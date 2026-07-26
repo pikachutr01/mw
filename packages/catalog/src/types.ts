@@ -56,6 +56,11 @@ export interface UnitDef {
    *   3) üretim süresi (Model A: süre = area × 0.95^(Baraka−1))
    */
   area: number;
+  /**
+   * Sefer hızı (§13.5.2). Ordunun hızı **en yavaş birimin** hızıdır; süre `100/v` ile ölçeklenir.
+   * Savunma birimleri yürümez → 0 (sefere hiç katılamazlar).
+   */
+  speed: number;
 }
 
 export type TechId =

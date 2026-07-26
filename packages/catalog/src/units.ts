@@ -12,21 +12,22 @@ import type { UnitDef } from './types.ts';
  */
 export const UNITS: readonly UnitDef[] = [
   // ── SAVAŞÇILAR ────────────────────────────────────────────────────────────────
-  //                                                        hp  magicHp carry pAtk pDef  mAtk    mDef   gold    food     area
-  u('dwarf',        'Cüce',         2,      60,      0,    10,    4,    9,     4,    182,   200,     450,      9),
-  u('elf',          'Elf',          1,      80,      0,     4,    9,    4,    11,    234,   450,     650,     12),
-  u('cavalry',      'Süvari',       2,     300,      0,    40,   72,   36,    18,    845,  1200,    2400,     52),
-  u('pegasus',      'Pegasus',      1,     300,    250,    40,   48,   84,    60,   1300,  4000,    3200,     80),
-  u('dragon',       'Ejderha',      1,    2000,   2800,   300,  540,  540,   600,  13000, 45000,   20000,    750),
-  u('mangonel',     'Mancınık',     1,    1500,      0,     0,  204,  120,   240,   4160, 12000,    6000,    240),
-  u('ogre',         'Ogre',         2,    3000,      0,   500,  420,  720,   300,  12000, 18000,   24000,    666),
-  u('shaman',       'Şaman',        1,     200,    200,     1,    6,    6,    12,    750,  2000,    2000,     18),
-  u('spy_bird',     'Casus Kuş',    1,       0,      0,     0,    1,    1,     2,     10,   100,     200,      1),
-  u('cargo_wagon',  'Yük Arabası',  2,       0,      0,  3000,   10,   10,    10,    100,  1000,    1000,      8),
-  u('gnome',        'Gnom',         2,     200,      0,     4,   12,   12,    12,    260,  1600,    1600,     25),
-  u('chaos',        'Kaos',         2,  220000, 250000,     0, 40000, 40000, 27000, 1200000, 2000000, 2000000, 40000),
+  //                                                        hp  magicHp carry pAtk pDef  mAtk    mDef   gold    food     area  hız
+  u('dwarf',        'Cüce',         2,      60,      0,    10,    4,    9,     4,    182,   200,     450,      9,  100),
+  u('elf',          'Elf',          1,      80,      0,     4,    9,    4,    11,    234,   450,     650,     12,  120),
+  u('cavalry',      'Süvari',       2,     300,      0,    40,   72,   36,    18,    845,  1200,    2400,     52,  140),
+  u('pegasus',      'Pegasus',      1,     300,    250,    40,   48,   84,    60,   1300,  4000,    3200,     80,  160),
+  u('dragon',       'Ejderha',      1,    2000,   2800,   300,  540,  540,   600,  13000, 45000,   20000,    750,  160),
+  u('mangonel',     'Mancınık',     1,    1500,      0,     0,  204,  120,   240,   4160, 12000,    6000,    240,  100),
+  u('ogre',         'Ogre',         2,    3000,      0,   500,  420,  720,   300,  12000, 18000,   24000,    666,  100),
+  u('shaman',       'Şaman',        1,     200,    200,     1,    6,    6,    12,    750,  2000,    2000,     18,  120),
+  u('spy_bird',     'Casus Kuş',    1,       0,      0,     0,    1,    1,     2,     10,   100,     200,      1, 6000),
+  u('cargo_wagon',  'Yük Arabası',  2,       0,      0,  3000,   10,   10,    10,    100,  1000,    1000,      8,  140),
+  u('gnome',        'Gnom',         2,     200,      0,     4,   12,   12,    12,    260,  1600,    1600,     25,  120),
+  u('chaos',        'Kaos',         2,  220000, 250000,     0, 40000, 40000, 27000, 1200000, 2000000, 2000000, 40000, 80),
 
   // ── SAVUNMA BİRİMLERİ / YAPILARI ──────────────────────────────────────────────
+  // Savunma birimleri sefere ÇIKMAZ → hız 0 (sefer doğrulaması bunu kullanıyor).
   d('archer_tower', 'Okçu Kulesi',  1,      60,      0,     0,   12,    6,    19,    325,   300,     450,     24),
   d('trap',         'Tuzak',        2,     340,      0,     0,    0,   18,     0,     42,   400,       0,      3),
   d('oil_cauldron', 'Kazancı',      2,     800,      0,     0,   30,  120,    72,   2418,  2400,    3200,    150),
@@ -40,13 +41,19 @@ export const UNITS: readonly UnitDef[] = [
   d('temple',       'Tapınak',      3,       0,      0,     0,    0,    0,     0,      1,  8000,    2000,    400),
 ] as const;
 
+/**
+ * Kahraman hızı (§13.5.5 cetveli). Kahraman ordunun hızını YÜKSELTMEZ — yalnız tek başına
+ * yola çıktığında bu hızla gider (`harita.html`: "Kahraman orduyu hızlandırmaz").
+ */
+export const HERO_SPEED = 200;
+
 function u(
   id: string, tr: string, type: 1 | 2 | 3,
   hp: number, magicHp: number, carry: number,
   pAtk: number, pDef: number, mAtk: number, mDef: number,
-  gold: number, food: number, area: number,
+  gold: number, food: number, area: number, speed: number,
 ): UnitDef {
-  return { id, name: { tr }, kind: 'warrior', type, hp, magicHp, carry, pAtk, pDef, mAtk, mDef, gold, food, area };
+  return { id, name: { tr }, kind: 'warrior', type, hp, magicHp, carry, pAtk, pDef, mAtk, mDef, gold, food, area, speed };
 }
 
 function d(
@@ -55,7 +62,7 @@ function d(
   pAtk: number, pDef: number, mAtk: number, mDef: number,
   gold: number, food: number, area: number,
 ): UnitDef {
-  return { id, name: { tr }, kind: 'defense', type, hp, magicHp, carry, pAtk, pDef, mAtk, mDef, gold, food, area };
+  return { id, name: { tr }, kind: 'defense', type, hp, magicHp, carry, pAtk, pDef, mAtk, mDef, gold, food, area, speed: 0 };
 }
 
 export const UNITS_BY_ID: Readonly<Record<string, UnitDef>> = Object.fromEntries(

@@ -3,11 +3,14 @@ import { AuthController } from './auth/auth.controller.ts';
 import { AuthGuard } from './auth/auth.guard.ts';
 import { AuthService } from './auth/auth.service.ts';
 import { TokenService } from './auth/token.service.ts';
+import { BattleController } from './battles/battle.controller.ts';
 import { CityController } from './cities/city.controller.ts';
 import { CityService } from './cities/city.service.ts';
 import { createDb, type Db } from './db/client.ts';
 import { DB } from './db/tokens.ts';
 import { HealthController } from './health/health.controller.ts';
+import { MissionController } from './missions/mission.controller.ts';
+import { MissionService } from './missions/mission.service.ts';
 import { SimulateController } from './simulate/simulate.controller.ts';
 import { GameClockService } from './world/game-clock.service.ts';
 
@@ -17,10 +20,13 @@ export { DB } from './db/tokens.ts';
  * Faz 2 modülü. Bağımlılıklar elle kurulmuş fabrikalarla veriliyor — servislerin hiçbiri Nest'e
  * bağımlı değil (saf sınıflar), böylece testlerde Nest'i ayağa kaldırmadan doğrudan kullanılıyor.
  *
- * Faz 2'nin kalanı: kuyruk (bina/teknik/birim), saldırı görevi + savaş çözümü, rapor, sohbet.
+ * Faz 2'nin kalanı: Genel Sohbet (WS) ve web ekranları.
  */
 @Module({
-  controllers: [HealthController, SimulateController, AuthController, CityController],
+  controllers: [
+    HealthController, SimulateController, AuthController, CityController,
+    MissionController, BattleController,
+  ],
   providers: [
     {
       provide: DB,
@@ -39,6 +45,7 @@ export { DB } from './db/tokens.ts';
     },
     { provide: GameClockService, useFactory: (db: Db) => new GameClockService(db), inject: [DB] },
     { provide: CityService, useFactory: (db: Db) => new CityService(db), inject: [DB] },
+    { provide: MissionService, useFactory: (db: Db) => new MissionService(db), inject: [DB] },
     {
       provide: AuthService,
       useFactory: (db: Db, tokens: TokenService, clock: GameClockService) =>

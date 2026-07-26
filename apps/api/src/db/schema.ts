@@ -319,6 +319,105 @@ export const missionUnits = pgTable('mission_units', {
   count: integer('count').notNull(),
 }, (t) => [uniqueIndex('mission_units_pk').on(t.missionId, t.unitType)]);
 
+/* ═══ KAHRAMAN (§13.11.4b/c) ════════════════════════════════════════════════
+ * Kahraman ADET değil VARLIK: her biri kendi seviyesi, tecrübesi ve yetenek dağılımıyla
+ * ayrı satırdır. Öldüğünde silinmez — `dead_until` ile Tapınak'ta diriltme sürecine girer
+ * (§13.11.7), yani seviye ve yetenekleri korunur.
+ */
+export const heroes = pgTable('heroes', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull().references(() => worlds.id),
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  /** Kahramanın durduğu şehir. Seferdeyken NULL (görevde `mission_heroes` tutar). */
+  cityId: bigint('city_id', { mode: 'number' }).references(() => cities.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  level: smallint('level').notNull().default(1),
+  xp: bigint('xp', { mode: 'number' }).notNull().default(0),
+  /** Yetenek puanları — seviye başına 3 dağıtılır (§13.11.4c). */
+  fAtk: integer('f_atk').notNull().default(0),
+  fDef: integer('f_def').notNull().default(0),
+  mAtk: integer('m_atk').notNull().default(0),
+  mDef: integer('m_def').notNull().default(0),
+  /** Öldüyse dirilene kadar (OYUN saati). NULL = yaşıyor. */
+  deadUntil: timestamp('dead_until', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('heroes_player').on(t.playerId),
+  index('heroes_city').on(t.cityId),
+]);
+
+/** Sefere katılan kahramanlar. Kahraman orduyu HIZLANDIRMAZ (§13.5.5) → süre hesabına girmez. */
+export const missionHeroes = pgTable('mission_heroes', {
+  missionId: bigint('mission_id', { mode: 'number' }).notNull()
+    .references(() => missions.id, { onDelete: 'cascade' }),
+  heroId: bigint('hero_id', { mode: 'number' }).notNull()
+    .references(() => heroes.id, { onDelete: 'cascade' }),
+}, (t) => [
+  uniqueIndex('mission_heroes_pk').on(t.missionId, t.heroId),
+  // ⭐ Bir kahraman aynı anda YALNIZ BİR seferde olabilir; kısıtı sorgu değil indeks korur.
+  uniqueIndex('mission_heroes_hero').on(t.heroId),
+]);
+
+/* ═══ SAVAŞ KAYDI (§5 determinizm + §13.10) ═════════════════════════════════
+ * ⭐ Savaş **yeniden oynatılabilir** olmak zorundadır: `rng_seed` + `engine_version` +
+ * `catalog_hash` + `input` birlikte saklanır. "O savaş neden böyle bitti" sorusuna kanıtla
+ * cevap verilir; motor sürümü değişse bile eski savaşın hangi dengeyle çözüldüğü bellidir.
+ */
+export const battles = pgTable('battles', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull().references(() => worlds.id),
+  /** Savaşı doğuran saldırı görevi (tekil → aynı görev iki savaş üretemez). */
+  missionId: bigint('mission_id', { mode: 'number' }).references(() => missions.id, { onDelete: 'set null' }),
+  attackerPlayerId: bigint('attacker_player_id', { mode: 'number' }),
+  defenderPlayerId: bigint('defender_player_id', { mode: 'number' }),
+  attackerCityId: bigint('attacker_city_id', { mode: 'number' }),
+  defenderCityId: bigint('defender_city_id', { mode: 'number' }),
+  /** Savaş anı — OYUN saatinde (`mission.execute_at`), `now()` değil (§13.10.2 kural 3). */
+  at: timestamp('at', { withTimezone: true }).notNull(),
+  winner: text('winner').notNull(), // attacker | defender | draw
+  night: boolean('night').notNull().default(false),
+  rngSeed: bigint('rng_seed', { mode: 'number' }).notNull(),
+  engineVersion: text('engine_version').notNull(),
+  catalogHash: text('catalog_hash').notNull(),
+  /** Motora verilen TAM girdi (yeniden oynatma için yeterli). */
+  input: jsonb('input').notNull(),
+  /** Motor çıktısı + ganimet dökümü. Rapor ekranı bunu okur. */
+  result: jsonb('result').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('battles_mission').on(t.missionId),
+  index('battles_defender').on(t.defenderPlayerId, t.at),
+  index('battles_attacker').on(t.attackerPlayerId, t.at),
+]);
+
+/**
+ * Oyuncu posta kutusu — savaş raporu, dönüş raporu, sistem duyurusu.
+ * Sohbetten AYRIDIR: sohbet anlık ve kanal bazlı, bu kalıcı ve oyuncu bazlı.
+ * `body` yapısal (jsonb) tutulur → rapor metni sunumda üretilir, dilden bağımsız kalır.
+ */
+export const messages = pgTable('messages', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull().references(() => worlds.id),
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  /** battle_report | return_report | system */
+  kind: text('kind').notNull(),
+  /** Oyuncunun bu raporda hangi tarafta olduğu: attacker | defender | owner */
+  side: text('side'),
+  battleId: bigint('battle_id', { mode: 'number' }).references(() => battles.id, { onDelete: 'cascade' }),
+  missionId: bigint('mission_id', { mode: 'number' }),
+  subject: text('subject').notNull(),
+  body: jsonb('body').notNull().default({}),
+  /** OYUN saatinde — rapor "ne zaman oldu" der, "ne zaman yazıldı" demez. */
+  at: timestamp('at', { withTimezone: true }).notNull(),
+  readAt: timestamp('read_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('messages_player').on(t.playerId, t.id),
+  index('messages_unread').on(t.playerId).where(sql`${t.readAt} IS NULL`),
+]);
+
 /**
  * ⭐ TRANSACTIONAL OUTBOX (§1): bildirim satırı, onu doğuran oyun mutasyonuyla AYNI
  * transaction'da yazılır → "savaş oldu ama rapor gitmedi" durumu imkânsız.

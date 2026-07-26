@@ -4,7 +4,9 @@
  * Küçük sunucu profilinde (§4.0) `ROLE=all` iken API süreciyle AYNI süreçte çalışır;
  * `ROLE=worker` ise yalnız bu döngüler koşar. Kod aynı, fark yalnız neyin başlatıldığı.
  */
+import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';
+import { battleHandlers } from '../missions/battle.handlers.ts';
 import { echoHandler } from '../missions/echo.handler.ts';
 import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
@@ -33,11 +35,13 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
    * Görev tipleri (§1: "hepsi aynı çatı").
    *   `echo`            → omurgayı ölçen sahte tip (Faz 1)
    *   `*_finish`        → kuyruk bitişleri (Faz 2) ✓
-   *   sırada: attack + return (savaş çözümü), sonra Faz 3 (nakliye/casusluk/şehir kurma),
-   *           Faz 4 (hero_revive, vacation_end, abuse_scan)
+   *   `attack`/`return` → savaş çözümü + dönüş bacağı (Faz 2) ✓
+   *   sırada: Faz 3 (nakliye/casusluk/şehir kurma), Faz 4 (hero_revive, vacation_end, abuse_scan)
    */
+  const cities = new CityService(db);
   const registry = new HandlerRegistry().register('echo', echoHandler);
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
+  for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
 
   const scheduler = new SchedulerService(db, clock, registry, {
     worldId: opts.worldId,

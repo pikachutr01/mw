@@ -12,6 +12,10 @@ export {
 } from './config.ts';
 export { createRng, hashSeed, type Rng } from './rng.ts';
 export {
+  distance, armySpeed, travelSeconds, DEFAULT_MAP_CONFIG,
+  type Coordinates, type MapConfig, type TravelInput,
+} from './travel.ts';
+export {
   heroSkillBudget, heroSkillTotal, assertHeroSkills, type HeroSkillBudget,
 } from './hero.ts';
 export type {

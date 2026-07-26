@@ -43,6 +43,13 @@
       "when": 1785075710876,
       "tag": "0005_tricky_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785085328627,
+      "tag": "0006_yielding_maggott",
+      "breakpoints": true
     }
   ]
 }
