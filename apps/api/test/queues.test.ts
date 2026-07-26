@@ -372,3 +372,86 @@ describe('sahiplik ve idempotency', () => {
     expect((await buildings())['farm']).toBe(2);
   });
 });
+
+describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur")', () => {
+  it('iptal kuyruğu VE görevi kapatır, kaynağı kısmen iade eder', async () => {
+    const at = await clock.gameNow(worldId);
+    const cost = buildingCost('farm', 2);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+
+    const { refunded } = await queues.cancel({ queueId: q.id, playerId, at });
+
+    // Varsayılan %90 iade (kuyruğu yağma-korumalı kasa yapmasın diye %10 kesinti).
+    expect(refunded.gold).toBe(Math.floor(cost.gold * 0.9));
+    expect(await queues.openQueues(cityId)).toHaveLength(0);
+
+    const m = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT status FROM missions WHERE id IN (SELECT mission_id FROM queues WHERE id = ${q.id})
+    `);
+    expect(String(m[0]!['status'])).toBe('canceled');
+
+    const snap = await cities.snapshot(cityId, at);
+    expect(snap!.gold).toBe(4000 - cost.gold + Math.floor(cost.gold * 0.9));
+  });
+
+  it('iptal sonrası aynı kategoride yeni iş açılabilir', async () => {
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    await queues.cancel({ queueId: q.id, playerId, at });
+    await expect(queues.enqueueBuilding({ cityId, playerId, type: 'mine', at })).resolves.toBeTruthy();
+  });
+
+  it('⭐ iptal edilen kuyruk, görevi bir şekilde çalışsa bile UYGULANMAZ', async () => {
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    const mRows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT mission_id FROM queues WHERE id = ${q.id}
+    `);
+    const missionId = Number(mRows[0]!['mission_id']);
+
+    await queues.cancel({ queueId: q.id, playerId, at });
+
+    // Görevi zorla yeniden kuyruğa al ve çalıştır: seviye ARTMAMALI.
+    await h.db.execute(sql`
+      UPDATE missions SET status = 'scheduled', execute_at = now() - interval '1 s', finished_at = NULL
+       WHERE id = ${missionId}
+    `);
+    await scheduler().tick();
+    expect((await buildings())['farm']).toBe(1);
+  });
+
+  it('tam iade istenirse oran 1.0 verilir', async () => {
+    const at = await clock.gameNow(worldId);
+    const cost = buildingCost('farm', 2);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    const { refunded } = await queues.cancel({ queueId: q.id, playerId, at, refundRatio: 1 });
+    expect(refunded.gold).toBe(cost.gold);
+  });
+
+  it('başkasının kuyruğu iptal edilemez', async () => {
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    await expect(queues.cancel({ queueId: q.id, playerId: playerId + 999, at }))
+      .rejects.toThrow(/sizin değil/);
+  });
+
+  it('aynı kuyruk iki kez iptal edilemez', async () => {
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    await queues.cancel({ queueId: q.id, playerId, at });
+    await expect(queues.cancel({ queueId: q.id, playerId, at })).rejects.toThrow(/bulunamadı/);
+  });
+
+  it('teknik iptali de çalışır (İlerletmeyi Durdur)', async () => {
+    await giveResources(1e9, 1e9);
+    await setLevel('academy', 1);
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueTech({ cityId, playerId, type: 'blacksmithing', at });
+
+    await queues.cancel({ queueId: q.id, playerId, at });
+
+    // İptal sonrası aynı teknik başka şehirde araştırılabilir olmalı (kilit kalkmış).
+    expect(await queues.openQueues(cityId)).toHaveLength(0);
+    await expect(queues.enqueueTech({ cityId, playerId, type: 'blacksmithing', at })).resolves.toBeTruthy();
+  });
+});

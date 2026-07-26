@@ -21,6 +21,12 @@ import { toDate, type Db } from '../db/client.ts';
 
 export type QueueCategory = 'building' | 'unit' | 'defense' | 'tech';
 
+/**
+ * İptalde iade oranı. Orijinaldeki değer elimizde YOK (istemci hesaplamıyor, sunucudan geliyordu)
+ * → bu bizim denge kararımız. Ayrıntı: `cancel()` dokümantasyonu. `world_config` ile ezilebilir.
+ */
+export const DEFAULT_CANCEL_REFUND_RATIO = 0.9;
+
 export class QueueError extends Error {
   constructor(
     readonly code: QueueErrorCode,
@@ -344,6 +350,61 @@ export class QueueService {
       startedAt: toDate(qRows[0]!['started_at']),
       finishAt: toDate(qRows[0]!['finish_at']),
     };
+  }
+
+  /**
+   * ⭐ KUYRUK İPTALİ — orijinalde her kuyruk türü için ayrı menü aksiyonu var:
+   * "Yapımı Durdur" · "İlerletmeyi Durdur" · "Diriltmeyi Durdur" · "Görev İptal"
+   * (`g.java` menü tablosu) ve sunucu uçları `ipUnt.do` / `ipMgr.do` / `ipOrd.do` (`ip` = iptal).
+   * Bizde bu eksikti — `canceled_at` sütunu vardı ama iptal eden kod yoktu.
+   *
+   * İptal, kuyruk satırını VE bitiş görevini birlikte kapatır. Handler'daki
+   * `canceled_at IS NULL` koşulu sayesinde, görev bir şekilde yine çalışsa bile etki UYGULANMAZ.
+   *
+   * ⚠️ **İADE ORANI BİR DENGE KARARIDIR** (orijinaldeki oran elimizde yok — istemci hesaplamıyor).
+   * Varsayılan **%90**: tam iade, kuyruğu **yağmaya karşı kasa** yapardı — oyuncu saldırı gelmeden
+   * kaynağı üretime yatırıp saldırıdan sonra iptal ederek yağmadan tamamen kurtarabilirdi.
+   * %10 kesinti bu sömürüyü kârsız kılar. `cancelRefundRatio: 1.0` ile kapatılabilir.
+   */
+  async cancel(opts: {
+    queueId: number; playerId: number; at: Date; refundRatio?: number;
+  }): Promise<{ refunded: { gold: number; food: number } }> {
+    const ratio = Math.max(0, Math.min(1, opts.refundRatio ?? DEFAULT_CANCEL_REFUND_RATIO));
+
+    return this.db.transaction(async (tx) => {
+      const rows = await tx.execute<Record<string, unknown>>(sql`
+        SELECT id, city_id, player_id, spent_gold, spent_food, mission_id, category, item_type
+          FROM queues
+         WHERE id = ${opts.queueId} AND completed_at IS NULL AND canceled_at IS NULL
+         FOR UPDATE
+      `);
+      const q = rows[0];
+      if (!q) throw new QueueError('city_not_found', 'İptal edilecek kuyruk bulunamadı.');
+      if (Number(q['player_id']) !== opts.playerId) {
+        throw new QueueError('not_owner', 'Bu kuyruk sizin değil.');
+      }
+
+      await tx.execute(sql`
+        UPDATE queues SET canceled_at = ${opts.at.toISOString()}::timestamptz WHERE id = ${opts.queueId}
+      `);
+      // Görev de iptal edilir; yine de çalışırsa handler `canceled_at` yüzünden etkiyi uygulamaz.
+      if (q['mission_id'] != null) {
+        await tx.execute(sql`
+          UPDATE missions SET status = 'canceled', finished_at = now()
+           WHERE id = ${Number(q['mission_id'])} AND status IN ('scheduled', 'running')
+        `);
+      }
+
+      const refunded = {
+        gold: Math.floor(Number(q['spent_gold']) * ratio),
+        food: Math.floor(Number(q['spent_food']) * ratio),
+      };
+      const cityId = Number(q['city_id']);
+      if (refunded.gold > 0 || refunded.food > 0) {
+        await this.cities.add(cityId, refunded, opts.at, tx as never);
+      }
+      return { refunded };
+    });
   }
 
   /** Şehrin açık kuyrukları (arayüzdeki geri sayımlar). */

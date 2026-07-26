@@ -217,6 +217,26 @@ export const playerIps = pgTable('player_ips', {
   index('player_ips_by_block').on(t.ipBlock24),
 ]);
 
+/**
+ * ⭐ OYUNCU ENGELLEME — orijinalde VAR ve bizde eksikti.
+ * Kanıt: `g.java` menüsünde "Oyuncuyu Blokla" / "Bloklamayı Kaldır", sunucu ucu `msBlk.do`.
+ * Engellenen oyuncu **DM başlatamaz** ve mesajı görünmez (§13.12). Sohbet planındaki
+ * `muted_until` bildirim susturmasıydı; bu ise gerçek engelleme listesi — ayrı şey.
+ */
+export const playerBlocks = pgTable('player_blocks', {
+  worldId: smallint('world_id').notNull(),
+  /** Engelleyen. */
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  /** Engellenen. */
+  blockedPlayerId: bigint('blocked_player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('player_blocks_pk').on(t.playerId, t.blockedPlayerId),
+  index('player_blocks_target').on(t.blockedPlayerId),
+]);
+
 /** Analizörün (Faz 4) ürettiği şüphe sinyalleri. Faz 2'de tablo boş durur. */
 export const abuseSignals = pgTable('abuse_signals', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
