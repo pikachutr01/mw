@@ -11,8 +11,10 @@ import { DB } from './db/tokens.ts';
 import { HealthController } from './health/health.controller.ts';
 import { MissionController } from './missions/mission.controller.ts';
 import { MissionService } from './missions/mission.service.ts';
+import { QueueService } from './queues/queue.service.ts';
 import { SimulateController } from './simulate/simulate.controller.ts';
 import { GameClockService } from './world/game-clock.service.ts';
+import { WorldController } from './world/world.controller.ts';
 
 export { DB } from './db/tokens.ts';
 
@@ -25,7 +27,7 @@ export { DB } from './db/tokens.ts';
 @Module({
   controllers: [
     HealthController, SimulateController, AuthController, CityController,
-    MissionController, BattleController,
+    MissionController, BattleController, WorldController,
   ],
   providers: [
     {
@@ -46,6 +48,11 @@ export { DB } from './db/tokens.ts';
     { provide: GameClockService, useFactory: (db: Db) => new GameClockService(db), inject: [DB] },
     { provide: CityService, useFactory: (db: Db) => new CityService(db), inject: [DB] },
     { provide: MissionService, useFactory: (db: Db) => new MissionService(db), inject: [DB] },
+    {
+      provide: QueueService,
+      useFactory: (db: Db, cities: CityService) => new QueueService(db, cities),
+      inject: [DB, CityService],
+    },
     {
       provide: AuthService,
       useFactory: (db: Db, tokens: TokenService, clock: GameClockService) =>

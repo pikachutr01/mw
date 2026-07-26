@@ -21,5 +21,9 @@
     "turbo": "^2.3.3",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "//": "esbuild kurulum betiği ikiliyi yerleştirir — engellenirse Vite hiç çalışmaz.",
+    "onlyBuiltDependencies": ["esbuild", "@node-rs/argon2"]
   }
 }

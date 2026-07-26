@@ -1,0 +1,65 @@
+@import 'tailwindcss';
+
+/**
+ * ⭐ TEK KAYNAK (§13.13.1): renkler/boşluklar/fontlar `packages/design-tokens/tokens.json`'dan
+ * üretilir. Burada YENİ renk tanımlanmaz — tanımlanırsa gece/gündüz eşleşmesi ve WCAG kontrast
+ * kapısı sessizce bozulur.
+ */
+@import '@mobiwar/design-tokens/css';
+
+/** Token'ları Tailwind yardımcılarına bağlar: `bg-surface`, `text-muted`, `border-strong`… */
+@theme inline {
+  --color-bg: var(--mw-color-bg);
+  --color-surface: var(--mw-color-surface);
+  --color-raised: var(--mw-color-surface-raised);
+  --color-border: var(--mw-color-border);
+  --color-strong: var(--mw-color-border-strong);
+  --color-ink: var(--mw-color-text-primary);
+  --color-muted: var(--mw-color-text-muted);
+  --color-accent: var(--mw-color-accent);
+  --color-accent-hover: var(--mw-color-accent-hover);
+  --color-on-accent: var(--mw-color-on-accent);
+  --color-gold: var(--mw-color-gold);
+  --color-food: var(--mw-color-food);
+  --color-danger: var(--mw-color-danger);
+  --color-warning: var(--mw-color-warning);
+  --color-success: var(--mw-color-success);
+  --color-info: var(--mw-color-info);
+
+  --font-display: var(--mw-font-display);
+  --font-body: var(--mw-font-body);
+  --font-mono: var(--mw-font-mono);
+
+  --radius-sm: var(--mw-radius-sm);
+  --radius-md: var(--mw-radius-md);
+  --radius-lg: var(--mw-radius-lg);
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mw-color-bg);
+  color: var(--mw-color-text-primary);
+  font-family: var(--mw-font-body);
+  /* Oyun ekranı; sayfa değil. Gövde kaydırması alt bara çarpmasın diye kapalı. */
+  overscroll-behavior: none;
+}
+
+h1, h2, h3, .display {
+  font-family: var(--mw-font-display);
+  letter-spacing: 0.01em;
+}
+
+/* Klavye erişilebilirliği: odak halkası daima görünür (§13.13.5 kalite kapısı). */
+:focus-visible {
+  outline: 2px solid var(--mw-color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Sayısal sütunlar kaymasın — kaynak ve geri sayım okunurluğu için. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
