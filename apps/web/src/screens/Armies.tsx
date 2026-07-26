@@ -1,140 +1,223 @@
 /**
- * ⭐ ORDULAR — giriş sonrası oyuncuyu KARŞILAYAN ekran (kullanıcı kararı).
+ * ⭐ ORDULAR — giriş sonrası oyuncuyu KARŞILAYAN ekran ve şehir değiştirme yeri.
  *
- * Orijinalde de menünün ilk maddesi budur (`g.java` menü tablosu, `images/scr_web01`) ve giriş
- * ekranı "Şehrinizde herhangi bir hareketlilik yok" özetiyle açılır (`images/scr_itv01`).
- * Mantığı basit: oyun **zamanlanmış olaylar** üzerine kuruludur, oyuncunun ilk sorusu daima
- * *"şu an ne oluyor?"* olur.
+ * Orijinal davranış (referans `images/mobil arayüz2.jpg`, `scr_itv01`, `scr_web01`):
+ *   • Şehirler ÜSTTE yan yana dizilir (kale simgesi + ad); tıklayınca **aktif şehir değişir**.
+ *   • O şehirle ilgili her ordu hareketi, şehrin simgesinin ALTINA dikey olarak asılır.
+ *   • Sıra **görevin başladığı ana** göredir (varış sırası değil) — kullanıcı kuralı.
  *
- * Ekran, şehirden GİDEN ve şehre GELEN tüm ordu hareketlerini tek listede toplar.
- *
- * ⚠️ **Gelen saldırıda birleşim GİZLİDİR** (§13.10.1): varış saati ve kaynak koordinat görünür,
- * ne geldiği görünmez. Arayüz bunu açıkça yazar ki oyuncu "veri eksik" sanmasın.
+ * Şehir değiştirme başka hiçbir ekranda tekrarlanmaz: oyuncu "şehir değiştireceksem Ordular'a
+ * giderim" alışkanlığını tek yerde kurar.
  */
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fmt, remaining, useTick } from '../lib/hooks.ts';
 import { describeUnits } from '../lib/names.ts';
-import { useCities, useCity, useMissions, type IncomingRow, type MissionRow } from '../lib/queries.ts';
+import { useCities, useCity, useMovements, type Coords, type Movement } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
-import { Empty, MissionIcon, Panel } from '../components/ui.tsx';
+import { Empty, Panel, Res } from '../components/ui.tsx';
 
-/** Görev tipi + yön → ikon `id`'si ve Türkçe etiket (§13.11.9 dosya adı sözleşmesi). */
-function iconOf(type: string): { id: string; label: string } {
-  switch (type) {
-    case 'attack': return { id: 'attack_out', label: 'Saldırı' };
-    case 'return': return { id: 'attack_back', label: 'Dönüş' };
-    case 'transport': return { id: 'transport_out', label: 'Nakliye' };
-    case 'support': return { id: 'support', label: 'Destek' };
-    case 'spy': return { id: 'spy_out', label: 'Casusluk' };
-    case 'found_city': return { id: 'found_city', label: 'Şehir Kur' };
-    case 'teleport': return { id: 'teleport', label: 'Teleport' };
-    default: return { id: type, label: type };
-  }
-}
+/** Görev tipi → Türkçe ad. Tooltip başlığı bu. */
+const TYPE_LABEL: Record<string, string> = {
+  attack: 'Saldırı',
+  return: 'Dönüş',
+  transport: 'Nakliye',
+  support: 'Destek',
+  spy: 'Casusluk',
+  found_city: 'Şehir Kurma',
+  teleport: 'Teleport',
+};
+
+const coordText = (c: Coords | null): string => (c ? `${c.k}:${c.d}:${c.s}` : '—');
 
 export function Armies() {
-  const missions = useMissions();
   const cities = useCities();
-  const { cityId } = useActiveCity();
+  const movements = useMovements();
+  const { cityId, setCityId } = useActiveCity();
   const city = useCity(cityId);
   useTick();
 
-  const cityName = (id: number | null): string =>
-    cities.data?.cities.find((c) => c.id === id)?.name ?? `#${id ?? '?'}`;
+  const [tip, setTip] = useState<{ m: Movement; x: number; y: number } | null>(null);
+  const list = cities.data?.cities ?? [];
+  const all = movements.data?.movements ?? [];
 
-  const outgoing = missions.data?.outgoing ?? [];
-  const incoming = missions.data?.incoming ?? [];
-  const quiet = outgoing.length === 0 && incoming.length === 0;
+  // Mobilde tooltip TIKLAMAYLA açılıyor → boşluğa dokununca kapanmalı.
+  useEffect(() => {
+    if (!tip) return;
+    const close = (): void => setTip(null);
+    window.addEventListener('scroll', close, true);
+    return () => window.removeEventListener('scroll', close, true);
+  }, [tip]);
+
+  const byCity = useCallback(
+    (id: number): Movement[] => all
+      .filter((m) => m.cityId === id)
+      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt)),
+    [all],
+  );
 
   return (
-    <div className="space-y-3">
-      {/* Orijinaldeki "Durum Özeti" karşılaması (scr_itv01). */}
-      <Panel title="Durum Özeti" right={city.data?.name}>
-        <div className="px-3 py-2 text-sm">
-          {quiet ? (
-            <span className="text-muted">Şehrinde herhangi bir hareketlilik yok.</span>
-          ) : (
-            <span className="text-ink">
-              {incoming.length > 0 ? (
-                <b className="text-danger">{incoming.length} ordu sana doğru yolda</b>
-              ) : null}
-              {incoming.length > 0 && outgoing.length > 0 ? ' · ' : null}
-              {outgoing.length > 0 ? `${outgoing.length} seferin sürüyor` : null}
-            </span>
-          )}
+    <div className="space-y-3" onClick={() => setTip(null)}>
+      <Panel title="Ordular" right={all.length > 0 ? `${all.length} hareket` : 'sakin'}>
+        {list.length === 0 ? (
+          <Empty>Şehir yükleniyor…</Empty>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto p-3">
+            {list.map((c) => (
+              <CityColumn
+                key={c.id}
+                name={c.name}
+                coords={c.coordinates}
+                active={c.id === cityId}
+                movements={byCity(c.id)}
+                onSelect={() => setCityId(c.id)}
+                onTip={setTip}
+              />
+            ))}
+          </div>
+        )}
+        <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted">
+          Şehre tıklayarak aktif şehri değiştirirsin. Simgeler görevin <b>başlama sırasına</b> göre dizilir.
         </div>
       </Panel>
 
-      <Panel title="Gelen Ordu" right={incoming.length > 0 ? `${incoming.length}` : undefined}>
-        {incoming.length === 0 ? (
-          <Empty>Şehirlerine gelen ordu yok.</Empty>
-        ) : (
-          <ul className="divide-y divide-border">
-            {incoming.map((m, i) => <IncomingItem key={m.id} m={m} alt={i % 2 === 1} name={cityName} />)}
-          </ul>
-        )}
+      {/* Aktif şehrin dikey bilgi paneli (orijinalde sağda duran "Durum Özeti"). */}
+      <Panel title="Durum Özeti" right={city.data?.name}>
+        <div className="space-y-1.5 px-3 py-2 text-sm">
+          {all.length === 0 ? (
+            <span className="text-muted">Şehrinde herhangi bir hareketlilik yok.</span>
+          ) : (
+            <MovementSummary movements={all} />
+          )}
+          {city.data ? (
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-2 text-xs">
+              <Res kind="gold" value={fmt(city.data.resources.gold)} size={14} />
+              <Res kind="food" value={fmt(city.data.resources.food)} size={14} />
+              <span className="text-muted">
+                {coordText(city.data.coordinates)}{city.data.isCapital ? ' · Başkent' : ''}
+              </span>
+            </div>
+          ) : null}
+        </div>
       </Panel>
 
-      <Panel title="Ordularım" right={outgoing.length > 0 ? `${outgoing.length} sefer` : undefined}>
-        {outgoing.length === 0 ? (
-          <Empty>Yolda ordun yok. Dünya ekranından hedef seç.</Empty>
-        ) : (
-          <ul className="divide-y divide-border">
-            {outgoing.map((m, i) => <OutgoingItem key={m.id} m={m} alt={i % 2 === 1} name={cityName} />)}
-          </ul>
-        )}
-      </Panel>
+      {tip ? <Tooltip m={tip.m} x={tip.x} y={tip.y} /> : null}
     </div>
   );
 }
 
-function IncomingItem({
-  m, alt, name,
-}: { m: IncomingRow; alt: boolean; name: (id: number | null) => string }) {
+/** Tek şehir: kale simgesi + ad + altına asılan hareket simgeleri. */
+function CityColumn({
+  name, coords, active, movements, onSelect, onTip,
+}: {
+  name: string;
+  coords: Coords;
+  active: boolean;
+  movements: Movement[];
+  onSelect: () => void;
+  onTip: (t: { m: Movement; x: number; y: number } | null) => void;
+}) {
   return (
-    <li className={`flex items-center gap-3 px-3 py-2 ${alt ? 'bg-row-alt' : ''}`}>
-      <MissionIcon id="incoming_attack" title="Gelen saldırı" />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-danger">
-          {name(m.targetCityId)} şehrine saldırı
-        </div>
-        <div className="text-xs text-muted">
-          Kaynak: {m.origin ? `${m.origin.k}:${m.origin.d}:${m.origin.s}` : 'bilinmiyor'}
-          {' · '}
-          <span className="italic">birleşim gizli — öğrenmek için casusluk gerekir</span>
-        </div>
+    <div className="flex w-20 shrink-0 flex-col items-center">
+      <button
+        onClick={(e) => { e.stopPropagation(); onSelect(); }}
+        title={`${name} (${coordText(coords)})`}
+        className={`w-full rounded-[var(--radius-sm)] border-2 p-1 transition-colors ${
+          active ? 'border-accent bg-accent/15' : 'border-transparent hover:bg-raised'
+        }`}
+      >
+        <img src="/assets/buildings/castle.png" alt="" width={48} height={48}
+          className="mx-auto h-12 w-12 object-contain" />
+        <span className={`mt-0.5 block truncate text-[11px] ${active ? 'font-semibold text-accent' : 'text-muted'}`}>
+          {name}
+        </span>
+      </button>
+
+      {/* Hareketler dikey olarak şehrin ALTINA asılır. */}
+      <div className="mt-1 flex flex-col items-center gap-1">
+        {movements.map((m) => <MovementIcon key={m.key} m={m} onTip={onTip} />)}
       </div>
-      <div className="tnum shrink-0 text-right text-sm font-semibold text-danger">
-        {remaining(m.arrivesAt) ?? 'varıyor!'}
-      </div>
-    </li>
+    </div>
   );
 }
 
-function OutgoingItem({
-  m, alt, name,
-}: { m: MissionRow; alt: boolean; name: (id: number | null) => string }) {
-  const isReturn = m.type === 'return';
-  const icon = iconOf(m.type);
-  const units = describeUnits(m.units, fmt);
+function MovementIcon({
+  m, onTip,
+}: { m: Movement; onTip: (t: { m: Movement; x: number; y: number } | null) => void }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const left = remaining(m.executeAt);
+
+  // Fare TAKİPLİ tooltip (masaüstü) · dokunmatikte tıklama noktasına sabit (mobil web).
+  const show = (e: React.MouseEvent): void => onTip({ m, x: e.clientX, y: e.clientY });
 
   return (
-    <li className={`flex items-center gap-3 px-3 py-2 ${alt ? 'bg-row-alt' : ''}`}>
-      <MissionIcon id={icon.id} title={icon.label} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm text-ink">
-          <b>{icon.label}</b>
-          {' → '}
-          {isReturn
-            ? name(m.targetCityId)
-            : m.target ? `${m.target.k}:${m.target.d}:${m.target.s}` : '—'}
+    <span
+      ref={ref}
+      onMouseEnter={show}
+      onMouseMove={show}
+      onMouseLeave={() => onTip(null)}
+      onClick={(e) => { e.stopPropagation(); show(e); }}
+      className="relative inline-flex cursor-help flex-col items-center"
+    >
+      <img src={`/assets/missions/${m.icon}.png`} alt={TYPE_LABEL[m.type] ?? m.type}
+        width={32} height={32}
+        className={`h-8 w-8 object-contain ${m.direction === 'in' ? 'drop-shadow-[0_0_3px_var(--mw-color-danger)]' : ''}`} />
+      <span className="tnum text-[10px] leading-tight text-muted">{left ?? 'varıyor'}</span>
+    </span>
+  );
+}
+
+/** Fareyi takip eden tooltip. Konum viewport'a göre kırpılır ki ekran dışına taşmasın. */
+function Tooltip({ m, x, y }: { m: Movement; x: number; y: number }) {
+  const W = 240;
+  const left = Math.min(x + 14, window.innerWidth - W - 8);
+  const top = Math.min(y + 14, window.innerHeight - 90);
+
+  return (
+    <div
+      role="tooltip"
+      style={{ left, top, width: W, boxShadow: 'var(--mw-shadow-md)' }}
+      className="pointer-events-none fixed z-50 rounded-[var(--radius-sm)] border-2 border-strong bg-surface"
+    >
+      <div className="display border-b-2 border-strong bg-panel-header px-2 py-1 text-xs font-semibold tracking-wide text-on-panel-header uppercase">
+        {TYPE_LABEL[m.type] ?? m.type}
+        {m.direction === 'in' ? ' (gelen)' : m.direction === 'own' ? ' (dönüş)' : ''}
+      </div>
+      <div className="space-y-0.5 px-2 py-1.5 text-xs">
+        <div className="text-ink">
+          Kaynak: <span className="tnum">{coordText(m.origin)}</span>
+          {m.originPlayer ? ` (${m.originPlayer})` : ''}
         </div>
-        <div className="truncate text-xs text-muted">{units || 'birlik yok'}</div>
+        <div className="text-ink">
+          Hedef: <span className="tnum">{coordText(m.target)}</span>
+          {m.targetPlayer ? ` (${m.targetPlayer})` : ''}
+        </div>
+        {m.units && Object.keys(m.units).length > 0 ? (
+          <div className="border-t border-border pt-0.5 text-muted">{describeUnits(m.units, fmt)}</div>
+        ) : null}
       </div>
-      <div className="tnum shrink-0 text-right text-sm">
-        <span className={isReturn ? 'text-success' : 'text-warning'}>
-          {remaining(m.executeAt) ?? 'varıyor!'}
-        </span>
-      </div>
-    </li>
+    </div>
+  );
+}
+
+/** "2 saldırı geliyor · 1 nakliye yolda" gibi tek satırlık özet. */
+function MovementSummary({ movements }: { movements: Movement[] }) {
+  const incoming = movements.filter((m) => m.direction === 'in');
+  const outgoing = movements.filter((m) => m.direction === 'out');
+  const returning = movements.filter((m) => m.direction === 'own');
+
+  return (
+    <div className="space-y-0.5">
+      {incoming.length > 0 ? (
+        <div className="font-semibold text-danger">
+          ⚠ {incoming.length} hareket sana doğru yolda
+        </div>
+      ) : null}
+      {outgoing.length > 0 ? (
+        <div className="text-ink">{outgoing.length} seferin sürüyor</div>
+      ) : null}
+      {returning.length > 0 ? (
+        <div className="text-success">{returning.length} ordun dönüyor</div>
+      ) : null}
+    </div>
   );
 }

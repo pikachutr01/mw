@@ -254,16 +254,36 @@ export class AuthService {
    * skoru, tehdit çarpanı) Faz 3'te haritayla birlikte gelecek. Şimdilik determinist tarama:
    * `cities(world_id,k,d,s)` UNIQUE olduğu için yarış durumunda ikinci ekleme DB'de patlar.
    */
+  /**
+   * İlk BOŞ yuva. Gerçek yerleşim algoritması §13.6 (Faz 3); bu geçici ama **doğru** olmak zorunda.
+   *
+   * ⚠️ Eskiden yuva şehir SAYISINDAN türetiliyordu (`count % 10`). Bu, şehirler tam sırayla
+   * oluşturulup hiç silinmediği sürece çalışır; bir şehir silinince veya bir yuva elle dolunca
+   * **aynı koordinat ikinci kez üretilir** ve kayıt `cities_world_coords` ihlaliyle 500 verir.
+   * Şimdi gerçekten boş olan en küçük yuva bulunuyor (boşluk varsa onu doldurur).
+   *
+   * ⭐ Dünya boyutları oyunun kendi dokümanından: 10 kıta × 500 diyar × 10 şehir,
+   * koordinatlar **1-indeksli** (1:45:10 = 1. kıta, 45. diyar, 10. şehir).
+   */
   private async findFreeSlot(worldId: number, tx: Db): Promise<{ k: number; d: number; s: number }> {
-    const rows = await tx.execute<{ n: number } & Record<string, unknown>>(sql`
-      SELECT COUNT(*)::int AS n FROM cities WHERE world_id = ${worldId}
+    const perDistrict = WORLD_SHAPE.citiesPerDistrict;
+    const perContinent = perDistrict * WORLD_SHAPE.districtsPerContinent;
+
+    const rows = await tx.execute<{ idx: number } & Record<string, unknown>>(sql`
+      WITH used AS (
+        SELECT ((k - 1) * ${WORLD_SHAPE.districtsPerContinent} + (d - 1)) * ${perDistrict} + (s - 1) AS idx
+          FROM cities WHERE world_id = ${worldId}
+      )
+      SELECT MIN(i)::int AS idx
+        FROM generate_series(0, COALESCE((SELECT MAX(idx) FROM used), -1) + 1) AS i
+       WHERE i NOT IN (SELECT idx FROM used)
     `);
-    const n = Number(rows[0]?.n ?? 0);
-    // ⭐ Dünya boyutları oyunun kendi dokümanından: 10 kıta × 500 diyar × 10 şehir
-    // ve koordinatlar **1-indeksli** (örnek: 1:45:10 = 1. kıta, 45. diyar, 10. şehir).
-    const s = (n % WORLD_SHAPE.citiesPerDistrict) + 1;
-    const d = (Math.floor(n / WORLD_SHAPE.citiesPerDistrict) % WORLD_SHAPE.districtsPerContinent) + 1;
-    const k = Math.floor(n / (WORLD_SHAPE.citiesPerDistrict * WORLD_SHAPE.districtsPerContinent)) + 1;
-    return { k, d, s };
+    const idx = Number(rows[0]?.idx ?? 0);
+
+    return {
+      k: Math.floor(idx / perContinent) + 1,
+      d: (Math.floor(idx / perDistrict) % WORLD_SHAPE.districtsPerContinent) + 1,
+      s: (idx % perDistrict) + 1,
+    };
   }
 }

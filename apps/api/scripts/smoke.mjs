@@ -124,8 +124,7 @@ async function main() {
 
   console.log('\n10. Görev ve mesaj listeleri');
   const missions = await call('GET', '/api/v1/missions', { token: A });
-  ok(Array.isArray(missions.body?.outgoing), 'giden görev listesi var');
-  ok(Array.isArray(missions.body?.incoming), 'gelen ordu listesi var');
+  ok(Array.isArray(missions.body?.movements), 'ordu hareketleri listesi var', missions.body);
   const msgs = await call('GET', '/api/v1/messages', { token: A });
   ok(typeof msgs.body?.unread === 'number', 'okunmamış sayacı var', msgs.body);
 

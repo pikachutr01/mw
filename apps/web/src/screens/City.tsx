@@ -16,20 +16,15 @@ import {
 import { useActiveCity } from '../lib/city-context.tsx';
 import { Button, Empty, ErrorBox, Input, Panel, Requirements, Res } from '../components/ui.tsx';
 
-type Tab = 'buildings' | 'units' | 'defenses' | 'techs';
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'buildings', label: 'Yapılar' },
-  { id: 'units', label: 'Baraka' },
-  { id: 'defenses', label: 'Savunma' },
-  { id: 'techs', label: 'Akademi' },
-];
-
-export function City() {
+/**
+ * Şehir ekranlarının ORTAK kabuğu: şehir başlığı + bütçe çubukları + açık kuyruklar.
+ * Baraka/Yapılar/Savunma/Akademi artık ayrı menü maddesi (ve ayrı rota) olduğu için ortak kısım
+ * tek yerde duruyor — dört ekranda tekrarlanmıyor.
+ */
+function CityFrame({ children }: { children: (city: CityDetail) => React.ReactNode }) {
   const { cityId } = useActiveCity();
   const city = useCity(cityId);
   const catalog = useCatalog(cityId);
-  const [tab, setTab] = useState<Tab>('buildings');
 
   if (!city.data || !catalog.data) return <Empty>Şehir yükleniyor…</Empty>;
   const d = city.data;
@@ -47,27 +42,19 @@ export function City() {
       </Panel>
 
       <Queues city={d} />
-
-      <div className="grid grid-cols-4 gap-1">
-        {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`display rounded-[var(--radius-sm)] border-2 px-2 py-2 text-xs font-semibold tracking-wide uppercase ${
-              tab === t.id
-                ? 'border-strong bg-accent text-on-accent'
-                : 'border-border bg-surface text-muted hover:bg-raised'
-            }`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'buildings' ? <Buildings city={d} /> : null}
-      {tab === 'units' ? <Trainable city={d} kind="unit" /> : null}
-      {tab === 'defenses' ? <Trainable city={d} kind="defense" /> : null}
-      {tab === 'techs' ? <Techs city={d} /> : null}
+      {children(d)}
     </div>
   );
 }
+
+export const BuildingsScreen = (): React.ReactElement =>
+  <CityFrame>{(c) => <Buildings city={c} />}</CityFrame>;
+export const BarracksScreen = (): React.ReactElement =>
+  <CityFrame>{(c) => <Trainable city={c} kind="unit" />}</CityFrame>;
+export const DefenseScreen = (): React.ReactElement =>
+  <CityFrame>{(c) => <Trainable city={c} kind="defense" />}</CityFrame>;
+export const AcademyScreen = (): React.ReactElement =>
+  <CityFrame>{(c) => <Techs city={c} />}</CityFrame>;
 
 function Budget({ label, used, total, hint }: { label: string; used: number; total: number; hint: string }) {
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;

@@ -68,12 +68,17 @@ export class MissionController {
   }
 
   /**
-   * "Ordular" ekranı — giden ve gelen hareketler.
+   * ⭐ "Ordular" ekranı — şehirlerimle ilgili TÜM ordu hareketleri, tek düz liste.
+   *
+   * Her hareket bir **çıpa şehre** (`cityId`) asılır: arayüz o şehrin kale simgesinin altına
+   * dizer (orijinal davranış — `images/mobil arayüz2.jpg`). Kendi şehirlerim arasındaki bir
+   * nakliye İKİ hareket üretir: kaynakta `transport_out`, hedefte `transport_back`.
    *
    * ⭐ GÖRÜNÜRLÜK MATRİSİ SORGUDA UYGULANIR (§13.10.1), istemciye ham liste ASLA gönderilmez:
-   *   • kendi görevlerin: tam döküm (birim listesi dahil)
-   *   • sana gelen saldırı: varış saati + kaynak koordinat — **birleşim GİZLİ**
-   *   • dönüş bacakları (`type='return'`): hedef tarafın sorgusuna hiç girmez
+   *   • kendi görevlerim: tam döküm (birim listesi dahil)
+   *   • bana gelen saldırı: varış saati + kaynak koordinat — **birleşim GİZLİ** (`units` YOK)
+   *   • saldırı dönüş bacağı: hedefin sorgusuna hiç girmez (çünkü `target_city_id` saldıranın
+   *     kendi şehridir — savunanla eşleşmez)
    */
   @Get()
   async list(@Req() req: AuthedRequest, @Query('cityId') cityId?: string): Promise<Record<string, unknown>> {
@@ -81,63 +86,114 @@ export class MissionController {
     const gameNow = await this.clock.gameNow(player.worldId);
     const cityFilter = cityId ? Number(cityId) : null;
 
-    const outgoing = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT m.id, m.type, m.origin_city_id, m.target_city_id, m.target_k, m.target_d, m.target_s,
-             m.execute_at, m.created_at,
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      WITH my AS (
+        SELECT id FROM cities WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
+      )
+      SELECT m.id, m.type, m.owner_player_id, m.origin_city_id, m.target_city_id,
+             m.target_k, m.target_d, m.target_s, m.execute_at, m.created_at,
+             oc.k AS ok, oc.d AS od, oc.s AS os, op.username AS oname,
+             tc.k AS tk, tc.d AS td, tc.s AS ts, tp.username AS tname,
+             (m.origin_city_id IN (SELECT id FROM my)) AS origin_is_mine,
+             (m.target_city_id IN (SELECT id FROM my)) AS target_is_mine,
              COALESCE(json_object_agg(mu.unit_type, mu.count)
                       FILTER (WHERE mu.unit_type IS NOT NULL), '{}'::json) AS units
         FROM missions m
         LEFT JOIN mission_units mu ON mu.mission_id = m.id
+        LEFT JOIN cities oc ON oc.id = m.origin_city_id
+        LEFT JOIN players op ON op.id = oc.player_id
+        LEFT JOIN cities tc ON tc.id = m.target_city_id
+        LEFT JOIN players tp ON tp.id = tc.player_id
        WHERE m.world_id = ${player.worldId}
-         AND m.owner_player_id = ${player.playerId}
          AND m.status IN ('scheduled', 'running')
-         AND m.type IN ('attack', 'return', 'transport', 'support', 'spy')
-         AND (${cityFilter}::bigint IS NULL OR m.origin_city_id = ${cityFilter}::bigint)
-       GROUP BY m.id
-       ORDER BY m.execute_at
+         AND m.type IN ('attack', 'return', 'transport', 'support', 'spy', 'found_city')
+         AND (m.origin_city_id IN (SELECT id FROM my) OR m.target_city_id IN (SELECT id FROM my))
+       GROUP BY m.id, oc.k, oc.d, oc.s, op.username, tc.k, tc.d, tc.s, tp.username
+       ORDER BY m.created_at, m.id
     `);
 
-    // Gelen saldırılar: yalnız SALDIRI gidişi görünür; `return` bu sorguya hiç girmez.
-    const incoming = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT m.id, m.execute_at, m.target_city_id,
-             o.k AS origin_k, o.d AS origin_d, o.s AS origin_s
-        FROM missions m
-        JOIN cities c ON c.id = m.target_city_id
-        LEFT JOIN cities o ON o.id = m.origin_city_id
-       WHERE m.world_id = ${player.worldId}
-         AND m.type = 'attack'
-         AND m.status IN ('scheduled', 'running')
-         AND c.player_id = ${player.playerId}
-         AND (${cityFilter}::bigint IS NULL OR m.target_city_id = ${cityFilter}::bigint)
-       ORDER BY m.execute_at
-    `);
+    const movements: Record<string, unknown>[] = [];
+    for (const r of rows) {
+      const type = String(r['type']);
+      const mine = Boolean(r['origin_is_mine']);
+      const targetMine = Boolean(r['target_is_mine']);
+      const origin = r['ok'] == null
+        ? null : { k: Number(r['ok']), d: Number(r['od']), s: Number(r['os']) };
+      const target = r['tk'] == null
+        ? (r['target_k'] == null
+          ? null : { k: Number(r['target_k']), d: Number(r['target_d']), s: Number(r['target_s']) })
+        : { k: Number(r['tk']), d: Number(r['td']), s: Number(r['ts']) };
+
+      const base = {
+        id: Number(r['id']),
+        type,
+        startedAt: toDate(r['created_at']).toISOString(),
+        executeAt: toDate(r['execute_at']).toISOString(),
+        origin,
+        originPlayer: r['oname'] == null ? null : String(r['oname']),
+        target,
+        targetPlayer: r['tname'] == null ? null : String(r['tname']),
+      };
+
+      // GİDEN bacak — çıpa: kaynak şehir (benim).
+      if (mine) {
+        const icon = OUT_ICON[type];
+        if (icon) {
+          movements.push({
+            ...base, key: `${r['id']}-out`, direction: 'out', icon,
+            cityId: Number(r['origin_city_id']),
+            units: r['units'] ?? {},
+          });
+        }
+      }
+      // GELEN bacak — çıpa: hedef şehir (benim).
+      if (targetMine) {
+        const icon = type === 'return' ? 'attack' : IN_ICON[type];
+        if (icon) {
+          movements.push({
+            ...base, key: `${r['id']}-in`,
+            // Kendi ordumun dönüşü "gelen tehdit" değil; yön `own` ile ayrılıyor.
+            direction: type === 'return' ? 'own' : 'in',
+            icon,
+            cityId: Number(r['target_city_id']),
+            // ⭐ Yabancı hareketinde birleşim GİZLİ: `units` bilerek yok (§13.10.1).
+            ...(type === 'return' ? { units: r['units'] ?? {} } : {}),
+          });
+        }
+      }
+    }
+
+    const filtered = cityFilter == null
+      ? movements : movements.filter((m) => m['cityId'] === cityFilter);
 
     return {
       gameNow: gameNow.toISOString(),
       serverNow: new Date().toISOString(),
-      outgoing: outgoing.map((r) => ({
-        id: Number(r['id']),
-        type: String(r['type']),
-        originCityId: r['origin_city_id'] == null ? null : Number(r['origin_city_id']),
-        targetCityId: r['target_city_id'] == null ? null : Number(r['target_city_id']),
-        target: r['target_k'] == null
-          ? null
-          : { k: Number(r['target_k']), d: Number(r['target_d']), s: Number(r['target_s']) },
-        executeAt: toDate(r['execute_at']).toISOString(),
-        units: r['units'] ?? {},
-      })),
-      incoming: incoming.map((r) => ({
-        id: Number(r['id']),
-        targetCityId: Number(r['target_city_id']),
-        origin: r['origin_k'] == null
-          ? null
-          : { k: Number(r['origin_k']), d: Number(r['origin_d']), s: Number(r['origin_s']) },
-        arrivesAt: toDate(r['execute_at']).toISOString(),
-        // ⭐ `units` BİLEREK YOK: birleşim gizlidir, öğrenmek için casusluk gerekir (§13.10.1).
-      })),
+      // Sıra GÖREVİN BAŞLADIĞI ana göre (kullanıcı kuralı) — varış sırası değil.
+      movements: filtered,
     };
   }
 }
+
+/**
+ * Görev tipi → simge dosyası (§13.11.9: dosya adı = katalog `id`).
+ * Eşleme kullanıcının tanımından birebir (`duzenleme_onerileri.txt`).
+ */
+const OUT_ICON: Record<string, string> = {
+  attack: 'attack',
+  transport: 'transport_out',
+  support: 'support_out',
+  spy: 'spy_out',
+  found_city: 'found_city',
+  // `return` giden bacak üretmez: kaynağı düşmanın şehridir, benim değil.
+};
+
+const IN_ICON: Record<string, string> = {
+  attack: 'attack_in',
+  transport: 'transport_back',
+  support: 'support_in',
+  spy: 'spy_back',
+};
 
 /** Alan hatalarını HTTP'ye çevirir; kodlar istemcide i18n anahtarı olarak kullanılır. */
 function toHttp(err: unknown): Error {

@@ -9,21 +9,44 @@
  */
 import { NavLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { getSession, logout } from '../lib/api.ts';
 import { fmt, useTheme, useTick } from '../lib/hooks.ts';
-import { useCities, useCity, useMessages, useMissions } from '../lib/queries.ts';
+import { useCities, useCity, useMessages, useMovements } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { Panel, Res } from './ui.tsx';
 
 /**
- * Menü sırası orijinaldeki gibi: **Ordular en üstte** (giriş ekranı da orası).
- * `short` mobil alt barın dar sekmeleri için.
+ * ⭐ SOL MENÜ SIRASI — orijinaldeki gibi (`images/scr_web01`, kullanıcı listesi):
+ * Ordular · Baraka · Yapılar · Savunma · Akademi · Tapınak · Dünya · Mesajlar ·
+ * Komuta Merkezi · Seçenekler · Yardım · Oyunu Kapat.
+ *
+ * Mesajlar orijinal menüde yoktu (muhtemelen Komuta Merkezi altındaydı) ama okunmamış rozeti
+ * sürekli görünmeli → **Komuta Merkezi'nden hemen önce** bırakıldı (kullanıcı kararı).
  */
-const NAV = [
-  { to: '/armies', label: 'Ordular', short: 'Ordular', icon: '⚔️' },
-  { to: '/city', label: 'Şehir', short: 'Şehir', icon: '🏰' },
-  { to: '/world', label: 'Dünya', short: 'Dünya', icon: '🗺️' },
-  { to: '/messages', label: 'Mesajlar', short: 'Mesaj', icon: '✉️' },
-  { to: '/more', label: 'Daha Fazla', short: 'Daha', icon: '☰' },
+const MENU = [
+  { to: '/armies', label: 'Ordular', icon: '⚔️' },
+  { to: '/barracks', label: 'Baraka', icon: '🛡️' },
+  { to: '/buildings', label: 'Yapılar', icon: '🏗️' },
+  { to: '/defense', label: 'Savunma', icon: '🏯' },
+  { to: '/academy', label: 'Akademi', icon: '📜' },
+  { to: '/temple', label: 'Tapınak', icon: '⛩️' },
+  { to: '/world', label: 'Dünya', icon: '🗺️' },
+  { to: '/messages', label: 'Mesajlar', icon: '✉️' },
+  { to: '/command', label: 'Komuta Merkezi', icon: '🎖️' },
+  { to: '/options', label: 'Seçenekler', icon: '⚙️' },
+  { to: '/help', label: 'Yardım', icon: '❓' },
+] as const;
+
+/**
+ * Mobil alt bar 11 madde taşıyamaz → beş sekmeye indiriliyor. "Şehir" sekmesi, menünün şehirle
+ * ilgili maddelerini (Baraka/Yapılar/Savunma/Akademi/Tapınak) listeleyen bir hub'dır.
+ */
+const TABS = [
+  { to: '/armies', label: 'Ordular', icon: '⚔️' },
+  { to: '/city', label: 'Şehir', icon: '🏰' },
+  { to: '/world', label: 'Dünya', icon: '🗺️' },
+  { to: '/messages', label: 'Mesaj', icon: '✉️' },
+  { to: '/more', label: 'Daha', icon: '☰' },
 ] as const;
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -31,16 +54,21 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="flex h-full flex-col bg-bg text-ink">
       <ResourceBar />
 
-      {/* Masaüstünde tam genişlik üç sütun; mobilde tek sütun. */}
+      {/*
+        Masaüstünde üç sütun; mobilde tek sütun.
+        ⭐ Orta sütun **dar tutulur** (üzerinde iş yapmaya yetecek kadar) ve yan panellerle arası
+        ekran genişledikçe **açılır** (`lg:gap-8` → `2xl:gap-20`). Referans `images/scr_web03`:
+        orada da orta panel dar, aradaki boşluk belirgin. Ekran daraldıkça boşluk kapanır.
+      */}
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[1800px] gap-3 px-3 py-3">
-          <aside className="hidden w-52 shrink-0 lg:block">
+        <div className="mx-auto flex w-full max-w-[1700px] justify-center gap-3 px-3 py-3 lg:gap-8 2xl:gap-20">
+          <aside className="hidden w-48 shrink-0 lg:block">
             <SideMenu />
           </aside>
 
-          <main className="min-w-0 flex-1 pb-24 lg:pb-3">{children}</main>
+          <main className="w-full min-w-0 max-w-3xl pb-24 lg:pb-3">{children}</main>
 
-          <aside className="hidden w-64 shrink-0 xl:block">
+          <aside className="hidden w-56 shrink-0 xl:block">
             <AlliancePanel />
           </aside>
         </div>
@@ -118,26 +146,28 @@ function ResourceBar() {
 
 function SideMenu() {
   const messages = useMessages();
-  const missions = useMissions();
+  const movements = useMovements();
+  const session = getSession();
   const unread = messages.data?.unread ?? 0;
-  const incoming = missions.data?.incoming.length ?? 0;
+  // Rozet YALNIZ gelen (yabancı) hareketleri sayar; kendi seferlerim acil bilgi değil.
+  const incoming = (movements.data?.movements ?? []).filter((m) => m.direction === 'in').length;
 
   return (
-    <Panel title="Menü" className="sticky top-3">
+    <Panel title={session?.username ?? 'Menü'} className="sticky top-3">
       <nav className="p-1.5">
-        {NAV.map((t) => {
+        {MENU.map((t) => {
           const badge = t.to === '/messages' ? unread : t.to === '/armies' ? incoming : 0;
           return (
             <NavLink key={t.to} to={t.to}
               className={({ isActive }) =>
-                `mb-1 flex items-center gap-2 rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-sm
+                `mb-0.5 flex items-center gap-2 rounded-[var(--radius-sm)] border px-2.5 py-1 text-sm
                  transition-colors ${
                   isActive
                     ? 'border-strong bg-accent font-medium text-on-accent'
                     : 'border-transparent text-ink hover:border-border hover:bg-raised'
                 }`}>
               <span aria-hidden className="text-base leading-none">{t.icon}</span>
-              <span className="flex-1">{t.label}</span>
+              <span className="flex-1 truncate">{t.label}</span>
               {badge > 0 ? (
                 <span className="rounded-full bg-danger px-1.5 text-[10px] leading-4 text-on-accent">
                   {badge}
@@ -146,6 +176,14 @@ function SideMenu() {
             </NavLink>
           );
         })}
+        <button
+          onClick={() => { void logout().then(() => window.location.reload()); }}
+          className="mt-1 flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-transparent
+            px-2.5 py-1 text-sm text-danger transition-colors hover:border-danger hover:bg-raised"
+        >
+          <span aria-hidden className="text-base leading-none">⏻</span>
+          <span className="flex-1 text-left">Oyunu Kapat</span>
+        </button>
       </nav>
     </Panel>
   );
@@ -177,18 +215,18 @@ function AlliancePanel() {
 
 function BottomBar() {
   const messages = useMessages();
-  const missions = useMissions();
+  const movements = useMovements();
   const { pathname } = useLocation();
 
   const unread = messages.data?.unread ?? 0;
   // ⭐ Gelen ordu rozeti: oyuncunun ekranda görmesi gereken TEK acil bilgi (§13.5.3).
-  const incoming = missions.data?.incoming.length ?? 0;
+  const incoming = (movements.data?.movements ?? []).filter((m) => m.direction === 'in').length;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t-2 border-strong bg-panel-header lg:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="mx-auto flex w-full max-w-3xl">
-        {NAV.map((t) => {
+        {TABS.map((t) => {
           const active = pathname.startsWith(t.to);
           const badge = t.to === '/messages' ? unread : t.to === '/armies' ? incoming : 0;
           return (
@@ -197,7 +235,7 @@ function BottomBar() {
                 active ? 'font-semibold text-on-panel-header' : 'text-on-panel-header/70'
               }`}>
               <span className="text-lg leading-none">{t.icon}</span>
-              {t.short}
+              {t.label}
               {badge > 0 ? (
                 <span className="absolute top-0.5 right-1/2 translate-x-4 rounded-full bg-danger px-1.5 text-[10px] leading-4 text-on-accent">
                   {badge}

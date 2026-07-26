@@ -107,21 +107,32 @@ export interface CityCatalog {
   techs: CatalogTech[];
 }
 
-export interface MissionRow {
-  id: number;
-  type: string;
-  originCityId: number | null;
-  targetCityId: number | null;
-  target: { k: number; d: number; s: number } | null;
-  executeAt: string;
-  units: Record<string, number>;
+export interface Coords {
+  k: number;
+  d: number;
+  s: number;
 }
 
-export interface IncomingRow {
+/**
+ * Bir ordu hareketi. Arayüz bunu **çıpa şehrin** (`cityId`) kale simgesi altına asar.
+ * `direction`: `out` benim gönderdiğim · `in` bana gelen (yabancı) · `own` kendi ordumun dönüşü.
+ */
+export interface Movement {
+  key: string;
   id: number;
-  targetCityId: number;
-  origin: { k: number; d: number; s: number } | null;
-  arrivesAt: string;
+  type: string;
+  direction: 'out' | 'in' | 'own';
+  /** Simge dosyası adı (`/assets/missions/<icon>.png`). */
+  icon: string;
+  cityId: number;
+  startedAt: string;
+  executeAt: string;
+  origin: Coords | null;
+  originPlayer: string | null;
+  target: Coords | null;
+  targetPlayer: string | null;
+  /** Yalnız KENDİ hareketlerimde dolu; yabancı harekette birleşim gizlidir (§13.10.1). */
+  units?: Record<string, number>;
 }
 
 export interface MessageRow {
@@ -169,10 +180,11 @@ export const useCatalog = (cityId: number | null): UseQueryResult<CityCatalog> =
   enabled: cityId != null,
 });
 
-export const useMissions = (): UseQueryResult<{ outgoing: MissionRow[]; incoming: IncomingRow[] }> =>
+export const useMovements = (): UseQueryResult<{ movements: Movement[] }> =>
   useQuery({
     queryKey: ['missions'],
-    queryFn: () => get<{ outgoing: MissionRow[]; incoming: IncomingRow[] }>('/api/v1/missions'),
+    queryFn: () => get<{ movements: Movement[] }>('/api/v1/missions'),
+    // ⚠️ Geçici: WS gelene kadar yoklama. Kullanıcı kuralı "olay ANINDA görünmeli" → sıradaki iş.
     refetchInterval: 10_000,
   });
 

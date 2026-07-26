@@ -332,7 +332,12 @@ export const heroes = pgTable('heroes', {
   /** Kahramanın durduğu şehir. Seferdeyken NULL (görevde `mission_heroes` tutar). */
   cityId: bigint('city_id', { mode: 'number' }).references(() => cities.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
-  level: smallint('level').notNull().default(1),
+  /**
+   * ⭐ Kahramanlar **seviye 0** olarak çıkar (ekran görüntüsüyle doğrulandı: `scr_itv03`,
+   * "nart - Seviye 0"). İlk seviye için 500 tecrübe gerekir (`heroXpForLevel(1)`), ekranda
+   * `396 / 500` — formül birebir tutuyor.
+   */
+  level: smallint('level').notNull().default(0),
   xp: bigint('xp', { mode: 'number' }).notNull().default(0),
   /** Yetenek puanları — seviye başına 3 dağıtılır (§13.11.4c). */
   fAtk: integer('f_atk').notNull().default(0),

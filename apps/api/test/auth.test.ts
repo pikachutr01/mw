@@ -93,6 +93,44 @@ describe('kayıt', () => {
     expect(snap!.goldPerHour + snap!.foodPerHour).toBe(11);
   });
 
+  /**
+   * ⚠️ GERÇEK HATA (2026-07-27): yuva şehir SAYISINDAN türetiliyordu (`count % 10`). Bir yuva
+   * elle dolduğunda veya bir şehir silindiğinde aynı koordinat ikinci kez üretiliyor ve kayıt
+   * `cities_world_coords` ihlaliyle 500 dönüyordu. Test o durumu birebir kuruyor.
+   */
+  it('⭐ dolu yuva ATLANIR: elle açılmış koordinat kaydı bozmaz', async () => {
+    const first = await auth.register({ ...cred('ilk'), worldId }, webCtx());
+    const firstCity = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT k, d, s FROM cities WHERE player_id = ${first.playerId}
+    `);
+    const k = Number(firstCity[0]!['k']);
+    const d = Number(firstCity[0]!['d']);
+    const s = Number(firstCity[0]!['s']);
+
+    // Sıradaki yuvayı BAŞKASI kapsın (koloni kurma, yerleşim algoritması, elle müdahale…).
+    await cities.create({
+      worldId, playerId: first.playerId, name: 'engel',
+      k, d, s: s + 1, isCapital: false, at: await clock.gameNow(worldId),
+    });
+
+    // Yeni kayıt çakışmamalı; boş bir yuvaya düşmeli.
+    const second = await auth.register({ ...cred('ikinci'), worldId }, webCtx());
+    const secondCity = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT k, d, s FROM cities WHERE player_id = ${second.playerId}
+    `);
+    expect(secondCity).toHaveLength(1);
+    const got = `${secondCity[0]!['k']}:${secondCity[0]!['d']}:${secondCity[0]!['s']}`;
+    expect(got).not.toBe(`${k}:${d}:${s}`);
+    expect(got).not.toBe(`${k}:${d}:${s + 1}`);
+  });
+
+  it('boşalan yuva yeniden kullanılır (şehir silinince kayıt tıkanmaz)', async () => {
+    const a = await auth.register({ ...cred('bosluk'), worldId }, webCtx());
+    await h.db.execute(sql`DELETE FROM cities WHERE player_id = ${a.playerId}`);
+    // Kalan tek şehir yoksa bile kayıt çalışmalı.
+    await expect(auth.register({ ...cred('sonraki'), worldId }, webCtx())).resolves.toBeTruthy();
+  });
+
   it('72 saat acemi koruması yazılır', async () => {
     const r = await auth.register({ ...cred('acemi'), worldId }, webCtx());
     const rows = await h.db.execute<Record<string, unknown>>(sql`

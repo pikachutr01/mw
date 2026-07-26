@@ -6,10 +6,11 @@ import { ActiveCityProvider } from './lib/city-context.tsx';
 import { Shell } from './components/Shell.tsx';
 import { Armies } from './screens/Armies.tsx';
 import { Auth } from './screens/Auth.tsx';
-import { City } from './screens/City.tsx';
-import { World } from './screens/World.tsx';
+import { AcademyScreen, BarracksScreen, BuildingsScreen, DefenseScreen } from './screens/City.tsx';
+import { CityHub } from './screens/CityHub.tsx';
 import { Messages } from './screens/Messages.tsx';
-import { More } from './screens/More.tsx';
+import { CommandScreen, HelpScreen, OptionsScreen, TempleScreen } from './screens/Placeholders.tsx';
+import { World } from './screens/World.tsx';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,19 +33,30 @@ export function App() {
     return <Auth onDone={() => setSessionState(getSession())} />;
   }
 
+  const logout = (): void => setSessionState(null);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ActiveCityProvider>
         <BrowserRouter>
           <Shell>
             <Routes>
-              {/* ⭐ Giriş sonrası ilk ekran ORDULAR (kullanıcı kararı): oyun zamanlanmış olaylar
-                  üzerine kurulu, oyuncunun ilk sorusu daima "şu an ne oluyor?". */}
+              {/* ⭐ Giriş sonrası HER KOŞULDA Ordular (kullanıcı kararı): oyun zamanlanmış
+                  olaylar üzerine kurulu, oyuncunun ilk sorusu daima "şu an ne oluyor?". */}
               <Route path="/armies" element={<Armies />} />
-              <Route path="/city" element={<City />} />
+              <Route path="/barracks" element={<BarracksScreen />} />
+              <Route path="/buildings" element={<BuildingsScreen />} />
+              <Route path="/defense" element={<DefenseScreen />} />
+              <Route path="/academy" element={<AcademyScreen />} />
+              <Route path="/temple" element={<TempleScreen />} />
               <Route path="/world" element={<World />} />
               <Route path="/messages" element={<Messages />} />
-              <Route path="/more" element={<More onLoggedOut={() => setSessionState(null)} />} />
+              <Route path="/command" element={<CommandScreen />} />
+              <Route path="/options" element={<OptionsScreen onLoggedOut={logout} />} />
+              <Route path="/help" element={<HelpScreen />} />
+              {/* Mobil "Şehir" ve "Daha" sekmeleri */}
+              <Route path="/city" element={<CityHub />} />
+              <Route path="/more" element={<OptionsScreen onLoggedOut={logout} />} />
               <Route path="*" element={<Navigate to="/armies" replace />} />
             </Routes>
           </Shell>
