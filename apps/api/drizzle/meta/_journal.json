@@ -22,6 +22,13 @@
       "when": 1785072022708,
       "tag": "0002_lazy_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785073288709,
+      "tag": "0003_great_william_stryker",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,7 @@
  */
 import { relations, sql } from 'drizzle-orm';
 import {
-  bigint, bigserial, boolean, index, integer, jsonb, pgTable, smallint, text, timestamp,
+  bigint, bigserial, boolean, index, integer, jsonb, numeric, pgTable, smallint, text, timestamp,
   uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -72,10 +72,15 @@ export const cities = pgTable('cities', {
   d: integer('d').notNull(),
   s: integer('s').notNull(),
   isCapital: boolean('is_capital').notNull().default(false),
-  // Kaynaklar numeric değil çift-hassasiyet DEĞİL: tembel birikim kayıpsız olsun diye text-numeric
-  // yerine bigint+kesir tutmuyoruz; drizzle numeric mode'u Faz 1'de `resources_at` çıpasıyla gelir.
-  gold: bigint('gold', { mode: 'number' }).notNull().default(0),
-  food: bigint('food', { mode: 'number' }).notNull().default(0),
+  /**
+   * ⭐ TEMBEL BİRİKİM (§3): tick YOK. Kaynak, `resources_at` çıpasından itibaren geçen OYUN
+   * süresiyle okuma/mutasyon anında hesaplanır.
+   * **numeric(20,6)** — kesirli kısım saklanıyor ki birikim KAYIPSIZ olsun: saatte 11 kaynak
+   * üreten bir şehir 10 saniyede 0,0305 üretir; bunu tam sayıya yuvarlarsak her okumada sıfırlanır
+   * ve oyuncu asla kaynak biriktiremez. Ayrıca float değil numeric → yuvarlama hatası yok.
+   */
+  gold: numeric('gold', { precision: 20, scale: 6 }).notNull().default('0'),
+  food: numeric('food', { precision: 20, scale: 6 }).notNull().default('0'),
   resourcesAt: timestamp('resources_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
