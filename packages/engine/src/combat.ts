@@ -13,7 +13,7 @@
  * ========================================================================== */
 import {
   FLYING, NONCOMBAT, NO_POOL, NO_ROUND_LOSS, OUT_OF_BATTLE, PASSIVE_STRUCTS, SETTLE_ON_LOSS,
-  TECHS_BY_ID, TECH_BY_UNIT, UNITS, UNITS_BY_ID, catalogHash,
+  LEVEL_BASED, TECHS_BY_ID, TECH_BY_UNIT, UNITS, UNITS_BY_ID, catalogHash,
   type TechLevels, type UnitDef,
 } from '@mobiwar/catalog';
 import { type CombatConfig, DEFAULT_COMBAT_CONFIG } from './config.ts';
@@ -552,7 +552,9 @@ function sideResult(army: Army): SideResult {
     if (e.restoredByFloor > 0) floorRestored[e.id] = e.restoredByFloor;
   }
   return {
-    alive: army.units.reduce((n, e) => n + e.countFinal, 0),
+    // Sur/Büyü Kalkanı/Tapınak SEVİYEdir, adet değil → "hayatta kalan birim" toplamına girmez.
+    // (Sur'un durumu `wallIntegrity` ile yüzde olarak raporlanır.)
+    alive: army.units.reduce((n, e) => n + (LEVEL_BASED.has(e.id) ? 0 : e.countFinal), 0),
     // "X ünite kaybetti" toplamı YALNIZ savaşçıları sayar; savunma yapıları girmez.
     lost: army.units.reduce(
       (n, e) => n + (e.kind === 'defense' ? 0 : Math.max(0, e.count0 - e.countFinal)),

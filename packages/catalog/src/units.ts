@@ -88,3 +88,10 @@ export const SETTLE_ON_LOSS: readonly string[] = ['cargo_wagon', 'gnome'];
 
 /** "Yenik" kontrolünde sayılmayan birimler (binary FUN_004114b0). */
 export const NONCOMBAT: ReadonlySet<string> = new Set(['cargo_wagon', 'spy_bird', 'gnome', 'trap']);
+
+/**
+ * Adedi değil SEVİYESİ olan yapılar. Girdideki sayı "kaç tane" değil "kaçıncı seviye" demektir
+ * (Sur 3 = üçüncü seviye sur, üç sur değil) ve savaşta seviye DÜŞMEZ — Sur'da bütünlük yüzdesi
+ * ayrıca raporlanır. Bu yüzden "hayatta kalan birim" toplamına KATILMAZLAR.
+ */
+export const LEVEL_BASED: ReadonlySet<string> = new Set(['wall', 'magic_shield', 'temple']);

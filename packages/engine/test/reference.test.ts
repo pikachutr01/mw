@@ -49,6 +49,18 @@ describe('referans savaş', () => {
     expect(r.defender.wallIntegrity).toBeLessThan(0.05);
   });
 
+  it('Sur ve Büyü Kalkanı "hayatta kalan birim" toplamına girmez (adet değil SEVİYE)', () => {
+    const r = simulate(REFERENCE);
+    // Seviye bilgisi raporda durur, durumu ayrıca YÜZDE olarak gelir…
+    expect(r.defender.counts['wall']).toBe(3);
+    expect(r.defender.wallIntegrity).not.toBeNull();
+    // …ama "3 birim asker" gibi toplama eklenmez.
+    const sumOfUnits = Object.entries(r.defender.counts)
+      .filter(([id]) => !['wall', 'magic_shield', 'temple'].includes(id))
+      .reduce((n, [, c]) => n + c, 0);
+    expect(r.defender.alive).toBe(sumOfUnits);
+  });
+
   it('savunma tabanı bu savaşta da geçerli', () => {
     const r = simulate(REFERENCE);
     for (const id of ['archer_tower', 'oil_cauldron', 'mangonel_tower', 'guard']) {
