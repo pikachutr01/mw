@@ -36,6 +36,18 @@ export interface AuthResult extends TokenPair {
   sessionId: string;
 }
 
+/**
+ * ⭐ DÜNYA BOYUTLARI — oyunun kendi dokümanından (`teknik_ve_yapi_dokumantasyonu.md`):
+ * *"Bir dünyada 10 kıta, bir kıtada 500 diyar ve bir diyarda da 10 şehir bulunmaktadır."*
+ * → dünya başına 50.000 şehir yuvası. Koordinatlar **1-indeksli** (1:45:10).
+ * Faz 3'te `world_config.map`'e taşınacak; yerleşim algoritması da (§13.6) bunu kullanacak.
+ */
+export const WORLD_SHAPE = {
+  continents: 10,
+  districtsPerContinent: 500,
+  citiesPerDistrict: 10,
+} as const;
+
 /** Yanlış parola denemesi bu sayıyı aşarsa hesap kısa süre kilitlenir (kaba kuvvet freni). */
 const MAX_FAILED_LOGINS = 10;
 const LOCK_MINUTES = 15;
@@ -247,7 +259,11 @@ export class AuthService {
       SELECT COUNT(*)::int AS n FROM cities WHERE world_id = ${worldId}
     `);
     const n = Number(rows[0]?.n ?? 0);
-    // 100 şehir/diyar, 100 diyar/kıta — Faz 3'te gerçek dünya sabitlerinden gelecek.
-    return { k: Math.floor(n / 10_000), d: Math.floor((n % 10_000) / 100), s: n % 100 };
+    // ⭐ Dünya boyutları oyunun kendi dokümanından: 10 kıta × 500 diyar × 10 şehir
+    // ve koordinatlar **1-indeksli** (örnek: 1:45:10 = 1. kıta, 45. diyar, 10. şehir).
+    const s = (n % WORLD_SHAPE.citiesPerDistrict) + 1;
+    const d = (Math.floor(n / WORLD_SHAPE.citiesPerDistrict) % WORLD_SHAPE.districtsPerContinent) + 1;
+    const k = Math.floor(n / (WORLD_SHAPE.citiesPerDistrict * WORLD_SHAPE.districtsPerContinent)) + 1;
+    return { k, d, s };
   }
 }

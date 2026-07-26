@@ -12,20 +12,14 @@
 import { sql } from 'drizzle-orm';
 import {
   UNITS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
-  buildingCost, buildingTimeSeconds, checkRequirement, techCost, techTimeSeconds,
-  trainingTimeSeconds, type UnmetRequirement,
+  buildingCost, buildingTimeSeconds, cancelRefund, checkRequirement, techCost, techTimeSeconds,
+  trainingTimeSeconds, type RefundRule, type UnmetRequirement,
 } from '@mobiwar/catalog';
 import { CapacityService } from '../cities/capacity.service.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 
 export type QueueCategory = 'building' | 'unit' | 'defense' | 'tech';
-
-/**
- * İptalde iade oranı. Orijinaldeki değer elimizde YOK (istemci hesaplamıyor, sunucudan geliyordu)
- * → bu bizim denge kararımız. Ayrıntı: `cancel()` dokümantasyonu. `world_config` ile ezilebilir.
- */
-export const DEFAULT_CANCEL_REFUND_RATIO = 0.9;
 
 export class QueueError extends Error {
   constructor(
@@ -361,19 +355,28 @@ export class QueueService {
    * İptal, kuyruk satırını VE bitiş görevini birlikte kapatır. Handler'daki
    * `canceled_at IS NULL` koşulu sayesinde, görev bir şekilde yine çalışsa bile etki UYGULANMAZ.
    *
-   * ⚠️ **İADE ORANI BİR DENGE KARARIDIR** (orijinaldeki oran elimizde yok — istemci hesaplamıyor).
-   * Varsayılan **%90**: tam iade, kuyruğu **yağmaya karşı kasa** yapardı — oyuncu saldırı gelmeden
-   * kaynağı üretime yatırıp saldırıdan sonra iptal ederek yağmadan tamamen kurtarabilirdi.
-   * %10 kesinti bu sömürüyü kârsız kılar. `cancelRefundRatio: 1.0` ile kapatılabilir.
+   * ⭐ **İADE KURALI OYUNUN KENDİ DOKÜMANINDAN** (`teknik_ve_yapi_dokumantasyonu.md`,
+   * BARAKA + YAPILAR başlıkları — kullanıcı işaret etti, 2026-07-26). Sabit yüzde DEĞİL, iki kural:
+   *
+   *   **Yapı · teknik · Sur/Büyü Kalkanı → SÜREYE GÖRE:** `iade = harcanan × (1 − ilerleme)`
+   *     Doküman örneği: 100/100'e inşa edilen yapı %20 tamamken iptal → 80/80 iade.
+   *   **Savaşçı · adetli savunma birimi → BİR BİRİM EKSİK:** `iade = harcanan × (adet−1)/adet`
+   *     Doküman: *"her iptal işlemi için 1 ünitenin ücreti eksik iade edilir"* → tek birimlik
+   *     siparişin iptalinde HİÇ iade yok; 2 Ejderha iptali bir Ejderhayı yakar.
+   *
+   * (Önceki sabit %90 varsayımım yanlıştı; dokümanın kuralı bunun yerini aldı.)
    */
   async cancel(opts: {
-    queueId: number; playerId: number; at: Date; refundRatio?: number;
-  }): Promise<{ refunded: { gold: number; food: number } }> {
-    const ratio = Math.max(0, Math.min(1, opts.refundRatio ?? DEFAULT_CANCEL_REFUND_RATIO));
+    queueId: number; playerId: number; at: Date;
+    /** Testler/denge için iadeyi ayrıca ölçekler (varsayılan 1 = dokümandaki kural aynen). */
+    refundRatio?: number;
+  }): Promise<{ refunded: { gold: number; food: number }; rule: RefundRule; progress: number }> {
+    const extraRatio = Math.max(0, Math.min(1, opts.refundRatio ?? 1));
 
     return this.db.transaction(async (tx) => {
       const rows = await tx.execute<Record<string, unknown>>(sql`
-        SELECT id, city_id, player_id, spent_gold, spent_food, mission_id, category, item_type
+        SELECT id, city_id, player_id, spent_gold, spent_food, mission_id, category, item_type,
+               count, target_level, started_at, finish_at
           FROM queues
          WHERE id = ${opts.queueId} AND completed_at IS NULL AND canceled_at IS NULL
          FOR UPDATE
@@ -395,15 +398,31 @@ export class QueueService {
         `);
       }
 
+      // Adetli kalemler (savaşçı + adetli savunma birimi) "bir birim eksik", diğerleri süreye göre.
+      const count = q['count'] == null ? null : Number(q['count']);
+      const rule: RefundRule = count != null ? 'minusOneUnit' : 'timeProgress';
+
+      const startedAt = toDate(q['started_at']).getTime();
+      const finishAt = toDate(q['finish_at']).getTime();
+      const span = Math.max(1, finishAt - startedAt);
+      const progress = Math.min(1, Math.max(0, (opts.at.getTime() - startedAt) / span));
+
+      const base = cancelRefund({
+        rule,
+        spent: { gold: Number(q['spent_gold']), food: Number(q['spent_food']) },
+        progress,
+        count: count ?? 1,
+      });
       const refunded = {
-        gold: Math.floor(Number(q['spent_gold']) * ratio),
-        food: Math.floor(Number(q['spent_food']) * ratio),
+        gold: Math.floor(base.gold * extraRatio),
+        food: Math.floor(base.food * extraRatio),
       };
+
       const cityId = Number(q['city_id']);
       if (refunded.gold > 0 || refunded.food > 0) {
         await this.cities.add(cityId, refunded, opts.at, tx as never);
       }
-      return { refunded };
+      return { refunded, rule, progress };
     });
   }
 

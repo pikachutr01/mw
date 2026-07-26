@@ -65,15 +65,18 @@ export const TECH_REQUIREMENTS: Readonly<Record<string, Requirement>> = {
  * **Mimar Okulu**'na bağlı. Kale'nin kendisinin ön-şartı yok.
  */
 export const BUILDING_REQUIREMENTS: Readonly<Record<string, Requirement>> = {
+  // Doküman'da "Ön Şartlar" başlığı OLMAYAN yapıların ön-şartı YOKTUR.
   castle: {},
   farm: {},
   mine: {},
-  barracks: { buildings: { castle: 1 } },
+  barracks: {},
+  architect_school: {},
+  // Aşağıdakiler `teknik_ve_yapi_dokumantasyonu.md`'den BİREBİR (2026-07-26 düzeltmesi —
+  // önceki değerler benim tahminimdi ve dördü de yanlıştı).
   academy: { buildings: { castle: 2 } },
-  architect_school: { buildings: { castle: 3 } },
-  cave: { buildings: { architect_school: 2 } },
-  temple: { buildings: { architect_school: 4 } },
-  teleport: { buildings: { architect_school: 10 } },
+  cave: { buildings: { architect_school: 1 } },
+  temple: { buildings: { castle: 3, architect_school: 3 }, techs: { sorcery: 6 } },
+  teleport: { buildings: { castle: 12, architect_school: 12 }, techs: { sorcery: 12 } },
 };
 
 export interface UnmetRequirement {

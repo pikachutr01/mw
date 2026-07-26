@@ -145,6 +145,42 @@ export function trainingTimeSeconds(
   );
 }
 
+/**
+ * ⭐ İPTAL İADESİ — oyunun KENDİ dokümanından (`teknik_ve_yapi_dokumantasyonu.md`, BARAKA + YAPILAR).
+ * İki farklı kural var; yüzdesel tek bir oran DEĞİL:
+ *
+ * **1) Süreye göre (yapı · teknik · Sur/Büyü Kalkanı)** — doküman örneği birebir:
+ *    *"100 altın ve 100 yemeğe inşa edilen bir yapı %20 oranında tamamlanmışken iptal edildiğinde
+ *    80 altın ve 80 yemek iade edilir."*  →  `iade = harcanan × (1 − ilerleme)`
+ *
+ * **2) Birim başına (savaşçı · adetli savunma birimi)** — doküman:
+ *    *"mevcut üretimdeki savaşçının kaynağını geri alamazsınız… her iptal işlemi için 1 ünitenin
+ *    ücreti eksik iade edilir."*  →  `iade = harcanan × (adet − 1) / adet`
+ *    Bu yüzden Ejderha/Kaos gibi pahalı birimlerin iptali ağır: 2 Ejderha siparişinin iptali
+ *    bir Ejderhanın maliyetini yakar.
+ */
+export type RefundRule = 'timeProgress' | 'minusOneUnit';
+
+export interface RefundInput {
+  rule: RefundRule;
+  spent: Cost;
+  /** Süreye göre kuralda: geçen süre / toplam süre (0-1 arası kırpılır). */
+  progress?: number;
+  /** Birim başına kuralda: sipariş adedi. */
+  count?: number;
+}
+
+export function cancelRefund(input: RefundInput): Cost {
+  const { gold, food } = input.spent;
+  if (input.rule === 'timeProgress') {
+    const remaining = 1 - Math.min(1, Math.max(0, input.progress ?? 0));
+    return { gold: Math.floor(gold * remaining), food: Math.floor(food * remaining) };
+  }
+  const count = Math.max(1, Math.trunc(input.count ?? 1));
+  const keep = (count - 1) / count;   // tek birimlik sipariş → hiç iade yok
+  return { gold: Math.floor(gold * keep), food: Math.floor(food * keep) };
+}
+
 /** Kahraman diriltme maliyeti: (3000, 2000) × 1,5^seviye (§13.11.4b). */
 export function heroReviveCost(level: number): Cost {
   const k = 1.5 ** Math.max(0, level);

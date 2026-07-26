@@ -6,8 +6,12 @@ export const password = z.string().min(8).max(200);
 export const registerRequest = z.object({
   email: z.string().email(),
   password,
-  /** Oyun içinde yalnız bu görünür ve DEĞİŞTİRİLEMEZ. */
-  username: z.string().min(3).max(20).regex(/^[\p{L}\p{N}_-]+$/u),
+  /**
+   * Oyun içinde yalnız bu görünür ve **DEĞİŞTİRİLEMEZ**.
+   * Kural oyunun kendi dokümanından: *"en az 3, en fazla 10 karakter. Boşluk ve noktalama
+   * işaretleri kullanılamaz."* (Önceki max 20 bizim uydurmamızdı.)
+   */
+  username: z.string().min(3).max(10).regex(/^[\p{L}\p{N}]+$/u, 'Boşluk ve noktalama kullanılamaz.'),
 });
 export type RegisterRequest = z.infer<typeof registerRequest>;
 

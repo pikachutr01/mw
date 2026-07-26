@@ -153,12 +153,14 @@ describe('yapı yükseltme', () => {
   it('ön-şart karşılanmazsa reddedilir ve EKSİKLERİN TAMAMI bildirilir', async () => {
     await giveResources(10_000_000, 10_000_000);
     const at = await clock.gameNow(worldId);
-    // Teleport → Mimar Okulu 10 gerekiyor (şu an 0)
+    // Teleport → Kale 12 + Mimar Okulu 12 + Büyücülük 12 (doküman); hepsi eksik
     const err = await queues.enqueueBuilding({ cityId, playerId, type: 'teleport', at })
       .catch((e: unknown) => e as QueueError);
     expect(err).toBeInstanceOf(QueueError);
     expect((err as QueueError).code).toBe('requirements_unmet');
-    expect((err as QueueError).message).toMatch(/architect_school 10/);
+    expect((err as QueueError).message).toMatch(/architect_school 12/);
+    expect((err as QueueError).message).toMatch(/castle 12/);
+    expect((err as QueueError).message).toMatch(/sorcery 12/);
   });
 
   it('seviye tavanı aşılamaz (Çiftlik 40)', async () => {
@@ -374,15 +376,17 @@ describe('sahiplik ve idempotency', () => {
 });
 
 describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur")', () => {
-  it('iptal kuyruğu VE görevi kapatır, kaynağı kısmen iade eder', async () => {
+  it('⭐ YAPI iptali SÜREYE göre iade eder (dokümanın kuralı)', async () => {
     const at = await clock.gameNow(worldId);
     const cost = buildingCost('farm', 2);
     const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
 
-    const { refunded } = await queues.cancel({ queueId: q.id, playerId, at });
+    // Hemen iptal → ilerleme ~0 → neredeyse tamamı iade.
+    const { refunded, rule, progress } = await queues.cancel({ queueId: q.id, playerId, at });
 
-    // Varsayılan %90 iade (kuyruğu yağma-korumalı kasa yapmasın diye %10 kesinti).
-    expect(refunded.gold).toBe(Math.floor(cost.gold * 0.9));
+    expect(rule).toBe('timeProgress');
+    expect(progress).toBeCloseTo(0, 2);
+    expect(refunded.gold).toBe(cost.gold);
     expect(await queues.openQueues(cityId)).toHaveLength(0);
 
     const m = await h.db.execute<Record<string, unknown>>(sql`
@@ -391,7 +395,61 @@ describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur
     expect(String(m[0]!['status'])).toBe('canceled');
 
     const snap = await cities.snapshot(cityId, at);
-    expect(snap!.gold).toBe(4000 - cost.gold + Math.floor(cost.gold * 0.9));
+    expect(snap!.gold).toBe(4000);   // hemen iptal → kese başa döndü
+  });
+
+  it('⭐ dokümanın ÖRNEĞİ birebir: %20 tamamlanmış yapı iptalinde %80 iade', async () => {
+    const at = await clock.gameNow(worldId);
+    const cost = buildingCost('farm', 2);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+
+    // Sürenin %20'si geçmiş anda iptal et.
+    const span = q.finishAt.getTime() - q.startedAt.getTime();
+    const yuzde20 = new Date(q.startedAt.getTime() + span * 0.2);
+    const { refunded, progress } = await queues.cancel({ queueId: q.id, playerId, at: yuzde20 });
+
+    expect(progress).toBeCloseTo(0.2, 2);
+    expect(refunded.gold).toBe(Math.floor(cost.gold * 0.8));
+    expect(refunded.food).toBe(Math.floor(cost.food * 0.8));
+  });
+
+  it('⭐ SAVAŞÇI iptali BİR BİRİM EKSİK iade eder (dokümanın kuralı)', async () => {
+    await setTech('blacksmithing', 1);
+    const at = await clock.gameNow(worldId);
+    const def = UNITS_BY_ID['dwarf']!;
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
+
+    const { refunded, rule } = await queues.cancel({ queueId: q.id, playerId, at });
+
+    expect(rule).toBe('minusOneUnit');
+    // 5 sipariş → 4 birimin ücreti iade, 1 birim yanar (üretimdeki savaşçı).
+    expect(refunded.gold).toBe(def.gold * 4);
+    expect(refunded.food).toBe(def.food * 4);
+  });
+
+  it('TEK birimlik sipariş iptalinde HİÇ iade yok', async () => {
+    await setTech('blacksmithing', 1);
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 1, at });
+
+    const { refunded } = await queues.cancel({ queueId: q.id, playerId, at });
+
+    expect(refunded).toEqual({ gold: 0, food: 0 });
+  });
+
+  it('pahalı birimlerde iptal AĞIR (dokümanın Ejderha/Kaos uyarısı)', async () => {
+    await giveResources(1e11, 1e11);
+    await setLevel('barracks', 10);
+    await setTech('sorcery', 12);
+    const at = await clock.gameNow(worldId);
+    const dragon = UNITS_BY_ID['dragon']!;
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dragon', count: 2, at });
+
+    const { refunded } = await queues.cancel({ queueId: q.id, playerId, at });
+
+    // 2 Ejderha siparişinin iptali BİR Ejderhayı yakar.
+    expect(refunded.gold).toBe(dragon.gold);
+    expect(dragon.gold).toBeGreaterThan(40_000);
   });
 
   it('iptal sonrası aynı kategoride yeni iş açılabilir', async () => {
@@ -420,12 +478,12 @@ describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur
     expect((await buildings())['farm']).toBe(1);
   });
 
-  it('tam iade istenirse oran 1.0 verilir', async () => {
+  it('ek denge çarpanı (refundRatio) iadeyi ayrıca kısar', async () => {
     const at = await clock.gameNow(worldId);
     const cost = buildingCost('farm', 2);
     const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
-    const { refunded } = await queues.cancel({ queueId: q.id, playerId, at, refundRatio: 1 });
-    expect(refunded.gold).toBe(cost.gold);
+    const { refunded } = await queues.cancel({ queueId: q.id, playerId, at, refundRatio: 0.5 });
+    expect(refunded.gold).toBe(Math.floor(cost.gold * 0.5));
   });
 
   it('başkasının kuyruğu iptal edilemez', async () => {
