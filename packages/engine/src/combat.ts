@@ -127,24 +127,27 @@ function applyNight(army: Army, nightVision: number, cfg: CombatConfig): void {
 
 /**
  * Kahramanın KENDİ P'sine katkısı (savunma) — durum düştükçe azalır.
- * fizSav ÜSSEL etki eder: 10 puan ≈ ×1,79 (ölçüm: lvl10'da 4.500 → 8.000).
+ * TOPLAMSAL: seviye tabanı + puan başına sabit. Ölçüm: lvl10/fizSav10 → 8.246,
+ * lvl15/fizSav45 → 25.751 (puan başına ≈ 420).
  */
 function heroDefPower(h: HeroState, cfg: CombatConfig): number {
   if ((h.level | 0) <= 0) return 0;
-  const { defBase, defPerLevel, defSkillBase } = cfg.hero;
-  const base = defBase + defPerLevel * (h.level | 0);
-  return round(base * defSkillBase ** Math.max(0, h.fDef ?? 0) * h.durum / 100);
+  const { defBase, defPerLevel, defPerPoint } = cfg.hero;
+  const value = defBase + defPerLevel * (h.level | 0) + defPerPoint * Math.max(0, h.fDef ?? 0);
+  return round(value * h.durum / 100);
 }
 
 /**
- * Kahramanın saldırı havuzuna katkısı (ofans) — seviyeye göre kuadratik, fizSald'a göre ÜSSEL.
- * Ölçüm (lvl15): 0/6/12 puan → 17.500 / 40.000 / 125.000.
+ * Kahramanın saldırı havuzuna katkısı (ofans) — durum düştükçe azalır.
+ * TOPLAMSAL: seviye² tabanı + puan başına sabit. Yüksek puanda puan terimi baskın.
+ * Ölçüm (lvl15): 0/6/12/24/45 puan → 16,9k / 62,7k / 100,7k / 166k / 346k · lvl20/60 → 455k.
  */
 function heroOffPower(h: HeroState, cfg: CombatConfig): number {
   if ((h.level | 0) <= 0) return 0;
-  const { offCoef, offSkillBase } = cfg.hero;
+  const { offLevelCoef, offPerPoint } = cfg.hero;
   const lvl = h.level | 0;
-  return round(offCoef * lvl * lvl * offSkillBase ** Math.max(0, h.fAtk ?? 0) * h.durum / 100);
+  const value = offLevelCoef * lvl * lvl + offPerPoint * Math.max(0, h.fAtk ?? 0);
+  return round(value * h.durum / 100);
 }
 
 /**

@@ -60,16 +60,62 @@ describe('yeteneklerin savaştaki etkisi', () => {
     expect(magicDef.defender.lost).toBe(none.defender.lost);
   });
 
-  it('fizSald ÜSSEL etki eder (lineer değil)', () => {
-    const s0 = simulate(battle({ level: 15 }, 'x'));
-    const s6 = simulate(battle({ level: 15, fAtk: 6 }, 'x'));
-    const s12 = simulate(battle({ level: 15, fAtk: 12 }, 'x'));
-    // Savunanın kaybı artan puanla hızlanarak büyümeli (orijinal: 2584 → 3242 → 4015).
-    const ilkArtis = s6.defender.lost - s0.defender.lost;
-    const ikinciArtis = s12.defender.lost - s6.defender.lost;
-    expect(ilkArtis).toBeGreaterThan(300);
-    expect(ikinciArtis).toBeGreaterThan(300);
-    expect(s12.defender.lost).toBeGreaterThan(s6.defender.lost);
+  /**
+   * ⚠️ Y turu (2026-07-26) bir ara vardığım "üssel, puan başına ×1,18" çıkarımını ÇÜRÜTTÜ:
+   * o rakam yalnız 0-12 puanlık pencereden geliyordu. 24/45/60 puan ölçülünce puan başına kazanç
+   * yavaşlıyor (×1,244 → ×1,082 → ×1,043 → ×1,036 → ×1,018) ve şekil TOPLAMSAL/lineer çıkıyor.
+   * Bu test o hatayı bir daha yapmamızı engelliyor: getiri AZALAN olmalı.
+   */
+  it('fizSald getirisi puan başına AZALIR (üssel değil)', () => {
+    const own = (fAtk: number): number => {
+      // Kendi kaybındaki düşüş, kahraman ofansının doğrudan ölçüsü (savunan kaybı doyuyor).
+      const r = simulate(battle({ level: 15, fAtk }, 'x'));
+      return r.attacker.lost;
+    };
+    const s0 = own(0);
+    const s12 = own(12);
+    const s24 = own(24);
+    const s45 = own(45);
+
+    // Daha çok puan her zaman daha iyi…
+    expect(s12).toBeLessThan(s0);
+    expect(s24).toBeLessThan(s12);
+    expect(s45).toBeLessThan(s24);
+
+    // …ama puan başına kazanç azalıyor: ilk 12 puan, son 21 puandan daha çok iş yapıyor.
+    const ilk12PuanBasina = (s0 - s12) / 12;
+    const son21PuanBasina = (s24 - s45) / 21;
+    expect(ilk12PuanBasina).toBeGreaterThan(son21PuanBasina);
+  });
+
+  it('savunan kaybı DOYAR (öldürülecek ordu kalmıyor)', () => {
+    // Ölçüm: 12/24/45/60 puanda savunan kaybı 4015 → 4254 → 4269 → 4276; ordu 4300 birim.
+    const s24 = simulate(battle({ level: 15, fAtk: 24 }, 'doy'));
+    const s45 = simulate(battle({ level: 15, fAtk: 45 }, 'doy'));
+    const ordu = 2000 + 1200 + 500 + 300 + 300;
+    expect(s24.defender.lost).toBeGreaterThan(ordu * 0.95);
+    expect(s45.defender.lost).toBeGreaterThan(ordu * 0.95);
+    expect(s45.defender.lost).toBeLessThanOrEqual(ordu);
+  });
+
+  it('yüksek fizSald savaşı KISALTIR (ölçüm: 45 ve 60 puanda 4 tur)', () => {
+    expect(simulate(battle({ level: 15 }, 'tur')).turns).toBe(5);
+    expect(simulate(battle({ level: 15, fAtk: 45 }, 'tur')).turns).toBeLessThanOrEqual(4);
+    expect(simulate(battle({ level: 20, fAtk: 60 }, 'tur')).turns).toBeLessThanOrEqual(4);
+  });
+
+  it('fizSald, kendi kaybını düşürmede fizSav’dan DAHA etkili', () => {
+    // Ölçüm: Y1 (24 fizSald) atk 688 · Y3 (45 fizSav) atk 908 → saldırı, savunmadan iyi korur.
+    const saldiri24 = simulate(battle({ level: 15, fAtk: 24 }, 'k'));
+    const savunma45 = simulate(battle({ level: 15, fDef: 45 }, 'k'));
+    expect(saldiri24.attacker.lost).toBeLessThan(savunma45.attacker.lost);
+  });
+
+  it('büyüye harcanan puan ZİYAN olur (Y4 kanıtı)', () => {
+    // Y4: 15 fizSald + 15 fizSav + 15 büyü → atk 758; Y1: 24 fizSald tek başına → atk 688.
+    const dengeli = simulate(battle({ level: 15, fAtk: 15, fDef: 15, mAtk: 8, mDef: 7 }, 'z'));
+    const sadeceSaldiri = simulate(battle({ level: 15, fAtk: 24 }, 'z'));
+    expect(sadeceSaldiri.attacker.lost).toBeLessThan(dengeli.attacker.lost);
   });
 
   it('fizSav saldıranın kaybını düşürür', () => {
@@ -86,14 +132,26 @@ describe('yeteneklerin savaştaki etkisi', () => {
     expect(fark).toBeLessThan(0.25);
   });
 
-  it('⚠️ tavan: tam puanlı kahraman orduyu İKAME ETMEZ', () => {
-    // Seviye 20 × 3 = 60 puanın tamamı fizSald'da: üssel model tavan olmadan ×10⁴ verirdi.
+  /**
+   * ⚠️ Y turu tavanı ÇÜRÜTTÜ. Önce "tek kahraman orduyu ikame etmemeli" diye %50 tavan koymuştum;
+   * ölçüm tam puanlı kahramanın GERÇEKTEN ordu ölçeğinde olduğunu gösterdi (lvl20/60 puan:
+   * saldıran 4.300 birimin yalnız 318'ini kaybederek savunanı 4 turda siliyor).
+   * Varsayılan tavan artık ölçülen aralığın dışında; alan yalnız denge düğmesi olarak duruyor.
+   */
+  it('tam puanlı kahraman ordu ölçeğindedir (ölçülen davranış)', () => {
     const full = simulate(battle({ level: 20, fAtk: 60 }, 'cap'));
     const none = simulate(battle({ level: 20 }, 'cap'));
-    const oran = full.defender.lost / Math.max(1, none.defender.lost);
-    expect(oran).toBeGreaterThan(1);       // kahraman gerçekten güçlendiriyor
-    expect(oran).toBeLessThan(3);          // ama savaşı tek başına bitirmiyor
-    expect(DEFAULT_COMBAT_CONFIG.hero.maxPoolShare).toBeLessThanOrEqual(1);
+    // Kendi kaybı en az yarıya inmeli — kahraman gerçekten belirleyici.
+    expect(full.attacker.lost).toBeLessThan(none.attacker.lost * 0.5);
+    // Varsayılan tavan ölçülen aralığı KISMIYOR.
+    expect(DEFAULT_COMBAT_CONFIG.hero.maxPoolShare).toBeGreaterThanOrEqual(1);
+  });
+
+  it('tavan düğmesi hâlâ çalışıyor (denge gerekirse kısılabilir)', () => {
+    const kisik = mergeCombatConfig({ hero: { maxPoolShare: 0.1 } });
+    const serbest = simulate(battle({ level: 20, fAtk: 60 }, 'knob'));
+    const kisilmis = simulate(battle({ level: 20, fAtk: 60 }, 'knob'), kisik);
+    expect(kisilmis.attacker.lost).toBeGreaterThan(serbest.attacker.lost);
   });
 });
 

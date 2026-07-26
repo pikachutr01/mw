@@ -51,26 +51,36 @@ export interface CombatConfig {
   counterK: number;
 
   /**
-   * Kahraman modeli [REKON-KALİBRE — KAHRAMAN_TESTLERI.md, 2026-07-26 yeniden çözüldü].
+   * Kahraman modeli [REKON-KALİBRE — `KAHRAMAN_TESTLERI.md`, G/S/D/X **+ Y** turları].
    *
-   * Yetenek etkisi LİNEER DEĞİL ÜSSEL: orijinal simülatörden geri çözülen ofans katkısı
-   * lvl15'te 0/6/12 fizSald için 17.500 → 40.000 → 125.000 (yani puan başına ≈ ×1,18).
-   * Bu, binary'nin `taban × 1,06^yetenek` biçimiyle uyumlu (1,06³ = 1,191 ≈ 1,18).
-   * Eski lineer `(1 + 0,25·fizSald)` modeli yüksek yetenekte ofansı %25-33 eksik veriyordu.
+   * ⚠️ **DÜZELTME (Y turu, 2026-07-26):** bir ara "yetenek etkisi ÜSSEL, puan başına ×1,18"
+   * demiştim — **yanlıştı.** O çıkarım yalnız 0-12 puanlık pencereden geliyordu. Y turu 24/45/60
+   * puanı ölçtü ve puan başına kazanç **yavaşlıyor**: ×1,244 → ×1,082 → ×1,043 → ×1,036 → ×1,018.
+   * Tüm aralığa bakıldığında şekil **TOPLAMSAL ve puanda LİNEER**.
+   *
+   *   heroOff = offLevelCoef × seviye²  +  offPerPoint × fizSald
+   *   heroDef = defBase + defPerLevel × seviye  +  defPerPoint × fizSav
+   *
+   * Geri çözülen ofans (lvl15): 0/6/12/24/45 puan → 16.9k / 62.7k / 100.7k / 166k / 346k;
+   * lvl20 60 puan → 455k. Yüksek puanda **seviye terimi gürültü** kalıyor (lvl15 s45 ile
+   * lvl20 s60 aynı doğruya oturuyor) — çünkü oyunda puan zaten seviyeye bağlı (3/seviye).
    */
   hero: {
-    /** Savunma katkısı: (defBase + defPerLevel × seviye) × defSkillBase^fizSav */
+    /** Savunma katkısı: defBase + defPerLevel × seviye + defPerPoint × fizSav */
     defBase: number;
     defPerLevel: number;
-    defSkillBase: number;
-    /** Ofans katkısı: offCoef × seviye² × offSkillBase^fizSald */
-    offCoef: number;
-    offSkillBase: number;
+    defPerPoint: number;
+    /** Ofans katkısı: offLevelCoef × seviye² + offPerPoint × fizSald */
+    offLevelCoef: number;
+    offPerPoint: number;
     /**
-     * ⚠️ TAVAN — kahraman kendi ordusunun havuzunun/P'sinin en fazla bu oranı kadar katkı verebilir.
-     * Gerekçe: yetenek başına ×1,18 üsseldir; seviye 15'te oyuncunun 45 puanı vardır (3/seviye) ve
-     * ölçüm verimiz yalnız 0-12 puan aralığını kapsıyor. Tavan olmadan tek kahraman koca orduyu
-     * gölgede bırakırdı (45 puanda ×1735). Yüksek puanlı ölçüm gelince tavan gevşetilecek.
+     * Kahraman katkısına tavan (kendi ordusunun havuzunun/P'sinin katı olarak).
+     *
+     * ⚠️ **Y turu tavanı ÇÜRÜTTÜ:** ölçüm, tam puanlı kahramanın gerçekten **ordu ölçeğinde**
+     * olduğunu gösterdi (lvl20/60 puan: saldıran 4.300 birimin yalnız 318'ini kaybederek
+     * savunanı 4 turda siliyor). Bu yüzden varsayılan **2,0** = ölçülen aralıkta devre dışı.
+     * Alan yine de duruyor: denge gerekçesiyle kısmak istenirse tek config satırı (oyun tasarımı
+     * kararı olur, ölçüm değil).
      */
     maxPoolShare: number;
     /** Seviye başına verilen geliştirme puanı (kullanıcı doğrulaması, 2026-07-26). */
@@ -118,10 +128,10 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   hero: {
     defBase: 3000,
     defPerLevel: 140,
-    defSkillBase: 1.06,
-    offCoef: 70,
-    offSkillBase: 1.18,
-    maxPoolShare: 0.5,
+    defPerPoint: 420,
+    offLevelCoef: 75,
+    offPerPoint: 7400,
+    maxPoolShare: 2.0,
     pointsPerLevel: 3,
     durumMitigation: 5.0,
     durumK: 0.0002,
