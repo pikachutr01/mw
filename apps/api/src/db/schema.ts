@@ -89,6 +89,110 @@ export const buildings = pgTable('buildings', {
   level: smallint('level').notNull().default(0),
 }, (t) => [uniqueIndex('buildings_pk').on(t.cityId, t.type)]);
 
+/* ═══ OTURUM ve ÇOKLU HESAP SİNYALLERİ (§9.1) ═══════════════════════════════
+ * ⏰ Tespit MANTIĞI sonradan yazılabilir, VERİ sonradan toplanamaz. Bu yüzden toplama katmanı
+ * Faz 2'de kuruluyor, analiz Faz 4'te (eşikler gerçek oyuncu davranışı görülmeden tahmindir).
+ * ⚠️ Bu veri ASLA otomatik cezaya bağlanmaz — yalnız skorlu rapor üretir, kararı yönetici verir.
+ */
+export const sessions = pgTable('sessions', {
+  id: uuid('id').primaryKey(),
+  accountId: bigint('account_id', { mode: 'number' }).notNull()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  refreshHash: text('refresh_hash').notNull(),
+  ip: text('ip'),
+  /** Web'de User-Agent; mobilde YOK (orada platform/os/model kullanılır). */
+  ua: text('ua'),
+  /** İstemcide üretilip kalıcı saklanan UUID (`X-Device-Id`). En güçlü teknik iz. */
+  deviceId: text('device_id'),
+  /** 'web' | 'android' | 'ios' — web ve mobil sinyalleri farklı olduğu için ayrı tutulur. */
+  platform: text('platform'),
+  osVersion: text('os_version'),
+  deviceModel: text('device_model'),
+  appVersion: text('app_version'),
+  timezone: text('timezone'),
+  locale: text('locale'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, (t) => [
+  index('sessions_account').on(t.accountId, t.createdAt),
+  index('sessions_device').on(t.deviceId),
+  index('sessions_ip').on(t.ip),
+]);
+
+/**
+ * Oyuncu × cihaz sayaç tablosu. `sessions` 90 günde budanır ama öbek bilgisi burada kalır
+ * (satır sayısı oyuncu×cihaz ile sınırlı → sınırsız büyümez).
+ * ⭐ Kabul kriteri: aynı tarayıcıdan iki hesaba girilirse aynı `device_id` iki `player_id` ile görünür.
+ */
+export const playerDevices = pgTable('player_devices', {
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  deviceId: text('device_id').notNull(),
+  platform: text('platform'),
+  firstSeen: timestamp('first_seen', { withTimezone: true }).notNull().defaultNow(),
+  lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
+  hits: integer('hits').notNull().default(1),
+}, (t) => [
+  uniqueIndex('player_devices_pk').on(t.playerId, t.deviceId),
+  // Analizin ana sorgusu: "bu cihazı kaç oyuncu kullandı?"
+  index('player_devices_by_device').on(t.deviceId),
+]);
+
+export const playerIps = pgTable('player_ips', {
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  ip: text('ip').notNull(),
+  /** /24 öbeği — mobil operatör NAT'ında tek IP yetmez, öbek daha anlamlı. */
+  ipBlock24: text('ip_block_24'),
+  asn: text('asn'),
+  firstSeen: timestamp('first_seen', { withTimezone: true }).notNull().defaultNow(),
+  lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
+  hits: integer('hits').notNull().default(1),
+}, (t) => [
+  uniqueIndex('player_ips_pk').on(t.playerId, t.ip),
+  index('player_ips_by_block').on(t.ipBlock24),
+]);
+
+/** Analizörün (Faz 4) ürettiği şüphe sinyalleri. Faz 2'de tablo boş durur. */
+export const abuseSignals = pgTable('abuse_signals', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id'),
+  /** sameDeviceId · oneWayResourceFlow · profitlessAttackFarm · … (§9.1.2) */
+  kind: text('kind').notNull(),
+  subjectPlayerId: bigint('subject_player_id', { mode: 'number' }),
+  relatedPlayerId: bigint('related_player_id', { mode: 'number' }),
+  score: integer('score').notNull(),
+  evidence: jsonb('evidence').notNull().default({}),
+  windowFrom: timestamp('window_from', { withTimezone: true }),
+  windowTo: timestamp('window_to', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  /** Yöneticinin kararı: 'innocent' | 'warned' | 'banned' | 'watch' */
+  resolution: text('resolution'),
+}, (t) => [
+  index('abuse_signals_pair').on(t.subjectPlayerId, t.relatedPlayerId),
+  index('abuse_signals_open').on(t.createdAt).where(sql`${t.resolvedAt} IS NULL`),
+]);
+
+/**
+ * Artımlı tarama çıpası: `window_from` = son BAŞARILI taramanın `window_to`'su.
+ * Böylece "son kontrolden sonraki işlemler" tam olarak bir kez incelenir; worker kapalı
+ * kalsa bile pencere kaymaz (§9.1.3).
+ */
+export const abuseScanRuns = pgTable('abuse_scan_runs', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id'),
+  windowFrom: timestamp('window_from', { withTimezone: true }).notNull(),
+  windowTo: timestamp('window_to', { withTimezone: true }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  signalsFound: integer('signals_found').notNull().default(0),
+  playersFlagged: integer('players_flagged').notNull().default(0),
+  emailedAt: timestamp('emailed_at', { withTimezone: true }),
+}, (t) => [index('abuse_scan_runs_window').on(t.worldId, t.windowTo)]);
+
 /* ═══ GÖREV KUYRUĞU (§1 — sistemin belkemiği) ═══════════════════════════════
  * Görev = oyuncunun "Ordular" ekranında GÖRDÜĞÜ oyun varlığı. Bu yüzden Redis'te değil
  * Postgres'te: kuyruk ile ordu aynı transaction'da değişir, split-brain imkânsız.

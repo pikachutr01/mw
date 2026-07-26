@@ -15,6 +15,13 @@
       "when": 1785069687642,
       "tag": "0001_pale_nick_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785072022708,
+      "tag": "0002_lazy_thor",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@
  *
  * Test DB'si ayrıdır (`mobiwar_test`), her dosya kendi dünyasını yaratır → paralel çalışabilir.
  */
+import { randomUUID } from 'node:crypto';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { sql } from 'drizzle-orm';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +54,29 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
   await h.db.execute(sql`DELETE FROM outbox WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM audit_log WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM echo_effects WHERE world_id = ${worldId}`);
+  // Dünya kimlikleri her koşuda 100'den başlıyor → önceki koşunun oyuncuları temizlenmeli,
+  // yoksa username/email tekilliği ikinci koşuda çakışır. (cities → players sırası önemli.)
+  await h.db.execute(sql`DELETE FROM cities WHERE world_id = ${worldId}`);
+  await h.db.execute(sql`DELETE FROM players WHERE world_id = ${worldId}`);
+}
+
+/**
+ * Test oyuncusu yaratır. E-posta/kullanıcı adı **rastgele** — testler aynı DB'de tekrar tekrar
+ * koştuğu için sabit değerler tekillik kısıtına çarpardı.
+ */
+export async function createPlayer(h: DbHandle, worldId: number, label: string): Promise<number> {
+  const token = randomUUID().slice(0, 8);
+  const acc = await h.db.execute<{ id: number } & Record<string, unknown>>(sql`
+    INSERT INTO accounts (email, password_hash)
+    VALUES (${`${label}-${token}@test.local`}, 'test-hash')
+    RETURNING id
+  `);
+  const p = await h.db.execute<{ id: number } & Record<string, unknown>>(sql`
+    INSERT INTO players (world_id, account_id, username)
+    VALUES (${worldId}, ${Number(acc[0]!.id)}, ${`${label}-${token}`})
+    RETURNING id
+  `);
+  return Number(p[0]!.id);
 }
 
 /**
