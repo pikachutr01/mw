@@ -61,22 +61,35 @@ export interface Requirement {
   techs?: Record<string, number>;
 }
 
+/** Ön-şart adı TÜRKÇE olarak sunucudan gelir (§13.14) — istemci eşleme tablosu tutmaz. */
+export interface NamedRequirement {
+  id: string;
+  name: string;
+  level: number;
+  kind: 'building' | 'tech';
+}
+
 export interface CatalogEntry {
   id: string;
   name: string;
   requirements: Requirement;
+  requirementNames: NamedRequirement[];
 }
 
 export interface CatalogBuilding extends CatalogEntry {
   level: number;
   maxLevel: number;
   nextCost: { gold: number; food: number } | null;
+  /** Bir sonraki seviyenin süresi (saniye). Tavandaysa null. */
+  nextSeconds: number | null;
 }
 
 export interface CatalogUnit extends CatalogEntry {
   area: number;
   speed?: number;
   cost: { gold: number; food: number };
+  /** Bir birimin üretim süresi (saniye); adetle çarpılır. */
+  seconds: number;
   levelBased?: boolean;
   current?: number;
 }
@@ -84,6 +97,7 @@ export interface CatalogUnit extends CatalogEntry {
 export interface CatalogTech extends CatalogEntry {
   level: number;
   nextCost: { gold: number; food: number };
+  nextSeconds: number;
 }
 
 export interface CityCatalog {

@@ -12,8 +12,10 @@ import {
 import { sql } from 'drizzle-orm';
 import { enqueueRequest } from '@mobiwar/contracts';
 import {
-  BUILDINGS, BUILDING_REQUIREMENTS, TECHS, TECH_REQUIREMENTS, UNITS, UNIT_REQUIREMENTS,
-  buildingCost, techCost, unitCost,
+  BUILDINGS, BUILDINGS_BY_ID, BUILDING_ORDER, BUILDING_REQUIREMENTS,
+  DEFENSE_ORDER, TECHS, TECHS_BY_ID, TECH_ORDER, TECH_REQUIREMENTS,
+  UNITS, UNITS_BY_ID, UNIT_REQUIREMENTS, WARRIOR_ORDER,
+  buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, trainingTimeSeconds, unitCost,
 } from '@mobiwar/catalog';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import type { Db } from '../db/client.ts';
@@ -122,35 +124,64 @@ export class CityController {
     const techs = mapCounts(techRows, 'level');
     const defenses = mapCounts(defRows, 'count');
 
+    // Süreleri ETKİLEYEN yapılar: Mimar Okulu (yapı + savunma), Baraka (savaşçı), Akademi (teknik).
+    const architect = snap.buildings['architect_school'] ?? 0;
+    const barracks = snap.buildings['barracks'] ?? 1;
+    const academy = snap.buildings['academy'] ?? 0;
+
     return {
-      buildings: BUILDINGS.map((b) => {
+      // ⚠️ Sıra ARAYÜZ sırasıdır (§ display-order): katalog dizisinin kendi sırası değil.
+      buildings: orderBy(BUILDINGS, BUILDING_ORDER).map((b) => {
         const level = snap.buildings[b.id] ?? 0;
         const next = level + 1;
+        const available = next <= b.maxLevel;
         return {
           id: b.id, name: b.name.tr, level, maxLevel: b.maxLevel,
-          nextCost: next <= b.maxLevel ? buildingCost(b.id, next) : null,
+          nextCost: available ? buildingCost(b.id, next) : null,
+          // ⭐ Bir sonraki seviyenin SÜRESİ (saniye) — oyuncu maliyetle birlikte bunu da görmeli.
+          nextSeconds: available ? Math.round(buildingTimeSeconds(b.id, next, architect)) : null,
           requirements: BUILDING_REQUIREMENTS[b.id] ?? {},
+          requirementNames: nameRequirements(BUILDING_REQUIREMENTS[b.id]),
         };
       }),
-      units: UNITS.filter((u) => u.kind === 'warrior').map((u) => ({
+      units: orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER).map((u) => ({
         id: u.id, name: u.name.tr, area: u.area, speed: u.speed,
         cost: unitCost(u.id, 1),
+        /** Bir birimin üretim süresi (Model A: alan × 0,95^(Baraka−1)). Adetle çarpılır. */
+        seconds: Math.round(trainingTimeSeconds(u.id, barracks)),
         requirements: UNIT_REQUIREMENTS[u.id] ?? {},
+        requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
       })),
-      defenses: UNITS.filter((u) => u.kind === 'defense' && u.id !== 'temple').map((u) => ({
-        id: u.id, name: u.name.tr, area: u.area,
-        /** Sur ve Büyü Kalkanı ADET değil SEVİYE taşır (§13.11.1b). */
-        levelBased: u.id === 'wall' || u.id === 'magic_shield',
-        current: defenses[u.id] ?? 0,
-        cost: unitCost(u.id, 1),
-        requirements: UNIT_REQUIREMENTS[u.id] ?? {},
-      })),
-      techs: TECHS.map((t) => {
+      defenses: orderBy(
+        UNITS.filter((u) => u.kind === 'defense' && u.id !== 'temple'), DEFENSE_ORDER,
+      ).map((u) => {
+        // Sur ve Büyü Kalkanı ADET değil SEVİYE taşır (§13.11.1b) → maliyet/süre seviyeye bağlı.
+        const levelBased = u.id === 'wall' || u.id === 'magic_shield';
+        const current = defenses[u.id] ?? 0;
+        const nextLevel = current + 1;
+        const cost = levelBased
+          ? {
+            gold: Math.round(u.gold * 1.8 ** (nextLevel - 1)),
+            food: Math.round(u.food * 1.8 ** (nextLevel - 1)),
+          }
+          : unitCost(u.id, 1);
+        return {
+          id: u.id, name: u.name.tr, area: u.area, levelBased, current, cost,
+          seconds: levelBased
+            ? Math.round((10 * (cost.gold + cost.food)) / 1.4 ** architect)
+            : Math.round(trainingTimeSeconds(u.id, architect)),
+          requirements: UNIT_REQUIREMENTS[u.id] ?? {},
+          requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
+        };
+      }),
+      techs: orderBy(TECHS, TECH_ORDER).map((t) => {
         const level = techs[t.id] ?? 0;
         return {
           id: t.id, name: t.name.tr, level,
           nextCost: techCost(t.id, level + 1),
+          nextSeconds: Math.round(techTimeSeconds(t.id, level + 1, academy)),
           requirements: TECH_REQUIREMENTS[t.id] ?? {},
+          requirementNames: nameRequirements(TECH_REQUIREMENTS[t.id]),
         };
       }),
     };
@@ -213,6 +244,29 @@ export class CityController {
       throw new ForbiddenException('Bu şehir sizin değil.');
     }
   }
+}
+
+/**
+ * ⭐ Ön-şart `id`'lerini TÜRKÇE adlara çevirir (§13.14): kod/DB İngilizce kalır, **oyuncuya
+ * görünen metin Türkçedir**. Arayüzde "castle 2" değil "Kale 2" yazmalı.
+ *
+ * Çeviri sunucuda yapılıyor çünkü ad katalogdadır; istemcinin ikinci bir eşleme tablosu tutması
+ * kaçınılmaz olarak katalogdan sürüklenirdi.
+ */
+function nameRequirements(
+  req: { buildings?: Record<string, number>; techs?: Record<string, number> } | undefined,
+): { id: string; name: string; level: number; kind: 'building' | 'tech' }[] {
+  const out: { id: string; name: string; level: number; kind: 'building' | 'tech' }[] = [];
+  for (const [id, level] of Object.entries(req?.buildings ?? {})) {
+    out.push({
+      id, level, kind: 'building',
+      name: BUILDINGS_BY_ID[id]?.name.tr ?? UNITS_BY_ID[id]?.name.tr ?? id,
+    });
+  }
+  for (const [id, level] of Object.entries(req?.techs ?? {})) {
+    out.push({ id, level, kind: 'tech', name: TECHS_BY_ID[id]?.name.tr ?? id });
+  }
+  return out;
 }
 
 function mapCounts(rows: Record<string, unknown>[], field: string): Record<string, number> {

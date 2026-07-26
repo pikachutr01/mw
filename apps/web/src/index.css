@@ -25,6 +25,10 @@
   --color-warning: var(--mw-color-warning);
   --color-success: var(--mw-color-success);
   --color-info: var(--mw-color-info);
+  --color-panel-header: var(--mw-color-panel-header);
+  --color-on-panel-header: var(--mw-color-on-panel-header);
+  --color-row-alt: var(--mw-color-row-alt);
+  --color-bolt: var(--mw-color-bolt);
 
   --font-display: var(--mw-font-display);
   --font-body: var(--mw-font-body);

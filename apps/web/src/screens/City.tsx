@@ -1,17 +1,20 @@
 /**
- * ŞEHİR sekmesi — iç sekmeler: Yapılar · Baraka · Savunma · Akademi (§10).
+ * ŞEHİR — iç sekmeler: Yapılar · Baraka · Savunma · Akademi (§10).
  *
- * ⭐ Maliyet ve ön-şartlar **sunucudan** gelir (`/cities/:id/catalog`), istemci hesaplamaz.
+ * ⭐ Maliyet, **süre** ve ön-şartlar SUNUCUDAN gelir (`/cities/:id/catalog`); istemci hesaplamaz.
  * Denge değiştiğinde arayüz kendiliğinden doğru olur — formül tek yerde yaşar.
+ * ⭐ Sıralama da sunucudan gelir (katalogdaki `BUILDING_ORDER`/`TECH_ORDER`) → arayüzün kendi
+ * sıralama tablosu YOK, olsaydı katalogdan sürüklenirdi.
  */
 import { useState } from 'react';
-import { fmt, remaining, useTick } from '../lib/hooks.ts';
+import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
+import { nameOf } from '../lib/names.ts';
 import {
   useCancelQueue, useCatalog, useCity, useEnqueue,
   type CatalogUnit, type CityDetail, type QueueRow,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
-import { Badge, Button, Card, Empty, ErrorBox, Input, Requirements, SectionTitle } from '../components/ui.tsx';
+import { Button, Empty, ErrorBox, Input, Panel, Requirements, Res } from '../components/ui.tsx';
 
 type Tab = 'buildings' | 'units' | 'defenses' | 'techs';
 
@@ -33,25 +36,25 @@ export function City() {
 
   return (
     <div className="space-y-3">
-      <Card>
-        <SectionTitle right={`${d.coordinates.k}:${d.coordinates.d}:${d.coordinates.s}`}>
-          {d.name}{d.isCapital ? ' · Başkent' : ''}
-        </SectionTitle>
-        <div className="grid grid-cols-2 gap-2 px-3 pb-3 text-xs">
+      <Panel title={`${d.name}${d.isCapital ? ' · Başkent' : ''}`}
+        right={`${d.coordinates.k}:${d.coordinates.d}:${d.coordinates.s}`}>
+        <div className="grid grid-cols-1 gap-3 px-3 py-3 text-xs sm:grid-cols-2">
           <Budget label="Kale bütçesi" used={d.capacity.castle.used} total={d.capacity.castle.total}
             hint="Σ(bina seviyeleri) ≤ Kale × 10" />
           <Budget label="Sur kapasitesi" used={d.capacity.defense.used} total={d.capacity.defense.total}
             hint="Savunma birimleri Alan kadar yer kaplar" />
         </div>
-      </Card>
+      </Panel>
 
       <Queues city={d} />
 
-      <div className="flex gap-1">
+      <div className="grid grid-cols-4 gap-1">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex-1 rounded-[var(--radius-sm)] border px-2 py-1.5 text-xs ${
-              tab === t.id ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted hover:bg-raised'
+            className={`display rounded-[var(--radius-sm)] border-2 px-2 py-2 text-xs font-semibold tracking-wide uppercase ${
+              tab === t.id
+                ? 'border-strong bg-accent text-on-accent'
+                : 'border-border bg-surface text-muted hover:bg-raised'
             }`}>
             {t.label}
           </button>
@@ -68,36 +71,52 @@ export function City() {
 
 function Budget({ label, used, total, hint }: { label: string; used: number; total: number; hint: string }) {
   const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+  const full = used >= total;
   return (
     <div title={hint}>
-      <div className="mb-1 flex justify-between text-muted">
-        <span>{label}</span>
-        <span className="tnum">{fmt(used)} / {fmt(total)}</span>
+      <div className="mb-1 flex justify-between">
+        <span className="text-muted">{label}</span>
+        <span className={`tnum ${full ? 'font-semibold text-danger' : 'text-ink'}`}>
+          {fmt(used)} / {fmt(total)}
+        </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-raised">
-        <div className="h-full bg-accent" style={{ width: `${pct}%` }} />
+      <div className="h-2 overflow-hidden rounded-full border border-border bg-raised">
+        <div className={`h-full ${full ? 'bg-danger' : 'bg-accent'}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
 
-/** Açık kuyruklar — oyuncunun gördüğü geri sayımlar. Sunucu saatinden çizilir. */
+/** Maliyet + süre satırı — her kalemde AYNI biçim (oyuncu tek yere bakmayı öğrenir). */
+function CostLine({ gold, food, seconds }: { gold: number; food: number; seconds: number | null }) {
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
+      <Res kind="gold" value={fmt(gold)} size={14} />
+      <Res kind="food" value={fmt(food)} size={14} />
+      {seconds != null ? (
+        <span className="tnum inline-flex items-center gap-1" title="Süre">
+          ⏳ {formatDuration(seconds)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Açık kuyruklar — oyuncunun gördüğü geri sayımlar; sunucu saatinden çizilir. */
 function Queues({ city }: { city: CityDetail }) {
   useTick(city.queues.length > 0);
   const cancel = useCancelQueue();
 
   if (city.queues.length === 0) return null;
   return (
-    <Card>
-      <SectionTitle>Sürüyor</SectionTitle>
+    <Panel title="Sürüyor">
       <ul className="divide-y divide-border">
-        {city.queues.map((q) => (
-          <li key={q.id} className="flex items-center justify-between gap-2 px-3 py-2">
+        {city.queues.map((q, i) => (
+          <li key={q.id}
+            className={`flex items-center justify-between gap-2 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
             <div className="min-w-0">
               <div className="truncate text-sm text-ink">{describeQueue(q)}</div>
-              <div className="tnum text-xs text-muted">
-                {remaining(q.finishAt) ?? 'birazdan biter…'}
-              </div>
+              <div className="tnum text-xs text-warning">{remaining(q.finishAt) ?? 'birazdan biter…'}</div>
             </div>
             <Button size="sm" variant="danger" disabled={cancel.isPending}
               onClick={() => cancel.mutate(q.id)}>
@@ -106,16 +125,17 @@ function Queues({ city }: { city: CityDetail }) {
           </li>
         ))}
       </ul>
-      <div className="px-3 pb-3 text-[11px] text-muted">
+      <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted">
         İptal iadesi: yapı/teknik <b>süreye göre</b>, savaşçı <b>bir birim eksik</b>.
       </div>
-    </Card>
+    </Panel>
   );
 }
 
 function describeQueue(q: QueueRow): string {
-  if (q.count != null) return `${q.itemType} × ${fmt(q.count)}`;
-  return `${q.itemType} → seviye ${q.targetLevel}`;
+  // Ekranda İngilizce id GÖRÜNMEZ (§13.14): "farm → seviye 2" değil "Çiftlik → seviye 2".
+  if (q.count != null) return `${nameOf(q.itemType)} × ${fmt(q.count)}`;
+  return `${nameOf(q.itemType)} → seviye ${q.targetLevel}`;
 }
 
 function Buildings({ city }: { city: CityDetail }) {
@@ -125,27 +145,25 @@ function Buildings({ city }: { city: CityDetail }) {
   const busy = city.queues.some((q) => q.category === 'building');
 
   return (
-    <Card>
-      <SectionTitle right={busy ? 'bir yapı sürüyor' : undefined}>Yapılar</SectionTitle>
-      <ErrorBox error={enqueue.error} />
+    <Panel title="Yapılar" right={busy ? 'bir yapı sürüyor' : undefined}>
+      <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
       <ul className="divide-y divide-border">
-        {(catalog.data?.buildings ?? []).map((b) => {
+        {(catalog.data?.buildings ?? []).map((b, i) => {
           const maxed = b.level >= b.maxLevel;
           const cost = b.nextCost;
           const afford = !!cost && city.resources.gold >= cost.gold && city.resources.food >= cost.food;
           return (
-            <li key={b.id} className="flex items-center justify-between gap-3 px-3 py-2">
+            <li key={b.id}
+              className={`flex items-center justify-between gap-3 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
               <div className="min-w-0">
-                <div className="text-sm text-ink">
-                  {b.name} <span className="text-muted">sv {b.level}</span>
-                  {maxed ? <Badge>tavan</Badge> : null}
+                <div className="text-sm">
+                  <span className="font-medium text-ink">{b.name}</span>
+                  <span className="ml-1.5 tnum text-xs text-accent">sv {b.level}</span>
+                  {maxed ? <span className="ml-1.5 text-[11px] text-muted">(tavan)</span> : null}
                 </div>
-                {cost ? (
-                  <div className="tnum text-xs text-muted">
-                    🪙 {fmt(cost.gold)} · 🌾 {fmt(cost.food)}
-                  </div>
-                ) : null}
-                <Requirements requirements={b.requirements} buildings={city.buildings} techs={city.techs} />
+                {cost ? <CostLine gold={cost.gold} food={cost.food} seconds={b.nextSeconds} /> : null}
+                <Requirements requirementNames={b.requirementNames}
+                  buildings={city.buildings} techs={city.techs} />
               </div>
               <Button size="sm" disabled={maxed || busy || !afford || enqueue.isPending}
                 onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
@@ -155,7 +173,7 @@ function Buildings({ city }: { city: CityDetail }) {
           );
         })}
       </ul>
-    </Card>
+    </Panel>
   );
 }
 
@@ -170,31 +188,33 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
   const have = kind === 'unit' ? city.units : city.defenses;
 
   return (
-    <Card>
-      <SectionTitle right={busy ? 'üretim sürüyor' : undefined}>
-        {kind === 'unit' ? 'Baraka' : 'Savunma'}
-      </SectionTitle>
-      <ErrorBox error={enqueue.error} />
+    <Panel title={kind === 'unit' ? 'Baraka' : 'Savunma'} right={busy ? 'üretim sürüyor' : undefined}>
+      <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
       <ul className="divide-y divide-border">
-        {list.map((u) => {
+        {list.map((u, i) => {
           const n = Number(counts[u.id] ?? '') || 0;
           // Sur ve Büyü Kalkanı ADET değil SEVİYE ilerletir → adet kutusu gösterilmez.
           const levelBased = u.levelBased === true;
-          const total = levelBased ? null : { gold: u.cost.gold * n, food: u.cost.food * n };
-          const afford = !total
-            || (city.resources.gold >= total.gold && city.resources.food >= total.food);
+          const total = levelBased
+            ? { gold: u.cost.gold, food: u.cost.food, seconds: u.seconds }
+            : { gold: u.cost.gold * n, food: u.cost.food * n, seconds: (u.seconds ?? 0) * n };
+          const afford = city.resources.gold >= total.gold && city.resources.food >= total.food;
           return (
-            <li key={u.id} className="px-3 py-2">
+            <li key={u.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-sm text-ink">
-                    {u.name} <span className="text-muted">· {fmt(have[u.id] ?? 0)} adet</span>
+                  <div className="text-sm">
+                    <span className="font-medium text-ink">{u.name}</span>
+                    <span className="ml-1.5 tnum text-xs text-accent">
+                      {levelBased ? `sv ${have[u.id] ?? 0}` : `${fmt(have[u.id] ?? 0)} adet`}
+                    </span>
                   </div>
-                  <div className="tnum text-xs text-muted">
-                    🪙 {fmt(u.cost.gold)} · 🌾 {fmt(u.cost.food)} · alan {u.area}
-                    {u.speed ? ` · hız ${u.speed}` : ''}
+                  <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
+                  <div className="text-[11px] text-muted">
+                    alan {u.area}{u.speed ? ` · hız ${u.speed}` : ''}
                   </div>
-                  <Requirements requirements={u.requirements} buildings={city.buildings} techs={city.techs} />
+                  <Requirements requirementNames={u.requirementNames}
+                    buildings={city.buildings} techs={city.techs} />
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {levelBased ? null : (
@@ -212,16 +232,19 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   </Button>
                 </div>
               </div>
-              {total && n > 0 ? (
-                <div className={`tnum mt-1 text-[11px] ${afford ? 'text-muted' : 'text-danger'}`}>
-                  Toplam: 🪙 {fmt(total.gold)} · 🌾 {fmt(total.food)}
+              {!levelBased && n > 0 ? (
+                <div className={`mt-1 flex items-center gap-3 text-[11px] ${afford ? 'text-muted' : 'text-danger'}`}>
+                  <span>Toplam:</span>
+                  <Res kind="gold" value={fmt(total.gold)} size={13} />
+                  <Res kind="food" value={fmt(total.food)} size={13} />
+                  <span className="tnum">⏳ {formatDuration(total.seconds)}</span>
                 </div>
               ) : null}
             </li>
           );
         })}
       </ul>
-    </Card>
+    </Panel>
   );
 }
 
@@ -232,25 +255,25 @@ function Techs({ city }: { city: CityDetail }) {
   const busy = city.queues.some((q) => q.category === 'tech');
 
   return (
-    <Card>
-      <SectionTitle right={busy ? 'araştırma sürüyor' : undefined}>Akademi</SectionTitle>
-      <ErrorBox error={enqueue.error} />
+    <Panel title="Akademi" right={busy ? 'araştırma sürüyor' : undefined}>
+      <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
       <div className="px-3 pb-1 text-[11px] text-muted">
         Teknik seviyesi <b>oyuncu geneli</b>dir; aynı teknik iki şehirde aynı anda araştırılamaz.
       </div>
       <ul className="divide-y divide-border">
-        {(catalog.data?.techs ?? []).map((t) => {
+        {(catalog.data?.techs ?? []).map((t, i) => {
           const afford = city.resources.gold >= t.nextCost.gold && city.resources.food >= t.nextCost.food;
           return (
-            <li key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
+            <li key={t.id}
+              className={`flex items-center justify-between gap-3 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
               <div className="min-w-0">
-                <div className="text-sm text-ink">
-                  {t.name} <span className="text-muted">sv {t.level}</span>
+                <div className="text-sm">
+                  <span className="font-medium text-ink">{t.name}</span>
+                  <span className="ml-1.5 tnum text-xs text-accent">sv {t.level}</span>
                 </div>
-                <div className="tnum text-xs text-muted">
-                  🪙 {fmt(t.nextCost.gold)} · 🌾 {fmt(t.nextCost.food)}
-                </div>
-                <Requirements requirements={t.requirements} buildings={city.buildings} techs={city.techs} />
+                <CostLine gold={t.nextCost.gold} food={t.nextCost.food} seconds={t.nextSeconds} />
+                <Requirements requirementNames={t.requirementNames}
+                  buildings={city.buildings} techs={city.techs} />
               </div>
               <Button size="sm" disabled={busy || !afford || enqueue.isPending}
                 onClick={() => enqueue.mutate({ category: 'tech', type: t.id })}>
@@ -260,6 +283,6 @@ function Techs({ city }: { city: CityDetail }) {
           );
         })}
       </ul>
-    </Card>
+    </Panel>
   );
 }

@@ -10,4 +10,5 @@ export * from './techs.ts';
 export * from './buildings.ts';
 export * from './formulas.ts';
 export * from './prerequisites.ts';
+export * from './display-order.ts';
 export { catalogHash, CATALOG_VERSION } from './hash.ts';

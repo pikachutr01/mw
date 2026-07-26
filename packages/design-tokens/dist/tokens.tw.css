@@ -18,6 +18,10 @@
   --color-success: var(--mw-color-success);
   --color-info: var(--mw-color-info);
   --color-focus-ring: var(--mw-color-focus-ring);
+  --color-panel-header: var(--mw-color-panel-header);
+  --color-on-panel-header: var(--mw-color-on-panel-header);
+  --color-row-alt: var(--mw-color-row-alt);
+  --color-bolt: var(--mw-color-bolt);
   --color-overlay: var(--mw-color-overlay);
   --radius-xs: var(--mw-radius-xs);
   --radius-sm: var(--mw-radius-sm);

@@ -16,7 +16,11 @@ export const lightColors = {
   "warning": "#B3701A",
   "success": "#4F6B33",
   "info": "#2F5D8C",
-  "focusRing": "#8A5A2B"
+  "focusRing": "#8A5A2B",
+  "panelHeader": "#C89B5A",
+  "onPanelHeader": "#2B2116",
+  "rowAlt": "#F3E9D6",
+  "bolt": "#A97540"
 } as const;
 
 export const darkColors = {
@@ -36,7 +40,11 @@ export const darkColors = {
   "warning": "#E08A3C",
   "success": "#8FB05E",
   "info": "#7FA9D4",
-  "focusRing": "#E8B75F"
+  "focusRing": "#E8B75F",
+  "panelHeader": "#8A5A2B",
+  "onPanelHeader": "#FAF3E3",
+  "rowAlt": "#2A2218",
+  "bolt": "#B8862F"
 } as const;
 
 export type ColorToken = keyof typeof lightColors;

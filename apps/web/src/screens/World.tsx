@@ -13,7 +13,7 @@ import { useActiveCity } from '../lib/city-context.tsx';
 import {
   useCatalog, useCity, useSendAttack, useWorld, type WorldSlot,
 } from '../lib/queries.ts';
-import { Badge, Button, Card, Empty, ErrorBox, Input, SectionTitle } from '../components/ui.tsx';
+import { Badge, Button, Empty, ErrorBox, Input, Panel, Res } from '../components/ui.tsx';
 
 export function World() {
   const { cityId } = useActiveCity();
@@ -28,9 +28,8 @@ export function World() {
 
   return (
     <div className="space-y-3">
-      <Card>
-        <SectionTitle right={<span>10 kıta × 500 diyar × 10 şehir</span>}>Dünya</SectionTitle>
-        <div className="flex items-end gap-2 px-3 pb-3">
+      <Panel title="Dünya" right="10 kıta × 500 diyar × 10 şehir">
+        <div className="flex items-end gap-2 px-3 py-3">
           <label className="flex-1">
             <span className="mb-1 block text-xs text-muted">Kıta</span>
             <select value={k} onChange={(e) => setK(Number(e.target.value))}
@@ -54,19 +53,18 @@ export function World() {
             </Button>
           ) : null}
         </div>
-      </Card>
+      </Panel>
 
-      <Card>
-        <SectionTitle right={`${k}:${d}`}>Diyar listesi</SectionTitle>
+      <Panel title="Diyar listesi" right={`${k}:${d}`}>
         <ul className="divide-y divide-border">
-          {(world.data?.slots ?? []).map((slot) => (
+          {(world.data?.slots ?? []).map((slot, i) => (
             <li key={slot.s}>
               <button
                 disabled={!slot.city}
                 onClick={() => setTarget(slot)}
                 className={`flex w-full items-center gap-3 px-3 py-2 text-left ${
-                  slot.city ? 'hover:bg-raised' : 'cursor-default'
-                }`}
+                  i % 2 === 1 ? 'bg-row-alt' : ''
+                } ${slot.city ? 'hover:bg-raised' : 'cursor-default'}`}
               >
                 <span className="tnum w-6 shrink-0 text-xs text-muted">{slot.s}</span>
                 {slot.city ? (
@@ -91,10 +89,10 @@ export function World() {
             </li>
           ))}
         </ul>
-        <div className="px-3 py-2 text-[11px] text-muted">
+        <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted">
           Bu liste asker ve kaynak göstermez; öğrenmenin yolu casusluktur.
         </div>
-      </Card>
+      </Panel>
 
       {target?.city ? (
         <AttackSheet slot={target} coords={{ k, d }} onClose={() => setTarget(null)} />

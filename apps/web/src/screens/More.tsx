@@ -7,7 +7,7 @@
 import { getSession, logout } from '../lib/api.ts';
 import { useTheme } from '../lib/hooks.ts';
 import { useCities } from '../lib/queries.ts';
-import { Badge, Button, Card, SectionTitle } from '../components/ui.tsx';
+import { Badge, Button, Panel } from '../components/ui.tsx';
 
 const SOON = [
   ['Kahramanlar', 'Dirilt · Seviye Arttır · Özellikler'],
@@ -24,19 +24,17 @@ export function More({ onLoggedOut }: { onLoggedOut: () => void }) {
 
   return (
     <div className="space-y-3">
-      <Card>
-        <SectionTitle>Hesap</SectionTitle>
-        <div className="space-y-1 px-3 pb-3 text-sm">
+      <Panel title="Hesap">
+        <div className="space-y-1 p-3 text-sm">
           <div className="text-ink">{session?.username}</div>
           <div className="text-xs text-muted">
             Dünya {session?.worldId} · {cities.data?.cities.length ?? 0} şehir
           </div>
         </div>
-      </Card>
+      </Panel>
 
-      <Card>
-        <SectionTitle>Tema</SectionTitle>
-        <div className="flex gap-1 px-3 pb-3">
+      <Panel title="Tema">
+        <div className="flex gap-1 p-3 pb-1.5">
           {([['system', 'Sistem'], ['light', 'Gündüz'], ['dark', 'Gece']] as const).map(([id, label]) => (
             <button key={id} onClick={() => setTheme(id)}
               className={`flex-1 rounded-[var(--radius-sm)] border px-2 py-1.5 text-xs ${
@@ -49,10 +47,9 @@ export function More({ onLoggedOut }: { onLoggedOut: () => void }) {
         <div className="px-3 pb-3 text-[11px] text-muted">
           «Sistem» seçiliyken işletim sisteminin gece moduna geçişini canlı izler.
         </div>
-      </Card>
+      </Panel>
 
-      <Card>
-        <SectionTitle>Yakında</SectionTitle>
+      <Panel title="Yakında">
         <ul className="divide-y divide-border">
           {SOON.map(([title, hint]) => (
             <li key={title} className="flex items-center justify-between gap-2 px-3 py-2">
@@ -64,7 +61,7 @@ export function More({ onLoggedOut }: { onLoggedOut: () => void }) {
             </li>
           ))}
         </ul>
-      </Card>
+      </Panel>
 
       <Button variant="danger" className="w-full"
         onClick={() => { void logout().then(onLoggedOut); }}>

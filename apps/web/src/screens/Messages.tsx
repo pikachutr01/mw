@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import { fmt } from '../lib/hooks.ts';
 import { useBattle, useMarkRead, useMessages, type MessageRow } from '../lib/queries.ts';
-import { Badge, Button, Card, Empty, SectionTitle } from '../components/ui.tsx';
+import { Badge, Button, Empty, Panel, Res } from '../components/ui.tsx';
 
 type Filter = 'all' | 'reports' | 'messages';
 
@@ -24,29 +24,30 @@ export function Messages() {
 
   return (
     <div className="space-y-3">
-      <Card>
-        <SectionTitle right={`${messages.data?.unread ?? 0} okunmamış`}>Posta kutusu</SectionTitle>
-        <div className="flex gap-1 px-3 pb-3">
+      <Panel title="Posta kutusu" right={`${messages.data?.unread ?? 0} okunmamış`}>
+        <div className="flex gap-1 p-3">
           {([['all', 'Hepsi'], ['reports', 'Raporlar'], ['messages', 'Mesajlar']] as const).map(
             ([id, label]) => (
               <button key={id} onClick={() => setFilter(id)}
-                className={`flex-1 rounded-[var(--radius-sm)] border px-2 py-1 text-xs ${
-                  filter === id ? 'border-accent bg-accent text-on-accent' : 'border-border text-muted'
+                className={`flex-1 rounded-[var(--radius-sm)] border-2 px-2 py-1.5 text-xs ${
+                  filter === id
+                    ? 'border-strong bg-accent text-on-accent'
+                    : 'border-border bg-surface text-muted hover:bg-raised'
                 }`}>
                 {label}
               </button>
             ),
           )}
         </div>
-      </Card>
+      </Panel>
 
-      <Card>
+      <Panel title="Raporlar ve mesajlar">
         {items.length === 0 ? (
           <Empty>Hiç mesajın yok.</Empty>
         ) : (
           <ul className="divide-y divide-border">
-            {items.map((m) => (
-              <li key={m.id} className="px-3 py-2">
+            {items.map((m, i) => (
+              <li key={m.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
                 <button
                   className="w-full text-left"
                   onClick={() => {
@@ -78,7 +79,7 @@ export function Messages() {
             ))}
           </ul>
         )}
-      </Card>
+      </Panel>
     </div>
   );
 }
@@ -89,14 +90,23 @@ function Summary({ m }: { m: MessageRow }) {
   const loot = b['loot'] as { gold: number; food: number } | undefined;
   const lost = b['lost'] as number | undefined;
 
+  const hasLoot = !!loot && (loot.gold > 0 || loot.food > 0);
   const bits: string[] = [];
   if (typeof lost === 'number') bits.push(`kayıp ${fmt(lost)}`);
-  if (loot && (loot.gold > 0 || loot.food > 0)) {
-    bits.push(`🪙 ${fmt(loot.gold)} · 🌾 ${fmt(loot.food)}`);
-  }
   if (b['armyReturning'] === false) bits.push('ordudan kimse dönmedi');
-  if (bits.length === 0) return null;
-  return <div className="tnum mt-0.5 text-xs text-muted">{bits.join(' · ')}</div>;
+  if (bits.length === 0 && !hasLoot) return null;
+
+  return (
+    <div className="tnum mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
+      {bits.map((t) => <span key={t}>{t}</span>)}
+      {hasLoot ? (
+        <>
+          <Res kind="gold" value={fmt(loot!.gold)} size={13} />
+          <Res kind="food" value={fmt(loot!.food)} size={13} />
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function BattleReport({ battleId, onClose }: { battleId: number; onClose: () => void }) {
@@ -138,8 +148,10 @@ function BattleReport({ battleId, onClose }: { battleId: number; onClose: () => 
       ))}
 
       {r.loot ? (
-        <div className="tnum mb-2 text-xs text-ink">
-          {r.side === 'attacker' ? 'Ganimet' : 'Yağmalanan'}: 🪙 {fmt(r.loot.gold)} · 🌾 {fmt(r.loot.food)}
+        <div className="mb-2 flex items-center gap-2 text-xs text-ink">
+          <span>{r.side === 'attacker' ? 'Ganimet:' : 'Yağmalanan:'}</span>
+          <Res kind="gold" value={fmt(r.loot.gold)} size={14} />
+          <Res kind="food" value={fmt(r.loot.food)} size={14} />
         </div>
       ) : null}
 

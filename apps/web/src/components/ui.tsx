@@ -21,6 +21,132 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
   );
 }
 
+/**
+ * ⭐ ANA GÖRSEL BİRİM — orijinal arayüzün ahşap paneli (`images/scr_web01..06`):
+ * koyu gövde · parşömen başlık bandı · köşe perçinleri · çift çerçeve.
+ *
+ * Perçinler CSS ile çiziliyor (görsel dosya YOK) → temayla birlikte renk değiştiriyorlar ve
+ * ölçeklendiklerinde bulanmıyorlar.
+ */
+export function Panel({
+  title, right, children, className = '', bare = false,
+}: {
+  title?: ReactNode;
+  right?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  /** Başlık bandı olmadan yalnız çerçeve. */
+  bare?: boolean;
+}) {
+  return (
+    <section
+      className={`relative rounded-[var(--radius-md)] border-2 border-strong bg-surface
+        shadow-[var(--mw-shadow-md)] ${className}`}
+    >
+      <Bolts />
+      {!bare && title ? (
+        <header
+          className="flex items-center justify-between gap-2 rounded-t-[calc(var(--radius-md)-2px)]
+            border-b-2 border-strong bg-panel-header px-3 py-1.5"
+        >
+          <h2 className="display truncate text-sm font-semibold tracking-wider text-on-panel-header uppercase">
+            {title}
+          </h2>
+          {right ? (
+            <div className="shrink-0 text-[11px] text-on-panel-header/80">{right}</div>
+          ) : null}
+        </header>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+/** Dört köşedeki perçin — panelin "dövme demir" hissini veren tek detay. */
+function Bolts() {
+  const dot = 'absolute h-1.5 w-1.5 rounded-full bg-bolt/70 ring-1 ring-strong';
+  return (
+    <>
+      <span aria-hidden className={`${dot} top-1 left-1`} />
+      <span aria-hidden className={`${dot} top-1 right-1`} />
+      <span aria-hidden className={`${dot} bottom-1 left-1`} />
+      <span aria-hidden className={`${dot} bottom-1 right-1`} />
+    </>
+  );
+}
+
+/* ── İkonlar ───────────────────────────────────────────────────────────────── */
+
+/**
+ * ⭐ ALTIN / YEMEK — kaynak gösterilen HER yerde aynı ikon (kullanıcı isteği).
+ *
+ * ⚠️ Kaynak PNG'ler şu an **şeffaf değil, siyah zeminli** (kullanıcı sonra düzeltecek). Bu yüzden
+ * ikon koyu bir madalyon içine oturtuluyor: siyah kare madalyona karışıyor ve görüntü İKİ TEMADA
+ * da düzgün duruyor. Şeffaf sürüm gelince madalyon yine doğru görünür — değişiklik gerekmez.
+ */
+export function ResIcon({ kind, size = 16 }: { kind: 'gold' | 'food'; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#0b0b0b] ring-1 ring-strong/60"
+      style={{ width: size, height: size }}
+    >
+      <img src={`/assets/ui/${kind}.png`} alt="" width={size} height={size}
+        className="h-full w-full object-cover" />
+    </span>
+  );
+}
+
+/** Sayı + ikon; `tnum` ile sütunlar kaymaz. */
+export function Res({
+  kind, value, size = 16, className = '',
+}: {
+  kind: 'gold' | 'food'; value: string | number; size?: number; className?: string;
+}) {
+  return (
+    <span className={`tnum inline-flex items-center gap-1 whitespace-nowrap ${className}`}
+      title={kind === 'gold' ? 'Altın' : 'Yemek'}>
+      <ResIcon kind={kind} size={size} />
+      {value}
+    </span>
+  );
+}
+
+/**
+ * Görev simgeleri (§13.11.9: dosya adı = katalog `id`).
+ *
+ * ⚠️ Kullanıcı ikonların **bir kısmını** verdi; saldırı/dönüş/teleport henüz YOK → onlarda
+ * emoji yedeğine düşülüyor. Dosya eklendiği anda `HAS_ICON`'a adını yazmak yeterli, kod değişmez.
+ */
+const HAS_ICON = new Set([
+  'found_city', 'support', 'transport_out', 'transport_back', 'spy_out', 'spy_back',
+]);
+
+const EMOJI_FALLBACK: Record<string, string> = {
+  attack_out: '⚔️',
+  attack_back: '↩️',
+  incoming_attack: '🛡️',
+  teleport: '🌀',
+};
+
+export function MissionIcon({ id, size = 28, title }: { id: string; size?: number; title?: string }) {
+  const box = 'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full '
+    + 'bg-[#0b0b0b] ring-1 ring-strong/60';
+  if (HAS_ICON.has(id)) {
+    return (
+      <span className={box} style={{ width: size, height: size }} title={title}>
+        <img src={`/assets/missions/${id}.png`} alt={title ?? id} width={size} height={size}
+          className="h-full w-full object-cover" />
+      </span>
+    );
+  }
+  return (
+    <span className={box} style={{ width: size, height: size, fontSize: size * 0.55 }} title={title}>
+      <span aria-hidden>{EMOJI_FALLBACK[id] ?? '•'}</span>
+    </span>
+  );
+}
+
 type ButtonProps = {
   children: ReactNode;
   onClick?: () => void;
@@ -104,26 +230,38 @@ export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?
   );
 }
 
-/** Bir kuralın neden karşılanmadığını gösteren küçük liste (ön-şartlar). */
+/**
+ * Karşılanmayan ön-şartlar.
+ *
+ * ⭐ Adlar **TÜRKÇE** gösterilir (§13.14: kod/DB İngilizce, oyuncuya görünen metin Türkçe).
+ * Çeviri sunucudan `requirementNames` ile gelir — istemci ikinci bir eşleme tablosu tutmaz,
+ * tutsaydı katalogdan kaçınılmaz olarak sürüklenirdi.
+ */
+export interface NamedRequirement {
+  id: string;
+  name: string;
+  level: number;
+  kind: 'building' | 'tech';
+}
+
 export function Requirements({
-  requirements, buildings, techs,
+  requirementNames, buildings, techs,
 }: {
-  requirements: { buildings?: Record<string, number>; techs?: Record<string, number> };
+  requirementNames: NamedRequirement[] | undefined;
   buildings: Record<string, number>;
   techs: Record<string, number>;
 }) {
-  const rows: { label: string; need: number; have: number }[] = [];
-  for (const [id, need] of Object.entries(requirements.buildings ?? {})) {
-    rows.push({ label: id, need, have: buildings[id] ?? 0 });
-  }
-  for (const [id, need] of Object.entries(requirements.techs ?? {})) {
-    rows.push({ label: id, need, have: techs[id] ?? 0 });
-  }
-  const unmet = rows.filter((r) => r.have < r.need);
+  const unmet = (requirementNames ?? []).filter((r) => {
+    const have = r.kind === 'building' ? (buildings[r.id] ?? 0) : (techs[r.id] ?? 0);
+    return have < r.level;
+  });
   if (unmet.length === 0) return null;
   return (
     <div className="mt-1 text-[11px] text-danger">
-      Gerekli: {unmet.map((r) => `${r.label} ${r.need} (${r.have})`).join(' · ')}
+      Gerekli: {unmet.map((r) => {
+        const have = r.kind === 'building' ? (buildings[r.id] ?? 0) : (techs[r.id] ?? 0);
+        return `${r.name} ${r.level} (${have})`;
+      }).join(' · ')}
     </div>
   );
 }

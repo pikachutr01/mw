@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getSession, onSessionChange } from './lib/api.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
 import { Shell } from './components/Shell.tsx';
+import { Armies } from './screens/Armies.tsx';
 import { Auth } from './screens/Auth.tsx';
 import { City } from './screens/City.tsx';
-import { Command } from './screens/Command.tsx';
 import { World } from './screens/World.tsx';
 import { Messages } from './screens/Messages.tsx';
 import { More } from './screens/More.tsx';
@@ -38,12 +38,14 @@ export function App() {
         <BrowserRouter>
           <Shell>
             <Routes>
+              {/* ⭐ Giriş sonrası ilk ekran ORDULAR (kullanıcı kararı): oyun zamanlanmış olaylar
+                  üzerine kurulu, oyuncunun ilk sorusu daima "şu an ne oluyor?". */}
+              <Route path="/armies" element={<Armies />} />
               <Route path="/city" element={<City />} />
-              <Route path="/command" element={<Command />} />
               <Route path="/world" element={<World />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/more" element={<More onLoggedOut={() => setSessionState(null)} />} />
-              <Route path="*" element={<Navigate to="/city" replace />} />
+              <Route path="*" element={<Navigate to="/armies" replace />} />
             </Routes>
           </Shell>
         </BrowserRouter>
