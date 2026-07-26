@@ -1,0 +1,30 @@
+/* ÜRETİLMİŞ DOSYA — elle düzenlemeyin. Kaynak: packages/design-tokens/tokens.json */
+/* Tailwind v4: @import bu dosyayı, tokens.css'ten SONRA. Sınıflar: bg-surface, text-text-muted, ... */
+@theme inline {
+  --color-bg: var(--mw-color-bg);
+  --color-surface: var(--mw-color-surface);
+  --color-surface-raised: var(--mw-color-surface-raised);
+  --color-border: var(--mw-color-border);
+  --color-border-strong: var(--mw-color-border-strong);
+  --color-text-primary: var(--mw-color-text-primary);
+  --color-text-muted: var(--mw-color-text-muted);
+  --color-accent: var(--mw-color-accent);
+  --color-accent-hover: var(--mw-color-accent-hover);
+  --color-on-accent: var(--mw-color-on-accent);
+  --color-gold: var(--mw-color-gold);
+  --color-food: var(--mw-color-food);
+  --color-danger: var(--mw-color-danger);
+  --color-warning: var(--mw-color-warning);
+  --color-success: var(--mw-color-success);
+  --color-info: var(--mw-color-info);
+  --color-focus-ring: var(--mw-color-focus-ring);
+  --color-overlay: var(--mw-color-overlay);
+  --radius-xs: var(--mw-radius-xs);
+  --radius-sm: var(--mw-radius-sm);
+  --radius-md: var(--mw-radius-md);
+  --radius-lg: var(--mw-radius-lg);
+  --radius-full: var(--mw-radius-full);
+  --font-display: var(--mw-font-display);
+  --font-body: var(--mw-font-body);
+  --font-mono: var(--mw-font-mono);
+}

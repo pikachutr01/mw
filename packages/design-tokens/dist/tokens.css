@@ -1,0 +1,116 @@
+/* ÜRETİLMİŞ DOSYA — elle düzenlemeyin. Kaynak: packages/design-tokens/tokens.json */
+/* Gündüz varsayılan; gece iki yoldan gelir:
+   1) işletim sistemi tercihi (prefers-color-scheme)  → "system" modu
+   2) kök elemandaki data-theme                        → kullanıcı seçimi (her zaman KAZANIR) */
+:root {
+  --mw-radius-xs: 2px;
+  --mw-radius-sm: 6px;
+  --mw-radius-md: 10px;
+  --mw-radius-lg: 16px;
+  --mw-radius-full: 9999px;
+  --mw-space-1: 4px;
+  --mw-space-2: 8px;
+  --mw-space-3: 12px;
+  --mw-space-4: 16px;
+  --mw-space-5: 24px;
+  --mw-space-6: 32px;
+  --mw-space-8: 48px;
+  --mw-font-display: 'Cinzel', 'EB Garamond', Georgia, serif;
+  --mw-font-body: 'Inter', 'Source Sans 3', system-ui, sans-serif;
+  --mw-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --mw-color-bg: #F3E9D6;
+  --mw-color-surface: #FAF3E3;
+  --mw-color-surface-raised: #FFFBF0;
+  --mw-color-border: #D6C3A1;
+  --mw-color-border-strong: #B99F76;
+  --mw-color-text-primary: #2B2116;
+  --mw-color-text-muted: #6A5942;
+  --mw-color-accent: #8A5A2B;
+  --mw-color-accent-hover: #6F4720;
+  --mw-color-on-accent: #FFFBF0;
+  --mw-color-gold: #9A7413;
+  --mw-color-food: #4F6B33;
+  --mw-color-danger: #9E3324;
+  --mw-color-warning: #B3701A;
+  --mw-color-success: #4F6B33;
+  --mw-color-info: #2F5D8C;
+  --mw-color-focus-ring: #8A5A2B;
+  --mw-color-overlay: rgba(43, 33, 22, 0.45);
+  --mw-shadow-sm: 0 1px 2px rgba(43,33,22,.12);
+  --mw-shadow-md: 0 4px 12px rgba(43,33,22,.16);
+  --mw-shadow-sheet: 0 -8px 32px rgba(43,33,22,.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --mw-color-bg: #15110C;
+    --mw-color-surface: #1E1810;
+    --mw-color-surface-raised: #2A2218;
+    --mw-color-border: #3B3124;
+    --mw-color-border-strong: #574733;
+    --mw-color-text-primary: #EFE3CC;
+    --mw-color-text-muted: #B0A188;
+    --mw-color-accent: #D6A24A;
+    --mw-color-accent-hover: #E8B75F;
+    --mw-color-on-accent: #15110C;
+    --mw-color-gold: #E3B84C;
+    --mw-color-food: #8FB05E;
+    --mw-color-danger: #D4674F;
+    --mw-color-warning: #E08A3C;
+    --mw-color-success: #8FB05E;
+    --mw-color-info: #7FA9D4;
+    --mw-color-focus-ring: #E8B75F;
+    --mw-color-overlay: rgba(0, 0, 0, 0.65);
+    --mw-shadow-sm: 0 1px 2px rgba(0,0,0,.5);
+    --mw-shadow-md: 0 4px 12px rgba(0,0,0,.6);
+    --mw-shadow-sheet: 0 -8px 32px rgba(0,0,0,.7);
+  }
+}
+
+:root[data-theme='dark'] {
+  --mw-color-bg: #15110C;
+  --mw-color-surface: #1E1810;
+  --mw-color-surface-raised: #2A2218;
+  --mw-color-border: #3B3124;
+  --mw-color-border-strong: #574733;
+  --mw-color-text-primary: #EFE3CC;
+  --mw-color-text-muted: #B0A188;
+  --mw-color-accent: #D6A24A;
+  --mw-color-accent-hover: #E8B75F;
+  --mw-color-on-accent: #15110C;
+  --mw-color-gold: #E3B84C;
+  --mw-color-food: #8FB05E;
+  --mw-color-danger: #D4674F;
+  --mw-color-warning: #E08A3C;
+  --mw-color-success: #8FB05E;
+  --mw-color-info: #7FA9D4;
+  --mw-color-focus-ring: #E8B75F;
+  --mw-color-overlay: rgba(0, 0, 0, 0.65);
+  --mw-shadow-sm: 0 1px 2px rgba(0,0,0,.5);
+  --mw-shadow-md: 0 4px 12px rgba(0,0,0,.6);
+  --mw-shadow-sheet: 0 -8px 32px rgba(0,0,0,.7);
+}
+
+:root[data-theme='light'] {
+  --mw-color-bg: #F3E9D6;
+  --mw-color-surface: #FAF3E3;
+  --mw-color-surface-raised: #FFFBF0;
+  --mw-color-border: #D6C3A1;
+  --mw-color-border-strong: #B99F76;
+  --mw-color-text-primary: #2B2116;
+  --mw-color-text-muted: #6A5942;
+  --mw-color-accent: #8A5A2B;
+  --mw-color-accent-hover: #6F4720;
+  --mw-color-on-accent: #FFFBF0;
+  --mw-color-gold: #9A7413;
+  --mw-color-food: #4F6B33;
+  --mw-color-danger: #9E3324;
+  --mw-color-warning: #B3701A;
+  --mw-color-success: #4F6B33;
+  --mw-color-info: #2F5D8C;
+  --mw-color-focus-ring: #8A5A2B;
+  --mw-color-overlay: rgba(43, 33, 22, 0.45);
+  --mw-shadow-sm: 0 1px 2px rgba(43,33,22,.12);
+  --mw-shadow-md: 0 4px 12px rgba(43,33,22,.16);
+  --mw-shadow-sheet: 0 -8px 32px rgba(43,33,22,.22);
+}

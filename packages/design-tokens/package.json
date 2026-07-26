@@ -1,0 +1,23 @@
+{
+  "name": "@mobiwar/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/tokens.ts",
+  "exports": {
+    ".": "./dist/tokens.ts",
+    "./css": "./dist/tokens.css",
+    "./tailwind": "./dist/tokens.tw.css",
+    "./dart": "./dist/tokens.dart"
+  },
+  "scripts": {
+    "build": "node --experimental-strip-types src/build.ts",
+    "check": "node --experimental-strip-types src/build.ts --check",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+.env
+.env.local
+.DS_Store
+# design-tokens/dist ÜRETİLİR ama depoya İŞLENİR (tokens:check sürüklenmeyi yakalar) — bkz. §13.13.1
+!packages/design-tokens/dist/
+!packages/design-tokens/dist/**

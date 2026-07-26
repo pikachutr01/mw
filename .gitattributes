@@ -1,0 +1,8 @@
+# Depoda HER ZAMAN LF. Windows'ta çalışıp WSL2'de derlediğimiz için CRLF karışması
+# sahte diff'ler ve "tokens:check" yanlış alarmları üretiyordu.
+* text=auto eol=lf
+
+# İkili dosyalar dokunulmadan geçer
+*.png binary
+*.webp binary
+*.zst binary
