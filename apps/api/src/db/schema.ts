@@ -94,6 +94,63 @@ export const buildings = pgTable('buildings', {
   level: smallint('level').notNull().default(0),
 }, (t) => [uniqueIndex('buildings_pk').on(t.cityId, t.type)]);
 
+/** Barakadaki hazır savaşçılar. */
+export const units = pgTable('units', {
+  cityId: bigint('city_id', { mode: 'number' }).notNull()
+    .references(() => cities.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  count: integer('count').notNull().default(0),
+}, (t) => [uniqueIndex('units_pk').on(t.cityId, t.type)]);
+
+/** Surdaki savunma birimleri. Sur ve Büyü Kalkanı adet DEĞİL seviye taşır (§13.11.1b). */
+export const defenses = pgTable('defenses', {
+  cityId: bigint('city_id', { mode: 'number' }).notNull()
+    .references(() => cities.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  count: integer('count').notNull().default(0),
+}, (t) => [uniqueIndex('defenses_pk').on(t.cityId, t.type)]);
+
+/** Teknikler oyuncu-GENEL (araştırma şehir bazlı ama seviye oyuncuda, §13.11.5). */
+export const techs = pgTable('techs', {
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  level: smallint('level').notNull().default(0),
+}, (t) => [uniqueIndex('techs_pk').on(t.playerId, t.type)]);
+
+/**
+ * ⭐ ÜRETİM/İLERLETME KUYRUĞU (§13.9 kategorileri: building · unit · defense · tech · hero_revive)
+ *
+ * Kuyruk satırı **oyuncunun ekranda gördüğü geri sayımdır**; bitişi ise `missions` tablosundaki
+ * bir görev uygular. İkisi aynı transaction'da yazılır → "kuyruk bitti ama bina gelmedi" olamaz.
+ * `finish_at` OYUN saatinde (bakımda geri sayım durur).
+ */
+export const queues = pgTable('queues', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull(),
+  cityId: bigint('city_id', { mode: 'number' }).notNull()
+    .references(() => cities.id, { onDelete: 'cascade' }),
+  playerId: bigint('player_id', { mode: 'number' }).notNull(),
+  /** building | unit | defense | tech */
+  category: text('category').notNull(),
+  itemType: text('item_type').notNull(),
+  /** Yapı/teknikte hedef seviye; birimde adet. */
+  targetLevel: smallint('target_level'),
+  count: integer('count'),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+  finishAt: timestamp('finish_at', { withTimezone: true }).notNull(),
+  spentGold: numeric('spent_gold', { precision: 20, scale: 6 }).notNull().default('0'),
+  spentFood: numeric('spent_food', { precision: 20, scale: 6 }).notNull().default('0'),
+  /** Bitişi uygulayacak görev (aynı transaction'da yazılır). */
+  missionId: bigint('mission_id', { mode: 'number' }),
+  canceledAt: timestamp('canceled_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (t) => [
+  index('queues_city_open').on(t.cityId, t.finishAt)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+  index('queues_player').on(t.playerId, t.finishAt),
+]);
+
 /* ═══ OTURUM ve ÇOKLU HESAP SİNYALLERİ (§9.1) ═══════════════════════════════
  * ⏰ Tespit MANTIĞI sonradan yazılabilir, VERİ sonradan toplanamaz. Bu yüzden toplama katmanı
  * Faz 2'de kuruluyor, analiz Faz 4'te (eşikler gerçek oyuncu davranışı görülmeden tahmindir).

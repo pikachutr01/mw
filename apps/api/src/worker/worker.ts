@@ -9,6 +9,7 @@ import { echoHandler } from '../missions/echo.handler.ts';
 import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
+import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 
 export interface WorkerOptions {
@@ -29,13 +30,14 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
   const clock = new GameClockService(db);
 
   /**
-   * Görev tipleri (§1: "hepsi aynı çatı"). Faz 1'de yalnız `echo` kayıtlı — omurgayı test eden
-   * sahte tip. Gerçek tipler sırayla eklenecek:
-   *   Faz 2 → attack, return, building_finish, unit_batch_finish, tech_finish
-   *   Faz 3 → transport, support, spy, found_city, teleport, cave_load/unload, wall_repair
-   *   Faz 4 → hero_revive, vacation_end
+   * Görev tipleri (§1: "hepsi aynı çatı").
+   *   `echo`            → omurgayı ölçen sahte tip (Faz 1)
+   *   `*_finish`        → kuyruk bitişleri (Faz 2) ✓
+   *   sırada: attack + return (savaş çözümü), sonra Faz 3 (nakliye/casusluk/şehir kurma),
+   *           Faz 4 (hero_revive, vacation_end, abuse_scan)
    */
   const registry = new HandlerRegistry().register('echo', echoHandler);
+  for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
 
   const scheduler = new SchedulerService(db, clock, registry, {
     worldId: opts.worldId,
