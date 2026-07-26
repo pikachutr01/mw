@@ -10,7 +10,7 @@
     "dev": "node --watch --experimental-transform-types src/main.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

@@ -8,6 +8,24 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+
+    # Faz 1 testleri GERÇEK Postgres istiyor: SKIP LOCKED, advisory lock ve transaction
+    # geri alma taklit edilemez — omurganın tüm garantileri tam olarak bunlara dayanıyor.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mobiwar
+          POSTGRES_PASSWORD: mobiwar
+          POSTGRES_DB: mobiwar
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U mobiwar -d mobiwar"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://mobiwar:mobiwar@localhost:5432/mobiwar
+
     steps:
       - uses: actions/checkout@v5
 
@@ -24,6 +42,10 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      # Migration'lar depoda; sunucuda ASLA `push` yapılmaz (§4.0). CI de aynı yolu kullanır.
+      - name: Migration'ları uygula
+        run: pnpm db:migrate
 
       - name: Test
         run: pnpm test

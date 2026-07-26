@@ -8,6 +8,13 @@
       "when": 1785050059086,
       "tag": "0000_closed_molecule_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785069687642,
+      "tag": "0001_pale_nick_fury",
+      "breakpoints": true
     }
   ]
 }

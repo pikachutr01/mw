@@ -1,0 +1,184 @@
+/**
+ * ⭐ SCHEDULER DÖNGÜSÜ (SİSTEM PLANI §1)
+ *
+ * Her turda: bayat kilitleri kurtar → vadesi gelenleri kilitle → sırayla, her biri kendi
+ * transaction'ında çalıştır. Dünya bakımdaysa **yeni görev alınmaz** (çalışan biter — graceful drain).
+ *
+ * Gecikme sonucu DEĞİŞTİRMEZ: poll aralığı ne olursa olsun görevler `(execute_at, id)` sırasıyla
+ * işlenir ve handler `mission.executeAt`'i "şimdi" kabul eder.
+ */
+import { sql } from 'drizzle-orm';
+import type { Db } from '../db/client.ts';
+import { auditLog, outbox } from '../db/schema.ts';
+import type { GameClockService } from '../world/game-clock.service.ts';
+import type { HandlerContext, HandlerRegistry, Tx } from './handler-registry.ts';
+import { MissionRepository, type MissionRow } from './mission.repository.ts';
+
+export interface SchedulerOptions {
+  worldId: number;
+  workerId?: string;
+  /** Poll aralığı (ms). Görevler dakika/saat mertebesinde → 1 sn fazlasıyla yeter. */
+  pollIntervalMs?: number;
+  /** Bir turda alınacak en fazla görev. */
+  batchSize?: number;
+  /** Bu süredir `running` kalan kilit crash sayılır ve kurtarılır. */
+  staleLockMs?: number;
+  maxAttempts?: number;
+  retryBackoffMs?: number;
+  onError?: (err: unknown, mission: MissionRow | null) => void;
+}
+
+export interface TickResult {
+  claimed: number;
+  done: number;
+  retried: number;
+  dead: number;
+  reaped: number;
+  skippedPaused: boolean;
+  lagMs: number;
+}
+
+export class SchedulerService {
+  private readonly repo: MissionRepository;
+  private readonly opts: Required<Omit<SchedulerOptions, 'onError'>> & Pick<SchedulerOptions, 'onError'>;
+  private timer: NodeJS.Timeout | null = null;
+  private running = false;
+  private stopped = false;
+
+  constructor(
+    private readonly db: Db,
+    private readonly clock: GameClockService,
+    private readonly registry: HandlerRegistry,
+    options: SchedulerOptions,
+  ) {
+    this.repo = new MissionRepository(db);
+    this.opts = {
+      worldId: options.worldId,
+      workerId: options.workerId ?? `worker-${process.pid}`,
+      pollIntervalMs: options.pollIntervalMs ?? 1000,
+      batchSize: options.batchSize ?? 50,
+      staleLockMs: options.staleLockMs ?? 60_000,
+      maxAttempts: options.maxAttempts ?? 5,
+      retryBackoffMs: options.retryBackoffMs ?? 5_000,
+      onError: options.onError,
+    };
+  }
+
+  /** Tek tur. Testler bunu elle çağırır (zamanla yarışmadan davranışı ölçmek için). */
+  async tick(): Promise<TickResult> {
+    const result: TickResult = {
+      claimed: 0, done: 0, retried: 0, dead: 0, reaped: 0, skippedPaused: false, lagMs: 0,
+    };
+
+    const world = await this.clock.read(this.opts.worldId);
+    if (world.paused) {
+      // Bakım: yeni görev ALINMAZ. Oyun saati de donduğu için vade zaten ilerlemiyor.
+      result.skippedPaused = true;
+      return result;
+    }
+
+    result.reaped = await this.repo.reapStale(this.opts.worldId, this.opts.staleLockMs);
+    result.lagMs = await this.repo.lagMs(this.opts.worldId, world.gameNow);
+
+    const claimed = await this.repo.claimDue({
+      worldId: this.opts.worldId,
+      gameNow: world.gameNow,
+      limit: this.opts.batchSize,
+      workerId: this.opts.workerId,
+    });
+    result.claimed = claimed.length;
+
+    for (const mission of claimed) {
+      try {
+        await this.runOne(mission);
+        result.done++;
+      } catch (err) {
+        this.opts.onError?.(err, mission);
+        const outcome = await this.repo.markFailed(
+          mission.id,
+          err instanceof Error ? err.message : String(err),
+          this.opts.maxAttempts,
+          this.opts.retryBackoffMs,
+        );
+        if (outcome === 'dead') result.dead++;
+        else result.retried++;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Tek görevi tek transaction'da çalıştırır.
+   * Handler patlarsa transaction geri alınır → yarım uygulanmış oyun durumu OLUŞMAZ.
+   */
+  private async runOne(mission: MissionRow): Promise<void> {
+    const handler = this.registry.get(mission.type);
+    if (!handler) throw new Error(`Kayıtlı handler yok: ${mission.type}`);
+
+    await this.db.transaction(async (tx) => {
+      const ctx: HandlerContext = {
+        tx: tx as unknown as Tx,
+        mission,
+        at: mission.executeAt,
+        worldId: mission.worldId,
+        emit: async (topic, payload) => {
+          await tx.insert(outbox).values({ worldId: mission.worldId, topic, payload });
+        },
+        audit: async (entry) => {
+          await tx.insert(auditLog).values({
+            worldId: mission.worldId,
+            playerId: entry.playerId ?? mission.ownerPlayerId,
+            action: entry.action,
+            entity: entry.entity ?? null,
+            entityId: entry.entityId ?? null,
+            before: (entry.before ?? null) as never,
+            after: (entry.after ?? null) as never,
+            traceId: `mission:${mission.id}`,
+          });
+        },
+        lockCity: async (cityId) => {
+          // Aynı şehre aynı anda düşen görevler seri hâle gelir (§1 sıra kuralı).
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(${cityId}::bigint)`);
+        },
+      };
+
+      await handler(ctx);
+
+      // Durum geçişi AYNI transaction'da: süreç burada ölürse görev 'running' kalır ve
+      // reapStale onu geri kuyruğa alır — yarım iş kalmaz.
+      await tx.execute(sql`
+        UPDATE missions SET status = 'done', finished_at = now(), locked_by = NULL, locked_at = NULL
+         WHERE id = ${mission.id}
+      `);
+    });
+  }
+
+  /** Sürekli döngü. `ROLE=all` profilinde API süreciyle aynı yerde çalışır. */
+  start(): void {
+    if (this.timer) return;
+    this.stopped = false;
+    const loop = async (): Promise<void> => {
+      if (this.stopped || this.running) return;
+      this.running = true;
+      try {
+        await this.tick();
+      } catch (err) {
+        this.opts.onError?.(err, null);
+      } finally {
+        this.running = false;
+      }
+    };
+    this.timer = setInterval(() => void loop(), this.opts.pollIntervalMs);
+    void loop();
+  }
+
+  /** Graceful stop: çalışan tur bitene kadar bekler. */
+  async stop(): Promise<void> {
+    this.stopped = true;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    while (this.running) await new Promise((r) => setTimeout(r, 10));
+  }
+}

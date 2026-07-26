@@ -6,7 +6,7 @@
  * ⚠️ İKİ KATMANLI KİMLİK (§13.12.1b): `accounts` dünyalar ÜSTÜdür (e-posta, parola, tema),
  * `players` dünya BAŞINAdır. Dünya-kapsamlı her tabloda `world_id` vardır.
  */
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import {
   bigint, bigserial, boolean, index, integer, jsonb, pgTable, smallint, text, timestamp,
   uniqueIndex, uuid,
@@ -16,7 +16,14 @@ export const worlds = pgTable('worlds', {
   id: smallint('id').primaryKey(),
   name: text('name').notNull(),
   state: text('state').notNull().default('running'), // running | maintenance | archived
+  /**
+   * ⭐ OYUN SAATİ (§2): game_now() = now() − clock_offset_ms.
+   * clock_offset_ms = dünyanın TOPLAM duraklama süresi. Bakımda geçen süre oyun saatine
+   * yansımaz → bakım sırasında hiçbir geri sayım ilerlemez, savaşlar kaymaz.
+   */
   clockOffsetMs: bigint('clock_offset_ms', { mode: 'number' }).notNull().default(0),
+  /** Bakım başlangıcı (gerçek zaman). NULL = dünya çalışıyor. */
+  pausedAt: timestamp('paused_at', { withTimezone: true }),
   speedMultiplier: integer('speed_multiplier').notNull().default(1),
   catalogHash: text('catalog_hash'),
   config: jsonb('config').notNull().default({}),
@@ -81,6 +88,84 @@ export const buildings = pgTable('buildings', {
   type: text('type').notNull(),
   level: smallint('level').notNull().default(0),
 }, (t) => [uniqueIndex('buildings_pk').on(t.cityId, t.type)]);
+
+/* ═══ GÖREV KUYRUĞU (§1 — sistemin belkemiği) ═══════════════════════════════
+ * Görev = oyuncunun "Ordular" ekranında GÖRDÜĞÜ oyun varlığı. Bu yüzden Redis'te değil
+ * Postgres'te: kuyruk ile ordu aynı transaction'da değişir, split-brain imkânsız.
+ */
+export const missions = pgTable('missions', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull().references(() => worlds.id),
+  type: text('type').notNull(),
+  /** scheduled → running → done | failed | canceled */
+  status: text('status').notNull().default('scheduled'),
+  ownerPlayerId: bigint('owner_player_id', { mode: 'number' }),
+  originCityId: bigint('origin_city_id', { mode: 'number' }),
+  targetCityId: bigint('target_city_id', { mode: 'number' }),
+  targetK: integer('target_k'),
+  targetD: integer('target_d'),
+  targetS: integer('target_s'),
+  /** ⭐ OYUN SAATİNDE. Handler bunu "şimdi" kabul eder, `now()`'ı DEĞİL (§13.10.2 kural 3). */
+  executeAt: timestamp('execute_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Hangi worker aldı (crash sonrası bayat kilidi tanımak için). */
+  lockedBy: text('locked_by'),
+  lockedAt: timestamp('locked_at', { withTimezone: true }),
+  attempts: smallint('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  /** Çift-tıklama koruması: aynı anahtarla ikinci görev yazılamaz. */
+  idempotencyKey: text('idempotency_key'),
+  payload: jsonb('payload').notNull().default({}),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+}, (t) => [
+  // Kuyruğun performans temeli: tamamlanmış milyonlarca görev indekste yer kaplamaz.
+  index('missions_due').on(t.executeAt, t.id).where(sql`${t.status} = 'scheduled'`),
+  index('missions_stale').on(t.lockedAt).where(sql`${t.status} = 'running'`),
+  index('missions_target_city').on(t.targetCityId, t.executeAt),
+  index('missions_owner').on(t.ownerPlayerId, t.executeAt),
+  uniqueIndex('missions_idempotency').on(t.worldId, t.idempotencyKey),
+]);
+
+export const missionUnits = pgTable('mission_units', {
+  missionId: bigint('mission_id', { mode: 'number' }).notNull()
+    .references(() => missions.id, { onDelete: 'cascade' }),
+  unitType: text('unit_type').notNull(),
+  count: integer('count').notNull(),
+}, (t) => [uniqueIndex('mission_units_pk').on(t.missionId, t.unitType)]);
+
+/**
+ * ⭐ TRANSACTIONAL OUTBOX (§1): bildirim satırı, onu doğuran oyun mutasyonuyla AYNI
+ * transaction'da yazılır → "savaş oldu ama rapor gitmedi" durumu imkânsız.
+ */
+export const outbox = pgTable('outbox', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id'),
+  topic: text('topic').notNull(),
+  payload: jsonb('payload').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  dispatchedAt: timestamp('dispatched_at', { withTimezone: true }),
+  attempts: smallint('attempts').notNull().default(0),
+  lastError: text('last_error'),
+}, (t) => [
+  index('outbox_pending').on(t.id).where(sql`${t.dispatchedAt} IS NULL`),
+]);
+
+/** Kaynak/asker değiştiren HER işlem before/after ile buraya yazılır (§8). */
+export const auditLog = pgTable('audit_log', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id'),
+  playerId: bigint('player_id', { mode: 'number' }),
+  action: text('action').notNull(),
+  entity: text('entity'),
+  entityId: bigint('entity_id', { mode: 'number' }),
+  before: jsonb('before'),
+  after: jsonb('after'),
+  traceId: text('trace_id'),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('audit_player').on(t.playerId, t.at),
+  index('audit_entity').on(t.entity, t.entityId, t.at),
+]);
 
 /* ═══ SOHBET (§13.12) ═══════════════════════════════════════════════════════
  * DÜNYA YALITIMI: her kanal world_id taşır; dm_key PLAYER id'lerinden üretilir (account'tan ASLA)
