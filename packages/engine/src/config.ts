@@ -50,13 +50,31 @@ export interface CombatConfig {
   /** Karşı-yön (savunan→saldıran) kalibrasyonu [REKON]: motor saldıranı ~%1 az öldürüyordu. */
   counterK: number;
 
-  /** Kahraman efektif model katsayıları [REKON-KALİBRE]. */
+  /**
+   * Kahraman modeli [REKON-KALİBRE — KAHRAMAN_TESTLERI.md, 2026-07-26 yeniden çözüldü].
+   *
+   * Yetenek etkisi LİNEER DEĞİL ÜSSEL: orijinal simülatörden geri çözülen ofans katkısı
+   * lvl15'te 0/6/12 fizSald için 17.500 → 40.000 → 125.000 (yani puan başına ≈ ×1,18).
+   * Bu, binary'nin `taban × 1,06^yetenek` biçimiyle uyumlu (1,06³ = 1,191 ≈ 1,18).
+   * Eski lineer `(1 + 0,25·fizSald)` modeli yüksek yetenekte ofansı %25-33 eksik veriyordu.
+   */
   hero: {
+    /** Savunma katkısı: (defBase + defPerLevel × seviye) × defSkillBase^fizSav */
     defBase: number;
     defPerLevel: number;
-    defPerFSav: number;
-    offPerLevel2: number;
-    offPerFSald: number;
+    defSkillBase: number;
+    /** Ofans katkısı: offCoef × seviye² × offSkillBase^fizSald */
+    offCoef: number;
+    offSkillBase: number;
+    /**
+     * ⚠️ TAVAN — kahraman kendi ordusunun havuzunun/P'sinin en fazla bu oranı kadar katkı verebilir.
+     * Gerekçe: yetenek başına ×1,18 üsseldir; seviye 15'te oyuncunun 45 puanı vardır (3/seviye) ve
+     * ölçüm verimiz yalnız 0-12 puan aralığını kapsıyor. Tavan olmadan tek kahraman koca orduyu
+     * gölgede bırakırdı (45 puanda ×1735). Yüksek puanlı ölçüm gelince tavan gevşetilecek.
+     */
+    maxPoolShare: number;
+    /** Seviye başına verilen geliştirme puanı (kullanıcı doğrulaması, 2026-07-26). */
+    pointsPerLevel: number;
     /** Kahramanın bedava taşıdığı baskı eşiği (pool/P). */
     durumMitigation: number;
     /** Eşik üstü baskının durumu düşürme hızı. */
@@ -98,11 +116,13 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   shieldCal: 0.85,
   counterK: 1.01,
   hero: {
-    defBase: 1500,
-    defPerLevel: 70,
-    defPerFSav: 0.2,
-    offPerLevel2: 120,
-    offPerFSald: 0.25,
+    defBase: 3000,
+    defPerLevel: 140,
+    defSkillBase: 1.06,
+    offCoef: 70,
+    offSkillBase: 1.18,
+    maxPoolShare: 0.5,
+    pointsPerLevel: 3,
     durumMitigation: 5.0,
     durumK: 0.0002,
   },

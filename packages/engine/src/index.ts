@@ -11,6 +11,9 @@ export {
   type CombatConfig, type LootConfig,
 } from './config.ts';
 export { createRng, hashSeed, type Rng } from './rng.ts';
+export {
+  heroSkillBudget, heroSkillTotal, assertHeroSkills, type HeroSkillBudget,
+} from './hero.ts';
 export type {
   SimulateInput, SimulateResult, SideInput, SideResult, UnitCounts, HeroInput,
 } from './types.ts';

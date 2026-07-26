@@ -125,19 +125,37 @@ function applyNight(army: Army, nightVision: number, cfg: CombatConfig): void {
 
 /* ── Kahraman ──────────────────────────────────────────────────────────────── */
 
-/** Kahramanın KENDİ P'sine katkısı (savunma) — durum düştükçe azalır. */
+/**
+ * Kahramanın KENDİ P'sine katkısı (savunma) — durum düştükçe azalır.
+ * fizSav ÜSSEL etki eder: 10 puan ≈ ×1,79 (ölçüm: lvl10'da 4.500 → 8.000).
+ */
 function heroDefPower(h: HeroState, cfg: CombatConfig): number {
   if ((h.level | 0) <= 0) return 0;
-  const { defBase, defPerLevel, defPerFSav } = cfg.hero;
-  return round((defBase + defPerLevel * (h.level | 0)) * (1 + defPerFSav * (h.fDef ?? 0)) * h.durum / 100);
+  const { defBase, defPerLevel, defSkillBase } = cfg.hero;
+  const base = defBase + defPerLevel * (h.level | 0);
+  return round(base * defSkillBase ** Math.max(0, h.fDef ?? 0) * h.durum / 100);
 }
 
-/** Kahramanın saldırı havuzuna katkısı (ofans) — seviyeye göre kuadratik. */
+/**
+ * Kahramanın saldırı havuzuna katkısı (ofans) — seviyeye göre kuadratik, fizSald'a göre ÜSSEL.
+ * Ölçüm (lvl15): 0/6/12 puan → 17.500 / 40.000 / 125.000.
+ */
 function heroOffPower(h: HeroState, cfg: CombatConfig): number {
   if ((h.level | 0) <= 0) return 0;
-  const { offPerLevel2, offPerFSald } = cfg.hero;
+  const { offCoef, offSkillBase } = cfg.hero;
   const lvl = h.level | 0;
-  return round(offPerLevel2 * lvl * lvl * (1 + offPerFSald * (h.fAtk ?? 0)) * h.durum / 100);
+  return round(offCoef * lvl * lvl * offSkillBase ** Math.max(0, h.fAtk ?? 0) * h.durum / 100);
+}
+
+/**
+ * ⚠️ Kahraman katkısına TAVAN: kendi ordusunun katkısının en fazla `maxPoolShare` katı.
+ * Üssel yetenek etkisi 0-12 puan verisiyle kalibre edildi; oyuncunun seviye 15'te 45 puanı var
+ * (3/seviye). Tavan olmadan tek kahraman orduyu ikame ederdi — bu bir DENGE kararıdır, ölçüm değil.
+ */
+function capHeroContribution(heroValue: number, armyValue: number, cfg: CombatConfig): number {
+  if (heroValue <= 0) return 0;
+  const cap = armyValue * cfg.hero.maxPoolShare;
+  return armyValue > 0 && heroValue > cap ? cap : heroValue;
 }
 
 const armyHeroDef = (a: Army, cfg: CombatConfig): number =>
@@ -172,8 +190,9 @@ function combatPool(
     if (type === 3) pool += e.stats.poolMagicHp * c * k;
     else if (e.type === type) pool += e.stats.poolHp * c * k;
   }
-  // Kahraman OFANSI yalnız fiziksel fazlarda (büyü yetenekleri fiziksel savaşta etkisiz).
-  if (type !== 3) pool += armyHeroOff(army, cfg);
+  // Kahraman OFANSI yalnız fiziksel fazlarda. (Büyü yetenekleri etkisiz çünkü kahramanın
+  // büyü TABAN statları 0 — binary formülü `taban × 1,06^yetenek` çarpımsaldır, 0×n = 0.)
+  if (type !== 3) pool += capHeroContribution(armyHeroOff(army, cfg), pool, cfg);
   return pool;
 }
 
@@ -188,7 +207,7 @@ function powerSum(army: Army, useSnap: boolean, cfg: CombatConfig): number {
     P += e.stats.unitPower * Math.max(0, c);
   }
   P += wallPower(army.wall);
-  return P + armyHeroDef(army, cfg);
+  return P + capHeroContribution(armyHeroDef(army, cfg), P, cfg);
 }
 
 /**
