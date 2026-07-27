@@ -11,8 +11,12 @@ import type { BuildingDef } from './types.ts';
 export const BUILDINGS: readonly BuildingDef[] = [
   b('castle', 'Kale', 200, 150, 20, false, false),
   b('barracks', 'Baraka', 120, 80, 20, false, true),
-  b('farm', 'Çiftlik', 60, 40, 40, true, true),
-  b('mine', 'Maden', 70, 30, 40, true, true),
+  // ⭐ EKONOMİ YAPILARI — taban maliyet kullanıcı kararı (2026-07-27): ürettiği kaynaktan
+  // AĞIR yer. Maden altın üretir → altın ağırlıklı (4/3); Çiftlik yemek üretir → yemek
+  // ağırlıklı (3/4). Eski tabanlar (60/40 ve 70/30) 14 kat pahalıydı ve yükseltmeyi ekonomik
+  // olmaktan çıkarıyordu: sv20 madeninin kendini amorti etmesi 8.175 saat sürüyordu, şimdi 574.
+  b('farm', 'Çiftlik', 3, 4, 40, true, true),
+  b('mine', 'Maden', 4, 3, 40, true, true),
   b('academy', 'Akademi', 250, 180, 20, false, true),
   b('architect_school', 'Mimar Okulu', 180, 120, 20, false, true),
   b('cave', 'Mağara', 150, 100, 20, false, true),

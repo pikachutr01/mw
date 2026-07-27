@@ -3,6 +3,7 @@
  * ham renk (`#fff`, `slate-700`) yazılmaz, yoksa gece modu ve kontrast kapısı sessizce bozulur.
  */
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
@@ -135,6 +136,41 @@ export function MissionIcon({ id, size = 36, title }: { id: string; size?: numbe
       className="inline-flex shrink-0 items-center justify-center"
       style={{ width: size, height: size, fontSize: size * 0.7 }}>
       <span aria-hidden>{EMOJI_FALLBACK[id] ?? '•'}</span>
+    </span>
+  );
+}
+
+/**
+ * ⭐ KATALOG GÖRSELİ — savaşçı · savunma · yapı · teknik satırlarının SOLUNDA (referans
+ * `images/scr_web01`: orijinalde her satırın başında birimin resmi var).
+ *
+ * Sözleşme §13.11.9 ile aynı: **dosya adı = katalog `id`**, klasör kategoriye göre. Eşleme
+ * tablosu YOK — yol id'den üretiliyor, yeni birim eklenince kod değişmiyor.
+ *
+ * ⚠️ Görsel yoksa (`onError`) çerçeve **boş kalır, kırık resim ikonu görünmez**: satır düzeni
+ * bozulmasın diye yer tutucu aynı ölçüyü koruyor.
+ *
+ * ⚠️ `loading="lazy"` bilerek YOK: görseller 160 px'e indirildikten sonra bir liste ~350 KB
+ * tutuyor ve hepsi ekranın ilk yüzünde. Tembel yükleme burada satırların gecikmeli dolmasından
+ * başka bir şey yapmıyordu.
+ */
+export type CatalogArt = 'units' | 'defenses' | 'buildings' | 'techs';
+
+export function CatalogIcon({
+  kind, id, size = 56, alt = '',
+}: { kind: CatalogArt; id: string; size?: number; alt?: string }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span
+      className="tex relative flex shrink-0 items-center justify-center overflow-hidden
+        rounded-[var(--radius-sm)] border border-border bg-raised"
+      style={{ width: size, height: size }}
+    >
+      {broken ? null : (
+        <img src={`/assets/${kind}/${id}.png`} alt={alt} width={size} height={size}
+          onError={() => setBroken(true)}
+          className="icon-shadow h-full w-full object-contain" />
+      )}
     </span>
   );
 }

@@ -4,8 +4,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  buildingCost, castleBudget, caveCapacity, defenseCapacity, dwarvesToBreakCave,
-  farmOutput, heroXpForLevel, mineOutput, trainingTimeSeconds, unitCost, UNITS_BY_ID,
+  buildingCost, buildingTimeSeconds, castleBudget, caveCapacity, defenseCapacity,
+  dwarvesToBreakCave, farmOutput, heroXpForLevel, mineOutput, STARTING_RESOURCES,
+  timeFromCost, trainingTimeSeconds, unitCost, unitTimeValue, UNITS_BY_ID,
 } from '../src/index.ts';
 
 describe('üretim formülleri', () => {
@@ -75,11 +76,34 @@ describe('kapasite kuralları', () => {
 });
 
 describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
-  it('çiftlik seviye maliyetleri', () => {
-    expect(buildingCost('farm', 1)).toEqual({ gold: 60, food: 40 });
-    expect(buildingCost('farm', 2)).toEqual({ gold: 174, food: 116 });
-    expect(buildingCost('farm', 3)).toEqual({ gold: 378, food: 252 });
-    expect(buildingCost('farm', 4)).toEqual({ gold: 732, food: 488 });
+  /**
+   * ⭐ Ekonomi yapıları ürettikleri kaynaktan AĞIR yer (kullanıcı kararı 2026-07-27):
+   * Maden altın üretir → 4 altın / 3 yemek · Çiftlik yemek üretir → 3 altın / 4 yemek.
+   */
+  it('çiftlik yemek ağırlıklı, maden altın ağırlıklı', () => {
+    expect(buildingCost('farm', 1)).toEqual({ gold: 3, food: 4 });
+    expect(buildingCost('mine', 1)).toEqual({ gold: 4, food: 3 });
+    // Eğri: taban × seviye × 1,45^(seviye−1)
+    expect(buildingCost('farm', 2)).toEqual({ gold: 9, food: 12 });
+    expect(buildingCost('farm', 4)).toEqual({ gold: 37, food: 49 });
+    expect(buildingCost('mine', 4)).toEqual({ gold: 49, food: 37 });
+  });
+
+  /**
+   * ⭐ Yeni tabanların ASIL sonucu: yükseltme artık kendini amorti ediyor.
+   * Eskiden (taban 70/30) sv20 madeninin geri ödemesi 8.175 saatti — yani hiç.
+   */
+  it('maden yükseltmesi makul sürede kendini amorti eder', () => {
+    const geriOdeme = (level: number): number => {
+      const c = buildingCost('mine', level);
+      return (c.gold + c.food) / (mineOutput(level) - mineOutput(level - 1));
+    };
+    expect(geriOdeme(2)).toBeLessThan(5);        // ~3 saat
+    expect(geriOdeme(10)).toBeLessThan(60);      // ~45 saat
+    expect(geriOdeme(20)).toBeLessThan(700);     // ~574 saat
+    // ⚠️ Maliyet eğrisi (1,45) üretim eğrisini (1,15) geçtiği için geri ödeme üstel büyür:
+    //    sv30'da 6.345 saat. Seviye tavanı 40 pratikte ulaşılabilir DEĞİL (kayda geçti).
+    expect(geriOdeme(30)).toBeGreaterThan(5_000);
   });
 
   it('kale 1→5 kümülatif ~7.500 (ittifak kurma eşiği, §13.15)', () => {
@@ -92,72 +116,117 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
     expect(total).toBeLessThan(8_000);
   });
 
-  it('başlangıç kesesi ekonomi 1→4 + baraka 1→2 + 5 cüceyi tam karşılar', () => {
+  /**
+   * ⭐ Yeni tabanlarla başlangıç kesesinin (4.000/4.000) rolü DEĞİŞTİ: artık ekonomiyi değil
+   * **Kale'yi** finanse ediyor. Ekonomi yapıları o kadar ucuz ki Kale 1'in izin verdiği
+   * 10 seviyenin tamamı 217 altın + 239 yemek tutuyor — kapı **Kale bütçesi**.
+   * Bu iyi bir tasarım: erken oyunun temposunu kese değil, bilinçli bir yapı kararı belirliyor.
+   */
+  it('Kale bütçesi artık kesenin önüne geçiyor', () => {
     let gold = 0;
     let food = 0;
-    for (let l = 2; l <= 4; l++) {
-      for (const b of ['farm', 'mine'] as const) {
-        const c = buildingCost(b, l);
-        gold += c.gold;
-        food += c.food;
-      }
-    }
-    const barracks = buildingCost('barracks', 2);
-    gold += barracks.gold;
-    food += barracks.food;
-    const dwarves = unitCost('dwarf', 5);
-    gold += dwarves.gold;
-    food += dwarves.food;
+    for (let l = 2; l <= 5; l++) { const c = buildingCost('farm', l); gold += c.gold; food += c.food; }
+    for (let l = 2; l <= 4; l++) { const c = buildingCost('mine', l); gold += c.gold; food += c.food; }
 
-    expect(gold).toBeGreaterThan(3900);   // kesenin altın kısmı neredeyse tam biter (3.999)
-    expect(gold).toBeLessThanOrEqual(4000);
-    expect(food).toBeLessThanOrEqual(4000);
-    expect(food).toBeGreaterThan(3500);
+    // Çiftlik 5 + Maden 4 + Baraka 1 = tam 10 seviye = Kale 1 bütçesinin tamamı.
+    expect(castleBudget(1)).toBe(10);
+    expect(gold + food).toBeLessThan(500);              // kesenin %6'sı
+    expect(gold).toBeLessThan(STARTING_RESOURCES.gold);
+    expect(food).toBeLessThan(STARTING_RESOURCES.food);
+
+    // Kalan kese Kale 2-3'e gidiyor (bütçeyi 30 seviyeye çıkarır).
+    let kale = 0;
+    for (let l = 2; l <= 3; l++) { const c = buildingCost('castle', l); kale += c.gold + c.food; }
+    expect(kale).toBeLessThan(STARTING_RESOURCES.gold + STARTING_RESOURCES.food - gold - food);
   });
 });
 
 /**
- * ⭐ ÜRETİM SÜRESİ — Model B (kullanıcı onayı 2026-07-27, `k.java`'nın kendi formülü).
+ * ⭐ ÜRETİM SÜRESİ — kurgulanan model (§13.11.3, kullanıcı kararı 2026-07-27):
+ * `190 × ((altın+yemek+taşıma)/1000)^0,8 / 1,2^seviye`.
  *
- * Bu blok modelin **iki dayanağını** de kilitliyor: eski ekran görüntülerindeki savaşçı süreleri
- * (o dönemin yarım maliyetleriyle) ve 2015 tarihli Muhafız ekranı (bizim binary maliyetimizle).
- * Biri bozulursa model değişmiş demektir.
+ * Testler modelin **niyetini** kilitliyor, tek tek sayıları değil: oynanabilir ölçek, anlamlı
+ * ama tek eksenli olmayan Baraka etkisi, elit birimin zaman avantajı ve Yük Arabası düzeltmesi.
  */
-describe('üretim süresi (Model B)', () => {
-  it('⭐ MUHAFIZ KANITI: 10(a+y)/1,4^16 = 3:22 (images/mobil.png, 2015)', () => {
-    // Ekranda 2400 altın + 2000 yemek → katalogdaki binary maliyetin AYNISI.
-    const guard = UNITS_BY_ID['guard']!;
-    expect([guard.gold, guard.food]).toEqual([2400, 2000]);
-    expect(trainingTimeSeconds('guard', 16)).toBeCloseTo(202.02, 2);   // ekranda 3:22
+describe('üretim süresi (kurgulanan model)', () => {
+  it('ölçek oynanabilir: Cüce Baraka 1\'de ~2 dk, Baraka 20\'de saniyeler', () => {
+    expect(trainingTimeSeconds('dwarf', 1)).toBeCloseTo(113.6, 1);
+    expect(trainingTimeSeconds('dwarf', 5)).toBeCloseTo(54.8, 1);
+    expect(trainingTimeSeconds('dwarf', 20)).toBeLessThan(5);
   });
 
-  it('savunma birimi Mimar Okulu\'na, savaşçı Baraka\'ya bağlı', () => {
-    // Savunma: her seviye %28,6 kısaltır (1/1,4).
-    expect(trainingTimeSeconds('guard', 0)).toBeCloseTo(44_000, 5);
-    expect(trainingTimeSeconds('guard', 1)).toBeCloseTo(44_000 / 1.4, 5);
-    // Savaşçı: üstel eğri, tam sayı bölmesiyle.
-    expect(trainingTimeSeconds('dwarf', 0)).toBeCloseTo(65 ** 0.8 * 65, 5);
-    expect(trainingTimeSeconds('dwarf', 1)).toBeCloseTo((65 ** 0.8 * 65) / 1.4, 5);
+  it('her Baraka seviyesi süreyi %16,7 kısaltır (20 seviyede 32 kat)', () => {
+    const b1 = trainingTimeSeconds('dwarf', 1);
+    expect(trainingTimeSeconds('dwarf', 2)).toBeCloseTo(b1 / 1.2, 6);
+    expect(trainingTimeSeconds('dwarf', 0) / trainingTimeSeconds('dwarf', 20))
+      .toBeCloseTo(1.2 ** 20, 3);
   });
 
-  it('eski ekran görüntüleri (Baraka 15, o dönemin YARIM maliyetleri) ±%5 tutuyor', () => {
-    // Katalogda binary (iki kat) maliyet var; ekranın kendi maliyetiyle formülü doğrudan sınıyoruz.
-    const modelB = (gold: number, food: number, barracks: number): number =>
-      (Math.floor((gold + food) / 10) ** 0.8 * 65) / 1.4 ** barracks;
-    const gozlem: [number, number, number][] = [
-      [100, 225, 7],       // Cüce
-      [225, 320, 10],      // Elf
-      [600, 1200, 26],     // Süvari
-      [2000, 1600, 45],    // Pegasus
-      [24000, 10000, 271], // Ejderha 4:31
+  it('birim ön-şartına ulaştığında makul sürede çıkar', () => {
+    // (birim, gerekli Baraka, üst sınır saniye)
+    const beklenen: [string, number, number][] = [
+      ['spy_bird', 3, 60], ['cargo_wagon', 3, 480], ['cavalry', 4, 300],
+      ['pegasus', 7, 300], ['dragon', 10, 900], ['ogre', 8, 900], ['chaos', 15, 3 * 3600],
     ];
-    for (const [gold, food, gorulen] of gozlem) {
-      expect(Math.abs(modelB(gold, food, 15) / gorulen - 1)).toBeLessThan(0.05);
+    for (const [id, baraka, ustSinir] of beklenen) {
+      expect(trainingTimeSeconds(id, baraka)).toBeLessThanOrEqual(ustSinir);
     }
   });
 
-  it('Model A denge düğmesi olarak duruyor (varsayılan DEĞİL)', () => {
-    expect(trainingTimeSeconds('dwarf', 1, 'area')).toBeCloseTo(9, 5);
-    expect(trainingTimeSeconds('dwarf', 1)).not.toBeCloseTo(9, 1);
+  /** Üs 0,8'in amacı: elit birim saniye başına daha çok GÜÇ üretsin (bedeli: ön-şartlar). */
+  it('elit birim saniye başına ~2 kat güç üretir', () => {
+    const gucBasinaSaniye = (id: string): number =>
+      trainingTimeSeconds(id, 10) / UNITS_BY_ID[id]!.area;
+    const oran = gucBasinaSaniye('dwarf') / gucBasinaSaniye('dragon');
+    expect(oran).toBeGreaterThan(1.8);
+    expect(oran).toBeLessThan(2.5);
+  });
+
+  /** Taşıma terimi olmasa ganimet taşımak bedavaya gelirdi (2.000 kaynağa 3.000 taşıma). */
+  it('Yük Arabası taşıma kapasitesi kadar ek süre öder', () => {
+    expect(unitTimeValue('cargo_wagon')).toBe(1000 + 1000 + 3000);
+    expect(unitTimeValue('dwarf')).toBe(200 + 450 + 10);
+    // Taşımasız değere göre 2,1 kat.
+    const tasimasiz = 190 * (2000 / 1000) ** 0.8;
+    expect(trainingTimeSeconds('cargo_wagon', 0) / tasimasiz).toBeCloseTo(2.1, 1);
+  });
+
+  it('savunma birimi Mimar Okulu\'na bağlı, aynı eğriyle', () => {
+    expect(trainingTimeSeconds('guard', 0)).toBeCloseTo(190 * 4.4 ** 0.8, 5);
+    expect(trainingTimeSeconds('guard', 10)).toBeCloseTo(190 * 4.4 ** 0.8 / 1.2 ** 10, 5);
+  });
+
+  it('emekli modeller karşılaştırma için duruyor (varsayılan DEĞİL)', () => {
+    expect(trainingTimeSeconds('dwarf', 1, 'area')).toBeCloseTo(9, 5);          // Model A
+    expect(trainingTimeSeconds('dwarf', 1, 'original')).toBeCloseTo(1309.5, 1); // Model B
+    expect(trainingTimeSeconds('dwarf', 1)).toBeCloseTo(113.6, 1);              // yürürlükte
+  });
+});
+
+/**
+ * ⭐ YAPI/TEKNİK SÜRESİ aynı eğriyi kullanır (katsayı 400). Eski `10 × maliyet` kuralı üstel
+ * maliyet eğrisiyle çarpışıyordu: Kale 20 **2.869 gün** sürüyordu. Bu test o çöküşün geri
+ * gelmediğini kilitler.
+ */
+describe('yapı ve teknik süresi', () => {
+  it('yüksek seviye yapı süresi patlamıyor', () => {
+    const kale20 = buildingTimeSeconds('castle', 20, 10);
+    expect(kale20 / 86_400).toBeLessThan(4);         // ~2,4 gün (Mimar Okulu 10)
+    expect(buildingTimeSeconds('castle', 2, 0)).toBeLessThan(600);   // ilk yükseltme dakikalar
+  });
+
+  it('Mimar Okulu kendi seviyesiyle hızlanır (özel dal YOK)', () => {
+    expect(buildingTimeSeconds('architect_school', 5, 4))
+      .toBeCloseTo(buildingTimeSeconds('architect_school', 5, 4), 10);
+    // Aynı maliyetli iki yapı aynı süreyi alır: Mimar Okulu artık istisna değil.
+    const c = buildingCost('architect_school', 5);
+    expect(buildingTimeSeconds('architect_school', 5, 4)).toBeCloseTo(timeFromCost(c, 4), 10);
+  });
+
+  it('aynı DEĞERDE yapı, birimin ~2 katı sürer (400/190)', () => {
+    // Cüce'nin değeri 660 → aynı değere sahip bir yapı kalemiyle karşılaştırılıyor.
+    const deger = unitTimeValue('dwarf');
+    expect(timeFromCost({ gold: deger, food: 0 }, 0) / trainingTimeSeconds('dwarf', 0))
+      .toBeCloseTo(400 / 190, 6);
   });
 });

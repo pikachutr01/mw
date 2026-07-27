@@ -201,8 +201,8 @@ describe('savaşçı üretimi', () => {
 
     const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
     expect(q.count).toBe(5);
-    // ⭐ Model B (§13.11.3): ((200+450)/10)^0,8 × 65 / 1,4^Baraka. Baraka 1 → 1.309 sn/birim.
-    const birim = (65 ** 0.8 * 65) / 1.4;
+    // ⭐ §13.11.3: 190 × ((200+450+10)/1000)^0,8 / 1,2^Baraka. Baraka 1 → 113,6 sn/birim.
+    const birim = (190 * 0.66 ** 0.8) / 1.2;
     expect((q.finishAt.getTime() - at.getTime()) / 1000).toBeCloseTo(birim * 5, 0);
 
     await h.db.execute(sql`

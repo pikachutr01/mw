@@ -21,13 +21,24 @@ export const ECONOMY_CONSTANTS = {
   techCostRate: 1.5,
   /** süre böleni tabanı: /1.4^(ilgili yapı seviyesi) */
   timeDivisorRate: 1.4,
-  /** Mimar Okulu kendi süresi: (gold+food) / 1.2^level */
-  architectSelfRate: 1.2,
-  /** savaşçı süresi: ((gold+food)/10)^0.8 × 65 / 1.4^Baraka */
-  trainTimeExponent: 0.8,
-  trainTimeFactor: 65,
-  /** ⛔ EMEKLİ — Model A: süre(sn) = area × 0.95^(Baraka−1). Yalnız denge düğmesi olarak duruyor. */
+  /* ── SÜRE MODELİ (§13.11.3, kullanıcı kurgusu 2026-07-27) ─────────────────── */
+  /** Her hızlandırıcı yapı seviyesi süreyi %16,7 kısaltır (bölen `1,2^seviye`). */
+  timeDecayRate: 1.2,
+  /** Üs: `k.java`'nın kendi üssü. Pahalı birimi saniye başına daha verimli yapar (bkz. §13.11.3). */
+  timeExponent: 0.8,
+  /** Savaşçı ve savunma birimi katsayısı → Cüce, Baraka 1'de 1 dk 54 sn. */
+  unitTimeFactor: 190,
+  /** Yapı / teknik / Sur / Büyü Kalkanı katsayısı → aynı maliyette birimin ~2 katı süre. */
+  structureTimeFactor: 400,
+  /** 1 birim taşıma kapasitesi = 1 kaynak sayılır (yalnız Yük Arabası'nda anlamlı fark yaratır). */
+  carryTimeWeight: 1,
+
+  /* ── Emekli süre modelleri (yalnız denge düğmesi) ─────────────────────────── */
+  /** ⛔ Model A: `area × 0.95^(Baraka−1)`. */
   trainTimeAreaDecay: 0.95,
+  /** ⛔ Model B (k.java): `(⌊(a+y)/10⌋)^0.8 × 65 / 1.4^Baraka`. */
+  originalTrainFactor: 65,
+  originalDivisorRate: 1.4,
 } as const;
 
 export interface Cost {
@@ -104,80 +115,114 @@ export function unitCost(unitId: string, count = 1): Cost {
 }
 
 /**
- * ⭐ ORTAK SÜRE KURALI: `10 × (altın+yemek) / 1,4^(ilgili yapı seviyesi)`.
+ * ⭐ ORTAK SÜRE ÇEKİRDEĞİ (§13.11.3): `K × (değer/1000)^0,8 / 1,2^(hızlandıran yapı seviyesi)`.
  *
- * `k.java`'nın tek süre fonksiyonunda (`k.a(String, h)`) yapı · teknik · savunma birimi ve
- * Sur/Büyü Kalkanı dallarının HEPSİ bunu kullanıyor; yalnız bölen yapı değişiyor
- * (Mimar Okulu / Akademi). Bu yüzden formül tek yerde: dört yerde ayrı yazılsaydı biri
- * güncellenip diğerleri unutulurdu.
+ * Dört kategori de (savaşçı · savunma · yapı · teknik) **aynı eğriyi** kullanır; yalnız `K` ve
+ * hızlandıran yapı değişir. Tek çekirdek olmasının sebebi acı deneyim: dört yerde ayrı yazılsaydı
+ * biri güncellenip diğerleri unutulurdu.
  *
- * 🎯 **Doğrulama (2026-07-27):** `images/mobil.png` (2015) Muhafız = 2400 altın + 2000 yemek,
- * süre **3:22**. `10×4400 / 1,4^16 = 202,02 sn = 3:22` — Mimar Okulu 16'da birebir. Aynı ekran
- * yarım maliyetle çözülseydi Mimar Okulu 13,94 çıkardı (tam sayı değil) → binary maliyet tablosu
- * ile bu süre formülü AYNI oyun sürümünde yaşamış.
+ * **Üs neden 0,8?** `k.java`'nın kendi üssü — ve doğru şekli veriyor: süre maliyetin altında
+ * kalan bir hızla büyür, böylece elit birim saniye başına daha çok güç üretir (Ejderha, Cüce'nin
+ * 100 katı maliyete karşı 39 katı süre = güç/saniye'de 2,1 kat avantaj). Bu avantajın bedeli
+ * yüksek ön-şartlar. Üs 1,0 olsaydı birim seçimi yalnız maliyet verimliliğine inerdi.
+ *
+ * **Bölen neden 1,2 (orijinaldeki 1,4 değil)?** 1,4 yirmi seviyede **836 kat** demek; Baraka tek
+ * başına oyunun kaderini belirler ve seviye 1'deki oyuncu hiçbir şey üretemez. 1,2 ile yirmi
+ * seviye **32 kat** kazandırır — hissedilir ama tek eksenli değil.
  */
+function timeCurve(value: number, factor: number, level: number): number {
+  return (
+    (factor * (Math.max(0, value) / 1000) ** ECONOMY_CONSTANTS.timeExponent)
+    / ECONOMY_CONSTANTS.timeDecayRate ** Math.max(0, level)
+  );
+}
+
+/** Maliyeti olan her YAPISAL kalemin süresi (yapı · teknik · Sur · Büyü Kalkanı). */
 export function timeFromCost(cost: Cost, divisorLevel: number): number {
-  return (10 * (cost.gold + cost.food)) / ECONOMY_CONSTANTS.timeDivisorRate ** Math.max(0, divisorLevel);
+  return timeCurve(cost.gold + cost.food, ECONOMY_CONSTANTS.structureTimeFactor, divisorLevel);
 }
 
-/** Yapı inşa süresi (saniye): 10 × (altın+yemek) / 1.4^MimarOkulu. Mimar Okulu kendisi: /1.2^sv. */
+/**
+ * Yapı inşa süresi (saniye). Hızlandıran: **Mimar Okulu**.
+ *
+ * ⚠️ Mimar Okulu'nun kendisi için ayrı kural YOK: o da kendi **mevcut** seviyesiyle hızlanır.
+ * Orijinaldeki özel dal (`/1,2^sv`, 10× çarpansız) 1,4'lük bölenin kaçışını frenlemek içindi;
+ * bölen 1,2'ye inince frene gerek kalmadı ve özel dal sessiz bir tutarsızlık kaynağı olurdu.
+ */
 export function buildingTimeSeconds(buildingId: string, level: number, architectSchool: number): number {
-  const c = buildingCost(buildingId, level);
-  if (buildingId === 'architect_school') {
-    // Kendi kendini hızlandıramaz; kendi eğrisi daha yumuşak (1,2) ve 10× çarpanı yok.
-    return (c.gold + c.food) / ECONOMY_CONSTANTS.architectSelfRate ** level;
-  }
-  return timeFromCost(c, architectSchool);
+  return timeFromCost(buildingCost(buildingId, level), architectSchool);
 }
 
-/** Teknik araştırma süresi (saniye): 10 × (altın+yemek) / 1.4^Akademi (o şehrin akademisi). */
+/** Teknik araştırma süresi (saniye). Hızlandıran: **o şehrin Akademi'si**. */
 export function techTimeSeconds(techId: string, level: number, academy: number): number {
   return timeFromCost(techCost(techId, level), academy);
 }
 
-export type TrainingTimeModel = 'area' | 'cost';
+/**
+ * Birimin "değeri" = süreye giren büyüklük: **altın + yemek + taşıma kapasitesi**.
+ *
+ * **Neden maliyet?** Katalogdaki `area` motorda birimin SAVAŞ GÜCÜdür ve savaşçılarda
+ * `maliyet/güç` oranı 63 ile 100 arasında (ortalama 81) — yani orijinal tasarımcılar birimleri
+ * **zaten güçleriyle orantılı fiyatlamış**. Maliyeti kullanmak gücü de kullanmak demektir;
+ * ayrıca bir güç terimi eklemek aynı bilgiyi iki kez saymak olurdu.
+ *
+ * **Neden ayrıca taşıma?** `maliyet/güç` oranı destek birimlerinde patlıyor (Yük Arabası 250,
+ * Casus Kuş 300) çünkü onların değeri savaş gücünde değil. Yük Arabası 2.000 kaynağa **3.000
+ * taşıma** veriyor — kaynak başına Cüce'nin 100 katı. Taşımayı 1:1 kaynak saymazsak ganimet
+ * taşımak bedava gelirdi: bu terimle değeri 2.000 → 5.000 olur, süresi 2,1 katına çıkar.
+ * Diğer birimlerde etki ihmal edilebilir (Ejderha +%0,5) — kasıtlı olarak **hedefli** bir düzeltme.
+ */
+export function unitTimeValue(unitId: string): number {
+  const def = UNITS_BY_ID[unitId];
+  if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
+  return def.gold + def.food + ECONOMY_CONSTANTS.carryTimeWeight * def.carry;
+}
+
+/** `balanced` = yürürlükteki model. Diğer ikisi ⛔ emekli, yalnız karşılaştırma için (§13.11.3). */
+export type TrainingTimeModel = 'balanced' | 'area' | 'original';
 
 /**
- * ⭐ BİRİM ÜRETİM SÜRESİ (saniye) — **Model B, kullanıcı onayı 2026-07-27**.
+ * ⭐ BİRİM ÜRETİM SÜRESİ (saniye) — §13.11.3, **kurgulanan model (kullanıcı, 2026-07-27)**.
  *
- * İki ayrı dal, ikisi de `k.java`'nın kendi kodundan:
- *  - **Savaşçı** (kategori `B`, bölen **Baraka**): `((altın+yemek)/10)^0,8 × 65 / 1,4^Baraka`
- *  - **Savunma birimi** (kategori `S`, bölen **Mimar Okulu**): `10 × (altın+yemek) / 1,4^MimarOkulu`
+ * ```
+ * süre = 190 × ((altın + yemek + taşıma) / 1000)^0,8 / 1,2^seviye
+ * ```
+ * Hızlandıran: savaşçıda **Baraka**, savunma biriminde **Mimar Okulu**.
  *
- * 🎯 Neden Model A (süre = Alan × 0,95^(Baraka−1)) **elendi**:
- *  1. *Yapısal olarak yanlış:* süre alanla orantılı olsaydı `süre/alan` sabit çıkardı; oysa aynı
- *     hesabın beş biriminde 0,36 ile 0,83 arasında **2,3 kat** değişiyor.
- *  2. *0,95 oranı hiçbir kaynakta yok* — tahmindi. Model B'nin 1,4'ü ise yapı ve teknik
- *     sürelerinde zaten kullandığımız, decompile edilmiş sabitin ta kendisi.
- *  3. *Muhafız kanıtı:* bkz. `timeFromCost` — savunma dalı 2015 ekran görüntüsünde sıfır sapmayla
- *     tutuyor ve o ekrandaki maliyetler bizim binary tablomuzla aynı.
+ * Ölçek: Cüce Baraka 1'de **1 dk 54 sn** → Baraka 5'te 55 sn → Baraka 20'de 4 sn ·
+ * Ejderha, ön-şartı olan Baraka 10'da **14 dk 29 sn** · Kaos, Baraka 15'te 2 sa 36 dk ·
+ * Casus Kuş Baraka 3'te 42 sn.
  *
- * ⚠️ `Math.floor((altın+yemek)/10)`: `k.java` bunu **tam sayı bölmesi** ile yapıyor (long/long).
- * Kesirli bırakırsak ucuz birimlerde saniyeler kayar; orijinalin sayısını üretmek için aynen taklit.
- *
- * `model: 'area'` yalnız eski Model A'yı geri getirmek isteyen denge düğmesi olarak duruyor.
+ * ⚠️ **Orijinalin ham sayıları alınmadı, ŞEKLİ alındı.** `k.java` Baraka 1'de Cüce'yi
+ * 21 dk 50 sn yapıyor (bölen 1,4). Elimizdeki tek gerçek ölçüm (Muhafız 3:22, `images/mobil.png`)
+ * birim görselinden anlaşıldığı üzere oyunun **eski bir sürümüne** ait — formülün varlığını
+ * kanıtlıyor ama son sürümün ölçeğini kanıtlamıyor. Bu yüzden üs (0,8) ve maliyet güdümlü yapı
+ * korundu, katsayı ve bölen oynanabilirliğe göre kurgulandı.
  */
 export function trainingTimeSeconds(
   unitId: string,
   sourceLevel: number,
-  model: TrainingTimeModel = 'cost',
+  model: TrainingTimeModel = 'balanced',
 ): number {
   const def = UNITS_BY_ID[unitId];
   if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
   const lvl = Math.max(0, sourceLevel);
-  if (model === 'area') {
+
+  if (model === 'area') {                      // ⛔ Model A — süre = Alan × 0,95^(Baraka−1)
     return def.area * ECONOMY_CONSTANTS.trainTimeAreaDecay ** (Math.max(1, lvl) - 1);
   }
-  if (def.kind === 'defense') {
-    // Savunma birimi maliyeti SABİT (Sur/Büyü Kalkanı hariç — onların seviyeli maliyeti
-    // çağıran tarafta hesaplanıp `timeFromCost`'a verilir).
-    return timeFromCost({ gold: def.gold, food: def.food }, lvl);
+  if (model === 'original') {                  // ⛔ Model B — k.java'nın ham sayıları
+    if (def.kind === 'defense') {
+      return (10 * (def.gold + def.food)) / ECONOMY_CONSTANTS.originalDivisorRate ** lvl;
+    }
+    // `k.java` maliyeti onda birine TAM SAYI bölmesiyle indiriyor (long/long).
+    return (
+      (Math.floor((def.gold + def.food) / 10) ** ECONOMY_CONSTANTS.timeExponent
+        * ECONOMY_CONSTANTS.originalTrainFactor)
+      / ECONOMY_CONSTANTS.originalDivisorRate ** lvl
+    );
   }
-  const tenths = Math.floor((def.gold + def.food) / 10);
-  return (
-    (tenths ** ECONOMY_CONSTANTS.trainTimeExponent * ECONOMY_CONSTANTS.trainTimeFactor)
-    / ECONOMY_CONSTANTS.timeDivisorRate ** lvl
-  );
+  return timeCurve(unitTimeValue(unitId), ECONOMY_CONSTANTS.unitTimeFactor, lvl);
 }
 
 /**

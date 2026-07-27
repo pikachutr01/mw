@@ -14,7 +14,9 @@ import {
   type CatalogUnit, type CityDetail, type QueueRow,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
-import { Button, Empty, ErrorBox, Input, Panel, Requirements, Res } from '../components/ui.tsx';
+import {
+  Button, CatalogIcon, Empty, ErrorBox, Input, Panel, Requirements, Res,
+} from '../components/ui.tsx';
 
 /**
  * Şehir ekranlarının ORTAK kabuğu: şehir başlığı + bütçe çubukları + açık kuyruklar.
@@ -150,7 +152,9 @@ function Buildings({ city }: { city: CityDetail }) {
           return (
             <li key={b.id}
               className={`flex items-center justify-between gap-3 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              <div className="min-w-0">
+              {/* ⭐ Görsel SOLDA (orijinal: `images/scr_web01`). */}
+              <CatalogIcon kind="buildings" id={b.id} alt={b.name} />
+              <div className="min-w-0 flex-1">
                 <div className="text-sm">
                   <span className="font-medium text-ink">{b.name}</span>
                   <span className="ml-1.5 tnum text-xs text-accent">sv {b.level}</span>
@@ -197,7 +201,9 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
           return (
             <li key={u.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
+                {/* ⭐ Görsel SOLDA. Baraka'da savaşçı, Savunma'da savunma seti. */}
+                <CatalogIcon kind={kind === 'unit' ? 'units' : 'defenses'} id={u.id} alt={u.name} />
+                <div className="min-w-0 flex-1">
                   <div className="text-sm">
                     <span className="font-medium text-ink">{u.name}</span>
                     <span className="ml-1.5 tnum text-xs text-accent">
@@ -262,7 +268,8 @@ function Techs({ city }: { city: CityDetail }) {
           return (
             <li key={t.id}
               className={`flex items-center justify-between gap-3 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              <div className="min-w-0">
+              <CatalogIcon kind="techs" id={t.id} alt={t.name} />
+              <div className="min-w-0 flex-1">
                 <div className="text-sm">
                   <span className="font-medium text-ink">{t.name}</span>
                   <span className="ml-1.5 tnum text-xs text-accent">sv {t.level}</span>
