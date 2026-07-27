@@ -1,0 +1,1 @@
+ALTER TABLE "cities" ADD COLUMN "teleport_ready_at" timestamp with time zone;

@@ -7,6 +7,7 @@
 import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';
 import { battleHandlers } from '../missions/battle.handlers.ts';
+import { missionHandlers } from '../missions/mission.handlers.ts';
 import { echoHandler } from '../missions/echo.handler.ts';
 import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
@@ -39,12 +40,14 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
    *   `echo`            → omurgayı ölçen sahte tip (Faz 1)
    *   `*_finish`        → kuyruk bitişleri (Faz 2) ✓
    *   `attack`/`return` → savaş çözümü + dönüş bacağı (Faz 2) ✓
-   *   sırada: Faz 3 (nakliye/casusluk/şehir kurma), Faz 4 (hero_revive, vacation_end, abuse_scan)
+   *   `transport`/`support`/`spy`/`found_city` → savaş dışı görevler (Faz 2) ✓
+   *   sırada: Faz 4 (hero_revive, vacation_end, abuse_scan)
    */
   const cities = new CityService(db);
   const registry = new HandlerRegistry().register('echo', echoHandler);
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
+  for (const [type, handler] of Object.entries(missionHandlers(cities))) registry.register(type, handler);
 
   const scheduler = new SchedulerService(db, clock, registry, {
     worldId: opts.worldId,

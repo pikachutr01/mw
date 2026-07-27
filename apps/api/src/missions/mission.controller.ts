@@ -9,6 +9,7 @@ import {
   HttpCode, Inject, NotFoundException, Param, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
+import { maxCities } from '@mobiwar/catalog';
 import { sendMissionRequest } from '@mobiwar/contracts';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { toDate, type Db } from '../db/client.ts';
@@ -65,6 +66,174 @@ export class MissionController {
     } catch (err) {
       throw toHttp(err);
     }
+  }
+
+  /**
+   * ⭐ `POST /api/v1/missions/send` — SALDIRI DIŞINDAKİ tüm görev tipleri tek uçtan.
+   *
+   * Doküman (DÜNYA): *"tüm görev seçenekleri de (saldırı, nakliye, casusluk, destek, şehir kurma
+   * ve teleport) yalnızca dünya menüsünden yapılabilir"* → arayüzde tek modal, sunucuda tek uç.
+   * Tip başına ayrı rota yazmak beş kopya doğrulama bloğu demekti.
+   */
+  @Post('send')
+  @HttpCode(201)
+  async send(@Body() body: unknown, @Req() req: AuthedRequest): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const parsed = sendMissionRequest.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException({ code: 'invalid_request', issues: parsed.error.issues });
+    }
+    const d = parsed.data;
+    const at = await this.clock.gameNow(player.worldId);
+    const base = {
+      originCityId: d.originCityId,
+      playerId: player.playerId,
+      worldId: player.worldId,
+      target: d.target,
+      units: d.units,
+      heroIds: d.heroIds,
+      at,
+    };
+
+    try {
+      // ⚠️ Teleport ANLIKTIR: görev satırı üretmez, bu yüzden yanıtı da farklıdır.
+      if (d.type === 'teleport') {
+        const r = await this.missions.teleport(base);
+        return {
+          instant: true,
+          targetCityId: r.targetCityId,
+          units: r.units,
+          heroIds: r.heroIds,
+          teleportReadyAt: r.readyAt.toISOString(),
+          gameNow: at.toISOString(),
+          serverNow: new Date().toISOString(),
+        };
+      }
+
+      const cargo = d.cargo ?? { gold: 0, food: 0 };
+      const m = d.type === 'attack' ? await this.missions.sendAttack(base)
+        : d.type === 'transport' ? await this.missions.sendTransport({ ...base, cargo })
+          : d.type === 'support' ? await this.missions.sendSupport({ ...base, cargo })
+            : d.type === 'spy' ? await this.missions.sendSpy(base)
+              : await this.missions.sendFoundCity(base);
+
+      return {
+        missionId: m.missionId,
+        type: d.type,
+        targetCityId: 'targetCityId' in m ? m.targetCityId : null,
+        units: m.units,
+        heroIds: m.heroIds,
+        distance: m.distance,
+        speed: m.speed,
+        travelSeconds: m.travelSeconds,
+        executeAt: m.executeAt.toISOString(),
+        gameNow: at.toISOString(),
+        serverNow: new Date().toISOString(),
+      };
+    } catch (err) {
+      throw toHttp(err);
+    }
+  }
+
+  /**
+   * ⭐ `GET /api/v1/missions/options` — bir hedefe HANGİ görevlerin gönderilebileceği.
+   *
+   * Kural sunucuda yaşar: istemci "kime ne gönderilebilir"i kendi hesaplasaydı aynı mantık iki
+   * yerde durur ve kaçınılmaz olarak birbirinden kayardı (maliyet/süre kuralıyla aynı ilke).
+   * Kapalı seçenek **gizlenmez, sebebiyle gösterilir** — oyuncu neden yapamadığını görmeli.
+   */
+  @Get('options')
+  async options(
+    @Query('originCityId') originCityIdRaw: string,
+    @Query('k') k: string, @Query('d') d: string, @Query('s') s: string,
+    @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const originCityId = Number(originCityIdRaw);
+    const coords = { k: Number(k), d: Number(d), s: Number(s) };
+    const at = await this.clock.gameNow(player.worldId);
+
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT
+        (SELECT row_to_json(x) FROM (
+           SELECT c.id, c.player_id, c.name, p.username, p.protected_until, p.vacation_until
+             FROM cities c JOIN players p ON p.id = c.player_id
+            WHERE c.world_id = ${player.worldId}
+              AND c.k = ${coords.k} AND c.d = ${coords.d} AND c.s = ${coords.s}
+         ) x) AS target,
+        (SELECT COUNT(*)::int FROM cities WHERE player_id = ${player.playerId}) AS owned,
+        (SELECT COALESCE(level,0) FROM techs
+          WHERE player_id = ${player.playerId} AND type = 'colonization') AS colonization,
+        (SELECT COALESCE(level,0) FROM buildings
+          WHERE city_id = ${originCityId} AND type = 'teleport') AS from_teleport,
+        (SELECT teleport_ready_at FROM cities WHERE id = ${originCityId}) AS teleport_ready
+    `);
+    const r = rows[0] ?? {};
+    const target = (r['target'] ?? null) as null | {
+      id: number; player_id: number; name: string; username: string;
+      protected_until: string | null; vacation_until: string | null;
+    };
+    const owned = Number(r['owned'] ?? 0);
+    const colonization = Number(r['colonization'] ?? 0);
+    const cityLimit = maxCities(colonization);
+    const fromTeleport = Number(r['from_teleport'] ?? 0);
+    const teleportReady = r['teleport_ready'] == null ? null : toDate(r['teleport_ready']);
+
+    const opts: { type: string; label: string; enabled: boolean; reason: string | null }[] = [];
+    const add = (type: string, label: string, enabled: boolean, reason: string | null = null): void => {
+      opts.push({ type, label, enabled, reason });
+    };
+
+    if (!target) {
+      // ── BOŞ YUVA: yalnız şehir kurma (doküman: "boş alanlar - ile gösterilir") ──
+      const fits = owned < cityLimit;
+      add('found_city', 'Şehir Kur', fits,
+        fits ? null
+          : `En fazla ${cityLimit} şehir kurabilirsin (Sömürgecilik ${colonization}). `
+            + 'Sömürgecilik tekniğinin her üç kademesi bir şehir daha açar.');
+    } else if (target.player_id === player.playerId) {
+      if (target.id === originCityId) {
+        // Aktif şehir: menü yok, yalnız bilgi (kullanıcı kararı).
+        return { self: true, activeCity: true, target: describeTarget(target), options: [] };
+      }
+      // ── KENDİ DİĞER ŞEHRİM ──
+      add('transport', 'Nakliye', true);
+      add('support', 'Destek', true);
+      const toTeleport = await this.teleportLevel(target.id);
+      const ready = teleportReady == null || teleportReady <= at;
+      const canTeleport = fromTeleport >= 1 && toTeleport >= 1 && ready;
+      add('teleport', 'Teleport', canTeleport,
+        canTeleport ? null
+          : fromTeleport < 1 || toTeleport < 1
+            ? 'Teleport için her iki şehirde de Teleport binası en az 1. seviye olmalı.'
+            : `Teleport binası hazır değil (${teleportReady!.toISOString()}).`);
+    } else {
+      // ── BAŞKA OYUNCU ──
+      const prot = target.protected_until == null ? null : toDate(target.protected_until);
+      const vac = target.vacation_until == null ? null : toDate(target.vacation_until);
+      const shielded = (prot != null && prot > at) || (vac != null && vac > at);
+      const why = prot != null && prot > at ? 'Oyuncu acemi koruması altında.' : 'Oyuncu tatil modunda.';
+      // ⚠️ Aynı ittifakta olmak saldırı/casusluğa ENGEL DEĞİL (kullanıcı kuralı).
+      add('attack', 'Saldırı', !shielded, shielded ? why : null);
+      add('spy', 'Casusluk', !shielded, shielded ? why : null);
+      add('transport', 'Nakliye', true);
+    }
+
+    return {
+      self: target?.player_id === player.playerId,
+      activeCity: false,
+      target: target ? describeTarget(target) : null,
+      options: opts,
+      gameNow: at.toISOString(),
+      serverNow: new Date().toISOString(),
+    };
+  }
+
+  private async teleportLevel(cityId: number): Promise<number> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT COALESCE(level,0) AS lvl FROM buildings WHERE city_id = ${cityId} AND type = 'teleport'
+    `);
+    return Number(rows[0]?.['lvl'] ?? 0);
   }
 
   /**
@@ -231,6 +400,12 @@ const IN_ICON: Record<string, string> = {
   support: 'support_in',
   spy: 'spy_back',
 };
+
+function describeTarget(t: {
+  id: number; name: string; username: string;
+}): Record<string, unknown> {
+  return { cityId: t.id, name: t.name, username: t.username };
+}
 
 /** Alan hatalarını HTTP'ye çevirir; kodlar istemcide i18n anahtarı olarak kullanılır. */
 function toHttp(err: unknown): Error {

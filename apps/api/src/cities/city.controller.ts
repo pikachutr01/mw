@@ -147,7 +147,8 @@ export class CityController {
         };
       }),
       units: orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER).map((u) => ({
-        id: u.id, name: u.name.tr, area: u.area, speed: u.speed,
+        // `carry` nakliye/destek formunun kapasite göstergesi için gerekiyor (§NAKLİYE).
+        id: u.id, name: u.name.tr, area: u.area, speed: u.speed, carry: u.carry,
         cost: unitCost(u.id, 1),
         /** Bir birimin üretim süresi: `((a+y)/10)^0,8 × 65 / 1,4^Baraka`. Adetle çarpılır. */
         seconds: Math.round(trainingTimeSeconds(u.id, barracks)),

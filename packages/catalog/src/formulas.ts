@@ -285,6 +285,59 @@ export function cancelRefund(input: RefundInput): Cost {
   return { gold: Math.floor(gold * keep), food: Math.floor(food * keep) };
 }
 
+/* ── GÖREV KURALLARI (oyunun kendi dokümanı: DÜNYA / ŞEHİR KURMA / TELEPORT) ── */
+
+/**
+ * ⭐ Bir oyuncunun sahip olabileceği ŞEHİR SAYISI.
+ * Doküman: *"Sömürgecilik tekniğinin her üç kademesinde yeni bir şehir kurulabilir.
+ * Bir oyuncu en fazla 5 şehre sahip olabilir."*
+ * → başkent + ⌊Sömürgecilik/3⌋, tavan 5.
+ */
+export const MAX_CITIES = 5;
+export function maxCities(colonization: number): number {
+  return Math.min(MAX_CITIES, 1 + Math.floor(Math.max(0, colonization) / 3));
+}
+
+/**
+ * ⭐ Teleport'un yeniden hazır olma süresi (saniye).
+ * Doküman: *"Teleport binası seviyesini ilerlettiğinizde teleportun kendini hazır hale getirme
+ * süresi %2 kısalır."* → `taban × 0,98^(seviye−1)`. Taban §13.11.4'ten: **20 saat**.
+ */
+export const TELEPORT_BASE_COOLDOWN_SECONDS = 20 * 3600;
+export function teleportCooldownSeconds(teleportLevel: number): number {
+  const lvl = Math.max(1, teleportLevel);
+  return TELEPORT_BASE_COOLDOWN_SECONDS * 0.98 ** (lvl - 1);
+}
+
+/**
+ * ⭐ CASUSLUK bilgi kademesi (doküman, birebir).
+ *
+ * `fark = benimCasusluk + log2(gönderilen kuş) − rakipCasusluk`
+ * — doküman: *"8 casus kuş yollarsanız 2^3=8 olduğundan casusluk tekniğiniz 3 seviye fazla gibi
+ * davranır"*. Kademeler **kümülatif**: her seviye bir öncekinin üstüne ekler.
+ */
+export const SPY_LEVELS = [
+  'resources',      // fark < 0
+  'economy',        // fark = 0  → + Maden ve Çiftlik seviyesi
+  'armyTotals',     // fark = 1  → + toplam savaşçı ve savunma ünitesi sayısı
+  'armyTypes',      // fark = 2  → + birim TİPLERİ
+  'armyCounts',     // fark = 3  → + savaşçıların tek tek sayıları
+  'full',           // fark ≥ 4  → + teknikler, Kale/Sur/Büyü Kalkanı seviyeleri
+] as const;
+export type SpyLevel = (typeof SPY_LEVELS)[number];
+
+export function spyEffectiveDiff(myEspionage: number, birds: number, theirEspionage: number): number {
+  const bonus = birds > 0 ? Math.log2(birds) : 0;
+  return Math.max(0, myEspionage) + bonus - Math.max(0, theirEspionage);
+}
+
+/** Etkin farkı bilgi kademesine çevirir. `fark` kesirli olabilir → aşağı yuvarlanır. */
+export function spyLevelFor(diff: number): SpyLevel {
+  const step = Math.floor(diff);
+  if (step < 0) return 'resources';
+  return SPY_LEVELS[Math.min(SPY_LEVELS.length - 1, step + 1)]!;
+}
+
 /** Kahraman diriltme maliyeti: (3000, 2000) × 1,5^seviye (§13.11.4b). */
 export function heroReviveCost(level: number): Cost {
   const k = 1.5 ** Math.max(0, level);

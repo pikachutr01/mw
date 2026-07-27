@@ -1,20 +1,18 @@
 /**
  * DÜNYA sekmesi — **harita değil, DİYAR LİSTESİ** (§13.16.2).
  *
- * Bir diyarda tam 10 yuva vardır; boş yuva `-` ile geçer. Dolu yuvaya tıklamak **modal** açar:
- * mesafe/süre önizlemesi + saldırı formu.
+ * Bir diyarda tam 10 yuva vardır; boş yuva `-` ile geçer. **Her yuva tıklanabilir** — dolu olan
+ * görev seçeneklerini, boş olan "Şehir Kur"u açar. Doküman (DÜNYA): *"tüm görev seçenekleri
+ * yalnızca dünya menüsünden yapılabilir"* → modalın içeriği `screens/world-modal.tsx`'te.
  *
  * ⚠️ **Gizlilik (§13.16.5):** liste asker ve kaynak GÖSTERMEZ — bunu öğrenmenin yolu casusluktur.
  */
 import { useState } from 'react';
-import { armySpeed, distance, travelSeconds } from '@mobiwar/engine';
-import { fmt, formatDuration } from '../lib/hooks.ts';
+import { fmt } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
-import {
-  useCatalog, useCity, useSendAttack, useWorld, type WorldSlot,
-} from '../lib/queries.ts';
-import { Badge, Button, Empty, ErrorBox, Input, Panel } from '../components/ui.tsx';
-import { Modal } from '../components/Modal.tsx';
+import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
+import { Button, Input, Panel } from '../components/ui.tsx';
+import { SlotBadges, TargetModal } from './world-modal.tsx';
 
 export function World() {
   const { cityId } = useActiveCity();
@@ -63,12 +61,12 @@ export function World() {
         <ul className="max-h-[calc(100svh-19rem)] divide-y divide-border overflow-y-auto lg:max-h-[calc(100svh-15rem)]">
           {(world.data?.slots ?? []).map((slot, i) => (
             <li key={slot.s}>
+              {/* ⭐ BOŞ YUVA DA TIKLANABİLİR: şehir kurmanın tek yolu burası (doküman: DÜNYA). */}
               <button
-                disabled={!slot.city}
                 onClick={() => setTarget(slot)}
-                className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left ${
+                className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-raised ${
                   i % 2 === 1 ? 'bg-row-alt' : ''
-                } ${slot.city ? 'hover:bg-raised' : 'cursor-default'}`}
+                }`}
               >
                 <span className="tnum w-5 shrink-0 text-xs text-muted">{slot.s}</span>
                 {slot.city ? (
@@ -82,12 +80,10 @@ export function World() {
                         {slot.city.username} · skor {fmt(slot.city.score)}
                       </span>
                     </span>
-                    {slot.city.isOwn ? <Badge tone="success">senin</Badge> : null}
-                    {slot.city.protection === 'beginner' ? <Badge>acemi koruması</Badge> : null}
-                    {slot.city.protection === 'vacation' ? <Badge>tatilde</Badge> : null}
+                    <SlotBadges slot={slot} />
                   </>
                 ) : (
-                  <span className="flex-1 text-sm text-muted">—</span>
+                  <span className="flex-1 text-sm text-muted">— <span className="text-[11px]">iskâna açık</span></span>
                 )}
               </button>
             </li>
@@ -98,143 +94,9 @@ export function World() {
         </div>
       </Panel>
 
-      {target?.city ? (
-        <CityModal slot={target} coords={{ k, d }} onClose={() => setTarget(null)} />
+      {target ? (
+        <TargetModal slot={target} coords={{ k, d }} onClose={() => setTarget(null)} />
       ) : null}
-    </div>
-  );
-}
-
-/**
- * Şehir modalı: mesafe/süre önizlemesi + saldırı formu.
- * (Alt sayfa yerine MODAL — kullanıcı kararı, oyunun genel modal diline uyuyor.)
- */
-function CityModal({
-  slot, coords, onClose,
-}: {
-  slot: WorldSlot;
-  coords: { k: number; d: number };
-  onClose: () => void;
-}) {
-  const { cityId } = useActiveCity();
-  const city = useCity(cityId);
-  const catalog = useCatalog(cityId);
-  const send = useSendAttack();
-  const [picked, setPicked] = useState<Record<string, string>>({});
-
-  const target = { k: coords.k, d: coords.d, s: slot.s };
-  const origin = city.data?.coordinates;
-
-  const units: Record<string, number> = {};
-  for (const [id, raw] of Object.entries(picked)) {
-    const n = Math.trunc(Number(raw) || 0);
-    if (n > 0) units[id] = n;
-  }
-  const hasUnits = Object.keys(units).length > 0;
-
-  // ⭐ Önizleme motorun AYNI fonksiyonuyla hesaplanır (`packages/engine/travel.ts`); otorite yine
-  //    sunucudur, bu yalnız oyuncunun karar vermesi için. İkisi ayrı formül olsaydı kaçınılmaz
-  //    olarak birbirinden kayarlardı.
-  const D = origin ? distance(origin, target) : 0;
-  const speed = hasUnits ? armySpeed(units) : null;
-  const cartography = city.data?.techs['cartography'] ?? 0;
-  const eta = speed ? travelSeconds({ distance: D, speed, cartography }) : null;
-
-  const own = slot.city?.isOwn === true;
-  const protectedTarget = slot.city?.protection != null;
-
-  return (
-    <Modal
-      title={`${slot.city?.name ?? '—'} (${target.k}:${target.d}:${target.s})`}
-      onClose={onClose}
-      width="lg"
-      footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}
-    >
-      <div>
-        <div className="border-b border-border px-3 py-1.5 text-xs text-muted">
-          Oyuncu: <b className="text-ink">{slot.city?.username}</b>
-          {slot.city?.isCapital ? ' · başkent' : ''}
-        </div>
-
-        <div className="space-y-3 p-3">
-          <div className="tnum grid grid-cols-3 gap-2 text-xs">
-            <Stat label="Mesafe" value={fmt(D)} />
-            <Stat label="Ordu hızı" value={speed ? String(speed) : '—'} />
-            <Stat label="Tahmini süre" value={eta ? formatDuration(eta) : '—'} />
-          </div>
-
-          {own ? (
-            <div className="rounded-[var(--radius-sm)] border border-border px-3 py-2 text-sm text-muted">
-              Bu senin şehrin — kendi şehrine saldıramazsın.
-            </div>
-          ) : protectedTarget ? (
-            <div className="rounded-[var(--radius-sm)] border border-warning px-3 py-2 text-sm text-warning">
-              Bu oyuncu {slot.city?.protection === 'beginner' ? 'acemi koruması' : 'tatil modu'} altında —
-              saldırıya kapalı.
-            </div>
-          ) : (
-            <>
-              <div className="text-xs text-muted">
-                Ordunun hızı <b>en yavaş birimin</b> hızıdır. Birlikler yola çıktığı anda şehirden düşer.
-              </div>
-
-              <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
-                {(catalog.data?.units ?? []).map((u) => {
-                  const have = city.data?.units[u.id] ?? 0;
-                  if (have <= 0) return null;
-                  return (
-                    <li key={u.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                      <div className="min-w-0 text-sm text-ink">
-                        {u.name}
-                        <span className="ml-1 text-xs text-muted">
-                          {fmt(have)} hazır · hız {u.speed}
-                        </span>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Input type="number" min={0} max={have} inputMode="numeric"
-                          className="w-24 tnum" placeholder="0"
-                          value={picked[u.id] ?? ''}
-                          onChange={(e) => setPicked({ ...picked, [u.id]: e.target.value })} />
-                        <Button size="sm" variant="ghost"
-                          onClick={() => setPicked({ ...picked, [u.id]: String(have) })}>
-                          hepsi
-                        </Button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              {Object.values(city.data?.units ?? {}).every((n) => n <= 0) ? (
-                <Empty>Şehrinde savaşçı yok. Önce Baraka'dan üret.</Empty>
-              ) : null}
-
-              <ErrorBox error={send.error} />
-
-              <Button
-                className="w-full"
-                disabled={!hasUnits || send.isPending || cityId == null}
-                onClick={() => {
-                  send.mutate(
-                    { originCityId: cityId!, target, units },
-                    { onSuccess: () => { setPicked({}); onClose(); } },
-                  );
-                }}
-              >
-                {send.isPending ? 'Gönderiliyor…' : 'Saldırıya gönder'}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[var(--radius-sm)] border border-border px-2 py-1.5">
-      <div className="text-[11px] text-muted">{label}</div>
-      <div className="text-sm text-ink">{value}</div>
     </div>
   );
 }

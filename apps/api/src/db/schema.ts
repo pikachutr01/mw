@@ -82,6 +82,12 @@ export const cities = pgTable('cities', {
   gold: numeric('gold', { precision: 20, scale: 6 }).notNull().default('0'),
   food: numeric('food', { precision: 20, scale: 6 }).notNull().default('0'),
   resourcesAt: timestamp('resources_at', { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * ⭐ Teleport binası ne zaman tekrar hazır (OYUN saatinde). Doküman: *"Bu işlemden sonra
+   * teleport binası tekrar hazır hale gelinceye kadar kullanılamaz."*
+   * NULL = hiç kullanılmamış / hazır. Bekleme süresi `teleportCooldownSeconds(seviye)`.
+   */
+  teleportReadyAt: timestamp('teleport_ready_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('cities_world_coords').on(t.worldId, t.k, t.d, t.s),

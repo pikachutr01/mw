@@ -47,7 +47,12 @@ export { DB } from './db/tokens.ts';
     },
     { provide: GameClockService, useFactory: (db: Db) => new GameClockService(db), inject: [DB] },
     { provide: CityService, useFactory: (db: Db) => new CityService(db), inject: [DB] },
-    { provide: MissionService, useFactory: (db: Db) => new MissionService(db), inject: [DB] },
+    {
+      provide: MissionService,
+      // Nakliye/destek kaynağı şehirden düşerken tembel birikim uygulanmalı → CityService şart.
+      useFactory: (db: Db, cities: CityService) => new MissionService(db, cities),
+      inject: [DB, CityService],
+    },
     {
       provide: QueueService,
       useFactory: (db: Db, cities: CityService) => new QueueService(db, cities),

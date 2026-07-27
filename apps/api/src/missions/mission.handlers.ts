@@ -1,0 +1,514 @@
+/**
+ * ⭐ SAVAŞ DIŞI GÖREV ÇÖZÜMLERİ — nakliye · destek · casusluk · şehir kurma.
+ *
+ * Sözleşme saldırıyla aynı (§1): **`ctx.at` "şimdi"dir** (`now()` DEĞİL) ve her görev **tek
+ * transaction**tadır — teslimat, rapor ve dönüş görevi ya hep birlikte yazılır ya hiç yazılmaz.
+ *
+ * Kaynak: oyunun kendi dokümanı (`teknik_ve_yapi_dokumantasyonu.md` → NAKLİYE · DESTEK ·
+ * CASUSLUK · ŞEHİR KURMA başlıkları).
+ */
+import { sql } from 'drizzle-orm';
+import {
+  BUILDINGS_BY_ID, maxCities, spyEffectiveDiff, spyLevelFor, UNITS_BY_ID, type SpyLevel,
+} from '@mobiwar/catalog';
+import { createRng } from '@mobiwar/engine';
+import type { CityService } from '../cities/city.service.ts';
+import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
+
+/* ═══ NAKLİYE ══════════════════════════════════════════════════════════════ */
+
+/**
+ * Kaynağı hedefe teslim eder, ordu **boş döner** (kullanıcı kuralı).
+ *
+ * ⚠️ Kaynak yola çıkarken kaynak şehirden düşmüştü; hedef şehir bu arada yok olduysa mal
+ * **yok olmaz**, dönüş yüküne konur ve orduyla birlikte eve geri gelir.
+ */
+export function createTransportHandler(cities: CityService): MissionHandler {
+  return async (ctx) => {
+    const targetCityId = ctx.mission.targetCityId;
+    const originCityId = ctx.mission.originCityId;
+    if (originCityId == null) throw new Error('transport: kaynak şehir yok');
+
+    const cargo = readResources(ctx.mission.payload['cargo']);
+    const units = await loadMissionUnits(ctx.tx, ctx.mission.id);
+
+    const target = targetCityId == null ? null : await loadCityOwner(ctx.tx, targetCityId);
+    if (!target) {
+      // Hedef şehir yok olmuş → mal geri döner (yolda kaybolmaz).
+      await scheduleReturn(ctx, { homeCityId: originCityId, units, cargo, returnOf: 'transport' });
+      return;
+    }
+
+    await ctx.lockCity(targetCityId!);
+    if (cargo.gold > 0 || cargo.food > 0) {
+      await cities.add(targetCityId!, cargo, ctx.at, ctx.tx as never);
+    }
+
+    await writeMessage(ctx, {
+      playerId: target.playerId,
+      kind: 'transport_report',
+      side: 'receiver',
+      subject: 'Nakliye ulaştı',
+      body: { cityId: targetCityId, cargo, from: ctx.mission.originCityId, at: ctx.at.toISOString() },
+    });
+    await ctx.emit('city:changed', { cityId: targetCityId, playerId: target.playerId, reason: 'transport' });
+
+    // Ordu boş döner; birlikler varışta kaynak şehre eklenir.
+    await scheduleReturn(ctx, {
+      homeCityId: originCityId, units, cargo: { gold: 0, food: 0 }, returnOf: 'transport',
+    });
+
+    await ctx.audit({
+      action: 'mission.transport.delivered', entity: 'city', entityId: targetCityId!,
+      after: { cargo, units },
+    });
+  };
+}
+
+/* ═══ DESTEK ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * **TEK YÖNLÜ** (doküman): *"askerleriniz artık gönderdiğiniz şehrin barakasına, kahramanlar ise
+ * o şehrin tapınağına yerleşir."* → dönüş görevi YOK. Kaynak da varsa hedefin kasasına eklenir.
+ */
+export function createSupportHandler(cities: CityService): MissionHandler {
+  return async (ctx) => {
+    const targetCityId = ctx.mission.targetCityId;
+    const originCityId = ctx.mission.originCityId;
+    if (originCityId == null) throw new Error('support: kaynak şehir yok');
+
+    const cargo = readResources(ctx.mission.payload['cargo']);
+    const units = await loadMissionUnits(ctx.tx, ctx.mission.id);
+
+    const target = targetCityId == null ? null : await loadCityOwner(ctx.tx, targetCityId);
+    if (!target) {
+      // Hedef şehir yok olmuş → destek tek yönlü olsa da ordu ortada kalamaz, eve döner.
+      await scheduleReturn(ctx, { homeCityId: originCityId, units, cargo, returnOf: 'support' });
+      return;
+    }
+
+    await ctx.lockCity(targetCityId!);
+    for (const [type, count] of Object.entries(units)) {
+      if (count <= 0) continue;
+      await ctx.tx.execute(sql`
+        INSERT INTO units (city_id, type, count) VALUES (${targetCityId}, ${type}, ${count})
+        ON CONFLICT (city_id, type) DO UPDATE SET count = units.count + ${count}
+      `);
+    }
+    // Kahramanlar hedef şehrin tapınağına yerleşir.
+    await ctx.tx.execute(sql`
+      UPDATE heroes SET city_id = ${targetCityId}
+       WHERE id IN (SELECT hero_id FROM mission_heroes WHERE mission_id = ${ctx.mission.id})
+    `);
+    await ctx.tx.execute(sql`DELETE FROM mission_heroes WHERE mission_id = ${ctx.mission.id}`);
+
+    if (cargo.gold > 0 || cargo.food > 0) {
+      await cities.add(targetCityId!, cargo, ctx.at, ctx.tx as never);
+    }
+
+    await writeMessage(ctx, {
+      playerId: target.playerId,
+      kind: 'support_report',
+      side: 'receiver',
+      subject: 'Destek ulaştı',
+      body: { cityId: targetCityId, units, cargo, at: ctx.at.toISOString() },
+    });
+    await ctx.emit('city:changed', { cityId: targetCityId, playerId: target.playerId, reason: 'support' });
+
+    await ctx.audit({
+      action: 'mission.support.arrived', entity: 'city', entityId: targetCityId!,
+      after: { units, cargo },
+    });
+  };
+}
+
+/* ═══ CASUSLUK ═════════════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ Bilgi kademesi `fark = benimCasusluk + log2(kuş) − rakipCasusluk` (doküman, birebir).
+ *
+ * ⚠️ **Kuş kaybı yalnız savunanda Elf veya Okçu Kulesi varsa** olur (§13.11.6): doküman
+ * *"Casusluk tekniğiniz zayıf ise düşmanınız sizin casus kuşlarınızı fark edebilir ve onları
+ * vurabilir"* diyor; vurabilecek birim yoksa vurulma da olmaz.
+ *
+ * ⚠️ **Tüm kuşlar ölürse ne rapor ne dönüş görevi** oluşur — ordu yok olmuştur (saldırıdaki
+ * "tam kayıpta dönüş yok" kuralının ikizi).
+ */
+export function createSpyHandler(): MissionHandler {
+  return async (ctx) => {
+    const targetCityId = ctx.mission.targetCityId;
+    const originCityId = ctx.mission.originCityId;
+    const spyPlayerId = ctx.mission.ownerPlayerId;
+    if (originCityId == null || spyPlayerId == null) throw new Error('spy: eksik görev alanları');
+
+    const units = await loadMissionUnits(ctx.tx, ctx.mission.id);
+    const birds = units['spy_bird'] ?? 0;
+
+    const target = targetCityId == null ? null : await loadCityOwner(ctx.tx, targetCityId);
+    if (!target || birds <= 0) {
+      await scheduleReturn(ctx, {
+        homeCityId: originCityId, units, cargo: { gold: 0, food: 0 }, returnOf: 'spy',
+      });
+      return;
+    }
+    await ctx.lockCity(targetCityId!);
+
+    const mine = await techLevel(ctx.tx, spyPlayerId, 'espionage');
+    const theirs = await techLevel(ctx.tx, target.playerId, 'espionage');
+    const diff = spyEffectiveDiff(mine, birds, theirs);
+    const level = spyLevelFor(diff);
+
+    // ── Kuş kaybı ────────────────────────────────────────────────────────────
+    const defense = await ctx.tx.execute<Record<string, unknown>>(sql`
+      SELECT
+        (SELECT COALESCE(count,0) FROM units    WHERE city_id = ${targetCityId} AND type = 'elf')          AS elf,
+        (SELECT COALESCE(count,0) FROM defenses WHERE city_id = ${targetCityId} AND type = 'archer_tower') AS tower
+    `);
+    const canShoot = Number(defense[0]?.['elf'] ?? 0) > 0 || Number(defense[0]?.['tower'] ?? 0) > 0;
+    // Fark ne kadar düşükse vurulma o kadar olası; fark ≥ 2'de artık fark edilmezler.
+    const risk = canShoot ? Math.min(0.9, Math.max(0, (2 - diff) * 0.25)) : 0;
+    // ⭐ Determinizm (§5): tohum görevin kimliğidir → aynı görev yeniden oynatılırsa aynı biter.
+    const rng = createRng(`spy:${ctx.mission.id}`);
+    let lost = 0;
+    for (let i = 0; i < birds; i++) if (rng.next() < risk) lost++;
+    const survivors = birds - lost;
+
+    if (survivors <= 0) {
+      // Hiç kuş dönmedi → bilgi yok, dönüş görevi yok. Yalnız iki tarafa haber.
+      await writeMessage(ctx, {
+        playerId: spyPlayerId, kind: 'spy_report', side: 'spy',
+        subject: 'Casus kuşların vuruldu',
+        body: { targetCityId, birdsSent: birds, birdsLost: lost, level: null, at: ctx.at.toISOString() },
+      });
+      await writeMessage(ctx, {
+        playerId: target.playerId, kind: 'spy_report', side: 'target',
+        subject: 'Casusluk girişimi engellendi',
+        body: { cityId: targetCityId, birdsShot: lost, at: ctx.at.toISOString() },
+      });
+      await ctx.audit({ action: 'mission.spy.destroyed', entity: 'city', entityId: targetCityId!, after: { birds } });
+      return;
+    }
+
+    const intel = await gatherIntel(ctx.tx, targetCityId!, target.playerId, level);
+    await writeMessage(ctx, {
+      playerId: spyPlayerId, kind: 'spy_report', side: 'spy',
+      subject: `Casusluk raporu · ${target.name}`,
+      body: {
+        targetCityId, targetCityName: target.name, targetPlayer: target.username,
+        birdsSent: birds, birdsLost: lost, level, diff: Math.round(diff * 100) / 100,
+        intel, at: ctx.at.toISOString(),
+      },
+    });
+    // Savunan yalnız vurabildiyse haberdar olur — yoksa casusluk sessizdir (§13.11.6).
+    if (lost > 0) {
+      await writeMessage(ctx, {
+        playerId: target.playerId, kind: 'spy_report', side: 'target',
+        subject: 'Şehrinde casus kuş vuruldu',
+        body: { cityId: targetCityId, birdsShot: lost, at: ctx.at.toISOString() },
+      });
+    }
+
+    await scheduleReturn(ctx, {
+      homeCityId: originCityId,
+      units: { spy_bird: survivors },
+      cargo: { gold: 0, food: 0 },
+      returnOf: 'spy',
+    });
+    await ctx.audit({
+      action: 'mission.spy.resolved', entity: 'city', entityId: targetCityId!,
+      after: { birds, lost, level, diff },
+    });
+  };
+}
+
+/** Kademeye göre TOPLANAN bilgi. Her kademe bir öncekinin üstüne ekler (doküman). */
+async function gatherIntel(
+  tx: Tx, cityId: number, playerId: number, level: SpyLevel,
+): Promise<Record<string, unknown>> {
+  const order: SpyLevel[] = ['resources', 'economy', 'armyTotals', 'armyTypes', 'armyCounts', 'full'];
+  const at = order.indexOf(level);
+  const out: Record<string, unknown> = {};
+
+  const res = await tx.execute<Record<string, unknown>>(sql`
+    SELECT gold, food FROM cities WHERE id = ${cityId}
+  `);
+  out['resources'] = {
+    gold: Math.floor(Number(res[0]?.['gold'] ?? 0)),
+    food: Math.floor(Number(res[0]?.['food'] ?? 0)),
+  };
+
+  const buildings = await tx.execute<Record<string, unknown>>(sql`
+    SELECT type, level FROM buildings WHERE city_id = ${cityId}
+  `);
+  const levels: Record<string, number> = {};
+  for (const b of buildings) levels[String(b['type'])] = Number(b['level']);
+
+  if (at >= 1) out['economy'] = { mine: levels['mine'] ?? 0, farm: levels['farm'] ?? 0 };
+
+  if (at >= 2) {
+    const [warriors, defenses] = await Promise.all([
+      tx.execute<Record<string, unknown>>(sql`SELECT type, count FROM units WHERE city_id = ${cityId}`),
+      tx.execute<Record<string, unknown>>(sql`SELECT type, count FROM defenses WHERE city_id = ${cityId}`),
+    ]);
+    const w = countsOf(warriors);
+    const d = countsOf(defenses);
+    // Sur/Büyü Kalkanı ADET değil SEVİYE taşır → "toplam savunma ünitesi"ne girmezler.
+    const dUnits = Object.fromEntries(Object.entries(d).filter(([id]) => !isLevelBased(id)));
+
+    out['totals'] = {
+      warriors: sum(Object.values(w)),
+      defenses: sum(Object.values(dUnits)),
+    };
+    if (at >= 3) {
+      out['warriorTypes'] = Object.keys(w).filter((id) => (w[id] ?? 0) > 0);
+      out['defenseTypes'] = Object.keys(dUnits).filter((id) => (dUnits[id] ?? 0) > 0);
+    }
+    if (at >= 4) {
+      out['warriors'] = w;
+      out['defenses'] = dUnits;
+    }
+  }
+
+  if (at >= 5) {
+    const techs = await tx.execute<Record<string, unknown>>(sql`
+      SELECT type, level FROM techs WHERE player_id = ${playerId}
+    `);
+    const defLevels = await tx.execute<Record<string, unknown>>(sql`
+      SELECT type, count FROM defenses WHERE city_id = ${cityId} AND type IN ('wall', 'magic_shield')
+    `);
+    const dl = countsOf(defLevels);
+    out['techs'] = countsOf(techs, 'level');
+    out['structures'] = {
+      castle: levels['castle'] ?? 0,
+      wall: dl['wall'] ?? 0,
+      magic_shield: dl['magic_shield'] ?? 0,
+    };
+  }
+  return out;
+}
+
+/* ═══ ŞEHİR KURMA ══════════════════════════════════════════════════════════ */
+
+/**
+ * ⚠️ Yuvanın boşluğu **VARIŞ ANINDA** kontrol edilir. Doküman: *"Ordunuz şehir kurmaya giderken,
+ * seçtiğiniz yere başka bir oyuncu tarafından şehir kurulabilir. Bu durumda ordunuz şehir
+ * kuramadan geri dönecektir."* Şehir sayısı limiti de burada YENİDEN bakılır: iki görev aynı
+ * anda varırsa ilki limiti doldurmuş olabilir.
+ */
+export function createFoundCityHandler(cities: CityService): MissionHandler {
+  return async (ctx) => {
+    const originCityId = ctx.mission.originCityId;
+    const playerId = ctx.mission.ownerPlayerId;
+    if (originCityId == null || playerId == null) throw new Error('found_city: eksik görev alanları');
+
+    // Hedef BOŞ yuva olduğu için `target_city_id` yok; koordinat görev satırında duruyor.
+    const coords = await loadTargetCoords(ctx.tx, ctx.mission.id);
+    if (!coords) throw new Error('found_city: hedef koordinat yok');
+    const units = await loadMissionUnits(ctx.tx, ctx.mission.id);
+
+    const check = await ctx.tx.execute<Record<string, unknown>>(sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM cities
+          WHERE world_id = ${ctx.worldId} AND k = ${coords.k} AND d = ${coords.d} AND s = ${coords.s}) AS taken,
+        (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS owned,
+        (SELECT COALESCE(level,0) FROM techs WHERE player_id = ${playerId} AND type = 'colonization') AS colonization
+    `);
+    const taken = Number(check[0]?.['taken'] ?? 0) > 0;
+    const owned = Number(check[0]?.['owned'] ?? 0);
+    const limit = maxCities(Number(check[0]?.['colonization'] ?? 0));
+
+    if (taken || owned >= limit) {
+      await writeMessage(ctx, {
+        playerId, kind: 'found_city_report', side: 'owner',
+        subject: taken ? 'Şehir kurulamadı — yer dolu' : 'Şehir kurulamadı — şehir limiti',
+        body: { coordinates: coords, reason: taken ? 'slot_taken' : 'city_limit', at: ctx.at.toISOString() },
+      });
+      await scheduleReturn(ctx, {
+        homeCityId: originCityId, units, cargo: { gold: 0, food: 0 }, returnOf: 'found_city',
+      });
+      return;
+    }
+
+    const name = await nextColonyName(ctx.tx, playerId);
+    const cityId = await cities.create({
+      worldId: ctx.worldId,
+      playerId,
+      name,
+      k: coords.k, d: coords.d, s: coords.s,
+      isCapital: false,
+      at: ctx.at,
+    }, ctx.tx as never);
+
+    // Şehri kuran ordu yeni şehrin garnizonu olur (dönüş görevi YOK).
+    for (const [type, count] of Object.entries(units)) {
+      if (count <= 0) continue;
+      await ctx.tx.execute(sql`
+        INSERT INTO units (city_id, type, count) VALUES (${cityId}, ${type}, ${count})
+        ON CONFLICT (city_id, type) DO UPDATE SET count = units.count + ${count}
+      `);
+    }
+    await ctx.tx.execute(sql`
+      UPDATE heroes SET city_id = ${cityId}
+       WHERE id IN (SELECT hero_id FROM mission_heroes WHERE mission_id = ${ctx.mission.id})
+    `);
+    await ctx.tx.execute(sql`DELETE FROM mission_heroes WHERE mission_id = ${ctx.mission.id}`);
+
+    await writeMessage(ctx, {
+      playerId, kind: 'found_city_report', side: 'owner',
+      subject: `Yeni şehir kuruldu: ${name}`,
+      body: { cityId, name, coordinates: coords, units, at: ctx.at.toISOString() },
+    });
+    await ctx.emit('city:founded', { cityId, playerId, coordinates: coords });
+    await ctx.audit({
+      action: 'mission.found_city.created', entity: 'city', entityId: cityId,
+      playerId, after: { name, coordinates: coords, units },
+    });
+  };
+}
+
+/** Koloni adı: "<oyuncu> kolonisi N". Ekranda İngilizce id görünmez (§13.14). */
+async function nextColonyName(tx: Tx, playerId: number): Promise<string> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT username, (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS n
+      FROM players WHERE id = ${playerId}
+  `);
+  const username = String(rows[0]?.['username'] ?? 'Koloni');
+  return `${username} kolonisi ${Number(rows[0]?.['n'] ?? 1)}`;
+}
+
+/* ═══ Ortak yardımcılar ════════════════════════════════════════════════════ */
+
+/**
+ * Dönüş bacağı. `returnOf` dönüşün ASLINI taşır → arayüz doğru simgeyi seçer (nakliye dönüşü
+ * kılıç değil araba gösterir) ve rapor metni doğru olur.
+ */
+async function scheduleReturn(ctx: HandlerContext, o: {
+  homeCityId: number;
+  units: Record<string, number>;
+  cargo: { gold: number; food: number };
+  returnOf: string;
+}): Promise<number | null> {
+  const anyUnit = Object.values(o.units).some((n) => n > 0);
+  const heroes = await ctx.tx.execute<Record<string, unknown>>(sql`
+    SELECT hero_id FROM mission_heroes WHERE mission_id = ${ctx.mission.id}
+  `);
+  // Ne birlik ne kahraman kaldıysa dönecek bir şey yok (§13.11.7).
+  if (!anyUnit && heroes.length === 0) return null;
+
+  const travel = Math.max(1, Number(ctx.mission.payload['travelSeconds'] ?? 0));
+  const executeAt = new Date(ctx.at.getTime() + travel * 1000);
+
+  const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
+    INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id, target_city_id,
+                          execute_at, payload, idempotency_key)
+    VALUES (${ctx.worldId}, 'return', 'scheduled', ${ctx.mission.ownerPlayerId},
+            ${ctx.mission.targetCityId}, ${o.homeCityId},
+            ${executeAt.toISOString()}::timestamptz,
+            ${JSON.stringify({
+              loot: o.cargo, travelSeconds: travel,
+              fromMissionId: ctx.mission.id, returnOf: o.returnOf,
+            })}::jsonb,
+            ${`return:${ctx.mission.id}`})
+    RETURNING id
+  `);
+  const returnMissionId = Number(rows[0]!['id']);
+
+  for (const [type, count] of Object.entries(o.units)) {
+    if (count <= 0) continue;
+    await ctx.tx.execute(sql`
+      INSERT INTO mission_units (mission_id, unit_type, count) VALUES (${returnMissionId}, ${type}, ${count})
+    `);
+  }
+  await ctx.tx.execute(sql`
+    UPDATE mission_heroes SET mission_id = ${returnMissionId} WHERE mission_id = ${ctx.mission.id}
+  `);
+  return returnMissionId;
+}
+
+async function loadMissionUnits(tx: Tx, missionId: number): Promise<Record<string, number>> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT unit_type, count FROM mission_units WHERE mission_id = ${missionId}
+  `);
+  const out: Record<string, number> = {};
+  for (const r of rows) out[String(r['unit_type'])] = Number(r['count']);
+  return out;
+}
+
+async function loadCityOwner(
+  tx: Tx, cityId: number,
+): Promise<{ playerId: number; name: string; username: string } | null> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT c.player_id, c.name, p.username FROM cities c
+      JOIN players p ON p.id = c.player_id
+     WHERE c.id = ${cityId}
+  `);
+  const r = rows[0];
+  return r
+    ? { playerId: Number(r['player_id']), name: String(r['name']), username: String(r['username']) }
+    : null;
+}
+
+/** Boş yuvaya giden görevlerde hedef koordinat `missions` satırındadır (şehir id'si yoktur). */
+async function loadTargetCoords(
+  tx: Tx, missionId: number,
+): Promise<{ k: number; d: number; s: number } | null> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT target_k, target_d, target_s FROM missions WHERE id = ${missionId}
+  `);
+  const r = rows[0];
+  if (!r || r['target_k'] == null) return null;
+  return { k: Number(r['target_k']), d: Number(r['target_d']), s: Number(r['target_s']) };
+}
+
+async function techLevel(tx: Tx, playerId: number, type: string): Promise<number> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT level FROM techs WHERE player_id = ${playerId} AND type = ${type}
+  `);
+  return Number(rows[0]?.['level'] ?? 0);
+}
+
+async function writeMessage(ctx: HandlerContext, o: {
+  playerId: number; kind: string; side: string; subject: string; body: Record<string, unknown>;
+}): Promise<void> {
+  await ctx.tx.execute(sql`
+    INSERT INTO messages (world_id, player_id, kind, side, battle_id, mission_id, subject, body, at)
+    VALUES (${ctx.worldId}, ${o.playerId}, ${o.kind}, ${o.side}, NULL, ${ctx.mission.id},
+            ${o.subject}, ${JSON.stringify(o.body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
+  `);
+}
+
+function readResources(v: unknown): { gold: number; food: number } {
+  if (!v || typeof v !== 'object') return { gold: 0, food: 0 };
+  const r = v as Record<string, unknown>;
+  return { gold: Math.max(0, Number(r['gold'] ?? 0)), food: Math.max(0, Number(r['food'] ?? 0)) };
+}
+
+function countsOf(rows: Record<string, unknown>[], field = 'count'): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of rows) {
+    const n = Number(r[field] ?? 0);
+    if (n > 0) out[String(r['type'])] = n;
+  }
+  return out;
+}
+
+function isLevelBased(id: string): boolean {
+  return id === 'wall' || id === 'magic_shield' || id === 'temple';
+}
+
+const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
+
+/** Katalogdaki adları raporlarda kullanmak için (İngilizce id ekranda görünmez, §13.14). */
+export function unitNameTr(id: string): string {
+  return UNITS_BY_ID[id]?.name.tr ?? BUILDINGS_BY_ID[id]?.name.tr ?? id;
+}
+
+/** Worker'a kaydedilecek tipler. */
+export function missionHandlers(cities: CityService): Record<string, MissionHandler> {
+  return {
+    transport: createTransportHandler(cities),
+    support: createSupportHandler(cities),
+    spy: createSpyHandler(),
+    found_city: createFoundCityHandler(cities),
+  };
+}

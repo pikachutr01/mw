@@ -12,6 +12,7 @@
  */
 import { useState } from 'react';
 import { fmt } from '../lib/hooks.ts';
+import { describeUnits, nameOf } from '../lib/names.ts';
 import { useBattle, useMarkRead, useMessages, type MessageRow } from '../lib/queries.ts';
 import { Badge, Button, Empty, Panel, Res } from '../components/ui.tsx';
 import { Modal } from '../components/Modal.tsx';
@@ -184,29 +185,145 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
   );
 }
 
-/** Savaş dışı mesaj (dönüş raporu, sistem duyurusu). */
+/**
+ * Savaş dışı rapor (dönüş · nakliye · destek · casusluk · şehir kurma · sistem duyurusu).
+ *
+ * ⚠️ Birim adları **`nameOf` üzerinden** yazılır: ham `id` ekranda İngilizce görünürdü (§13.14).
+ */
 function PlainBody({ m }: { m: MessageRow }) {
   const b = m.body ?? {};
+  if (m.kind === 'spy_report') return <SpyBody body={b} />;
+
   const loot = b['loot'] as { gold: number; food: number } | undefined;
+  const cargo = b['cargo'] as { gold: number; food: number } | undefined;
   const units = b['units'] as Record<string, number> | undefined;
+  const coords = b['coordinates'] as { k: number; d: number; s: number } | undefined;
+  const carried = loot ?? cargo;
 
   return (
     <div className="space-y-2 text-sm">
+      {coords ? (
+        <div className="tnum text-ink">Koordinat: {coords.k}:{coords.d}:{coords.s}</div>
+      ) : null}
       {units && Object.keys(units).length > 0 ? (
         <div>
-          <div className="mb-1 text-xs font-semibold text-muted uppercase">Dönen birlikler</div>
-          <div className="text-ink">
-            {Object.entries(units).map(([id, n]) => `${id} ${fmt(n)}`).join(' · ')}
-          </div>
+          <div className="mb-1 text-xs font-semibold text-muted uppercase">Birlikler</div>
+          <div className="text-ink">{describeUnits(units, fmt)}</div>
         </div>
       ) : null}
-      {loot && (loot.gold > 0 || loot.food > 0) ? (
+      {carried && (carried.gold > 0 || carried.food > 0) ? (
         <div className="flex items-center gap-2 text-ink">
-          <span>Getirilen:</span>
-          <Res kind="gold" value={fmt(loot.gold)} size={14} />
-          <Res kind="food" value={fmt(loot.food)} size={14} />
+          <span>{m.kind === 'return_report' ? 'Getirilen:' : 'Taşınan:'}</span>
+          <Res kind="gold" value={fmt(carried.gold)} size={14} />
+          <Res kind="food" value={fmt(carried.food)} size={14} />
         </div>
       ) : null}
+      {b['reason'] === 'slot_taken' ? (
+        <div className="text-danger">Ordu varmadan önce oraya başka bir oyuncu şehir kurdu.</div>
+      ) : null}
+      {b['reason'] === 'city_limit' ? (
+        <div className="text-danger">Şehir hakkın dolduğu için kurulamadı; ordu geri dönüyor.</div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * ⭐ CASUSLUK RAPORU — kademeli. Doküman: fark büyüdükçe daha çok bilgi gelir; bu yüzden
+ * **eksik bölümler gösterilmez** (boş kutu değil, hiç yok) — oyuncu neyi göremediğini
+ * "daha fazla kuş / daha yüksek Casusluk" mesajından anlar.
+ */
+function SpyBody({ body }: { body: Record<string, unknown> }) {
+  const intel = (body['intel'] ?? {}) as Record<string, unknown>;
+  const res = intel['resources'] as { gold: number; food: number } | undefined;
+  const eco = intel['economy'] as { mine: number; farm: number } | undefined;
+  const totals = intel['totals'] as { warriors: number; defenses: number } | undefined;
+  const warriors = intel['warriors'] as Record<string, number> | undefined;
+  const defenses = intel['defenses'] as Record<string, number> | undefined;
+  const wTypes = intel['warriorTypes'] as string[] | undefined;
+  const dTypes = intel['defenseTypes'] as string[] | undefined;
+  const techs = intel['techs'] as Record<string, number> | undefined;
+  const structures = intel['structures'] as Record<string, number> | undefined;
+  const lost = Number(body['birdsLost'] ?? 0);
+  const sent = Number(body['birdsSent'] ?? 0);
+
+  return (
+    <div className="space-y-3 text-sm">
+      <div className="text-xs text-muted">
+        {fmt(sent)} casus kuş gönderildi
+        {lost > 0 ? <span className="text-danger"> · {fmt(lost)} tanesi vuruldu</span> : ' · kayıp yok'}
+        {body['diff'] != null ? ` · etkin fark ${String(body['diff'])}` : ''}
+      </div>
+
+      {body['level'] == null ? (
+        <div className="text-danger">Hiçbir kuş dönmedi; bilgi alınamadı.</div>
+      ) : null}
+
+      {res ? (
+        <Section title="Kaynak">
+          <span className="flex items-center gap-3">
+            <Res kind="gold" value={fmt(res.gold)} size={14} />
+            <Res kind="food" value={fmt(res.food)} size={14} />
+          </span>
+        </Section>
+      ) : null}
+
+      {eco ? (
+        <Section title="Ekonomi">
+          <span className="tnum">Maden {eco.mine} · Çiftlik {eco.farm}</span>
+        </Section>
+      ) : null}
+
+      {totals ? (
+        <Section title="Ordu büyüklüğü">
+          <span className="tnum">
+            {fmt(totals.warriors)} savaşçı · {fmt(totals.defenses)} savunma ünitesi
+          </span>
+        </Section>
+      ) : null}
+
+      {warriors && Object.keys(warriors).length > 0 ? (
+        <Section title="Savaşçılar">{describeUnits(warriors, fmt)}</Section>
+      ) : wTypes && wTypes.length > 0 ? (
+        <Section title="Savaşçı tipleri">{wTypes.map(nameOf).join(' · ')}</Section>
+      ) : null}
+
+      {defenses && Object.keys(defenses).length > 0 ? (
+        <Section title="Savunma">{describeUnits(defenses, fmt)}</Section>
+      ) : dTypes && dTypes.length > 0 ? (
+        <Section title="Savunma tipleri">{dTypes.map(nameOf).join(' · ')}</Section>
+      ) : null}
+
+      {structures ? (
+        <Section title="Yapılar">
+          <span className="tnum">
+            Kale {structures['castle'] ?? 0} · Sur {structures['wall'] ?? 0} ·
+            {' '}Büyü Kalkanı {structures['magic_shield'] ?? 0}
+          </span>
+        </Section>
+      ) : null}
+
+      {techs && Object.keys(techs).length > 0 ? (
+        <Section title="Teknikler">
+          {Object.entries(techs).map(([id, lv]) => `${nameOf(id)} ${lv}`).join(' · ')}
+        </Section>
+      ) : null}
+
+      {body['level'] != null && body['level'] !== 'full' ? (
+        <div className="rounded-[var(--radius-sm)] border border-border px-2.5 py-2 text-[11px] text-muted">
+          Daha fazla bilgi için <b>daha çok casus kuş</b> gönder ya da <b>Casusluk</b> tekniğini
+          yükselt. Kuş sayısı ikinin kuvvetiyle sayılır: 8 kuş = +3 seviye, 16 kuş = +4.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-0.5 text-xs font-semibold text-muted uppercase">{title}</div>
+      <div className="text-ink">{children}</div>
     </div>
   );
 }

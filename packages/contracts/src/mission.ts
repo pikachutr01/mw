@@ -14,10 +14,24 @@ export const sendMissionRequest = z.object({
   target: coordinates,
   units: unitCounts,
   heroIds: z.array(z.number().int().positive()).max(5).default([]),
-  /** Nakliye/şehir kurma ile götürülen kaynak. */
+  /** Nakliye ve destekte götürülen kaynak (taşıma kapasitesiyle sınırlı). */
   cargo: resources.optional(),
 });
 export type SendMissionRequest = z.infer<typeof sendMissionRequest>;
+
+/**
+ * Dünya modalının bir hedef için gösterdiği seçenekler. Sunucu üretir — istemci "kime ne
+ * gönderilebilir" kuralını KENDİ hesaplamaz, hesaplasaydı kural iki yerde yaşardı.
+ */
+export const missionOption = z.object({
+  type: missionType.exclude(['return', 'attack']).or(z.literal('attack')),
+  /** Ekranda görünen Türkçe ad (§13.14). */
+  label: z.string(),
+  enabled: z.boolean(),
+  /** Kapalıysa SEBEBİ — düğmeyi sessizce gizlemek oyuncuyu şaşırtıyordu. */
+  reason: z.string().nullable(),
+});
+export type MissionOption = z.infer<typeof missionOption>;
 
 export const mission = z.object({
   id: z.number().int().positive(),

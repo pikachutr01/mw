@@ -87,6 +87,8 @@ export interface CatalogBuilding extends CatalogEntry {
 export interface CatalogUnit extends CatalogEntry {
   area: number;
   speed?: number;
+  /** Ganimet taşıma kapasitesi — nakliye/destek formunun tavanı (§NAKLİYE). */
+  carry?: number;
   cost: { gold: number; food: number };
   /** Bir birimin üretim süresi (saniye); adetle çarpılır. */
   seconds: number;
@@ -273,19 +275,53 @@ export function useCancelQueue() {
   });
 }
 
-export function useSendAttack() {
+/** Dünya modalının hedef başına gösterdiği seçenekler — kural SUNUCUDA yaşar. */
+export interface MissionOption {
+  type: string;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+}
+
+export interface TargetOptions {
+  self: boolean;
+  activeCity: boolean;
+  target: { cityId: number; name: string; username: string } | null;
+  options: MissionOption[];
+}
+
+export const useMissionOptions = (
+  originCityId: number | null, target: { k: number; d: number; s: number } | null,
+): UseQueryResult<TargetOptions> => useQuery({
+  queryKey: ['mission-options', originCityId, target?.k, target?.d, target?.s],
+  queryFn: () => get<TargetOptions>(
+    `/api/v1/missions/options?originCityId=${originCityId}&k=${target!.k}&d=${target!.d}&s=${target!.s}`,
+  ),
+  enabled: originCityId != null && target != null,
+  staleTime: 0,
+});
+
+export interface SendMissionInput {
+  type: string;
+  originCityId: number;
+  target: { k: number; d: number; s: number };
+  units: Record<string, number>;
+  heroIds?: number[];
+  cargo?: { gold: number; food: number };
+}
+
+/**
+ * ⭐ TEK UÇ, TÜM GÖREVLER (`POST /missions/send`) — doküman: bütün görevler yalnız Dünya
+ * menüsünden yapılır. Teleport ANLIKTIR: görev listesi yerine şehir verisi değişir.
+ */
+export function useSendMission() {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: (input: {
-      originCityId: number;
-      target: { k: number; d: number; s: number };
-      units: Record<string, number>;
-    }) => api('/api/v1/missions/attack', {
+    mutationFn: (input: SendMissionInput) => api<{ instant?: boolean }>('/api/v1/missions/send', {
       method: 'POST',
-      body: { type: 'attack', ...input, heroIds: [] },
+      body: { heroIds: [], ...input },
     }),
-    // Saldırı hem şehri (birlikler düştü) hem görev listesini değiştirir.
-    onSuccess: () => invalidate(['city', 'missions', 'world']),
+    onSuccess: () => invalidate(['city', 'cities', 'missions', 'world', 'mission-options']),
   });
 }
 

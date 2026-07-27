@@ -45,7 +45,7 @@ beforeAll(async () => {
   h = await setupTestDb();
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
-  missions = new MissionService(h.db);
+  missions = new MissionService(h.db, cities);
   registry = new HandlerRegistry();
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
 }, 60_000);
