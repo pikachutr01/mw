@@ -10,6 +10,19 @@
         if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
       })();
     </script>
+    <!--
+      Tipografi (§13.13): Cinzel = başlıklar (Roma kitabesi karakteri, oyunun antik dili),
+      Spectral = gövde (sıcak serif, uzun metinde yorucu değil), JetBrains Mono = sayılar
+      (tabular rakam → kaynak ve geri sayım sütunları kaymaz).
+      ⚠️ Bu fontlar token'larda TANIMLIYDI ama hiç YÜKLENMİYORDU; tarayıcı Georgia/system-ui'ye
+      düşüyordu — arayüzün "sade" görünmesinin en büyük sebeplerinden biri buydu.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <title>Mobiwar</title>
   </head>
   <body>

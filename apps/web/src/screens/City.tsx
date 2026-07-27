@@ -31,8 +31,9 @@ function CityFrame({ children }: { children: (city: CityDetail) => React.ReactNo
 
   return (
     <div className="space-y-3">
-      <Panel title={`${d.name}${d.isCapital ? ' · Başkent' : ''}`}
-        right={`${d.coordinates.k}:${d.coordinates.d}:${d.coordinates.s}`}>
+      {/* Şehir adı/koordinatı artık üstteki bilgi çubuğunda ve şehir şeridinde → burada tekrar YOK.
+          Panel yalnız o ekranda gereken şeyi taşıyor: alan bütçeleri. */}
+      <Panel title="Alan bütçeleri" bare={false}>
         <div className="grid grid-cols-1 gap-3 px-3 py-3 text-xs sm:grid-cols-2">
           <Budget label="Kale bütçesi" used={d.capacity.castle.used} total={d.capacity.castle.total}
             hint="Σ(bina seviyeleri) ≤ Kale × 10" />
@@ -57,18 +58,27 @@ export const AcademyScreen = (): React.ReactElement =>
   <CityFrame>{(c) => <Techs city={c} />}</CityFrame>;
 
 function Budget({ label, used, total, hint }: { label: string; used: number; total: number; hint: string }) {
-  const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
-  const full = used >= total;
+  // ⚠️ Kapasite HENÜZ YOKSA (Sur 0) "0 / 0" kırmızı yazılırsa "dolu" sanılır; oysa yapı hiç
+  //    kurulmamıştır. Ayrı durum olarak gösteriliyor.
+  const none = total <= 0;
+  const pct = none ? 0 : Math.min(100, (used / total) * 100);
+  const full = !none && used >= total;
+
   return (
     <div title={hint}>
       <div className="mb-1 flex justify-between">
         <span className="text-muted">{label}</span>
-        <span className={`tnum ${full ? 'font-semibold text-danger' : 'text-ink'}`}>
-          {fmt(used)} / {fmt(total)}
-        </span>
+        {none ? (
+          <span className="text-muted">yok</span>
+        ) : (
+          <span className={`tnum ${full ? 'font-semibold text-danger' : 'text-ink'}`}>
+            {fmt(used)} / {fmt(total)}
+          </span>
+        )}
       </div>
       <div className="h-2 overflow-hidden rounded-full border border-border bg-raised">
-        <div className={`h-full ${full ? 'bg-danger' : 'bg-accent'}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full transition-all ${full ? 'bg-danger' : 'bg-accent'}`}
+          style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

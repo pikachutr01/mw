@@ -3,7 +3,8 @@
 /**
  * ⭐ TEK KAYNAK (§13.13.1): renkler/boşluklar/fontlar `packages/design-tokens/tokens.json`'dan
  * üretilir. Burada YENİ renk tanımlanmaz — tanımlanırsa gece/gündüz eşleşmesi ve WCAG kontrast
- * kapısı sessizce bozulur.
+ * kapısı sessizce bozulur. Buradaki eklemeler yalnız **doku ve derinlik** katmanıdır: renk
+ * üretmezler, var olan rengin üstüne saydam gölge/desen koyarlar.
  */
 @import '@mobiwar/design-tokens/css';
 
@@ -39,22 +40,98 @@
   --radius-lg: var(--mw-radius-lg);
 }
 
+/* ═══ DOKULAR ═══════════════════════════════════════════════════════════════
+ * ⭐ Dokular GÖRSEL DOSYA DEĞİL, CSS'tir. Üç sebep:
+ *   1. Ağırlık yok — tek bir doku PNG'si tüm arayüz kodundan büyük olurdu.
+ *    2. Temayla birlikte değişirler: gündüz parşömen lifi, gece dövme taş.
+ *    3. Ölçeklenince bulanmazlar (retina/zoom).
+ * Hepsi SAYDAM katmanlardır: altlarındaki token rengini boyamaz, ona doku verir.
+ */
+:root {
+  /*
+   * İnce tanecik — kâğıt/taş gözeneği. `feTurbulence` ile üretilir, ~300 bayt.
+   * Saydamlık SVG'nin İÇİNE gömülü (`opacity`) çünkü tek bir arka plan katmanının opaklığı
+   * CSS'ten ayrıca ayarlanamıyor.
+   */
+  --tex-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+
+  /* Gündüz: parşömen lifi — hafif çapraz dokuma. */
+  --tex-panel:
+    repeating-linear-gradient(45deg, rgb(0 0 0 / 0.018) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.014) 0 1px, transparent 1px 5px);
+
+  /* Zemin: geniş, yumuşak bir kumaş dokusu — panellerden daha belirgin. */
+  --tex-page:
+    radial-gradient(120% 90% at 50% -10%, rgb(255 255 255 / 0.45), transparent 60%),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.022) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(0deg, rgb(0 0 0 / 0.018) 0 1px, transparent 1px 6px);
+
+  /* Başlık bandı: dövme metal parlaması. */
+  --tex-header:
+    linear-gradient(180deg, rgb(255 255 255 / 0.28), transparent 45%, rgb(0 0 0 / 0.14)),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.05) 0 1px, transparent 1px 3px);
+
+  /* Kabartma: panelin içine ince bir ışık/gölge çizgisi (derinlik). */
+  --bevel:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    inset 0 -1px 0 rgb(0 0 0 / 0.10);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --tex-panel:
+      repeating-linear-gradient(45deg, rgb(255 255 255 / 0.020) 0 1px, transparent 1px 4px),
+      repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.20) 0 1px, transparent 1px 5px);
+    --tex-page:
+      radial-gradient(120% 90% at 50% -10%, rgb(255 255 255 / 0.06), transparent 60%),
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 0.016) 0 1px, transparent 1px 6px),
+      repeating-linear-gradient(0deg, rgb(0 0 0 / 0.30) 0 1px, transparent 1px 6px);
+    --tex-header:
+      linear-gradient(180deg, rgb(255 255 255 / 0.16), transparent 45%, rgb(0 0 0 / 0.30)),
+      repeating-linear-gradient(90deg, rgb(0 0 0 / 0.12) 0 1px, transparent 1px 3px);
+    --bevel:
+      inset 0 1px 0 rgb(255 255 255 / 0.10),
+      inset 0 -1px 0 rgb(0 0 0 / 0.45);
+  }
+}
+
+:root[data-theme='dark'] {
+  --tex-panel:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.020) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.20) 0 1px, transparent 1px 5px);
+  --tex-page:
+    radial-gradient(120% 90% at 50% -10%, rgb(255 255 255 / 0.06), transparent 60%),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.016) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(0deg, rgb(0 0 0 / 0.30) 0 1px, transparent 1px 6px);
+  --tex-header:
+    linear-gradient(180deg, rgb(255 255 255 / 0.16), transparent 45%, rgb(0 0 0 / 0.30)),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / 0.12) 0 1px, transparent 1px 3px);
+  --bevel:
+    inset 0 1px 0 rgb(255 255 255 / 0.10),
+    inset 0 -1px 0 rgb(0 0 0 / 0.45);
+}
+
 html, body, #root {
   height: 100%;
 }
 
 body {
   margin: 0;
-  background: var(--mw-color-bg);
   color: var(--mw-color-text-primary);
   font-family: var(--mw-font-body);
+  background-color: var(--mw-color-bg);
+  /* Tanecik zemin katmanının en üstünde: "düz renk" hissini kıran şey bu. */
+  background-image: var(--tex-grain), var(--tex-page);
+  background-size: 120px 120px, auto;
+  background-attachment: fixed;
   /* Oyun ekranı; sayfa değil. Gövde kaydırması alt bara çarpmasın diye kapalı. */
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, .display {
   font-family: var(--mw-font-display);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
 }
 
 /* Klavye erişilebilirliği: odak halkası daima görünür (§13.13.5 kalite kapısı). */
@@ -65,5 +142,35 @@ h1, h2, h3, .display {
 
 /* Sayısal sütunlar kaymasın — kaynak ve geri sayım okunurluğu için. */
 .tnum {
+  font-family: var(--mw-font-mono);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/**
+ * Dokulu yüzey.
+ *
+ * ⚠️ Doku **sözde-eleman DEĞİL, arka plan katmanı**. Bir ara `::after` + `position: relative`
+ * kullanıyordum; o `relative`, sınıfı alan her elemanın konumlandırmasını eziyordu ve
+ * mobil alt gezinti barının `fixed`'ini bozup barı ekran dışına düşürmüştü. `background-image`
+ * katmanları `background-color`'ın ÜSTÜNE çizildiği için aynı sonucu yan etkisiz veriyor.
+ */
+.tex {
+  background-image: var(--tex-panel), var(--tex-grain);
+  background-size: auto, 120px 120px;
+}
+
+/** Başlık bandı dokusu (dövme metal). */
+.tex-header {
+  background-image: var(--tex-header);
+}
+
+/** Panel derinliği: kabartma + dış gölge. */
+.bevel {
+  box-shadow: var(--bevel), var(--mw-shadow-md);
+}
+
+/** Şehir/görev simgelerinin altına düşen yumuşak gölge — düz PNG'yi zemine oturtur. */
+.icon-shadow {
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
 }

@@ -40,20 +40,19 @@ export function Panel({
 }) {
   return (
     <section
-      className={`relative rounded-[var(--radius-md)] border-2 border-strong bg-surface
-        shadow-[var(--mw-shadow-md)] ${className}`}
+      className={`tex bevel relative rounded-[var(--radius-md)] border-2 border-strong bg-surface ${className}`}
     >
       <Bolts />
       {!bare && title ? (
         <header
-          className="flex items-center justify-between gap-2 rounded-t-[calc(var(--radius-md)-2px)]
-            border-b-2 border-strong bg-panel-header px-3 py-1.5"
+          className="tex-header flex items-center justify-between gap-2 rounded-t-[calc(var(--radius-md)-2px)]
+            border-b-2 border-strong bg-panel-header px-3 py-2"
         >
-          <h2 className="display truncate text-sm font-semibold tracking-wider text-on-panel-header uppercase">
+          <h2 className="display truncate text-[13px] font-semibold tracking-wider text-on-panel-header uppercase">
             {title}
           </h2>
           {right ? (
-            <div className="shrink-0 text-[11px] text-on-panel-header/80">{right}</div>
+            <div className="shrink-0 text-[11px] text-on-panel-header/85">{right}</div>
           ) : null}
         </header>
       ) : null}
@@ -80,31 +79,26 @@ function Bolts() {
 /**
  * ⭐ ALTIN / YEMEK — kaynak gösterilen HER yerde aynı ikon (kullanıcı isteği).
  *
- * ⚠️ Kaynak PNG'ler şu an **şeffaf değil, siyah zeminli** (kullanıcı sonra düzeltecek). Bu yüzden
- * ikon koyu bir madalyon içine oturtuluyor: siyah kare madalyona karışıyor ve görüntü İKİ TEMADA
- * da düzgün duruyor. Şeffaf sürüm gelince madalyon yine doğru görünür — değişiklik gerekmez.
+ * ⚠️ Görseller **şeffaf**; koyu madalyon YOK. (Bir ara madalyon vardı çünkü ilk sürümler siyah
+ * zeminliydi — şeffaf sürümler gelince madalyon ikonu boğuyordu, kaldırıldı.)
  */
-export function ResIcon({ kind, size = 16 }: { kind: 'gold' | 'food'; size?: number }) {
+export function ResIcon({ kind, size = 18 }: { kind: 'gold' | 'food'; size?: number }) {
   return (
-    <span
-      aria-hidden
-      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#0b0b0b] ring-1 ring-strong/60"
-      style={{ width: size, height: size }}
-    >
-      <img src={`/assets/ui/${kind}.png`} alt="" width={size} height={size}
-        className="h-full w-full object-cover" />
-    </span>
+    <img src={`/assets/ui/${kind}.png`} alt="" aria-hidden
+      width={size} height={size}
+      className="icon-shadow inline-block shrink-0 object-contain"
+      style={{ width: size, height: size }} />
   );
 }
 
 /** Sayı + ikon; `tnum` ile sütunlar kaymaz. */
 export function Res({
-  kind, value, size = 16, className = '',
+  kind, value, size = 18, className = '',
 }: {
   kind: 'gold' | 'food'; value: string | number; size?: number; className?: string;
 }) {
   return (
-    <span className={`tnum inline-flex items-center gap-1 whitespace-nowrap ${className}`}
+    <span className={`tnum inline-flex items-center gap-1.5 whitespace-nowrap ${className}`}
       title={kind === 'gold' ? 'Altın' : 'Yemek'}>
       <ResIcon kind={kind} size={size} />
       {value}
@@ -119,29 +113,27 @@ export function Res({
  * emoji yedeğine düşülüyor. Dosya eklendiği anda `HAS_ICON`'a adını yazmak yeterli, kod değişmez.
  */
 const HAS_ICON = new Set([
-  'found_city', 'support', 'transport_out', 'transport_back', 'spy_out', 'spy_back',
+  'attack', 'attack_in', 'found_city', 'support_out', 'support_in',
+  'transport_out', 'transport_back', 'spy_out', 'spy_back',
 ]);
 
 const EMOJI_FALLBACK: Record<string, string> = {
-  attack_out: '⚔️',
-  attack_back: '↩️',
-  incoming_attack: '🛡️',
   teleport: '🌀',
 };
 
-export function MissionIcon({ id, size = 28, title }: { id: string; size?: number; title?: string }) {
-  const box = 'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full '
-    + 'bg-[#0b0b0b] ring-1 ring-strong/60';
+export function MissionIcon({ id, size = 36, title }: { id: string; size?: number; title?: string }) {
   if (HAS_ICON.has(id)) {
     return (
-      <span className={box} style={{ width: size, height: size }} title={title}>
-        <img src={`/assets/missions/${id}.png`} alt={title ?? id} width={size} height={size}
-          className="h-full w-full object-cover" />
-      </span>
+      <img src={`/assets/missions/${id}.png`} alt={title ?? id} title={title}
+        width={size} height={size}
+        className="icon-shadow inline-block shrink-0 object-contain"
+        style={{ width: size, height: size }} />
     );
   }
   return (
-    <span className={box} style={{ width: size, height: size, fontSize: size * 0.55 }} title={title}>
+    <span title={title}
+      className="inline-flex shrink-0 items-center justify-center"
+      style={{ width: size, height: size, fontSize: size * 0.7 }}>
       <span aria-hidden>{EMOJI_FALLBACK[id] ?? '•'}</span>
     </span>
   );
@@ -166,10 +158,11 @@ export function Button({
     'inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] font-medium '
     + 'transition-colors disabled:opacity-45 disabled:cursor-not-allowed';
   const sizes = size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm';
+  // Kabartma + doku: düz renk yerine basılabilir bir yüzey hissi.
   const variants = {
-    primary: 'bg-accent text-on-accent hover:bg-accent-hover',
-    ghost: 'border border-strong text-ink hover:bg-raised',
-    danger: 'border border-danger text-danger hover:bg-danger hover:text-on-accent',
+    primary: 'tex-header border-2 border-strong bg-accent text-on-accent shadow-[var(--bevel)] hover:bg-accent-hover active:translate-y-px',
+    ghost: 'border-2 border-strong bg-surface text-ink hover:bg-raised active:translate-y-px',
+    danger: 'border-2 border-danger bg-surface text-danger hover:bg-danger hover:text-on-accent active:translate-y-px',
   }[variant];
   return (
     <button type={type} onClick={onClick} disabled={disabled} title={title}
