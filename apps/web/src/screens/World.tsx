@@ -1,8 +1,8 @@
 /**
  * DÜNYA sekmesi — **harita değil, DİYAR LİSTESİ** (§13.16.2).
  *
- * Bir diyarda tam 10 yuva vardır; boş yuva `-` ile geçer. Dolu yuvaya tıklamak alt sayfayı
- * (bottom sheet) açar: mesafe/süre + saldırı formu.
+ * Bir diyarda tam 10 yuva vardır; boş yuva `-` ile geçer. Dolu yuvaya tıklamak **modal** açar:
+ * mesafe/süre önizlemesi + saldırı formu.
  *
  * ⚠️ **Gizlilik (§13.16.5):** liste asker ve kaynak GÖSTERMEZ — bunu öğrenmenin yolu casusluktur.
  */
@@ -13,7 +13,8 @@ import { useActiveCity } from '../lib/city-context.tsx';
 import {
   useCatalog, useCity, useSendAttack, useWorld, type WorldSlot,
 } from '../lib/queries.ts';
-import { Badge, Button, Empty, ErrorBox, Input, Panel, Res } from '../components/ui.tsx';
+import { Badge, Button, Empty, ErrorBox, Input, Panel } from '../components/ui.tsx';
+import { Modal } from '../components/Modal.tsx';
 
 export function World() {
   const { cityId } = useActiveCity();
@@ -95,14 +96,17 @@ export function World() {
       </Panel>
 
       {target?.city ? (
-        <AttackSheet slot={target} coords={{ k, d }} onClose={() => setTarget(null)} />
+        <CityModal slot={target} coords={{ k, d }} onClose={() => setTarget(null)} />
       ) : null}
     </div>
   );
 }
 
-/** Alt sayfa: mesafe/süre önizlemesi + saldırı formu. */
-function AttackSheet({
+/**
+ * Şehir modalı: mesafe/süre önizlemesi + saldırı formu.
+ * (Alt sayfa yerine MODAL — kullanıcı kararı, oyunun genel modal diline uyuyor.)
+ */
+function CityModal({
   slot, coords, onClose,
 }: {
   slot: WorldSlot;
@@ -137,19 +141,16 @@ function AttackSheet({
   const protectedTarget = slot.city?.protection != null;
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-[var(--mw-color-overlay)]"
-      onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}
-        className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-t-[var(--radius-lg)] border-t border-border bg-surface pb-6"
-        style={{ boxShadow: 'var(--mw-shadow-sheet)' }}>
-        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-surface px-3 py-2">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-ink">
-              {slot.city?.name} <span className="text-muted">({target.k}:{target.d}:{target.s})</span>
-            </div>
-            <div className="text-xs text-muted">{slot.city?.username}</div>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>Kapat</Button>
+    <Modal
+      title={`${slot.city?.name ?? '—'} (${target.k}:${target.d}:${target.s})`}
+      onClose={onClose}
+      width="lg"
+      footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}
+    >
+      <div>
+        <div className="border-b border-border px-3 py-1.5 text-xs text-muted">
+          Oyuncu: <b className="text-ink">{slot.city?.username}</b>
+          {slot.city?.isCapital ? ' · başkent' : ''}
         </div>
 
         <div className="space-y-3 p-3">
@@ -222,7 +223,7 @@ function AttackSheet({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

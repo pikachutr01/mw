@@ -9,14 +9,17 @@
  * Şehir değiştirme başka hiçbir ekranda tekrarlanmaz: oyuncu "şehir değiştireceksem Ordular'a
  * giderim" alışkanlığını tek yerde kurar.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { fmt, remaining, useTick } from '../lib/hooks.ts';
+import { useCallback, useEffect, useState } from 'react';
+import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
 import { describeUnits } from '../lib/names.ts';
-import { useCities, useCity, useMovements, type Coords, type Movement } from '../lib/queries.ts';
+import {
+  useCancelMission, useCities, useCity, useMovements, type Coords, type Movement,
+} from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
-import { Empty, Panel, Res } from '../components/ui.tsx';
+import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
+import { Modal, useConfirm } from '../components/Modal.tsx';
 
-/** Görev tipi → Türkçe ad. Tooltip başlığı bu. */
+/** Görev tipi → Türkçe ad. */
 const TYPE_LABEL: Record<string, string> = {
   attack: 'Saldırı',
   return: 'Dönüş',
@@ -29,6 +32,18 @@ const TYPE_LABEL: Record<string, string> = {
 
 const coordText = (c: Coords | null): string => (c ? `${c.k}:${c.d}:${c.s}` : '—');
 
+/**
+ * Hareketin başlığı. Dönüş bacağında **hangi görevden dönüldüğü** yazılır ("Casusluk dönüşü"),
+ * çünkü simge de aslına göre seçiliyor — sadece "Dönüş" deseydik simge ile metin çelişirdi.
+ */
+function titleOf(m: Movement): string {
+  if (m.direction === 'own' && m.returnOf) {
+    return `${TYPE_LABEL[m.returnOf] ?? m.returnOf} dönüşü${m.canceled ? ' (iptal edildi)' : ''}`;
+  }
+  const name = TYPE_LABEL[m.type] ?? m.type;
+  return m.direction === 'in' ? `Gelen ${name.toLowerCase()}` : name;
+}
+
 export function Armies() {
   const cities = useCities();
   const movements = useMovements();
@@ -37,6 +52,7 @@ export function Armies() {
   useTick();
 
   const [tip, setTip] = useState<{ m: Movement; x: number; y: number } | null>(null);
+  const [open, setOpen] = useState<Movement | null>(null);
   const list = cities.data?.cities ?? [];
   const all = movements.data?.movements ?? [];
 
@@ -71,6 +87,7 @@ export function Armies() {
                 movements={byCity(c.id)}
                 onSelect={() => setCityId(c.id)}
                 onTip={setTip}
+                onOpen={setOpen}
               />
             ))}
           </div>
@@ -100,14 +117,15 @@ export function Armies() {
         </div>
       </Panel>
 
-      {tip ? <Tooltip m={tip.m} x={tip.x} y={tip.y} /> : null}
+      {tip && !open ? <Tooltip m={tip.m} x={tip.x} y={tip.y} /> : null}
+      {open ? <MovementModal m={open} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }
 
 /** Tek şehir: kale simgesi + ad + altına asılan hareket simgeleri. */
 function CityColumn({
-  name, coords, active, movements, onSelect, onTip,
+  name, coords, active, movements, onSelect, onTip, onOpen,
 }: {
   name: string;
   coords: Coords;
@@ -115,6 +133,7 @@ function CityColumn({
   movements: Movement[];
   onSelect: () => void;
   onTip: (t: { m: Movement; x: number; y: number } | null) => void;
+  onOpen: (m: Movement) => void;
 }) {
   return (
     <div className="flex w-20 shrink-0 flex-col items-center">
@@ -134,35 +153,53 @@ function CityColumn({
 
       {/* Hareketler dikey olarak şehrin ALTINA asılır. */}
       <div className="mt-1 flex flex-col items-center gap-1">
-        {movements.map((m) => <MovementIcon key={m.key} m={m} onTip={onTip} />)}
+        {movements.map((m) => <MovementIcon key={m.key} m={m} onTip={onTip} onOpen={onOpen} />)}
       </div>
     </div>
   );
 }
 
 function MovementIcon({
-  m, onTip,
-}: { m: Movement; onTip: (t: { m: Movement; x: number; y: number } | null) => void }) {
-  const ref = useRef<HTMLSpanElement>(null);
+  m, onTip, onOpen,
+}: {
+  m: Movement;
+  onTip: (t: { m: Movement; x: number; y: number } | null) => void;
+  onOpen: (m: Movement) => void;
+}) {
   const left = remaining(m.executeAt);
+  const isReturn = m.direction === 'own';
 
-  // Fare TAKİPLİ tooltip (masaüstü) · dokunmatikte tıklama noktasına sabit (mobil web).
+  // Fare TAKİPLİ tooltip (masaüstü); dokunmatikte parmak yoksa tooltip de yok → tıklama modalı açar.
   const show = (e: React.MouseEvent): void => onTip({ m, x: e.clientX, y: e.clientY });
 
   return (
-    <span
-      ref={ref}
+    <button
+      type="button"
       onMouseEnter={show}
       onMouseMove={show}
       onMouseLeave={() => onTip(null)}
-      onClick={(e) => { e.stopPropagation(); show(e); }}
-      className="relative inline-flex cursor-help flex-col items-center"
+      onClick={(e) => { e.stopPropagation(); onTip(null); onOpen(m); }}
+      title={titleOf(m)}
+      className="relative inline-flex cursor-pointer flex-col items-center rounded-[var(--radius-sm)] p-0.5 hover:bg-raised"
     >
-      <img src={`/assets/missions/${m.icon}.png`} alt={TYPE_LABEL[m.type] ?? m.type}
-        width={32} height={32}
-        className={`h-8 w-8 object-contain ${m.direction === 'in' ? 'drop-shadow-[0_0_3px_var(--mw-color-danger)]' : ''}`} />
+      <span className="relative">
+        <img src={`/assets/missions/${m.icon}.png`} alt={titleOf(m)}
+          width={32} height={32}
+          className={`h-8 w-8 object-contain ${
+            m.direction === 'in' ? 'drop-shadow-[0_0_3px_var(--mw-color-danger)]' : ''
+          }`} />
+        {/* ⭐ Dönüş rozeti: oyuncu İLK BAKIŞTA giden mi dönen mi ayırt edebilmeli. */}
+        {isReturn ? (
+          <span aria-hidden
+            title="Geri dönüyor"
+            className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full
+              border border-strong bg-success text-[9px] leading-none text-on-accent">
+            ↩
+          </span>
+        ) : null}
+      </span>
       <span className="tnum text-[10px] leading-tight text-muted">{left ?? 'varıyor'}</span>
-    </span>
+    </button>
   );
 }
 
@@ -179,8 +216,7 @@ function Tooltip({ m, x, y }: { m: Movement; x: number; y: number }) {
       className="pointer-events-none fixed z-50 rounded-[var(--radius-sm)] border-2 border-strong bg-surface"
     >
       <div className="display border-b-2 border-strong bg-panel-header px-2 py-1 text-xs font-semibold tracking-wide text-on-panel-header uppercase">
-        {TYPE_LABEL[m.type] ?? m.type}
-        {m.direction === 'in' ? ' (gelen)' : m.direction === 'own' ? ' (dönüş)' : ''}
+        {titleOf(m)}
       </div>
       <div className="space-y-0.5 px-2 py-1.5 text-xs">
         <div className="text-ink">
@@ -196,6 +232,112 @@ function Tooltip({ m, x, y }: { m: Movement; x: number; y: number }) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Hareket detay modalı + **iptal**.
+ *
+ * ⭐ İptal geri alınamaz ve bir bedeli var (ordu gidilen yol kadar geri döner) → **global onay
+ * diyaloğundan** geçer. Bedelin ne olduğu onay metninde AÇIKÇA yazar; oyuncu "iptal = anında
+ * geri geldi" sanmamalı.
+ */
+function MovementModal({ m, onClose }: { m: Movement; onClose: () => void }) {
+  const confirm = useConfirm();
+  const cancelMission = useCancelMission();
+  useTick();
+
+  const elapsedS = Math.max(0, Math.round((serverNow() - Date.parse(m.startedAt)) / 1000));
+  const left = remaining(m.executeAt);
+  const units = describeUnits(m.units, fmt);
+
+  const onCancel = async (): Promise<void> => {
+    const ok = await confirm({
+      title: `${titleOf(m)} iptal edilsin mi?`,
+      danger: true,
+      confirmLabel: 'Orduyu geri çağır',
+      body: (
+        <div className="space-y-2">
+          <p>Ordu geri çağrılacak ve <b>gittiği yol kadar</b> sürede şehre dönecek.</p>
+          <p className="text-muted">
+            Şu ana kadar <b>{formatDuration(elapsedS)}</b> yol aldı; dönüş de yaklaşık o kadar sürer.
+          </p>
+          {m.direction === 'out' && m.targetPlayer ? (
+            <p className="text-muted">
+              {m.targetPlayer} bu hareketin iptal edildiğini görecek.
+            </p>
+          ) : null}
+        </div>
+      ),
+    });
+    if (!ok) return;
+    cancelMission.mutate(m.id, { onSuccess: onClose });
+  };
+
+  return (
+    <Modal
+      title={titleOf(m)}
+      onClose={onClose}
+      footer={m.canCancel ? (
+        <>
+          <Button variant="ghost" onClick={onClose}>Kapat</Button>
+          <Button variant="danger" disabled={cancelMission.isPending} onClick={() => void onCancel()}>
+            {cancelMission.isPending ? 'İptal ediliyor…' : 'Görevi iptal et'}
+          </Button>
+        </>
+      ) : <Button variant="ghost" onClick={onClose}>Kapat</Button>}
+    >
+      <div className="space-y-3 px-3 py-3 text-sm">
+        <div className="flex items-center gap-3">
+          <img src={`/assets/missions/${m.icon}.png`} alt="" width={40} height={40}
+            className="h-10 w-10 shrink-0 object-contain" />
+          <div>
+            <div className="font-medium text-ink">{titleOf(m)}</div>
+            <div className="tnum text-xs text-muted">
+              Varış: {left ?? 'varıyor'} · başlangıç {new Date(m.startedAt).toLocaleString('tr-TR')}
+            </div>
+          </div>
+        </div>
+
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-muted">Kaynak</dt>
+          <dd className="tnum text-ink">
+            {coordText(m.origin)}{m.originPlayer ? ` (${m.originPlayer})` : ''}
+          </dd>
+          <dt className="text-muted">Hedef</dt>
+          <dd className="tnum text-ink">
+            {coordText(m.target)}{m.targetPlayer ? ` (${m.targetPlayer})` : ''}
+          </dd>
+          {units ? (
+            <>
+              <dt className="text-muted">Ordu</dt>
+              <dd className="text-ink">{units}</dd>
+            </>
+          ) : null}
+        </dl>
+
+        {m.direction === 'own' ? (
+          <div className="rounded-[var(--radius-sm)] border border-success bg-success/10 px-2.5 py-2 text-xs text-success">
+            ↩ Bu ordu <b>geri dönüyor</b>{m.canceled ? ' (görev iptal edildiği için)' : ''}.
+            Vardığında birlikler şehre, varsa ganimet kasaya eklenecek.
+          </div>
+        ) : null}
+
+        {m.direction === 'in' ? (
+          <div className="rounded-[var(--radius-sm)] border border-danger bg-danger/10 px-2.5 py-2 text-xs text-danger">
+            Bu hareket <b>sana doğru</b> geliyor. Ne getirdiği gizlidir — öğrenmek için casusluk gerekir.
+          </div>
+        ) : null}
+
+        {!m.canCancel && m.direction === 'out' ? (
+          <div className="text-xs text-muted">
+            Görev işlenmeye başladı, artık iptal edilemez.
+          </div>
+        ) : null}
+
+        <ErrorBox error={cancelMission.error} />
+      </div>
+    </Modal>
   );
 }
 

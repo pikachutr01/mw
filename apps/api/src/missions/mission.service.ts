@@ -17,8 +17,15 @@ import { armySpeed, distance, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG 
 import { toDate, type Db } from '../db/client.ts';
 import type { Tx } from './handler-registry.ts';
 
+/** İptal edilebilen görev tipleri. `return` bilerek YOK — ordu zaten eve geliyor. */
+export const CANCELABLE_TYPES: readonly string[] = [
+  'attack', 'transport', 'support', 'spy', 'found_city',
+];
+
 export type MissionErrorCode =
   | 'city_not_found'
+  | 'mission_not_found'
+  | 'not_cancelable'
   | 'not_owner'
   | 'target_not_found'
   | 'self_attack'
@@ -139,7 +146,7 @@ export class MissionService {
 
       await this.assertTargetAttackable(t, target.playerId, opts.at);
       await this.assertAttackLimit(t, opts.playerId, target.id, opts.at);
-      await this.assertMarchLimit(t, opts.originCityId);
+      await this.assertMarchLimit(t, opts.originCityId, opts.playerId);
 
       // ⭐ Saldıran kendi acemi korumasını ANINDA kaybeder (§13.5.4). Saldırı yazılmadan önce
       // düşürülür: "korumalıyken vur, korumalı kal" boşluğu hiç oluşmaz.
@@ -211,6 +218,132 @@ export class MissionService {
         travelSeconds: seconds,
         executeAt,
       };
+    });
+  }
+
+  /**
+   * ⭐ GÖREV İPTALİ (kullanıcı isteği, 2026-07-27).
+   *
+   * Ordu yoldayken geri çağrılabilir. **Dönüş süresi = GİDİLEN yol kadar**: yolun yarısındaysa
+   * yarı sürede döner. Bu, iptali bedava bir "geri al" düğmesi olmaktan çıkarır — orduyu
+   * göndermek gerçek bir zaman taahhüdüdür ve iptal o taahhüdün yarısını yine ödetir.
+   *
+   * ⚠️ **Dönüş bacağı iptal EDİLEMEZ**: ordu zaten eve geliyor, iptalin bir anlamı yok.
+   * ⚠️ Görev vadesi gelmiş ve worker onu almışsa (`running`) iptal edilemez — savaş çözülüyordur.
+   *    Bu yüzden koşul `status = 'scheduled'` ve satır `FOR UPDATE` ile kilitleniyor: worker'ın
+   *    aynı anda görevi alması ile iptal yarışırsa **biri kaybeder ve durum tutarlı kalır**.
+   */
+  async cancelMission(opts: {
+    missionId: number;
+    playerId: number;
+    worldId: number;
+    /** OYUN saatinde "şimdi". */
+    at: Date;
+  }): Promise<{ returnMissionId: number; returnSeconds: number; executeAt: Date }> {
+    return this.db.transaction(async (tx) => {
+      const t = tx as unknown as Tx;
+
+      const rows = await t.execute<Record<string, unknown>>(sql`
+        SELECT id, world_id, type, status, owner_player_id, origin_city_id, target_city_id,
+               execute_at, created_at, payload
+          FROM missions
+         WHERE id = ${opts.missionId}
+         FOR UPDATE
+      `);
+      const m = rows[0];
+      if (!m) throw new MissionError('mission_not_found', 'Görev bulunamadı.');
+      if (Number(m['owner_player_id']) !== opts.playerId
+        || Number(m['world_id']) !== opts.worldId) {
+        throw new MissionError('not_owner', 'Bu görev sizin değil.');
+      }
+      const type = String(m['type']);
+      if (type === 'return') {
+        throw new MissionError('not_cancelable', 'Dönen ordu iptal edilemez, zaten geliyor.');
+      }
+      if (!CANCELABLE_TYPES.includes(type)) {
+        throw new MissionError('not_cancelable', 'Bu görev tipi iptal edilemez.');
+      }
+      if (String(m['status']) !== 'scheduled') {
+        throw new MissionError('not_cancelable', 'Görev şu anda işleniyor, artık iptal edilemez.');
+      }
+
+      const payload = (m['payload'] ?? {}) as Record<string, unknown>;
+      const travelSeconds = Math.max(1, Number(payload['travelSeconds'] ?? 0));
+      const departedAt = payload['departedAt'] != null
+        ? toDate(payload['departedAt'])
+        : toDate(m['created_at']);
+
+      // Gidilen yol = geçen süre; dönüş de o kadar sürer. Toplam yol süresini aşamaz.
+      const elapsed = Math.round((opts.at.getTime() - departedAt.getTime()) / 1000);
+      const returnSeconds = Math.max(1, Math.min(travelSeconds, elapsed));
+      const executeAt = new Date(opts.at.getTime() + returnSeconds * 1000);
+
+      await t.execute(sql`
+        UPDATE missions SET status = 'canceled', finished_at = now() WHERE id = ${opts.missionId}
+      `);
+
+      const originCityId = Number(m['origin_city_id']);
+      const targetCityId = m['target_city_id'] == null ? null : Number(m['target_city_id']);
+
+      const ret = await t.execute<Record<string, unknown>>(sql`
+        INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id, target_city_id,
+                              execute_at, payload, idempotency_key)
+        VALUES (${opts.worldId}, 'return', 'scheduled', ${opts.playerId},
+                ${targetCityId}, ${originCityId},
+                ${executeAt.toISOString()}::timestamptz,
+                ${JSON.stringify({
+                  loot: { gold: 0, food: 0 },
+                  travelSeconds: returnSeconds,
+                  fromMissionId: opts.missionId,
+                  // ⭐ Dönüşün ASLI: simge ve rapor metni buna bakar (casusluk dönüşü kuş simgesi
+                  //    göstermeli, kılıç değil).
+                  returnOf: type,
+                  canceled: true,
+                })}::jsonb,
+                ${`return:${opts.missionId}`})
+        RETURNING id
+      `);
+      const returnMissionId = Number(ret[0]!['id']);
+
+      // Birlikler ve kahramanlar dönüş görevine taşınır (yeniden yazılmaz — aynı satırlar).
+      await t.execute(sql`
+        UPDATE mission_units SET mission_id = ${returnMissionId} WHERE mission_id = ${opts.missionId}
+      `);
+      await t.execute(sql`
+        UPDATE mission_heroes SET mission_id = ${returnMissionId} WHERE mission_id = ${opts.missionId}
+      `);
+
+      // Hedef şehrin sahibi kim? İptal ona da bildirilmeli ki "gelen ordu" ekranından DÜŞSÜN.
+      let targetPlayerId: number | null = null;
+      if (targetCityId != null) {
+        const c = await t.execute<Record<string, unknown>>(sql`
+          SELECT player_id FROM cities WHERE id = ${targetCityId}
+        `);
+        targetPlayerId = c[0] == null ? null : Number(c[0]['player_id']);
+      }
+
+      await t.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${opts.worldId}, 'mission:canceled',
+                ${JSON.stringify({
+                  missionId: opts.missionId,
+                  returnMissionId,
+                  type,
+                  ownerPlayerId: opts.playerId,
+                  targetPlayerId,
+                  targetCityId,
+                  originCityId,
+                })}::jsonb)
+      `);
+
+      await t.execute(sql`
+        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
+        VALUES (${opts.worldId}, ${opts.playerId}, 'mission.canceled', 'mission', ${opts.missionId},
+                ${JSON.stringify({ type, returnSeconds, returnMissionId })}::jsonb,
+                ${`mission:${opts.missionId}`})
+      `);
+
+      return { returnMissionId, returnSeconds, executeAt };
     });
   }
 
@@ -298,16 +431,28 @@ export class MissionService {
     }
   }
 
-  /** Baraka seviyesi, şehirden aynı anda kaç sefer çıkabileceğini sınırlar. */
-  private async assertMarchLimit(tx: Tx, originCityId: number): Promise<void> {
+  /**
+   * Baraka seviyesi, şehirden aynı anda kaç sefer çıkabileceğini sınırlar.
+   *
+   * ⚠️ **Sayım ORDUNUN EVİNE göre yapılır, `origin_city_id`'ye göre DEĞİL.** Dönüş bacağında
+   * `origin_city_id` **karşı tarafın şehri**dir (ordu oradan dönüyor); naif sayım iki hata
+   * üretiyordu: (1) benim dönen ordum kendi limitime yazılmıyordu, (2) daha kötüsü **savunanın**
+   * limitini işgal ediyordu — saldırıya uğrayan oyuncu, saldıranın ordusu dönerken kendi
+   * ordusunu gönderemiyordu.
+   */
+  private async assertMarchLimit(tx: Tx, originCityId: number, playerId: number): Promise<void> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
       SELECT
         (SELECT COALESCE(level, 0) FROM buildings
           WHERE city_id = ${originCityId} AND type = ${this.rules.marchLimitSource}) AS lvl,
         (SELECT COUNT(*)::int FROM missions
-          WHERE origin_city_id = ${originCityId}
-            AND type IN ('attack', 'return', 'transport', 'support', 'spy')
-            AND status IN ('scheduled', 'running')) AS n
+          WHERE owner_player_id = ${playerId}
+            AND status IN ('scheduled', 'running')
+            AND type IN ('attack', 'return', 'transport', 'support', 'spy', 'found_city')
+            AND (
+              (type <> 'return' AND origin_city_id = ${originCityId})
+              OR (type = 'return' AND target_city_id = ${originCityId})
+            )) AS n
     `);
     const level = Number(rows[0]?.['lvl'] ?? 0);
     const open = Number(rows[0]?.['n'] ?? 0);

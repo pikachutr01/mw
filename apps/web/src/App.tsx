@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getSession, onSessionChange } from './lib/api.ts';
 import { connectRealtime } from './lib/realtime.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
+import { ConfirmProvider } from './components/Modal.tsx';
 import { Shell } from './components/Shell.tsx';
 import { Armies } from './screens/Armies.tsx';
 import { Auth } from './screens/Auth.tsx';
@@ -44,31 +45,34 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ActiveCityProvider>
-        <BrowserRouter>
-          <Shell>
-            <Routes>
-              {/* ⭐ Giriş sonrası HER KOŞULDA Ordular (kullanıcı kararı): oyun zamanlanmış
-                  olaylar üzerine kurulu, oyuncunun ilk sorusu daima "şu an ne oluyor?". */}
-              <Route path="/armies" element={<Armies />} />
-              <Route path="/barracks" element={<BarracksScreen />} />
-              <Route path="/buildings" element={<BuildingsScreen />} />
-              <Route path="/defense" element={<DefenseScreen />} />
-              <Route path="/academy" element={<AcademyScreen />} />
-              <Route path="/temple" element={<TempleScreen />} />
-              <Route path="/world" element={<World />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="/command" element={<CommandScreen />} />
-              <Route path="/options" element={<OptionsScreen onLoggedOut={logout} />} />
-              <Route path="/help" element={<HelpScreen />} />
-              {/* Mobil "Şehir" ve "Daha" sekmeleri */}
-              <Route path="/city" element={<CityHub />} />
-              <Route path="/more" element={<OptionsScreen onLoggedOut={logout} />} />
-              <Route path="*" element={<Navigate to="/armies" replace />} />
-            </Routes>
-          </Shell>
-        </BrowserRouter>
-      </ActiveCityProvider>
+      {/* Onay diyaloğu GLOBAL: her çağıran kendi diyaloğunu kursa metinler ve davranış ayrışırdı. */}
+      <ConfirmProvider>
+        <ActiveCityProvider>
+          <BrowserRouter>
+            <Shell>
+              <Routes>
+                {/* ⭐ Giriş sonrası HER KOŞULDA Ordular (kullanıcı kararı): oyun zamanlanmış
+                    olaylar üzerine kurulu, oyuncunun ilk sorusu daima "şu an ne oluyor?". */}
+                <Route path="/armies" element={<Armies />} />
+                <Route path="/barracks" element={<BarracksScreen />} />
+                <Route path="/buildings" element={<BuildingsScreen />} />
+                <Route path="/defense" element={<DefenseScreen />} />
+                <Route path="/academy" element={<AcademyScreen />} />
+                <Route path="/temple" element={<TempleScreen />} />
+                <Route path="/world" element={<World />} />
+                <Route path="/messages" element={<Messages />} />
+                <Route path="/command" element={<CommandScreen />} />
+                <Route path="/options" element={<OptionsScreen onLoggedOut={logout} />} />
+                <Route path="/help" element={<HelpScreen />} />
+                {/* Mobil "Şehir" ve "Daha" sekmeleri */}
+                <Route path="/city" element={<CityHub />} />
+                <Route path="/more" element={<OptionsScreen onLoggedOut={logout} />} />
+                <Route path="*" element={<Navigate to="/armies" replace />} />
+              </Routes>
+            </Shell>
+          </BrowserRouter>
+        </ActiveCityProvider>
+      </ConfirmProvider>
     </QueryClientProvider>
   );
 }

@@ -400,6 +400,41 @@ describe('⭐ 24 saatte 3 saldırı limiti (saldıran-hedef çifti başına)', (
 });
 
 describe('Baraka sefer limiti', () => {
+  /**
+   * ⚠️ GERÇEK KUSUR (2026-07-27): sayım `origin_city_id`'ye bakıyordu. Dönüş bacağında bu alan
+   * **karşı tarafın şehri** olduğu için saldıranın dönen ordusu SAVUNANIN limitini işgal ediyor,
+   * saldırıya uğrayan oyuncu kendi ordusunu gönderemiyordu.
+   */
+  it('⭐ saldıranın DÖNEN ordusu savunanın sefer limitini İŞGAL ETMEZ', async () => {
+    await setBuilding(defendCity, 'barracks', 1);
+    await giveUnits(attackCity, 'dwarf', 3000);
+    await giveUnits(defendCity, 'dwarf', 100);
+    const at = await clock.gameNow(worldId);
+
+    // Saldıran vurur, ordusu döner → dönüş görevi savunanın şehrinden ÇIKIYOR gibi görünür.
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 3000 }, at,
+    });
+    await runDue(m.missionId);
+    const returns = await openMissions('return');
+    expect(returns).toHaveLength(1);
+    expect(Number(returns[0]!['origin_city_id'])).toBe(defendCity);   // kusurun kaynağı
+
+    // Savunan, Baraka 1 ile kendi seferini AÇABİLMELİ (savaşta ölenlerin yerine yeni asker).
+    await giveUnits(defendCity, 'dwarf', 50);
+    const ucuncu = await createPlayer(h, worldId, 'hedef2');
+    await cities.create({
+      worldId, playerId: ucuncu, name: 'hedef2', k: 1, d: 1, s: 8, isCapital: true, at,
+    });
+    await h.db.execute(sql`UPDATE players SET protected_until = NULL WHERE id = ${ucuncu}`);
+
+    await expect(missions.sendAttack({
+      originCityId: defendCity, playerId: defender, worldId,
+      target: { k: 1, d: 1, s: 8 }, units: { dwarf: 10 }, at,
+    })).resolves.toBeTruthy();
+  });
+
   it('açık sefer sayısı Baraka seviyesini aşamaz', async () => {
     await setBuilding(attackCity, 'barracks', 2);
     await giveUnits(attackCity, 'dwarf', 1000);
@@ -816,6 +851,155 @@ describe('⭐ DÜNYA YALITIMI (§13.12.1b)', () => {
       target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
     }).catch((e: unknown) => e as MissionError);
     expect((err as MissionError).code).toBe('world_mismatch');
+  });
+});
+
+describe('⭐ GÖREV İPTALİ (yoldaki orduyu geri çağırma)', () => {
+  /** Saldırı gönderip belirtilen kadar yol almış hâle getirir. */
+  async function sendAndTravel(seconds: number): Promise<{ missionId: number; at: Date; travel: number }> {
+    await giveUnits(attackCity, 'dwarf', 500);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 100 }, at,
+    });
+    // "seconds kadar yol aldı" → iptal anını ileri alıyoruz.
+    return { missionId: m.missionId, at: new Date(at.getTime() + seconds * 1000), travel: m.travelSeconds };
+  }
+
+  it('⭐ dönüş süresi GİDİLEN yol kadardır', async () => {
+    const { missionId, at, travel } = await sendAndTravel(300);
+
+    const r = await missions.cancelMission({ missionId, playerId: attacker, worldId, at });
+
+    expect(r.returnSeconds).toBe(300);
+    expect(r.executeAt.getTime()).toBe(at.getTime() + 300_000);
+    // Yolun tamamı kadar sürmez — yarı yoldan dönmek yarı sürer.
+    expect(r.returnSeconds).toBeLessThan(travel);
+  });
+
+  it('dönüş süresi toplam yol süresini AŞAMAZ', async () => {
+    const { missionId, at, travel } = await sendAndTravel(0);
+    const cokSonra = new Date(at.getTime() + (travel + 10_000) * 1000);
+
+    const r = await missions.cancelMission({ missionId, playerId: attacker, worldId, at: cokSonra });
+
+    expect(r.returnSeconds).toBe(travel);
+  });
+
+  it('birlikler ve kahraman dönüş görevine TAŞINIR (kopyalanmaz)', async () => {
+    const hero = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level)
+      VALUES (${worldId}, ${attacker}, ${attackCity}, ${'K-' + randomUUID().slice(0, 4)}, 3)
+      RETURNING id
+    `);
+    const heroId = Number(hero[0]!['id']);
+    await giveUnits(attackCity, 'dwarf', 500);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 100 }, heroIds: [heroId], at,
+    });
+
+    const r = await missions.cancelMission({
+      missionId: m.missionId, playerId: attacker, worldId,
+      at: new Date(at.getTime() + 60_000),
+    });
+
+    const units = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT mission_id, count FROM mission_units WHERE unit_type = 'dwarf'
+        AND mission_id IN (${m.missionId}, ${r.returnMissionId})
+    `);
+    expect(units).toHaveLength(1);
+    expect(Number(units[0]!['mission_id'])).toBe(r.returnMissionId);
+    expect(Number(units[0]!['count'])).toBe(100);
+
+    const heroes = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT mission_id FROM mission_heroes WHERE hero_id = ${heroId}
+    `);
+    expect(Number(heroes[0]!['mission_id'])).toBe(r.returnMissionId);
+  });
+
+  it('iptal edilen görev ÇALIŞMAZ, dönüş görevi birlikleri geri koyar', async () => {
+    const { missionId, at } = await sendAndTravel(120);
+    const before = (await unitsOf(attackCity))['dwarf'];
+    expect(before).toBe(400);   // 500 − 100 yola çıktı
+
+    const r = await missions.cancelMission({ missionId, playerId: attacker, worldId, at });
+
+    // İptal edilen saldırı vadesi gelse bile savaş ÜRETMEZ.
+    await h.db.execute(sql`
+      UPDATE missions SET execute_at = now() - interval '1 s' WHERE id = ${missionId}
+    `);
+    await scheduler().tick();
+    const battles = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM battles WHERE world_id = ${worldId}
+    `);
+    expect(battles).toHaveLength(0);
+
+    // Dönüş varınca birlikler geri gelir.
+    await runDue(r.returnMissionId);
+    expect((await unitsOf(attackCity))['dwarf']).toBe(500);
+  });
+
+  it('⭐ hedefe İPTAL BİLDİRİMİ gider (savunanın ekranından düşsün diye)', async () => {
+    const { missionId, at } = await sendAndTravel(60);
+    await missions.cancelMission({ missionId, playerId: attacker, worldId, at });
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM outbox WHERE world_id = ${worldId} AND topic = 'mission:canceled'
+    `);
+    expect(rows).toHaveLength(1);
+    const p = rows[0]!['payload'] as Record<string, unknown>;
+    expect(Number(p['ownerPlayerId'])).toBe(attacker);
+    expect(Number(p['targetPlayerId'])).toBe(defender);
+  });
+
+  it('dönüş bacağı iptal EDİLEMEZ', async () => {
+    const { missionId, at } = await sendAndTravel(60);
+    const r = await missions.cancelMission({ missionId, playerId: attacker, worldId, at });
+
+    const err = await missions.cancelMission({
+      missionId: r.returnMissionId, playerId: attacker, worldId, at,
+    }).catch((e: unknown) => e as MissionError);
+    expect((err as MissionError).code).toBe('not_cancelable');
+  });
+
+  it('başkasının görevi iptal edilemez', async () => {
+    const { missionId, at } = await sendAndTravel(60);
+    const err = await missions.cancelMission({
+      missionId, playerId: defender, worldId, at,
+    }).catch((e: unknown) => e as MissionError);
+    expect((err as MissionError).code).toBe('not_owner');
+  });
+
+  it('⚠️ worker görevi ALDIYSA iptal edilemez (savaş çözülüyordur)', async () => {
+    const { missionId, at } = await sendAndTravel(60);
+    await h.db.execute(sql`UPDATE missions SET status = 'running' WHERE id = ${missionId}`);
+
+    const err = await missions.cancelMission({
+      missionId, playerId: attacker, worldId, at,
+    }).catch((e: unknown) => e as MissionError);
+    expect((err as MissionError).code).toBe('not_cancelable');
+  });
+
+  it('aynı görev iki kez iptal edilemez', async () => {
+    const { missionId, at } = await sendAndTravel(60);
+    await missions.cancelMission({ missionId, playerId: attacker, worldId, at });
+    await expect(missions.cancelMission({ missionId, playerId: attacker, worldId, at }))
+      .rejects.toThrow();
+  });
+
+  it('iptal, Baraka sefer limitini SERBEST BIRAKMAZ (ordu hâlâ yolda)', async () => {
+    await setBuilding(attackCity, 'barracks', 1);
+    const { missionId, at } = await sendAndTravel(60);
+    await missions.cancelMission({ missionId, playerId: attacker, worldId, at });
+
+    // Dönüş görevi de açık sefer sayılır → yeni sefer açılamaz.
+    await expect(missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
+    })).rejects.toThrow(/en fazla 1 sefer/);
   });
 });
 

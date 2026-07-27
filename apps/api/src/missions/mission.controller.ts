@@ -6,7 +6,7 @@
  */
 import {
   BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get,
-  HttpCode, Inject, NotFoundException, Post, Query, Req, UseGuards,
+  HttpCode, Inject, NotFoundException, Param, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { sendMissionRequest } from '@mobiwar/contracts';
@@ -14,7 +14,7 @@ import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
-import { MissionError, MissionService } from './mission.service.ts';
+import { CANCELABLE_TYPES, MissionError, MissionService } from './mission.service.ts';
 
 @Controller('api/v1/missions')
 @UseGuards(AuthGuard)
@@ -68,6 +68,31 @@ export class MissionController {
   }
 
   /**
+   * ⭐ `POST /api/v1/missions/:id/cancel` — yoldaki orduyu geri çağırır.
+   * Dönüş süresi GİDİLEN yol kadardır (bkz. `MissionService.cancelMission`).
+   */
+  @Post(':id/cancel')
+  @HttpCode(200)
+  async cancel(@Param('id') id: string, @Req() req: AuthedRequest): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const at = await this.clock.gameNow(player.worldId);
+    try {
+      const r = await this.missions.cancelMission({
+        missionId: Number(id), playerId: player.playerId, worldId: player.worldId, at,
+      });
+      return {
+        returnMissionId: r.returnMissionId,
+        returnSeconds: r.returnSeconds,
+        executeAt: r.executeAt.toISOString(),
+        gameNow: at.toISOString(),
+        serverNow: new Date().toISOString(),
+      };
+    } catch (err) {
+      throw toHttp(err);
+    }
+  }
+
+  /**
    * ⭐ "Ordular" ekranı — şehirlerimle ilgili TÜM ordu hareketleri, tek düz liste.
    *
    * Her hareket bir **çıpa şehre** (`cityId`) asılır: arayüz o şehrin kale simgesinin altına
@@ -90,7 +115,8 @@ export class MissionController {
       WITH my AS (
         SELECT id FROM cities WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
       )
-      SELECT m.id, m.type, m.owner_player_id, m.origin_city_id, m.target_city_id,
+      SELECT m.id, m.type, m.status, m.payload, m.owner_player_id,
+             m.origin_city_id, m.target_city_id,
              m.target_k, m.target_d, m.target_s, m.execute_at, m.created_at,
              oc.k AS ok, oc.d AS od, oc.s AS os, op.username AS oname,
              tc.k AS tk, tc.d AS td, tc.s AS ts, tp.username AS tname,
@@ -115,6 +141,11 @@ export class MissionController {
     const movements: Record<string, unknown>[] = [];
     for (const r of rows) {
       const type = String(r['type']);
+      const status = String(r['status']);
+      const payload = (r['payload'] ?? {}) as Record<string, unknown>;
+      /** Dönüşün ASLI: casusluk dönüşü kuş simgesi göstermeli, kılıç değil. */
+      const returnOf = payload['returnOf'] == null ? 'attack' : String(payload['returnOf']);
+      const canceled = payload['canceled'] === true;
       const mine = Boolean(r['origin_is_mine']);
       const targetMine = Boolean(r['target_is_mine']);
       const origin = r['ok'] == null
@@ -127,6 +158,9 @@ export class MissionController {
       const base = {
         id: Number(r['id']),
         type,
+        /** Dönüş bacağında hangi görevden dönüldüğü (arayüz "casusluk dönüşü" yazabilsin). */
+        returnOf: type === 'return' ? returnOf : null,
+        canceled: type === 'return' ? canceled : false,
         startedAt: toDate(r['created_at']).toISOString(),
         executeAt: toDate(r['execute_at']).toISOString(),
         origin,
@@ -143,12 +177,14 @@ export class MissionController {
             ...base, key: `${r['id']}-out`, direction: 'out', icon,
             cityId: Number(r['origin_city_id']),
             units: r['units'] ?? {},
+            // İptal yalnız HENÜZ İŞLENMEMİŞ görevde mümkün; worker aldıysa savaş çözülüyordur.
+            canCancel: status === 'scheduled' && CANCELABLE_TYPES.includes(type),
           });
         }
       }
       // GELEN bacak — çıpa: hedef şehir (benim).
       if (targetMine) {
-        const icon = type === 'return' ? 'attack' : IN_ICON[type];
+        const icon = type === 'return' ? (OUT_ICON[returnOf] ?? 'attack') : IN_ICON[type];
         if (icon) {
           movements.push({
             ...base, key: `${r['id']}-in`,
@@ -158,6 +194,7 @@ export class MissionController {
             cityId: Number(r['target_city_id']),
             // ⭐ Yabancı hareketinde birleşim GİZLİ: `units` bilerek yok (§13.10.1).
             ...(type === 'return' ? { units: r['units'] ?? {} } : {}),
+            canCancel: false,
           });
         }
       }
@@ -202,7 +239,10 @@ function toHttp(err: unknown): Error {
   switch (err.code) {
     case 'city_not_found':
     case 'target_not_found':
+    case 'mission_not_found':
       return new NotFoundException(payload);
+    case 'not_cancelable':
+      return new ConflictException(payload);
     case 'not_owner':
     case 'world_mismatch':
     case 'target_protected':

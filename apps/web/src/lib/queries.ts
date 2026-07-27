@@ -131,6 +131,12 @@ export interface Movement {
   originPlayer: string | null;
   target: Coords | null;
   targetPlayer: string | null;
+  /** Dönüş bacağında hangi görevden dönüldüğü (`attack` · `spy` · `transport` …). */
+  returnOf: string | null;
+  /** Dönüş, görev iptalinden mi doğdu? */
+  canceled: boolean;
+  /** Bu hareket iptal edilebilir mi (yalnız kendi, henüz işlenmemiş görevlerim)? */
+  canCancel: boolean;
   /** Yalnız KENDİ hareketlerimde dolu; yabancı harekette birleşim gizlidir (§13.10.1). */
   units?: Record<string, number>;
 }
@@ -200,10 +206,19 @@ export const useWorld = (k: number, d: number): UseQueryResult<{ slots: WorldSlo
   refetchInterval: 30_000,
 });
 
+/**
+ * Savaş raporu.
+ *
+ * ⭐ Rapor modalı açıldığında veri **her seferinde sunucudan** çekilir (`staleTime: 0` +
+ * `refetchOnMount: 'always'`): rapor bir savaşın kanıtıdır, önbellekten bayat gösterilmesi
+ * "sayılar tutmuyor" tartışması doğurur.
+ */
 export const useBattle = (battleId: number | null): UseQueryResult<BattleReport> => useQuery({
   queryKey: ['battle', battleId],
   queryFn: () => get<BattleReport>(`/api/v1/battles/${battleId}`),
   enabled: battleId != null,
+  staleTime: 0,
+  refetchOnMount: 'always',
 });
 
 export interface ReportLine {
@@ -274,10 +289,47 @@ export function useSendAttack() {
   });
 }
 
+/**
+ * Mesajı okundu işaretler.
+ *
+ * ⭐ **İyimser güncelleme**: sol paneldeki okunmamış sayacı sunucu yanıtını beklemeden düşer.
+ * Aksi hâlde oyuncu mesaja tıklıyor, rozet bir tur daha eski sayıyı gösteriyor ve "okundu mu
+ * olmadı mı" belirsizliği doğuyordu. Hata olursa `onError` gerçek veriyi geri çeker.
+ */
 export function useMarkRead() {
-  const invalidate = useInvalidate();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api(`/api/v1/messages/${id}/read`, { method: 'POST' }),
-    onSuccess: () => invalidate(['messages']),
+    onMutate: async (id: number) => {
+      await qc.cancelQueries({ queryKey: ['messages'] });
+      const previous = qc.getQueryData<{ unread: number; items: MessageRow[] }>(['messages']);
+      if (previous) {
+        const target = previous.items.find((m) => m.id === id);
+        if (target && !target.readAt) {
+          qc.setQueryData(['messages'], {
+            unread: Math.max(0, previous.unread - 1),
+            items: previous.items.map((m) =>
+              (m.id === id ? { ...m, readAt: new Date().toISOString() } : m)),
+          });
+        }
+      }
+      return { previous };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.previous) qc.setQueryData(['messages'], ctx.previous);
+    },
+    onSettled: () => { void qc.invalidateQueries({ queryKey: ['messages'] }); },
+  });
+}
+
+/** Yoldaki orduyu geri çağırır. Dönüş süresi GİDİLEN yol kadardır. */
+export function useCancelMission() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (missionId: number) =>
+      api<{ returnSeconds: number; executeAt: string }>(`/api/v1/missions/${missionId}/cancel`, {
+        method: 'POST', body: {},
+      }),
+    onSuccess: () => invalidate(['missions', 'city']),
   });
 }

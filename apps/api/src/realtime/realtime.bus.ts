@@ -99,6 +99,18 @@ export function eventForOutbox(
         ref: { battleId: num(payload['battleId']), cityId: num(payload['cityId']) },
       };
 
+    /**
+     * ⭐ İptal İKİ tarafa da gider: sahibine "ordun dönüyor", hedefe "gelen saldırı DÜŞTÜ".
+     * Hedefe haber vermezsek savunan var olmayan bir orduya karşı savunma yapar — iptalin
+     * en önemli yan etkisi budur.
+     */
+    case 'mission:canceled':
+      return {
+        topic: 'missions:changed', worldId,
+        playerIds: players(num(payload['ownerPlayerId']), num(payload['targetPlayerId'])),
+        ref: { missionId: num(payload['missionId']), cityId: num(payload['targetCityId']) },
+      };
+
     case 'city:army_returned':
       return {
         topic: 'missions:changed', worldId,
