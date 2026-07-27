@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getSession, onSessionChange } from './lib/api.ts';
+import { connectRealtime } from './lib/realtime.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
 import { Shell } from './components/Shell.tsx';
 import { Armies } from './screens/Armies.tsx';
@@ -28,6 +29,12 @@ export function App() {
   // Oturum api.ts'te merkezî: refresh başarısız olunca oradan düşürülür ve burası haberdar olur
   // → token süresi dolan oyuncu boş ekranda kalmaz, giriş formuna döner.
   useEffect(() => onSessionChange(setSessionState), []);
+
+  // Gerçek zamanlı bağlantı oturum varken açık durur; token yenilenince kendini yeniler.
+  useEffect(() => {
+    if (!session) return;
+    return connectRealtime(queryClient);
+  }, [session]);
 
   if (!session) {
     return <Auth onDone={() => setSessionState(getSession())} />;

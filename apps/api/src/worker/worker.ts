@@ -12,12 +12,15 @@ import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
+import { eventForOutbox, type RealtimeBus } from '../realtime/realtime.bus.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 
 export interface WorkerOptions {
   worldId: number;
   workerId?: string;
   pollIntervalMs?: number;
+  /** Gerçek zamanlı yol. Verilmezse olaylar yalnız outbox'ta kalır (testlerde böyle). */
+  bus?: RealtimeBus;
 }
 
 export interface Worker {
@@ -60,10 +63,16 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
     },
   });
 
-  // Faz 2'de burada WS gateway'i bağlanacak; şimdilik yalnız log kanalı.
+  /**
+   * ⭐ OUTBOX → GERÇEK ZAMANLI YOL.
+   *
+   * Teslim garantisi outbox'ta (§1); bu kanal onun **hızlı** ucu. Yayın başarısız olsa bile
+   * satır teslim edilmiş sayılır: WS "kaçırılabilir" katmandır, kalıcı kayıt zaten DB'dedir.
+   * Aksi hâlde bir soket hatası bildirimi sonsuza kadar yeniden denetirdi.
+   */
   dispatcher.on('*', async (row) => {
-    // eslint-disable-next-line no-console
-    console.log(`[outbox] ${row.topic}`, row.payload);
+    const event = eventForOutbox(row.topic, row.payload, row.worldId);
+    if (event) await opts.bus?.publish(event);
   });
 
   return {

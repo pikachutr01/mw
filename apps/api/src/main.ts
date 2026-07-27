@@ -1,31 +1,41 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { Server as HttpServer } from 'node:http';
 import { AppModule } from './app.module.ts';
+import { TokenService } from './auth/token.service.ts';
 import { createDb } from './db/client.ts';
+import { RealtimeBus } from './realtime/realtime.bus.ts';
+import { RealtimeGateway } from './realtime/realtime.gateway.ts';
 import { createWorker, type Worker } from './worker/worker.ts';
 
 /**
  * Küçük sunucu profili (§4.0): `ROLE=all` iken api + worker AYNI süreçte çalışır.
- * `ROLE=api` yalnız HTTP, `ROLE=worker` yalnız görev döngüsü.
+ * `ROLE=api` yalnız HTTP + WS, `ROLE=worker` yalnız görev döngüsü.
+ *
+ * ⭐ Gerçek zamanlı yol **Postgres LISTEN/NOTIFY** üzerinden gider → roller ayrı süreçlere
+ * bölündüğünde de kod değişmeden çalışır (worker NOTIFY eder, api LISTEN eder). Redis zorunlu
+ * değil; küçük sunucu profilinde ikinci bir altyapı bağımlılığı istemiyoruz.
  */
 async function bootstrap(): Promise<void> {
   const role = process.env['ROLE'] ?? 'all';
   const runApi = role === 'all' || role === 'api';
   const runWorker = role === 'all' || role === 'worker';
 
+  const url = process.env['DATABASE_URL'];
+  if (!url) throw new Error('DATABASE_URL tanımsız.');
+
   let worker: Worker | null = null;
-  let closeDb: (() => Promise<void>) | null = null;
+  let gateway: RealtimeGateway | null = null;
+  const handle = createDb(url);
+  const bus = new RealtimeBus(handle.sql);
 
   if (runWorker) {
-    const url = process.env['DATABASE_URL'];
-    if (!url) throw new Error('DATABASE_URL tanımsız — worker veritabanı olmadan çalışamaz.');
-    const handle = createDb(url);
-    closeDb = handle.close;
     worker = createWorker(handle.db, {
       worldId: Number(process.env['WORLD_ID'] ?? 1),
       workerId: `worker-${process.pid}`,
       pollIntervalMs: Number(process.env['POLL_INTERVAL_MS'] ?? 1000),
+      bus,
     });
     worker.start();
     // eslint-disable-next-line no-console
@@ -37,16 +47,22 @@ async function bootstrap(): Promise<void> {
     app.enableShutdownHooks();
     const port = Number(process.env['PORT'] ?? 3002);
     await app.listen({ port, host: '0.0.0.0' });
+
+    // Soket sunucusu Fastify'ın HTTP sunucusuna takılır → tek port, tek köken, CORS yok.
+    gateway = new RealtimeGateway(handle.db, app.get(TokenService), bus);
+    await gateway.attach(app.getHttpServer() as HttpServer);
+
     // eslint-disable-next-line no-console
-    console.log(`[mobiwar] api hazır → http://localhost:${port}/healthz  (ROLE=${role})`);
+    console.log(`[mobiwar] api hazır → http://localhost:${port}/healthz  ·  ws /ws  (ROLE=${role})`);
   }
 
   // Graceful shutdown: çalışan görev turu bitene kadar bekle → yarım iş kalmaz.
   const shutdown = async (signal: string): Promise<void> => {
     // eslint-disable-next-line no-console
     console.log(`[mobiwar] ${signal} alındı, kapatılıyor…`);
+    await gateway?.close();
     await worker?.stop();
-    await closeDb?.();
+    await handle.close();
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

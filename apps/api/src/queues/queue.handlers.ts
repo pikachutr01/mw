@@ -52,7 +52,9 @@ export const buildingFinishHandler: MissionHandler = async (ctx) => {
   `);
 
   await ctx.emit('city:building_finished', {
-    cityId, type: p.itemType, level: p.targetLevel, at: ctx.at.toISOString(),
+    // ⭐ `playerId` gerçek zamanlı yol için ŞART: olay kime gidecek, oradan bulunuyor.
+    cityId, playerId: ctx.mission.ownerPlayerId,
+    type: p.itemType, level: p.targetLevel, at: ctx.at.toISOString(),
   });
   await ctx.audit({
     action: 'building.finished', entity: 'city', entityId: cityId,
@@ -74,7 +76,8 @@ export const unitFinishHandler: MissionHandler = async (ctx) => {
   `);
 
   await ctx.emit('city:units_finished', {
-    cityId, type: p.itemType, count: p.count, at: ctx.at.toISOString(),
+    cityId, playerId: ctx.mission.ownerPlayerId,
+    type: p.itemType, count: p.count, at: ctx.at.toISOString(),
   });
   await ctx.audit({
     action: 'units.finished', entity: 'city', entityId: cityId,
@@ -107,7 +110,8 @@ export const defenseFinishHandler: MissionHandler = async (ctx) => {
   }
 
   await ctx.emit('city:defense_finished', {
-    cityId, type: p.itemType, count: p.count, level: p.targetLevel, at: ctx.at.toISOString(),
+    cityId, playerId: ctx.mission.ownerPlayerId,
+    type: p.itemType, count: p.count, level: p.targetLevel, at: ctx.at.toISOString(),
   });
   await ctx.audit({
     action: 'defense.finished', entity: 'city', entityId: cityId,

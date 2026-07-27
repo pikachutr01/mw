@@ -8,8 +8,9 @@
  * ("kaç kaynağım var", "hangi şehirdeyim", "bekleyen bir şey var mı") orada.
  */
 import { NavLink, useLocation } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { getSession, logout } from '../lib/api.ts';
+import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { fmt, useTheme, useTick } from '../lib/hooks.ts';
 import { useCities, useCity, useMessages, useMovements } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
@@ -129,6 +130,8 @@ function ResourceBar() {
           </span>
         </div>
 
+        <ConnectionDot />
+
         <button
           onClick={() => setTheme(nextTheme)}
           title={`Tema: ${theme} → ${nextTheme}`}
@@ -139,6 +142,33 @@ function ResourceBar() {
         </button>
       </div>
     </header>
+  );
+}
+
+/**
+ * Gerçek zamanlı bağlantı göstergesi.
+ *
+ * Kopukluk SESSİZ kalmamalı: oyuncu "gelen ordu yok" görüntüsüne bakarken aslında bağlantısı
+ * kopmuş olabilir. Nokta kopukken kırmızıya döner ve başlıkta ne olduğu yazar.
+ */
+function ConnectionDot() {
+  const [state, setState] = useState(getConnectionState);
+  useEffect(() => onConnectionChange(setState), []);
+
+  const label = state === 'online' ? 'Canlı bağlantı açık'
+    : state === 'connecting' ? 'Bağlanıyor…'
+      : 'Bağlantı koptu — yeniden deneniyor';
+  const color = state === 'online' ? 'bg-success'
+    : state === 'connecting' ? 'bg-warning'
+      : 'bg-danger';
+
+  return (
+    <span title={label} aria-label={label}
+      className="flex shrink-0 items-center" role="status">
+      <span className={`h-2 w-2 rounded-full ring-1 ring-strong ${color} ${
+        state === 'online' ? '' : 'animate-pulse'
+      }`} />
+    </span>
   );
 }
 
