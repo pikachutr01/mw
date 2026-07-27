@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Mobiwar">
+  <!--
+    Maskable sürüm: Android simgeyi daire/squircle olarak KIRPAR. Bu yüzden zemin boydan boya
+    dolar (yuvarlak köşe yok) ve çizim %80'lik güvenli alanın içinde kalacak kadar küçültülür —
+    aksi hâlde kulelerin mazgalları kırpılırdı.
+  -->
+  <defs>
+    <linearGradient id="bronze" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8c274" />
+      <stop offset="0.55" stop-color="#c8973f" />
+      <stop offset="1" stop-color="#8a6224" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="#1a1410" />
+
+  <g transform="translate(256 256) scale(0.68) translate(-256 -256)">
+    <g fill="url(#bronze)">
+      <path d="M96 200h24v-26h26v26h24v-26h26v26h24v212H96z" />
+      <path d="M292 200h24v-26h26v26h24v-26h26v26h24v212H292z" />
+      <path d="M164 262h22v-24h26v24h24v-24h26v24h24v-24h26v24h22v150H164z" />
+    </g>
+    <path d="M224 412V352a32 32 0 0 1 64 0v60z" fill="#1a1410" />
+    <g fill="#1a1410">
+      <rect x="132" y="250" width="18" height="30" rx="6" />
+      <rect x="362" y="250" width="18" height="30" rx="6" />
+      <rect x="200" y="306" width="18" height="26" rx="6" />
+      <rect x="294" y="306" width="18" height="26" rx="6" />
+    </g>
+  </g>
+</svg>

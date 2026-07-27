@@ -13,7 +13,7 @@ import { sql } from 'drizzle-orm';
 import {
   UNITS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
   buildingCost, buildingTimeSeconds, cancelRefund, checkRequirement, techCost, techTimeSeconds,
-  trainingTimeSeconds, type RefundRule, type UnmetRequirement,
+  timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
 } from '@mobiwar/catalog';
 import { CapacityService } from '../cities/capacity.service.ts';
 import { CityService } from '../cities/city.service.ts';
@@ -130,8 +130,8 @@ export class QueueService {
       };
       await this.spend(tx as never, opts.cityId, cost, opts.at);
 
-      // Model A (§13.11.3): süre = Alan × 0,95^(Baraka−1), adet ile çarpılır.
-      const perUnit = trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 1);
+      // ⭐ Model B (§13.11.3, k.java): `((altın+yemek)/10)^0,8 × 65 / 1,4^Baraka`, adetle çarpılır.
+      const perUnit = trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 0);
       return this.insert(tx as never, {
         ...st, cityId: opts.cityId, category: 'unit', itemType: opts.type,
         targetLevel: null, count: opts.count, cost, seconds: perUnit * opts.count, at: opts.at,
@@ -173,7 +173,7 @@ export class QueueService {
         // Sur/Büyü Kalkanı maliyeti SEVİYE tabanlı: taban × 1,8^seviye (§13.9, motor kararını doğrular)
         cost = { gold: def.gold * 1.8 ** (targetLevel - 1), food: def.food * 1.8 ** (targetLevel - 1) };
         cost = { gold: Math.round(cost.gold), food: Math.round(cost.food) };
-        seconds = (10 * (cost.gold + cost.food)) / 1.4 ** (st.buildings['architect_school'] ?? 0);
+        seconds = timeFromCost(cost, st.buildings['architect_school'] ?? 0);
       } else {
         count = opts.count;
         // ⭐ Savunma kapasitesi: 25.000 × 1,30^(Sur−1); birim başına katalogdaki `area`
@@ -186,8 +186,9 @@ export class QueueService {
           );
         }
         cost = { gold: def.gold * count, food: def.food * count };
-        // Savunma birimleri Mimar Okulu'na bağlı (§13.9 "S" kategorisi)
-        seconds = trainingTimeSeconds(opts.type, st.buildings['architect_school'] ?? 1) * count;
+        // ⭐ Savunma birimi süresi = 10(a+y)/1,4^MimarOkulu (§13.9 "S" kategorisi, k.java).
+        //    Mimar Okulu YOKSA bölen 1'dir — bu yüzden varsayılan 0, 1 değil.
+        seconds = trainingTimeSeconds(opts.type, st.buildings['architect_school'] ?? 0) * count;
       }
 
       await this.spend(tx as never, opts.cityId, cost, opts.at);

@@ -4,7 +4,7 @@
  * Şehir şeridi her ekranda olduğu için (bkz. `CityStrip`) bu parçalar da Ordular ekranına özel
  * olamaz — oyuncu Baraka'dayken de gelen saldırının üstüne gelip ne olduğunu görebilmeli.
  */
-import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
+import { fmt, formatDuration, remaining, remainingClock, serverNow, useTick } from '../lib/hooks.ts';
 import { describeUnits } from '../lib/names.ts';
 import { useCancelMission, type Coords, type Movement } from '../lib/queries.ts';
 import { Button, ErrorBox } from './ui.tsx';
@@ -45,7 +45,7 @@ export function MovementIcon({
   onTip: (t: TipState | null) => void;
   onOpen: (m: Movement) => void;
 }) {
-  const left = remaining(m.executeAt);
+  const left = remainingClock(m.executeAt);
   const isReturn = m.direction === 'own';
 
   // Fare TAKİPLİ tooltip (masaüstü); dokunmatikte tıklama modalı açar.
@@ -63,21 +63,25 @@ export function MovementIcon({
         p-0.5 transition-transform hover:scale-110"
     >
       <span className="relative">
+        {/* ⭐ Boyut ŞEHİR SİMGESİYLE AYNI (kullanıcı kararı): olay simgeleri kalenin altında
+            küçücük kalınca dizi "kale + tozlar" gibi görünüyordu; artık aynı ağırlıkta. */}
         <img src={`/assets/missions/${m.icon}.png`} alt={titleOf(m)}
-          width={44} height={44}
-          className={`icon-shadow h-9 w-9 object-contain sm:h-11 sm:w-11 ${
+          width={80} height={80}
+          className={`icon-shadow h-14 w-14 object-contain sm:h-20 sm:w-20 ${
             m.direction === 'in' ? 'drop-shadow-[0_0_5px_var(--mw-color-danger)]' : ''
           }`} />
         {/* ⭐ Dönüş rozeti: oyuncu İLK BAKIŞTA giden mi dönen mi ayırt edebilmeli. */}
         {isReturn ? (
           <span aria-hidden title="Geri dönüyor"
-            className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full
-              border border-strong bg-success text-[10px] leading-none text-on-accent shadow">
+            className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full
+              border border-strong bg-success text-[11px] leading-none text-on-accent shadow">
             ↩
           </span>
         ) : null}
       </span>
-      <span className="tnum text-[10px] leading-tight text-muted">{left ?? 'varıyor'}</span>
+      <span className="tnum text-[11px] leading-tight font-semibold text-muted">
+        {left ?? 'varıyor'}
+      </span>
     </button>
   );
 }

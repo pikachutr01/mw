@@ -155,7 +155,11 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
     fetch(path.startsWith('/') ? path : `/api/v1/${path}`, {
       method: opts.method ?? 'GET',
       headers: {
-        'content-type': 'application/json',
+        // ⚠️ `content-type` YALNIZ gövde varken gönderilir. Gövdesiz bir DELETE/POST'ta bu başlığı
+        //    bırakmak Fastify'ı *"Body cannot be empty when content-type is set to
+        //    'application/json'"* hatasına düşürüyordu (yapı yükseltme iptali böyle patlıyordu):
+        //    başlık "gövde geliyor" diye söz verir, gövde gelmez, ayrıştırıcı 400 döner.
+        ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
         'x-device-id': deviceId(),
         'x-platform': 'web',
         ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}),

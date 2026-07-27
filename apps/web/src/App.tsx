@@ -5,6 +5,7 @@ import { getSession, onSessionChange } from './lib/api.ts';
 import { connectRealtime } from './lib/realtime.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
 import { ConfirmProvider } from './components/Modal.tsx';
+import { OfflineBanner } from './components/OfflineBanner.tsx';
 import { Shell } from './components/Shell.tsx';
 import { Armies } from './screens/Armies.tsx';
 import { Auth } from './screens/Auth.tsx';
@@ -38,13 +39,21 @@ export function App() {
   }, [session]);
 
   if (!session) {
-    return <Auth onDone={() => setSessionState(getSession())} />;
+    return (
+      <>
+        {/* Çevrimdışı uyarısı GİRİŞ ekranında da gerekli: ağ yokken "giriş başarısız" mesajı
+            oyuncuya parolasını yanlış girdiğini düşündürüyordu. */}
+        <OfflineBanner />
+        <Auth onDone={() => setSessionState(getSession())} />
+      </>
+    );
   }
 
   const logout = (): void => setSessionState(null);
 
   return (
     <QueryClientProvider client={queryClient}>
+      <OfflineBanner />
       {/* Onay diyaloğu GLOBAL: her çağıran kendi diyaloğunu kursa metinler ve davranış ayrışırdı. */}
       <ConfirmProvider>
         <ActiveCityProvider>

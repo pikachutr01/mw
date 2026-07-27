@@ -15,7 +15,8 @@ import {
   BUILDINGS, BUILDINGS_BY_ID, BUILDING_ORDER, BUILDING_REQUIREMENTS,
   DEFENSE_ORDER, TECHS, TECHS_BY_ID, TECH_ORDER, TECH_REQUIREMENTS,
   UNITS, UNITS_BY_ID, UNIT_REQUIREMENTS, WARRIOR_ORDER,
-  buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, trainingTimeSeconds, unitCost,
+  buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, timeFromCost,
+  trainingTimeSeconds, unitCost,
 } from '@mobiwar/catalog';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import type { Db } from '../db/client.ts';
@@ -125,8 +126,9 @@ export class CityController {
     const defenses = mapCounts(defRows, 'count');
 
     // Süreleri ETKİLEYEN yapılar: Mimar Okulu (yapı + savunma), Baraka (savaşçı), Akademi (teknik).
+    // ⚠️ Varsayılan 0 (1 DEĞİL): bölen `1,4^seviye`, kurulmamış yapı hiç hızlandırmamalı.
     const architect = snap.buildings['architect_school'] ?? 0;
-    const barracks = snap.buildings['barracks'] ?? 1;
+    const barracks = snap.buildings['barracks'] ?? 0;
     const academy = snap.buildings['academy'] ?? 0;
 
     return {
@@ -147,7 +149,7 @@ export class CityController {
       units: orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER).map((u) => ({
         id: u.id, name: u.name.tr, area: u.area, speed: u.speed,
         cost: unitCost(u.id, 1),
-        /** Bir birimin üretim süresi (Model A: alan × 0,95^(Baraka−1)). Adetle çarpılır. */
+        /** Bir birimin üretim süresi: `((a+y)/10)^0,8 × 65 / 1,4^Baraka`. Adetle çarpılır. */
         seconds: Math.round(trainingTimeSeconds(u.id, barracks)),
         requirements: UNIT_REQUIREMENTS[u.id] ?? {},
         requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
@@ -167,8 +169,9 @@ export class CityController {
           : unitCost(u.id, 1);
         return {
           id: u.id, name: u.name.tr, area: u.area, levelBased, current, cost,
+          // İki dal da AYNI kural: 10(a+y)/1,4^MimarOkulu. Fark yalnız maliyetin seviyeli olması.
           seconds: levelBased
-            ? Math.round((10 * (cost.gold + cost.food)) / 1.4 ** architect)
+            ? Math.round(timeFromCost(cost, architect))
             : Math.round(trainingTimeSeconds(u.id, architect)),
           requirements: UNIT_REQUIREMENTS[u.id] ?? {},
           requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),

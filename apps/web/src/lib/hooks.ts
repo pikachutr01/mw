@@ -42,14 +42,41 @@ export function remaining(iso: string | null | undefined, now = serverNow()): st
   return formatDuration(Math.round(ms / 1000));
 }
 
+/**
+ * ⭐ **Saniye hassasiyeti her zaman** (kullanıcı kararı): saatlik geri sayımlarda da saniye yazar.
+ * Önceden `2 sa 04 dk` gösteriliyordu; oyuncu ekrana bakıp "donmuş mu?" diye tereddüt ediyordu ve
+ * son dakikaya kadar varışın tam anını göremiyordu. Ordu hareketleri dahil TÜM geri sayımlar
+ * bu fonksiyondan geçer.
+ */
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (h) return `${h} sa ${String(m).padStart(2, '0')} dk`;
-  if (m) return `${m} dk ${String(sec).padStart(2, '0')} sn`;
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  if (h) return `${h} sa ${pad(m)} dk ${pad(sec)} sn`;
+  if (m) return `${m} dk ${pad(sec)} sn`;
   return `${sec} sn`;
+}
+
+/**
+ * Dar yerler için **saat biçimi**: `04:31` · `2:04:27`. Orijinal oyunun kendi gösterimi budur
+ * (`images/scr_mobil02`, `scr_itv03`) ve saniye hassasiyetini kaybetmeden simgenin altına sığar.
+ */
+export function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  const rest = `${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+  return h ? `${h}:${rest}` : rest;
+}
+
+/** `remaining` ile aynı, yalnız saat biçiminde. Bitmişse `null`. */
+export function remainingClock(iso: string | null | undefined, now = serverNow()): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso) - now;
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return formatClock(ms / 1000);
 }
 
 export const nf = new Intl.NumberFormat('tr-TR');

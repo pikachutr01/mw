@@ -1,0 +1,27 @@
+{
+  "name": "Mobiwar",
+  "short_name": "Mobiwar",
+  "description": "Zamanlanmis olaylar uzerine kurulu strateji oyunu.",
+  "lang": "tr",
+  "dir": "ltr",
+  "start_url": "/armies",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1410",
+  "theme_color": "#1a1410",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ]
+}

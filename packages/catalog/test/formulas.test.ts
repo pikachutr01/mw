@@ -116,13 +116,48 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
   });
 });
 
-describe('üretim süresi (Model A)', () => {
-  it('Cüce 9 sn, Kaos 11,1 saat (Baraka 1)', () => {
-    expect(trainingTimeSeconds('dwarf', 1)).toBe(9);
-    expect(trainingTimeSeconds('chaos', 1) / 3600).toBeCloseTo(11.11, 1);
+/**
+ * ⭐ ÜRETİM SÜRESİ — Model B (kullanıcı onayı 2026-07-27, `k.java`'nın kendi formülü).
+ *
+ * Bu blok modelin **iki dayanağını** de kilitliyor: eski ekran görüntülerindeki savaşçı süreleri
+ * (o dönemin yarım maliyetleriyle) ve 2015 tarihli Muhafız ekranı (bizim binary maliyetimizle).
+ * Biri bozulursa model değişmiş demektir.
+ */
+describe('üretim süresi (Model B)', () => {
+  it('⭐ MUHAFIZ KANITI: 10(a+y)/1,4^16 = 3:22 (images/mobil.png, 2015)', () => {
+    // Ekranda 2400 altın + 2000 yemek → katalogdaki binary maliyetin AYNISI.
+    const guard = UNITS_BY_ID['guard']!;
+    expect([guard.gold, guard.food]).toEqual([2400, 2000]);
+    expect(trainingTimeSeconds('guard', 16)).toBeCloseTo(202.02, 2);   // ekranda 3:22
   });
 
-  it('Baraka seviyesi süreyi %5 kısaltır', () => {
-    expect(trainingTimeSeconds('dwarf', 2)).toBeCloseTo(8.55, 5);
+  it('savunma birimi Mimar Okulu\'na, savaşçı Baraka\'ya bağlı', () => {
+    // Savunma: her seviye %28,6 kısaltır (1/1,4).
+    expect(trainingTimeSeconds('guard', 0)).toBeCloseTo(44_000, 5);
+    expect(trainingTimeSeconds('guard', 1)).toBeCloseTo(44_000 / 1.4, 5);
+    // Savaşçı: üstel eğri, tam sayı bölmesiyle.
+    expect(trainingTimeSeconds('dwarf', 0)).toBeCloseTo(65 ** 0.8 * 65, 5);
+    expect(trainingTimeSeconds('dwarf', 1)).toBeCloseTo((65 ** 0.8 * 65) / 1.4, 5);
+  });
+
+  it('eski ekran görüntüleri (Baraka 15, o dönemin YARIM maliyetleri) ±%5 tutuyor', () => {
+    // Katalogda binary (iki kat) maliyet var; ekranın kendi maliyetiyle formülü doğrudan sınıyoruz.
+    const modelB = (gold: number, food: number, barracks: number): number =>
+      (Math.floor((gold + food) / 10) ** 0.8 * 65) / 1.4 ** barracks;
+    const gozlem: [number, number, number][] = [
+      [100, 225, 7],       // Cüce
+      [225, 320, 10],      // Elf
+      [600, 1200, 26],     // Süvari
+      [2000, 1600, 45],    // Pegasus
+      [24000, 10000, 271], // Ejderha 4:31
+    ];
+    for (const [gold, food, gorulen] of gozlem) {
+      expect(Math.abs(modelB(gold, food, 15) / gorulen - 1)).toBeLessThan(0.05);
+    }
+  });
+
+  it('Model A denge düğmesi olarak duruyor (varsayılan DEĞİL)', () => {
+    expect(trainingTimeSeconds('dwarf', 1, 'area')).toBeCloseTo(9, 5);
+    expect(trainingTimeSeconds('dwarf', 1)).not.toBeCloseTo(9, 1);
   });
 });

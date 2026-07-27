@@ -31,17 +31,11 @@ function CityFrame({ children }: { children: (city: CityDetail) => React.ReactNo
 
   return (
     <div className="space-y-3">
-      {/* Şehir adı/koordinatı artık üstteki bilgi çubuğunda ve şehir şeridinde → burada tekrar YOK.
-          Panel yalnız o ekranda gereken şeyi taşıyor: alan bütçeleri. */}
-      <Panel title="Alan bütçeleri" bare={false}>
-        <div className="grid grid-cols-1 gap-3 px-3 py-3 text-xs sm:grid-cols-2">
-          <Budget label="Kale bütçesi" used={d.capacity.castle.used} total={d.capacity.castle.total}
-            hint="Σ(bina seviyeleri) ≤ Kale × 10" />
-          <Budget label="Sur kapasitesi" used={d.capacity.defense.used} total={d.capacity.defense.total}
-            hint="Savunma birimleri Alan kadar yer kaplar" />
-        </div>
-      </Panel>
-
+      {/* ⚠️ "Alan bütçeleri" paneli KALDIRILDI (kullanıcı kararı): dört şehir ekranının da
+          tepesinde iki çubuk taşımak yer yiyordu ve bilgi zaten gerektiği anda kendini gösteriyor —
+          bütçe dolduğunda yükseltme denemesi açık bir uyarıyla reddediliyor. Kale bütçesi çubuğu
+          ileride **Kale'ye tıklanınca açılan modalda** yaşayacak; bileşen o gün için duruyor.
+          Sur kapasitesi ise artık hiç UYGULANMIYOR (bkz. `capacity.service.ts`). */}
       <Queues city={d} />
       {children(d)}
     </div>
@@ -57,7 +51,11 @@ export const DefenseScreen = (): React.ReactElement =>
 export const AcademyScreen = (): React.ReactElement =>
   <CityFrame>{(c) => <Techs city={c} />}</CityFrame>;
 
-function Budget({ label, used, total, hint }: { label: string; used: number; total: number; hint: string }) {
+/**
+ * Kale bütçesi çubuğu. **Şu an hiçbir ekranda çizilmiyor** — yeri Kale detay modalı (sıradaki tur).
+ * Silmek yerine duruyor çünkü bütçe kuralı canlı: yalnız gösterimi ertelendi.
+ */
+export function Budget({ label, used, total, hint }: { label: string; used: number; total: number; hint: string }) {
   // ⚠️ Kapasite HENÜZ YOKSA (Sur 0) "0 / 0" kırmızı yazılırsa "dolu" sanılır; oysa yapı hiç
   //    kurulmamıştır. Ayrı durum olarak gösteriliyor.
   const none = total <= 0;
@@ -206,10 +204,11 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                       {levelBased ? `sv ${have[u.id] ?? 0}` : `${fmt(have[u.id] ?? 0)} adet`}
                     </span>
                   </div>
+                  {/* ⚠️ "alan · hız" satırı KALDIRILDI (kullanıcı kararı): ham stat, üretim
+                      kararında işe yaramıyordu ve satırı kalabalıklaştırıyordu. Bu bilgiler
+                      birime tıklayınca açılacak detay modalında — savaşçının hikâyesiyle
+                      birlikte — gösterilecek (sıradaki tur). */}
                   <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
-                  <div className="text-[11px] text-muted">
-                    alan {u.area}{u.speed ? ` · hız ${u.speed}` : ''}
-                  </div>
                   <Requirements requirementNames={u.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
                 </div>

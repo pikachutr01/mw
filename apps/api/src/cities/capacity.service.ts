@@ -23,6 +23,13 @@ export interface AreaRules {
     base: number;
     rate: number;
     consumers: readonly string[];
+    /**
+     * ⭐ Kural UYGULANSIN mı? Kullanıcı kararı (2026-07-27): **hayır** — savunma birimleri, üretim
+     * ön-şartları sağlandığı sürece sınırsız üretilebilir. Sur'un kapasite vermesi mekaniği
+     * hazır duruyor ama kapıyı kapatmıyor; denge gerektirirse tek `true` ile geri gelir.
+     * Hesaplama her hâlükârda yapılır (arayüz "ne kadar yer kaplıyor" diyebilsin).
+     */
+    enforced: boolean;
   };
 }
 
@@ -40,6 +47,7 @@ export const DEFAULT_AREA_RULES: AreaRules = {
     base: 25_000,
     rate: 1.3,
     consumers: ['archer_tower', 'trap', 'oil_cauldron', 'mangonel_tower', 'guard', 'ballista', 'magic_shield'],
+    enforced: false,
   },
 };
 
@@ -86,7 +94,9 @@ export class CapacityService {
     if (extra && this.rules.defenseCapacity.consumers.includes(extra.type)) {
       used += extra.count * (UNITS_BY_ID[extra.type]?.area ?? 0);
     }
-    return { used, total, free: total - used, fits: used <= total };
+    // Kural kapalıysa `fits` DAİMA doğru — sayılar yine hesaplanır, yalnız kapı kapanmaz.
+    const fits = !this.rules.defenseCapacity.enforced || used <= total;
+    return { used, total, free: total - used, fits };
   }
 
   /** Yapı seviye tavanı (§13.11.2): Çiftlik/Maden 40, diğer yapılar 20. */

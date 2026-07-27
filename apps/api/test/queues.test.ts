@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildingCost, defenseCapacity, UNITS_BY_ID } from '@mobiwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
-import { CapacityService } from '../src/cities/capacity.service.ts';
+import { CapacityService, DEFAULT_AREA_RULES } from '../src/cities/capacity.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { echoHandler } from '../src/missions/echo.handler.ts';
@@ -201,8 +201,9 @@ describe('savaşçı üretimi', () => {
 
     const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
     expect(q.count).toBe(5);
-    // Model A: Cüce 9 sn × 5 = 45 sn (Baraka 1)
-    expect((q.finishAt.getTime() - at.getTime()) / 1000).toBeCloseTo(45, 0);
+    // ⭐ Model B (§13.11.3): ((200+450)/10)^0,8 × 65 / 1,4^Baraka. Baraka 1 → 1.309 sn/birim.
+    const birim = (65 ** 0.8 * 65) / 1.4;
+    expect((q.finishAt.getTime() - at.getTime()) / 1000).toBeCloseTo(birim * 5, 0);
 
     await h.db.execute(sql`
       UPDATE missions SET execute_at = now() - interval '1 second'
@@ -250,7 +251,14 @@ describe('savaşçı üretimi', () => {
 });
 
 describe('savunma birimi üretimi', () => {
-  it('⭐ SUR KAPASİTESİ aşılamaz (25.000 × 1,30^(Sur−1))', async () => {
+  /**
+   * ⭐ KULLANICI KARARI (2026-07-27): Sur kapasitesi artık **kapı değil**. Savunma birimleri,
+   * üretim ön-şartları sağlandığı sürece istenildiği kadar üretilebilir. Mekanizma silinmedi —
+   * `DEFAULT_AREA_RULES.defenseCapacity.enforced` ile tek satırda geri gelir. Test hem kapının
+   * açık olduğunu hem de kuralın kapatılınca yeniden çalıştığını doğrular; yoksa "kapalı" karar
+   * sessizce "kaybolmuş" kurala dönüşürdü.
+   */
+  it('⭐ Sur kapasitesi UYGULANMIYOR — kapasitenin çok üstünde savunma üretilebilir', async () => {
     await giveResources(1e12, 1e12);
     await setTech('archery', 1);
     await h.db.execute(sql`
@@ -266,11 +274,21 @@ describe('savunma birimi üretimi', () => {
 
     await expect(queues.enqueueDefense({
       cityId, playerId, type: 'archer_tower', count: sigar + 100, at,
-    })).rejects.toThrow(/kapasitesi yetmiyor/);
-
-    await expect(queues.enqueueDefense({
-      cityId, playerId, type: 'archer_tower', count: sigar, at,
     })).resolves.toBeTruthy();
+
+    // Hesap yine yapılıyor: kapasite aşıldı, yalnız kapı kapanmıyor.
+    const acik = new CapacityService();
+    const durum = acik.defenseCapacity({ wall: 1 }, { archer_tower: sigar + 100 });
+    expect(durum.used).toBeGreaterThan(durum.total);
+    expect(durum.fits).toBe(true);
+
+    // Kural açılırsa aynı girdi reddedilir (mekanizma canlı).
+    const kapali = new CapacityService({
+      ...DEFAULT_AREA_RULES,
+      defenseCapacity: { ...DEFAULT_AREA_RULES.defenseCapacity, enforced: true },
+    });
+    expect(kapali.defenseCapacity({ wall: 1 }, { archer_tower: sigar + 100 }).fits).toBe(false);
+    expect(kapali.defenseCapacity({ wall: 1 }, { archer_tower: sigar }).fits).toBe(true);
   });
 
   it('Sur SEVİYE olarak ilerler (adet değil)', async () => {

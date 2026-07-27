@@ -23,10 +23,10 @@ export const ECONOMY_CONSTANTS = {
   timeDivisorRate: 1.4,
   /** Mimar Okulu kendi süresi: (gold+food) / 1.2^level */
   architectSelfRate: 1.2,
-  /** savaşçı süresi (Model B): ((gold+food)/10)^0.8 × 65 / 1.4^Baraka */
+  /** savaşçı süresi: ((gold+food)/10)^0.8 × 65 / 1.4^Baraka */
   trainTimeExponent: 0.8,
   trainTimeFactor: 65,
-  /** Model A: süre(sn) = area × 0.95^(Baraka−1) */
+  /** ⛔ EMEKLİ — Model A: süre(sn) = area × 0.95^(Baraka−1). Yalnız denge düğmesi olarak duruyor. */
   trainTimeAreaDecay: 0.95,
 } as const;
 
@@ -103,44 +103,79 @@ export function unitCost(unitId: string, count = 1): Cost {
   return { gold: def.gold * count, food: def.food * count };
 }
 
+/**
+ * ⭐ ORTAK SÜRE KURALI: `10 × (altın+yemek) / 1,4^(ilgili yapı seviyesi)`.
+ *
+ * `k.java`'nın tek süre fonksiyonunda (`k.a(String, h)`) yapı · teknik · savunma birimi ve
+ * Sur/Büyü Kalkanı dallarının HEPSİ bunu kullanıyor; yalnız bölen yapı değişiyor
+ * (Mimar Okulu / Akademi). Bu yüzden formül tek yerde: dört yerde ayrı yazılsaydı biri
+ * güncellenip diğerleri unutulurdu.
+ *
+ * 🎯 **Doğrulama (2026-07-27):** `images/mobil.png` (2015) Muhafız = 2400 altın + 2000 yemek,
+ * süre **3:22**. `10×4400 / 1,4^16 = 202,02 sn = 3:22` — Mimar Okulu 16'da birebir. Aynı ekran
+ * yarım maliyetle çözülseydi Mimar Okulu 13,94 çıkardı (tam sayı değil) → binary maliyet tablosu
+ * ile bu süre formülü AYNI oyun sürümünde yaşamış.
+ */
+export function timeFromCost(cost: Cost, divisorLevel: number): number {
+  return (10 * (cost.gold + cost.food)) / ECONOMY_CONSTANTS.timeDivisorRate ** Math.max(0, divisorLevel);
+}
+
 /** Yapı inşa süresi (saniye): 10 × (altın+yemek) / 1.4^MimarOkulu. Mimar Okulu kendisi: /1.2^sv. */
 export function buildingTimeSeconds(buildingId: string, level: number, architectSchool: number): number {
   const c = buildingCost(buildingId, level);
-  const total = c.gold + c.food;
   if (buildingId === 'architect_school') {
-    return total / ECONOMY_CONSTANTS.architectSelfRate ** level;
+    // Kendi kendini hızlandıramaz; kendi eğrisi daha yumuşak (1,2) ve 10× çarpanı yok.
+    return (c.gold + c.food) / ECONOMY_CONSTANTS.architectSelfRate ** level;
   }
-  return (10 * total) / ECONOMY_CONSTANTS.timeDivisorRate ** Math.max(0, architectSchool);
+  return timeFromCost(c, architectSchool);
 }
 
 /** Teknik araştırma süresi (saniye): 10 × (altın+yemek) / 1.4^Akademi (o şehrin akademisi). */
 export function techTimeSeconds(techId: string, level: number, academy: number): number {
-  const c = techCost(techId, level);
-  return (10 * (c.gold + c.food)) / ECONOMY_CONSTANTS.timeDivisorRate ** Math.max(0, academy);
+  return timeFromCost(techCost(techId, level), academy);
 }
 
 export type TrainingTimeModel = 'area' | 'cost';
 
 /**
- * Birim üretim süresi (saniye).
- * Model A (ONAYLANDI, §13.11.3): süre = area × 0.95^(Baraka−1). Cüce 9 sn, Kaos 11,1 saat.
- * Model B (k.java, saklı): ((altın+yemek)/10)^0.8 × 65 / 1.4^Baraka.
- * Savunma birimlerinde `sourceLevel` = Mimar Okulu, savaşçılarda Baraka.
+ * ⭐ BİRİM ÜRETİM SÜRESİ (saniye) — **Model B, kullanıcı onayı 2026-07-27**.
+ *
+ * İki ayrı dal, ikisi de `k.java`'nın kendi kodundan:
+ *  - **Savaşçı** (kategori `B`, bölen **Baraka**): `((altın+yemek)/10)^0,8 × 65 / 1,4^Baraka`
+ *  - **Savunma birimi** (kategori `S`, bölen **Mimar Okulu**): `10 × (altın+yemek) / 1,4^MimarOkulu`
+ *
+ * 🎯 Neden Model A (süre = Alan × 0,95^(Baraka−1)) **elendi**:
+ *  1. *Yapısal olarak yanlış:* süre alanla orantılı olsaydı `süre/alan` sabit çıkardı; oysa aynı
+ *     hesabın beş biriminde 0,36 ile 0,83 arasında **2,3 kat** değişiyor.
+ *  2. *0,95 oranı hiçbir kaynakta yok* — tahmindi. Model B'nin 1,4'ü ise yapı ve teknik
+ *     sürelerinde zaten kullandığımız, decompile edilmiş sabitin ta kendisi.
+ *  3. *Muhafız kanıtı:* bkz. `timeFromCost` — savunma dalı 2015 ekran görüntüsünde sıfır sapmayla
+ *     tutuyor ve o ekrandaki maliyetler bizim binary tablomuzla aynı.
+ *
+ * ⚠️ `Math.floor((altın+yemek)/10)`: `k.java` bunu **tam sayı bölmesi** ile yapıyor (long/long).
+ * Kesirli bırakırsak ucuz birimlerde saniyeler kayar; orijinalin sayısını üretmek için aynen taklit.
+ *
+ * `model: 'area'` yalnız eski Model A'yı geri getirmek isteyen denge düğmesi olarak duruyor.
  */
 export function trainingTimeSeconds(
   unitId: string,
   sourceLevel: number,
-  model: TrainingTimeModel = 'area',
+  model: TrainingTimeModel = 'cost',
 ): number {
   const def = UNITS_BY_ID[unitId];
   if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
-  const lvl = Math.max(1, sourceLevel);
+  const lvl = Math.max(0, sourceLevel);
   if (model === 'area') {
-    return def.area * ECONOMY_CONSTANTS.trainTimeAreaDecay ** (lvl - 1);
+    return def.area * ECONOMY_CONSTANTS.trainTimeAreaDecay ** (Math.max(1, lvl) - 1);
   }
-  const total = def.gold + def.food;
+  if (def.kind === 'defense') {
+    // Savunma birimi maliyeti SABİT (Sur/Büyü Kalkanı hariç — onların seviyeli maliyeti
+    // çağıran tarafta hesaplanıp `timeFromCost`'a verilir).
+    return timeFromCost({ gold: def.gold, food: def.food }, lvl);
+  }
+  const tenths = Math.floor((def.gold + def.food) / 10);
   return (
-    ((total / 10) ** ECONOMY_CONSTANTS.trainTimeExponent * ECONOMY_CONSTANTS.trainTimeFactor)
+    (tenths ** ECONOMY_CONSTANTS.trainTimeExponent * ECONOMY_CONSTANTS.trainTimeFactor)
     / ECONOMY_CONSTANTS.timeDivisorRate ** lvl
   );
 }

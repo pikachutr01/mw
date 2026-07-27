@@ -1,9 +1,14 @@
 /**
- * ⭐ ŞEHİR ŞERİDİ — **her ekranın üstünde** durur (kullanıcı kararı; orijinalde de öyle:
- * `images/scr_web01..06`, `scr_mobil01`).
+ * ⭐ ŞEHİR ŞERİDİ — şehir değiştirmenin tek yolu.
  *
- * Böylece oyuncu hangi ekranda olursa olsun şehrini tek dokunuşla değiştirir; "şehir değiştirmek
- * için Ordular'a git" adımı ortadan kalkar.
+ * **İki ayrı iş birbirinden ayrıldı** (kullanıcı kararı, 2. geri bildirim turu):
+ *  1. *Şehir seçmek* — masaüstünde her ekranın üstünde durur.
+ *  2. *Ordu hareketlerini görmek* — **yalnız Ordular ekranında**. Diğer ekranlarda şehirlerin
+ *     altına dizilen simgeler dikkat dağıtıyordu ve zaten Ordular ekranı bu iş için var.
+ *
+ * **Mobilde şerit yalnız Ordular ekranında görünür**: her sayfanın tepesinde şehir listesi
+ * taşımak zaten dar olan alanı iyice daraltıyordu. Mobil oyuncu şehrini Ordular'dan değiştirir
+ * (orijinal mobil arayüzün de yaptığı bu — `images/mobil arayüz2.jpg`).
  *
  * Yerleşim: **merkez odaklı**. Tek şehir varsa ortada durur, şehir sayısı arttıkça sağa ve sola
  * doğru büyür (kullanıcı tanımı). Taşma olursa yatay kayar ve aktif şehir görünüme çekilir.
@@ -11,6 +16,7 @@
  * Her şehrin altında **ad**, onun altında **koordinat** yazar.
  */
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, useMovements, type Movement } from '../lib/queries.ts';
 import {
@@ -18,20 +24,23 @@ import {
 } from './movements.tsx';
 
 /**
- * ⚠️ Hareket simgeleri şeridin KENDİSİNDE duruyor, Ordular ekranında değil. Bir ara ikisi de
- * kendi şeridini çiziyordu ve ekranda **iki şerit** birden görünüyordu. Ayrıca doğrusu da bu:
- * oyuncu Baraka ekranındayken de gelen saldırıyı görmeli.
+ * ⚠️ Şerit TEK yerde çiziliyor (kabuk). Bir ara hem kabuk hem Ordular ekranı kendi şeridini
+ * çiziyordu ve ekranda **iki şerit** birden görünüyordu; bu yüzden "Ordular'da hareketler de
+ * görünsün" kuralı ikinci bir bileşenle değil, buradaki rota kontrolüyle uygulanıyor.
  */
 export function CityStrip() {
   const cities = useCities();
   const movements = useMovements();
   const { cityId, setCityId } = useActiveCity();
+  const { pathname } = useLocation();
   const activeRef = useRef<HTMLButtonElement>(null);
   const [tip, setTip] = useState<TipState | null>(null);
   const [open, setOpen] = useState<Movement | null>(null);
 
+  /** Hareketler (ve mobilde şeridin kendisi) yalnız Ordular ekranında. */
+  const onArmies = pathname.startsWith('/armies');
   const list = cities.data?.cities ?? [];
-  const all = movements.data?.movements ?? [];
+  const all = onArmies ? movements.data?.movements ?? [] : [];
 
   useEffect(() => {
     if (!tip) return;
@@ -48,7 +57,7 @@ export function CityStrip() {
   if (list.length === 0) return null;
 
   return (
-    <div className="mb-3 overflow-x-auto">
+    <div className={`mb-3 overflow-x-auto ${onArmies ? '' : 'hidden lg:block'}`}>
       {/* `justify-center` + `min-w-max`: az şehirde ortalanır, çoğalınca merkezden dışa açılır. */}
       <div className="mx-auto flex min-w-max justify-center gap-2 px-1 sm:gap-4">
         {list.map((c) => {
