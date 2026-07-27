@@ -138,15 +138,15 @@ describe('yapı yükseltme', () => {
   });
 
   it('kaynak yetmezse kuyruk AÇILMAZ ve kaynak değişmez', async () => {
-    await giveResources(10, 10);
+    await giveResources(2, 2);
     const at = await clock.gameNow(worldId);
 
-    // Çiftlik'in ön-şartı yok → doğrudan kaynak kontrolüne düşer (Çiftlik 2 = 174 altın).
+    // Çiftlik'in ön-şartı yok → doğrudan kaynak kontrolüne düşer (Çiftlik 1→2 = 3 altın + 4 yemek).
     await expect(queues.enqueueBuilding({ cityId, playerId, type: 'farm', at }))
       .rejects.toThrow(/Kaynak yetersiz/);
 
     const snap = await cities.snapshot(cityId, at);
-    expect(snap!.gold).toBe(10);
+    expect(snap!.gold).toBe(2);
     expect(await queues.openQueues(cityId)).toHaveLength(0);
   });
 

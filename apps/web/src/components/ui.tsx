@@ -147,8 +147,9 @@ export function MissionIcon({ id, size = 36, title }: { id: string; size?: numbe
  * Sözleşme §13.11.9 ile aynı: **dosya adı = katalog `id`**, klasör kategoriye göre. Eşleme
  * tablosu YOK — yol id'den üretiliyor, yeni birim eklenince kod değişmiyor.
  *
- * ⚠️ Görsel yoksa (`onError`) çerçeve **boş kalır, kırık resim ikonu görünmez**: satır düzeni
- * bozulmasın diye yer tutucu aynı ölçüyü koruyor.
+ * ⚠️ **ÇERÇEVE YOK, ZEMİN YOK** (kullanıcı kararı 2026-07-28). Görseller şeffaf; arkalarına
+ * kutu/kenarlık koymak onları "rozet" gibi gösteriyordu. Şimdi doğrudan satırın kendi zemininin
+ * üstünde duruyorlar — şeffaf bölgeden başka renk görünmüyor.
  *
  * ⚠️ `loading="lazy"` bilerek YOK: görseller 160 px'e indirildikten sonra bir liste ~350 KB
  * tutuyor ve hepsi ekranın ilk yüzünde. Tembel yükleme burada satırların gecikmeli dolmasından
@@ -160,18 +161,13 @@ export function CatalogIcon({
   kind, id, size = 56, alt = '',
 }: { kind: CatalogArt; id: string; size?: number; alt?: string }) {
   const [broken, setBroken] = useState(false);
+  // Görsel yoksa satırın hizası bozulmasın diye AYNI ölçüde boş yer bırakılır.
+  if (broken) return <span aria-hidden className="block shrink-0" style={{ width: size, height: size }} />;
   return (
-    <span
-      className="tex relative flex shrink-0 items-center justify-center overflow-hidden
-        rounded-[var(--radius-sm)] border border-border bg-raised"
-      style={{ width: size, height: size }}
-    >
-      {broken ? null : (
-        <img src={`/assets/${kind}/${id}.png`} alt={alt} width={size} height={size}
-          onError={() => setBroken(true)}
-          className="icon-shadow h-full w-full object-contain" />
-      )}
-    </span>
+    <img src={`/assets/${kind}/${id}.png`} alt={alt} width={size} height={size}
+      onError={() => setBroken(true)}
+      className="icon-shadow shrink-0 object-contain"
+      style={{ width: size, height: size }} />
   );
 }
 

@@ -5,16 +5,20 @@ import type { BuildingDef } from './types.ts';
  * Orijinal sunucu ölü olduğu için yapı/teknik TABAN maliyetleri elimizde yoktu; bu değerler
  * deneme-yanılmayla ayarlanacak → `world_config.economy.bases` bunları geçersiz kılabilir.
  *
+ * ⭐ **`baseGold`/`baseFood` = oyuncunun ÖDEDİĞİ İLK yükseltmenin fiyatı** (kullanıcı, 2026-07-28).
+ * `STARTING_BUILDINGS`'te olan yapılar (Kale · Baraka · Çiftlik · Maden) oyuna **seviye 1**
+ * başladığı için onlarda bu, **1→2** yükseltmesinin fiyatıdır; diğerlerinde seviye 1'in.
+ * Ölçekleme `buildingCost()` içinde tek yerde yapılıyor.
+ *
  * Seviye tavanları (§13.11.2): Çiftlik/Maden 40 · diğer yapılar 20 · teknikler sınırsız.
  * Kale bütçesi (§13.11.1): Σ(bina seviyeleri) ≤ Kale × 10 — Kale kendisi ve Sur/Büyü Kalkanı hariç.
  */
 export const BUILDINGS: readonly BuildingDef[] = [
   b('castle', 'Kale', 200, 150, 20, false, false),
   b('barracks', 'Baraka', 120, 80, 20, false, true),
-  // ⭐ EKONOMİ YAPILARI — taban maliyet kullanıcı kararı (2026-07-27): ürettiği kaynaktan
-  // AĞIR yer. Maden altın üretir → altın ağırlıklı (4/3); Çiftlik yemek üretir → yemek
-  // ağırlıklı (3/4). Eski tabanlar (60/40 ve 70/30) 14 kat pahalıydı ve yükseltmeyi ekonomik
-  // olmaktan çıkarıyordu: sv20 madeninin kendini amorti etmesi 8.175 saat sürüyordu, şimdi 574.
+  // ⭐ EKONOMİ YAPILARI — kullanıcı kararı (2026-07-27): ürettiği kaynaktan AĞIR yer.
+  // Maden altın üretir → altın ağırlıklı (4/3); Çiftlik yemek üretir → yemek ağırlıklı (3/4).
+  // Bu sayılar **1→2 yükseltmesinin** fiyatı (ikisi de seviye 1 başlıyor).
   b('farm', 'Çiftlik', 3, 4, 40, true, true),
   b('mine', 'Maden', 4, 3, 40, true, true),
   b('academy', 'Akademi', 250, 180, 20, false, true),

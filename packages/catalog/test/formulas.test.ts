@@ -80,40 +80,52 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
    * ⭐ Ekonomi yapıları ürettikleri kaynaktan AĞIR yer (kullanıcı kararı 2026-07-27):
    * Maden altın üretir → 4 altın / 3 yemek · Çiftlik yemek üretir → 3 altın / 4 yemek.
    */
-  it('çiftlik yemek ağırlıklı, maden altın ağırlıklı', () => {
-    expect(buildingCost('farm', 1)).toEqual({ gold: 3, food: 4 });
-    expect(buildingCost('mine', 1)).toEqual({ gold: 4, food: 3 });
-    // Eğri: taban × seviye × 1,45^(seviye−1)
-    expect(buildingCost('farm', 2)).toEqual({ gold: 9, food: 12 });
-    expect(buildingCost('farm', 4)).toEqual({ gold: 37, food: 49 });
-    expect(buildingCost('mine', 4)).toEqual({ gold: 49, food: 37 });
+  /**
+   * ⭐ Taban = oyuncunun ÖDEDİĞİ İLK yükseltme. Kale/Baraka/Çiftlik/Maden seviye 1 başladığı
+   * için onlarda bu **1→2**'dir. Bu test o yorumu kilitler: bozulursa ekranda görünen ilk
+   * fiyat kullanıcının verdiği sayı olmaktan çıkar.
+   */
+  it('taban fiyat = ilk ÖDENEN yükseltme (sv1→2)', () => {
+    expect(buildingCost('farm', 2)).toEqual({ gold: 3, food: 4 });   // yemek ağırlıklı
+    expect(buildingCost('mine', 2)).toEqual({ gold: 4, food: 3 });   // altın ağırlıklı
+    expect(buildingCost('castle', 2)).toEqual({ gold: 200, food: 150 });
+    expect(buildingCost('barracks', 2)).toEqual({ gold: 120, food: 80 });
+    // Seviye 0'dan başlayan yapılarda taban seviye 1'in fiyatıdır (ölçekleme yok).
+    expect(buildingCost('academy', 1)).toEqual({ gold: 250, food: 180 });
+    // Eğri: seviye × 1,33^(seviye−1), sv2'ye göre ölçekli.
+    expect(buildingCost('farm', 4)).toEqual({ gold: 11, food: 14 });
+    expect(buildingCost('mine', 4)).toEqual({ gold: 14, food: 11 });
   });
 
   /**
-   * ⭐ Yeni tabanların ASIL sonucu: yükseltme artık kendini amorti ediyor.
-   * Eskiden (taban 70/30) sv20 madeninin geri ödemesi 8.175 saatti — yani hiç.
+   * ⭐ **SEVİYE TAVANI 40 GERÇEKTEN ULAŞILABİLİR OLMALI** (kullanıcı, 2026-07-28).
+   * Maliyet `1,33^L`, üretim `1,15^L` büyüdüğü için geri ödeme yine de uzuyor — bu kasıtlı
+   * (ekonomi doyar, oyuncu yağmaya yönelir) ama son seviye **bir ay** mertebesinde kalmalı,
+   * bir YIL değil. 1,45 ile sv40'ın geri ödemesi 8.700 saatti; artık 870.
    */
-  it('maden yükseltmesi makul sürede kendini amorti eder', () => {
+  it('maden yükseltmesi seviye 40\'a kadar kendini amorti eder', () => {
     const geriOdeme = (level: number): number => {
       const c = buildingCost('mine', level);
       return (c.gold + c.food) / (mineOutput(level) - mineOutput(level - 1));
     };
-    expect(geriOdeme(2)).toBeLessThan(5);        // ~3 saat
-    expect(geriOdeme(10)).toBeLessThan(60);      // ~45 saat
-    expect(geriOdeme(20)).toBeLessThan(700);     // ~574 saat
-    // ⚠️ Maliyet eğrisi (1,45) üretim eğrisini (1,15) geçtiği için geri ödeme üstel büyür:
-    //    sv30'da 6.345 saat. Seviye tavanı 40 pratikte ulaşılabilir DEĞİL (kayda geçti).
-    expect(geriOdeme(30)).toBeGreaterThan(5_000);
+    expect(geriOdeme(2)).toBeLessThan(2);          // ~1 saat
+    expect(geriOdeme(10)).toBeLessThan(10);        // ~6,5 saat
+    expect(geriOdeme(20)).toBeLessThan(50);        // ~42 saat
+    expect(geriOdeme(40)).toBeLessThan(1_000);     // ~870 saat ≈ 36 gün
+    // Yine de monoton artıyor: her seviye bir öncekinden pahalı bir yatırım.
+    expect(geriOdeme(40)).toBeGreaterThan(geriOdeme(30));
+    expect(geriOdeme(30)).toBeGreaterThan(geriOdeme(20));
   });
 
-  it('kale 1→5 kümülatif ~7.500 (ittifak kurma eşiği, §13.15)', () => {
+  it('kale 1→5 kümülatif ~4.150 (ittifak kurma eşiği, §13.15)', () => {
+    // Taban artık 1→2'nin fiyatı olduğu için eğri bir basamak indi (eskiden ~7.500).
     let total = 0;
     for (let l = 2; l <= 5; l++) {
       const c = buildingCost('castle', l);
       total += c.gold + c.food;
     }
-    expect(total).toBeGreaterThan(7_000);
-    expect(total).toBeLessThan(8_000);
+    expect(total).toBeGreaterThan(4_000);
+    expect(total).toBeLessThan(4_500);
   });
 
   /**
@@ -165,7 +177,7 @@ describe('üretim süresi (kurgulanan model)', () => {
   it('birim ön-şartına ulaştığında makul sürede çıkar', () => {
     // (birim, gerekli Baraka, üst sınır saniye)
     const beklenen: [string, number, number][] = [
-      ['spy_bird', 3, 60], ['cargo_wagon', 3, 480], ['cavalry', 4, 300],
+      ['spy_bird', 3, 60], ['cargo_wagon', 3, 600], ['cavalry', 4, 300],
       ['pegasus', 7, 300], ['dragon', 10, 900], ['ogre', 8, 900], ['chaos', 15, 3 * 3600],
     ];
     for (const [id, baraka, ustSinir] of beklenen) {
@@ -182,13 +194,17 @@ describe('üretim süresi (kurgulanan model)', () => {
     expect(oran).toBeLessThan(2.5);
   });
 
-  /** Taşıma terimi olmasa ganimet taşımak bedavaya gelirdi (2.000 kaynağa 3.000 taşıma). */
+  /**
+   * Taşıma terimi olmasa ganimet taşımak bedavaya gelirdi: 2.000 kaynağa **5.000 taşıma**
+   * (kapasite `teknik_ve_yapi_dokumantasyonu.md`'den; 3.000 yazılıydı, 2026-07-28 düzeltildi).
+   */
   it('Yük Arabası taşıma kapasitesi kadar ek süre öder', () => {
-    expect(unitTimeValue('cargo_wagon')).toBe(1000 + 1000 + 3000);
+    expect(UNITS_BY_ID['cargo_wagon']!.carry).toBe(5000);
+    expect(unitTimeValue('cargo_wagon')).toBe(1000 + 1000 + 5000);
     expect(unitTimeValue('dwarf')).toBe(200 + 450 + 10);
-    // Taşımasız değere göre 2,1 kat.
+    // Taşımasız değere göre 2,7 kat.
     const tasimasiz = 190 * (2000 / 1000) ** 0.8;
-    expect(trainingTimeSeconds('cargo_wagon', 0) / tasimasiz).toBeCloseTo(2.1, 1);
+    expect(trainingTimeSeconds('cargo_wagon', 0) / tasimasiz).toBeCloseTo(2.72, 1);
   });
 
   it('savunma birimi Mimar Okulu\'na bağlı, aynı eğriyle', () => {

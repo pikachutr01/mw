@@ -9,6 +9,11 @@ import type { UnitDef } from './types.ts';
  * (Mangonel pAtk 192/menzilli · Balista pAtk 480/menzilli · Okçu Kulesi hp 60 · Büyü Kalkanı büyü).
  *
  * `area` = binary "train" hücresi = dokümandaki "Alan" (12/12 birimde doğrulandı).
+ *
+ * ⚠️ **`carry` binary'den GELMEZ** — oyunun kendi dokümanındaki "Kapasite" satırıdır. Simülatör
+ * savaşta ortaya çıkan ganimeti hesaplar, ne kadarının taşındığını bilmez; bu yüzden taşıma
+ * kapasitesinin tek kaynağı `teknik_ve_yapi_dokumantasyonu.md`'dir. 12/12 birim doğrulandı
+ * (2026-07-28). Ganimet altın/yemek **eşit oranda** taşınır.
  */
 export const UNITS: readonly UnitDef[] = [
   // ── SAVAŞÇILAR ────────────────────────────────────────────────────────────────
@@ -22,7 +27,11 @@ export const UNITS: readonly UnitDef[] = [
   u('ogre',         'Ogre',         2,    3000,      0,   500,  420,  720,   300,  12000, 18000,   24000,    666,  100),
   u('shaman',       'Şaman',        1,     200,    200,     1,    6,    6,    12,    750,  2000,    2000,     18,  120),
   u('spy_bird',     'Casus Kuş',    1,       0,      0,     0,    1,    1,     2,     10,   100,     200,      1, 6000),
-  u('cargo_wagon',  'Yük Arabası',  2,       0,      0,  3000,   10,   10,    10,    100,  1000,    1000,      8,  140),
+  // ⚠️ Yük Arabası taşıma kapasitesi **5000** (2026-07-28 düzeltildi, `teknik_ve_yapi_dokumantasyonu.md`).
+  // Kodda 3000 yazıyordu; binary'den gelmiş gibi duruyordu ama gelemezdi: simülatör yalnız savaşta
+  // ORTAYA ÇIKAN ganimeti hesaplar, ne kadarının taşındığını bilmez. Diğer 11 birimin kapasitesi
+  // dokümanla birebir tutuyor — hata yalnız buradaydı.
+  u('cargo_wagon',  'Yük Arabası',  2,       0,      0,  5000,   10,   10,    10,    100,  1000,    1000,      8,  140),
   u('gnome',        'Gnom',         2,     200,      0,     4,   12,   12,    12,    260,  1600,    1600,     25,  120),
   u('chaos',        'Kaos',         2,  220000, 250000,     0, 40000, 40000, 27000, 1200000, 2000000, 2000000, 40000, 80),
 

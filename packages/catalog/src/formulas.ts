@@ -3,7 +3,7 @@
  * Tablo tutmuyoruz: üç tablonun da kapalı formu bulundu ve birebir doğrulandı
  * (Çiftlik 40/40 · Maden 40/40 · Kahraman XP 80/80 · Mağara cüce 119/120).
  */
-import { BUILDINGS_BY_ID } from './buildings.ts';
+import { BUILDINGS_BY_ID, STARTING_BUILDINGS } from './buildings.ts';
 import { TECHS_BY_ID } from './techs.ts';
 import { UNITS_BY_ID } from './units.ts';
 
@@ -13,10 +13,18 @@ export const ECONOMY_CONSTANTS = {
   foodRate: 1.16,
   goldBase: 5,
   goldRate: 1.15,
-  /** yapı maliyeti: base × buildingCostRate^(level−1) */
+  /** yapı maliyeti eğrisi: `buildingCostRate^(seviye−1)` */
   buildingCostRate: 1.8,
-  /** Çiftlik/Maden istisnası: base × level × economyCostRate^(level−1) */
-  economyCostRate: 1.45,
+  /**
+   * Çiftlik/Maden eğrisi: `seviye × economyCostRate^(seviye−1)`.
+   *
+   * ⚠️ **1,45 DEĞİL 1,33** (2026-07-28, kullanıcı onayı). `k.java`'daki sabit 1,45'ti ama o oran
+   * orijinalin (bilmediğimiz) tabanlarına ve muhtemelen başka bir seviye tavanına aitti. Bizim
+   * tavanımız **40** ve 1,45 ile maliyet `1,45^L`, üretim `1,16^L` büyüdüğü için seviye 40
+   * ekonomik olarak **ulaşılamaz** oluyordu: 190 milyon kaynak, geri ödemesi ~1 yıl.
+   * 1,33 ile seviye 40 = 7,1 milyon kaynak, geri ödeme 20-36 gün — gerçek bir geç-oyun hedefi.
+   */
+  economyCostRate: 1.33,
   /** teknik maliyeti: base × techCostRate^(level+1) */
   techCostRate: 1.5,
   /** süre böleni tabanı: /1.4^(ilgili yapı seviyesi) */
@@ -88,14 +96,30 @@ export function castleBudget(castleLevel: number): number {
   return Math.max(0, castleLevel) * 10;
 }
 
-/** `level` seviyesine ULAŞMANIN maliyeti (kümülatif değil). */
+/** Maliyet eğrisinin ham değeri (ölçeksiz). */
+function costCurve(buildingId: string, level: number): number {
+  return BUILDINGS_BY_ID[buildingId]?.economyCostCurve
+    ? level * ECONOMY_CONSTANTS.economyCostRate ** (level - 1)
+    : ECONOMY_CONSTANTS.buildingCostRate ** (level - 1);
+}
+
+/**
+ * `level` seviyesine ULAŞMANIN maliyeti (kümülatif değil).
+ *
+ * ⭐ **`baseGold`/`baseFood` = oyuncunun ÖDEDİĞİ İLK yükseltmenin fiyatı** (kullanıcı, 2026-07-28).
+ * Kale · Baraka · Çiftlik · Maden oyuna **seviye 1** başlıyor (`STARTING_BUILDINGS`), yani onlarda
+ * ilk ödenen seviye **2**'dir ve taban oraya oturur. Diğer yapılarda ilk ödenen seviye 1, hiçbir
+ * şey değişmez.
+ *
+ * Bu yorum olmadan taban görünmeyen bir seviyenin fiyatıydı: kullanıcı "Çiftlik 3 altın 4 yemek"
+ * dediğinde ekranda **9/12** çıkıyordu (çünkü 3/4 seviye 1'in fiyatıydı, oyuncu ise 1→2'yi görür).
+ */
 export function buildingCost(buildingId: string, level: number): Cost {
   const def = BUILDINGS_BY_ID[buildingId];
   if (!def) throw new Error(`Bilinmeyen yapı: ${buildingId}`);
   if (level <= 0) return { gold: 0, food: 0 };
-  const k = def.economyCostCurve
-    ? level * ECONOMY_CONSTANTS.economyCostRate ** (level - 1)
-    : ECONOMY_CONSTANTS.buildingCostRate ** (level - 1);
+  const firstPaid = (STARTING_BUILDINGS[buildingId] ?? 0) + 1;
+  const k = costCurve(buildingId, level) / costCurve(buildingId, firstPaid);
   return { gold: Math.round(def.baseGold * k), food: Math.round(def.baseFood * k) };
 }
 
