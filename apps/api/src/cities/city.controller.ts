@@ -18,13 +18,49 @@ import {
   buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, timeFromCost,
   trainingTimeSeconds, unitCost,
 } from '@mobiwar/catalog';
+import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import { CaveError, CaveService, type CaveState } from '../cave/cave.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { QueueError, QueueService } from '../queues/queue.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { CapacityService } from './capacity.service.ts';
 import { CityService } from './city.service.ts';
+
+/** Mağara emri: `{ units: { dwarf: 100, elf: 20 } }`. Tür süzgeci servistedir. */
+const caveJobRequest = z.object({
+  units: z.record(z.string(), z.number().int().nonnegative()),
+});
+
+/** Mağara durumunu JSON'a çevirir (tarihleri ISO). */
+function caveResponse(st: CaveState): Record<string, unknown> {
+  return {
+    ...st,
+    repairUntil: st.repairUntil?.toISOString() ?? null,
+    job: st.job
+      ? {
+        ...st.job,
+        startedAt: st.job.startedAt.toISOString(),
+        finishAt: st.job.finishAt.toISOString(),
+      }
+      : null,
+  };
+}
+
+/** Mağara hatası → HTTP. Kod istemciye AYNEN gider (i18n'e hazır, §13.14). */
+function toCaveHttp(err: unknown): Error {
+  if (!(err instanceof CaveError)) return err as Error;
+  const body = { code: err.code, message: err.message, details: err.details };
+  if (err.code === 'city_not_found') return new NotFoundException(body);
+  if (err.code === 'not_owner') return new ForbiddenException(body);
+  // Kapasite/meşgul/onarım: istek geçerli ama şu an yapılamaz → 409.
+  if (err.code === 'cave_busy' || err.code === 'cave_repairing'
+    || err.code === 'capacity_exceeded' || err.code === 'not_enough_units') {
+    return new ConflictException(body);
+  }
+  return new BadRequestException(body);
+}
 
 @Controller('api/v1/cities')
 @UseGuards(AuthGuard)
@@ -34,6 +70,7 @@ export class CityController {
   constructor(
     private readonly cities: CityService,
     private readonly queues: QueueService,
+    private readonly cave: CaveService,
     private readonly clock: GameClockService,
     @Inject(DB) private readonly db: Db,
   ) {}
@@ -126,9 +163,61 @@ export class CityController {
         ...q, startedAt: q.startedAt.toISOString(), finishAt: q.finishAt.toISOString(),
       })),
       capacity: this.capacity.status(snap.buildings, defenses),
+      /**
+       * ⭐ MAĞARA şehir yanıtının parçası (§13.20.5): Yapılar ekranı hem geri sayımı hem
+       * kapasiteyi hem de "onarımda" durumunu tek istekte çiziyor. Ayrı uca koysaydık Yapılar
+       * her açılışta ikinci bir gidiş-dönüş yapardı.
+       */
+      cave: caveResponse(await this.cave.state(cityId, gameNow)),
       serverNow: new Date().toISOString(),
       gameNow: gameNow.toISOString(),
     };
+  }
+
+  /* ── Mağara (§13.20) ──────────────────────────────────────────────────────── */
+
+  /**
+   * Savaşçıları mağaraya yollar.
+   *
+   * ⚠️ **İPTALİ YOK** (kullanıcı kararı): `CANCELABLE_TYPES` listesinde `cave_*` bilerek
+   * bulunmuyor. Birlikler emir anında barakadan düşer; oyuncu kararının bedelini süreyle öder.
+   */
+  @Post(':id/cave/store')
+  async caveStore(
+    @Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    return this.caveJob('store', Number(id), body, req);
+  }
+
+  /** Mağaradaki savaşçıları şehre çağırır. */
+  @Post(':id/cave/withdraw')
+  async caveWithdraw(
+    @Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    return this.caveJob('withdraw', Number(id), body, req);
+  }
+
+  private async caveJob(
+    direction: 'store' | 'withdraw', cityId: number, body: unknown, req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const parsed = caveJobRequest.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Geçersiz istek.');
+    const at = await this.clock.gameNow(player.worldId);
+
+    try {
+      const res = direction === 'store'
+        ? await this.cave.store({ cityId, playerId: player.playerId, units: parsed.data.units, at })
+        : await this.cave.withdraw({ cityId, playerId: player.playerId, units: parsed.data.units, at });
+      return {
+        ...res,
+        finishAt: new Date(at.getTime() + res.seconds * 1000).toISOString(),
+        cave: caveResponse(await this.cave.state(cityId, at)),
+        serverNow: new Date().toISOString(),
+      };
+    } catch (err) {
+      throw toCaveHttp(err);
+    }
   }
 
   /**

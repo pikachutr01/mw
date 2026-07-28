@@ -4,6 +4,7 @@
  * Küçük sunucu profilinde (§4.0) `ROLE=all` iken API süreciyle AYNI süreçte çalışır;
  * `ROLE=worker` ise yalnız bu döngüler koşar. Kod aynı, fark yalnız neyin başlatıldığı.
  */
+import { CAVE_HANDLERS } from '../cave/cave.handlers.ts';
 import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';
 import { battleHandlers } from '../missions/battle.handlers.ts';
@@ -42,6 +43,7 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
    *   `*_finish`        → kuyruk bitişleri (Faz 2) ✓
    *   `attack`/`return` → savaş çözümü + dönüş bacağı (Faz 2) ✓
    *   `transport`/`support`/`spy`/`found_city` → savaş dışı görevler (Faz 2) ✓
+   *   `cave_*`          → mağara doldurma/boşaltma + yıkılınca kaçış (Faz 2) ✓
    *   sırada: Faz 4 (hero_revive, vacation_end, abuse_scan)
    */
   const cities = new CityService(db);
@@ -49,6 +51,7 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
     .register('echo', echoHandler)
     .register('ranking_snapshot', createRankingSnapshotHandler());
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
+  for (const [type, handler] of Object.entries(CAVE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
   for (const [type, handler] of Object.entries(missionHandlers(cities))) registry.register(type, handler);
 

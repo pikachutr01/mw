@@ -107,6 +107,12 @@ export const cities = pgTable('cities', {
    * NULL = hiç kullanılmamış / hazır. Bekleme süresi `teleportCooldownSeconds(seviye)`.
    */
   teleportReadyAt: timestamp('teleport_ready_at', { withTimezone: true }),
+  /**
+   * ⭐ MAĞARA ONARIMI (§13.20.4). Yıkılan mağara bu ana kadar **kullanılamaz**: içine ordu
+   * sokulamaz, boşaltılamaz, seviyesi ilerletilemez ve **yeniden yıkılamaz**. NULL = sağlam.
+   * OYUN saatinde (bakımda onarım da durur).
+   */
+  caveRepairUntil: timestamp('cave_repair_until', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('cities_world_coords').on(t.worldId, t.k, t.d, t.s),
@@ -126,6 +132,24 @@ export const units = pgTable('units', {
   type: text('type').notNull(),
   count: integer('count').notNull().default(0),
 }, (t) => [uniqueIndex('units_pk').on(t.cityId, t.type)]);
+
+/**
+ * ⭐ MAĞARADAKİ SAVAŞÇILAR (§13.20) — `units` tablosundan **AYRI**.
+ *
+ * Ayrı tablo olması bir tercih değil, kuralın kendisi: doküman *"mağaradaki askerler savaşa
+ * katılmazlar"* ve *"casus kuşları mağaradaki askerleri göremezler"* diyor. Aynı tabloda
+ * tutup bir bayrakla ayırsaydık savaş, casusluk, sefer ve ekran sorgularının HEPSİNE
+ * "ve mağarada değil" koşulu eklemek gerekirdi; biri unutulduğunda hata **sessiz** olurdu
+ * (saklanan ordu savaşa girer). Ayrı tablo bu unutmayı imkânsız kılıyor.
+ *
+ * ⚠️ Puan bu birimleri KAYBETMEZ: kaynak harcanmıştı, birim hâlâ duruyor (§13.17.1).
+ */
+export const caveUnits = pgTable('cave_units', {
+  cityId: bigint('city_id', { mode: 'number' }).notNull()
+    .references(() => cities.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  count: integer('count').notNull().default(0),
+}, (t) => [uniqueIndex('cave_units_pk').on(t.cityId, t.type)]);
 
 /** Surdaki savunma birimleri. Sur ve Büyü Kalkanı adet DEĞİL seviye taşır (§13.11.1b). */
 export const defenses = pgTable('defenses', {

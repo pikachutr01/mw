@@ -87,6 +87,15 @@ export class QueueService {
       // Aynı şehirde aynı anda tek yapı işi (klasik kural; kuyruk uzatma premium konusu).
       await this.assertNoOpenQueue(tx as never, opts.cityId, 'building');
 
+      /**
+       * ⭐ MAĞARA MEŞGULKEN SEVİYE İLERLETİLEMEZ (kullanıcı kuralı 2026-07-28).
+       * İki durum: **onarımda** (yıkılmış) ya da içine/dışına ordu taşınıyor. İkisi de fiziksel
+       * olarak makul ama asıl gerekçe daha sert: seviye değişirse KAPASİTE ve SÜRE değişir;
+       * yolda olan bir işin ortasında bunları oynatmak "kapasitesi aşılmış mağara" gibi
+       * onarılması zor durumlar üretirdi.
+       */
+      if (opts.type === 'cave') await this.assertCaveIdle(tx as never, opts.cityId, opts.at);
+
       const max = this.capacity.maxBuildingLevel(opts.type);
       if (target > max) {
         throw new QueueError('max_level', `${opts.type} en fazla ${max}. seviyeye çıkabilir.`);
@@ -311,6 +320,27 @@ export class QueueService {
         `${nameOfItem(itemType)} için gereken: ${describeUnmet(unmet)}`,
         unmet,
       );
+    }
+  }
+
+  /** Mağara onarımda ya da doldurma/boşaltma sürüyorsa seviye ilerletme reddedilir (§13.20). */
+  private async assertCaveIdle(tx: Db, cityId: number, at: Date): Promise<void> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT
+        (SELECT cave_repair_until FROM cities WHERE id = ${cityId}) AS repair_until,
+        EXISTS (
+          SELECT 1 FROM missions
+           WHERE target_city_id = ${cityId}
+             AND type IN ('cave_store', 'cave_withdraw')
+             AND status IN ('scheduled', 'running')
+        ) AS busy
+    `);
+    const repairUntil = rows[0]?.['repair_until'] == null ? null : toDate(rows[0]!['repair_until']);
+    if (repairUntil != null && repairUntil > at) {
+      throw new QueueError('slot_busy', 'Mağara onarılıyor; seviyesi şimdi ilerletilemez.');
+    }
+    if (rows[0]?.['busy'] === true) {
+      throw new QueueError('slot_busy', 'Mağarada bir taşıma sürüyor; seviyesi şimdi ilerletilemez.');
     }
   }
 

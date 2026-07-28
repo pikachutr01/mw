@@ -49,6 +49,33 @@ export const ECONOMY_CONSTANTS = {
   originalDivisorRate: 1.4,
 } as const;
 
+/**
+ * ⭐ MAĞARA SABİTLERİ (§13.20). İlk dördü **ölçülmüş veriden** gelir ve denge düğmesi DEĞİLDİR;
+ * son dördü bizim kurgumuzdur ve serbestçe ayarlanabilir.
+ */
+export const CAVE_CONSTANTS = {
+  /* ── Ölçülmüş ─────────────────────────────────────────────────────────────── */
+  /** Kapasite tablosu: 50 · 100 · 200 … 26.214.400 (20/20). */
+  capacityBase: 50,
+  /** `cuce-magara.png`: seviye 1'de 100 cüce (Demircilik 0). */
+  breakBase: 100,
+  /** Her seviye mağaraya %50 dayanıklılık (doküman + tablo). */
+  breakRate: 1.5,
+  /** Demircilik seviyesi başına payda +0,05 (TOPLAMSAL — üssel değil). */
+  blacksmithingRelief: 0.05,
+
+  /* ── Kurgu (denge düğmesi) ────────────────────────────────────────────────── */
+  /** `süre = transferFactor × √alan / 1,1^(sv−1)`. 25 → seviye 1'de dolu mağara 2 dk 57 sn. */
+  transferFactor: 25,
+  /** Doküman: her mağara seviyesi doldurma/boşaltmayı %10 azaltır. */
+  transferDecayRate: 1.1,
+  /** Tek birimlik işlem bile anlık olmasın (istismar tamponu). */
+  minTransferSeconds: 5,
+  /** Yıkılan mağaranın onarımı: 26 saat, her seviye %10 kısa (§13.20.4). */
+  repairBaseSeconds: 26 * 3600,
+  repairDecayRate: 0.9,
+} as const;
+
 export interface Cost {
   gold: number;
   food: number;
@@ -74,15 +101,86 @@ export function heroXpForLevel(level: number): number {
   return xp;
 }
 
-/** Mağarayı yıkmak için gereken cüce sayısı — 119/120 hücrede doğrulandı. */
+/* ═══ MAĞARA (§13.20) ═══════════════════════════════════════════════════════
+ * İki sayı **ölçülmüş veridir** (kapasite tablosu + `images/cuce-magara.png`), iki sayı
+ * **bizim kurgumuzdur** (doldurma/boşaltma ve tamir süresi). Ayrımı korumak önemli: ölçülene
+ * dokunulmaz, kurgulanan denge düğmesidir.
+ */
+
+/**
+ * ⭐ ÖLÇÜLMÜŞ: mağarayı yıkmak için gereken cüce sayısı.
+ * `cuce-magara.png` tablosunun **119/120 hücresi** bu formülle birebir tutuyor.
+ *
+ * Demircilik etkisi **toplamsal paydadır** (`1 + 0,05·d`), üssel DEĞİL — ayrım büyük:
+ * Demircilik 30'da üssel model 0,95³⁰ = 0,21 verirken gerçek tablo 1/2,5 = 0,40 diyor.
+ *
+ * ⚠️ Tek uyuşmayan hücre (Demircilik 4 · Mağara 22 → tabloda 415.667, formül 415.657) tablonun
+ * KENDİ içinde de tutarsız: komşularıyla ×1,5 zinciri kurulmuyor. Basım hatası kabul edildi.
+ */
 export function dwarvesToBreakCave(caveLevel: number, blacksmithing: number): number {
-  return Math.round((100 * 1.5 ** (caveLevel - 1)) / (1 + 0.05 * Math.max(0, blacksmithing)));
+  if (caveLevel <= 0) return Infinity;          // yapılmamış mağara yıkılamaz
+  return Math.round(
+    (CAVE_CONSTANTS.breakBase * CAVE_CONSTANTS.breakRate ** (caveLevel - 1))
+    / (1 + CAVE_CONSTANTS.blacksmithingRelief * Math.max(0, blacksmithing)),
+  );
 }
 
-/** Mağara kapasitesi (ALAN cinsinden) — 50 × 2^(sv−1), 20/20 doğrulandı. */
+/** ⭐ ÖLÇÜLMÜŞ: mağara kapasitesi (ALAN cinsinden) — 50 × 2^(sv−1), 20/20 doğrulandı. */
 export function caveCapacity(caveLevel: number): number {
   if (caveLevel <= 0) return 0;
-  return 50 * 2 ** (caveLevel - 1);
+  return CAVE_CONSTANTS.capacityBase * 2 ** (caveLevel - 1);
+}
+
+/** Birim adetlerinin toplam ALANI — mağara kapasitesi bu birimde ölçülür. */
+export function unitsArea(counts: Record<string, number>): number {
+  let total = 0;
+  for (const [id, n] of Object.entries(counts)) {
+    if (!(n > 0)) continue;
+    total += (UNITS_BY_ID[id]?.area ?? 0) * Math.trunc(n);
+  }
+  return total;
+}
+
+/**
+ * ⭐ KURGU: mağarayı doldurma / boşaltma süresi.
+ *
+ * Doküman iki şey söylüyor: *"gereken süre, savaşçıların toplam kapladığı alana göre değişir"*
+ * ve *"mağara seviyesini her arttırdığında doldurma boşaltma %10 azalır"*. Şeklin kalanı bize
+ * kaldı; kullanıcının koyduğu şart: **tek seferde büyük alanı sokmak, aynı alanı parça parça
+ * sokmaktan avantajlı olsun.**
+ *
+ * `süre = K × √alan / 1,1^(sv−1)`
+ *
+ * • **Karekök** o şartın ta kendisi: alan başına süre `K / √alan` ile azalıyor. Seviye 1'de
+ *   tek Cüce (9 alan) 25 sn ≈ 2,8 sn/alan; mağarayı dolduran 50 alan 177 sn ≈ 3,5 sn/alan…
+ *   ölçek büyüdükçe fark açılıyor: 25.600 alan 1.696 sn ≈ 0,066 sn/alan.
+ * • Üs neden 0,8 değil (üretim süresiyle aynı olsun diye)? Kapasite seviye başına **2 katına**
+ *   çıkıyor, süre yalnız %10 azalıyor. 0,8 üssüyle dolu mağarayı doldurmak seviye 20'de
+ *   **233 saat** sürüyordu; √ ile 5 sa 49 dk. Karekök bu iki üssel arasındaki tek makul denge.
+ * • Dünya hız çarpanı UYGULANMAZ: bu bir sefer değil, şehir içi iş — üretim süreleri de
+ *   çarpanla ölçeklenmiyor.
+ */
+export function caveTransferSeconds(area: number, caveLevel: number): number {
+  if (area <= 0) return 0;
+  const level = Math.max(1, caveLevel);
+  const raw = (CAVE_CONSTANTS.transferFactor * Math.sqrt(area))
+    / CAVE_CONSTANTS.transferDecayRate ** (level - 1);
+  return Math.max(CAVE_CONSTANTS.minTransferSeconds, Math.round(raw));
+}
+
+/**
+ * ⭐ KURGU: yıkılan mağaranın kendini onarma süresi.
+ *
+ * Doküman *"24 saat sürer, bu süre kısalmaz"* diyor; **kullanıcı bunu bilerek değiştirdi**
+ * (2026-07-28): taban biraz daha uzun (26 sa) ama her seviye %10 kısaltıyor. Gerekçe: mağarayı
+ * yükseltmek yalnız kapasite değil **dayanıklılık** da almalı, yoksa yüksek seviye mağara
+ * yıkıldığında oyuncu sabit 24 saat boyunca en değerli ordusunu saklayamaz hâle geliyordu.
+ */
+export function caveRepairSeconds(caveLevel: number): number {
+  const level = Math.max(1, caveLevel);
+  return Math.round(
+    CAVE_CONSTANTS.repairBaseSeconds * CAVE_CONSTANTS.repairDecayRate ** (level - 1),
+  );
 }
 
 /** Savunma kapasitesi = 25.000 × 1,30^(Sur−1) — her savunma birimi `area` kadar tüketir (§13.11.1b). */

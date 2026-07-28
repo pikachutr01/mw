@@ -6,6 +6,7 @@ import { TokenService } from './auth/token.service.ts';
 import { BattleController } from './battles/battle.controller.ts';
 import { CityController } from './cities/city.controller.ts';
 import { CityService } from './cities/city.service.ts';
+import { CaveService } from './cave/cave.service.ts';
 import { CommandController } from './command/command.controller.ts';
 import { createDb, type Db } from './db/client.ts';
 import { DB } from './db/tokens.ts';
@@ -48,6 +49,7 @@ export { DB } from './db/tokens.ts';
     },
     { provide: GameClockService, useFactory: (db: Db) => new GameClockService(db), inject: [DB] },
     { provide: CityService, useFactory: (db: Db) => new CityService(db), inject: [DB] },
+    { provide: CaveService, useFactory: (db: Db) => new CaveService(db), inject: [DB] },
     {
       provide: MissionService,
       // Nakliye/destek kaynağı şehirden düşerken tembel birikim uygulanmalı → CityService şart.

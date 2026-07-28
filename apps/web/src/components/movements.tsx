@@ -19,6 +19,10 @@ export const TYPE_LABEL: Record<string, string> = {
   spy: 'Casusluk',
   found_city: 'Şehir Kurma',
   teleport: 'Teleport',
+  // ⭐ Mağara işleri (§13.20): üçü de şehrin İÇİNDE geçer, hedef ve kaynak aynı şehirdir.
+  cave_store: 'Mağaraya giriş',
+  cave_withdraw: 'Mağaradan çıkış',
+  cave_return: 'Mağaradan kaçış',
 };
 
 export const coordText = (c: Coords | null): string => (c ? `${c.k}:${c.d}:${c.s}` : '—');
@@ -32,6 +36,8 @@ export function titleOf(m: Movement): string {
     return `${TYPE_LABEL[m.returnOf] ?? m.returnOf} dönüşü${m.canceled ? ' (iptal edildi)' : ''}`;
   }
   const name = TYPE_LABEL[m.type] ?? m.type;
+  // Mağara işlerinde "Gelen …" öneki anlamsız: karşı taraf yok, hareket şehrin kendi içinde.
+  if (m.type.startsWith('cave_')) return name;
   return m.direction === 'in' ? `Gelen ${name.toLowerCase()}` : name;
 }
 

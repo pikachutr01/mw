@@ -313,7 +313,8 @@ export class MissionController {
         LEFT JOIN players tp ON tp.id = tc.player_id
        WHERE m.world_id = ${player.worldId}
          AND m.status IN ('scheduled', 'running')
-         AND m.type IN ('attack', 'return', 'transport', 'support', 'spy', 'found_city')
+         AND m.type IN ('attack', 'return', 'transport', 'support', 'spy', 'found_city',
+                        'cave_store', 'cave_withdraw', 'cave_return')
          AND (m.origin_city_id IN (SELECT id FROM my) OR m.target_city_id IN (SELECT id FROM my))
        GROUP BY m.id, oc.k, oc.d, oc.s, op.username, tc.k, tc.d, tc.s, tp.username
        ORDER BY m.created_at, m.id
@@ -341,6 +342,7 @@ export class MissionController {
        * ne getirdiğini bilmeliyim. Saldırı ve casuslukta gizlilik matrisi (§13.10.1) aynen
        * duruyor — orada birleşim de yük de gizli.
        */
+      const isCave = type.startsWith('cave_');
       const openCargo = type === 'transport' || type === 'support'
         || (type === 'return' && (returnOf === 'transport' || returnOf === 'support'));
       const cargo = openCargo
@@ -387,7 +389,7 @@ export class MissionController {
             cityId: Number(r['target_city_id']),
             // ⭐ SALDIRI/CASUSLUKTA birleşim GİZLİ (§13.10.1); nakliye/destekte açık — gelen
             //    yardımın ne getirdiğini görmek oyunun kendi mantığı.
-            ...(type === 'return' || openCargo ? { units: r['units'] ?? {} } : {}),
+            ...(type === 'return' || openCargo || isCave ? { units: r['units'] ?? {} } : {}),
             canCancel: false,
           });
         }
@@ -419,11 +421,22 @@ const OUT_ICON: Record<string, string> = {
   // `return` giden bacak üretmez: kaynağı düşmanın şehridir, benim değil.
 };
 
+/**
+ * ⚠️ **MAĞARA İSTİSNASI** (§13.20.5): `cave_*` görevlerinde kaynak ve hedef **aynı şehirdir**.
+ * `OUT_ICON`'da karşılıkları BİLEREK yok → yalnız GELEN bacak çizilir, yani ekranda tek bir
+ * **sarı kalkan** görünür. İki bacak da çizilseydi oyuncu tek işlem için iki satır görürdü.
+ *
+ * Destek normalde iki şehir arasındadır (yeşil kalkan gönderen, sarı kalkan alan); mağara
+ * bunun tek şehirli istisnasıdır ve kullanıcı kararıyla böyledir.
+ */
 const IN_ICON: Record<string, string> = {
   attack: 'attack_in',
   transport: 'transport_back',
   support: 'support_in',
   spy: 'spy_back',
+  cave_store: 'support_in',
+  cave_withdraw: 'support_in',
+  cave_return: 'support_in',
 };
 
 function describeTarget(t: {

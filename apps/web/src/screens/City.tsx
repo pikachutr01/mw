@@ -13,7 +13,7 @@
  * ezberlemesi beklenemez.
  */
 import { useState } from 'react';
-import { cancelRefund } from '@mobiwar/catalog';
+import { cancelRefund, caveRepairSeconds } from '@mobiwar/catalog';
 import { nameOf } from '../lib/names.ts';
 import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
 import {
@@ -25,6 +25,7 @@ import {
   Button, CatalogIcon, Empty, ErrorBox, Input, Panel, Requirements, Res,
 } from '../components/ui.tsx';
 import { useConfirm } from '../components/Modal.tsx';
+import { CaveModal } from './cave-modal.tsx';
 
 function CityFrame({ children }: { children: (city: CityDetail) => React.ReactNode }) {
   const { cityId } = useActiveCity();
@@ -211,6 +212,14 @@ function Buildings({ city }: { city: CityDetail }) {
   const enqueue = useEnqueue(cityId);
   const askCancel = useCancelWithConfirm();
   const busy = city.queues.some((q) => q.category === 'building');
+  const [caveOpen, setCaveOpen] = useState(false);
+  const cave = city.cave;
+  /**
+   * ⭐ MAĞARA MEŞGULSE seviye ilerletilemez (§13.20): onarımdaysa ya da içine/dışına asker
+   * taşınıyorsa. Sunucu da reddediyor; düğmeyi burada da kapatmak oyuncuyu hata mesajıyla
+   * karşılaşmadan bilgilendiriyor (ön-şart düğmesindeki kararın aynısı).
+   */
+  const caveLocked = cave.repairing || cave.job != null;
 
   return (
     <Panel title="Yapılar">
@@ -230,17 +239,56 @@ function Buildings({ city }: { city: CityDetail }) {
               <div className="flex items-center justify-between gap-3">
                 <CatalogIcon kind="buildings" id={b.id} alt={b.name} />
                 <div className="min-w-0 flex-1">
-                  <ItemName name={b.name} value={b.level} />
+                  {/* ⭐ Mağara adı TIKLANABİLİR: doldurma/boşaltma modalının girişi burasıdır
+                      (doküman: "Yapılar menüsünde … mağaraya asker doldurma"). */}
+                  {b.id === 'cave' && b.level > 0 ? (
+                    <button type="button" onClick={() => setCaveOpen(true)}
+                      className="text-left text-[15px] leading-tight underline decoration-dotted
+                        underline-offset-2 hover:text-accent">
+                      <span className="font-semibold text-ink">{b.name}</span>
+                      <span className="tnum ml-1.5 text-accent">({b.level})</span>
+                      <span className="tnum ml-2 text-[11px] text-muted">
+                        {fmt(cave.usedArea)} / {fmt(cave.capacity)} alan
+                      </span>
+                    </button>
+                  ) : (
+                    <ItemName name={b.name} value={b.level} />
+                  )}
                   {cost ? <CostLine gold={cost.gold} food={cost.food} seconds={b.nextSeconds} /> : null}
                   <Requirements requirementNames={b.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
                 </div>
                 {/* ⚠️ Ön-şart eksikse düğme PASİF — hata mesajıyla karşılaşmadan görülmeli. */}
-                <Button size="sm" disabled={maxed || busy || !afford || unmet || enqueue.isPending}
+                <Button size="sm"
+                  disabled={maxed || busy || !afford || unmet || enqueue.isPending
+                    || (b.id === 'cave' && caveLocked)}
                   onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
                   {maxed ? '—' : `sv ${b.level + 1}`}
                 </Button>
               </div>
+              {/* ⭐ Mağaranın taşıma ve onarım geri sayımları da tam burada — seviye ilerletme
+                  çubuğuyla AYNI yerde, çünkü oyuncu "mağara ne yapıyor" sorusunu tek noktaya
+                  bakarak cevaplayabilmeli. İkisi de İPTAL EDİLEMEZ. */}
+              {b.id === 'cave' && cave.job ? (
+                <ProgressRow
+                  startedAt={cave.job.startedAt} finishAt={cave.job.finishAt}
+                  canCancel={false}
+                  label={cave.job.direction === 'store'
+                    ? `mağaraya giriyor · ${fmt(cave.job.area)} alan`
+                    : `mağaradan çıkıyor · ${fmt(cave.job.area)} alan`}
+                />
+              ) : null}
+              {b.id === 'cave' && cave.repairing && cave.repairUntil ? (
+                <ProgressRow
+                  /* Onarımın BAŞLANGICI saklanmıyor (gereksiz sütun): bitişten toplam süreyi
+                     geri sayarak türetiliyor — çubuk böylece gerçek ilerlemeyi gösteriyor. */
+                  startedAt={new Date(
+                    Date.parse(cave.repairUntil) - caveRepairSeconds(cave.level) * 1000,
+                  ).toISOString()}
+                  finishAt={cave.repairUntil}
+                  canCancel={false} label="mağara onarılıyor"
+                />
+              ) : null}
               {q ? (
                 <ProgressRow
                   startedAt={q.startedAt} finishAt={q.finishAt}
@@ -255,6 +303,9 @@ function Buildings({ city }: { city: CityDetail }) {
           );
         })}
       </ul>
+      {caveOpen ? (
+        <CaveModal city={city} cave={cave} onClose={() => setCaveOpen(false)} />
+      ) : null}
     </Panel>
   );
 }
@@ -440,6 +491,14 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                 <CatalogIcon kind={kind === 'unit' ? 'units' : 'defenses'} id={u.id} alt={u.name} />
                 <div className="min-w-0 flex-1">
                   <ItemName name={u.name} value={levelBased ? `sv ${have[u.id] ?? 0}` : fmt(have[u.id] ?? 0)} />
+                  {/* ⭐ Orijinal Baraka kartında birimin MAĞARADAKİ adedi de yazıyor
+                      (`images/scr_web01`: "Mağarada : 0"). Yalnız 0'dan büyükse çizilir —
+                      mağarası olmayan oyuncunun her satırında sıfır görmesi gürültü olurdu. */}
+                  {!levelBased && (city.cave.units[u.id] ?? 0) > 0 ? (
+                    <div className="text-[11px] text-muted">
+                      Mağarada: <b className="tnum text-ink">{fmt(city.cave.units[u.id]!)}</b>
+                    </div>
+                  ) : null}
                   <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
                   <Requirements requirementNames={u.requirementNames}
                     buildings={city.buildings} techs={city.techs} />

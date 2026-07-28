@@ -12,8 +12,13 @@
  *   • Ganimet savunandan **savaş anında** düşülür, saldırana **dönüş anında** eklenir.
  */
 import { sql } from 'drizzle-orm';
-import { LEVEL_BASED, UNITS_BY_ID, heroReviveSeconds } from '@mobiwar/catalog';
+import {
+  LEVEL_BASED, UNITS_BY_ID, caveRepairSeconds, dwarvesToBreakCave, heroReviveSeconds,
+} from '@mobiwar/catalog';
 import { calculateLoot, simulate, type LootResult, type SimulateInput, type SimulateResult } from '@mobiwar/engine';
+import { drainCave } from '../cave/cave.service.ts';
+import { toDate } from '../db/client.ts';
+import { scheduleCaveEscape } from '../cave/cave.handlers.ts';
 import type { CityService } from '../cities/city.service.ts';
 import { debitLosses } from '../scoring/score.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
@@ -145,6 +150,15 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       await cities.add(targetCityId, loot.leftoverDebrisToDefender, ctx.at, ctx.tx as never);
     }
 
+    // ⭐ MAĞARA (§13.20.3) — savaş çözüldükten SONRA, ganimetten ÖNCE bakılır: mağara yıkılsa
+    //    bile içindeki ordu savaşa katılmamıştı ve ganimete etkisi yok.
+    const cave = await resolveCaveBreak(ctx, {
+      cityId: targetCityId,
+      defenderPlayerId: defenderCity.playerId,
+      survivingDwarves: Math.max(0, Math.trunc(result.attacker.counts['dwarf'] ?? 0)),
+      blacksmithing: attacker.techs['blacksmithing'] ?? 0,
+    });
+
     await settleHeroes(ctx, defender.heroes, result.defender.heroes, defender.temple, targetCityId);
     const attackerHeroesAlive = await settleHeroes(
       ctx, attacker.heroes, result.attacker.heroes, attacker.temple, originCityId,
@@ -169,6 +183,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       loot,
       night,
       returning: anySurvivor,
+      cave,
     });
 
     await ctx.audit({
@@ -356,6 +371,90 @@ async function applySurvivors(
   }
 }
 
+/* ═══ MAĞARA YIKILMASI (§13.20.3) ═══════════════════════════════════════════ */
+
+export interface CaveBreakResult {
+  /** Savunanda gerçekten bir mağara var mıydı (sv ≥ 1)? */
+  present: boolean;
+  level: number;
+  /** Bu seviyeyi yıkmak için gereken cüce (saldıranın Demircilik'i düşülmüş). */
+  required: number;
+  /** Saldırıdan sağ çıkan cüce sayısı. */
+  survivingDwarves: number;
+  broken: boolean;
+  /** Yıkılmadıysa sebebi: `not_enough_dwarves` · `already_repairing` · `no_cave`. */
+  reason: string | null;
+  /** Yıkıldıysa mağaradan kaçan birlikler. */
+  escaped: Record<string, number>;
+  repairUntil: string | null;
+}
+
+/**
+ * ⭐ Mağara yıkılır mı?
+ *
+ * Ölçüt **hayatta kalan cüce sayısıdır**, saldırıya çıkan değil. Gerekçe iki taraflı:
+ * (1) doküman kazanma şartından söz etmiyor, yalnız *"cüceler yeterince fazla sayıda
+ * olduklarında"* diyor; (2) eşikler zaten büyük (sv 1 → 100, sv 10 → 3.844), o kadar cüceyle
+ * savaştan sağ çıkmak fiilen üstünlük demek. Böylece "kaybeden saldırı mağarayı yıkamaz"
+ * kuralını ayrıca yazmaya gerek kalmıyor — motorun sonucu bunu kendiliğinden sağlıyor.
+ *
+ * Kullanıcının koyduğu üç kapı burada:
+ *  • **Seviye 0 mağara yıkılmaz** (henüz üretilmemiş).
+ *  • **Onarımdaki mağara yeniden yıkılmaz**, süresi de baştan başlamaz.
+ *  • **Boş mağara da yıkılır** — içeride asker olması şart değil.
+ */
+async function resolveCaveBreak(ctx: HandlerContext, o: {
+  cityId: number;
+  defenderPlayerId: number;
+  survivingDwarves: number;
+  blacksmithing: number;
+}): Promise<CaveBreakResult> {
+  const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
+    SELECT c.cave_repair_until,
+           COALESCE((SELECT level FROM buildings b WHERE b.city_id = c.id AND b.type = 'cave'), 0) AS level
+      FROM cities c WHERE c.id = ${o.cityId}
+  `);
+  const level = Number(rows[0]?.['level'] ?? 0);
+  const repairUntil = rows[0]?.['cave_repair_until'] == null
+    ? null : toDate(rows[0]!['cave_repair_until']);
+
+  const base: CaveBreakResult = {
+    present: level > 0,
+    level,
+    required: level > 0 ? dwarvesToBreakCave(level, o.blacksmithing) : 0,
+    survivingDwarves: o.survivingDwarves,
+    broken: false,
+    reason: null,
+    escaped: {},
+    repairUntil: null,
+  };
+
+  if (level <= 0) return { ...base, reason: 'no_cave' };
+  if (repairUntil != null && repairUntil > ctx.at) {
+    // Onarımdaki mağara zaten yıkık; ikinci bir yıkım süreyi UZATMAZ.
+    return { ...base, reason: 'already_repairing', repairUntil: repairUntil.toISOString() };
+  }
+  if (o.survivingDwarves < base.required) return { ...base, reason: 'not_enough_dwarves' };
+
+  const inside = await drainCave(ctx.tx, o.cityId);
+  const until = new Date(ctx.at.getTime() + caveRepairSeconds(level) * 1000);
+  await ctx.tx.execute(sql`
+    UPDATE cities SET cave_repair_until = ${until.toISOString()}::timestamptz WHERE id = ${o.cityId}
+  `);
+
+  await scheduleCaveEscape(ctx, {
+    cityId: o.cityId, playerId: o.defenderPlayerId, caveLevel: level, inside,
+  });
+
+  await ctx.audit({
+    action: 'cave.broken', entity: 'city', entityId: o.cityId,
+    playerId: o.defenderPlayerId,
+    after: { level, required: base.required, dwarves: o.survivingDwarves, escaped: inside },
+  });
+
+  return { ...base, broken: true, escaped: inside, repairUntil: until.toISOString() };
+}
+
 /** Savaş öncesi/sonrası adetlerden tür tür kayıp. Artı yönde değişim (taban onarımı) sayılmaz. */
 function perTypeLosses(
   before: Record<string, number>, after: Record<string, number>,
@@ -490,6 +589,7 @@ async function writeBattleReports(ctx: HandlerContext, o: {
   loot: LootResult;
   night: boolean;
   returning: boolean;
+  cave: CaveBreakResult;
 }): Promise<void> {
   const won = o.result.winner === 'attacker';
   const base = {
@@ -514,6 +614,14 @@ async function writeBattleReports(ctx: HandlerContext, o: {
       loot: o.loot.taken,
       lootBreakdown: o.loot,
       armyReturning: o.returning,
+      /**
+       * ⭐ Saldırana yalnız SONUÇ söylenir, mağaranın içi DEĞİL. Kaç asker kaçtığını görmek
+       * casusluğun bile veremediği bir bilgiyi bedava vermek olurdu (doküman: *"casus kuşları
+       * mağaradaki askerleri göremezler"*). Kaç cüce gerektiği söyleniyor ki oyuncu bir dahaki
+       * sefere kaç cüceyle geleceğini bilsin.
+       */
+      cave: { present: o.cave.present, broken: o.cave.broken, required: o.cave.required,
+        survivingDwarves: o.cave.survivingDwarves, reason: o.cave.reason },
     },
   });
 
@@ -533,6 +641,8 @@ async function writeBattleReports(ctx: HandlerContext, o: {
       wallIntegrity: o.result.defender.wallIntegrity,
       lost_resources: o.loot.fromPlunder,
       debrisRecovered: o.loot.leftoverDebrisToDefender,
+      // Savunan KENDİ mağarasının tam dökümünü görür: kimin kaçtığı, onarımın ne zaman biteceği.
+      cave: o.cave,
     },
   });
 

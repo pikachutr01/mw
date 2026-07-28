@@ -79,8 +79,31 @@ export interface CityDetail {
   /** Oyuncunun TÜM şehirlerindeki açık teknik araştırmaları. */
   techQueues: TechQueueRow[];
   capacity: { castle: BudgetStatus; defense: BudgetStatus };
+  /** ⭐ Mağara (§13.20) — Yapılar ekranı geri sayımı ve modalı bundan çiziyor. */
+  cave: CaveState;
   gameNow: string;
   serverNow: string;
+}
+
+export interface CaveState {
+  level: number;
+  /** Kapasite ALAN cinsinden (adet değil). */
+  capacity: number;
+  usedArea: number;
+  freeArea: number;
+  /** Mağaranın İÇİNDEKİLER — yalnız sahibi görür (casus göremez). */
+  units: Record<string, number>;
+  repairUntil: string | null;
+  repairing: boolean;
+  /** Süren doldurma/boşaltma. ⚠️ İptal edilemez. */
+  job: {
+    missionId: number;
+    direction: 'store' | 'withdraw';
+    units: Record<string, number>;
+    area: number;
+    startedAt: string;
+    finishAt: string;
+  } | null;
 }
 
 export interface Requirement {
@@ -258,6 +281,10 @@ export const useMovements = (): UseQueryResult<{ movements: Movement[] }> =>
  *   🔴 en az bir **bize gelen saldırı/casusluk** varsa (tehdit her şeyi ezer)
  *   🟢 tehdit yok ama **bizim başlattığımız** bir hareket varsa (dönüşler dahil)
  *   🟡 yalnızca **bize gelen nakliye/destek** varsa
+ *
+ * ⭐ Mağara işleri (§13.20) `direction: 'in'` taşır ve saldırı/casusluk olmadıkları için
+ * doğal olarak **sarı** düşer; oyuncunun kendi seferi varsa yeşil onu ezer — kullanıcının
+ * istediği sıra zaten bu kuralın içinde, ayrı bir özel durum yazmaya gerek kalmadı.
  */
 export function armiesBadge(
   movements: Movement[],
@@ -454,6 +481,22 @@ export function useCancelQueue() {
     mutationFn: (queueId: number) =>
       api(`/api/v1/cities/queues/${queueId}`, { method: 'DELETE' }),
     onSuccess: () => invalidate(['city', 'cities', 'catalog']),
+  });
+}
+
+/**
+ * ⭐ MAĞARA emri (§13.20). **İptali yoktur** — bilerek `useCancel…` ikizi yazılmadı: iptal
+ * edilebilseydi "saldırıyı gör, sakla, iptal et" döngüsü mağarayı bedava kalkana çevirirdi.
+ */
+export function useCaveJob(cityId: number | null) {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: { direction: 'store' | 'withdraw'; units: Record<string, number> }) =>
+      api<{ seconds: number; area: number; finishAt: string }>(
+        `/api/v1/cities/${cityId}/cave/${input.direction}`,
+        { method: 'POST', body: { units: input.units } },
+      ),
+    onSuccess: () => invalidate(['city', 'missions']),
   });
 }
 
