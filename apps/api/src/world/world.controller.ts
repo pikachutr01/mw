@@ -1,7 +1,7 @@
 /**
  * ⭐ DÜNYA EKRANI (§13.16) — **harita değil, DİYAR LİSTESİ**.
  *
- * Bir diyarda tam 10 şehir yuvası vardır; ekran o 10 satırı gösterir, boş yuva `-` ile geçer.
+ * Bir diyarda tam 10 şehir yeri vardır; ekran o 10 satırı gösterir, boş şehir `-` ile geçer.
  *
  * ⚠️ **GİZLİLİK (§13.16.5):** bu uç asker ve kaynak **GÖSTERMEZ** — onları öğrenmenin tek yolu
  * casusluktur. Dönen tek "hassas" bilgi koruma durumudur (saldırı düğmesini kapatmak için gerekir)
@@ -35,7 +35,7 @@ export class WorldController {
     return WORLD_SHAPE;
   }
 
-  /** Bir diyarın 10 yuvası. Dolu yuvada oyuncu adı + skor + koruma durumu görünür. */
+  /** Bir diyarın 10 şehir yeri. Dolu şehirde oyuncu adı + skor + koruma durumu görünür. */
   @Get(':k/:d')
   async district(
     @Param('k') k: string, @Param('d') d: string, @Req() req: AuthedRequest,

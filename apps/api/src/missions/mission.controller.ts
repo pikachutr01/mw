@@ -186,7 +186,7 @@ export class MissionController {
     };
 
     if (!target) {
-      // ── BOŞ YUVA: yalnız şehir kurma (doküman: "boş alanlar - ile gösterilir") ──
+      // ── BOŞ ŞEHİR: yalnız şehir kurma (doküman: "boş alanlar - ile gösterilir") ──
       const fits = owned < cityLimit;
       add('found_city', 'Şehir Kur', fits,
         fits ? null

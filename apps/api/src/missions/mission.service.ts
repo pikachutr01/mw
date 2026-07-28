@@ -327,13 +327,13 @@ export class MissionService {
   }
 
   /**
-   * ⭐ ŞEHİR KURMA — hedef **BOŞ yuva** olmalı.
+   * ⭐ ŞEHİR KURMA — hedef **BOŞ şehir** olmalı.
    *
    * Doküman: *"Sömürgecilik tekniğinin her üç kademesinde yeni bir şehir kurulabilir. Bir oyuncu
    * en fazla 5 şehre sahip olabilir."* · *"Ordunuz şehir kurmaya giderken seçtiğiniz yere başka
    * bir oyuncu tarafından şehir kurulabilir. Bu durumda ordunuz şehir kuramadan geri dönecektir."*
    *
-   * ⚠️ Yuva **kalkışta** boş olsa bile varışta dolu olabilir — asıl kontrol handler'da, varış
+   * ⚠️ Şehir yeri **kalkışta** boş olsa bile varışta dolu olabilir — asıl kontrol handler'da, varış
    * anında yapılır. Buradaki kontrol yalnız oyuncuyu boşuna göndermemek için.
    */
   async sendFoundCity(opts: SendOpts): Promise<MarchResult> {
@@ -614,7 +614,7 @@ export class MissionService {
     requireOwnTarget?: boolean;
     /** Hedef benim şehrim OLAMAZ (casusluk). */
     forbidOwnTarget?: boolean;
-    /** Hedef BOŞ yuva olmalı (şehir kurma). */
+    /** Hedef BOŞ şehir olmalı (şehir kurma). */
     targetMustBeEmpty?: boolean;
     /** Casus Kuş'a izin ver (yalnız casusluk). */
     allowSpyBird?: boolean;

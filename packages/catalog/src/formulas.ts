@@ -80,6 +80,15 @@ export const CAVE_CONSTANTS = {
   repairDecayRate: 0.9,
 } as const;
 
+/**
+ * ⭐ SUR SABİTLERİ (§13.21.2). İkisi de **kurgu** — doküman onarım süresini vermiyor.
+ * Tamamen yıkılmış seviye 1 sur 8 saatte, seviye 20 sur 1 sa 38 dk'da toparlanır.
+ */
+export const WALL_CONSTANTS = {
+  repairBaseSeconds: 8 * 3600,
+  repairDecayRate: 0.92,
+} as const;
+
 export interface Cost {
   gold: number;
   food: number;
@@ -180,6 +189,34 @@ export function caveTransferSeconds(area: number, caveLevel: number): number {
  * yükseltmek yalnız kapasite değil **dayanıklılık** da almalı, yoksa yüksek seviye mağara
  * yıkıldığında oyuncu sabit 24 saat boyunca en değerli ordusunu saklayamaz hâle geliyordu.
  */
+/**
+ * ⭐ SUR ONARIMI (§13.21.2) — savaştan sonra kendini onarır.
+ *
+ * Doküman: *"Savaşlarda yıkılan sur savaş sonrasında belirli bir süre içinde yeniden onarılır."*
+ * Süreyi söylemiyor; kullanıcı kurguladı (2026-07-29): **hem alınan hasara hem seviyeye** bağlı.
+ *
+ * `süre = 8 saat × hasarOranı × 0,92^(sv−1)`
+ *
+ * • **Hasarla orantılı**, çünkü %20'ye düşmüş bir sur %70'te kalandan çok daha uzun sürmeli
+ *   (kullanıcının verdiği örnek).
+ * • **Seviye kısaltır** — dokümanda böyle bir bilgi yok, bilerek eklendi: Sur'u yükseltmek yalnız
+ *   dayanıklılık değil **toparlanma hızı** da kazandırmalı, yoksa yüksek seviye sur her savaştan
+ *   sonra daha uzun süre işlevsiz kalırdı (aynı gerekçeyle mağara onarımı da seviyeyle kısalıyor).
+ *
+ * @param integrity savaş sonrası kalan bütünlük, 0-1 arası
+ */
+export function wallRepairSeconds(wallLevel: number, integrity: number): number {
+  const damage = Math.min(1, Math.max(0, 1 - integrity));
+  if (damage <= 0 || wallLevel <= 0) return 0;
+  return Math.max(
+    60,
+    Math.round(
+      WALL_CONSTANTS.repairBaseSeconds * damage
+      * WALL_CONSTANTS.repairDecayRate ** (Math.max(1, wallLevel) - 1),
+    ),
+  );
+}
+
 export function caveRepairSeconds(caveLevel: number): number {
   const level = Math.max(1, caveLevel);
   return Math.round(

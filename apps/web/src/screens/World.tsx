@@ -1,7 +1,7 @@
 /**
  * DÜNYA sekmesi — **harita değil, DİYAR LİSTESİ** (§13.16.2), referans `images/scr_web03`.
  *
- * Tablo altı sütun: **No · Şehir · Oyuncu · İttifak · Sıra · Görev**. Boş yuva da dolu yuva da
+ * Tablo altı sütun: **No · Şehir · Oyuncu · İttifak · Sıra · Görev**. Boş şehir de dolu şehir de
  * **aynı yükseklikte** satır alır — orijinalde de öyle ve göz sütunları kaydırmadan tarıyor.
  *
  * ⭐ **Görev sütunu bir kısayoldur:** simgeye tıklamak modalı doğrudan o görevin formunda açar.
@@ -90,7 +90,7 @@ export function World() {
         </div>
       </Panel>
 
-      <Panel title="Diyar listesi" right="10 yuva">
+      <Panel title="Diyar listesi" right="10 şehir">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -126,7 +126,7 @@ export function World() {
                   <tr
                     key={slot.s}
                     onClick={() => setTarget({ slot })}
-                    /* ⭐ Tüm satırlar EŞİT yükseklikte (`h-9`): boş yuva da dolu yuva kadar yer
+                    /* ⭐ Tüm satırlar EŞİT yükseklikte (`h-9`): boş şehir de dolu şehir kadar yer
                        kaplar, böylece 10 satır her ekranda aynı yüksekliği tutar. */
                     className={`h-9 cursor-pointer border-b border-border transition-colors hover:bg-raised ${
                       i % 2 === 1 ? 'bg-row-alt' : ''

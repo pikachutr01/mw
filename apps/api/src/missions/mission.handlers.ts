@@ -290,7 +290,7 @@ async function gatherIntel(
 /* ═══ ŞEHİR KURMA ══════════════════════════════════════════════════════════ */
 
 /**
- * ⚠️ Yuvanın boşluğu **VARIŞ ANINDA** kontrol edilir. Doküman: *"Ordunuz şehir kurmaya giderken,
+ * ⚠️ Şehir yerinin boşluğu **VARIŞ ANINDA** kontrol edilir. Doküman: *"Ordunuz şehir kurmaya giderken,
  * seçtiğiniz yere başka bir oyuncu tarafından şehir kurulabilir. Bu durumda ordunuz şehir
  * kuramadan geri dönecektir."* Şehir sayısı limiti de burada YENİDEN bakılır: iki görev aynı
  * anda varırsa ilki limiti doldurmuş olabilir.
@@ -301,7 +301,7 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
     const playerId = ctx.mission.ownerPlayerId;
     if (originCityId == null || playerId == null) throw new Error('found_city: eksik görev alanları');
 
-    // Hedef BOŞ yuva olduğu için `target_city_id` yok; koordinat görev satırında duruyor.
+    // Hedef BOŞ şehir olduğu için `target_city_id` yok; koordinat görev satırında duruyor.
     const coords = await loadTargetCoords(ctx.tx, ctx.mission.id);
     if (!coords) throw new Error('found_city: hedef koordinat yok');
     const units = await loadMissionUnits(ctx.tx, ctx.mission.id);
@@ -448,7 +448,7 @@ async function loadCityOwner(
     : null;
 }
 
-/** Boş yuvaya giden görevlerde hedef koordinat `missions` satırındadır (şehir id'si yoktur). */
+/** Boş şehre giden görevlerde hedef koordinat `missions` satırındadır (şehir id'si yoktur). */
 async function loadTargetCoords(
   tx: Tx, missionId: number,
 ): Promise<{ k: number; d: number; s: number } | null> {

@@ -14,6 +14,7 @@
 import { sql } from 'drizzle-orm';
 import {
   LEVEL_BASED, UNITS_BY_ID, caveRepairSeconds, dwarvesToBreakCave, heroReviveSeconds,
+  wallRepairSeconds,
 } from '@mobiwar/catalog';
 import { calculateLoot, simulate, type LootResult, type SimulateInput, type SimulateResult } from '@mobiwar/engine';
 import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
@@ -37,6 +38,8 @@ export function isNightBattle(at: Date, window = NIGHT_WINDOW): boolean {
 interface SideState {
   playerId: number;
   units: Record<string, number>;
+  /** Savunanın savaşa GİRERKENKİ sur bütünlüğü (0-1). Onarım sürüyorsa 1'den küçüktür. */
+  wallIntegrity?: number;
   techs: Record<string, number>;
   heroes: { id: number; level: number; fAtk: number; fDef: number; mAtk: number; mDef: number }[];
   temple: number;
@@ -71,7 +74,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
     }
 
     const attacker = await loadAttackerState(ctx, attackerPlayerId);
-    const defender = await loadDefenderState(ctx.tx, targetCityId, defenderCity.playerId);
+    const defender = await loadDefenderState(ctx.tx, targetCityId, defenderCity.playerId, ctx.at);
 
     const night = isNightBattle(ctx.at);
     const input: SimulateInput = {
@@ -84,6 +87,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       },
       defender: {
         counts: defender.units,
+        wallIntegrity: defender.wallIntegrity,
         tech: defender.techs,
         heroes: defender.heroes.map(toHeroInput),
         temple: defender.temple,
@@ -199,6 +203,25 @@ export function createAttackHandler(cities: CityService): MissionHandler {
           at: ctx.at.toISOString(),
         },
       });
+    }
+
+    /**
+     * ⭐ SUR ONARIMI (§13.21.2) — doküman: *"Savaşlarda yıkılan sur savaş sonrasında belirli bir
+     * süre içinde yeniden onarılır."* Süre hem kalan bütünlüğe hem seviyeye bağlı.
+     *
+     * ⚠️ Sur SAĞLAM çıktıysa satıra dokunulmaz; aksi hâlde her savaş boş bir onarım kaydı yazardı.
+     */
+    const wallLevel = Math.max(0, Math.trunc(defender.units['wall'] ?? 0));
+    const integrityAfter = result.defender.wallIntegrity;
+    if (wallLevel > 0 && integrityAfter != null && integrityAfter < 1) {
+      const seconds = wallRepairSeconds(wallLevel, integrityAfter);
+      const until = new Date(ctx.at.getTime() + seconds * 1000);
+      await ctx.tx.execute(sql`
+        UPDATE cities
+           SET wall_integrity = ${integrityAfter}::numeric,
+               wall_repair_until = ${until.toISOString()}::timestamptz
+         WHERE id = ${targetCityId}
+      `);
     }
 
     await settleHeroes(ctx, defender.heroes, result.defender.heroes, defender.temple, targetCityId);
@@ -355,7 +378,9 @@ async function loadAttackerState(ctx: HandlerContext, playerId: number): Promise
  * Savunanın SAVAŞ ANINDAKİ durumu: barakadaki savaşçılar + surdaki savunma birimleri +
  * Sur/Büyü Kalkanı SEVİYELERİ (bunlar adet değil seviye taşır, §13.11.1b) + oyuncu teknikleri.
  */
-async function loadDefenderState(tx: Tx, cityId: number, playerId: number): Promise<SideState> {
+async function loadDefenderState(
+  tx: Tx, cityId: number, playerId: number, at: Date,
+): Promise<SideState> {
   const [unitRows, defRows, heroRows] = await Promise.all([
     tx.execute<Record<string, unknown>>(sql`SELECT type, count FROM units WHERE city_id = ${cityId}`),
     tx.execute<Record<string, unknown>>(sql`SELECT type, count FROM defenses WHERE city_id = ${cityId}`),
@@ -371,9 +396,24 @@ async function loadDefenderState(tx: Tx, cityId: number, playerId: number): Prom
     if (count > 0) units[String(r['type'])] = count;
   }
 
+  /**
+   * ⭐ Sur onarımdaysa savaşa HASARLI girer (§13.21.2). Onarım bittiyse (`wall_repair_until`
+   * geçmişte) bütünlük 1 sayılır — ayrı bir "onarım bitti" görevi yazmaya gerek yok, tembel
+   * kaynak birikimindeki desenin aynısı.
+   */
+  const wallRows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT wall_integrity, wall_repair_until FROM cities WHERE id = ${cityId}
+  `);
+  const repairUntil = wallRows[0]?.['wall_repair_until'] == null
+    ? null : toDate(wallRows[0]!['wall_repair_until']);
+  const wallIntegrity = repairUntil != null && repairUntil > at
+    ? Math.min(1, Math.max(0, Number(wallRows[0]?.['wall_integrity'] ?? 1)))
+    : 1;
+
   return {
     playerId,
     units,
+    wallIntegrity,
     techs: await loadTechs(tx, playerId),
     heroes: heroRows.map(toHeroRow),
     temple: await loadTemple(tx, cityId),

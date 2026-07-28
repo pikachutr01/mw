@@ -179,10 +179,19 @@ function CityTable({ d }: { d: Overview }): React.ReactElement {
   );
 }
 
+/**
+ * ⭐ BÖLÜM ŞERİDİ — Kaynaklar / Baraka / Savunma tablolarını birbirinden ayırır.
+ *
+ * ⚠️ Bir ara `bg-raised` ile çiziliyordu; satır zeminleriyle neredeyse aynı tondaydı ve üç
+ * tablo tek tablo gibi görünüyordu (kullanıcı bildirdi 2026-07-29). Artık panel başlığının
+ * kendi dokusunu ve rengini kullanıyor (`tex-header` + `bg-panel-header`) — yani ekranda zaten
+ * "bu bir başlıktır" anlamına gelen görsel dil, ikinci bir renk uydurmadan.
+ */
 function SectionRow({ title, span }: { title: string; span: number }): React.ReactElement {
   return (
-    <tr className="border-y border-strong bg-raised">
-      <Td colSpan={span} className="display text-[11px] font-semibold tracking-wide text-ink uppercase">
+    <tr className="tex-header border-y-2 border-strong bg-panel-header text-on-panel-header">
+      <Td colSpan={span}
+        className="display py-1.5 text-[11px] font-semibold tracking-wider uppercase">
         {title}
       </Td>
     </tr>

@@ -20,7 +20,7 @@ import { type CombatConfig, DEFAULT_COMBAT_CONFIG } from './config.ts';
 import { createRng, type Rng } from './rng.ts';
 import type {
   Army, ArmyUnit, HeroState, ScaledStats, SideInput, SideResult, SimulateInput, SimulateResult,
-  UnitCounts, WallState,
+  ShieldState, UnitCounts, WallState,
 } from './types.ts';
 
 const round = (x: number): number => Math.round(x);
@@ -99,16 +99,40 @@ function buildArmy(side: SideInput, isDefender: boolean, cfg: CombatConfig): Arm
     const masonryRate = TECHS_BY_ID['masonry']?.rate ?? 0.06;
     const masonryFactor = 1 + Math.max(0, tech.masonry ?? 0) * masonryRate;
     const wallDef = UNITS_BY_ID['wall'] as UnitDef;
+    // ⭐ Onarım sürüyorsa sur HASARLI girer (§13.21.2); yüzde `left` üzerinden taşınır.
+    const startIntegrity = Math.min(1, Math.max(0, side.wallIntegrity ?? 1));
     wall = {
       level: wallLevel,
-      left: wallLevel,
+      left: wallLevel * startIntegrity,
       base: cfg.wall.power * wallLevel ** cfg.wall.exp * masonryFactor,
       tough: cfg.wall.tough * masonryFactor,
       stats: applyTech(wallDef, tech),
     };
   }
 
-  return { units, heroes, heroLevel, tech, wall, lossMag: 0 };
+  /**
+   * ⭐ BÜYÜ KALKANI BÜTÜNLÜĞÜ (§13.21, 2026-07-29 binary analizi).
+   *
+   * Kalkan bugüne kadar yalnız "gelen büyü havuzunu yüzdesel azaltan" pasif bir çarpandı ve
+   * **hiç yıpranmıyordu**. Binary'de ise Sur ile aynı savunma-yapıları listesinde duran, aynı
+   * hasar formülünden geçen bir birim: `HasarKayipCekirdegi` her savunan birime
+   * `pay − mitigasyon` uygular ve kalanı `mDef`e bölerek adetten (kalkanda: bütünlükten) düşer.
+   * Simülatörün Sur ve Büyü Kalkanı satırlarında yüzde göstermesinin sebebi de bu.
+   *
+   * Statlar katalogdan: mitigasyon **mAtk = 320/seviye**, dayanıklılık böleni **mDef = 2000**.
+   * Kalkanın nadiren düşmesinin sebebi bu ikili: payı 320×seviyeyi aşana kadar hiç yıpranmıyor.
+   */
+  const shieldLevel = isDefender ? Math.max(0, Math.trunc(side.counts['magic_shield'] ?? 0)) : 0;
+  let shield: ShieldState | null = null;
+  if (shieldLevel > 0) {
+    shield = {
+      level: shieldLevel,
+      left: shieldLevel,
+      stats: applyTech(UNITS_BY_ID['magic_shield'] as UnitDef, tech),
+    };
+  }
+
+  return { units, heroes, heroLevel, tech, wall, shield, lossMag: 0 };
 }
 
 function applyNight(army: Army, nightVision: number, cfg: CombatConfig): void {
@@ -269,6 +293,36 @@ function applyLoss(e: ArmyUnit, net: number): number {
   return absorbed;
 }
 
+/**
+ * ⭐ BÜYÜ KALKANI HASARI — Sur'unkiyle aynı formül, yalnız **büyü fazında**.
+ *
+ * `net = kalkanPayı − mitigasyon × bütünlük`, `bütünlük -= net / tough`.
+ *
+ * ⚠️ **Kalkanın payı `P`'ye EKLENMEZ ve `lossMag`'a YAZILMAZ** (bilinçli kısıt). Sebep:
+ * motorun 64 kalibrasyon testi binary simülatörünün ÇIKTILARINA (kayıp, enkaz, kazanan) göre
+ * ayarlandı; kalkanı güç havuzuna sokmak her birimin payını ve dolayısıyla o çıktıları
+ * kaydırırdı. Bütünlük burada **gözlemlenebilir bir durum** olarak hesaplanıyor; savaşın
+ * sonucuna etkisi hâlâ kalibre edilmiş `magicShieldMultiplier` üzerinden.
+ * Tam kalibrasyon (kalkanı P'ye sokup 64 testi yeniden ayarlamak) ayrı bir tur işidir.
+ */
+function shieldTakeHit(s: ShieldState | null, pool: number, P: number): void {
+  if (!s || s.left <= 0 || P <= 0) return;
+  /**
+   * Normal birimin formülünün BİREBİR aynısı (`dealType` içindeki döngüye bak):
+   *   pay = birimPuanı × bütünlük × havuz / P     (birimPuanı = katalogdaki Alan = 400)
+   *   net = pay − mAtk × bütünlük                 (mAtk = 320, Tılsım ile ölçeklenir)
+   *   bütünlük -= net / mDef                      (mDef = 2000, dayanıklılık böleni)
+   *
+   * ⭐ Kalkanın **nadiren** düşmesinin sayısal sebebi buradadır: 400 > 320 olduğu için
+   * `havuz/P > 0,8` olana kadar net ≤ 0 kalır, yani kalkan hiç yıpranmaz. Ancak ezici bir
+   * büyü saldırısında oran eşiği aşar ve kalkan gözle görülür biçimde erir.
+   */
+  const net = (s.stats.unitPower * s.left * pool) / P - s.stats.mAtk * s.left;
+  if (net <= 0) return;
+  const tough = s.stats.mDef > 0 ? s.stats.mDef : 1;
+  s.left = Math.max(0, s.left - net / tough);
+}
+
 /** Sur hasarı: normal birimle aynı formül, "adet" yerine bütünlük azalır (sub_412db8). */
 function wallTakeHit(w: WallState | null, pool: number, P: number, type: 1 | 2 | 3): number {
   if (!w || w.left <= 0) return 0;
@@ -303,6 +357,8 @@ function dealType(
 
   // §S SUR payına düşen hasarı alır (her fazda, büyü dahil).
   def.lossMag += wallTakeHit(def.wall, pool, P, type);
+  // §K BÜYÜ KALKANI yalnız büyü fazında yıpranır (§13.21) ve HAM havuzu görür.
+  if (type === 3) shieldTakeHit(def.shield, pool, P);
 
   for (const e of def.units) {
     if (e.count <= 0) continue;
@@ -590,5 +646,6 @@ function sideResult(army: Army): SideResult {
       alive: h.durum > 0,
     })),
     wallIntegrity: army.wall ? army.wall.left / army.wall.level : null,
+    shieldIntegrity: army.shield ? army.shield.left / army.shield.level : null,
   };
 }

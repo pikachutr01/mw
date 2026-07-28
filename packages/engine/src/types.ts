@@ -16,6 +16,11 @@ export interface HeroInput {
 }
 
 export interface SideInput {
+  /**
+   * ⭐ Sur'un savaşa GİRERKENKİ bütünlüğü (0-1). Verilmezse 1 (sağlam).
+   * Onarım sürerken gelen ikinci saldırıda sur tam güçle savaşmasın diye var (§13.21.2).
+   */
+  wallIntegrity?: number;
   counts: UnitCounts;
   tech?: TechLevels;
   heroes?: HeroInput[];
@@ -89,12 +94,28 @@ export interface WallState {
   stats: ScaledStats;
 }
 
+/**
+ * ⭐ BÜYÜ KALKANI BÜTÜNLÜĞÜ (§13.21) — Sur'un ikizi.
+ *
+ * Binary'de kalkan, Sur ile **aynı listede** (savunma yapıları grubu) duran ve **aynı hasar
+ * formülünden geçen** bir birimdir; simülatörün ekranında ikisi de yüzde olarak gösterilir
+ * (`sub_412a78` = kalan, float). Tek farkı ne zaman hasar aldığı: Sur her fazda, kalkan
+ * **yalnız büyü fazında**.
+ */
+export interface ShieldState {
+  level: number;
+  /** kalan bütünlük (SEVİYE biriminde) */
+  left: number;
+  stats: ScaledStats;
+}
+
 export interface Army {
   units: ArmyUnit[];
   heroes: HeroState[];
   heroLevel: number;
   tech: TechLevels;
   wall: WallState | null;
+  shield: ShieldState | null;
   lossMag: number;
 }
 
@@ -109,6 +130,8 @@ export interface SideResult {
   heroes: { level: number; durum: number; alive: boolean }[];
   /** sur bütünlüğü 0-1 (sur yoksa null) */
   wallIntegrity: number | null;
+  /** büyü kalkanı bütünlüğü 0-1 (kalkan yoksa null) */
+  shieldIntegrity: number | null;
 }
 
 export interface SimulateResult {

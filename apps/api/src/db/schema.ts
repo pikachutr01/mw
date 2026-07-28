@@ -113,6 +113,16 @@ export const cities = pgTable('cities', {
    * OYUN saatinde (bakımda onarım da durur).
    */
   caveRepairUntil: timestamp('cave_repair_until', { withTimezone: true }),
+  /**
+   * ⭐ SUR BÜTÜNLÜĞÜ ve ONARIMI (§13.21.2). Doküman: *"Savaşlarda yıkılan sur savaş sonrasında
+   * belirli bir süre içinde yeniden onarılır."*
+   *
+   * `wallIntegrity` savaş sonrası kalan oran (0-1); onarım bitene kadar sur bu oranla savaşır,
+   * `wallRepairUntil` geçince tekrar 1 sayılır. İkisini birlikte tutmak şart: yalnız süre
+   * tutulsaydı onarım sırasında gelen ikinci saldırıda sur **tam güçle** savaşırdı.
+   */
+  wallIntegrity: numeric('wall_integrity', { precision: 6, scale: 4 }).notNull().default('1'),
+  wallRepairUntil: timestamp('wall_repair_until', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('cities_world_coords').on(t.worldId, t.k, t.d, t.s),

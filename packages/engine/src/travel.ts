@@ -20,7 +20,7 @@ export interface Coordinates {
   k: number;
   /** diyar */
   d: number;
-  /** şehir yuvası */
+  /** şehir yeri */
   s: number;
 }
 

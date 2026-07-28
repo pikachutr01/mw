@@ -326,7 +326,7 @@ describe('şehir kurma', () => {
     expect(maxCities(60)).toBe(5);           // tavan
   });
 
-  it('boş yuvaya şehir kurar, ordu yeni şehrin garnizonu olur', async () => {
+  it('boş şehre şehir kurar, ordu yeni şehrin garnizonu olur', async () => {
     await setTech(me, 'colonization', 6);    // 1 + 2 = 3 şehir hakkı (2 şehri var)
     await giveUnits(home, 'dwarf', 30);
     const at = await clock.gameNow(worldId);
@@ -346,7 +346,7 @@ describe('şehir kurma', () => {
     expect(await openReturn()).toBeNull();   // garnizon olarak kalır
   });
 
-  it('⭐ yuva bu arada dolarsa ordu GERİ DÖNER (doküman)', async () => {
+  it('⭐ şehir yeri bu arada dolarsa ordu GERİ DÖNER (doküman)', async () => {
     await setTech(me, 'colonization', 6);
     await giveUnits(home, 'dwarf', 20);
     const at = await clock.gameNow(worldId);
@@ -378,7 +378,7 @@ describe('şehir kurma', () => {
     })).rejects.toThrow(/en fazla 2 şehre/i);
   });
 
-  it('dolu yuvaya şehir kurulamaz', async () => {
+  it('dolu şehre şehir kurulamaz', async () => {
     await setTech(me, 'colonization', 6);
     await giveUnits(home, 'dwarf', 20);
     const at = await clock.gameNow(worldId);

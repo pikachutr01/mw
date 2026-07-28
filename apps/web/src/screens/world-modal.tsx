@@ -36,7 +36,7 @@ const MISSION_INFO: Record<string, { title: string; hint: string; icon: string }
   spy: { title: 'Casusluk', icon: 'spy_out', hint: 'Casus kuşlarla bilgi topla.' },
   transport: { title: 'Nakliye', icon: 'transport_out', hint: 'Altın ve yemek gönder.' },
   support: { title: 'Destek', icon: 'support_out', hint: 'Birlikleri kalıcı olarak taşı.' },
-  found_city: { title: 'Şehir Kur', icon: 'found_city', hint: 'Boş yuvaya yeni şehir kur.' },
+  found_city: { title: 'Şehir Kur', icon: 'found_city', hint: 'Buraya yeni bir şehir kur.' },
   teleport: { title: 'Teleport', icon: 'teleport', hint: 'Anlık transfer, kaynak taşınmaz.' },
 };
 
@@ -57,7 +57,7 @@ export function TargetModal({
   const data = options.data;
   const title = slot.city
     ? `${slot.city.name} (${target.k}:${target.d}:${target.s})`
-    : `Boş yuva (${target.k}:${target.d}:${target.s})`;
+    : `Boş şehir (${target.k}:${target.d}:${target.s})`;
 
   return (
     <Modal

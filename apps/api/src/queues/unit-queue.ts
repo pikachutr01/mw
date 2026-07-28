@@ -45,8 +45,22 @@ const MAX_CHAIN = 50;
  *
  * @returns eklenen birimler (`{ dwarf: 12 }`) — çağıran isterse bildirim üretebilir.
  */
+/**
+ * ⭐ BANT KATEGORİLERİ (2026-07-29). Baraka'daki tek-bant mantığı Savunma'ya da genişletildi
+ * (kullanıcı isteği): savunma BİRİMLERİ de teker teker, sırayla üretilir. Sur ve Büyü Kalkanı
+ * bu banda GİRMEZ — onlar seviye taşır ve kendi satırlarında paralel ilerler (§13.21.3).
+ */
+export type BandCategory = 'unit' | 'defense';
+
+/**
+ * ⚠️ Bant sorgularının hepsinde `target_level IS NULL` var. Sebep: **Sur ve Büyü Kalkanı**
+ * da `category = 'defense'` satırıdır ama banda GİRMEZ (seviye taşır, paralel ilerler).
+ * Bu koşul olmadan bir Sur yükseltmesi banttaki sırayı işgal ediyor ve üretim emirleri
+ * 2. sıradan başlıyordu (§13.21.3).
+ */
+
 export async function materializeUnitQueues(
-  runner: Runner, cityId: number, at: Date,
+  runner: Runner, cityId: number, at: Date, category: BandCategory = 'unit',
 ): Promise<Record<string, number>> {
   const produced: Record<string, number> = {};
 
@@ -54,7 +68,7 @@ export async function materializeUnitQueues(
     const rows = await runner.execute<Record<string, unknown>>(sql`
       SELECT id, item_type, count, done, per_unit_seconds, started_at, position
         FROM queues
-       WHERE city_id = ${cityId} AND category = 'unit'
+       WHERE city_id = ${cityId} AND category = ${category} AND target_level IS NULL
          AND completed_at IS NULL AND canceled_at IS NULL
        ORDER BY position, id
        LIMIT 1
@@ -98,7 +112,7 @@ export async function materializeUnitQueues(
       UPDATE queues SET completed_at = ${finishedAt.toISOString()}::timestamptz
        WHERE id = ${q.id} AND completed_at IS NULL
     `);
-    await promoteNext(runner, cityId, finishedAt);
+    await promoteNext(runner, cityId, finishedAt, category);
   }
 
   return produced;
@@ -108,10 +122,12 @@ export async function materializeUnitQueues(
  * Bekleyen emirleri bir sıra yukarı alır ve zinciri yeniden kurar.
  * `startAt` = bandın boşaldığı an (biten emrin bitişi ya da iptal anı).
  */
-export async function promoteNext(runner: Runner, cityId: number, startAt: Date): Promise<void> {
+export async function promoteNext(
+  runner: Runner, cityId: number, startAt: Date, category: BandCategory = 'unit',
+): Promise<void> {
   await runner.execute(sql`
     UPDATE queues SET position = position - 1
-     WHERE city_id = ${cityId} AND category = 'unit'
+     WHERE city_id = ${cityId} AND category = ${category} AND target_level IS NULL
        AND completed_at IS NULL AND canceled_at IS NULL AND position > 1
   `);
   /**
@@ -121,10 +137,10 @@ export async function promoteNext(runner: Runner, cityId: number, startAt: Date)
    */
   await runner.execute(sql`
     UPDATE queues SET started_at = ${startAt.toISOString()}::timestamptz, done = 0
-     WHERE city_id = ${cityId} AND category = 'unit'
+     WHERE city_id = ${cityId} AND category = ${category} AND target_level IS NULL
        AND completed_at IS NULL AND canceled_at IS NULL AND position = 1
   `);
-  await rescheduleUnitChain(runner, cityId, startAt);
+  await rescheduleUnitChain(runner, cityId, startAt, category);
 }
 
 /**
@@ -143,12 +159,12 @@ export async function promoteNext(runner: Runner, cityId: number, startAt: Date)
  * saati o an başlar.
  */
 export async function rescheduleUnitChain(
-  runner: Runner, cityId: number, bandFreeAt: Date,
+  runner: Runner, cityId: number, bandFreeAt: Date, category: BandCategory = 'unit',
 ): Promise<void> {
   const rows = await runner.execute<Record<string, unknown>>(sql`
     SELECT id, count, done, per_unit_seconds, started_at, position
       FROM queues
-     WHERE city_id = ${cityId} AND category = 'unit'
+     WHERE city_id = ${cityId} AND category = ${category} AND target_level IS NULL
        AND completed_at IS NULL AND canceled_at IS NULL
      ORDER BY position, id
   `);
@@ -189,10 +205,12 @@ export async function rescheduleUnitChain(
 }
 
 /** Şehirdeki AÇIK savaşçı emri sayısı (Baraka seviyesi kadar olabilir). */
-export async function openUnitQueueCount(runner: Runner, cityId: number): Promise<number> {
+export async function openUnitQueueCount(
+  runner: Runner, cityId: number, category: BandCategory = 'unit',
+): Promise<number> {
   const rows = await runner.execute<Record<string, unknown>>(sql`
     SELECT COUNT(*)::int AS n FROM queues
-     WHERE city_id = ${cityId} AND category = 'unit'
+     WHERE city_id = ${cityId} AND category = ${category} AND target_level IS NULL
        AND completed_at IS NULL AND canceled_at IS NULL
   `);
   return Number(rows[0]?.['n'] ?? 0);

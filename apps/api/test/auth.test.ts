@@ -94,11 +94,11 @@ describe('kayıt', () => {
   });
 
   /**
-   * ⚠️ GERÇEK HATA (2026-07-27): yuva şehir SAYISINDAN türetiliyordu (`count % 10`). Bir yuva
+   * ⚠️ GERÇEK HATA (2026-07-27): şehir yeri şehir SAYISINDAN türetiliyordu (`count % 10`). Bir şehir yeri
    * elle dolduğunda veya bir şehir silindiğinde aynı koordinat ikinci kez üretiliyor ve kayıt
    * `cities_world_coords` ihlaliyle 500 dönüyordu. Test o durumu birebir kuruyor.
    */
-  it('⭐ dolu yuva ATLANIR: elle açılmış koordinat kaydı bozmaz', async () => {
+  it('⭐ dolu şehir yeri ATLANIR: elle açılmış koordinat kaydı bozmaz', async () => {
     const first = await auth.register({ ...cred('ilk'), worldId }, webCtx());
     const firstCity = await h.db.execute<Record<string, unknown>>(sql`
       SELECT k, d, s FROM cities WHERE player_id = ${first.playerId}
@@ -107,13 +107,13 @@ describe('kayıt', () => {
     const d = Number(firstCity[0]!['d']);
     const s = Number(firstCity[0]!['s']);
 
-    // Sıradaki yuvayı BAŞKASI kapsın (koloni kurma, yerleşim algoritması, elle müdahale…).
+    // Sıradaki şehir yerini BAŞKASI kapsın (koloni kurma, yerleşim algoritması, elle müdahale…).
     await cities.create({
       worldId, playerId: first.playerId, name: 'engel',
       k, d, s: s + 1, isCapital: false, at: await clock.gameNow(worldId),
     });
 
-    // Yeni kayıt çakışmamalı; boş bir yuvaya düşmeli.
+    // Yeni kayıt çakışmamalı; boş bir şehir yerine düşmeli.
     const second = await auth.register({ ...cred('ikinci'), worldId }, webCtx());
     const secondCity = await h.db.execute<Record<string, unknown>>(sql`
       SELECT k, d, s FROM cities WHERE player_id = ${second.playerId}
@@ -124,7 +124,7 @@ describe('kayıt', () => {
     expect(got).not.toBe(`${k}:${d}:${s + 1}`);
   });
 
-  it('boşalan yuva yeniden kullanılır (şehir silinince kayıt tıkanmaz)', async () => {
+  it('boşalan şehir yeri yeniden kullanılır (şehir silinince kayıt tıkanmaz)', async () => {
     const a = await auth.register({ ...cred('bosluk'), worldId }, webCtx());
     await h.db.execute(sql`DELETE FROM cities WHERE player_id = ${a.playerId}`);
     // Kalan tek şehir yoksa bile kayıt çalışmalı.

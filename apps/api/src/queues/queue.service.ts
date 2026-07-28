@@ -197,8 +197,36 @@ export class QueueService {
 
     return this.db.transaction(async (tx) => {
       const st = await this.loadCity(tx as never, opts.cityId, opts.playerId);
-      await this.assertNoOpenQueue(tx as never, opts.cityId, 'defense');
       this.assertRequirements(UNIT_REQUIREMENTS[opts.type], st, opts.type);
+
+      /**
+       * ⭐ SAVUNMADA İKİ AYRI ŞERİT (kullanıcı kararı 2026-07-29).
+       *
+       * `Sur` ve `Büyü Kalkanı` SEVİYE taşır; diğerleri adet. İkisi tek sıraya girdiğinde
+       * "Balista üretiyorum, Sur'u yükseltemiyorum" gibi bir kilit doğuyordu — oysa bunlar
+       * fiziksel olarak da ayrı işler. Artık:
+       *   • **Yapı şeridi** (Sur / Büyü Kalkanı): aynı anda tek yükseltme, birim üretiminden
+       *     BAĞIMSIZ ilerler.
+       *   • **Birim şeridi**: Baraka'daki tek bandın aynısı — emirler sırayla, teker teker
+       *     üretilir; aynı anda **Sur seviyesi** kadar emir kuyruğa girebilir.
+       *
+       * ⚠️ Emir sayısını Sur'a bağlamak bizim kararımız: savunma birimleri surda yaşar ve
+       * çoğunun ön-şartı zaten Sur seviyesidir; Baraka'nın savaşçılar için oynadığı rolü
+       * savunmada Sur oynuyor.
+       */
+      if (levelBased) {
+        await this.assertNoOpenStructureQueue(tx as never, opts.cityId);
+      } else {
+        const wall = Math.max(1, st.defenses['wall'] ?? 1);
+        const open = await openUnitQueueCount(tx as never, opts.cityId, 'defense');
+        if (open >= wall) {
+          throw new QueueError(
+            'queue_busy',
+            `Savunmada aynı anda en fazla ${wall} üretim emri olabilir. Sur'u yükseltin.`,
+            { open, limit: wall },
+          );
+        }
+      }
 
       let cost: { gold: number; food: number };
       let seconds: number;
@@ -234,10 +262,32 @@ export class QueueService {
       }
 
       await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
-      return this.insert(tx as never, {
+
+      // Sur / Büyü Kalkanı: tek kalem, banda girmez → eski davranış aynen.
+      if (levelBased) {
+        return this.insert(tx as never, {
+          ...st, cityId: opts.cityId, category: 'defense', itemType: opts.type,
+          targetLevel, count, cost, seconds, at: opts.at,
+        });
+      }
+
+      // Adetli savunma birimi: Baraka bandının birebir aynısı.
+      const perUnit = seconds / Math.max(1, count ?? 1);
+      const position = (await openUnitQueueCount(tx as never, opts.cityId, 'defense')) + 1;
+      const item = await this.insert(tx as never, {
         ...st, cityId: opts.cityId, category: 'defense', itemType: opts.type,
-        targetLevel, count, cost, seconds, at: opts.at,
+        targetLevel: null, count, cost, seconds, at: opts.at,
+        perUnitSeconds: perUnit, position,
       });
+      await rescheduleUnitChain(tx as never, opts.cityId, opts.at, 'defense');
+      const fresh = await tx.execute<Record<string, unknown>>(sql`
+        SELECT started_at, finish_at FROM queues WHERE id = ${item.id}
+      `);
+      return {
+        ...item,
+        startedAt: toDate(fresh[0]!['started_at']),
+        finishAt: toDate(fresh[0]!['finish_at']),
+      };
     });
   }
 
@@ -312,7 +362,7 @@ export class QueueService {
     st: CityState,
     itemType: string,
   ): void {
-    const unmet = checkRequirement(req, { buildings: st.buildings, techs: st.techs });
+    const unmet = checkRequirement(req, { buildings: structureLevels(st), techs: st.techs });
     if (unmet.length > 0) {
       throw new QueueError(
         'requirements_unmet',
@@ -341,6 +391,18 @@ export class QueueService {
     }
     if (rows[0]?.['busy'] === true) {
       throw new QueueError('slot_busy', 'Mağarada bir taşıma sürüyor; seviyesi şimdi ilerletilemez.');
+    }
+  }
+
+  /** Sur/Büyü Kalkanı şeridi: aynı anda tek yükseltme (birim üretiminden bağımsız). */
+  private async assertNoOpenStructureQueue(tx: Db, cityId: number): Promise<void> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM queues
+       WHERE city_id = ${cityId} AND category = 'defense' AND target_level IS NOT NULL
+         AND completed_at IS NULL AND canceled_at IS NULL
+    `);
+    if (rows.length > 0) {
+      throw new QueueError('slot_busy', 'Sur ya da Büyü Kalkanı yükseltmesi zaten sürüyor.');
     }
   }
 
@@ -473,8 +535,9 @@ export class QueueService {
       if (Number(q['player_id']) !== opts.playerId) {
         throw new QueueError('not_owner', 'Bu kuyruk sizin değil.');
       }
-      // Üretilmiş askerler iptalden ETKİLENMEZ → önce şehri "şimdi"ye getir, sonra iptal et.
-      if (String(q['category']) === 'unit') {
+      // Üretilmiş birimler iptalden ETKİLENMEZ → önce şehri "şimdi"ye getir, sonra iptal et.
+      // ⭐ Savunma birimleri de artık bantta (§13.21.3) → aynı yol onlar için de geçerli.
+      if (isBandRow(q)) {
         await this.cities.materialize(Number(q['city_id']), opts.at, tx as never);
         const fresh = await tx.execute<Record<string, unknown>>(sql`
           SELECT done, completed_at FROM queues WHERE id = ${opts.queueId}
@@ -510,7 +573,7 @@ export class QueueService {
        * Üretimi bitmiş askerler zaten şehirde → onların bedeli iade edilmez. Kalan `n` birimden
        * dokümanın "bir ünite eksik" kuralı işler: iade = birimMaliyeti × (n − 1).
        */
-      const isUnit = String(q['category']) === 'unit' && count != null;
+      const isUnit = isBandRow(q) && count != null;
       const done = Number(q['done'] ?? 0);
       const spent = { gold: Number(q['spent_gold']), food: Number(q['spent_food']) };
       const effectiveSpent = isUnit && count! > 0
@@ -537,8 +600,8 @@ export class QueueService {
        * Bu satır olmadan bekleyen emirler eski saatleriyle kalıyor ve iptalden sonra hepsi
        * birden üretilmiş gibi görünüyordu.
        */
-      if (String(q['category']) === 'unit') {
-        await promoteNext(tx as never, cityId, opts.at);
+      if (isBandRow(q)) {
+        await promoteNext(tx as never, cityId, opts.at, String(q['category']) as 'unit' | 'defense');
       }
       if (refunded.gold > 0 || refunded.food > 0) {
         await this.cities.add(cityId, refunded, opts.at, tx as never);
@@ -614,6 +677,35 @@ export class QueueService {
       await tx.execute(sql`UPDATE queues SET position = ${other} WHERE id = ${opts.queueId}`);
     });
   }
+}
+
+/**
+ * ⭐ ÖN-ŞART TABLOSUNDAKİ "yapı" seviyeleri — `buildings` + **seviye taşıyan savunma yapıları**.
+ *
+ * ⚠️ **GERÇEK HATA** (2026-07-29'da bulundu): Sur ve Büyü Kalkanı `defenses` tablosunda yaşıyor
+ * ama ön-şart tablosunda `buildings: { wall: N }` diye yazılı. `checkRequirement`'a yalnız
+ * `st.buildings` verildiği için Sur seviyesi **daima 0** okunuyordu → *Okçu Kulesi, Balista,
+ * Muhafız, Kazancı, Mangonel ve Büyü Kalkanı HİÇBİR ZAMAN üretilemiyordu* ("Okçu Kulesi için
+ * gereken: Sur 1 (şu an 0)"). Savunma ekranı bu yüzden fiilen ölüydü.
+ *
+ * Çözüm ön-şart tablosunu değiştirmek DEĞİL (orada Sur gerçekten bir yapıdır); okuma anında
+ * iki kaynağı birleştirmek. Böylece "Sur nerede saklanıyor" ayrıntısı ön-şart mantığına sızmıyor.
+ */
+function structureLevels(st: CityState): Record<string, number> {
+  return {
+    ...st.buildings,
+    wall: st.defenses['wall'] ?? 0,
+    magic_shield: st.defenses['magic_shield'] ?? 0,
+  };
+}
+
+/**
+ * Satır **banda** mı ait? (savaşçı ya da adetli savunma birimi).
+ * Sur/Büyü Kalkanı `target_level` taşır ve banda girmez.
+ */
+function isBandRow(q: Record<string, unknown>): boolean {
+  const c = String(q['category']);
+  return (c === 'unit' || c === 'defense') && q['target_level'] == null;
 }
 
 function nameOfItem(id: string): string {

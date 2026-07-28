@@ -8,7 +8,7 @@ export const cityId = z.number().int().positive();
 export const coordinates = z.object({
   k: z.number().int().min(0), // kıta
   d: z.number().int().min(0), // diyar
-  s: z.number().int().min(0), // şehir yuvası
+  s: z.number().int().min(0), // şehir yeri
 });
 export type Coordinates = z.infer<typeof coordinates>;
 

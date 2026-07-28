@@ -104,7 +104,7 @@ async function main() {
 
   console.log('\n8. Dünya ekranı');
   const w = await call('GET', `/api/v1/world/${aCity.coordinates.k}/${aCity.coordinates.d}`, { token: A });
-  ok(w.body?.slots?.length === 10, 'diyar 10 yuva döndürüyor');
+  ok(w.body?.slots?.length === 10, 'diyar 10 şehir döndürüyor');
   const mine = w.body.slots.find((s) => s.city?.id === aCity.id);
   ok(mine?.city?.isOwn === true, 'kendi şehrim işaretli');
   ok(mine?.city?.protection === 'beginner', 'acemi koruması görünüyor', mine?.city);

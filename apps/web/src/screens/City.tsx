@@ -414,15 +414,17 @@ function useProductionSync(producedTotal: number): void {
  * söyler.
  */
 function ProductionPanel({
-  city, queues, onCancel, onMove,
+  city, queues, onCancel, onMove, noun = 'asker', limit,
 }: {
   city: CityDetail;
   queues: QueueRow[];
   onCancel: (q: QueueRow) => void;
   onMove: (queueId: number, direction: 'up' | 'down') => void;
+  /** Savunmada "asker" değil "birim" denir — aynı bant, farklı kelime. */
+  noun?: string;
+  limit: number;
 }) {
   const [collapsed, setCollapsed] = useCollapsed();
-  const barracks = Math.max(1, city.buildings['barracks'] ?? 1);
   const now = serverNow();
 
   // Süren emirlerin toplam üretimi — değiştiği anda (kısılmış) tazeleme tetikler.
@@ -443,7 +445,7 @@ function ProductionPanel({
       right={
         <button onClick={() => setCollapsed(!collapsed)}
           className="text-[11px] text-on-panel-header/85 hover:text-on-panel-header">
-          {queues.length}/{barracks} emir · {collapsed ? 'göster ▾' : 'gizle ▴'}
+          {queues.length}/{limit} emir · {collapsed ? 'göster ▾' : 'gizle ▴'}
         </button>
       }
     >
@@ -462,8 +464,8 @@ function ProductionPanel({
                     <ItemName name={nameOf(q.itemType)} value={fmt(remaining)} />
                     <div className="text-[11px] text-muted">
                       {active
-                        ? <>sırada üretiliyor · <span className="tnum">{remaining}</span> asker kaldı</>
-                        : <>bant boşalınca başlar · <span className="tnum">{remaining}</span> asker</>}
+                        ? <>sırada üretiliyor · <span className="tnum">{remaining}</span> {noun} kaldı</>
+                        : <>bant boşalınca başlar · <span className="tnum">{remaining}</span> {noun}</>}
                     </div>
                   </div>
                   {!active ? (
@@ -479,7 +481,7 @@ function ProductionPanel({
                 </div>
 
                 {active && p ? (
-                  <UnitTicker start={p.unitStart} end={p.unitEnd} finished={p.finished} />
+                  <UnitTicker start={p.unitStart} end={p.unitEnd} finished={p.finished} noun={noun} />
                 ) : (
                   <div className="mt-1.5 border-t border-border pt-1.5 text-[11px] text-muted">
                     Başlıyor: <span className="tnum">{remaining_(q.startedAt)}</span>
@@ -507,7 +509,9 @@ const remaining_ = (iso: string): string => remaining(iso) ?? 'birazdan';
  * ⭐ Çubuk yeni askere geçerken **animasyon kapatılır** (`transition-none`): %100'den %0'a
  * yumuşak geçiş, dolmuş çubuğun geri sarması gibi görünüyordu.
  */
-function UnitTicker({ start, end, finished }: { start: number; end: number; finished: boolean }) {
+function UnitTicker({ start, end, finished, noun = 'asker' }: {
+  start: number; end: number; finished: boolean; noun?: string;
+}) {
   const now = serverNow();
   const pct = finished ? 100 : Math.min(100, Math.max(0, ((now - start) / Math.max(1, end - start)) * 100));
   const left = Math.max(0, (end - now) / 1000);
@@ -516,7 +520,7 @@ function UnitTicker({ start, end, finished }: { start: number; end: number; fini
   return (
     <div className="mt-1.5 border-t border-border pt-1.5">
       <div className="mb-1 flex items-center justify-between text-[11px]">
-        <span className="text-muted">sıradaki asker</span>
+        <span className="text-muted">sıradaki {noun}</span>
         <span className="tnum font-semibold text-warning">
           {finished ? 'sipariş tamamlandı' : formatDuration(left)}
         </span>
@@ -542,19 +546,44 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
 
   const list: CatalogUnit[] = (kind === 'unit' ? catalog.data?.units : catalog.data?.defenses) ?? [];
   const have = kind === 'unit' ? city.units : city.defenses;
-  const queues = city.queues.filter((q) => q.category === kind)
+  /**
+   * ⚠️ Ön-şartta geçen "yapı" seviyesi `buildings` + **seviye taşıyan savunma yapıları**.
+   * Sur `defenses` tablosunda yaşıyor ama ön-şartta bir YAPI olarak yazılı; yalnız `buildings`e
+   * bakmak Sur'u daima 0 gösteriyordu ve Sur ön-şartlı her savunma birimi kilitli kalıyordu
+   * (sunucu tarafındaki ikiziyle aynı hata — `queue.service.ts:structureLevels`).
+   */
+  const structureLevels: Record<string, number> = {
+    ...city.buildings,
+    wall: city.defenses['wall'] ?? 0,
+    magic_shield: city.defenses['magic_shield'] ?? 0,
+  };
+  /**
+   * ⭐ SAVUNMADA DA İKİ ŞERİT (§13.21.3, kullanıcı isteği 2026-07-29).
+   *
+   * `target_level` taşıyan satırlar **Sur / Büyü Kalkanı** yükseltmesidir: kendi satırlarında
+   * ilerler ve birim üretiminden BAĞIMSIZ akar. Kalanlar Baraka'dakiyle aynı **tek banda**
+   * girer ve üstteki panelde sırayla listelenir.
+   */
+  const all = city.queues.filter((q) => q.category === kind);
+  const structureQueues = all.filter((q) => q.targetLevel != null);
+  const queues = all.filter((q) => q.targetLevel == null)
     .sort((a, b) => (a.position ?? 1) - (b.position ?? 1));
-  const barracks = city.buildings['barracks'] ?? 1;
-  // Savunmada hâlâ tek slot; barakada Baraka seviyesi kadar emir (kullanıcı kuralı).
-  const slotsFull = kind === 'unit' ? queues.length >= Math.max(1, barracks) : queues.length > 0;
+
+  // Emir sınırı: savaşçıda Baraka, savunma biriminde Sur (savunma birimleri surda yaşar).
+  const bandLimit = Math.max(1, kind === 'unit'
+    ? (city.buildings['barracks'] ?? 1)
+    : (city.defenses['wall'] ?? 1));
+  const slotsFull = queues.length >= bandLimit;
 
   return (
     <>
-      {/* ⭐ Barakada süren emirler ÜSTTEKİ panelde, tek bant sırasıyla (kullanıcı kararı). */}
-      {kind === 'unit' ? (
+      {/* ⭐ Süren birim emirleri ÜSTTEKİ panelde, tek bant sırasıyla (kullanıcı kararı). */}
+      {queues.length > 0 ? (
         <ProductionPanel
           city={city}
           queues={queues}
+          noun={kind === 'unit' ? 'asker' : 'birim'}
+          limit={bandLimit}
           onMove={(queueId, direction) => move.mutate({ queueId, direction })}
           onCancel={(q) => {
             const u = list.find((x) => x.id === q.itemType);
@@ -570,7 +599,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
 
     <Panel
       title={kind === 'unit' ? 'Baraka' : 'Savunma'}
-      right={kind === 'unit' ? `${queues.length}/${Math.max(1, barracks)} emir` : undefined}
+      right={`${queues.length}/${bandLimit} emir`}
     >
       <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
       <ul className="divide-y divide-border">
@@ -582,10 +611,9 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
             : { gold: u.cost.gold * n, food: u.cost.food * n, seconds: (u.seconds ?? 0) * n };
           const afford = city.resources.gold >= total.gold && city.resources.food >= total.food;
           const unmet = (u.requirementNames ?? []).some((r) => {
-            const lv = r.kind === 'building' ? (city.buildings[r.id] ?? 0) : (city.techs[r.id] ?? 0);
+            const lv = r.kind === 'building' ? (structureLevels[r.id] ?? 0) : (city.techs[r.id] ?? 0);
             return lv < r.level;
           });
-          const mine = queues.filter((q) => q.itemType === u.id);
 
           return (
             <li key={u.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
@@ -603,7 +631,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   ) : null}
                   <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
                   <Requirements requirementNames={u.requirementNames}
-                    buildings={city.buildings} techs={city.techs} />
+                    buildings={structureLevels} techs={city.techs} />
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {levelBased ? null : (
@@ -632,10 +660,11 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                 </div>
               ) : null}
 
-              {/* ⚠️ Barakada süren emirler SATIRDA DEĞİL üstteki "Üretim bandı" panelinde
-                  (kullanıcı kararı): tek bant sırayla işlediği için sıralı tek liste doğru yer.
-                  Savunmada tek slot olduğu için satır içi ilerleme kalıyor. */}
-              {kind === 'defense' ? mine.map((q) => (
+              {/* ⚠️ Adetli birimlerin ilerlemesi SATIRDA DEĞİL üstteki "Üretim bandı" panelinde:
+                  tek bant sırayla işlediği için sıralı tek liste doğru yer. Satır içi ilerleme
+                  yalnız SEVİYE taşıyan Sur / Büyü Kalkanı'nda kalıyor — onlar banda girmez ve
+                  birim üretimiyle paralel akar (§13.21.3). */}
+              {levelBased ? structureQueues.filter((q) => q.itemType === u.id).map((q) => (
                 <ProgressRow
                   key={q.id}
                   startedAt={q.startedAt} finishAt={q.finishAt}

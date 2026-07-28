@@ -92,7 +92,9 @@ export class CityService {
      * geçiyor. Böylece oyuncu çevrimdışıyken saldırı gelirse o ana kadar üretilmiş askerler
      * savaşta gerçekten hazır bulunur.
      */
-    await materializeUnitQueues(runner as never, cityId, at);
+    await materializeUnitQueues(runner as never, cityId, at, 'unit');
+    // ⭐ Savunma birimleri de artık tek bantta üretiliyor (§13.21.3) → aynı tembel yol.
+    await materializeUnitQueues(runner as never, cityId, at, 'defense');
   }
 
   /** Şehri `at` anına ilerletip anlık görüntüsünü döndürür (oyuncuya gösterilen hâl). */

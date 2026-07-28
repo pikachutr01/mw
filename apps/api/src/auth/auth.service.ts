@@ -39,7 +39,7 @@ export interface AuthResult extends TokenPair {
 /**
  * ⭐ DÜNYA BOYUTLARI — oyunun kendi dokümanından (`teknik_ve_yapi_dokumantasyonu.md`):
  * *"Bir dünyada 10 kıta, bir kıtada 500 diyar ve bir diyarda da 10 şehir bulunmaktadır."*
- * → dünya başına 50.000 şehir yuvası. Koordinatlar **1-indeksli** (1:45:10).
+ * → dünya başına 50.000 boş şehir yeri. Koordinatlar **1-indeksli** (1:45:10).
  * Faz 3'te `world_config.map`'e taşınacak; yerleşim algoritması da (§13.6) bunu kullanacak.
  */
 export const WORLD_SHAPE = {
@@ -100,7 +100,7 @@ export class AuthService {
       `);
       const playerId = Number(ply[0]!.id);
 
-      // Başkent: yerleşim algoritması Faz 3'te (§13.6); şimdilik ilk boş yuva.
+      // Başkent: yerleşim algoritması Faz 3'te (§13.6); şimdilik ilk boş şehir yeri.
       const slot = await this.findFreeSlot(input.worldId, tx as never);
       await this.cities.create({
         worldId: input.worldId,
@@ -256,17 +256,17 @@ export class AuthService {
   }
 
   /**
-   * İlk boş harita yuvası. **Geçici** — gerçek yerleşim algoritması (§13.6: nefes payı, komşu
+   * İlk boş harita noktası. **Geçici** — gerçek yerleşim algoritması (§13.6: nefes payı, komşu
    * skoru, tehdit çarpanı) Faz 3'te haritayla birlikte gelecek. Şimdilik determinist tarama:
    * `cities(world_id,k,d,s)` UNIQUE olduğu için yarış durumunda ikinci ekleme DB'de patlar.
    */
   /**
-   * İlk BOŞ yuva. Gerçek yerleşim algoritması §13.6 (Faz 3); bu geçici ama **doğru** olmak zorunda.
+   * İlk BOŞ şehir yeri. Gerçek yerleşim algoritması §13.6 (Faz 3); bu geçici ama **doğru** olmak zorunda.
    *
-   * ⚠️ Eskiden yuva şehir SAYISINDAN türetiliyordu (`count % 10`). Bu, şehirler tam sırayla
-   * oluşturulup hiç silinmediği sürece çalışır; bir şehir silinince veya bir yuva elle dolunca
+   * ⚠️ Eskiden şehir yeri şehir SAYISINDAN türetiliyordu (`count % 10`). Bu, şehirler tam sırayla
+   * oluşturulup hiç silinmediği sürece çalışır; bir şehir silinince veya bir şehir yeri elle dolunca
    * **aynı koordinat ikinci kez üretilir** ve kayıt `cities_world_coords` ihlaliyle 500 verir.
-   * Şimdi gerçekten boş olan en küçük yuva bulunuyor (boşluk varsa onu doldurur).
+   * Şimdi gerçekten boş olan en küçük şehir yeri bulunuyor (boşluk varsa onu doldurur).
    *
    * ⭐ Dünya boyutları oyunun kendi dokümanından: 10 kıta × 500 diyar × 10 şehir,
    * koordinatlar **1-indeksli** (1:45:10 = 1. kıta, 45. diyar, 10. şehir).
