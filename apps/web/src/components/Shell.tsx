@@ -21,42 +21,63 @@ import { fmt, useTick } from '../lib/hooks.ts';
 import { armiesBadge, useCity, useMessages, useMovements } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
+import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
 import { Panel, Res } from './ui.tsx';
 
 /**
- * Sol menü sırası orijinaldeki gibi. Mesajlar orijinal menüde yoktu ama okunmamış rozeti
+ * Sol menü sırası orijinaldeki gibi (`images/scr_web05` sol sütun). Mesajlar orijinalin **web**
+ * menüsünde yoktu (J2ME'de Komuta Merkezi altındaydı, `g.java` case 10) ama okunmamış rozeti
  * sürekli görünmeli → **Komuta Merkezi'nden hemen önce** (kullanıcı kararı).
+ *
+ * ⭐ Simgeler kullanıcının çizdiği set (`images/ikonlar`), emoji DEĞİL: emoji işletim sistemine
+ * göre değişiyor ve oyunun antik paletiyle hiç uyuşmuyordu. Dosya adı = `assets/menu/<icon>.png`.
  */
 const MENU = [
-  { to: '/armies', label: 'Ordular', icon: '⚔️' },
-  { to: '/barracks', label: 'Baraka', icon: '🛡️' },
-  { to: '/buildings', label: 'Yapılar', icon: '🏗️' },
-  { to: '/defense', label: 'Savunma', icon: '🏯' },
-  { to: '/academy', label: 'Akademi', icon: '📜' },
-  { to: '/temple', label: 'Tapınak', icon: '⛩️' },
-  { to: '/world', label: 'Dünya', icon: '🗺️' },
-  { to: '/messages', label: 'Mesajlar', icon: '✉️' },
-  { to: '/command', label: 'Komuta Merkezi', icon: '🎖️' },
-  { to: '/options', label: 'Seçenekler', icon: '⚙️' },
-  { to: '/help', label: 'Yardım', icon: '❓' },
+  { to: '/armies', label: 'Ordular', icon: 'ordular' },
+  { to: '/barracks', label: 'Baraka', icon: 'baraka' },
+  { to: '/buildings', label: 'Yapılar', icon: 'yapilar' },
+  { to: '/defense', label: 'Savunma', icon: 'savunma' },
+  { to: '/academy', label: 'Akademi', icon: 'akademi' },
+  { to: '/temple', label: 'Tapınak', icon: 'tapinak' },
+  { to: '/world', label: 'Dünya', icon: 'dunya' },
+  { to: '/messages', label: 'Mesajlar', icon: 'mesaj' },
+  { to: '/command', label: 'Komuta Merkezi', icon: 'komutamerkezi' },
+  { to: '/options', label: 'Seçenekler', icon: 'secenekler' },
+  { to: '/help', label: 'Yardım', icon: 'yardim' },
 ] as const;
 
 /** Mobil alt bar 11 madde taşıyamaz → beş sekme; "Şehir" şehir ekranlarının hub'ıdır. */
 const TABS = [
-  { to: '/armies', label: 'Ordular', icon: '⚔️' },
-  { to: '/city', label: 'Şehir', icon: '🏰' },
-  { to: '/world', label: 'Dünya', icon: '🗺️' },
-  { to: '/messages', label: 'Mesaj', icon: '✉️' },
-  { to: '/more', label: 'Daha', icon: '☰' },
+  { to: '/armies', label: 'Ordular', icon: 'ordular' },
+  { to: '/city', label: 'Şehir', icon: 'sehir' },
+  { to: '/world', label: 'Dünya', icon: 'dunya' },
+  { to: '/messages', label: 'Mesaj', icon: 'mesaj' },
+  { to: '/more', label: 'Daha', icon: 'secenekler' },
 ] as const;
 
-/** Rota → ekranda gösterilen sayfa adı (bilgi çubuğunun sağ ucu). */
-const PAGE_TITLE: Record<string, string> = {
-  '/armies': 'Ordular', '/barracks': 'Baraka', '/buildings': 'Yapılar', '/defense': 'Savunma',
-  '/academy': 'Akademi', '/temple': 'Tapınak', '/world': 'Dünya', '/messages': 'Mesajlar',
-  '/command': 'Komuta Merkezi', '/options': 'Seçenekler', '/help': 'Yardım', '/city': 'Şehir',
-  '/more': 'Seçenekler',
-};
+/**
+ * Rota → ekranda gösterilen sayfa adı (bilgi çubuğunun sağ ucu).
+ *
+ * ⚠️ Eşleşme `startsWith` ile yapıldığı için **uzun yol önce** denenmeli; `/command` kısa yolu
+ * `/command/rankings`'i yutar ve alt sayfada yanlış başlık yazardı.
+ */
+const PAGE_TITLE: [string, string][] = [
+  ['/command/rankings', 'Sıralamalar'],
+  ['/command', 'Genel Durum'],
+  ['/armies', 'Ordular'], ['/barracks', 'Baraka'], ['/buildings', 'Yapılar'],
+  ['/defense', 'Savunma'], ['/academy', 'Akademi'], ['/temple', 'Tapınak'],
+  ['/world', 'Dünya'], ['/messages', 'Mesajlar'], ['/options', 'Seçenekler'],
+  ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'],
+];
+
+/** Sol menü ve mobil alt barın ortak simgesi. */
+function MenuIcon({ id, size }: { id: string; size: number }) {
+  return (
+    <img src={`/assets/menu/${id}.png`} alt="" aria-hidden width={size} height={size}
+      className="icon-shadow shrink-0 object-contain"
+      style={{ width: size, height: size }} />
+  );
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   return (
@@ -91,15 +112,16 @@ function InfoBar() {
   const city = useCity(cityId);
   const { pathname } = useLocation();
 
-  // Kaynak sunucuda tembel birikiyor; aradaki saniyeleri istemci yansıtır ki sayaç donmuş
-  // görünmesin. Otorite yine sunucudur (5 sn'de bir tazeleniyor).
+  // ⭐ Sayaç YOKLAMAYLA değil, üretim hızıyla **ekstrapolasyonla** akıyor: sunucu kaynağı tembel
+  // biriktiriyor, istemci aradaki saniyeleri saniyede bir çiziyor. Otorite yine sunucudur —
+  // çıpa WS olaylarında ve emniyet ağı yoklamasında (dakikada bir) tazeleniyor.
   const now = useTick();
   const d = city.data;
   const elapsedH = d ? Math.max(0, (now - Date.parse(d.serverNow)) / 3_600_000) : 0;
   const gold = d ? d.resources.gold + d.production.goldPerHour * elapsedH : 0;
   const food = d ? d.resources.food + d.production.foodPerHour * elapsedH : 0;
 
-  const page = Object.entries(PAGE_TITLE).find(([p]) => pathname.startsWith(p))?.[1] ?? '';
+  const page = PAGE_TITLE.find(([p]) => pathname.startsWith(p))?.[1] ?? '';
 
   return (
     <div className="tex tex-header bevel mb-3 flex items-center justify-center gap-3 rounded-[var(--radius-md)]
@@ -140,53 +162,70 @@ function SpeedBadge({ speed }: { speed?: { resource: number; travel: number } })
   if (rows.every(([, v]) => v === 1)) return null;
 
   return (
-    <span className="group relative flex shrink-0 items-center">
-      <span aria-hidden className="text-[15px] leading-none">⚡</span>
-      <span className="sr-only">Hızlandırılmış dünya</span>
-      {/* Tooltip: saf CSS (grup-hover) — tek satırlık bir bilgi için durum tutmaya değmez. */}
-      <span
-        role="tooltip"
-        className="tex bevel pointer-events-none absolute top-full right-0 z-50 mt-1.5 hidden
-          w-44 rounded-[var(--radius-sm)] border-2 border-strong bg-surface p-2 text-left
-          group-hover:block"
-      >
-        <span className="display mb-1 block text-[11px] font-semibold tracking-wide text-ink uppercase">
-          Hızlandırılmış dünya
-        </span>
-        {rows.map(([label, v]) => (
-          <span key={label} className="flex items-baseline justify-between gap-2 text-[11px]">
-            <span className="text-muted">{label}</span>
-            <span className={`tnum font-semibold ${v === 1 ? 'text-muted' : 'text-accent'}`}>
-              {v}x
-            </span>
-          </span>
-        ))}
+    <Tooltip
+      placement="bottom"
+      className="shrink-0 items-center"
+      label={
+        <>
+          <TooltipTitle>Hızlandırılmış dünya</TooltipTitle>
+          {rows.map(([label, v]) => (
+            <TooltipRow key={label} label={label} value={`${v}x`} tone={v === 1 ? 'muted' : 'accent'} />
+          ))}
+        </>
+      }
+    >
+      <span tabIndex={0} className="cursor-help leading-none outline-none">
+        <span aria-hidden className="text-[15px] leading-none">⚡</span>
+        <span className="sr-only">Hızlandırılmış dünya</span>
       </span>
-    </span>
+    </Tooltip>
   );
 }
 
 /**
  * Gerçek zamanlı bağlantı göstergesi. Kopukluk SESSİZ kalmamalı: oyuncu "gelen ordu yok"
  * görüntüsüne bakarken aslında bağlantısı kopmuş olabilir.
+ *
+ * ⭐ Nokta tek başına ne olduğunu anlatmıyordu (tarayıcının `title`'ı bir saniye sonra ve
+ * biçimsiz çıkıyor). Artık gerçek bir ipucu: **durum + ne anlama geldiği**. Yoklama emniyet ağına
+ * indirildiği için bu göstergenin okunabilir olması daha da önemli — WS kopuksa ekran artık
+ * 5 saniyede değil 60 saniyede bir tazeleniyor ve oyuncunun bunu bilmesi gerekiyor.
  */
 function ConnectionDot() {
   const [state, setState] = useState(getConnectionState);
   useEffect(() => onConnectionChange(setState), []);
 
-  const label = state === 'online' ? 'Canlı bağlantı açık'
-    : state === 'connecting' ? 'Bağlanıyor…'
-      : 'Bağlantı koptu — yeniden deneniyor';
-  const color = state === 'online' ? 'bg-success'
-    : state === 'connecting' ? 'bg-warning'
-      : 'bg-danger';
+  const { label, note, color } = state === 'online'
+    ? {
+      label: 'Canlı bağlantı açık',
+      note: 'Savaş, gelen ordu ve üretim bitişleri anında düşüyor.',
+      color: 'bg-success',
+    }
+    : state === 'connecting'
+      ? {
+        label: 'Bağlanıyor…',
+        note: 'Canlı hat kuruluyor; bu sırada ekran dakikada bir tazeleniyor.',
+        color: 'bg-warning',
+      }
+      : {
+        label: 'Bağlantı koptu',
+        note: 'Yeniden deneniyor. Hiçbir olay kaybolmaz; bağlanınca hepsi gelir.',
+        color: 'bg-danger',
+      };
 
   return (
-    <span title={label} aria-label={label} role="status" className="flex shrink-0 items-center">
-      <span className={`h-2 w-2 rounded-full ring-1 ring-black/30 ${color} ${
-        state === 'online' ? '' : 'animate-pulse'
-      }`} />
-    </span>
+    <Tooltip
+      placement="bottom"
+      className="shrink-0 items-center"
+      label={<><TooltipTitle>{label}</TooltipTitle><span className="text-muted">{note}</span></>}
+    >
+      <span tabIndex={0} role="status" aria-label={label}
+        className="flex cursor-help items-center outline-none">
+        <span className={`h-2 w-2 rounded-full ring-1 ring-black/30 ${color} ${
+          state === 'online' ? '' : 'animate-pulse'
+        }`} />
+      </span>
+    </Tooltip>
   );
 }
 
@@ -227,7 +266,7 @@ function SideMenu() {
                       ? 'border-strong bg-accent font-semibold text-on-accent shadow-[var(--bevel)]'
                       : 'border-transparent text-ink hover:border-border hover:bg-raised'
                   }`}>
-                <span aria-hidden className="text-base leading-none">{t.icon}</span>
+                <MenuIcon id={t.icon} size={26} />
                 <span className="flex-1 truncate">{t.label}</span>
                 {badge > 0 ? (
                   <span className={`rounded-full px-1.5 text-[10px] leading-4 ${tone}`}>{badge}</span>
@@ -240,7 +279,7 @@ function SideMenu() {
             className="mt-1 flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-transparent
               px-2.5 py-1.5 text-[13px] text-danger transition-colors hover:border-danger hover:bg-raised"
           >
-            <span aria-hidden className="text-base leading-none">⏻</span>
+            <MenuIcon id="cikis" size={26} />
             <span className="flex-1 text-left">Oyunu Kapat</span>
           </button>
         </nav>
@@ -295,7 +334,7 @@ function BottomBar() {
               className={`relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] ${
                 active ? 'font-semibold text-on-panel-header' : 'text-on-panel-header/70'
               }`}>
-              <span className="text-xl leading-none">{t.icon}</span>
+              <MenuIcon id={t.icon} size={26} />
               {t.label}
               {badge > 0 ? (
                 <span className={`absolute top-0.5 right-1/2 translate-x-4 rounded-full px-1.5 text-[10px] leading-4 ${tone}`}>

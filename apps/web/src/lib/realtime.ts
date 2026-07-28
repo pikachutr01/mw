@@ -37,12 +37,24 @@ export function onConnectionChange(fn: (s: ConnectionState) => void): () => void
   return () => stateListeners.delete(fn);
 }
 
-/** Sunucu olayı → tazelenecek sorgu anahtarları. Eşleme TEK yerde. */
+/**
+ * Sunucu olayı → tazelenecek sorgu anahtarları. Eşleme TEK yerde.
+ *
+ * ⚠️ Bu tablo **yoklama aralıklarının dayanağıdır** (`queries.ts`). Bir olay burada karşılıksız
+ * kalırsa ekran ancak emniyet ağı yoklaması dönene kadar (60 sn) eski veriyi gösterir. Yeni bir
+ * sunucu olayı eklendiğinde önce buraya bakılmalı.
+ */
 const INVALIDATES: Record<string, string[]> = {
   'missions:changed': ['missions'],
-  'city:changed': ['city', 'catalog'],
+  'city:changed': ['city', 'catalog', 'overview'],
+  // Yeni şehir kurulması şehir ŞERİDİNİ de değiştirir.
+  'cities:changed': ['cities', 'city', 'world'],
+  // Posta kutusuna düşen her satır — okunmamış rozeti anında güncellensin.
+  'messages:changed': ['messages'],
   // Savaş hem raporu hem orduyu hem şehri değiştirir.
   'battle:resolved': ['messages', 'missions', 'city'],
+  // Sıralama günde 3 kez donuyor; donduğu an ekrandaki sıra bayatlamasın.
+  'ranking:updated': ['rankings', 'overview', 'world'],
 };
 
 export function connectRealtime(queryClient: QueryClient): () => void {

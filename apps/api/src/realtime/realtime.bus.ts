@@ -122,10 +122,47 @@ export function eventForOutbox(
     case 'city:units_finished':
     case 'city:defense_finished':
     case 'player:tech_finished':
+    /**
+     * ⚠️ **BU İKİSİ EKSİKTİ** (2026-07-28'de bulundu). `city:changed` nakliye/destek varışında,
+     * `city:founded` yeni şehir kurulduğunda yazılıyordu ama burada karşılığı olmadığı için
+     * `eventForOutbox` `null` dönüyor ve olay WS'e HİÇ çıkmıyordu. Ekran güncelleniyordu çünkü
+     * istemci 5 saniyede bir şehri yokluyordu — yani yoklama gerçek bir boşluğu örtüyordu.
+     * Yoklamayı emniyet ağına indirmeden önce boşluğun kapanması gerekiyordu.
+     */
+    case 'city:changed':
       return {
         topic: 'city:changed', worldId,
         playerIds: players(num(payload['playerId'])),
         ref: { cityId: num(payload['cityId']) },
+      };
+
+    // Yeni şehir ŞEHİR LİSTESİNİ de değiştirir → istemcide `cities` anahtarı da tazelenir.
+    case 'city:founded':
+      return {
+        topic: 'cities:changed', worldId,
+        playerIds: players(num(payload['playerId'])),
+        ref: { cityId: num(payload['cityId']) },
+      };
+
+    /**
+     * Posta kutusuna düşen HER satır (savaş raporu · dönüş · casusluk · nakliye · destek).
+     * Okunmamış rozeti bununla anında güncelleniyor; `messages` yoklaması artık yalnız emniyet ağı.
+     */
+    case 'message:written':
+      return {
+        topic: 'messages:changed', worldId,
+        playerIds: players(num(payload['playerId'])),
+        ref: { kind: payload['kind'] == null ? null : String(payload['kind']) },
+      };
+
+    /**
+     * Sıralama anlık görüntüsü — **dünya geneli** yayın (`playerIds` boş): sıra herkesinkini
+     * aynı anda değiştirir, oyuncu başına olay üretmek 10.000 satırlık bir dünyada anlamsız olurdu.
+     */
+    case 'ranking:updated':
+      return {
+        topic: 'ranking:updated', worldId, playerIds: [],
+        ref: { takenAt: payload['takenAt'] == null ? null : String(payload['takenAt']) },
       };
 
     default:

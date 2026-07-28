@@ -560,6 +560,8 @@ async function writeMessage(ctx: HandlerContext, o: {
     VALUES (${ctx.worldId}, ${o.playerId}, ${o.kind}, ${o.side}, ${o.battleId}, ${ctx.mission.id},
             ${o.subject}, ${JSON.stringify(o.body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
   `);
+  // Mesaj yazımı ve haberi aynı yerde — bkz. `mission.handlers.ts` içindeki ikizi.
+  await ctx.emit('message:written', { playerId: o.playerId, kind: o.kind });
 }
 
 function readLootPayload(payload: Record<string, unknown>): { gold: number; food: number } {

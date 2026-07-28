@@ -190,9 +190,14 @@ export class CommandController {
            ORDER BY r.rank LIMIT ${PAGE_SIZE} OFFSET ${offset}
         `)
       : kind === 'player'
+        /**
+         * ⚠️ Şehir sayısı BİLEREK yok (kullanıcı kararı 2026-07-28, `images/scr_web02` ile
+         * doğrulandı): orijinal sıralama tablosu **Sıra · Oyuncu · Puan · Değişim · İttifak**
+         * gösteriyor. Şehir sayısı casuslukla öğrenilecek bir bilgiye yakın; sıralamada bedava
+         * verilmesi Dünya ekranındaki gizlilik kuralıyla (§13.16.5) da çelişiyordu.
+         */
         ? await this.db.execute<Record<string, unknown>>(sql`
-            SELECT r.rank, r.prev_rank, r.subject_id, r.score, p.username,
-                   (SELECT COUNT(*) FROM cities c WHERE c.player_id = p.id) AS cities
+            SELECT r.rank, r.prev_rank, r.subject_id, r.score, p.username
               FROM rankings r
               JOIN players p ON p.id = r.subject_id
              WHERE r.world_id = ${player.worldId} AND r.kind = 'player'
@@ -210,8 +215,14 @@ export class CommandController {
       myPage: myRank == null ? null : Math.floor((myRank - 1) / PAGE_SIZE) + 1,
       takenAt: takenAt?.toISOString() ?? null,
       nextAt: nextSnapshotAt(gameNow).toISOString(),
-      /** İttifak şeması gelene kadar boş liste + sebebi (ekran bunu yazıyor, boş kutu göstermiyor). */
-      unavailable: kind === 'alliance' ? 'İttifaklar henüz açılmadı.' : null,
+      /**
+       * Boş liste sebebi. Metin **oyunun kendi dizesinden** (`g.java` / `k.java` string tablosu):
+       * *"Bu dünyada hiç ittifak yok!"* · *"Bu dünyada hiç kahraman yok!"* — kendi cümlemizi
+       * uydurmak yerine orijinalin ağzını kullanıyoruz (§13.14 adlandırma sözleşmesinin ruhu).
+       */
+      unavailable: kind === 'alliance' ? 'Bu dünyada hiç ittifak yok!'
+        : kind === 'hero' && total === 0 ? 'Bu dünyada hiç kahraman yok!'
+          : null,
       rows: rows.map((r) => ({
         rank: Number(r['rank']),
         prevRank: r['prev_rank'] == null ? null : Number(r['prev_rank']),
@@ -229,7 +240,7 @@ export class CommandController {
           : {
             name: String(r['username']),
             score: Number(r['score']),
-            cities: Number(r['cities'] ?? 0),
+            // İttifak şeması gelene kadar orijinaldeki gibi "-" gösterilir (`scr_web02`).
             alliance: null as string | null,
             isMine: Number(r['subject_id']) === player.playerId,
           }),

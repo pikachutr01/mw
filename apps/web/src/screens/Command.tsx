@@ -1,37 +1,51 @@
 /**
- * ⭐ KOMUTA MERKEZİ — **Genel Durum** ve **Sıralamalar** (referans `images/scr_web05`, `scr_web02`)
+ * ⭐ KOMUTA MERKEZİ — **Genel Durum** ve **Sıralamalar**
+ * (referans `images/scr_web05`, `images/scr_web02`; menü hiyerarşisi `DecompiledSrc/src/g.java`)
  *
- * Doküman (GENEL DURUM): *"tüm şehirlerinizdeki ordu ve kaynak durumunu gösterir. Ayrıca
- * tekniklerinizin seviyesi ve sıralamanız hakkında da istatistikler içerir. Puanlama,
- * harcadığınız kaynak miktarına göre yapılır."*
+ * ### Orijinalden ne alındı
+ * J2ME istemcisinde Komuta Merkezi bir **hub**tur (`g.java` case 10):
+ * *Mesajlar · Genel Durum · İttifak · Arama · Sıralamalar*. Bizde Mesajlar sol menüde ayrı duruyor
+ * (okunmamış rozeti sürekli görünsün diye), İttifak ve Arama ise kendi turlarını bekliyor —
+ * ama **sekme yapısı ve isimlendirme** oradan geliyor. Sıralamanın üç dalı da aynı dosyadan
+ * (case 101): *Oyuncuya Göre · İttifağa Göre · Kahramana Göre*.
  *
- * İki karar bu ekranın şeklini belirledi:
- *
- *  1. **Ordu dökümü SÜTUN, satır değil.** 4 şehir × 12 savaşçı türü bir satır listesi olarak
- *     48 satır ederdi; şehirler satır, birim türleri sütun olunca tablo tek bakışta okunuyor ve
- *     "hangi şehirde ne var" karşılaştırması dikey olarak yapılabiliyor. Sütun başlıkları
- *     **birimin kendi görseli** (ad `title`'da) — 12 Türkçe başlık tabloyu ekrana sığdırmazdı.
- *  2. **Sıra CANLI DEĞİL** (§13.16): başlıkta "son güncelleme / sıradaki" yazıyor. Bu olmadan
+ * ### Ekranın şeklini belirleyen üç karar
+ *  1. **Panel adı "Hükümdarlık"** (orijinal web ekranı), sayfa adı ise bilgi çubuğunda
+ *     "Genel Durum" — ikisi orijinalde de farklı.
+ *  2. **Şehir tablosu DEVRİK:** satırlar kaynak/birim türü, sütunlar şehirler. Bir ara tersiydi
+ *     (şehir satır, birim sütun); orijinal de bu yönde ve sebebi net — oyuncu "hangi birimden
+ *     toplam kaç tane, nerede" diye bakar, şehir sayısı 4-10 arasında kalır ama birim türü 20'ye
+ *     çıkar. Sütun sayısını şehre bağlamak tabloyu yatay kaydırmaktan kurtarıyor.
+ *  3. **Sıra CANLI DEĞİL** (§13.17.2): başlıkta "güncelleme / sıradaki" yazıyor. Bu olmadan
  *     oyuncu puanını artırıp sırasının değişmemesini hata sanar.
+ *
+ * ⚠️ Ekrana **kural anlatan bilgi metni konulmaz** (kullanıcı kararı 2026-07-28): puanın nasıl
+ * hesaplandığı gibi açıklamalar **Yardım** sayfasında toplanacak.
  */
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { LEVEL_BASED } from '@mobiwar/catalog';
-import { useOverview, useRankings, type Overview, type RankingKind } from '../lib/queries.ts';
+import {
+  useOverview, useRankings, type NamedType, type Overview, type RankingKind,
+} from '../lib/queries.ts';
 import { fmt } from '../lib/hooks.ts';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
-
-type Tab = 'overview' | 'rankings';
+import { Tooltip } from '../components/Tooltip.tsx';
 
 export function CommandScreen(): React.ReactElement {
-  const [tab, setTab] = useState<Tab>('overview');
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const onRankings = pathname.startsWith('/command/rankings');
+
   return (
     <div className="space-y-2">
+      {/* Sekme = ROTA: geri tuşu çalışsın ve "sıralamada gör" gibi kısayollar bağlanabilsin. */}
       <Tabs
-        value={tab}
-        onChange={setTab}
+        value={onRankings ? 'rankings' : 'overview'}
+        onChange={(v) => navigate(v === 'rankings' ? '/command/rankings' : '/command')}
         items={[['overview', 'Genel Durum'], ['rankings', 'Sıralamalar']]}
       />
-      {tab === 'overview' ? <Overview /> : <Rankings />}
+      {onRankings ? <Rankings /> : <Overview />}
     </div>
   );
 }
@@ -44,7 +58,7 @@ function Overview(): React.ReactElement {
 
   if (!d) {
     return (
-      <Panel title="Genel Durum">
+      <Panel title="Hükümdarlık">
         <div className="space-y-2 p-3">
           <Skeleton w="12rem" /><Skeleton w="8rem" /><Skeleton w="16rem" />
         </div>
@@ -54,153 +68,171 @@ function Overview(): React.ReactElement {
 
   return (
     <div className="space-y-2">
-      <ScoreHeader d={d} />
-      <ArmyTable d={d} kind="units" title="Ordular" />
-      <ArmyTable d={d} kind="defenses" title="Savunma" />
-      <TechList d={d} />
+      <Realm d={d} />
+      <CityTable d={d} />
     </div>
   );
 }
 
-function ScoreHeader({ d }: { d: Overview }): React.ReactElement {
+/** Orijinalin "Hükümdarlık" paneli: solda künye, sağda teknik seviyeleri (`scr_web05`). */
+function Realm({ d }: { d: Overview }): React.ReactElement {
   const p = d.player;
   return (
-    <Panel title="Genel Durum" right={snapshotNote(d.ranking)}>
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-        <Stat label="Puan" value={fmt(p.score)}
-          hint={`sonraki puana ${fmt(p.toNextPoint)} kaynak`} />
-        <Stat label="Sıra"
-          value={p.rank == null ? '—' : `${fmt(p.rank)} / ${fmt(p.totalPlayers)}`}
-          hint={changeLabel(p.rankChange)} tone={changeTone(p.rankChange)} />
-        <Stat label="İttifak" value={p.alliance ?? '—'} hint="henüz açılmadı" />
-        <Stat label="İttifak sırası"
-          value={p.allianceRank == null ? '—' : fmt(p.allianceRank)}
-          hint={changeLabel(p.allianceRankChange)} tone={changeTone(p.allianceRankChange)} />
-      </div>
-      {/* Puanın nereden geldiği ekranda yazılı: oyuncu "neden puanım düştü" diye sormasın. */}
-      <div className="border-t border-border px-3 py-2 text-[11px] text-muted">
-        Harcanan her 1.000 kaynak 1 puan kazandırır; savaşta kaybedilen ordu aynı oranda puan
-        götürür.
+    <Panel title="Hükümdarlık" right={snapshotNote(d.ranking)}>
+      <div className="grid gap-px bg-border sm:grid-cols-2">
+        <dl className="space-y-1 bg-surface px-3 py-3 text-[13px]">
+          <Line label="Puan" value={fmt(p.score)} strong />
+          <Line label="Sıra" value={p.rank == null ? '—' : `${fmt(p.rank)} / ${fmt(p.totalPlayers)}`} />
+          <Line label="Sıra Değişim" value={changeMark(p.rankChange)} tone={changeTone(p.rankChange)} />
+          <Line label="İttifak Adı" value={p.alliance ?? '-'} />
+          <Line label="İttifak Sırası" value={p.allianceRank == null ? '-' : fmt(p.allianceRank)} />
+          <Line label="İttifak Sıra Değişim" value={changeMark(p.allianceRankChange)}
+            tone={changeTone(p.allianceRankChange)} />
+        </dl>
+
+        <dl className="grid grid-cols-2 gap-x-3 bg-surface px-3 py-3 text-[13px] sm:grid-cols-1">
+          {d.techs.map((t) => (
+            <Line key={t.id} label={t.name} value={String(t.level)}
+              tone={t.level === 0 ? 'muted' : 'ink'} />
+          ))}
+        </dl>
       </div>
     </Panel>
   );
 }
 
-function Stat({
-  label, value, hint, tone = 'muted',
+function Line({
+  label, value, tone = 'ink', strong = false,
 }: {
-  label: string; value: string; hint?: string | null; tone?: 'muted' | 'success' | 'danger';
+  label: string; value: string; tone?: 'ink' | 'muted' | 'success' | 'danger'; strong?: boolean;
 }): React.ReactElement {
-  const toneClass = { muted: 'text-muted', success: 'text-success', danger: 'text-danger' }[tone];
+  const toneClass = {
+    ink: 'text-ink', muted: 'text-muted', success: 'text-success', danger: 'text-danger',
+  }[tone];
   return (
-    <div className="bg-surface px-3 py-2">
-      <div className="display text-[11px] tracking-wide text-muted uppercase">{label}</div>
-      <div className="tnum truncate text-lg font-semibold text-ink">{value}</div>
-      {hint ? <div className={`truncate text-[11px] ${toneClass}`}>{hint}</div> : null}
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="truncate text-muted">{label}</dt>
+      <dd className={`tnum shrink-0 ${toneClass} ${strong ? 'text-base font-semibold' : ''}`}>
+        {value}
+      </dd>
     </div>
   );
 }
 
 /**
- * Şehir × birim tablosu. Sütunlar **oyuncunun sahip olduğu** türlerle sınırlanıyor: katalogdaki
- * her türü sütun yapmak boş bir 20 sütunluk tablo üretiyordu.
+ * Şehirler tablosu — orijinaldeki gibi **satır = kalem, sütun = şehir**, bölüm başlıklarıyla
+ * (Kaynaklar · Baraka · Savunma). Boş hücre orijinaldeki gibi `-`.
  */
-function ArmyTable({
-  d, kind, title,
-}: { d: Overview; kind: 'units' | 'defenses'; title: string }): React.ReactElement {
-  const types = (kind === 'units' ? d.unitTypes : d.defenseTypes)
-    .filter((t) => (d.totals[kind][t.id] ?? 0) > 0);
-  const art = kind === 'units' ? 'units' : 'defenses';
+function CityTable({ d }: { d: Overview }): React.ReactElement {
+  const units = d.unitTypes.filter((t) => (d.totals.units[t.id] ?? 0) > 0);
+  const defenses = d.defenseTypes.filter((t) => (d.totals.defenses[t.id] ?? 0) > 0);
 
   return (
-    <Panel title={title} right={`${d.cities.length} şehir`}>
-      {types.length === 0 ? (
-        <Empty>Henüz {kind === 'units' ? 'savaşçınız' : 'savunma biriminiz'} yok.</Empty>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="tex-header border-b-2 border-strong bg-panel-header text-on-panel-header">
-                <Th className="min-w-[8rem]">Şehir</Th>
-                {kind === 'units' ? <Th className="w-24 text-right">Kaynak</Th> : null}
-                {types.map((t) => (
-                  <Th key={t.id} className="w-14 text-center">
-                    <span className="flex justify-center" title={t.name}>
-                      <CatalogIcon kind={art} id={t.id} size={28} alt={t.name} />
+    <Panel title="Şehirler" right={`${d.cities.length} şehir`}>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="tex-header border-b-2 border-strong bg-panel-header text-on-panel-header">
+              <Th className="min-w-[7rem]"> </Th>
+              {/**
+                * ⚠️ `normal-case` **iç `span`'de**: `Th`'nin `uppercase`'i Tailwind sıralamasında
+                * kardeş sınıfı yeniyor, ama `text-transform` MİRAS alındığı için çocukta yazmak
+                * kesin sonuç veriyor. Şehir adı oyuncunun yazdığı metindir, büyük harfe çevrilmez.
+                */}
+              {d.cities.map((c) => (
+                <Th key={c.id} className="min-w-[5.5rem] text-center">
+                  <Tooltip label={`${c.name} · ${c.coordinates.k}:${c.coordinates.d}:${c.coordinates.s}`}>
+                    <span className="cursor-help truncate normal-case">
+                      {c.name}{c.isCapital ? ' ★' : ''}
                     </span>
-                  </Th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {d.cities.map((c, i) => (
-                <tr key={c.id} className={`border-b border-border ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-                  <Td className="font-medium text-ink">
-                    {c.name}{c.isCapital ? ' ★' : ''}
-                    <span className="tnum ml-1 text-[11px] text-muted">
-                      {c.coordinates.k}:{c.coordinates.d}:{c.coordinates.s}
-                    </span>
-                  </Td>
-                  {kind === 'units' ? (
-                    <Td className="text-right">
-                      <span className="flex flex-col items-end gap-0.5">
-                        <Res kind="gold" value={fmt(c.resources.gold)} size={14} />
-                        <Res kind="food" value={fmt(c.resources.food)} size={14} />
-                      </span>
-                    </Td>
-                  ) : null}
-                  {types.map((t) => (
-                    <Td key={t.id} className="tnum text-center">
-                      {c[kind][t.id] ? amount(t.id, c[kind][t.id]!) : <span className="text-muted">—</span>}
-                    </Td>
-                  ))}
-                </tr>
+                  </Tooltip>
+                </Th>
               ))}
-              <tr className="border-t-2 border-strong bg-raised font-semibold">
-                <Td className="text-ink">Toplam</Td>
-                {kind === 'units' ? (
-                  <Td className="text-right">
-                    <span className="flex flex-col items-end gap-0.5">
-                      <Res kind="gold" value={fmt(d.totals.gold)} size={14} />
-                      <Res kind="food" value={fmt(d.totals.food)} size={14} />
-                    </span>
-                  </Td>
-                ) : null}
-                {types.map((t) => (
-                  <Td key={t.id} className="tnum text-center text-ink">
-                    {/* Sur/Kalkan SEVİYE taşır → şehirler arası toplanamaz, çizgi konur. */}
-                    {LEVEL_BASED.has(t.id) ? '—' : fmt(d.totals[kind][t.id] ?? 0)}
-                  </Td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
-  );
-}
+              <Th className="w-20 text-center">Toplam</Th>
+            </tr>
+          </thead>
+          <tbody>
+            <SectionRow title="Kaynaklar" span={d.cities.length + 2} />
+            <tr className="border-b border-border">
+              <Td className="text-muted"><Res kind="gold" value="Altın" size={16} /></Td>
+              {d.cities.map((c) => (
+                <Td key={c.id} className="tnum text-center text-ink">{fmt(c.resources.gold)}</Td>
+              ))}
+              <Td className="tnum text-center font-semibold text-ink">{fmt(d.totals.gold)}</Td>
+            </tr>
+            <tr className="border-b border-border bg-row-alt">
+              <Td className="text-muted"><Res kind="food" value="Yemek" size={16} /></Td>
+              {d.cities.map((c) => (
+                <Td key={c.id} className="tnum text-center text-ink">{fmt(c.resources.food)}</Td>
+              ))}
+              <Td className="tnum text-center font-semibold text-ink">{fmt(d.totals.food)}</Td>
+            </tr>
 
-/** Teknik seviyeleri — araştırılmamışlar da görünür ki oyuncu neyi kaçırdığını görsün. */
-function TechList({ d }: { d: Overview }): React.ReactElement {
-  return (
-    <Panel title="Teknikler" right={`${d.techs.filter((t) => t.level > 0).length}/${d.techs.length}`}>
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-4">
-        {d.techs.map((t) => (
-          <div key={t.id}
-            className={`flex items-center gap-2 bg-surface px-2 py-1.5 ${t.level === 0 ? 'opacity-45' : ''}`}>
-            <CatalogIcon kind="techs" id={t.id} size={32} alt="" />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{t.name}</span>
-            <span className="tnum text-sm font-semibold text-ink">{t.level}</span>
-          </div>
-        ))}
+            <ItemRows title="Baraka" art="units" types={units} cities={d.cities}
+              totals={d.totals.units} pick="units" empty="Henüz savaşçınız yok." />
+            <ItemRows title="Savunma" art="defenses" types={defenses} cities={d.cities}
+              totals={d.totals.defenses} pick="defenses" empty="Henüz savunma biriminiz yok." />
+          </tbody>
+        </table>
       </div>
     </Panel>
   );
 }
 
+function SectionRow({ title, span }: { title: string; span: number }): React.ReactElement {
+  return (
+    <tr className="border-y border-strong bg-raised">
+      <Td colSpan={span} className="display text-[11px] font-semibold tracking-wide text-ink uppercase">
+        {title}
+      </Td>
+    </tr>
+  );
+}
+
+function ItemRows({
+  title, art, types, cities, totals, pick, empty,
+}: {
+  title: string;
+  art: 'units' | 'defenses';
+  types: NamedType[];
+  cities: Overview['cities'];
+  totals: Record<string, number>;
+  pick: 'units' | 'defenses';
+  empty: string;
+}): React.ReactElement {
+  return (
+    <>
+      <SectionRow title={title} span={cities.length + 2} />
+      {types.length === 0 ? (
+        <tr className="border-b border-border">
+          <Td colSpan={cities.length + 2} className="py-3 text-center text-muted">{empty}</Td>
+        </tr>
+      ) : types.map((t, i) => (
+        <tr key={t.id} className={`border-b border-border ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
+          <Td className="text-ink">
+            <span className="flex items-center gap-1.5">
+              <CatalogIcon kind={art} id={t.id} size={24} alt="" />
+              <span className="truncate">{t.name}</span>
+            </span>
+          </Td>
+          {cities.map((c) => (
+            <Td key={c.id} className="tnum text-center">
+              {c[pick][t.id] ? amount(t.id, c[pick][t.id]!) : <span className="text-muted">-</span>}
+            </Td>
+          ))}
+          <Td className="tnum text-center font-semibold text-ink">
+            {/* Sur/Kalkan SEVİYE taşır → şehirler arası toplanamaz. */}
+            {LEVEL_BASED.has(t.id) ? '-' : fmt(totals[t.id] ?? 0)}
+          </Td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 /* ═══ Sıralamalar ═══════════════════════════════════════════════════════════ */
 
+/** Sekme adları orijinalin kısaltılmış web sürümünden (`images/scr_web02`). */
 const KINDS: [RankingKind, string][] = [
   ['player', 'Oyuncu'], ['alliance', 'İttifak'], ['hero', 'Kahraman'],
 ];
@@ -212,93 +244,125 @@ function Rankings(): React.ReactElement {
   const d = q.data;
 
   const pick = (k: RankingKind): void => { setKind(k); setPage(1); };
+  const cols = kind === 'hero' ? 5 : 6;
 
   return (
     <div className="space-y-2">
       <Tabs value={kind} onChange={pick} items={KINDS} />
+
       <Panel title="Sıralama" right={d ? snapshotNote(d) : null}>
+        {/* ⭐ Sayfalayıcı ÜSTTE ve "Sayfa: 1 / 159" biçiminde — orijinaldeki yeri ve dili. */}
+        <div className="flex items-center justify-center gap-2 border-b border-border px-2 py-1.5">
+          <Button size="sm" variant="ghost" disabled={!d || d.page <= 1}
+            onClick={() => setPage((d?.page ?? 1) - 1)} title="Önceki">◀</Button>
+          <span className="tnum text-xs text-muted">
+            Sayfa: <b className="text-ink">{d?.page ?? 1}</b> / {d?.pages ?? 1}
+          </span>
+          <Button size="sm" variant="ghost" disabled={!d || d.page >= d.pages}
+            onClick={() => setPage((d?.page ?? 1) + 1)} title="Sonraki">▶</Button>
+          {d?.myPage ? (
+            <Button size="sm" variant="ghost" className="ml-2"
+              onClick={() => setPage(d.myPage!)}>
+              Beni göster ({fmt(d.myRank ?? 0)})
+            </Button>
+          ) : null}
+        </div>
+
         {d?.unavailable ? (
           <Empty>{d.unavailable}</Empty>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="tex-header border-b-2 border-strong bg-panel-header text-on-panel-header">
-                    <Th className="w-12 text-center">Sıra</Th>
-                    <Th className="w-10 text-center">Δ</Th>
-                    <Th>{kind === 'hero' ? 'Kahraman' : 'Oyuncu'}</Th>
-                    {kind === 'hero'
-                      ? <><Th className="w-16 text-center">Seviye</Th><Th className="w-24 text-right">Tecrübe</Th></>
-                      : <><Th className="w-24 text-right">Puan</Th><Th className="w-14 text-center">Şehir</Th></>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {!d
-                    ? Array.from({ length: 8 }, (_, i) => (
-                      <tr key={`sk${i}`} className="h-8 border-b border-border">
-                        <Td className="text-center"><Skeleton w="1.5rem" /></Td>
-                        <Td className="text-center"><Skeleton w="1rem" /></Td>
-                        <Td><Skeleton w="8rem" /></Td>
-                        <Td><Skeleton w="4rem" /></Td>
-                        <Td><Skeleton w="2rem" /></Td>
-                      </tr>
-                    ))
-                    : d.rows.map((r, i) => (
-                      <tr key={r.id}
-                        className={`h-8 border-b border-border ${i % 2 === 1 ? 'bg-row-alt' : ''} ${
-                          r.isMine ? 'text-accent' : 'text-ink'}`}>
-                        <Td className="tnum text-center font-semibold">{fmt(r.rank)}</Td>
-                        <Td className={`tnum text-center text-[11px] ${
-                          changeTone(r.change) === 'success' ? 'text-success'
-                            : changeTone(r.change) === 'danger' ? 'text-danger' : 'text-muted'}`}>
-                          {changeMark(r.change)}
-                        </Td>
-                        <Td className="max-w-[12rem] truncate">
-                          {r.name}
-                          {kind === 'hero' ? (
-                            <span className="ml-1 text-[11px] text-muted">{r.owner}</span>
-                          ) : null}
-                          {r.dead ? <span className="ml-1"><Badge tone="danger">ölü</Badge></span> : null}
-                        </Td>
-                        {kind === 'hero'
-                          ? <><Td className="tnum text-center">{fmt(r.level ?? 0)}</Td>
-                            <Td className="tnum text-right">{fmt(r.xp ?? 0)}</Td></>
-                          : <><Td className="tnum text-right">{fmt(r.score ?? 0)}</Td>
-                            <Td className="tnum text-center text-muted">{fmt(r.cities ?? 0)}</Td></>}
-                      </tr>
-                    ))}
-                  {d && d.rows.length === 0 ? (
-                    <tr>
-                      <Td colSpan={5} className="py-4 text-center text-muted">
-                        Bu sıralamada henüz kayıt yok.
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="tex-header border-b-2 border-strong bg-panel-header text-on-panel-header">
+                  <Th className="w-12 text-center">Sıra</Th>
+                  <Th>{kind === 'hero' ? 'Kahraman' : 'Oyuncu'}</Th>
+                  {kind === 'hero'
+                    ? <><Th className="w-16 text-center">Seviye</Th><Th className="w-24 text-right">Tecrübe</Th></>
+                    : <><Th className="w-24 text-right">Puan</Th><Th className="w-16 text-center">Değişim</Th>
+                      <Th className="w-28">İttifak</Th></>}
+                  <Th className="w-10 text-center"> </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {!d
+                  ? Array.from({ length: 8 }, (_, i) => (
+                    <tr key={`sk${i}`} className="h-8 border-b border-border">
+                      <Td className="text-center"><Skeleton w="1.5rem" /></Td>
+                      <Td><Skeleton w="8rem" /></Td>
+                      <Td><Skeleton w="4rem" /></Td>
+                      <Td><Skeleton w="2rem" /></Td>
+                      <Td><Skeleton w="3rem" /></Td>
+                      <Td><Skeleton w="1rem" /></Td>
+                    </tr>
+                  ))
+                  : d.rows.map((r, i) => (
+                    <tr key={r.id}
+                      className={`h-8 border-b border-border ${i % 2 === 1 ? 'bg-row-alt' : ''} ${
+                        r.isMine ? 'text-accent' : 'text-ink'}`}>
+                      <Td className="tnum text-center font-semibold">{fmt(r.rank)}</Td>
+                      <Td className="max-w-[12rem] truncate">
+                        {r.name}
+                        {kind === 'hero' ? (
+                          <span className="ml-1 text-[11px] text-muted">{r.owner}</span>
+                        ) : null}
+                        {r.dead ? <span className="ml-1"><Badge tone="danger">ölü</Badge></span> : null}
+                      </Td>
+                      {kind === 'hero' ? (
+                        <>
+                          <Td className="tnum text-center">{fmt(r.level ?? 0)}</Td>
+                          <Td className="tnum text-right">{fmt(r.xp ?? 0)}</Td>
+                        </>
+                      ) : (
+                        <>
+                          <Td className="tnum text-right">{fmt(r.score ?? 0)}</Td>
+                          <Td className={`tnum text-center text-[11px] ${
+                            changeTone(r.change) === 'success' ? 'text-success'
+                              : changeTone(r.change) === 'danger' ? 'text-danger' : 'text-muted'}`}>
+                            {changeMark(r.change)}
+                          </Td>
+                          <Td className="max-w-[7rem] truncate text-muted">{r.alliance ?? '-'}</Td>
+                        </>
+                      )}
+                      <Td className="text-center">
+                        <MessageButton name={kind === 'hero' ? r.owner ?? r.name : r.name}
+                          disabled={r.isMine} />
                       </Td>
                     </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-
-            {d ? (
-              <div className="flex items-center gap-2 border-t border-border px-2 py-1.5">
-                <Button size="sm" variant="ghost" disabled={d.page <= 1}
-                  onClick={() => setPage(d.page - 1)}>◀</Button>
-                <span className="tnum text-xs text-muted">{d.page} / {d.pages}</span>
-                <Button size="sm" variant="ghost" disabled={d.page >= d.pages}
-                  onClick={() => setPage(d.page + 1)}>▶</Button>
-                {/* 340. sıradaki oyuncu kendini aramasın diye: doğru sayfaya tek tıkla gider. */}
-                {d.myPage ? (
-                  <Button size="sm" variant="ghost" className="ml-auto"
-                    onClick={() => setPage(d.myPage!)}>
-                    Beni göster ({fmt(d.myRank ?? 0)})
-                  </Button>
+                  ))}
+                {d && !d.unavailable && d.rows.length === 0 ? (
+                  <tr>
+                    <Td colSpan={cols} className="py-4 text-center text-muted">
+                      Bu sıralamada henüz kayıt yok.
+                    </Td>
+                  </tr>
                 ) : null}
-              </div>
-            ) : null}
-          </>
+              </tbody>
+            </table>
+          </div>
         )}
       </Panel>
     </div>
+  );
+}
+
+/**
+ * Satır sonundaki mesaj düğmesi — orijinalde sıralama satırının menüsünde **Mesaj** vardı
+ * (`g.java` case 106: *Mesaj · Dünyada Bul · İttifağa Davet*).
+ *
+ * ⚠️ DM (§13.12) henüz açılmadı; düğme yerini şimdiden tutuyor ve **sebebini söylüyor** — gizli
+ * bir düğmeyi sonradan keşfettirmektense kapalı olduğunu göstermek doğru.
+ */
+function MessageButton({ name, disabled }: { name: string; disabled: boolean }) {
+  if (disabled) return <span className="text-muted">—</span>;
+  return (
+    <Tooltip label={`${name} oyuncusuna mesaj — özel mesaj henüz açılmadı`}>
+      <button type="button" disabled aria-label={`${name} oyuncusuna mesaj`}
+        className="inline-flex cursor-not-allowed items-center opacity-45">
+        <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={20} height={20}
+          className="icon-shadow h-5 w-5 object-contain" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -335,11 +399,16 @@ function snapshotNote(r: { takenAt: string | null; nextAt: string }): React.Reac
   const hhmm = (iso: string): string =>
     new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
   return (
-    <span title="Saatler oyun saatidir (UTC): 00:00 · 08:00 · 16:00">
-      {r.takenAt
-        ? `güncelleme ${hhmm(r.takenAt)} · sıradaki ${hhmm(r.nextAt)} (oyun saati)`
-        : `ilk güncelleme ${hhmm(r.nextAt)} (oyun saati)`}
-    </span>
+    <Tooltip
+      placement="left"
+      label="Sıralama günde üç kez donar: 00:00 · 08:00 · 16:00 (oyun saati, UTC)."
+    >
+      <span className="cursor-help">
+        {r.takenAt
+          ? `güncelleme ${hhmm(r.takenAt)} · sıradaki ${hhmm(r.nextAt)}`
+          : `ilk güncelleme ${hhmm(r.nextAt)}`}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -356,14 +425,9 @@ function changeTone(change: number | null | undefined): 'muted' | 'success' | 'd
   return change > 0 ? 'success' : 'danger';
 }
 
-function changeLabel(change: number | null | undefined): string | null {
-  if (change == null) return null;
-  if (change === 0) return 'değişmedi';
-  return change > 0 ? `▲ ${change} yükseldi` : `▼ ${-change} düştü`;
-}
-
+/** Orijinalde değişim sütunu sayıdır (0, 2, -1). Yönü okunur kılmak için ok ekliyoruz. */
 function changeMark(change: number | null | undefined): string {
-  if (change == null) return '·';
-  if (change === 0) return '—';
+  if (change == null) return '-';
+  if (change === 0) return '0';
   return change > 0 ? `▲${change}` : `▼${-change}`;
 }

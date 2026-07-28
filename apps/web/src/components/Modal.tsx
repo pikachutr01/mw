@@ -26,8 +26,23 @@ export function Modal({
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * ⚠️ **ODAK ÇALMA HATASI** (2026-07-28'de bulundu). Bu etkinin bağımlılığı bir zamanlar
+   * `[onClose]`'du ve gövdesinde `boxRef.current?.focus()` vardı. Çağıranlar `onClose`'u
+   * `onClose={() => setTarget(null)}` diye **satır içi** veriyor → her render'da yeni bir işlev
+   * → etki yeniden koşuyor → **odak kutuya geri alınıyordu.**
+   *
+   * Sonuç: saldırı modalında asker sayısı yazarken imleç birkaç saniyede bir kayboluyordu.
+   * Suçlu yoklama gibi görünüyordu ama yoklama yalnız TETİKLEYİCİYDİ; her yeniden çizim
+   * (WS olayı, sayaç tik'i) aynı şeyi yapardı.
+   *
+   * Doğrusu: odak **yalnız açılışta** alınır (`[]`), `onClose` bir ref üzerinden okunur.
+   */
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') closeRef.current(); };
     document.addEventListener('keydown', onKey);
     // Modal açıkken arkadaki sayfa kaymamalı (mobilde en çok bozulan davranış).
     const prev = document.body.style.overflow;
@@ -37,7 +52,7 @@ export function Modal({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, []);
 
   const maxW = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' }[width];
 

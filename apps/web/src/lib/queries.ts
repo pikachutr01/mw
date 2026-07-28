@@ -2,8 +2,11 @@
  * Sunucu durumu (TanStack Query). Her yanıtta `serverNow` yakalanır → geri sayımlar sunucu
  * saatinden çizilir (§7).
  *
- * Tazeleme aralıkları oyunun temposuna göre: kaynak sürekli birikir (5 sn), görevler dakikalar
- * mertebesinde (10 sn), dünya listesi nadiren değişir (30 sn).
+ * ⭐ **YOKLAMA BİR EMNİYET AĞIDIR, VERİ YOLU DEĞİL** (2026-07-28). Ekranı güncel tutan asıl yol
+ * WebSocket'tir (`realtime.ts` → `INVALIDATES`); buradaki aralıklar yalnız "WS kopuk kaldığı bir
+ * pencerede ekran tamamen donmasın" diye var. Bu yüzden hepsi tek sabitten (`SAFETY_NET_MS`)
+ * besleniyor: aralığı düşürmek istemek, aslında WS eşlemesinde bir konunun eksik olduğunun
+ * habercisidir — çözüm yoklamayı sıklaştırmak değil, olayı eklemektir.
  */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { api } from './api.ts';
@@ -204,12 +207,30 @@ export const useCities = (): UseQueryResult<{ cities: CitySummary[] }> => useQue
   queryFn: () => get<{ cities: CitySummary[] }>('/api/v1/cities'),
 });
 
+/**
+ * ⭐ **EMNİYET AĞI ARALIĞI** — 5 sn → 60 sn (2026-07-28, kullanıcının sorusu üzerine incelendi).
+ *
+ * Şehir sorgusu bir zamanlar 5 saniyede bir yoklanıyordu ve gerekçesi *"kaynak sayacı canlı
+ * görünsün"*di. İncelemede bunun **iki kez yanlış** olduğu çıktı:
+ *
+ *  1. Sayaç zaten yoklamayla çizilmiyor: bilgi çubuğu `production` hızıyla istemcide
+ *     **ekstrapolasyon** yapıyor (`useTick`, saniyede bir). Yoklama sayacı akıtmıyor, yalnız
+ *     çıpayı tazeliyordu — ki 60 saniyede bir tazelemek de aynı işi görüyor.
+ *  2. Gerçekten kritik olan değişiklikler (kuyruk bitişi, savaş, gelen ordu, nakliye varışı)
+ *     WS ile **anında** geliyor. Bu turda WS'te eksik olan iki konu da kapatıldı
+ *     (`city:changed`, `city:founded`) — yani 5 saniyelik yoklama gerçek bir boşluğu örtüyordu.
+ *
+ * Ayrıca 5 saniyelik yoklama açık modallarda ölçülebilir bir **kullanıcı deneyimi hatası**
+ * üretiyordu: her yeniden çizim modalın odak etkisini yeniden koşturuyor ve yazılan inputtan
+ * odağı çalıyordu. Asıl kusur modaldaydı (düzeltildi) ama tetikleyici buydu.
+ */
+const SAFETY_NET_MS = 60_000;
+
 export const useCity = (cityId: number | null): UseQueryResult<CityDetail> => useQuery({
   queryKey: ['city', cityId],
   queryFn: () => get<CityDetail>(`/api/v1/cities/${cityId}`),
   enabled: cityId != null,
-  // Kaynak tembel birikiyor → sık tazeleme oyuncunun sayacı "canlı" görmesini sağlar.
-  refetchInterval: 5000,
+  refetchInterval: SAFETY_NET_MS,
 });
 
 export const useCatalog = (cityId: number | null): UseQueryResult<CityCatalog> => useQuery({
@@ -228,7 +249,7 @@ export const useMovements = (): UseQueryResult<{ movements: Movement[] }> =>
      * boşuna istek üretiyordu. 60 sn **emniyet ağı** olarak duruyor: WS kopuk kaldığı bir
      * pencerede ekran tamamen donmasın.
      */
-    refetchInterval: 60_000,
+    refetchInterval: SAFETY_NET_MS,
   });
 
 /**
@@ -248,16 +269,23 @@ export function armiesBadge(
   return { count: movements.length, tone: mine ? 'success' : 'warning' };
 }
 
+/**
+ * ⭐ 15 sn → **emniyet ağı** (60 sn). Posta kutusuna satır yazan HER yol artık `message:written`
+ * olayını da yazıyor (`writeMessage` içinde, çağıranlara bırakılmadı) → okunmamış rozeti WS ile
+ * anında güncelleniyor. Yoklama yalnız "WS kopuk kaldığı pencerede ekran tamamen donmasın" diye
+ * duruyor; mesajlar zaten kalıcı kayıtta, kaçan olay bir sonraki tazelemede görünür (§1 outbox).
+ */
 export const useMessages = (): UseQueryResult<{ unread: number; items: MessageRow[] }> => useQuery({
   queryKey: ['messages'],
   queryFn: () => get<{ unread: number; items: MessageRow[] }>('/api/v1/messages'),
-  refetchInterval: 15_000,
+  refetchInterval: SAFETY_NET_MS,
 });
 
 export const useWorld = (k: number, d: number): UseQueryResult<{ slots: WorldSlot[] }> => useQuery({
   queryKey: ['world', k, d],
   queryFn: () => get<{ slots: WorldSlot[] }>(`/api/v1/world/${k}/${d}`),
-  refetchInterval: 30_000,
+  // Diyar listesi nadiren değişir; şehir kurulunca `cities:changed` zaten tazeliyor.
+  refetchInterval: SAFETY_NET_MS,
 });
 
 /* ── Komuta Merkezi ────────────────────────────────────────────────────────── */
@@ -317,9 +345,8 @@ export interface RankingRow {
   id: number;
   name: string;
   isMine: boolean;
-  /** Oyuncu sekmesi. */
+  /** Oyuncu sekmesi. ⚠️ Şehir sayısı BİLEREK yok — orijinal tabloda da yok (`scr_web02`). */
   score?: number;
-  cities?: number;
   alliance?: string | null;
   /** Kahraman sekmesi. */
   owner?: string;
@@ -350,7 +377,7 @@ export interface RankingPage {
 export const useOverview = (): UseQueryResult<Overview> => useQuery({
   queryKey: ['overview'],
   queryFn: () => get<Overview>('/api/v1/command/overview'),
-  refetchInterval: 30_000,
+  refetchInterval: SAFETY_NET_MS,
 });
 
 /**

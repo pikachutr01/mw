@@ -467,6 +467,11 @@ async function techLevel(tx: Tx, playerId: number, type: string): Promise<number
   return Number(rows[0]?.['level'] ?? 0);
 }
 
+/**
+ * ⭐ Mesaj yazımı ve **haberi** aynı yerde. Bildirimi çağıranlara bıraksaydık yeni bir rapor türü
+ * eklendiğinde biri unutulur ve okunmamış rozeti ancak bir sonraki yoklamada güncellenirdi —
+ * yoklamayı emniyet ağına indirdikten sonra bu "sessiz eksik" dakikalarca sürerdi.
+ */
 async function writeMessage(ctx: HandlerContext, o: {
   playerId: number; kind: string; side: string; subject: string; body: Record<string, unknown>;
 }): Promise<void> {
@@ -475,6 +480,7 @@ async function writeMessage(ctx: HandlerContext, o: {
     VALUES (${ctx.worldId}, ${o.playerId}, ${o.kind}, ${o.side}, NULL, ${ctx.mission.id},
             ${o.subject}, ${JSON.stringify(o.body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
   `);
+  await ctx.emit('message:written', { playerId: o.playerId, kind: o.kind });
 }
 
 function readResources(v: unknown): { gold: number; food: number } {

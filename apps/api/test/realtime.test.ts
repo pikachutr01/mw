@@ -118,6 +118,38 @@ describe('outbox → istemci olayı eşlemesi', () => {
     }
   });
 
+  /**
+   * ⭐ **YOKLAMANIN ÖRTTÜĞÜ BOŞLUK** (2026-07-28). Bu üç konu handler'larda yazılıyordu ama
+   * eşleme tablosunda karşılığı yoktu → `null` dönüyor ve olay WS'e HİÇ çıkmıyordu. Ekran yine
+   * de güncel görünüyordu çünkü istemci şehri 5 saniyede bir yokluyordu. Yoklama emniyet ağına
+   * (60 sn) indirildiği için bu testler artık gerçek bir garantiyi koruyor.
+   */
+  it('⭐ nakliye/destek varışı, yeni şehir ve posta satırı WS\'e ÇIKAR', () => {
+    const city = eventForOutbox('city:changed', { cityId: 8, playerId: 6, reason: 'transport' }, 2)!;
+    expect(city, 'city:changed eşlenmemiş').toBeTruthy();
+    expect(city.topic).toBe('city:changed');
+    expect(city.playerIds).toEqual([6]);
+
+    const founded = eventForOutbox('city:founded', { cityId: 9, playerId: 6 }, 2)!;
+    expect(founded, 'city:founded eşlenmemiş').toBeTruthy();
+    // Yeni şehir ŞEHİR LİSTESİNİ de değiştirir → ayrı konu.
+    expect(founded.topic).toBe('cities:changed');
+
+    const msg = eventForOutbox('message:written', { playerId: 6, kind: 'return_report' }, 2)!;
+    expect(msg, 'message:written eşlenmemiş').toBeTruthy();
+    expect(msg.topic).toBe('messages:changed');
+    expect(msg.playerIds).toEqual([6]);
+  });
+
+  it('sıralama anlık görüntüsü DÜNYA GENELİ yayınlanır (oyuncu başına olay üretilmez)', () => {
+    const e = eventForOutbox('ranking:updated', {
+      takenAt: '2026-07-28T08:00:00.000Z', entries: 31,
+    }, 4)!;
+    expect(e.topic).toBe('ranking:updated');
+    expect(e.playerIds).toEqual([]);
+    expect(e.worldId).toBe(4);
+  });
+
   it('⭐ olay VERİ taşımaz, yalnız KİMLİK', () => {
     const e = eventForOutbox('city:army_returned', {
       cityId: 8, playerId: 6,

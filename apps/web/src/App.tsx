@@ -71,7 +71,9 @@ export function App() {
                 <Route path="/temple" element={<TempleScreen />} />
                 <Route path="/world" element={<World />} />
                 <Route path="/messages" element={<Messages />} />
+                {/* Sekme = rota: geri tuşu çalışsın, sıralamaya derin bağlantı verilebilsin. */}
                 <Route path="/command" element={<CommandScreen />} />
+                <Route path="/command/rankings" element={<CommandScreen />} />
                 <Route path="/options" element={<OptionsScreen onLoggedOut={logout} />} />
                 <Route path="/help" element={<HelpScreen />} />
                 {/* Mobil "Şehir" ve "Daha" sekmeleri */}
