@@ -12,7 +12,8 @@
  * kaleme göre değişiyor (yapı/teknik süreye göre, savaşçı bir birim eksik), oyuncunun bunu
  * ezberlemesi beklenemez.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cancelRefund, caveRepairSeconds } from '@mobiwar/catalog';
 import { nameOf } from '../lib/names.ts';
 import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
@@ -329,6 +330,80 @@ function useCollapsed(): [boolean, (v: boolean) => void] {
 }
 
 /**
+ * ⭐ ÜRETİM BANDININ İSTEMCİDE TÜRETİLMESİ (2026-07-28, kullanıcının bildirdiği hata)
+ *
+ * **Hata neydi:** bir askerin üretimi bitince çubuk %100'de donuyor, geri sayım "birazdan"da
+ * kalıyor ve **bir sonraki sunucu okumasına kadar** yenilenmiyordu. Yoklama 5 sn'den 60 sn'ye
+ * indirildiği için bu kusur bir anlık takılmadan **bir dakikalık donmaya** dönüştü.
+ *
+ * **Neden WS ile çözülmedi:** üretim **tembeldir** (§3, tick YOK). Sunucu bir askerin üretildiğini
+ * ancak şehir okunduğunda "fark eder"; bu yüzden asker başına olay yayınlayabilmesi için her aktif
+ * kuyruğa bir zamanlayıcı koymak, yani mimarinin temel kararını geri almak gerekirdi.
+ *
+ * **Neden asker başına fetch de değil:** 9 sn'lik Cüce siparişinde dakikada ~7 istek, yüksek
+ * Baraka'da 1 sn'lik birimde **dakikada 60 istek** ederdi.
+ *
+ * **Çözüm — sıfır maliyet:** bant **tamamen deterministik**. `startedAt` ve `perUnitSeconds`
+ * biliniyorsa k'ıncı asker `startedAt + k × perUnit` anında biter. İstemci sunucunun kullandığı
+ * FORMÜLÜN AYNISINI çalıştırıyor; hiçbir istek atmadan, saniyesi saniyesine.
+ * (Kaynak sayacındaki ekstrapolasyon kararının aynısı.)
+ *
+ * ⚠️ `q.done`/`q.remaining` **kullanılmıyor**: onlar sunucunun son okuma anındaki hâli, yani
+ * tanımı gereği bayat. Çıpa `startedAt` — o hiç bayatlamaz.
+ */
+interface UnitProgress {
+  /** Şimdiye kadar üretilmiş adet. */
+  produced: number;
+  /** Kalan sipariş. */
+  remaining: number;
+  /** Sıradaki tek askerin penceresi (ms). */
+  unitStart: number;
+  unitEnd: number;
+  /** Siparişin tamamı bitti (sunucudaki bitiş görevi birazdan satırı kapatacak). */
+  finished: boolean;
+}
+
+function unitProgress(q: QueueRow, now: number): UnitProgress | null {
+  const perMs = (q.perUnitSeconds ?? 0) * 1000;
+  const count = q.count ?? 0;
+  if (perMs <= 0 || count <= 0) return null;
+  const start = Date.parse(q.startedAt);
+  const produced = Math.min(count, Math.max(0, Math.floor((now - start) / perMs)));
+  const unitStart = start + produced * perMs;
+  return {
+    produced,
+    remaining: count - produced,
+    unitStart,
+    unitEnd: unitStart + perMs,
+    finished: produced >= count,
+  };
+}
+
+/**
+ * Barakadaki **toplam** adet (satırlardaki "Elf (407)") yalnız sunucudan gelir; onu da türetmek
+ * ordu göndermek gibi kararların dayandığı sayıyı tahmine çevirirdi.
+ *
+ * Bunun yerine: bir asker sınırı geçildiğinde **kısılmış** bir tazeleme tetiklenir. Kısıt şart —
+ * 1 sn'lik birimlerde dakikada 60 istek çıkardı. `MIN_SYNC_MS` ile en fazla 5 saniyede bir
+ * istenir, yani eski kör yoklamayla aynı üst sınır ama **yalnız gerçekten üretim varken** ve
+ * yalnız bant ekrandayken.
+ */
+const MIN_SYNC_MS = 5000;
+
+function useProductionSync(producedTotal: number): void {
+  const qc = useQueryClient();
+  const last = useRef({ produced: producedTotal, at: 0 });
+  useEffect(() => {
+    if (producedTotal === last.current.produced) return;
+    last.current.produced = producedTotal;
+    const now = Date.now();
+    if (now - last.current.at < MIN_SYNC_MS) return;
+    last.current.at = now;
+    void qc.invalidateQueries({ queryKey: ['city'] });
+  }, [producedTotal, qc]);
+}
+
+/**
  * ⭐ TEK ÜRETİM BANDI paneli — verilen emirler sırayla listelenir.
  *
  * Sayaç **tek bir askerin** süresidir (kullanıcı kararı): dolunca o asker barakaya eklenir,
@@ -348,6 +423,18 @@ function ProductionPanel({
 }) {
   const [collapsed, setCollapsed] = useCollapsed();
   const barracks = Math.max(1, city.buildings['barracks'] ?? 1);
+  const now = serverNow();
+
+  // Süren emirlerin toplam üretimi — değiştiği anda (kısılmış) tazeleme tetikler.
+  const progress = new Map<number, UnitProgress | null>();
+  let producedTotal = 0;
+  for (const q of queues) {
+    const p = (q.position ?? 1) === 1 ? unitProgress(q, now) : null;
+    progress.set(q.id, p);
+    if (p) producedTotal += p.produced;
+  }
+  useProductionSync(producedTotal);
+
   if (queues.length === 0) return null;
 
   return (
@@ -364,7 +451,9 @@ function ProductionPanel({
         <ul className="divide-y divide-border">
           {queues.map((q, i) => {
             const active = (q.position ?? 1) === 1;
-            const remaining = q.remaining ?? q.count ?? 0;
+            const p = progress.get(q.id) ?? null;
+            // ⭐ Kalan adet TÜRETİLİR; `q.remaining` sunucunun son okuma anındaki bayat hâli.
+            const remaining = p ? p.remaining : (q.remaining ?? q.count ?? 0);
             return (
               <li key={q.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
                 <div className="flex items-center gap-2.5">
@@ -389,8 +478,8 @@ function ProductionPanel({
                   <Button size="sm" variant="danger" onClick={() => onCancel(q)}>İptal et</Button>
                 </div>
 
-                {active && q.unitStartedAt && q.unitFinishAt ? (
-                  <UnitTicker startedAt={q.unitStartedAt} finishAt={q.unitFinishAt} />
+                {active && p ? (
+                  <UnitTicker start={p.unitStart} end={p.unitEnd} finished={p.finished} />
                 ) : (
                   <div className="mt-1.5 border-t border-border pt-1.5 text-[11px] text-muted">
                     Başlıyor: <span className="tnum">{remaining_(q.startedAt)}</span>
@@ -409,21 +498,32 @@ function ProductionPanel({
 const remaining_ = (iso: string): string => remaining(iso) ?? 'birazdan';
 
 /**
- * TEK BİR ASKERİN sayacı + çubuğu. Pencere dolduğunda sunucu yeni pencereyi veriyor;
- * arada kalan yarım saniyede çubuk %100'de bekler, geri sayım "birazdan" der.
+ * TEK BİR ASKERİN sayacı + çubuğu.
+ *
+ * ⚠️ Pencere artık **istemcide türetiliyor** (bkz. `unitProgress`): asker bitince sayaç sunucuyu
+ * beklemeden sıfırlanıp bir sonrakine geçer. Eskiden sunucudan gelen `unitStartedAt/FinishAt`
+ * kullanılıyordu ve iki okuma arasında çubuk %100'de donuyordu.
+ *
+ * ⭐ Çubuk yeni askere geçerken **animasyon kapatılır** (`transition-none`): %100'den %0'a
+ * yumuşak geçiş, dolmuş çubuğun geri sarması gibi görünüyordu.
  */
-function UnitTicker({ startedAt, finishAt }: { startedAt: string; finishAt: string }) {
-  const start = Date.parse(startedAt);
-  const end = Date.parse(finishAt);
-  const pct = Math.min(100, Math.max(0, ((serverNow() - start) / Math.max(1, end - start)) * 100));
+function UnitTicker({ start, end, finished }: { start: number; end: number; finished: boolean }) {
+  const now = serverNow();
+  const pct = finished ? 100 : Math.min(100, Math.max(0, ((now - start) / Math.max(1, end - start)) * 100));
+  const left = Math.max(0, (end - now) / 1000);
+  // Yeni pencerenin ilk saniyesinde çubuk geri sarmasın diye geçiş kapatılır.
+  const resetting = !finished && now - start < 1200;
   return (
     <div className="mt-1.5 border-t border-border pt-1.5">
       <div className="mb-1 flex items-center justify-between text-[11px]">
         <span className="text-muted">sıradaki asker</span>
-        <span className="tnum font-semibold text-warning">{remaining(finishAt) ?? 'birazdan'}</span>
+        <span className="tnum font-semibold text-warning">
+          {finished ? 'sipariş tamamlandı' : formatDuration(left)}
+        </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full border border-border bg-raised">
-        <div className="h-full bg-accent transition-[width] duration-1000 ease-linear"
+        <div className={`h-full bg-accent ${
+          resetting ? 'transition-none' : 'transition-[width] duration-1000 ease-linear'}`}
           style={{ width: `${pct}%` }} />
       </div>
     </div>
