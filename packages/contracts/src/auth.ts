@@ -15,8 +15,14 @@ export const registerRequest = z.object({
 });
 export type RegisterRequest = z.infer<typeof registerRequest>;
 
+/**
+ * ⭐ GİRİŞ **KULLANICI ADIYLA** (kullanıcı kararı 2026-07-28), e-posta ile değil.
+ * E-posta hesabın kimliği olarak kalıyor (kayıt, parola sıfırlama); oyuncunun ezberlediği ve
+ * oyunda gördüğü ad ise kullanıcı adı — girişte de onu istemek doğrusu.
+ * ⚠️ Kullanıcı adı **dünya başına** tekildir → giriş isteğinde `worldId` şart.
+ */
 export const loginRequest = z.object({
-  email: z.string().email(),
+  username: z.string().min(3).max(10),
   password,
 });
 export type LoginRequest = z.infer<typeof loginRequest>;

@@ -172,14 +172,14 @@ describe('giriş', () => {
   it('doğru parolayla giriş yapılır', async () => {
     const c = cred('giris');
     await auth.register({ ...c, worldId }, webCtx());
-    const r = await auth.login({ email: c.email, password: c.password, worldId }, webCtx());
+    const r = await auth.login({ username: c.username, password: c.password, worldId }, webCtx());
     expect(r.username).toBe(c.username);
   });
 
   it('yanlış parola reddedilir ve sayaç artar', async () => {
     const c = cred('yanlis');
     const reg = await auth.register({ ...c, worldId }, webCtx());
-    await expect(auth.login({ email: c.email, password: 'yanlis-parola', worldId }, webCtx()))
+    await expect(auth.login({ username: c.username, password: 'yanlis-parola', worldId }, webCtx()))
       .rejects.toThrow(/hatalı/i);
 
     const rows = await h.db.execute<{ failed_logins: number } & Record<string, unknown>>(sql`
@@ -191,17 +191,17 @@ describe('giriş', () => {
   it('başarılı giriş hatalı deneme sayacını sıfırlar', async () => {
     const c = cred('sifirla');
     const reg = await auth.register({ ...c, worldId }, webCtx());
-    await expect(auth.login({ email: c.email, password: 'x'.repeat(12), worldId }, webCtx())).rejects.toThrow();
-    await auth.login({ email: c.email, password: c.password, worldId }, webCtx());
+    await expect(auth.login({ username: c.username, password: 'x'.repeat(12), worldId }, webCtx())).rejects.toThrow();
+    await auth.login({ username: c.username, password: c.password, worldId }, webCtx());
     const rows = await h.db.execute<{ failed_logins: number } & Record<string, unknown>>(sql`
       SELECT failed_logins FROM accounts WHERE id = ${reg.accountId}
     `);
     expect(Number(rows[0]!.failed_logins)).toBe(0);
   });
 
-  it('olmayan e-posta "kullanıcı yok" demez, aynı hatayı verir', async () => {
-    await expect(auth.login({ email: 'yok@test.local', password: 'parola-12345', worldId }, webCtx()))
-      .rejects.toThrow(/E-posta veya parola hatalı/);
+  it('olmayan kullanıcı adı "kullanıcı yok" demez, aynı hatayı verir', async () => {
+    await expect(auth.login({ username: 'yokoyuncu', password: 'parola-12345', worldId }, webCtx()))
+      .rejects.toThrow(/Kullanıcı adı veya parola hatalı/);
   });
 });
 
@@ -249,7 +249,7 @@ describe('token ve oturum', () => {
   it('revokeAll tüm oturumları düşürür', async () => {
     const c = cred('hepsi');
     const r1 = await auth.register({ ...c, worldId }, webCtx());
-    const r2 = await auth.login({ email: c.email, password: c.password, worldId }, mobileCtx());
+    const r2 = await auth.login({ username: c.username, password: c.password, worldId }, mobileCtx());
 
     expect(await auth.revokeAll(r1.accountId)).toBe(2);
     await expect(auth.refresh(r1.refreshToken, webCtx())).rejects.toThrow();
@@ -272,7 +272,7 @@ describe('⭐ giriş akışı çoklu hesap sinyali üretiyor (§9.1)', () => {
   it('oturum kaydı web ve mobil ayrımını taşır', async () => {
     const c = cred('platform');
     const w = await auth.register({ ...c, worldId }, webCtx());
-    const m = await auth.login({ email: c.email, password: c.password, worldId }, mobileCtx());
+    const m = await auth.login({ username: c.username, password: c.password, worldId }, mobileCtx());
 
     const rows = await h.db.execute<Record<string, unknown>>(sql`
       SELECT id, platform, ua, device_model FROM sessions WHERE account_id = ${w.accountId} ORDER BY created_at

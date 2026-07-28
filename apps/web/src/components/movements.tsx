@@ -7,7 +7,7 @@
 import { fmt, formatDuration, remaining, remainingClock, serverNow, useTick } from '../lib/hooks.ts';
 import { describeUnits } from '../lib/names.ts';
 import { useCancelMission, type Coords, type Movement } from '../lib/queries.ts';
-import { Button, ErrorBox } from './ui.tsx';
+import { Button, ErrorBox, Res } from './ui.tsx';
 import { Modal, useConfirm } from './Modal.tsx';
 
 /** Görev tipi → Türkçe ad. */
@@ -58,9 +58,12 @@ export function MovementIcon({
       onMouseMove={show}
       onMouseLeave={() => onTip(null)}
       onClick={(e) => { e.stopPropagation(); onTip(null); onOpen(m); }}
-      title={titleOf(m)}
+      /* ⚠️ `title` YOK: fareyi takip eden kendi tooltip'imiz varken tarayıcının gecikmeli
+         kutusu da açılıyor ve ikisi üst üste biniyordu. */
+      /* ⚠️ `hover:scale-110` KALDIRILDI: büyüyen simge şeridin yüksekliğini aşıp kapsayıcıda
+         kaydırma çubuğu doğuruyordu. Geri bildirim artık yalnız parlaklıkla veriliyor. */
       className="relative inline-flex cursor-pointer flex-col items-center rounded-[var(--radius-sm)]
-        p-0.5 transition-transform hover:scale-110"
+        p-0.5 transition-[filter] hover:brightness-110"
     >
       <span className="relative">
         {/* ⭐ Boyut ŞEHİR SİMGESİYLE AYNI (kullanıcı kararı): olay simgeleri kalenin altında
@@ -173,9 +176,8 @@ export function MovementModal({ m, onClose }: { m: Movement; onClose: () => void
             className="icon-shadow h-13 w-13 shrink-0 object-contain" style={{ width: 52, height: 52 }} />
           <div>
             <div className="display text-base font-semibold text-ink">{titleOf(m)}</div>
-            <div className="tnum text-xs text-muted">
-              Varış: {left ?? 'varıyor'} · başlangıç {new Date(m.startedAt).toLocaleString('tr-TR')}
-            </div>
+            {/* Başlangıç zamanı KALDIRILDI (kullanıcı): geri sayım zaten aynı bilgiyi veriyor. */}
+            <div className="tnum text-xs text-muted">Varış: {left ?? 'varıyor'}</div>
           </div>
         </div>
 
@@ -192,6 +194,17 @@ export function MovementModal({ m, onClose }: { m: Movement; onClose: () => void
             <>
               <dt className="text-muted">Ordu</dt>
               <dd className="text-ink">{units}</dd>
+            </>
+          ) : null}
+          {/* ⭐ Nakliye/destek yükü AÇIK (kullanıcı): kendi şehrime gelen nakliyede kimin ne
+              taşıdığını görmeliyim. Saldırı/casuslukta birleşim gizli kalmaya devam ediyor. */}
+          {m.cargo && (m.cargo.gold > 0 || m.cargo.food > 0) ? (
+            <>
+              <dt className="text-muted">Taşınan</dt>
+              <dd className="flex items-center gap-3 text-ink">
+                <Res kind="gold" value={fmt(m.cargo.gold)} size={14} />
+                <Res kind="food" value={fmt(m.cargo.food)} size={14} />
+              </dd>
             </>
           ) : null}
         </dl>

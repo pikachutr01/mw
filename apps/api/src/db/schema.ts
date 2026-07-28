@@ -24,7 +24,14 @@ export const worlds = pgTable('worlds', {
   clockOffsetMs: bigint('clock_offset_ms', { mode: 'number' }).notNull().default(0),
   /** Bakım başlangıcı (gerçek zaman). NULL = dünya çalışıyor. */
   pausedAt: timestamp('paused_at', { withTimezone: true }),
+  /**
+   * ⭐ DÜNYA HIZ ÇARPANLARI — oyunun temposunu tek yerden ayarlar (§13.7).
+   * `speed_multiplier`: sefer sürelerini böler (mesafe hızı).
+   * `resource_multiplier`: Çiftlik/Maden üretimini çarpar.
+   * İkisi de 1 = klasik hız. **İleride admin panelinden yönetilecek.**
+   */
   speedMultiplier: integer('speed_multiplier').notNull().default(1),
+  resourceMultiplier: integer('resource_multiplier').notNull().default(1),
   catalogHash: text('catalog_hash'),
   config: jsonb('config').notNull().default({}),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
@@ -143,6 +150,20 @@ export const queues = pgTable('queues', {
   /** Yapı/teknikte hedef seviye; birimde adet. */
   targetLevel: smallint('target_level'),
   count: integer('count'),
+  /**
+   * ⭐ SAVAŞÇI ÜRETİMİ TEKER TEKER (kullanıcı kararı 2026-07-28).
+   * `done` = şimdiye kadar üretilip şehre eklenen adet · `perUnitSeconds` = bir birimin süresi.
+   * Üretim **tembel** ilerler (kaynak birikimiyle aynı desen): şehir her okunduğunda
+   * `materializeUnitQueues` geçen süreye düşen birimleri ekler. Böylece oyuncu çevrimdışıyken
+   * şehrine saldırı gelirse o ana kadar üretilmiş askerler savaşta GERÇEKTEN vardır.
+   */
+  done: integer('done').notNull().default(0),
+  perUnitSeconds: numeric('per_unit_seconds', { precision: 14, scale: 3 }),
+  /**
+   * Kuyruktaki sıra: **1 = üretimi süren**, 2+ bekleyenler. Bekleyenler kendi aralarında
+   * yer değiştirebilir; süren emir yerinden oynatılamaz.
+   */
+  position: smallint('position').notNull().default(1),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
   finishAt: timestamp('finish_at', { withTimezone: true }).notNull(),
   spentGold: numeric('spent_gold', { precision: 20, scale: 6 }).notNull().default('0'),

@@ -11,11 +11,12 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  UNITS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
+  UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
   buildingCost, buildingTimeSeconds, cancelRefund, checkRequirement, techCost, techTimeSeconds,
   timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
 } from '@mobiwar/catalog';
 import { CapacityService } from '../cities/capacity.service.ts';
+import { openUnitQueueCount, promoteNext, rescheduleUnitChain } from './unit-queue.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 
@@ -42,7 +43,8 @@ export type QueueErrorCode =
   | 'insufficient_resources'
   | 'slot_busy'
   | 'tech_already_researching'
-  | 'invalid_count';
+  | 'invalid_count'
+  | 'queue_busy';
 
 export interface QueueItem {
   id: number;
@@ -52,6 +54,10 @@ export interface QueueItem {
   count: number | null;
   startedAt: Date;
   finishAt: Date;
+  /** Savaşçı kuyruğu: üretilmiş adet · bir birimin süresi · sıradaki yer (1 = süren). */
+  done?: number;
+  perUnitSeconds?: number | null;
+  position?: number;
 }
 
 interface CityState {
@@ -121,21 +127,47 @@ export class QueueService {
 
     return this.db.transaction(async (tx) => {
       const st = await this.loadCity(tx as never, opts.cityId, opts.playerId);
-      await this.assertNoOpenQueue(tx as never, opts.cityId, 'unit');
       this.assertRequirements(UNIT_REQUIREMENTS[opts.type], st, opts.type);
 
-      const cost = {
-        gold: def.gold * opts.count,
-        food: def.food * opts.count,
-      };
+      /**
+       * ⭐ AYNI ANDA **BARAKA SEVİYESİ** KADAR EMİR (kullanıcı kuralı 2026-07-28).
+       * Tek emir sınırı kalktı: üretim sürerken kuyruğa yenisi eklenebiliyor, ama sınırsız değil —
+       * Baraka'yı yükseltmek gerçek bir kazanım olmalı.
+       */
+      const barracks = Math.max(1, st.buildings['barracks'] ?? 1);
+      const open = await openUnitQueueCount(tx as never, opts.cityId);
+      if (open >= barracks) {
+        throw new QueueError(
+          'queue_busy',
+          `Barakada aynı anda en fazla ${barracks} üretim emri olabilir. Baraka'yı yükseltin.`,
+          { open, limit: barracks },
+        );
+      }
+
+      const cost = { gold: def.gold * opts.count, food: def.food * opts.count };
       await this.spend(tx as never, opts.cityId, cost, opts.at);
 
-      // ⭐ Model B (§13.11.3, k.java): `((altın+yemek)/10)^0,8 × 65 / 1,4^Baraka`, adetle çarpılır.
       const perUnit = trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 0);
-      return this.insert(tx as never, {
+      // Sıra: ilk emir hemen başlar, sonrakiler bekler. `position` 1 = üretimi süren.
+      const position = open + 1;
+      const startAt = opts.at;
+
+      const item = await this.insert(tx as never, {
         ...st, cityId: opts.cityId, category: 'unit', itemType: opts.type,
-        targetLevel: null, count: opts.count, cost, seconds: perUnit * opts.count, at: opts.at,
+        targetLevel: null, count: opts.count, cost, seconds: perUnit * opts.count, at: startAt,
+        perUnitSeconds: perUnit, position,
       });
+      // ⭐ TEK BANT: yeni emir kuyruğa girince tüm zincirin saatleri sırayla yeniden kurulur —
+      //    bekleyen emir, öndekinin bitişinden önce saymaya BAŞLAMAZ.
+      await rescheduleUnitChain(tx as never, opts.cityId, opts.at);
+      const fresh = await tx.execute<Record<string, unknown>>(sql`
+        SELECT started_at, finish_at FROM queues WHERE id = ${item.id}
+      `);
+      return {
+        ...item,
+        startedAt: toDate(fresh[0]!['started_at']),
+        finishAt: toDate(fresh[0]!['finish_at']),
+      };
     });
   }
 
@@ -274,7 +306,8 @@ export class QueueService {
     if (unmet.length > 0) {
       throw new QueueError(
         'requirements_unmet',
-        `${itemType} için ön-şartlar karşılanmadı: ${describeUnmet(unmet)}`,
+        // ⚠️ Ekranda İngilizce `id` GÖRÜNMEZ (§13.14): hem kalem hem ön-şart adı Türkçeye çevrilir.
+        `${nameOfItem(itemType)} için gereken: ${describeUnmet(unmet)}`,
         unmet,
       );
     }
@@ -309,32 +342,43 @@ export class QueueService {
     category: QueueCategory; itemType: string;
     targetLevel: number | null; count: number | null;
     cost: { gold: number; food: number }; seconds: number; at: Date;
+    /** Savaşçı kuyruğu: bir birimin süresi ve sıradaki yeri. */
+    perUnitSeconds?: number; position?: number;
   }): Promise<QueueItem> {
     const finishAt = new Date(o.at.getTime() + Math.max(1, Math.round(o.seconds)) * 1000);
+    const position = o.position ?? 1;
 
     const qRows = await tx.execute<Record<string, unknown>>(sql`
       INSERT INTO queues (world_id, city_id, player_id, category, item_type, target_level, count,
-                          started_at, finish_at, spent_gold, spent_food)
+                          started_at, finish_at, spent_gold, spent_food, per_unit_seconds, position)
       VALUES (${o.worldId}, ${o.cityId}, ${o.playerId}, ${o.category}, ${o.itemType},
               ${o.targetLevel}, ${o.count},
               ${o.at.toISOString()}::timestamptz, ${finishAt.toISOString()}::timestamptz,
-              ${o.cost.gold}::numeric, ${o.cost.food}::numeric)
+              ${o.cost.gold}::numeric, ${o.cost.food}::numeric,
+              ${o.perUnitSeconds ?? null}, ${position})
       RETURNING id, started_at, finish_at
     `);
     const queueId = Number(qRows[0]!['id']);
 
-    const mRows = await tx.execute<Record<string, unknown>>(sql`
-      INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id, target_city_id,
-                            execute_at, payload, idempotency_key)
-      VALUES (${o.worldId}, ${`${o.category}_finish`}, 'scheduled', ${o.playerId},
-              ${o.cityId}, ${o.cityId}, ${finishAt.toISOString()}::timestamptz,
-              ${JSON.stringify({ queueId, itemType: o.itemType, targetLevel: o.targetLevel, count: o.count })}::jsonb,
-              ${`queue:${queueId}`})
-      RETURNING id
-    `);
-    await tx.execute(sql`
-      UPDATE queues SET mission_id = ${Number(mRows[0]!['id'])} WHERE id = ${queueId}
-    `);
+    /**
+     * ⚠️ **Bekleyen savaşçı emri için görev YAZILMAZ** (`position > 1`): ne zaman başlayacağı
+     * öndekinin bitişine bağlı ve o da iptal edilebilir. Sıradaki emir başlatılırken görevi
+     * `promoteNext` sonrası kurulur. Diğer kategorilerde tek kalem olduğu için değişen bir şey yok.
+     */
+    if (position === 1) {
+      const mRows = await tx.execute<Record<string, unknown>>(sql`
+        INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id, target_city_id,
+                              execute_at, payload, idempotency_key)
+        VALUES (${o.worldId}, ${`${o.category}_finish`}, 'scheduled', ${o.playerId},
+                ${o.cityId}, ${o.cityId}, ${finishAt.toISOString()}::timestamptz,
+                ${JSON.stringify({ queueId, itemType: o.itemType, targetLevel: o.targetLevel, count: o.count })}::jsonb,
+                ${`queue:${queueId}`})
+        RETURNING id
+      `);
+      await tx.execute(sql`
+        UPDATE queues SET mission_id = ${Number(mRows[0]!['id'])} WHERE id = ${queueId}
+      `);
+    }
 
     return {
       id: queueId,
@@ -344,6 +388,9 @@ export class QueueService {
       count: o.count,
       startedAt: toDate(qRows[0]!['started_at']),
       finishAt: toDate(qRows[0]!['finish_at']),
+      done: 0,
+      perUnitSeconds: o.perUnitSeconds ?? null,
+      position,
     };
   }
 
@@ -377,7 +424,7 @@ export class QueueService {
     return this.db.transaction(async (tx) => {
       const rows = await tx.execute<Record<string, unknown>>(sql`
         SELECT id, city_id, player_id, spent_gold, spent_food, mission_id, category, item_type,
-               count, target_level, started_at, finish_at
+               count, target_level, started_at, finish_at, done, position
           FROM queues
          WHERE id = ${opts.queueId} AND completed_at IS NULL AND canceled_at IS NULL
          FOR UPDATE
@@ -386,6 +433,17 @@ export class QueueService {
       if (!q) throw new QueueError('city_not_found', 'İptal edilecek kuyruk bulunamadı.');
       if (Number(q['player_id']) !== opts.playerId) {
         throw new QueueError('not_owner', 'Bu kuyruk sizin değil.');
+      }
+      // Üretilmiş askerler iptalden ETKİLENMEZ → önce şehri "şimdi"ye getir, sonra iptal et.
+      if (String(q['category']) === 'unit') {
+        await this.cities.materialize(Number(q['city_id']), opts.at, tx as never);
+        const fresh = await tx.execute<Record<string, unknown>>(sql`
+          SELECT done, completed_at FROM queues WHERE id = ${opts.queueId}
+        `);
+        if (fresh[0]?.['completed_at'] != null) {
+          throw new QueueError('city_not_found', 'Bu üretim çoktan tamamlandı.');
+        }
+        q['done'] = fresh[0]?.['done'] ?? q['done'];
       }
 
       await tx.execute(sql`
@@ -408,11 +466,26 @@ export class QueueService {
       const span = Math.max(1, finishAt - startedAt);
       const progress = Math.min(1, Math.max(0, (opts.at.getTime() - startedAt) / span));
 
+      /**
+       * ⭐ SAVAŞÇI İPTALİ **KALAN ADET** ÜZERİNDEN (kullanıcı, 2026-07-28).
+       * Üretimi bitmiş askerler zaten şehirde → onların bedeli iade edilmez. Kalan `n` birimden
+       * dokümanın "bir ünite eksik" kuralı işler: iade = birimMaliyeti × (n − 1).
+       */
+      const isUnit = String(q['category']) === 'unit' && count != null;
+      const done = Number(q['done'] ?? 0);
+      const spent = { gold: Number(q['spent_gold']), food: Number(q['spent_food']) };
+      const effectiveSpent = isUnit && count! > 0
+        ? {
+          gold: (spent.gold / count!) * Math.max(0, count! - done),
+          food: (spent.food / count!) * Math.max(0, count! - done),
+        }
+        : spent;
+
       const base = cancelRefund({
         rule,
-        spent: { gold: Number(q['spent_gold']), food: Number(q['spent_food']) },
+        spent: effectiveSpent,
         progress,
-        count: count ?? 1,
+        count: isUnit ? Math.max(1, count! - done) : count ?? 1,
       });
       const refunded = {
         gold: Math.floor(base.gold * extraRatio),
@@ -420,6 +493,14 @@ export class QueueService {
       };
 
       const cityId = Number(q['city_id']);
+      /**
+       * ⭐ İptal edilen emir bandı BOŞALTIR → sıradaki emir **o anda** başlar (fabrika mantığı).
+       * Bu satır olmadan bekleyen emirler eski saatleriyle kalıyor ve iptalden sonra hepsi
+       * birden üretilmiş gibi görünüyordu.
+       */
+      if (String(q['category']) === 'unit') {
+        await promoteNext(tx as never, cityId, opts.at);
+      }
       if (refunded.gold > 0 || refunded.food > 0) {
         await this.cities.add(cityId, refunded, opts.at, tx as never);
       }
@@ -430,10 +511,11 @@ export class QueueService {
   /** Şehrin açık kuyrukları (arayüzdeki geri sayımlar). */
   async openQueues(cityId: number): Promise<QueueItem[]> {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT id, category, item_type, target_level, count, started_at, finish_at
+      SELECT id, category, item_type, target_level, count, started_at, finish_at,
+             done, per_unit_seconds, position
         FROM queues
        WHERE city_id = ${cityId} AND completed_at IS NULL AND canceled_at IS NULL
-       ORDER BY finish_at
+       ORDER BY category, position, finish_at
     `);
     return rows.map((r) => ({
       id: Number(r['id']),
@@ -443,10 +525,56 @@ export class QueueService {
       count: r['count'] == null ? null : Number(r['count']),
       startedAt: toDate(r['started_at']),
       finishAt: toDate(r['finish_at']),
+      done: Number(r['done'] ?? 0),
+      perUnitSeconds: r['per_unit_seconds'] == null ? null : Number(r['per_unit_seconds']),
+      position: Number(r['position'] ?? 1),
     }));
+  }
+
+  /**
+   * ⭐ KUYRUKTA SIRA DEĞİŞTİRME (kullanıcı, 2026-07-28) — yalnız **bekleyen** emirler.
+   * `position = 1` üretimi sürendir ve yerinden oynatılamaz: onu taşımak "yarısı üretilmiş
+   * sipariş" kavramını bozardı.
+   */
+  async moveUnitQueue(opts: {
+    queueId: number; playerId: number; direction: 'up' | 'down';
+  }): Promise<void> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx.execute<Record<string, unknown>>(sql`
+        SELECT id, city_id, player_id, position FROM queues
+         WHERE id = ${opts.queueId} AND category = 'unit'
+           AND completed_at IS NULL AND canceled_at IS NULL
+         FOR UPDATE
+      `);
+      const q = rows[0];
+      if (!q) throw new QueueError('city_not_found', 'Kuyruk bulunamadı.');
+      if (Number(q['player_id']) !== opts.playerId) {
+        throw new QueueError('not_owner', 'Bu kuyruk sizin değil.');
+      }
+      const pos = Number(q['position']);
+      const other = opts.direction === 'up' ? pos - 1 : pos + 1;
+      if (pos <= 1 || other <= 1) {
+        throw new QueueError('queue_busy', 'Üretimi süren emir sıradan oynatılamaz.');
+      }
+
+      const swap = await tx.execute<Record<string, unknown>>(sql`
+        SELECT id FROM queues
+         WHERE city_id = ${Number(q['city_id'])} AND category = 'unit'
+           AND completed_at IS NULL AND canceled_at IS NULL AND position = ${other}
+         FOR UPDATE
+      `);
+      if (swap.length === 0) return;      // sınırdaki emir — sessizce yut
+
+      await tx.execute(sql`UPDATE queues SET position = ${pos} WHERE id = ${Number(swap[0]!['id'])}`);
+      await tx.execute(sql`UPDATE queues SET position = ${other} WHERE id = ${opts.queueId}`);
+    });
   }
 }
 
+function nameOfItem(id: string): string {
+  return UNITS_BY_ID[id]?.name.tr ?? BUILDINGS_BY_ID[id]?.name.tr ?? TECHS_BY_ID[id]?.name.tr ?? id;
+}
+
 function describeUnmet(unmet: UnmetRequirement[]): string {
-  return unmet.map((u) => `${u.id} ${u.required} (şu an ${u.current})`).join(', ');
+  return unmet.map((u) => `${nameOfItem(u.id)} ${u.required} (şu an ${u.current})`).join(' · ');
 }

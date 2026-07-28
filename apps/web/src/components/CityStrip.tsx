@@ -17,6 +17,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTick } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, useMovements, type Movement } from '../lib/queries.ts';
 import {
@@ -33,6 +34,9 @@ export function CityStrip() {
   const movements = useMovements();
   const { cityId, setCityId } = useActiveCity();
   const { pathname } = useLocation();
+  // ⚠️ Simgelerin altındaki geri sayım SANİYEDE BİR yeniden çizilmeli. Bu satır olmadan sayaç
+  //    yalnız sunucu yanıtı veya fare hareketi bileşeni tazelediğinde güncelleniyordu.
+  useTick(pathname.startsWith('/armies'));
   const activeRef = useRef<HTMLButtonElement>(null);
   const [tip, setTip] = useState<TipState | null>(null);
   const [open, setOpen] = useState<Movement | null>(null);

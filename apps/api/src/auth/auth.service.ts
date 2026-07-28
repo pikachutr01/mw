@@ -105,7 +105,9 @@ export class AuthService {
       await this.cities.create({
         worldId: input.worldId,
         playerId,
-        name: `${input.username} şehri`,
+        // Başkentin adı = oyuncu adı. Eski " şehri" eki kaldırıldı (kullanıcı): dünya
+        // tablosunda sütun zaten "Şehir" başlığını taşıyor, ek gereksiz tekrardı.
+        name: input.username,
         k: slot.k, d: slot.d, s: slot.s,
         isCapital: true,
         at: gameNow,
@@ -117,21 +119,25 @@ export class AuthService {
     return this.issueSession(result.accountId, result.playerId, input.worldId, input.username, ctx);
   }
 
-  async login(input: { email: string; password: string; worldId: number }, ctx: DeviceContext): Promise<AuthResult> {
-    const email = input.email.trim().toLowerCase();
+  /**
+   * ⭐ Giriş **KULLANICI ADIYLA** (kullanıcı kararı 2026-07-28). Kullanıcı adı dünya başına
+   * tekil olduğu için arama `players`'tan başlıyor ve hesaba oradan gidiyor.
+   */
+  async login(input: { username: string; password: string; worldId: number }, ctx: DeviceContext): Promise<AuthResult> {
+    const username = input.username.trim();
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT a.id AS account_id, a.password_hash, a.locked_until, a.failed_logins,
              p.id AS player_id, p.username, p.banned_at
-        FROM accounts a
-        LEFT JOIN players p ON p.account_id = a.id AND p.world_id = ${input.worldId}
-       WHERE a.email = ${email}
+        FROM players p
+        JOIN accounts a ON a.id = p.account_id
+       WHERE p.world_id = ${input.worldId} AND lower(p.username) = ${username.toLowerCase()}
     `);
     const row = rows[0];
 
     // Kullanıcı yoksa da parola doğrulaması kadar zaman harca (kullanıcı-var-mı sızıntısını kapatır).
     if (!row) {
       await this.passwords.verify('$argon2id$v=19$m=19456,t=2,p=1$aaaaaaaaaaaaaaaa$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', input.password);
-      throw new AuthError('invalid_credentials', 'E-posta veya parola hatalı.');
+      throw new AuthError('invalid_credentials', 'Kullanıcı adı veya parola hatalı.');
     }
 
     const lockedUntil = row['locked_until'] ? toDate(row['locked_until']) : null;
@@ -151,7 +157,7 @@ export class AuthService {
                                    ELSE locked_until END
          WHERE id = ${accountId}
       `);
-      throw new AuthError('invalid_credentials', 'E-posta veya parola hatalı.');
+      throw new AuthError('invalid_credentials', 'Kullanıcı adı veya parola hatalı.');
     }
 
     await this.db.execute(sql`
@@ -159,7 +165,7 @@ export class AuthService {
     `);
 
     if (row['player_id'] == null) {
-      // Hesap var ama bu dünyada oyuncusu yok → dünyaya katılım ayrı bir akış (Faz 3).
+      // Kullanıcı adıyla arandığı için buraya normalde düşülmez; savunma amaçlı duruyor.
       throw new AuthError('world_not_found', 'Bu hesabın seçilen dünyada oyuncusu yok.');
     }
 

@@ -177,9 +177,10 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   return body as T;
 }
 
-export async function login(email: string, password: string, worldId = 1): Promise<Session> {
+/** ⭐ Giriş KULLANICI ADIYLA (kullanıcı kararı): oyuncunun ezberlediği ad e-posta değil. */
+export async function login(username: string, password: string, worldId = 1): Promise<Session> {
   const r = await api<AuthResponse>('/api/v1/auth/login', {
-    method: 'POST', body: { email, password, worldId }, noRetry: true,
+    method: 'POST', body: { username, password, worldId }, noRetry: true,
   });
   const s = toSession(r);
   setSession(s);

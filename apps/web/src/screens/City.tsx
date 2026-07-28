@@ -1,47 +1,39 @@
 /**
- * ŞEHİR — iç sekmeler: Yapılar · Baraka · Savunma · Akademi (§10).
+ * ŞEHİR EKRANLARI — Yapılar · Baraka · Savunma · Akademi (§10).
  *
- * ⭐ Maliyet, **süre** ve ön-şartlar SUNUCUDAN gelir (`/cities/:id/catalog`); istemci hesaplamaz.
- * Denge değiştiğinde arayüz kendiliğinden doğru olur — formül tek yerde yaşar.
- * ⭐ Sıralama da sunucudan gelir (katalogdaki `BUILDING_ORDER`/`TECH_ORDER`) → arayüzün kendi
- * sıralama tablosu YOK, olsaydı katalogdan sürüklenirdi.
+ * ⭐ Maliyet, **süre**, ön-şartlar ve sıralama SUNUCUDAN gelir (`/cities/:id/catalog`).
+ *
+ * ⭐ **SÜREN İŞ, KALEMİN KENDİ SATIRINDA** (kullanıcı kararı 2026-07-28). Eskiden ekranın
+ * tepesinde ayrı bir "Sürüyor" paneli vardı; oyuncu neyin ilerlediğini bulmak için gözünü iki
+ * yere gezdiriyordu. Artık ilerleme çubuğu + geri sayım + iptal, ilerleyen kalemin **kendi
+ * satırının altında** karşıdan karşıya duruyor.
+ *
+ * ⭐ **İptal onaydan geçer** ve onay metni **geri alınamayacak tutarı** yazar — iade kuralı
+ * kaleme göre değişiyor (yapı/teknik süreye göre, savaşçı bir birim eksik), oyuncunun bunu
+ * ezberlemesi beklenemez.
  */
 import { useState } from 'react';
-import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
+import { cancelRefund } from '@mobiwar/catalog';
 import { nameOf } from '../lib/names.ts';
+import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
 import {
-  useCancelQueue, useCatalog, useCity, useEnqueue,
-  type CatalogUnit, type CityDetail, type QueueRow,
+  useCancelQueue, useCatalog, useCity, useEnqueue, useMoveQueue,
+  type CatalogUnit, type CityDetail, type QueueRow, type TechQueueRow,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import {
   Button, CatalogIcon, Empty, ErrorBox, Input, Panel, Requirements, Res,
 } from '../components/ui.tsx';
+import { useConfirm } from '../components/Modal.tsx';
 
-/**
- * Şehir ekranlarının ORTAK kabuğu: şehir başlığı + bütçe çubukları + açık kuyruklar.
- * Baraka/Yapılar/Savunma/Akademi artık ayrı menü maddesi (ve ayrı rota) olduğu için ortak kısım
- * tek yerde duruyor — dört ekranda tekrarlanmıyor.
- */
 function CityFrame({ children }: { children: (city: CityDetail) => React.ReactNode }) {
   const { cityId } = useActiveCity();
   const city = useCity(cityId);
   const catalog = useCatalog(cityId);
+  useTick();
 
   if (!city.data || !catalog.data) return <Empty>Şehir yükleniyor…</Empty>;
-  const d = city.data;
-
-  return (
-    <div className="space-y-3">
-      {/* ⚠️ "Alan bütçeleri" paneli KALDIRILDI (kullanıcı kararı): dört şehir ekranının da
-          tepesinde iki çubuk taşımak yer yiyordu ve bilgi zaten gerektiği anda kendini gösteriyor —
-          bütçe dolduğunda yükseltme denemesi açık bir uyarıyla reddediliyor. Kale bütçesi çubuğu
-          ileride **Kale'ye tıklanınca açılan modalda** yaşayacak; bileşen o gün için duruyor.
-          Sur kapasitesi ise artık hiç UYGULANMIYOR (bkz. `capacity.service.ts`). */}
-      <Queues city={d} />
-      {children(d)}
-    </div>
-  );
+  return <div className="space-y-3">{children(city.data)}</div>;
 }
 
 export const BuildingsScreen = (): React.ReactElement =>
@@ -53,194 +45,211 @@ export const DefenseScreen = (): React.ReactElement =>
 export const AcademyScreen = (): React.ReactElement =>
   <CityFrame>{(c) => <Techs city={c} />}</CityFrame>;
 
-/**
- * Kale bütçesi çubuğu. **Şu an hiçbir ekranda çizilmiyor** — yeri Kale detay modalı (sıradaki tur).
- * Silmek yerine duruyor çünkü bütçe kuralı canlı: yalnız gösterimi ertelendi.
- */
+/** Kale bütçesi çubuğu — Kale detay modalı için duruyor, şu an hiçbir ekranda çizilmiyor. */
 export function Budget({ label, used, total, hint }: { label: string; used: number; total: number; hint: string }) {
-  // ⚠️ Kapasite HENÜZ YOKSA (Sur 0) "0 / 0" kırmızı yazılırsa "dolu" sanılır; oysa yapı hiç
-  //    kurulmamıştır. Ayrı durum olarak gösteriliyor.
   const none = total <= 0;
   const pct = none ? 0 : Math.min(100, (used / total) * 100);
   const full = !none && used >= total;
-
   return (
     <div title={hint}>
       <div className="mb-1 flex justify-between">
         <span className="text-muted">{label}</span>
-        {none ? (
-          <span className="text-muted">yok</span>
-        ) : (
+        {none ? <span className="text-muted">yok</span> : (
           <span className={`tnum ${full ? 'font-semibold text-danger' : 'text-ink'}`}>
             {fmt(used)} / {fmt(total)}
           </span>
         )}
       </div>
       <div className="h-2 overflow-hidden rounded-full border border-border bg-raised">
-        <div className={`h-full transition-all ${full ? 'bg-danger' : 'bg-accent'}`}
-          style={{ width: `${pct}%` }} />
+        <div className={`h-full transition-all ${full ? 'bg-danger' : 'bg-accent'}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
 
-/** Maliyet + süre satırı — her kalemde AYNI biçim (oyuncu tek yere bakmayı öğrenir). */
+/* ── Ortak parçalar ─────────────────────────────────────────────────────────── */
+
+/** Ad + parantez içinde seviye/adet (kullanıcı kararı): "Çiftlik (20)" · "Cüce (302)". */
+function ItemName({ name, value }: { name: string; value: number | string }) {
+  return (
+    <div className="text-[15px] leading-tight">
+      <span className="font-semibold text-ink">{name}</span>
+      <span className="tnum ml-1.5 text-accent">({value})</span>
+    </div>
+  );
+}
+
 function CostLine({ gold, food, seconds }: { gold: number; food: number; seconds: number | null }) {
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
       <Res kind="gold" value={fmt(gold)} size={14} />
       <Res kind="food" value={fmt(food)} size={14} />
       {seconds != null ? (
-        <span className="tnum inline-flex items-center gap-1" title="Süre">
-          ⏳ {formatDuration(seconds)}
-        </span>
+        <span className="tnum inline-flex items-center gap-1" title="Süre">⏳ {formatDuration(seconds)}</span>
       ) : null}
     </div>
   );
 }
 
-/** Açık kuyruklar — oyuncunun gördüğü geri sayımlar; sunucu saatinden çizilir. */
-function Queues({ city }: { city: CityDetail }) {
-  useTick(city.queues.length > 0);
-  const cancel = useCancelQueue();
-
-  if (city.queues.length === 0) return null;
+/**
+ * ⭐ SATIR İÇİ İLERLEME — çubuk + geri sayım + iptal. Kalemin kendi satırının altında,
+ * karşıdan karşıya. `extra` savaşçı kuyruğunun "üretilen / toplam" bilgisini taşır.
+ */
+function ProgressRow({
+  startedAt, finishAt, label, onCancel, canCancel = true, cancelling = false, right,
+}: {
+  startedAt: string;
+  finishAt: string;
+  label?: React.ReactNode;
+  onCancel?: () => void;
+  canCancel?: boolean;
+  cancelling?: boolean;
+  right?: React.ReactNode;
+}) {
+  const start = Date.parse(startedAt);
+  const end = Date.parse(finishAt);
+  const pct = Math.min(100, Math.max(0, ((serverNow() - start) / Math.max(1, end - start)) * 100));
   return (
-    <Panel title="Sürüyor">
-      <ul className="divide-y divide-border">
-        {city.queues.map((q, i) => (
-          <li key={q.id}
-            className={`flex items-center justify-between gap-2 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-            <div className="min-w-0">
-              <div className="truncate text-sm text-ink">{describeQueue(q)}</div>
-              <div className="tnum text-xs text-warning">{remaining(q.finishAt) ?? 'birazdan biter…'}</div>
-            </div>
-            <Button size="sm" variant="danger" disabled={cancel.isPending}
-              onClick={() => cancel.mutate(q.id)}>
-              İptal
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted">
-        İptal iadesi: yapı/teknik <b>süreye göre</b>, savaşçı <b>bir birim eksik</b>.
+    <div className="mt-1.5 border-t border-border pt-1.5">
+      <div className="mb-1 flex items-center gap-2 text-[11px]">
+        <span className="tnum font-semibold text-warning">{remaining(finishAt) ?? 'birazdan biter…'}</span>
+        {label ? <span className="min-w-0 flex-1 truncate text-muted">{label}</span> : <span className="flex-1" />}
+        {right}
+        {canCancel && onCancel ? (
+          <Button size="sm" variant="danger" disabled={cancelling} onClick={onCancel}>İptal et</Button>
+        ) : null}
       </div>
-    </Panel>
+      <div className="h-1.5 overflow-hidden rounded-full border border-border bg-raised">
+        <div className="h-full bg-accent transition-[width] duration-1000 ease-linear"
+          style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
-function describeQueue(q: QueueRow): string {
-  // Ekranda İngilizce id GÖRÜNMEZ (§13.14): "farm → seviye 2" değil "Çiftlik → seviye 2".
-  if (q.count != null) return `${nameOf(q.itemType)} × ${fmt(q.count)}`;
-  return `${nameOf(q.itemType)} → seviye ${q.targetLevel}`;
+/**
+ * İptal onayı — **geri alınamayacak tutarı** hesaplayıp gösterir.
+ * Kural katalogdan (`cancelRefund`): yapı/teknik **süreye göre**, adetli kalem **bir birim eksik**.
+ */
+function useCancelWithConfirm(): (q: {
+  id: number; label: string; startedAt: string; finishAt: string;
+  spent: { gold: number; food: number }; count: number | null; done?: number;
+}) => Promise<void> {
+  const confirm = useConfirm();
+  const cancel = useCancelQueue();
+
+  return async (q) => {
+    const start = Date.parse(q.startedAt);
+    const end = Date.parse(q.finishAt);
+    const progress = Math.min(1, Math.max(0, (serverNow() - start) / Math.max(1, end - start)));
+
+    // Savaşçıda üretilenler zaten şehirde → hesap KALAN adet üzerinden.
+    const remainingCount = q.count != null ? Math.max(0, q.count - (q.done ?? 0)) : null;
+    const spent = remainingCount != null && q.count
+      ? {
+        gold: (q.spent.gold / q.count) * remainingCount,
+        food: (q.spent.food / q.count) * remainingCount,
+      }
+      : q.spent;
+
+    const refund = cancelRefund({
+      rule: q.count != null ? 'minusOneUnit' : 'timeProgress',
+      spent,
+      progress,
+      count: remainingCount ?? 1,
+    });
+    const lost = {
+      gold: Math.max(0, Math.round(q.spent.gold - refund.gold)),
+      food: Math.max(0, Math.round(q.spent.food - refund.food)),
+    };
+
+    const ok = await confirm({
+      title: `${q.label} iptal edilsin mi?`,
+      danger: true,
+      confirmLabel: 'İptal et',
+      body: (
+        <div className="space-y-2 text-sm">
+          <p>
+            {q.count != null
+              ? 'Üretimi biten birimler şehirde kalır; iadede kalan siparişten bir birimin bedeli düşülür.'
+              : 'İade süreye göre yapılır: harcanan kaynağın tamamlanmamış kısmı geri verilir.'}
+          </p>
+          <div className="rounded-[var(--radius-sm)] border border-danger bg-danger/10 px-2.5 py-2">
+            <div className="mb-1 text-xs font-semibold text-danger">Geri alamayacağın kaynak</div>
+            <div className="flex items-center gap-3">
+              <Res kind="gold" value={fmt(lost.gold)} size={14} />
+              <Res kind="food" value={fmt(lost.food)} size={14} />
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted">
+            <span>İade edilecek:</span>
+            <Res kind="gold" value={fmt(Math.round(refund.gold))} size={13} />
+            <Res kind="food" value={fmt(Math.round(refund.food))} size={13} />
+          </div>
+        </div>
+      ),
+    });
+    if (ok) cancel.mutate(q.id);
+  };
 }
+
+/** Bir kalem için o şehirde süren kuyruk satırı (varsa). */
+const queueFor = (city: CityDetail, category: string, itemType: string): QueueRow | undefined =>
+  city.queues.find((q) => q.category === category && q.itemType === itemType);
+
+/** Kalemin harcanmış kaynağı — iptal onayında "kaybedilecek" hesabı için gerekiyor. */
+function spentOf(cost: { gold: number; food: number }, count: number | null): { gold: number; food: number } {
+  const n = count ?? 1;
+  return { gold: cost.gold * n, food: cost.food * n };
+}
+
+/* ── Yapılar ────────────────────────────────────────────────────────────────── */
 
 function Buildings({ city }: { city: CityDetail }) {
   const { cityId } = useActiveCity();
   const catalog = useCatalog(cityId);
   const enqueue = useEnqueue(cityId);
+  const askCancel = useCancelWithConfirm();
   const busy = city.queues.some((q) => q.category === 'building');
 
   return (
-    <Panel title="Yapılar" right={busy ? 'bir yapı sürüyor' : undefined}>
+    <Panel title="Yapılar">
       <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
       <ul className="divide-y divide-border">
         {(catalog.data?.buildings ?? []).map((b, i) => {
           const maxed = b.level >= b.maxLevel;
           const cost = b.nextCost;
           const afford = !!cost && city.resources.gold >= cost.gold && city.resources.food >= cost.food;
+          const unmet = (b.requirementNames ?? []).some((r) => {
+            const have = r.kind === 'building' ? (city.buildings[r.id] ?? 0) : (city.techs[r.id] ?? 0);
+            return have < r.level;
+          });
+          const q = queueFor(city, 'building', b.id);
           return (
-            <li key={b.id}
-              className={`flex items-center justify-between gap-3 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              {/* ⭐ Görsel SOLDA (orijinal: `images/scr_web01`). */}
-              <CatalogIcon kind="buildings" id={b.id} alt={b.name} />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm">
-                  <span className="font-medium text-ink">{b.name}</span>
-                  <span className="ml-1.5 tnum text-xs text-accent">sv {b.level}</span>
-                  {maxed ? <span className="ml-1.5 text-[11px] text-muted">(tavan)</span> : null}
-                </div>
-                {cost ? <CostLine gold={cost.gold} food={cost.food} seconds={b.nextSeconds} /> : null}
-                <Requirements requirementNames={b.requirementNames}
-                  buildings={city.buildings} techs={city.techs} />
-              </div>
-              <Button size="sm" disabled={maxed || busy || !afford || enqueue.isPending}
-                onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
-                {maxed ? '—' : `sv ${b.level + 1}`}
-              </Button>
-            </li>
-          );
-        })}
-      </ul>
-    </Panel>
-  );
-}
-
-/** Savaşçı ve savunma birimi üretimi aynı desendir; fark yalnız kategori ve adet kuralı. */
-function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' }) {
-  const { cityId } = useActiveCity();
-  const catalog = useCatalog(cityId);
-  const enqueue = useEnqueue(cityId);
-  const [counts, setCounts] = useState<Record<string, string>>({});
-  const busy = city.queues.some((q) => q.category === kind);
-  const list: CatalogUnit[] = (kind === 'unit' ? catalog.data?.units : catalog.data?.defenses) ?? [];
-  const have = kind === 'unit' ? city.units : city.defenses;
-
-  return (
-    <Panel title={kind === 'unit' ? 'Baraka' : 'Savunma'} right={busy ? 'üretim sürüyor' : undefined}>
-      <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
-      <ul className="divide-y divide-border">
-        {list.map((u, i) => {
-          const n = Number(counts[u.id] ?? '') || 0;
-          // Sur ve Büyü Kalkanı ADET değil SEVİYE ilerletir → adet kutusu gösterilmez.
-          const levelBased = u.levelBased === true;
-          const total = levelBased
-            ? { gold: u.cost.gold, food: u.cost.food, seconds: u.seconds }
-            : { gold: u.cost.gold * n, food: u.cost.food * n, seconds: (u.seconds ?? 0) * n };
-          const afford = city.resources.gold >= total.gold && city.resources.food >= total.food;
-          return (
-            <li key={u.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              <div className="flex items-center justify-between gap-2">
-                {/* ⭐ Görsel SOLDA. Baraka'da savaşçı, Savunma'da savunma seti. */}
-                <CatalogIcon kind={kind === 'unit' ? 'units' : 'defenses'} id={u.id} alt={u.name} />
+            <li key={b.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
+              <div className="flex items-center justify-between gap-3">
+                <CatalogIcon kind="buildings" id={b.id} alt={b.name} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm">
-                    <span className="font-medium text-ink">{u.name}</span>
-                    <span className="ml-1.5 tnum text-xs text-accent">
-                      {levelBased ? `sv ${have[u.id] ?? 0}` : `${fmt(have[u.id] ?? 0)} adet`}
-                    </span>
-                  </div>
-                  {/* ⚠️ "alan · hız" satırı KALDIRILDI (kullanıcı kararı): ham stat, üretim
-                      kararında işe yaramıyordu ve satırı kalabalıklaştırıyordu. Bu bilgiler
-                      birime tıklayınca açılacak detay modalında — savaşçının hikâyesiyle
-                      birlikte — gösterilecek (sıradaki tur). */}
-                  <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
-                  <Requirements requirementNames={u.requirementNames}
+                  <ItemName name={b.name} value={b.level} />
+                  {cost ? <CostLine gold={cost.gold} food={cost.food} seconds={b.nextSeconds} /> : null}
+                  <Requirements requirementNames={b.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {levelBased ? null : (
-                    <Input type="number" min={1} inputMode="numeric" placeholder="adet"
-                      className="w-20 tnum"
-                      value={counts[u.id] ?? ''}
-                      onChange={(e) => setCounts({ ...counts, [u.id]: e.target.value })} />
-                  )}
-                  <Button size="sm"
-                    disabled={busy || enqueue.isPending || (!levelBased && (n <= 0 || !afford))}
-                    onClick={() => enqueue.mutate({
-                      category: kind, type: u.id, ...(levelBased ? {} : { count: n }),
-                    })}>
-                    {levelBased ? `sv ${(have[u.id] ?? 0) + 1}` : 'Üret'}
-                  </Button>
-                </div>
+                {/* ⚠️ Ön-şart eksikse düğme PASİF — hata mesajıyla karşılaşmadan görülmeli. */}
+                <Button size="sm" disabled={maxed || busy || !afford || unmet || enqueue.isPending}
+                  onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
+                  {maxed ? '—' : `sv ${b.level + 1}`}
+                </Button>
               </div>
-              {!levelBased && n > 0 ? (
-                <div className={`mt-1 flex items-center gap-3 text-[11px] ${afford ? 'text-muted' : 'text-danger'}`}>
-                  <span>Toplam:</span>
-                  <Res kind="gold" value={fmt(total.gold)} size={13} />
-                  <Res kind="food" value={fmt(total.food)} size={13} />
-                  <span className="tnum">⏳ {formatDuration(total.seconds)}</span>
-                </div>
+              {q ? (
+                <ProgressRow
+                  startedAt={q.startedAt} finishAt={q.finishAt}
+                  label={`seviye ${q.targetLevel}`}
+                  onCancel={() => void askCancel({
+                    id: q.id, label: b.name, startedAt: q.startedAt, finishAt: q.finishAt,
+                    spent: spentOf(cost ?? { gold: 0, food: 0 }, null), count: null,
+                  })}
+                />
               ) : null}
             </li>
           );
@@ -250,38 +259,294 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
   );
 }
 
+/* ── Baraka: üstteki "Sürüyor" paneli ───────────────────────────────────────── */
+
+/**
+ * ⭐ Katlama durumu **cihaz hafızasında** (kullanıcı kararı): tek anahtar, tüm şehirler için
+ * geçerli. Şehir başına saklamak "bir şehirde kapattım, diğerinde yine açık" sürtünmesi yaratırdı.
+ */
+const COLLAPSE_KEY = 'mw-barracks-collapsed';
+
+function useCollapsed(): [boolean, (v: boolean) => void] {
+  const [v, setV] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1');
+  return [v, (next: boolean) => {
+    localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+    setV(next);
+  }];
+}
+
+/**
+ * ⭐ TEK ÜRETİM BANDI paneli — verilen emirler sırayla listelenir.
+ *
+ * Sayaç **tek bir askerin** süresidir (kullanıcı kararı): dolunca o asker barakaya eklenir,
+ * kalan adet bir azalır, çubuk baştan başlar. Toplam süre hiçbir yerde geri saymaz — fabrika
+ * bandını izliyorsun, siparişin tamamını değil.
+ *
+ * Bekleyen emirler **saymaz**: bant boşalana kadar "sırada" yazar ve ne zaman başlayacağını
+ * söyler.
+ */
+function ProductionPanel({
+  city, queues, onCancel, onMove,
+}: {
+  city: CityDetail;
+  queues: QueueRow[];
+  onCancel: (q: QueueRow) => void;
+  onMove: (queueId: number, direction: 'up' | 'down') => void;
+}) {
+  const [collapsed, setCollapsed] = useCollapsed();
+  const barracks = Math.max(1, city.buildings['barracks'] ?? 1);
+  if (queues.length === 0) return null;
+
+  return (
+    <Panel
+      title="Üretim bandı"
+      right={
+        <button onClick={() => setCollapsed(!collapsed)}
+          className="text-[11px] text-on-panel-header/85 hover:text-on-panel-header">
+          {queues.length}/{barracks} emir · {collapsed ? 'göster ▾' : 'gizle ▴'}
+        </button>
+      }
+    >
+      {collapsed ? null : (
+        <ul className="divide-y divide-border">
+          {queues.map((q, i) => {
+            const active = (q.position ?? 1) === 1;
+            const remaining = q.remaining ?? q.count ?? 0;
+            return (
+              <li key={q.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
+                <div className="flex items-center gap-2.5">
+                  <CatalogIcon kind="units" id={q.itemType} size={40} alt={q.itemType} />
+                  <div className="min-w-0 flex-1">
+                    <ItemName name={nameOf(q.itemType)} value={fmt(remaining)} />
+                    <div className="text-[11px] text-muted">
+                      {active
+                        ? <>sırada üretiliyor · <span className="tnum">{remaining}</span> asker kaldı</>
+                        : <>bant boşalınca başlar · <span className="tnum">{remaining}</span> asker</>}
+                    </div>
+                  </div>
+                  {!active ? (
+                    <span className="flex shrink-0 items-center gap-0.5">
+                      <span className="tnum mr-1 text-[11px] text-muted">sıra {q.position}</span>
+                      <Button size="sm" variant="ghost" title="Yukarı"
+                        onClick={() => onMove(q.id, 'up')}>↑</Button>
+                      <Button size="sm" variant="ghost" title="Aşağı"
+                        onClick={() => onMove(q.id, 'down')}>↓</Button>
+                    </span>
+                  ) : null}
+                  <Button size="sm" variant="danger" onClick={() => onCancel(q)}>İptal et</Button>
+                </div>
+
+                {active && q.unitStartedAt && q.unitFinishAt ? (
+                  <UnitTicker startedAt={q.unitStartedAt} finishAt={q.unitFinishAt} />
+                ) : (
+                  <div className="mt-1.5 border-t border-border pt-1.5 text-[11px] text-muted">
+                    Başlıyor: <span className="tnum">{remaining_(q.startedAt)}</span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/** "Şu an" geçmişse boş dönmesin diye küçük sarmalayıcı. */
+const remaining_ = (iso: string): string => remaining(iso) ?? 'birazdan';
+
+/**
+ * TEK BİR ASKERİN sayacı + çubuğu. Pencere dolduğunda sunucu yeni pencereyi veriyor;
+ * arada kalan yarım saniyede çubuk %100'de bekler, geri sayım "birazdan" der.
+ */
+function UnitTicker({ startedAt, finishAt }: { startedAt: string; finishAt: string }) {
+  const start = Date.parse(startedAt);
+  const end = Date.parse(finishAt);
+  const pct = Math.min(100, Math.max(0, ((serverNow() - start) / Math.max(1, end - start)) * 100));
+  return (
+    <div className="mt-1.5 border-t border-border pt-1.5">
+      <div className="mb-1 flex items-center justify-between text-[11px]">
+        <span className="text-muted">sıradaki asker</span>
+        <span className="tnum font-semibold text-warning">{remaining(finishAt) ?? 'birazdan'}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full border border-border bg-raised">
+        <div className="h-full bg-accent transition-[width] duration-1000 ease-linear"
+          style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/* ── Baraka / Savunma ───────────────────────────────────────────────────────── */
+
+function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' }) {
+  const { cityId } = useActiveCity();
+  const catalog = useCatalog(cityId);
+  const enqueue = useEnqueue(cityId);
+  const move = useMoveQueue();
+  const askCancel = useCancelWithConfirm();
+  const [counts, setCounts] = useState<Record<string, string>>({});
+
+  const list: CatalogUnit[] = (kind === 'unit' ? catalog.data?.units : catalog.data?.defenses) ?? [];
+  const have = kind === 'unit' ? city.units : city.defenses;
+  const queues = city.queues.filter((q) => q.category === kind)
+    .sort((a, b) => (a.position ?? 1) - (b.position ?? 1));
+  const barracks = city.buildings['barracks'] ?? 1;
+  // Savunmada hâlâ tek slot; barakada Baraka seviyesi kadar emir (kullanıcı kuralı).
+  const slotsFull = kind === 'unit' ? queues.length >= Math.max(1, barracks) : queues.length > 0;
+
+  return (
+    <>
+      {/* ⭐ Barakada süren emirler ÜSTTEKİ panelde, tek bant sırasıyla (kullanıcı kararı). */}
+      {kind === 'unit' ? (
+        <ProductionPanel
+          city={city}
+          queues={queues}
+          onMove={(queueId, direction) => move.mutate({ queueId, direction })}
+          onCancel={(q) => {
+            const u = list.find((x) => x.id === q.itemType);
+            void askCancel({
+              id: q.id, label: u?.name ?? q.itemType,
+              startedAt: q.startedAt, finishAt: q.finishAt,
+              spent: spentOf(u?.cost ?? { gold: 0, food: 0 }, q.count),
+              count: q.count, done: q.done,
+            });
+          }}
+        />
+      ) : null}
+
+    <Panel
+      title={kind === 'unit' ? 'Baraka' : 'Savunma'}
+      right={kind === 'unit' ? `${queues.length}/${Math.max(1, barracks)} emir` : undefined}
+    >
+      <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
+      <ul className="divide-y divide-border">
+        {list.map((u, i) => {
+          const n = Number(counts[u.id] ?? '') || 0;
+          const levelBased = u.levelBased === true;
+          const total = levelBased
+            ? { gold: u.cost.gold, food: u.cost.food, seconds: u.seconds }
+            : { gold: u.cost.gold * n, food: u.cost.food * n, seconds: (u.seconds ?? 0) * n };
+          const afford = city.resources.gold >= total.gold && city.resources.food >= total.food;
+          const unmet = (u.requirementNames ?? []).some((r) => {
+            const lv = r.kind === 'building' ? (city.buildings[r.id] ?? 0) : (city.techs[r.id] ?? 0);
+            return lv < r.level;
+          });
+          const mine = queues.filter((q) => q.itemType === u.id);
+
+          return (
+            <li key={u.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
+              <div className="flex items-center justify-between gap-2">
+                <CatalogIcon kind={kind === 'unit' ? 'units' : 'defenses'} id={u.id} alt={u.name} />
+                <div className="min-w-0 flex-1">
+                  <ItemName name={u.name} value={levelBased ? `sv ${have[u.id] ?? 0}` : fmt(have[u.id] ?? 0)} />
+                  <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
+                  <Requirements requirementNames={u.requirementNames}
+                    buildings={city.buildings} techs={city.techs} />
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {levelBased ? null : (
+                    <Input type="number" min={1} inputMode="numeric" placeholder="adet"
+                      className="tnum w-16 py-1 text-center"
+                      value={counts[u.id] ?? ''}
+                      onChange={(e) => setCounts({ ...counts, [u.id]: e.target.value })} />
+                  )}
+                  <Button size="sm"
+                    disabled={unmet || slotsFull || enqueue.isPending
+                      || (!levelBased && (n <= 0 || !afford)) || (levelBased && !afford)}
+                    onClick={() => enqueue.mutate({
+                      category: kind, type: u.id, ...(levelBased ? {} : { count: n }),
+                    })}>
+                    {levelBased ? `sv ${(have[u.id] ?? 0) + 1}` : 'Üret'}
+                  </Button>
+                </div>
+              </div>
+
+              {!levelBased && n > 0 ? (
+                <div className={`mt-1 flex items-center gap-3 text-[11px] ${afford ? 'text-muted' : 'text-danger'}`}>
+                  <span>Toplam:</span>
+                  <Res kind="gold" value={fmt(total.gold)} size={13} />
+                  <Res kind="food" value={fmt(total.food)} size={13} />
+                  <span className="tnum">⏳ {formatDuration(total.seconds)}</span>
+                </div>
+              ) : null}
+
+              {/* ⚠️ Barakada süren emirler SATIRDA DEĞİL üstteki "Üretim bandı" panelinde
+                  (kullanıcı kararı): tek bant sırayla işlediği için sıralı tek liste doğru yer.
+                  Savunmada tek slot olduğu için satır içi ilerleme kalıyor. */}
+              {kind === 'defense' ? mine.map((q) => (
+                <ProgressRow
+                  key={q.id}
+                  startedAt={q.startedAt} finishAt={q.finishAt}
+                  label={q.count ? <span className="tnum">{fmt(q.count)} adet</span> : `seviye ${q.targetLevel}`}
+                  onCancel={() => void askCancel({
+                    id: q.id, label: u.name, startedAt: q.startedAt, finishAt: q.finishAt,
+                    spent: spentOf(u.cost, q.count), count: q.count, done: q.done,
+                  })}
+                />
+              )) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
+    </>
+  );
+}
+
+/* ── Akademi ────────────────────────────────────────────────────────────────── */
+
 function Techs({ city }: { city: CityDetail }) {
   const { cityId } = useActiveCity();
   const catalog = useCatalog(cityId);
   const enqueue = useEnqueue(cityId);
-  const busy = city.queues.some((q) => q.category === 'tech');
+  const askCancel = useCancelWithConfirm();
+  const busyHere = city.queues.some((q) => q.category === 'tech');
+
+  /** Hangi teknik nerede araştırılıyor — TÜM şehirler (Akademiler ortak). */
+  const byTech = new Map<string, TechQueueRow>();
+  for (const q of city.techQueues ?? []) byTech.set(q.itemType, q);
 
   return (
-    <Panel title="Akademi" right={busy ? 'araştırma sürüyor' : undefined}>
+    <Panel title="Akademi">
       <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
-      <div className="px-3 pb-1 text-[11px] text-muted">
-        Teknik seviyesi <b>oyuncu geneli</b>dir; aynı teknik iki şehirde aynı anda araştırılamaz.
-      </div>
       <ul className="divide-y divide-border">
         {(catalog.data?.techs ?? []).map((t, i) => {
           const afford = city.resources.gold >= t.nextCost.gold && city.resources.food >= t.nextCost.food;
+          const unmet = (t.requirementNames ?? []).some((r) => {
+            const lv = r.kind === 'building' ? (city.buildings[r.id] ?? 0) : (city.techs[r.id] ?? 0);
+            return lv < r.level;
+          });
+          const q = byTech.get(t.id);
+          // İptal YALNIZ araştırmayı başlatan şehirden (kullanıcı kuralı).
+          const mineHere = q?.cityId === city.id;
           return (
-            <li key={t.id}
-              className={`flex items-center justify-between gap-3 px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              <CatalogIcon kind="techs" id={t.id} alt={t.name} />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm">
-                  <span className="font-medium text-ink">{t.name}</span>
-                  <span className="ml-1.5 tnum text-xs text-accent">sv {t.level}</span>
+            <li key={t.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
+              <div className="flex items-center justify-between gap-3">
+                <CatalogIcon kind="techs" id={t.id} alt={t.name} />
+                <div className="min-w-0 flex-1">
+                  <ItemName name={t.name} value={t.level} />
+                  <CostLine gold={t.nextCost.gold} food={t.nextCost.food} seconds={t.nextSeconds} />
+                  <Requirements requirementNames={t.requirementNames}
+                    buildings={city.buildings} techs={city.techs} />
                 </div>
-                <CostLine gold={t.nextCost.gold} food={t.nextCost.food} seconds={t.nextSeconds} />
-                <Requirements requirementNames={t.requirementNames}
-                  buildings={city.buildings} techs={city.techs} />
+                <Button size="sm"
+                  disabled={busyHere || !!q || !afford || unmet || enqueue.isPending}
+                  onClick={() => enqueue.mutate({ category: 'tech', type: t.id })}>
+                  sv {t.level + 1}
+                </Button>
               </div>
-              <Button size="sm" disabled={busy || !afford || enqueue.isPending}
-                onClick={() => enqueue.mutate({ category: 'tech', type: t.id })}>
-                sv {t.level + 1}
-              </Button>
+              {q ? (
+                <ProgressRow
+                  startedAt={q.startedAt} finishAt={q.finishAt}
+                  label={<>seviye {q.targetLevel}{mineHere ? '' : ` · ${q.cityName}`}</>}
+                  canCancel={mineHere}
+                  onCancel={() => void askCancel({
+                    id: q.id, label: t.name, startedAt: q.startedAt, finishAt: q.finishAt,
+                    spent: t.nextCost, count: null,
+                  })}
+                />
+              ) : null}
             </li>
           );
         })}

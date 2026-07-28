@@ -158,9 +158,9 @@ describe('yapı yükseltme', () => {
       .catch((e: unknown) => e as QueueError);
     expect(err).toBeInstanceOf(QueueError);
     expect((err as QueueError).code).toBe('requirements_unmet');
-    expect((err as QueueError).message).toMatch(/architect_school 12/);
-    expect((err as QueueError).message).toMatch(/castle 12/);
-    expect((err as QueueError).message).toMatch(/sorcery 12/);
+    expect((err as QueueError).message).toMatch(/Mimar Okulu 12/);
+    expect((err as QueueError).message).toMatch(/Kale 12/);
+    expect((err as QueueError).message).toMatch(/Büyücülük 12/);
   });
 
   it('seviye tavanı aşılamaz (Çiftlik 40)', async () => {
@@ -205,6 +205,12 @@ describe('savaşçı üretimi', () => {
     const birim = (190 * 0.66 ** 0.8) / 1.2;
     expect((q.finishAt.getTime() - at.getTime()) / 1000).toBeCloseTo(birim * 5, 0);
 
+    // ⭐ Üretim TEKER TEKER ve tembel: zamanı ileri almak için kuyruğun başlangıcını geriye
+    //    çekiyoruz (oyun saatini beklemek yerine). Beş birimlik süre geçince beşi de eklenmiş olur.
+    await h.db.execute(sql`
+      UPDATE queues SET started_at = now() - interval '1 hour', finish_at = now() - interval '1 second'
+       WHERE id = ${q.id}
+    `);
     await h.db.execute(sql`
       UPDATE missions SET execute_at = now() - interval '1 second'
        WHERE id IN (SELECT mission_id FROM queues WHERE id = ${q.id})
@@ -212,13 +218,120 @@ describe('savaşçı üretimi', () => {
     await scheduler().tick();
 
     expect((await unitCounts())['dwarf']).toBe(5);
+    expect(await queues.openQueues(cityId)).toHaveLength(0);
+  });
+
+  /**
+   * ⭐ ÇEVRİMDIŞI ÜRETİM — kullanıcının işaret ettiği kritik senaryo: emri verip oyundan çıkan
+   * oyuncunun şehrine saldırı gelirse, o ana kadar üretilmiş askerler savaşta HAZIR olmalı.
+   * Üretim tembel ilerlediği için `materialize` (savaş çözümünün ilk adımı) bunu sağlar.
+   */
+  it('⭐ askerler TEKER TEKER eklenir; şehir okunduğu anda o ana kadarki üretim hazırdır', async () => {
+    await setTech('blacksmithing', 1);
+    await giveResources(1e9, 1e9);
+    const at = await clock.gameNow(worldId);
+
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 100, at });
+    const perUnit = (190 * 0.66 ** 0.8) / 1.2;
+
+    // Henüz hiçbiri bitmedi.
+    expect((await unitCounts())['dwarf'] ?? 0).toBe(0);
+
+    // Tam 10 birimlik süre geçmiş gibi yap.
+    const gecen = Math.round(perUnit * 10);
+    await h.db.execute(sql`
+      UPDATE queues SET started_at = now() - (${gecen}::int * interval '1 second') WHERE id = ${q.id}
+    `);
+    await cities.snapshot(cityId, new Date());
+
+    expect((await unitCounts())['dwarf']).toBe(10);
+    const open = await queues.openQueues(cityId);
+    expect(open[0]!.done).toBe(10);          // sipariş sürüyor
+    expect(open[0]!.count).toBe(100);
+  });
+
+  it('⭐ aynı anda BARAKA SEVİYESİ kadar emir; fazlası reddedilir', async () => {
+    await setTech('blacksmithing', 1);
+    await giveResources(1e9, 1e9);
+    await setLevel('barracks', 2);
+    const at = await clock.gameNow(worldId);
+
+    const a = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+    const b = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 20, at });
+    expect(a.position).toBe(1);
+    expect(b.position).toBe(2);
+
+    await expect(queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at }))
+      .rejects.toThrow(/en fazla 2 üretim emri/);
+  });
+
+  /**
+   * ⭐ TEK ÜRETİM BANDI — kullanıcının fabrika benzetmesi: 10 kazak bitmeden 20 gömleğin
+   * üretimi BAŞLAMAZ. 🐛 Bu test, emirlerin paralel geri sayıp iptalden sonra hepsinin birden
+   * üretilmesi hatasını kilitliyor.
+   */
+  it('⭐ kuyruktaki emir, öndeki BİTMEDEN üretmez ve saymaz', async () => {
+    await setTech('blacksmithing', 1);
+    await setTech('archery', 1);
+    await giveResources(1e9, 1e9);
+    await setLevel('barracks', 3);
+    const at = await clock.gameNow(worldId);
+
+    const a = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+    const b = await queues.enqueueUnits({ cityId, playerId, type: 'elf', count: 20, at });
+
+    // 2. emir 1.'nin BİTİŞİNDE başlar → başlangıcı a.finishAt'e eşit.
+    expect(b.startedAt.getTime()).toBeGreaterThanOrEqual(a.finishAt.getTime() - 1000);
+    expect(b.finishAt.getTime()).toBeGreaterThan(a.finishAt.getTime());
+
+    // 1. emrin süresinin yarısı geçtiğinde: Cüce üretilmiş, Elf HİÇ üretilmemiş olmalı.
+    const perDwarf = (190 * 0.66 ** 0.8) / 1.2 ** 3;
+    await h.db.execute(sql`
+      UPDATE queues SET started_at = started_at - (${Math.ceil(perDwarf * 5) + 1}::int * interval '1 second'),
+                        finish_at  = finish_at  - (${Math.ceil(perDwarf * 5) + 1}::int * interval '1 second')
+       WHERE city_id = ${cityId} AND category = 'unit'
+    `);
+    await cities.snapshot(cityId, new Date());
+    const u = await unitCounts();
+    expect(u['dwarf']).toBe(5);
+    expect(u['elf'] ?? 0).toBe(0);          // ← paralel ilerleme YOK
+
+    // 1. emri iptal et → 2. emir HEMEN bandı devralır ve o an başlar.
+    await queues.cancel({ queueId: a.id, playerId, at: new Date() });
+    const open = await queues.openQueues(cityId);
+    expect(open).toHaveLength(1);
+    expect(open[0]!.itemType).toBe('elf');
+    expect(open[0]!.position).toBe(1);
+    expect(open[0]!.done).toBe(0);
+    // Elf'in sayacı ancak ŞİMDİ başlıyor: bitişi hâlâ ilerde.
+    expect(open[0]!.finishAt.getTime()).toBeGreaterThan(Date.now());
+    expect((await unitCounts())['elf'] ?? 0).toBe(0);
+  });
+
+  it('⭐ iptalde YALNIZ kalan adet iade edilir (üretilenler geri alınmaz)', async () => {
+    await setTech('blacksmithing', 1);
+    await giveResources(1e9, 1e9);
+    const at = await clock.gameNow(worldId);
+    const def = UNITS_BY_ID['dwarf']!;
+
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 100, at });
+    const perUnit = (190 * 0.66 ** 0.8) / 1.2;
+    await h.db.execute(sql`
+      UPDATE queues SET started_at = now() - (${Math.ceil(perUnit * 40) + 1}::int * interval '1 second')
+       WHERE id = ${q.id}
+    `);
+
+    const r = await queues.cancel({ queueId: q.id, playerId, at: new Date() });
+    // 40 üretildi → kalan 60; iade = 59 birim (bir birim eksik kuralı).
+    expect((await unitCounts())['dwarf']).toBe(40);
+    expect(r.refunded.gold).toBeCloseTo(def.gold * 59, -1);
   });
 
   it('teknik ön-şartı olmayan birim üretilemez', async () => {
     const at = await clock.gameNow(worldId);
     // Cüce → Demircilik 1 gerekiyor (şu an 0)
     await expect(queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 1, at }))
-      .rejects.toThrow(/blacksmithing 1/);
+      .rejects.toThrow(/Demircilik 1/);
   });
 
   it('Baraka ön-şartı olmayan birim üretilemez', async () => {
@@ -227,7 +340,7 @@ describe('savaşçı üretimi', () => {
     const at = await clock.gameNow(worldId);
     // Kaos → Baraka 15 gerekiyor (şu an 1)
     await expect(queues.enqueueUnits({ cityId, playerId, type: 'chaos', count: 1, at }))
-      .rejects.toThrow(/barracks 15/);
+      .rejects.toThrow(/Baraka 15/);
   });
 
   it('geçersiz adet reddedilir', async () => {
@@ -336,7 +449,7 @@ describe('teknik araştırma', () => {
     const at = await clock.gameNow(worldId);
     // İçgüdü → Akademi 10 gerekiyor (şu an 0)
     await expect(queues.enqueueTech({ cityId, playerId, type: 'instinct', at }))
-      .rejects.toThrow(/academy 10/);
+      .rejects.toThrow(/Akademi 10/);
   });
 
   it('⭐ AYNI TEKNİK iki şehirde aynı anda araştırılamaz (§13.11.5)', async () => {

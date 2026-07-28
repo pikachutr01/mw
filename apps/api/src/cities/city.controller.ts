@@ -19,7 +19,7 @@ import {
   trainingTimeSeconds, unitCost,
 } from '@mobiwar/catalog';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
-import type { Db } from '../db/client.ts';
+import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { QueueError, QueueService } from '../queues/queue.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
@@ -88,14 +88,42 @@ export class CityController {
       isCapital: snap.isCapital,
       resources: { gold: snap.gold, food: snap.food },
       production: { goldPerHour: snap.goldPerHour, foodPerHour: snap.foodPerHour },
+      speed: snap.speed,
       buildings: snap.buildings,
       units,
       defenses,
       techs,
-      queues: (await this.queues.openQueues(cityId)).map((q) => ({
-        ...q,
-        startedAt: q.startedAt.toISOString(),
-        finishAt: q.finishAt.toISOString(),
+      /**
+       * ⭐ SAVAŞÇI SAYACI **TEK BİRİMLİKTİR** (kullanıcı kararı 2026-07-28): ekranda 300 birimin
+       * toplam süresi değil, sıradaki BİR birimin geri sayımı görünür ve dolunca sıfırlanır.
+       * `unitStartedAt`/`unitFinishAt` o tek birimin penceresi, `remaining` kalan sipariş adedi.
+       * Hesap sunucuda: istemci `done`'dan türetseydi kaynak birikimi gibi kaymalar başlardı.
+       */
+      queues: (await this.queues.openQueues(cityId)).map((q) => {
+        const perUnit = q.perUnitSeconds ?? null;
+        const done = q.done ?? 0;
+        const active = (q.position ?? 1) === 1;
+        const unitStart = perUnit != null
+          ? new Date(q.startedAt.getTime() + done * perUnit * 1000) : null;
+        const unitFinish = perUnit != null && unitStart != null
+          ? new Date(unitStart.getTime() + perUnit * 1000) : null;
+        return {
+          ...q,
+          startedAt: q.startedAt.toISOString(),
+          finishAt: q.finishAt.toISOString(),
+          remaining: q.count == null ? null : Math.max(0, q.count - done),
+          // Bekleyen emirde tek-birim penceresi YOK: henüz bant onun değil.
+          unitStartedAt: active && unitStart ? unitStart.toISOString() : null,
+          unitFinishAt: active && unitFinish ? unitFinish.toISOString() : null,
+        };
+      }),
+      /**
+       * ⭐ AKADEMİLER ORTAK (kullanıcı, 2026-07-28): teknik seviyesi oyuncu-geneldir, bu yüzden
+       * **hangi şehirde araştırılıyorsa** onun ilerlemesi her şehrin Akademi ekranında görünür.
+       * İptal yalnız o araştırmayı başlatan şehirden yapılabilir → satırda `cityId` taşınıyor.
+       */
+      techQueues: (await this.playerTechQueues(player.playerId)).map((q) => ({
+        ...q, startedAt: q.startedAt.toISOString(), finishAt: q.finishAt.toISOString(),
       })),
       capacity: this.capacity.status(snap.buildings, defenses),
       serverNow: new Date().toISOString(),
@@ -236,6 +264,51 @@ export class CityController {
     } catch (err) {
       throw toHttp(err);
     }
+  }
+
+  /**
+   * ⭐ Kuyruktaki savaşçı emrinin sırasını değiştirir (yalnız BEKLEYENLER).
+   * Üretimi süren emir yerinden oynatılamaz — servis bunu ayrıca doğruluyor.
+   */
+  @Post('queues/:queueId/move')
+  @HttpCode(200)
+  async moveQueue(
+    @Param('queueId') queueId: string, @Body() body: unknown, @Req() req: AuthedRequest,
+  ): Promise<{ ok: true }> {
+    const player = req.player!;
+    const dir = (body as { direction?: string })?.direction === 'down' ? 'down' : 'up';
+    try {
+      await this.queues.moveUnitQueue({
+        queueId: Number(queueId), playerId: player.playerId, direction: dir,
+      });
+      return { ok: true };
+    } catch (err) {
+      throw toHttp(err);
+    }
+  }
+
+  /** Oyuncunun TÜM şehirlerindeki açık teknik araştırmaları (Akademiler ortak). */
+  private async playerTechQueues(playerId: number): Promise<{
+    id: number; itemType: string; targetLevel: number | null;
+    cityId: number; cityName: string; startedAt: Date; finishAt: Date;
+  }[]> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT q.id, q.item_type, q.target_level, q.city_id, c.name AS city_name,
+             q.started_at, q.finish_at
+        FROM queues q JOIN cities c ON c.id = q.city_id
+       WHERE q.player_id = ${playerId} AND q.category = 'tech'
+         AND q.completed_at IS NULL AND q.canceled_at IS NULL
+       ORDER BY q.finish_at
+    `);
+    return rows.map((r) => ({
+      id: Number(r['id']),
+      itemType: String(r['item_type']),
+      targetLevel: r['target_level'] == null ? null : Number(r['target_level']),
+      cityId: Number(r['city_id']),
+      cityName: String(r['city_name']),
+      startedAt: toDate(r['started_at']),
+      finishAt: toDate(r['finish_at']),
+    }));
   }
 
   private async assertOwn(cityId: number, playerId: number, worldId: number): Promise<void> {

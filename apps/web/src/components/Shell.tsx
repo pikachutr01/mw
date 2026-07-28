@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { fmt, useTick } from '../lib/hooks.ts';
-import { useCities, useCity, useMessages, useMovements } from '../lib/queries.ts';
+import { armiesBadge, useCity, useMessages, useMovements } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
 import { Panel, Res } from './ui.tsx';
@@ -121,7 +121,48 @@ function InfoBar() {
       <span className="display truncate text-sm font-semibold tracking-wider uppercase">{page}</span>
 
       <ConnectionDot />
+      <SpeedBadge speed={d?.speed} />
     </div>
+  );
+}
+
+/**
+ * ⭐ HIZLANDIRILMIŞ DÜNYA ROZETİ — **yalnız bir değer normalden farklıysa** görünür.
+ * Her şey 1x iken hiçbir şey çizilmez; rozet varsa oyuncu "bu dünya klasik değil" bilgisini
+ * ilk bakışta alır. Değerler `worlds.speed_multiplier` / `worlds.resource_multiplier`.
+ */
+function SpeedBadge({ speed }: { speed?: { resource: number; travel: number } }) {
+  if (!speed) return null;
+  const rows: [string, number][] = [
+    ['Kaynak üretimi', speed.resource],
+    ['Sefer hızı', speed.travel],
+  ];
+  if (rows.every(([, v]) => v === 1)) return null;
+
+  return (
+    <span className="group relative flex shrink-0 items-center">
+      <span aria-hidden className="text-[15px] leading-none">⚡</span>
+      <span className="sr-only">Hızlandırılmış dünya</span>
+      {/* Tooltip: saf CSS (grup-hover) — tek satırlık bir bilgi için durum tutmaya değmez. */}
+      <span
+        role="tooltip"
+        className="tex bevel pointer-events-none absolute top-full right-0 z-50 mt-1.5 hidden
+          w-44 rounded-[var(--radius-sm)] border-2 border-strong bg-surface p-2 text-left
+          group-hover:block"
+      >
+        <span className="display mb-1 block text-[11px] font-semibold tracking-wide text-ink uppercase">
+          Hızlandırılmış dünya
+        </span>
+        {rows.map(([label, v]) => (
+          <span key={label} className="flex items-baseline justify-between gap-2 text-[11px]">
+            <span className="text-muted">{label}</span>
+            <span className={`tnum font-semibold ${v === 1 ? 'text-muted' : 'text-accent'}`}>
+              {v}x
+            </span>
+          </span>
+        ))}
+      </span>
+    </span>
   );
 }
 
@@ -151,13 +192,19 @@ function ConnectionDot() {
 
 /* ── Sol sütun: logo + menü (yalnız masaüstü) ──────────────────────────────── */
 
+/** Rozet renkleri tek yerde: sol menü ve mobil alt bar aynı kuralı kullansın. */
+const BADGE_TONE: Record<string, string> = {
+  danger: 'bg-danger text-on-accent',
+  success: 'bg-success text-on-accent',
+  warning: 'bg-warning text-on-accent',
+};
+
 function SideMenu() {
   const messages = useMessages();
   const movements = useMovements();
   const session = getSession();
   const unread = messages.data?.unread ?? 0;
-  // Rozet YALNIZ gelen (yabancı) hareketleri sayar; kendi seferlerim acil bilgi değil.
-  const incoming = (movements.data?.movements ?? []).filter((m) => m.direction === 'in').length;
+  const armies = armiesBadge(movements.data?.movements ?? []);
 
   return (
     <div className="sticky top-3 space-y-3">
@@ -169,7 +216,8 @@ function SideMenu() {
       <Panel title={session?.username ?? 'Menü'}>
         <nav className="p-1.5">
           {MENU.map((t) => {
-            const badge = t.to === '/messages' ? unread : t.to === '/armies' ? incoming : 0;
+            const badge = t.to === '/messages' ? unread : t.to === '/armies' ? armies?.count ?? 0 : 0;
+            const tone = t.to === '/armies' ? BADGE_TONE[armies?.tone ?? 'danger']! : BADGE_TONE['danger']!;
             return (
               <NavLink key={t.to} to={t.to}
                 className={({ isActive }) =>
@@ -182,9 +230,7 @@ function SideMenu() {
                 <span aria-hidden className="text-base leading-none">{t.icon}</span>
                 <span className="flex-1 truncate">{t.label}</span>
                 {badge > 0 ? (
-                  <span className="rounded-full bg-danger px-1.5 text-[10px] leading-4 text-on-accent">
-                    {badge}
-                  </span>
+                  <span className={`rounded-full px-1.5 text-[10px] leading-4 ${tone}`}>{badge}</span>
                 ) : null}
               </NavLink>
             );
@@ -234,7 +280,7 @@ function BottomBar() {
   const { pathname } = useLocation();
 
   const unread = messages.data?.unread ?? 0;
-  const incoming = (movements.data?.movements ?? []).filter((m) => m.direction === 'in').length;
+  const armies = armiesBadge(movements.data?.movements ?? []);
 
   return (
     <nav className="tex tex-header fixed inset-x-0 bottom-0 z-20 border-t-2 border-strong bg-panel-header lg:hidden"
@@ -242,7 +288,8 @@ function BottomBar() {
       <div className="mx-auto flex w-full max-w-3xl">
         {TABS.map((t) => {
           const active = pathname.startsWith(t.to);
-          const badge = t.to === '/messages' ? unread : t.to === '/armies' ? incoming : 0;
+          const badge = t.to === '/messages' ? unread : t.to === '/armies' ? armies?.count ?? 0 : 0;
+          const tone = t.to === '/armies' ? BADGE_TONE[armies?.tone ?? 'danger']! : BADGE_TONE['danger']!;
           return (
             <NavLink key={t.to} to={t.to}
               className={`relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] ${
@@ -251,7 +298,7 @@ function BottomBar() {
               <span className="text-xl leading-none">{t.icon}</span>
               {t.label}
               {badge > 0 ? (
-                <span className="absolute top-0.5 right-1/2 translate-x-4 rounded-full bg-danger px-1.5 text-[10px] leading-4 text-on-accent">
+                <span className={`absolute top-0.5 right-1/2 translate-x-4 rounded-full px-1.5 text-[10px] leading-4 ${tone}`}>
                   {badge}
                 </span>
               ) : null}

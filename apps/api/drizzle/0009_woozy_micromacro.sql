@@ -1,0 +1,1 @@
+ALTER TABLE "worlds" ADD COLUMN "resource_multiplier" integer DEFAULT 1 NOT NULL;

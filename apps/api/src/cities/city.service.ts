@@ -17,6 +17,7 @@ import {
 } from '@mobiwar/catalog';
 import type { Tx } from '../missions/handler-registry.ts';
 import { toDate, type Db } from '../db/client.ts';
+import { materializeUnitQueues } from '../queues/unit-queue.ts';
 
 export interface CityResources {
   gold: number;
@@ -38,6 +39,8 @@ export interface CitySnapshot {
   /** Saatlik üretim (arayüzdeki "+X/saat"). */
   goldPerHour: number;
   foodPerHour: number;
+  /** Dünya hız çarpanları (1 = klasik). Arayüz "hızlandırılmış dünya" rozetini bundan çizer. */
+  speed: { resource: number; travel: number };
   buildings: Record<string, number>;
   resourcesAt: Date;
 }
@@ -68,16 +71,28 @@ export class CityService {
     const foodPerHour = farmOutput(farm);
     const goldPerHour = mineOutput(mine);
 
+    // ⭐ Dünya kaynak çarpanı (`worlds.resource_multiplier`) burada uygulanır — TEK yerde,
+    //    çünkü oyuncunun gördüğü her kaynak sayısı bu fonksiyondan geçiyor.
     await runner.execute(sql`
-      UPDATE cities SET
-        gold = gold + (${goldPerHour}::numeric
-               * (EXTRACT(EPOCH FROM (${at.toISOString()}::timestamptz - resources_at)) / 3600.0)::numeric),
-        food = food + (${foodPerHour}::numeric
-               * (EXTRACT(EPOCH FROM (${at.toISOString()}::timestamptz - resources_at)) / 3600.0)::numeric),
+      UPDATE cities c SET
+        gold = c.gold + (${goldPerHour}::numeric * w.resource_multiplier
+               * (EXTRACT(EPOCH FROM (${at.toISOString()}::timestamptz - c.resources_at)) / 3600.0)::numeric),
+        food = c.food + (${foodPerHour}::numeric * w.resource_multiplier
+               * (EXTRACT(EPOCH FROM (${at.toISOString()}::timestamptz - c.resources_at)) / 3600.0)::numeric),
         resources_at = ${at.toISOString()}::timestamptz
-      WHERE id = ${cityId}
-        AND resources_at < ${at.toISOString()}::timestamptz
+      FROM worlds w
+      WHERE c.id = ${cityId}
+        AND w.id = c.world_id
+        AND c.resources_at < ${at.toISOString()}::timestamptz
     `);
+
+    /**
+     * ⭐ SAVAŞÇI ÜRETİMİ DE TEMBEL İLERLER — ve **tam burada**, çünkü bu fonksiyon "şehri T
+     * anına getir" sözleşmesinin tek yeridir: savaş çözümü, casusluk, her ekran okuması buradan
+     * geçiyor. Böylece oyuncu çevrimdışıyken saldırı gelirse o ana kadar üretilmiş askerler
+     * savaşta gerçekten hazır bulunur.
+     */
+    await materializeUnitQueues(runner as never, cityId, at);
   }
 
   /** Şehri `at` anına ilerletip anlık görüntüsünü döndürür (oyuncuya gösterilen hâl). */
@@ -85,8 +100,11 @@ export class CityService {
     await this.materialize(cityId, at, runner);
 
     const rows = await runner.execute<Record<string, unknown>>(sql`
-      SELECT id, world_id, player_id, name, k, d, s, is_capital, gold, food, resources_at
-        FROM cities WHERE id = ${cityId}
+      SELECT c.id, c.world_id, c.player_id, c.name, c.k, c.d, c.s, c.is_capital,
+             c.gold, c.food, c.resources_at,
+             w.resource_multiplier, w.speed_multiplier
+        FROM cities c JOIN worlds w ON w.id = c.world_id
+       WHERE c.id = ${cityId}
     `);
     const c = rows[0];
     if (!c) return null;
@@ -109,8 +127,13 @@ export class CityService {
       // Oyuncuya TAM SAYI gösterilir; kesir DB'de saklanmaya devam eder.
       gold: Math.floor(Number(c['gold'])),
       food: Math.floor(Number(c['food'])),
-      goldPerHour: mineOutput(buildings['mine'] ?? 0),
-      foodPerHour: farmOutput(buildings['farm'] ?? 0),
+      // ⚠️ Gösterilen üretim de çarpanı içerir; içermezse oyuncu "sayaç yazandan hızlı akıyor" der.
+      goldPerHour: mineOutput(buildings['mine'] ?? 0) * Number(c['resource_multiplier'] ?? 1),
+      foodPerHour: farmOutput(buildings['farm'] ?? 0) * Number(c['resource_multiplier'] ?? 1),
+      speed: {
+        resource: Number(c['resource_multiplier'] ?? 1),
+        travel: Number(c['speed_multiplier'] ?? 1),
+      },
       buildings,
       resourcesAt: toDate(c['resources_at']),
     };

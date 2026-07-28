@@ -23,49 +23,36 @@ import {
 import { Badge, Button, Empty, ErrorBox, Input, MissionIcon } from '../components/ui.tsx';
 import { Modal } from '../components/Modal.tsx';
 
-/** Görev tipi → ekranda görünen ad ve açıklama (§13.14: İngilizce id görünmez). */
+/**
+ * Görev tipi → ekranda görünen ad ve simge (§13.14: İngilizce id görünmez).
+ *
+ * ⚠️ **Açıklama metinleri KALDIRILDI** (kullanıcı, 2026-07-28): kural anlatan uzun paragraflar
+ * formu boğuyordu. Kuralların ayrıntısı ayrı bir yardım sayfasına gelecek; formda yalnız
+ * oyuncunun O AN karar vermek için ihtiyaç duyduğu **sayı** var (ör. kalan saldırı hakkı).
+ * Seçenek listesinde ise `hint` kısa bir tanıtım cümlesi olarak duruyor.
+ */
 const MISSION_INFO: Record<string, { title: string; hint: string; icon: string }> = {
-  attack: {
-    title: 'Saldırı', icon: 'attack',
-    hint: 'Birlikler yola çıkarken şehirden düşer. Bir şehre 24 saatte en fazla 3 saldırı yapılabilir.',
-  },
-  spy: {
-    title: 'Casusluk', icon: 'spy_out',
-    hint: 'Yalnız Casus Kuş gider. Kuş sayısı ikinin kuvvetiyle bilgi kademesini artırır: '
-      + '8 kuş = +3 seviye. Casusluk tekniğin zayıfsa kuşlar vurulabilir.',
-  },
-  transport: {
-    title: 'Nakliye', icon: 'transport_out',
-    hint: 'Kaynak yola çıkarken düşer, varınca teslim edilir; ordu boş döner. '
-      + 'Taşınabilecek miktar ordunun taşıma kapasitesiyle sınırlıdır.',
-  },
-  support: {
-    title: 'Destek', icon: 'support_out',
-    hint: 'TEK YÖNLÜ: birlikler hedef şehrin barakasına, kahramanlar tapınağına yerleşir. '
-      + 'İstersen kaynak da gönderebilirsin.',
-  },
-  found_city: {
-    title: 'Şehir Kur', icon: 'found_city',
-    hint: 'Ordu varınca şehri kurar ve garnizonu olur. Yer bu arada dolarsa ordu geri döner.',
-  },
-  teleport: {
-    title: 'Teleport', icon: 'teleport',
-    hint: 'ANLIK transfer — kendi şehirlerin arasında. Kaynak taşınmaz. '
-      + 'Kullanımdan sonra Teleport binası bekleme süresine girer.',
-  },
+  attack: { title: 'Saldırı', icon: 'attack', hint: 'Orduyu hedefe gönder.' },
+  spy: { title: 'Casusluk', icon: 'spy_out', hint: 'Casus kuşlarla bilgi topla.' },
+  transport: { title: 'Nakliye', icon: 'transport_out', hint: 'Altın ve yemek gönder.' },
+  support: { title: 'Destek', icon: 'support_out', hint: 'Birlikleri kalıcı olarak taşı.' },
+  found_city: { title: 'Şehir Kur', icon: 'found_city', hint: 'Boş yuvaya yeni şehir kur.' },
+  teleport: { title: 'Teleport', icon: 'teleport', hint: 'Anlık transfer, kaynak taşınmaz.' },
 };
 
 export function TargetModal({
-  slot, coords, onClose,
+  slot, coords, initialType, onClose,
 }: {
   slot: WorldSlot;
   coords: { k: number; d: number };
+  /** Dünya tablosundaki görev simgesinden gelindiyse doğrudan o formla açılır. */
+  initialType?: string;
   onClose: () => void;
 }) {
   const { cityId } = useActiveCity();
   const target = { k: coords.k, d: coords.d, s: slot.s };
   const options = useMissionOptions(cityId, target);
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(initialType ?? null);
 
   const data = options.data;
   const title = slot.city
@@ -109,7 +96,16 @@ export function TargetModal({
         ) : null}
 
         {picked ? (
-          <MissionForm type={picked} target={target} slot={slot} onDone={onClose} />
+          <MissionForm
+            type={picked}
+            target={target}
+            /* ⭐ Yetki kararı SUNUCUDAN gelen seçeneğe bakar. Dünya tablosundaki kısayol
+               simgesi listeyi atlayıp doğrudan forma girdiği için bu kontrol ŞART:
+               acemi korumasındaki oyuncuya saldırı formu açılabilir ama gönderilemez. */
+            option={data?.options.find((o) => o.type === picked) ?? null}
+            attacksLeft={data?.attacksLeft ?? null}
+            onDone={onClose}
+          />
         ) : null}
       </div>
     </Modal>
@@ -167,11 +163,12 @@ const FORM_RULES: Record<string, { units: 'warriors' | 'spy' | 'none'; cargo: bo
 };
 
 function MissionForm({
-  type, target, slot, onDone,
+  type, target, option, attacksLeft, onDone,
 }: {
   type: string;
   target: { k: number; d: number; s: number };
-  slot: WorldSlot;
+  option: MissionOption | null;
+  attacksLeft: number | null;
   onDone: () => void;
 }) {
   const { cityId } = useActiveCity();
@@ -217,8 +214,12 @@ function MissionForm({
     return false;
   });
 
+  // ⭐ Sunucu bu görevi kapattıysa form gönderilemez (acemi koruması, teleport bekleme süresi…).
+  const blocked = option != null && !option.enabled;
+
   // Nakliyede kargo ZORUNLU (boş nakliyenin anlamı yok), destekte isteğe bağlı.
   const canSend = cityId != null
+    && !blocked
     && hasUnits
     && (!rule.cargo || (cargoFits && affordCargo))
     && (type !== 'transport' || cargoTotal > 0)
@@ -226,23 +227,30 @@ function MissionForm({
 
   return (
     <div className="space-y-3 p-3">
-      <div className="flex items-start gap-2.5 rounded-[var(--radius-sm)] border border-border bg-raised px-2.5 py-2">
+      <div className="flex items-center gap-2.5">
         <MissionIcon id={info?.icon ?? 'attack'} size={36} />
-        <div className="text-[11px] text-muted">
-          <b className="display block text-sm text-ink">{info?.title ?? type}</b>
-          {info?.hint}
+        <b className="display text-base text-ink">{info?.title ?? type}</b>
+        {/* Süre seçilen ordunun EN YAVAŞ birimine göre canlı hesaplanır. */}
+        <span className="tnum ml-auto text-xs text-muted">
+          Süre: <b className="text-ink">
+            {type === 'teleport' ? 'anlık' : eta ? formatDuration(eta) : '—'}
+          </b>
+        </span>
+      </div>
+
+      {blocked ? (
+        <div role="alert"
+          className="rounded-[var(--radius-sm)] border border-danger bg-danger/10 px-3 py-2 text-xs text-danger">
+          {option?.reason ?? 'Bu görev şu anda gönderilemez.'}
         </div>
-      </div>
+      ) : null}
 
-      <div className="tnum grid grid-cols-3 gap-2 text-xs">
-        <Stat label="Mesafe" value={fmt(D)} />
-        <Stat label="Ordu hızı" value={speed ? String(speed) : '—'} />
-        <Stat label="Süre" value={type === 'teleport' ? 'anlık' : eta ? formatDuration(eta) : '—'} />
-      </div>
-
-      {slot.city?.protection ? (
-        <div className="rounded-[var(--radius-sm)] border border-warning px-3 py-2 text-xs text-warning">
-          Bu oyuncu {slot.city.protection === 'beginner' ? 'acemi koruması' : 'tatil modu'} altında.
+      {/* ⭐ Kural anlatmak yerine SAYI: oyuncu kaç hakkı kaldığını görür. */}
+      {type === 'attack' && attacksLeft != null && !blocked ? (
+        <div className={`rounded-[var(--radius-sm)] border px-3 py-2 text-xs ${
+          attacksLeft > 0 ? 'border-border text-muted' : 'border-danger text-danger'
+        }`}>
+          Bu şehre bugün kalan saldırı hakkın: <b className="tnum">{attacksLeft}</b>
         </div>
       ) : null}
 
@@ -253,19 +261,19 @@ function MissionForm({
             {list.map((u) => {
               const have = city.data?.units[u.id] ?? 0;
               if (have <= 0) return null;
+              // ⭐ Parantezdeki sayı ŞEHİRDE KALAN adet: input arttıkça canlı azalır, böylece
+              //    oyuncu "kaç tanesi evde kalıyor" sorusunu ayrıca hesaplamak zorunda kalmaz.
+              const left = Math.max(0, have - (units[u.id] ?? 0));
               return (
                 <li key={u.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5">
                   <img src={`/assets/units/${u.id}.png`} alt="" width={36} height={36}
                     className="icon-shadow h-9 w-9 shrink-0 object-contain" />
                   <div className="min-w-0 flex-1 text-sm text-ink">
-                    {u.name}
-                    <span className="ml-1 text-[11px] text-muted">
-                      {fmt(have)} hazır{u.carry ? ` · taşır ${fmt(u.carry)}` : ''}
-                    </span>
+                    {u.name} <span className="tnum text-muted">({fmt(left)})</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <Input type="number" min={0} max={have} inputMode="numeric"
-                      className="tnum w-20 py-1" placeholder="0"
+                      className="tnum w-16 py-1 text-center" placeholder="0"
                       value={picked[u.id] ?? ''}
                       onChange={(e) => setPicked({ ...picked, [u.id]: e.target.value })} />
                     <Button size="sm" variant="ghost"
@@ -299,12 +307,12 @@ function MissionForm({
           <div className="flex gap-2">
             <label className="flex-1">
               <span className="mb-0.5 block text-[11px] text-muted">Altın</span>
-              <Input type="number" min={0} inputMode="numeric" className="tnum py-1"
+              <Input type="number" min={0} inputMode="numeric" className="tnum w-24 py-1 text-center"
                 value={gold} onChange={(e) => setGold(e.target.value)} placeholder="0" />
             </label>
             <label className="flex-1">
               <span className="mb-0.5 block text-[11px] text-muted">Yemek</span>
-              <Input type="number" min={0} inputMode="numeric" className="tnum py-1"
+              <Input type="number" min={0} inputMode="numeric" className="tnum w-24 py-1 text-center"
                 value={food} onChange={(e) => setFood(e.target.value)} placeholder="0" />
             </label>
           </div>

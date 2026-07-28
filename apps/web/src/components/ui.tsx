@@ -110,12 +110,12 @@ export function Res({
 /**
  * Görev simgeleri (§13.11.9: dosya adı = katalog `id`).
  *
- * ⚠️ Kullanıcı ikonların **bir kısmını** verdi; saldırı/dönüş/teleport henüz YOK → onlarda
- * emoji yedeğine düşülüyor. Dosya eklendiği anda `HAS_ICON`'a adını yazmak yeterli, kod değişmez.
+ * Eksik ikon olursa emoji yedeğine düşer; dosya eklendiği anda `HAS_ICON`'a adını yazmak
+ * yeterli, kod değişmez. (Şu an tam set var — `teleport.png` 2026-07-28'de tamamlandı.)
  */
 const HAS_ICON = new Set([
   'attack', 'attack_in', 'found_city', 'support_out', 'support_in',
-  'transport_out', 'transport_back', 'spy_out', 'spy_back',
+  'transport_out', 'transport_back', 'spy_out', 'spy_back', 'teleport',
 ]);
 
 const EMOJI_FALLBACK: Record<string, string> = {

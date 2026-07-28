@@ -179,6 +179,7 @@ export class MissionController {
     const fromTeleport = Number(r['from_teleport'] ?? 0);
     const teleportReady = r['teleport_ready'] == null ? null : toDate(r['teleport_ready']);
 
+    let attacksLeft: number | null = null;
     const opts: { type: string; label: string; enabled: boolean; reason: string | null }[] = [];
     const add = (type: string, label: string, enabled: boolean, reason: string | null = null): void => {
       opts.push({ type, label, enabled, reason });
@@ -217,6 +218,16 @@ export class MissionController {
       add('attack', 'Saldırı', !shielded, shielded ? why : null);
       add('spy', 'Casusluk', !shielded, shielded ? why : null);
       add('transport', 'Nakliye', true);
+
+      // ⭐ Kalan saldırı hakkı — arayüz kuralı anlatmak yerine SAYIYI gösteriyor.
+      const since = new Date(at.getTime() - 24 * 3600_000);
+      const used = await this.db.execute<Record<string, unknown>>(sql`
+        SELECT COUNT(*)::int AS n FROM missions
+         WHERE type = 'attack' AND owner_player_id = ${player.playerId}
+           AND target_city_id = ${target.id} AND status <> 'canceled'
+           AND execute_at > ${since.toISOString()}::timestamptz
+      `);
+      attacksLeft = Math.max(0, 3 - Number(used[0]?.['n'] ?? 0));
     }
 
     return {
@@ -224,6 +235,7 @@ export class MissionController {
       activeCity: false,
       target: target ? describeTarget(target) : null,
       options: opts,
+      attacksLeft,
       gameNow: at.toISOString(),
       serverNow: new Date().toISOString(),
     };
@@ -324,9 +336,21 @@ export class MissionController {
           ? null : { k: Number(r['target_k']), d: Number(r['target_d']), s: Number(r['target_s']) })
         : { k: Number(r['tk']), d: Number(r['td']), s: Number(r['ts']) };
 
+      /**
+       * ⭐ Nakliye/destek yükü GÖRÜNÜR (kullanıcı, 2026-07-28): şehrime gelen nakliyede kimin
+       * ne getirdiğini bilmeliyim. Saldırı ve casuslukta gizlilik matrisi (§13.10.1) aynen
+       * duruyor — orada birleşim de yük de gizli.
+       */
+      const openCargo = type === 'transport' || type === 'support'
+        || (type === 'return' && (returnOf === 'transport' || returnOf === 'support'));
+      const cargo = openCargo
+        ? (payload['cargo'] ?? payload['loot'] ?? null) as Record<string, number> | null
+        : null;
+
       const base = {
         id: Number(r['id']),
         type,
+        cargo,
         /** Dönüş bacağında hangi görevden dönüldüğü (arayüz "casusluk dönüşü" yazabilsin). */
         returnOf: type === 'return' ? returnOf : null,
         canceled: type === 'return' ? canceled : false,
@@ -361,8 +385,9 @@ export class MissionController {
             direction: type === 'return' ? 'own' : 'in',
             icon,
             cityId: Number(r['target_city_id']),
-            // ⭐ Yabancı hareketinde birleşim GİZLİ: `units` bilerek yok (§13.10.1).
-            ...(type === 'return' ? { units: r['units'] ?? {} } : {}),
+            // ⭐ SALDIRI/CASUSLUKTA birleşim GİZLİ (§13.10.1); nakliye/destekte açık — gelen
+            //    yardımın ne getirdiğini görmek oyunun kendi mantığı.
+            ...(type === 'return' || openCargo ? { units: r['units'] ?? {} } : {}),
             canCancel: false,
           });
         }

@@ -174,3 +174,34 @@ h1, h2, h3, .display {
 .icon-shadow {
   filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
 }
+
+/**
+ * ⭐ SAYI KUTULARINDA OK YOK (kullanıcı kararı 2026-07-28). Tarayıcının artır/azalt okları
+ * dar kutuda yerin yarısını yiyor ve dokunmatikte yanlışlıkla basılıyordu; adet zaten elle
+ * yazılıyor ya da "hepsi" düğmesiyle dolduruluyor.
+ */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/**
+ * ⭐ TIKLANABİLİR HER ÖGEDE İMLEÇ (kullanıcı kararı). Tailwind reset'i `button`'a
+ * `cursor: default` veriyor; oyunda tıklanabilirliğin tek ipucu çoğu yerde imleç olduğu için
+ * bunu geri alıyoruz. Pasif düğmeler hariç — orada `not-allowed` doğru sinyal.
+ */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+summary,
+label:has(> input[type='checkbox']),
+a[href] {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}

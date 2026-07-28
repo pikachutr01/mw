@@ -21,7 +21,7 @@ export function Auth({ onDone }: { onDone: () => void }) {
     setError(null);
     setBusy(true);
     try {
-      if (mode === 'login') await login(email, password);
+      if (mode === 'login') await login(username, password);
       else await register(email, password, username);
       onDone();
     } catch (err) {
@@ -40,18 +40,23 @@ export function Auth({ onDone }: { onDone: () => void }) {
         </p>
 
         <form onSubmit={submit} className="space-y-3">
-          <Field label="E-posta">
-            <Input type="email" required autoComplete="email"
-              value={email} onChange={(e) => setEmail(e.target.value)} />
-          </Field>
-
+          {/* ⭐ GİRİŞTE e-posta değil KULLANICI ADI sorulur (kullanıcı kararı): oyuncunun
+              ezberlediği ve oyunda gördüğü ad odur. E-posta yalnız kayıtta gerekiyor. */}
           {mode === 'register' ? (
-            <Field label="Kullanıcı adı (3-10 karakter, sonradan değiştirilemez)">
-              <Input required minLength={3} maxLength={10} pattern="[A-Za-z0-9]+"
-                title="Yalnız harf ve rakam, 3-10 karakter"
-                value={username} onChange={(e) => setUsername(e.target.value)} />
+            <Field label="E-posta">
+              <Input type="email" required autoComplete="email"
+                value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
           ) : null}
+
+          <Field label={mode === 'login'
+            ? 'Kullanıcı adı'
+            : 'Kullanıcı adı (3-10 karakter, sonradan değiştirilemez)'}>
+            <Input required minLength={3} maxLength={10} pattern="[A-Za-z0-9]+"
+              autoComplete="username"
+              title="Yalnız harf ve rakam, 3-10 karakter"
+              value={username} onChange={(e) => setUsername(e.target.value)} />
+          </Field>
 
           <Field label="Parola (en az 10 karakter)">
             <Input type="password" required minLength={10}

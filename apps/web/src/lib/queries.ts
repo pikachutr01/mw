@@ -30,6 +30,26 @@ export interface QueueRow {
   count: number | null;
   startedAt: string;
   finishAt: string;
+  /** Savaşçı kuyruğu: üretilmiş adet · bir birimin süresi · sıradaki yer (1 = üretimi süren). */
+  done?: number;
+  perUnitSeconds?: number | null;
+  position?: number;
+  /** Kalan sipariş adedi (üretilenler düşülmüş). */
+  remaining?: number | null;
+  /** SIRADAKİ TEK BİRİMİN penceresi — ekrandaki sayaç ve çubuk bunu kullanır. */
+  unitStartedAt?: string | null;
+  unitFinishAt?: string | null;
+}
+
+/** Başka şehirde sürüyor olabilen teknik araştırması (Akademiler ortak). */
+export interface TechQueueRow {
+  id: number;
+  itemType: string;
+  targetLevel: number | null;
+  cityId: number;
+  cityName: string;
+  startedAt: string;
+  finishAt: string;
 }
 
 export interface BudgetStatus {
@@ -46,11 +66,15 @@ export interface CityDetail {
   isCapital: boolean;
   resources: { gold: number; food: number };
   production: { goldPerHour: number; foodPerHour: number };
+  /** Dünya hız çarpanları (1 = klasik). Bilgi çubuğundaki ⚡ rozeti bunu okur. */
+  speed?: { resource: number; travel: number };
   buildings: Record<string, number>;
   units: Record<string, number>;
   defenses: Record<string, number>;
   techs: Record<string, number>;
   queues: QueueRow[];
+  /** Oyuncunun TÜM şehirlerindeki açık teknik araştırmaları. */
+  techQueues: TechQueueRow[];
   capacity: { castle: BudgetStatus; defense: BudgetStatus };
   gameNow: string;
   serverNow: string;
@@ -141,6 +165,8 @@ export interface Movement {
   canCancel: boolean;
   /** Yalnız KENDİ hareketlerimde dolu; yabancı harekette birleşim gizlidir (§13.10.1). */
   units?: Record<string, number>;
+  /** Nakliye/destek yükü — saldırı ve casuslukta `null` (gizli). */
+  cargo?: { gold: number; food: number } | null;
 }
 
 export interface MessageRow {
@@ -165,6 +191,10 @@ export interface WorldSlot {
     score: number;
     isCapital: boolean;
     isOwn: boolean;
+    /** Dünya sırası — canlı değil, son güncellemeden (§13.16). */
+    rank: number;
+    /** İttifak adı — şema henüz yok, daima `null`. */
+    alliance: string | null;
     protection: 'beginner' | 'vacation' | null;
   } | null;
 }
@@ -192,9 +222,31 @@ export const useMovements = (): UseQueryResult<{ movements: Movement[] }> =>
   useQuery({
     queryKey: ['missions'],
     queryFn: () => get<{ movements: Movement[] }>('/api/v1/missions'),
-    // ⚠️ Geçici: WS gelene kadar yoklama. Kullanıcı kuralı "olay ANINDA görünmeli" → sıradaki iş.
-    refetchInterval: 10_000,
+    /**
+     * ⚠️ Yoklama 10 sn → **60 sn**. Görev başlama/bitişi artık WebSocket ile anında geliyor
+     * (`realtime.ts` bu sorguyu tazeliyor); 10 saniyelik yoklama aynı işi ikinci kez yapıp
+     * boşuna istek üretiyordu. 60 sn **emniyet ağı** olarak duruyor: WS kopuk kaldığı bir
+     * pencerede ekran tamamen donmasın.
+     */
+    refetchInterval: 60_000,
   });
+
+/**
+ * ⭐ ORDULAR ROZETİ (kullanıcı, 2026-07-28) — sayı **tüm hareketlerin toplamı**, renk ise
+ * "ekrana bakmadan ne bekliyorum" sorusunun cevabı:
+ *   🔴 en az bir **bize gelen saldırı/casusluk** varsa (tehdit her şeyi ezer)
+ *   🟢 tehdit yok ama **bizim başlattığımız** bir hareket varsa (dönüşler dahil)
+ *   🟡 yalnızca **bize gelen nakliye/destek** varsa
+ */
+export function armiesBadge(
+  movements: Movement[],
+): { count: number; tone: 'danger' | 'success' | 'warning' } | null {
+  if (movements.length === 0) return null;
+  const threat = movements.some((m) => m.direction === 'in' && (m.type === 'attack' || m.type === 'spy'));
+  if (threat) return { count: movements.length, tone: 'danger' };
+  const mine = movements.some((m) => m.direction === 'out' || m.direction === 'own');
+  return { count: movements.length, tone: mine ? 'success' : 'warning' };
+}
 
 export const useMessages = (): UseQueryResult<{ unread: number; items: MessageRow[] }> => useQuery({
   queryKey: ['messages'],
@@ -271,7 +323,19 @@ export function useCancelQueue() {
   return useMutation({
     mutationFn: (queueId: number) =>
       api(`/api/v1/cities/queues/${queueId}`, { method: 'DELETE' }),
-    onSuccess: () => invalidate(['city', 'catalog']),
+    onSuccess: () => invalidate(['city', 'cities', 'catalog']),
+  });
+}
+
+/** Kuyrukta bekleyen savaşçı emrini bir sıra yukarı/aşağı taşır (süren emir taşınamaz). */
+export function useMoveQueue() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: { queueId: number; direction: 'up' | 'down' }) =>
+      api(`/api/v1/cities/queues/${input.queueId}/move`, {
+        method: 'POST', body: { direction: input.direction },
+      }),
+    onSuccess: () => invalidate(['city']),
   });
 }
 
@@ -288,6 +352,8 @@ export interface TargetOptions {
   activeCity: boolean;
   target: { cityId: number; name: string; username: string } | null;
   options: MissionOption[];
+  /** Bu hedefe bugün kalan saldırı hakkı (yalnız yabancı şehirde dolu). */
+  attacksLeft: number | null;
 }
 
 export const useMissionOptions = (
