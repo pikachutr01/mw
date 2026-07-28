@@ -73,6 +73,15 @@ interface BattleResultShape {
     leftoverDebrisToDefender: { gold: number; food: number };
     effectivePlunderRate: number;
   };
+  /** ⭐ Mağara sonucu (§13.20.3). Eski savaşlarda YOK → alan opsiyonel. */
+  cave?: {
+    present: boolean;
+    broken: boolean;
+    level: number;
+    required: number;
+    survivingDwarves: number;
+    reason: string | null;
+  };
 }
 
 export interface BattleRow {
@@ -166,6 +175,33 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
 
   if (side === 'attacker' && r.attacker.alive <= 0) {
     notes.push('Ordudan kimse dönmedi.');
+  }
+
+  /**
+   * ⭐ MAĞARA (§13.20.3) — **iki tarafa da** bildirilir (kullanıcı isteği 2026-07-28).
+   *
+   * Ama aynı cümle değil: savunan kendi mağarasının yıkıldığını ve ordusunun kaçtığını bilmeli;
+   * saldıran ise **kaç cüceyle gelmesi gerektiğini** öğrenmeli — bu, bir sonraki saldırıyı
+   * planlanabilir kılan tek bilgi. Mağaranın İÇİ (kaç asker kaçtı) hiçbir koşulda saldırana
+   * gitmez: casusluğun bile göremediği bir bilgiyi bedava vermek olurdu.
+   */
+  const cave = r.cave;
+  if (cave?.present) {
+    if (cave.broken) {
+      notes.push(side === 'defender'
+        ? 'MAĞARAN YIKILDI. İçerideki ordu şehre kaçıyor; mağara onarılana kadar kullanılamaz.'
+        : `Düşmanın mağarası YIKILDI (${tr(cave.survivingDwarves)} cüce yeterli oldu).`);
+    } else if (cave.reason === 'already_repairing') {
+      notes.push(side === 'defender'
+        ? 'Mağaran zaten onarımdaydı; yeniden yıkılmadı ve onarım süresi uzamadı.'
+        : 'Düşmanın mağarası zaten yıkıktı.');
+    } else if (cave.reason === 'not_enough_dwarves') {
+      notes.push(side === 'defender'
+        ? `Mağaran dayandı: yıkılması için ${tr(cave.required)} cüce gerekiyordu, `
+          + `${tr(cave.survivingDwarves)} cüce sağ kaldı.`
+        : `Mağara yıkılmadı: ${tr(cave.required)} cüce gerekiyordu, `
+          + `${tr(cave.survivingDwarves)} cüce sağ kaldı.`);
+    }
   }
 
   return {

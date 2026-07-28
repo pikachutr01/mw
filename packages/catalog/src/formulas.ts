@@ -71,8 +71,12 @@ export const CAVE_CONSTANTS = {
   transferDecayRate: 1.1,
   /** Tek birimlik işlem bile anlık olmasın (istismar tamponu). */
   minTransferSeconds: 5,
-  /** Yıkılan mağaranın onarımı: 26 saat, her seviye %10 kısa (§13.20.4). */
-  repairBaseSeconds: 26 * 3600,
+  /**
+   * Yıkılan mağaranın onarımı: **20 saat**, her seviye %10 kısa (§13.20.2).
+   * ⚠️ Bir ara 26 saatti; kullanıcı 2026-07-28'de "biraz daha insaflı olsun" diyerek indirdi —
+   * mağara yıkılınca oyuncunun en değerli ordusu bir gün boyunca korumasız kalıyordu.
+   */
+  repairBaseSeconds: 20 * 3600,
   repairDecayRate: 0.9,
 } as const;
 

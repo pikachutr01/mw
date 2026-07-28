@@ -7,15 +7,15 @@
  * Ekranın üç kuralı:
  *  1. **Kapasite ALAN cinsindendir**, adet değil. Seçim değiştikçe alan **canlı** hesaplanır;
  *     tür fark etmez, tek şart toplamın kapasiteyi aşmaması.
- *  2. **İptal düğmesi YOK.** Bu bir eksik değil, kuralın kendisi (kullanıcı kararı): iptal
- *     edilebilseydi saldırıyı görüp saklanmak, saldırı bitince geri almak bedava olurdu.
- *     Modal bunu tek cümleyle söylüyor — oyuncu düğmeyi arayıp bulamamasın.
+ *  2. **Emir asker taşımaz, sayaç kurar.** Askerler süre boyunca yerinde durur; doldurma
+ *     beklerken şehirdedirler ve gelen saldırıya **katılırlar**. Bu yüzden iptal serbesttir ve
+ *     hiçbir telafi hesabı gerektirmez — geri alınacak bir taşıma yok.
  *  3. **Onarımdayken hiçbir işlem yapılamaz**; modal açılır ama sebebini ve kalan süreyi yazar.
  */
 import { useState } from 'react';
-import { UNITS_BY_ID, caveTransferSeconds } from '@mobiwar/catalog';
+import { UNITS_BY_ID, WARRIOR_ORDER, caveTransferSeconds } from '@mobiwar/catalog';
 import type { CaveState, CityDetail } from '../lib/queries.ts';
-import { useCaveJob } from '../lib/queries.ts';
+import { useCancelCaveJob, useCaveJob } from '../lib/queries.ts';
 import { fmt, formatDuration, remaining } from '../lib/hooks.ts';
 import { nameOf } from '../lib/names.ts';
 import { Modal } from '../components/Modal.tsx';
@@ -29,12 +29,19 @@ export function CaveModal({
   const [tab, setTab] = useState<Tab>('store');
   const [picked, setPicked] = useState<Record<string, string>>({});
   const job = useCaveJob(city.id);
+  const cancel = useCancelCaveJob(city.id);
 
   // Kaynak liste sekmeye göre değişir: doldururken BARAKA, boşaltırken MAĞARA.
   const source = tab === 'store' ? city.units : cave.units;
-  const rows = Object.entries(source)
-    .filter(([id, n]) => n > 0 && UNITS_BY_ID[id]?.kind === 'warrior')
-    .sort((a, b) => a[0].localeCompare(b[0]));
+  /**
+   * ⚠️ Sıra **katalogdan** (`WARRIOR_ORDER`), alfabetik DEĞİL. Bir ara `localeCompare(id)`
+   * ile sıralanıyordu; id'ler İngilizce olduğu için ekranda "Yük Arabası, Süvari, Kaos…"
+   * gibi anlamsız bir dizilim çıkıyordu (§13.14: ekranda İngilizce iz kalmaz).
+   * ⭐ Casus Kuş da listede: katalogda `kind: 'warrior'`, alanı 1 — saklanabilir.
+   */
+  const rows = WARRIOR_ORDER
+    .filter((id) => (source[id] ?? 0) > 0)
+    .map((id) => [id, source[id]!] as [string, number]);
 
   const units: Record<string, number> = {};
   for (const [id, raw] of Object.entries(picked)) {
@@ -61,6 +68,12 @@ export function CaveModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Kapat</Button>
+          {cave.job ? (
+            <Button variant="danger" disabled={cancel.isPending}
+              onClick={() => cancel.mutate()}>
+              İşlemi iptal et
+            </Button>
+          ) : null}
           <Button disabled={!canSend}
             onClick={() => job.mutate({ direction: tab, units }, { onSuccess: onClose })}>
             {tab === 'store' ? 'Mağaraya gönder' : 'Şehre çağır'}
@@ -82,7 +95,7 @@ export function CaveModal({
           <Notice tone="warning">
             {cave.job.direction === 'store' ? 'Mağaraya asker giriyor' : 'Mağaradan asker çıkıyor'}:
             {' '}<b className="tnum">{remaining(cave.job.finishAt) ?? 'birazdan biter…'}</b>.
-            {' '}Bu işlem <b>iptal edilemez</b>; bitmeden yeni emir verilemez.
+            {' '}Bitmeden yeni emir verilemez; iptal edersen askerler bulundukları yerde kalır.
           </Notice>
         ) : null}
 
@@ -100,6 +113,7 @@ export function CaveModal({
         </div>
 
         <ErrorBox error={job.error} />
+        <ErrorBox error={cancel.error} />
 
         {rows.length === 0 ? (
           <Empty>
@@ -145,10 +159,10 @@ export function CaveModal({
           </div>
         ) : null}
 
-        {/* Kuralın kendisi; oyuncu iptal düğmesini arayıp bulamasın diye açıkça yazılı. */}
-        <p className="text-[11px] text-muted">
-          Askerler emir verilir verilmez barakadan ayrılır ve işlem <b>iptal edilemez</b>.
-          Mağaradaki askerler savaşa katılmaz, casus kuşlar onları göremez.
+<p className="text-[11px] text-muted">
+          Askerler süre dolana kadar bulundukları yerde kalır: mağaraya girmeyi bekleyenler
+          şehirdedir ve <b>gelen saldırıya katılırlar</b>. Mağaradaki askerler savaşa katılmaz,
+          casus kuşlar onları göremez.
         </p>
       </div>
     </Modal>

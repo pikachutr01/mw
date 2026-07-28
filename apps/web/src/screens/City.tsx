@@ -17,7 +17,7 @@ import { cancelRefund, caveRepairSeconds } from '@mobiwar/catalog';
 import { nameOf } from '../lib/names.ts';
 import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
 import {
-  useCancelQueue, useCatalog, useCity, useEnqueue, useMoveQueue,
+  useCancelCaveJob, useCancelQueue, useCatalog, useCity, useEnqueue, useMoveQueue,
   type CatalogUnit, type CityDetail, type QueueRow, type TechQueueRow,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
@@ -213,6 +213,7 @@ function Buildings({ city }: { city: CityDetail }) {
   const askCancel = useCancelWithConfirm();
   const busy = city.queues.some((q) => q.category === 'building');
   const [caveOpen, setCaveOpen] = useState(false);
+  const cancelCave = useCancelCaveJob(cityId);
   const cave = city.cave;
   /**
    * ⭐ MAĞARA MEŞGULSE seviye ilerletilemez (§13.20): onarımdaysa ya da içine/dışına asker
@@ -272,10 +273,11 @@ function Buildings({ city }: { city: CityDetail }) {
               {b.id === 'cave' && cave.job ? (
                 <ProgressRow
                   startedAt={cave.job.startedAt} finishAt={cave.job.finishAt}
-                  canCancel={false}
+                  cancelling={cancelCave.isPending}
+                  onCancel={() => cancelCave.mutate()}
                   label={cave.job.direction === 'store'
-                    ? `mağaraya giriyor · ${fmt(cave.job.area)} alan`
-                    : `mağaradan çıkıyor · ${fmt(cave.job.area)} alan`}
+                    ? `mağaraya girecek · ${fmt(cave.job.area)} alan`
+                    : `mağaradan çıkacak · ${fmt(cave.job.area)} alan`}
                 />
               ) : null}
               {b.id === 'cave' && cave.repairing && cave.repairUntil ? (

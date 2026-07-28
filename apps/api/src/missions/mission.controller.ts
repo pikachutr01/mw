@@ -314,7 +314,7 @@ export class MissionController {
        WHERE m.world_id = ${player.worldId}
          AND m.status IN ('scheduled', 'running')
          AND m.type IN ('attack', 'return', 'transport', 'support', 'spy', 'found_city',
-                        'cave_store', 'cave_withdraw', 'cave_return')
+                        'cave_return')
          AND (m.origin_city_id IN (SELECT id FROM my) OR m.target_city_id IN (SELECT id FROM my))
        GROUP BY m.id, oc.k, oc.d, oc.s, op.username, tc.k, tc.d, tc.s, tp.username
        ORDER BY m.created_at, m.id
@@ -422,20 +422,25 @@ const OUT_ICON: Record<string, string> = {
 };
 
 /**
- * ⚠️ **MAĞARA İSTİSNASI** (§13.20.5): `cave_*` görevlerinde kaynak ve hedef **aynı şehirdir**.
- * `OUT_ICON`'da karşılıkları BİLEREK yok → yalnız GELEN bacak çizilir, yani ekranda tek bir
- * **sarı kalkan** görünür. İki bacak da çizilseydi oyuncu tek işlem için iki satır görürdü.
+ * ⚠️ **MAĞARA İSTİSNASI** (§13.20.5, kullanıcı kararı 2026-07-28):
+ *
+ * Doldurma/boşaltma emirleri Ordular ekranında **HİÇ GÖRÜNMEZ** — sorgunun tip listesinde de
+ * yokturlar. Gerekçe yeni modelden geliyor: emir yalnız bir sayaçtır, askerler süre boyunca
+ * şehirde (ya da mağarada) durur, ortada hareket eden bir ordu yoktur. Onları "hareket" diye
+ * göstermek oyuncuya olmayan bir sefer izlenimi verirdi.
+ *
+ * Görünen tek mağara olayı **yıkılan mağaradan kaçış**tır (`cave_return`) ve o gerçekten bir
+ * varış: kaynak ve hedef aynı şehir olduğu için `OUT_ICON`'da karşılığı BİLEREK yok →
+ * ekranda tek bir **sarı kalkan** çizilir.
  *
  * Destek normalde iki şehir arasındadır (yeşil kalkan gönderen, sarı kalkan alan); mağara
- * bunun tek şehirli istisnasıdır ve kullanıcı kararıyla böyledir.
+ * kaçışı bunun tek şehirli istisnasıdır.
  */
 const IN_ICON: Record<string, string> = {
   attack: 'attack_in',
   transport: 'transport_back',
   support: 'support_in',
   spy: 'spy_back',
-  cave_store: 'support_in',
-  cave_withdraw: 'support_in',
   cave_return: 'support_in',
 };
 

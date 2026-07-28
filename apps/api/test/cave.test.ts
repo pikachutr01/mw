@@ -1,11 +1,16 @@
 /**
  * ⭐ MAĞARA (§13.20) — formüller, doldurma/boşaltma ve savaşta yıkılma.
  *
+ * ⚠️ **MODEL 2026-07-28'de DEĞİŞTİ** (kullanıcı kararı): emir artık asker TAŞIMAZ, yalnız bir
+ * sayaç kurar. Askerler süre boyunca yerinde durur (şehirde ya da mağarada) ve şehirdekiler
+ * savaşa **katılır**; taşıma süre dolunca ANLIK olur. İptal serbest ve yan etkisizdir.
+ *
  * Kilitlenen davranışlar, hepsi bozulduğunda **sessiz** kalanlar:
  *   • Mağaradaki ordu savaşa katılmaz ve casus göremez → tabloları ayrı tutmanın tek sebebi bu.
- *   • Askerler emir ANINDA barakadan düşer → saldırı o sırada gelirse savaşa girmezler.
- *   • İşlem iptal edilemez → yoksa mağara "saldırıyı gör, sakla, iptal et" istismarına döner.
- *   • Yıkılan mağaranın ordusu şehre **boşaltma süresi kadar** sonra döner (anında değil).
+ *   • Doldurma emri BEKLERKEN askerler hâlâ şehirdedir ve savaşa girerler.
+ *   • Varışta `min(emredilen, mevcut)` alınır → ölmüş asker mağarada YENİDEN DOĞMAZ.
+ *   • Savaşta emrin tamamı ölürse emir iptal edilir ve ayrı bir mesaj gider.
+ *   • Yıkılan mağaranın ordusu şehre **sıfırdan boşaltma süresi** kadar sonra döner.
  *   • Onarımdaki mağara yeniden yıkılmaz ve süresi baştan başlamaz.
  */
 import { sql } from 'drizzle-orm';
@@ -15,6 +20,7 @@ import {
   dwarvesToBreakCave, unitsArea,
 } from '@mobiwar/catalog';
 import { CAVE_HANDLERS } from '../src/cave/cave.handlers.ts';
+import { buildBattleReport } from '../src/battles/battle-report.ts';
 import { CaveError, CaveService } from '../src/cave/cave.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
@@ -159,9 +165,9 @@ describe('mağara formülleri', () => {
     expect(caveTransferSeconds(1, 20)).toBeGreaterThanOrEqual(CAVE_CONSTANTS.minTransferSeconds);
   });
 
-  it('onarım 26 saat, her seviye %10 kısa', () => {
-    expect(caveRepairSeconds(1)).toBe(26 * 3600);
-    expect(caveRepairSeconds(2)).toBe(Math.round(26 * 3600 * 0.9));
+  it('onarım 20 saat, her seviye %10 kısa', () => {
+    expect(caveRepairSeconds(1)).toBe(20 * 3600);
+    expect(caveRepairSeconds(2)).toBe(Math.round(20 * 3600 * 0.9));
     expect(caveRepairSeconds(20)).toBeLessThan(caveRepairSeconds(1) / 7);
   });
 
@@ -175,7 +181,7 @@ describe('mağara formülleri', () => {
 /* ═══ Doldurma / boşaltma ═══════════════════════════════════════════════════ */
 
 describe('mağara doldurma ve boşaltma', () => {
-  it('⭐ askerler EMİR ANINDA barakadan düşer, mağaraya varışta girer', async () => {
+  it('⭐ askerler süre boyunca ŞEHİRDE kalır, ancak süre dolunca mağaraya girer', async () => {
     await setBuilding(defendCity, 'cave', 5);          // kapasite 800 alan
     await giveUnits(defendCity, 'dwarf', 50);
     const at = await clock.gameNow(worldId);
@@ -184,8 +190,8 @@ describe('mağara doldurma ve boşaltma', () => {
       cityId: defendCity, playerId: defender, units: { dwarf: 20 }, at,
     });
 
-    // Baraka hemen düştü; mağara HENÜZ boş — birlikler "yolda".
-    expect((await unitsOf(defendCity))['dwarf']).toBe(30);
+    // ⭐ Baraka DEĞİŞMEDİ: emir yalnız bir sayaç kurdu.
+    expect((await unitsOf(defendCity))['dwarf']).toBe(50);
     expect(await caveUnitsOf(defendCity)).toEqual({});
     expect(job.area).toBe(UNITS_BY_ID['dwarf']!.area * 20);
     expect(job.seconds).toBe(caveTransferSeconds(job.area, 5));
@@ -195,7 +201,44 @@ describe('mağara doldurma ve boşaltma', () => {
     expect((await unitsOf(defendCity))['dwarf']).toBe(30);
   });
 
-  it('boşaltmada birlikler mağaradan ANINDA çıkar, şehre varışları sürer', async () => {
+  it('⭐ İPTAL anlık ve yan etkisiz: doldurmada asker şehirde, boşaltmada mağarada kalır', async () => {
+    await setBuilding(defendCity, 'cave', 5);
+    await giveUnits(defendCity, 'dwarf', 50);
+    const at = await clock.gameNow(worldId);
+
+    await cave.store({ cityId: defendCity, playerId: defender, units: { dwarf: 20 }, at });
+    await cave.cancel({ cityId: defendCity, playerId: defender });
+    expect((await unitsOf(defendCity))['dwarf']).toBe(50);
+    expect(await caveUnitsOf(defendCity)).toEqual({});
+    expect((await cave.state(defendCity, at)).job).toBeNull();
+
+    // Mağarayı doldur, sonra boşaltmayı iptal et.
+    await runDue((await cave.store({
+      cityId: defendCity, playerId: defender, units: { dwarf: 20 }, at,
+    })).missionId);
+    await cave.withdraw({ cityId: defendCity, playerId: defender, units: { dwarf: 20 }, at });
+    await cave.cancel({ cityId: defendCity, playerId: defender });
+    expect(await caveUnitsOf(defendCity)).toEqual({ dwarf: 20 });
+    expect((await unitsOf(defendCity))['dwarf']).toBe(30);
+
+    // İş yokken iptal reddedilir.
+    await expect(cave.cancel({ cityId: defendCity, playerId: defender }))
+      .rejects.toMatchObject({ code: 'no_job' });
+  });
+
+  it('⭐ CASUS KUŞ mağaraya konulabilir (kullanıcı kuralı)', async () => {
+    await setBuilding(defendCity, 'cave', 5);
+    await giveUnits(defendCity, 'spy_bird', 40);
+    const at = await clock.gameNow(worldId);
+    const job = await cave.store({
+      cityId: defendCity, playerId: defender, units: { spy_bird: 40 }, at,
+    });
+    expect(job.area).toBe(UNITS_BY_ID['spy_bird']!.area * 40);
+    await runDue(job.missionId);
+    expect(await caveUnitsOf(defendCity)).toEqual({ spy_bird: 40 });
+  });
+
+  it('boşaltmada birlikler süre boyunca MAĞARADA kalır, sonunda şehre iner', async () => {
     await setBuilding(defendCity, 'cave', 5);
     await giveUnits(defendCity, 'dwarf', 40);
     const at = await clock.gameNow(worldId);
@@ -206,11 +249,13 @@ describe('mağara doldurma ve boşaltma', () => {
     const back = await cave.withdraw({
       cityId: defendCity, playerId: defender, units: { dwarf: 25 }, at,
     });
-    expect(await caveUnitsOf(defendCity)).toEqual({ dwarf: 15 });
+    // ⭐ Hâlâ mağaradalar → hâlâ korunuyorlar.
+    expect(await caveUnitsOf(defendCity)).toEqual({ dwarf: 40 });
     expect((await unitsOf(defendCity))['dwarf']).toBe(0);
 
     await runDue(back.missionId);
     expect((await unitsOf(defendCity))['dwarf']).toBe(25);
+    expect(await caveUnitsOf(defendCity)).toEqual({ dwarf: 15 });
   });
 
   it('kapasite aşılamaz; alan türden bağımsız toplanır', async () => {
@@ -222,9 +267,9 @@ describe('mağara doldurma ve boşaltma', () => {
     await expect(cave.store({ cityId: defendCity, playerId: defender, units: { dwarf: 6 }, at }))
       .rejects.toMatchObject({ code: 'capacity_exceeded' });
 
-    // 5 Cüce = 45 alan → kabul; asker barakadan düşmüş olmalı.
+    // 5 Cüce = 45 alan → kabul; asker YERİNDE kalır (emir yalnız sayaç kurar).
     await cave.store({ cityId: defendCity, playerId: defender, units: { dwarf: 5 }, at });
-    expect((await unitsOf(defendCity))['dwarf']).toBe(95);
+    expect((await unitsOf(defendCity))['dwarf']).toBe(100);
   });
 
   it('mağara yokken, meşgulken ve onarımdayken emir alınmaz', async () => {
@@ -258,8 +303,7 @@ describe('mağara doldurma ve boşaltma', () => {
 
     await giveUnits(defendCity, 'dwarf', 3);
     await expect(cave.store({ cityId: defendCity, playerId: defender, units: { dwarf: 10 }, at }))
-      .rejects.toBeInstanceOf(CaveError);
-    // Reddedilen emir hiçbir askeri düşürmemeli (transaction geri alındı).
+      .rejects.toMatchObject({ code: 'not_enough_units' });
     expect((await unitsOf(defendCity))['dwarf']).toBe(3);
   });
 
@@ -306,6 +350,7 @@ describe('mağaranın savaşta yıkılması', () => {
     await runDue((await cave.store({
       cityId: defendCity, playerId: defender, units: { dwarf: 200 }, at,
     })).missionId);
+    // Taşıma bitti → şehir boş, ordu mağarada.
     expect(await unitsOf(defendCity)).toEqual({ dwarf: 0 });
 
     // Eşiğin ALTINDA saldırı (sv10 için 3.844 cüce gerekir) → mağara sağlam kalır.
@@ -330,7 +375,7 @@ describe('mağaranın savaşta yıkılması', () => {
     const until = await caveRepairUntil();
     expect(until).not.toBeNull();
 
-    // Kaçış görevi: KENDİ şehrine gelen destek (kaynak = hedef).
+    // Kaçış görevi: KENDİ şehrine gelen destek (kaynak = hedef), TEK satır.
     const escapes = await openMissions('cave_return');
     expect(escapes).toHaveLength(1);
     expect(Number(escapes[0]!['origin_city_id'])).toBe(defendCity);
@@ -380,37 +425,25 @@ describe('mağaranın savaşta yıkılması', () => {
     expect((await caveRepairUntil())!.getTime()).toBe(first!.getTime());
   });
 
-  it('⭐ DOLDURULURKEN yıkılırsa birlikler gittikleri süre kadar geri döner', async () => {
-    await setBuilding(defendCity, 'cave', 8);         // taşıma uzun sürsün
+  it('⭐ DOLDURULURKEN yıkılırsa emir iptal edilir; askerler zaten ŞEHİRDEDİR', async () => {
+    await setBuilding(defendCity, 'cave', 8);         // eşik 1.709 cüce
     await giveUnits(defendCity, 'dwarf', 500);
     const at = await clock.gameNow(worldId);
     const job = await cave.store({
       cityId: defendCity, playerId: defender, units: { dwarf: 500 }, at,
     });
-    expect(job.seconds).toBeGreaterThan(60);
 
-    // Taşıma sürerken saldırı gelir (sv8 eşiği 1.709 cüce).
     await attackWith(3000);
 
-    // Doldurma görevi iptal edildi ve kaçışa çevrildi.
     const canceled = await h.db.execute<Record<string, unknown>>(sql`
       SELECT status FROM missions WHERE id = ${job.missionId}
     `);
     expect(String(canceled[0]!['status'])).toBe('canceled');
-
-    const escapes = await openMissions('cave_return');
-    expect(escapes).toHaveLength(1);
-    expect(String((escapes[0]!['payload'] as Record<string, unknown>)['reason']))
-      .toBe('interrupted_store');
-    // Yolun BAŞINDAYDILAR → dönüş süresi geçen süre kadar, yani neredeyse sıfır (taban 1 sn).
-    const seconds = Number((escapes[0]!['payload'] as Record<string, unknown>)['seconds']);
-    expect(seconds).toBeLessThan(job.seconds);
-
-    await runDue(Number(escapes[0]!['id']));
-    expect((await unitsOf(defendCity))['dwarf']).toBe(500);
+    // ⭐ Kaçış görevi YOK: mağara boştu, bekleyen askerler zaten şehirdeydi ve savaştılar.
+    expect(await openMissions('cave_return')).toHaveLength(0);
   });
 
-  it('⭐ BOŞALTILIRKEN yıkılırsa KALAN süre kadar sonra varırlar', async () => {
+  it('⭐ BOŞALTILIRKEN yıkılırsa askerler SIFIRDAN boşaltma süresiyle şehre gelir', async () => {
     await setBuilding(defendCity, 'cave', 8);
     await giveUnits(defendCity, 'dwarf', 500);
     const at = await clock.gameNow(worldId);
@@ -425,14 +458,63 @@ describe('mağaranın savaşta yıkılması', () => {
 
     const escapes = await openMissions('cave_return');
     expect(escapes).toHaveLength(1);
-    expect(String((escapes[0]!['payload'] as Record<string, unknown>)['reason']))
-      .toBe('interrupted_withdraw');
-    // Yolun başındalar → kalan süre ≈ toplam süre.
+    /**
+     * ⭐ Kalan süre hesabı YOK (kullanıcı kararı): askerler hâlâ mağaranın içindeydiler, bu
+     * yüzden kaçış BAŞTAN başlar ve süresi tüm mağara içeriğinin boşaltma süresine eşittir.
+     */
     const seconds = Number((escapes[0]!['payload'] as Record<string, unknown>)['seconds']);
-    expect(seconds).toBeGreaterThan(back.seconds * 0.5);
+    expect(seconds).toBe(back.seconds);
 
     await runDue(Number(escapes[0]!['id']));
     expect((await unitsOf(defendCity))['dwarf']).toBe(500);
+  });
+
+  it('⭐ SAVAŞ bekleyen doldurma emrini hayatta kalanlara göre KÜÇÜLTÜR', async () => {
+    await setBuilding(defendCity, 'cave', 10);       // eşik 3.844 → mağara yıkılmasın
+    await giveUnits(defendCity, 'dwarf', 500);
+    const at = await clock.gameNow(worldId);
+    const job = await cave.store({
+      cityId: defendCity, playerId: defender, units: { dwarf: 500 }, at,
+    });
+
+    // Savunanı ezmeyecek ama kayıp verdirecek bir saldırı.
+    await attackWith(200);
+    const survivors = (await unitsOf(defendCity))['dwarf'] ?? 0;
+    expect(survivors).toBeGreaterThan(0);
+    expect(survivors).toBeLessThan(500);
+
+    // Emir hayatta kalan sayıya indi ve süresi DEĞİŞMEDİ.
+    const st = await cave.state(defendCity, at);
+    expect(st.job?.units).toEqual({ dwarf: survivors });
+
+    await runDue(job.missionId);
+    // ⭐ Ordu ÇOĞALMADI: mağaraya yalnız hayatta kalanlar girdi, baraka boşaldı.
+    expect(await caveUnitsOf(defendCity)).toEqual({ dwarf: survivors });
+    expect((await unitsOf(defendCity))['dwarf'] ?? 0).toBe(0);
+  });
+
+  it('⭐ emrin TAMAMI ölürse emir iptal edilir ve AYRI bir mesaj gider', async () => {
+    await setBuilding(defendCity, 'cave', 10);
+    await giveUnits(defendCity, 'dwarf', 20);
+    const at = await clock.gameNow(worldId);
+    const job = await cave.store({
+      cityId: defendCity, playerId: defender, units: { dwarf: 20 }, at,
+    });
+
+    await attackWith(3000);                          // ezici: 20 Cüce silinir
+
+    const row = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT status FROM missions WHERE id = ${job.missionId}
+    `);
+    expect(String(row[0]!['status'])).toBe('canceled');
+
+    const msgs = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT subject, body FROM messages
+       WHERE world_id = ${worldId} AND player_id = ${defender} AND kind = 'system'
+    `);
+    expect(msgs).toHaveLength(1);
+    expect(String(msgs[0]!['subject'])).toMatch(/Mağaraya giriş iptal/);
+    expect((msgs[0]!['body'] as Record<string, unknown>)['reason']).toBe('all_units_lost');
   });
 
   it('saldıranın Demirciliği eşiği düşürür', async () => {
@@ -463,5 +545,46 @@ describe('mağaranın savaşta yıkılması', () => {
     expect(Object.keys(atkBody['cave'] as Record<string, unknown>)).not.toContain('escaped');
     expect((defBody['cave'] as Record<string, unknown>)['broken']).toBe(true);
     expect(defBody['cave']).toHaveProperty('escaped');
+  });
+
+  it('⭐ RAPOR MODALI iki tarafa da mağara notunu yazar (ama farklı cümleyle)', async () => {
+    await setBuilding(defendCity, 'cave', 1);
+    await attackWith(400);
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, at, night, winner, input, result, attacker_player_id, defender_player_id
+        FROM battles WHERE world_id = ${worldId}
+    `);
+    const row = rows[0]!;
+    const battle = {
+      id: Number(row['id']),
+      at: toDate(row['at']),
+      night: Boolean(row['night']),
+      winner: String(row['winner']),
+      input: row['input'],
+      result: row['result'],
+    } as never;
+
+    const def = buildBattleReport(battle, 'defender');
+    const atk = buildBattleReport(battle, 'attacker');
+    expect(def.notes.some((n) => n.includes('MAĞARAN YIKILDI'))).toBe(true);
+    expect(atk.notes.some((n) => n.includes('mağarası YIKILDI'))).toBe(true);
+    // Saldıranın notunda mağaranın içi geçmez.
+    expect(atk.notes.join(' ')).not.toMatch(/kaç(ıyor|tı)/);
+  });
+
+  it('mağara dayanırsa rapor GEREKEN cüce sayısını yazar', async () => {
+    await setBuilding(defendCity, 'cave', 5);        // eşik 506 cüce
+    await attackWith(50);
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, at, night, winner, input, result FROM battles WHERE world_id = ${worldId}
+    `);
+    const battle = {
+      id: Number(rows[0]!['id']), at: toDate(rows[0]!['at']), night: Boolean(rows[0]!['night']),
+      winner: String(rows[0]!['winner']), input: rows[0]!['input'], result: rows[0]!['result'],
+    } as never;
+    const atk = buildBattleReport(battle, 'attacker');
+    expect(atk.notes.some((n) => n.includes('506') && n.includes('yıkılmadı'))).toBe(true);
   });
 });

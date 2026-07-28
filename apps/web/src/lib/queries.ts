@@ -485,8 +485,8 @@ export function useCancelQueue() {
 }
 
 /**
- * ⭐ MAĞARA emri (§13.20). **İptali yoktur** — bilerek `useCancel…` ikizi yazılmadı: iptal
- * edilebilseydi "saldırıyı gör, sakla, iptal et" döngüsü mağarayı bedava kalkana çevirirdi.
+ * ⭐ MAĞARA emri (§13.20). Emir asker TAŞIMAZ, yalnız bir sayaç kurar; asıl taşıma süre
+ * dolunca olur. Bu yüzden iptal de serbesttir ve yan etkisizdir (`useCancelCaveJob`).
  */
 export function useCaveJob(cityId: number | null) {
   const invalidate = useInvalidate();
@@ -496,6 +496,18 @@ export function useCaveJob(cityId: number | null) {
         `/api/v1/cities/${cityId}/cave/${input.direction}`,
         { method: 'POST', body: { units: input.units } },
       ),
+    onSuccess: () => invalidate(['city', 'missions']),
+  });
+}
+
+/**
+ * Süren mağara emrini iptal eder — **anlık ve yan etkisiz**. Geçen/kalan süreye göre hiçbir
+ * hesap yapılmaz; ortada taşınan bir şey yok, yalnız bir sayaç var (§13.20).
+ */
+export function useCancelCaveJob(cityId: number | null) {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: () => api(`/api/v1/cities/${cityId}/cave/job`, { method: 'DELETE' }),
     onSuccess: () => invalidate(['city', 'missions']),
   });
 }

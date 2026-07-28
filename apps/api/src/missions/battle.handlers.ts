@@ -16,9 +16,8 @@ import {
   LEVEL_BASED, UNITS_BY_ID, caveRepairSeconds, dwarvesToBreakCave, heroReviveSeconds,
 } from '@mobiwar/catalog';
 import { calculateLoot, simulate, type LootResult, type SimulateInput, type SimulateResult } from '@mobiwar/engine';
-import { drainCave } from '../cave/cave.service.ts';
+import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
 import { toDate } from '../db/client.ts';
-import { scheduleCaveEscape } from '../cave/cave.handlers.ts';
 import type { CityService } from '../cities/city.service.ts';
 import { debitLosses } from '../scoring/score.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
@@ -150,14 +149,57 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       await cities.add(targetCityId, loot.leftoverDebrisToDefender, ctx.at, ctx.tx as never);
     }
 
-    // ⭐ MAĞARA (§13.20.3) — savaş çözüldükten SONRA, ganimetten ÖNCE bakılır: mağara yıkılsa
-    //    bile içindeki ordu savaşa katılmamıştı ve ganimete etkisi yok.
+    /**
+     * ⭐ MAĞARA (§13.20.3) — **kayıplar uygulandıktan SONRA** bakılır ve sıra önemlidir:
+     *  1. `resolveCaveBreak` mağara yıkıldı mı diye bakar; yıkıldıysa süren emirleri iptal eder.
+     *  2. Yıkılmadıysa bekleyen doldurma emri hayatta kalanlarla uzlaştırılır — o askerler
+     *     savaşa KATILDILAR (yeni model), ölmüş olabilirler.
+     * Ters sırada yapsaydık yıkılan mağarada iptal edilmiş bir emri boşuna uzlaştırırdık.
+     */
     const cave = await resolveCaveBreak(ctx, {
       cityId: targetCityId,
       defenderPlayerId: defenderCity.playerId,
       survivingDwarves: Math.max(0, Math.trunc(result.attacker.counts['dwarf'] ?? 0)),
       blacksmithing: attacker.techs['blacksmithing'] ?? 0,
     });
+    /**
+     * ⭐ Mağara sonucu **savaş kaydına da** yazılır (rapor modalı `battles.result`'tan okuyor).
+     * Satır yukarıda yazıldığı için birleştiriyoruz; `writeBattle`'ı aşağı taşımak savaş
+     * kaydının sırasını değiştirirdi ve determinizm künyesinin (§5) yerini oynatırdı.
+     *
+     * ⚠️ İki tarafın gördüğü ayrı: `escaped` (mağaradan kimin kaçtığı) YALNIZ savunanın
+     * mesajında; savaş kaydına da girmiyor ki rapor ucu yanlışlıkla saldırana sızdırmasın.
+     */
+    await ctx.tx.execute(sql`
+      UPDATE battles SET result = result || ${JSON.stringify({
+      cave: {
+        present: cave.present, broken: cave.broken, level: cave.level,
+        required: cave.required, survivingDwarves: cave.survivingDwarves, reason: cave.reason,
+      },
+    })}::jsonb
+       WHERE id = ${battleId}
+    `);
+
+    const caveOrder = cave.broken ? null : await reconcileCaveStore(ctx, targetCityId);
+    if (caveOrder?.canceled) {
+      /**
+       * Hepsi öldü → oyuncuya savaş raporundan **AYRI** bir mesaj (kullanıcı isteği).
+       * Rapor "savaşta ne oldu"yu anlatır; bu mesaj "planın ne oldu"yu.
+       */
+      await writeMessage(ctx, {
+        playerId: defenderCity.playerId,
+        kind: 'system',
+        side: 'owner',
+        battleId: null,
+        subject: 'Mağaraya giriş iptal edildi',
+        body: {
+          cityId: targetCityId,
+          reason: 'all_units_lost',
+          ordered: caveOrder.ordered,
+          at: ctx.at.toISOString(),
+        },
+      });
+    }
 
     await settleHeroes(ctx, defender.heroes, result.defender.heroes, defender.temple, targetCityId);
     const attackerHeroesAlive = await settleHeroes(
@@ -184,6 +226,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       night,
       returning: anySurvivor,
       cave,
+      caveOrder,
     });
 
     await ctx.audit({
@@ -436,14 +479,14 @@ async function resolveCaveBreak(ctx: HandlerContext, o: {
   }
   if (o.survivingDwarves < base.required) return { ...base, reason: 'not_enough_dwarves' };
 
-  const inside = await drainCave(ctx.tx, o.cityId);
   const until = new Date(ctx.at.getTime() + caveRepairSeconds(level) * 1000);
   await ctx.tx.execute(sql`
     UPDATE cities SET cave_repair_until = ${until.toISOString()}::timestamptz WHERE id = ${o.cityId}
   `);
 
-  await scheduleCaveEscape(ctx, {
-    cityId: o.cityId, playerId: o.defenderPlayerId, caveLevel: level, inside,
+  // Süren emirleri iptal eder, mağarayı boşaltır ve TEK kaçış görevini yazar.
+  const inside = await scheduleCaveEscape(ctx, {
+    cityId: o.cityId, playerId: o.defenderPlayerId, caveLevel: level,
   });
 
   await ctx.audit({
@@ -590,6 +633,8 @@ async function writeBattleReports(ctx: HandlerContext, o: {
   night: boolean;
   returning: boolean;
   cave: CaveBreakResult;
+  /** Bekleyen mağara emrinin savaştan sonraki hâli (yalnız savunanı ilgilendirir). */
+  caveOrder: CaveStoreReconcile | null;
 }): Promise<void> {
   const won = o.result.winner === 'attacker';
   const base = {
@@ -643,6 +688,8 @@ async function writeBattleReports(ctx: HandlerContext, o: {
       debrisRecovered: o.loot.leftoverDebrisToDefender,
       // Savunan KENDİ mağarasının tam dökümünü görür: kimin kaçtığı, onarımın ne zaman biteceği.
       cave: o.cave,
+      // Bekleyen doldurma emri savaştan etkilendiyse raporda da görünür.
+      caveOrder: o.caveOrder,
     },
   });
 

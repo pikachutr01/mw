@@ -6,14 +6,23 @@
  * mağaradaki askerler savaşa katılmazlar. Ayrıca düşmanlarınızın casus kuşları mağaradaki
  * askerleri göremezler."*
  *
- * ### Pazarlıksız üç kural
- *  1. **Askerler emir anında barakadan DÜŞER.** Yola çıkan ordu artık şehirde değildir — saldırı
- *     o sırada gelirse savaşa katılmaz. Bu, mağaranın oyundaki anlamıdır.
- *  2. **İŞLEM İPTAL EDİLEMEZ** (kullanıcı kararı 2026-07-28). İptal edilebilseydi mağara bir
- *     istismar aracına dönerdi: saldırıdan hemen önce "doldur" de, saldırı bitince iptal et,
- *     ordu hiç kaybolmadan korunmuş olsun. Şimdi oyuncu kararının bedelini **süreyle** ödüyor.
- *  3. **Kapasite ALAN cinsindendir**, adet değil. Tür önemsizdir; tek şart toplam alanın o anki
- *     seviyenin kapasitesini aşmaması.
+ * ### ⚠️ MODEL DEĞİŞTİ (kullanıcı kararı 2026-07-28, ikinci tur)
+ * Önceki tasarımda askerler **emir anında** barakadan düşüyordu ve işlem iptal edilemiyordu.
+ * Yeni tasarım tam tersi:
+ *
+ *  • **Emir yalnız bir zamanlayıcıdır.** Doldurma süresi boyunca askerler ŞEHİRDE kalır, gelen
+ *    saldırılara **katılır**; süre dolduğunda mağaraya ANLIK geçerler. Boşaltmada da aynısı:
+ *    süre boyunca mağarada dururlar, sonunda anlık şehre inerler.
+ *  • **İptal serbest ve ANLIKTIR.** Geçen/kalan süreye göre hiçbir hesap yapılmaz, çünkü
+ *    taşınan bir şey yok — iptal yalnız zamanlayıcıyı siler.
+ *
+ * Bu iki kural birlikte eski istismarı da kapatıyor: "saldırıyı gör, sakla, iptal et" artık
+ * bir kazanç sağlamıyor, çünkü **saklanmak süre dolana kadar zaten başlamıyor.**
+ *
+ * ### Bundan doğan tek zor kural
+ * Askerler süre boyunca şehirde olduğu için **savaşta ölebilirler.** O yüzden mağaraya giriş
+ * anında adet **yeniden ölçülür**: `giren = min(emredilen, barakadaki)`. Bu clamp olmadan
+ * ölmüş askerler mağarada yeniden doğardı — sessiz ve fark edilmesi çok zor bir hata.
  */
 import { sql } from 'drizzle-orm';
 import { UNITS_BY_ID, caveCapacity, caveTransferSeconds, unitsArea } from '@mobiwar/catalog';
@@ -28,6 +37,7 @@ export type CaveErrorCode =
   | 'no_cave'
   | 'cave_repairing'
   | 'cave_busy'
+  | 'no_job'
   | 'invalid_units'
   | 'not_enough_units'
   | 'capacity_exceeded';
@@ -48,7 +58,7 @@ export interface CaveState {
   /** Onarım bitişi (oyun saati) — NULL ise mağara sağlam. */
   repairUntil: Date | null;
   repairing: boolean;
-  /** Süren doldurma/boşaltma işi. */
+  /** Süren doldurma/boşaltma emri. ⭐ İPTAL EDİLEBİLİR. */
   job: {
     missionId: number;
     direction: 'store' | 'withdraw';
@@ -59,7 +69,6 @@ export interface CaveState {
   } | null;
 }
 
-/** Mağarayla ilgili görev tipleri — tek yerde ki sorgular ve testler aynı listeyi kullansın. */
 export const CAVE_JOB_TYPES = ['cave_store', 'cave_withdraw'] as const;
 
 export class CaveService {
@@ -79,15 +88,9 @@ export class CaveService {
     const level = Number(row['level'] ?? 0);
     const repairUntilRaw = row['cave_repair_until'];
     const repairUntil = repairUntilRaw == null ? null : toDate(repairUntilRaw);
-    // Süresi dolmuş onarım "sağlam" sayılır; satırı temizlemek için ayrı bir görev gerekmiyor.
     const repairing = repairUntil != null && repairUntil > gameNow;
 
-    const unitRows = await runner.execute<Record<string, unknown>>(sql`
-      SELECT type, count FROM cave_units WHERE city_id = ${cityId} AND count > 0
-    `);
-    const units: Record<string, number> = {};
-    for (const r of unitRows) units[String(r['type'])] = Number(r['count']);
-
+    const units = await readCounts(runner, 'cave_units', cityId);
     const capacity = caveCapacity(level);
     const usedArea = unitsArea(units);
 
@@ -130,10 +133,11 @@ export class CaveService {
   /* ── Doldurma ─────────────────────────────────────────────────────────────── */
 
   /**
-   * Seçilen savaşçıları mağaraya yollar.
+   * Savaşçıları mağaraya girmek üzere **işaretler**.
    *
-   * ⭐ Birlikler **bu transaction'da** barakadan düşer; mağaraya varış `cave_store` görevinin
-   * işidir. Aradaki sürede birlikler "yolda"dır: ne şehirde ne mağarada.
+   * ⚠️ Birlikler **şehirden ÇIKMAZ**: süre boyunca barakada dururlar, savaşa katılırlar,
+   * hatta sefere de gönderilebilirler. Emir yalnız "süre dolunca şu adetler mağaraya girsin"
+   * der; asıl taşıma `cave_store` handler'ındadır ve orada adet yeniden ölçülür.
    */
   async store(opts: {
     cityId: number; playerId: number; units: Record<string, number>; at: Date;
@@ -154,18 +158,17 @@ export class CaveService {
         );
       }
 
-      // ⭐ Barakadan düşüş KOŞULLU tek UPDATE: iki eşzamanlı emir aynı askeri gönderemez.
+      /**
+       * Emir anında **yalnız DOĞRULAMA** yapılır, düşüm değil: olmayan askeri işaretlemenin
+       * anlamı yok. Süre içinde ölürlerse varışta zaten clamp'lenecek.
+       */
+      const have = await readCounts(tx as never, 'units', opts.cityId);
       for (const [type, n] of Object.entries(wanted)) {
-        const res = await tx.execute<Record<string, unknown>>(sql`
-          UPDATE units SET count = count - ${n}
-           WHERE city_id = ${opts.cityId} AND type = ${type} AND count >= ${n}
-          RETURNING count
-        `);
-        if (res.length === 0) {
+        if ((have[type] ?? 0) < n) {
           throw new CaveError(
             'not_enough_units',
-            `${nameOf(type)} için yeterli asker yok (${n} istendi).`,
-            { type, count: n },
+            `${nameOf(type)} için yeterli asker yok (${n} istendi, ${have[type] ?? 0} var).`,
+            { type, count: n, have: have[type] ?? 0 },
           );
         }
       }
@@ -181,7 +184,12 @@ export class CaveService {
 
   /* ── Boşaltma ─────────────────────────────────────────────────────────────── */
 
-  /** Mağaradaki savaşçıları şehre çağırır. Birlikler mağaradan ANINDA çıkar, şehre varışları sürer. */
+  /**
+   * Mağaradaki savaşçıları çıkmak üzere **işaretler**.
+   *
+   * ⚠️ Birlikler mağaradan ÇIKMAZ: süre boyunca içeride kalırlar (yani hâlâ korunuyorlar,
+   * hâlâ savaşa katılmıyorlar). Süre dolunca anlık olarak barakaya inerler.
+   */
   async withdraw(opts: {
     cityId: number; playerId: number; units: Record<string, number>; at: Date;
   }): Promise<{ missionId: number; seconds: number; area: number }> {
@@ -193,16 +201,11 @@ export class CaveService {
       }
 
       for (const [type, n] of Object.entries(wanted)) {
-        const res = await tx.execute<Record<string, unknown>>(sql`
-          UPDATE cave_units SET count = count - ${n}
-           WHERE city_id = ${opts.cityId} AND type = ${type} AND count >= ${n}
-          RETURNING count
-        `);
-        if (res.length === 0) {
+        if ((st.units[type] ?? 0) < n) {
           throw new CaveError(
             'not_enough_units',
-            `Mağarada yeterli ${nameOf(type)} yok (${n} istendi).`,
-            { type, count: n },
+            `Mağarada yeterli ${nameOf(type)} yok (${n} istendi, ${st.units[type] ?? 0} var).`,
+            { type, count: n, have: st.units[type] ?? 0 },
           );
         }
       }
@@ -217,12 +220,42 @@ export class CaveService {
     });
   }
 
-  /* ── Ortak ────────────────────────────────────────────────────────────────── */
+  /* ── İptal ────────────────────────────────────────────────────────────────── */
 
   /**
-   * Sahiplik + mağaranın kullanılabilirliği. Üç kapı, üçü de kullanıcı kuralı:
-   * mağara yoksa (sv 0) · onarımdaysa · zaten bir iş sürüyorsa yeni emir alınmaz.
+   * ⭐ Süren emri iptal eder — **anlık ve yan etkisiz**.
+   *
+   * Geçen ya da kalan süreye göre hiçbir hesap YAPILMAZ (kullanıcı kararı): ortada taşınan
+   * bir şey yok, yalnız bir zamanlayıcı var. Doldurma iptal edilirse askerler zaten şehirde
+   * kalmaya devam eder; boşaltma iptal edilirse zaten mağarada duruyorlardır.
    */
+  async cancel(opts: { cityId: number; playerId: number }): Promise<{ direction: 'store' | 'withdraw' }> {
+    return this.db.transaction(async (tx) => {
+      const owner = await tx.execute<Record<string, unknown>>(sql`
+        SELECT player_id FROM cities WHERE id = ${opts.cityId} FOR UPDATE
+      `);
+      if (owner.length === 0) throw new CaveError('city_not_found', 'Şehir bulunamadı.');
+      if (Number(owner[0]!['player_id']) !== opts.playerId) {
+        throw new CaveError('not_owner', 'Bu şehir sizin değil.');
+      }
+
+      const rows = await tx.execute<Record<string, unknown>>(sql`
+        UPDATE missions SET status = 'canceled', finished_at = now()
+         WHERE target_city_id = ${opts.cityId}
+           AND type IN ('cave_store', 'cave_withdraw')
+           AND status = 'scheduled'
+        RETURNING type
+      `);
+      if (rows.length === 0) {
+        // `running` ise worker o an uyguluyordur; iptal artık geç kalmıştır.
+        throw new CaveError('no_job', 'İptal edilecek bir mağara işlemi yok.');
+      }
+      return { direction: String(rows[0]!['type']) === 'cave_store' ? 'store' : 'withdraw' };
+    });
+  }
+
+  /* ── Ortak ────────────────────────────────────────────────────────────────── */
+
   private async assertUsable(
     tx: Db, cityId: number, playerId: number, at: Date,
   ): Promise<CaveState> {
@@ -250,11 +283,18 @@ export class CaveService {
   }
 
   /**
-   * Görevi + taşınan birlikleri yazar.
+   * Emri yazar.
    *
-   * ⚠️ `origin_city_id` = `target_city_id` = **aynı şehir**. Mağara şehrin İÇİNDEDİR; sefer
-   * değil şehir içi bir iştir. Ordular ekranı bu eşitliği "kendi şehrime gelen destek"
-   * (sarı kalkan) olarak çiziyor.
+   * ⚠️ `origin_city_id` = `target_city_id` = **aynı şehir**, ama bu görev **Ordular ekranında
+   * GÖRÜNMEZ** (§13.20.5, kullanıcı kararı): ortada hareket eden bir ordu yok, yalnız şehrin
+   * içinde işleyen bir sayaç var. Ordular ekranında yalnız *yıkılan mağaradan kaçış*
+   * (`cave_return`) görünür.
+   *
+   * ⚠️ **Tekillik anahtarı BİLEREK NULL.** Bir ara "tip:şehir:an" yazıyordu ve gerçek bir hata
+   * üretiyordu: emir artık **iptal edilebilir** olduğu için oyuncu aynı saniye içinde aynı emri
+   * yeniden verdiğinde iptal edilmiş satırın anahtarına çarpıyordu. Çift-tıklama koruması zaten
+   * daha güçlü bir yerden geliyor: `assertUsable` şehir satırını `FOR UPDATE` kilitliyor, ikinci
+   * istek `cave_busy` ile dönüyor. (Postgres'te NULL'lar tekil indekste çakışmaz.)
    */
   private async schedule(tx: Db, o: {
     cityId: number; playerId: number; type: 'cave_store' | 'cave_withdraw';
@@ -267,7 +307,7 @@ export class CaveService {
       SELECT c.world_id, ${o.type}, 'scheduled', ${o.playerId}, c.id, c.id,
              ${executeAt.toISOString()}::timestamptz,
              ${JSON.stringify({ area: o.area, seconds: o.seconds })}::jsonb,
-             ${`${o.type}:${o.cityId}:${o.at.toISOString()}`}
+             NULL
         FROM cities c WHERE c.id = ${o.cityId}
       RETURNING id
     `);
@@ -283,7 +323,11 @@ export class CaveService {
 
 /* ── Yardımcılar ───────────────────────────────────────────────────────────── */
 
-/** Yalnız GERÇEK savaşçılar; savunma birimi ve bilinmeyen id sessizce elenir. */
+/**
+ * Yalnız savaşçılar; savunma birimi ve bilinmeyen id sessizce elenir.
+ * ⭐ **Casus Kuş dahildir** (kullanıcı, 2026-07-28): katalogda `kind: 'warrior'` ve alanı 1 —
+ * saklanması hem mümkün hem mantıklı, casusluk kapasitesi de korunmaya değer bir varlık.
+ */
 function sanitize(units: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [id, raw] of Object.entries(units ?? {})) {
@@ -299,7 +343,19 @@ function nameOf(id: string): string {
   return UNITS_BY_ID[id]?.name.tr ?? id;
 }
 
-/** Mağaraya birim ekler (varış anında). */
+/** `units` ya da `cave_units` tablosundan adetleri okur. */
+export async function readCounts(
+  runner: Runner, table: 'units' | 'cave_units', cityId: number,
+): Promise<Record<string, number>> {
+  const rows = await runner.execute<Record<string, unknown>>(sql`
+    SELECT type, count FROM ${sql.raw(table)} WHERE city_id = ${cityId} AND count > 0
+  `);
+  const out: Record<string, number> = {};
+  for (const r of rows) out[String(r['type'])] = Number(r['count']);
+  return out;
+}
+
+/** Mağaraya birim ekler. */
 export async function addCaveUnits(
   runner: Runner, cityId: number, units: Record<string, number>,
 ): Promise<void> {
@@ -312,7 +368,7 @@ export async function addCaveUnits(
   }
 }
 
-/** Şehrin barakasına birim ekler (mağaradan dönüş, destek varışı). */
+/** Şehrin barakasına birim ekler. */
 export async function addCityUnits(
   runner: Runner, cityId: number, units: Record<string, number>,
 ): Promise<void> {
@@ -325,7 +381,37 @@ export async function addCityUnits(
   }
 }
 
-/** Mağarayı boşaltır ve içindekileri döndürür (yıkılma anında kullanılır). */
+/**
+ * ⭐ Adetleri tablodan düşer ama **VAR OLANDAN FAZLASINI ALMAZ** ve gerçekten aldığını döndürür.
+ *
+ * Mağara modelinin kilit taşı bu: emir verildiğinde asker taşınmıyor, süre boyunca savaşta
+ * ölebiliyor. Varışta `min(emredilen, mevcut)` alınmazsa **ölmüş asker mağarada yeniden doğardı**
+ * — sessiz ve fark edilmesi çok zor bir hata. Satır kilidi (`FOR UPDATE`) aynı askeri iki işin
+ * birden taşımasını da engelliyor.
+ */
+export async function takeUnits(
+  runner: Runner, table: 'units' | 'cave_units', cityId: number, units: Record<string, number>,
+): Promise<Record<string, number>> {
+  const taken: Record<string, number> = {};
+  for (const [type, want] of Object.entries(units)) {
+    if (!(want > 0)) continue;
+    const cur = await runner.execute<Record<string, unknown>>(sql`
+      SELECT count FROM ${sql.raw(table)}
+       WHERE city_id = ${cityId} AND type = ${type} FOR UPDATE
+    `);
+    const have = cur.length === 0 ? 0 : Number(cur[0]!['count']);
+    const moved = Math.min(have, want);
+    if (moved <= 0) continue;
+    await runner.execute(sql`
+      UPDATE ${sql.raw(table)} SET count = count - ${moved}
+       WHERE city_id = ${cityId} AND type = ${type}
+    `);
+    taken[type] = moved;
+  }
+  return taken;
+}
+
+/** Mağarayı tamamen boşaltır ve içindekileri döndürür (yıkılma anında kullanılır). */
 export async function drainCave(
   runner: Runner, cityId: number,
 ): Promise<Record<string, number>> {

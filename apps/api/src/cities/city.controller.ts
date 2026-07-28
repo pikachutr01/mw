@@ -56,7 +56,8 @@ function toCaveHttp(err: unknown): Error {
   if (err.code === 'not_owner') return new ForbiddenException(body);
   // Kapasite/meşgul/onarım: istek geçerli ama şu an yapılamaz → 409.
   if (err.code === 'cave_busy' || err.code === 'cave_repairing'
-    || err.code === 'capacity_exceeded' || err.code === 'not_enough_units') {
+    || err.code === 'capacity_exceeded' || err.code === 'not_enough_units'
+    || err.code === 'no_job') {
     return new ConflictException(body);
   }
   return new BadRequestException(body);
@@ -195,6 +196,28 @@ export class CityController {
     @Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest,
   ): Promise<Record<string, unknown>> {
     return this.caveJob('withdraw', Number(id), body, req);
+  }
+
+  /**
+   * ⭐ Süren mağara emrini iptal eder — **anlık ve yan etkisiz** (kullanıcı kararı 2026-07-28).
+   *
+   * Kendi ucu var, `POST /missions/:id/cancel` kullanılmıyor: o uç yoldaki orduyu geri çağırır
+   * ve **dönüş süresi** üretir. Mağarada dönülecek bir yol yok — emir yalnız bir sayaçtır.
+   */
+  @Delete(':id/cave/job')
+  @HttpCode(200)
+  async caveCancel(
+    @Param('id') id: string, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const cityId = Number(id);
+    const at = await this.clock.gameNow(player.worldId);
+    try {
+      const res = await this.cave.cancel({ cityId, playerId: player.playerId });
+      return { ...res, cave: caveResponse(await this.cave.state(cityId, at)) };
+    } catch (err) {
+      throw toCaveHttp(err);
+    }
   }
 
   private async caveJob(
