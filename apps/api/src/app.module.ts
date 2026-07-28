@@ -6,6 +6,7 @@ import { TokenService } from './auth/token.service.ts';
 import { BattleController } from './battles/battle.controller.ts';
 import { CityController } from './cities/city.controller.ts';
 import { CityService } from './cities/city.service.ts';
+import { CommandController } from './command/command.controller.ts';
 import { createDb, type Db } from './db/client.ts';
 import { DB } from './db/tokens.ts';
 import { HealthController } from './health/health.controller.ts';
@@ -27,7 +28,7 @@ export { DB } from './db/tokens.ts';
 @Module({
   controllers: [
     HealthController, SimulateController, AuthController, CityController,
-    MissionController, BattleController, WorldController,
+    MissionController, BattleController, WorldController, CommandController,
   ],
   providers: [
     {

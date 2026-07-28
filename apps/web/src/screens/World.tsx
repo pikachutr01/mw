@@ -15,7 +15,7 @@
 import { useState } from 'react';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
-import { Button, Input, MissionIcon, Panel } from '../components/ui.tsx';
+import { Button, Input, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
 import { TargetModal } from './world-modal.tsx';
 
 /**
@@ -142,7 +142,7 @@ export function World() {
                     <Td className="hidden max-w-[8rem] truncate text-muted sm:table-cell">
                       {c?.alliance ?? '—'}
                     </Td>
-                    <Td className="tnum text-center text-muted">{c ? c.rank : '—'}</Td>
+                    <Td className="tnum text-center text-muted">{c?.rank ?? '—'}</Td>
                     <Td className="hidden sm:table-cell">
                       <span className="flex items-center justify-center gap-1">
                         {shortcuts.map((s) => (
@@ -174,24 +174,5 @@ export function World() {
         />
       ) : null}
     </div>
-  );
-}
-
-function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <th className={`display px-2 py-1.5 text-left text-[11px] font-semibold tracking-wide uppercase ${className}`}>
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-2 py-1 text-[13px] leading-tight ${className}`}>{children}</td>;
-}
-
-/** İskelet çubuğu — nabız animasyonu "veri geliyor" der, boş satır "veri yok" derdi. */
-function Skeleton({ w }: { w: string }) {
-  return (
-    <span className="block h-3 animate-pulse rounded bg-raised" style={{ width: w, maxWidth: '100%' }} />
   );
 }

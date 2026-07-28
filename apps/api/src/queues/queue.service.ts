@@ -19,6 +19,7 @@ import { CapacityService } from '../cities/capacity.service.ts';
 import { openUnitQueueCount, promoteNext, rescheduleUnitChain } from './unit-queue.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
+import { creditSpend, debitRefund } from '../scoring/score.service.ts';
 
 export type QueueCategory = 'building' | 'unit' | 'defense' | 'tech';
 
@@ -104,7 +105,7 @@ export class QueueService {
       }
 
       const cost = buildingCost(opts.type, target);
-      await this.spend(tx as never, opts.cityId, cost, opts.at);
+      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
       const seconds = buildingTimeSeconds(opts.type, target, st.buildings['architect_school'] ?? 0);
       return this.insert(tx as never, {
@@ -145,7 +146,7 @@ export class QueueService {
       }
 
       const cost = { gold: def.gold * opts.count, food: def.food * opts.count };
-      await this.spend(tx as never, opts.cityId, cost, opts.at);
+      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
       const perUnit = trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 0);
       // Sıra: ilk emir hemen başlar, sonrakiler bekler. `position` 1 = üretimi süren.
@@ -223,7 +224,7 @@ export class QueueService {
         seconds = trainingTimeSeconds(opts.type, st.buildings['architect_school'] ?? 0) * count;
       }
 
-      await this.spend(tx as never, opts.cityId, cost, opts.at);
+      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
       return this.insert(tx as never, {
         ...st, cityId: opts.cityId, category: 'defense', itemType: opts.type,
         targetLevel, count, cost, seconds, at: opts.at,
@@ -258,7 +259,7 @@ export class QueueService {
       }
 
       const cost = techCost(opts.type, target);
-      await this.spend(tx as never, opts.cityId, cost, opts.at);
+      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
       // Süre O ŞEHRİN akademisine bağlı (§13.9: a[187]="w" hangi şehir)
       const seconds = techTimeSeconds(opts.type, target, st.buildings['academy'] ?? 0);
@@ -325,7 +326,14 @@ export class QueueService {
     }
   }
 
-  private async spend(tx: Db, cityId: number, cost: { gold: number; food: number }, at: Date): Promise<void> {
+  /**
+   * Kaynağı düşer ve **puanı aynı transaction'da işler** (doküman: harcanan her 1000 birim
+   * kaynak 1 puan). Puanı burada yazmak şart: harcamanın tek geçtiği yer burası, başka bir
+   * noktaya koysak yeni bir kalem türü eklendiğinde puan sessizce yazılmadan kalırdı.
+   */
+  private async spend(
+    tx: Db, cityId: number, playerId: number, cost: { gold: number; food: number }, at: Date,
+  ): Promise<void> {
     const ok = await this.cities.trySpend(cityId, cost, at, tx as never);
     if (!ok) {
       throw new QueueError(
@@ -334,6 +342,7 @@ export class QueueService {
         cost,
       );
     }
+    await creditSpend(tx as never, playerId, cost);
   }
 
   /** Kuyruk satırı + bitiş görevi — AYNI transaction (yarım iş olamaz). */
@@ -503,6 +512,12 @@ export class QueueService {
       }
       if (refunded.gold > 0 || refunded.food > 0) {
         await this.cities.add(cityId, refunded, opts.at, tx as never);
+        /**
+         * ⭐ İADE EDİLEN KAYNAK HARCANMIŞ SAYILMAZ → puan tabanından geri alınır.
+         * Bu satır olmadan "sipariş ver, hemen iptal et" döngüsü kaynak harcamadan puan basardı:
+         * sipariş harcamayı puana yazar, iptal kaynağı geri verir, kasa hiç azalmaz.
+         */
+        await debitRefund(tx as never, opts.playerId, refunded);
       }
       return { refunded, rule, progress };
     });

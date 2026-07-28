@@ -13,6 +13,7 @@ import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
+import { createRankingSnapshotHandler, ensureRankingSchedule } from '../ranking/ranking.handler.ts';
 import { eventForOutbox, type RealtimeBus } from '../realtime/realtime.bus.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 
@@ -44,7 +45,9 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
    *   sırada: Faz 4 (hero_revive, vacation_end, abuse_scan)
    */
   const cities = new CityService(db);
-  const registry = new HandlerRegistry().register('echo', echoHandler);
+  const registry = new HandlerRegistry()
+    .register('echo', echoHandler)
+    .register('ranking_snapshot', createRankingSnapshotHandler());
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
   for (const [type, handler] of Object.entries(missionHandlers(cities))) registry.register(type, handler);
@@ -85,6 +88,15 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
     start() {
       scheduler.start();
       dispatcher.start();
+      /**
+       * ⭐ Sıralama zinciri açılışta garanti edilir. Bilerek **ateşle-unut**: veritabanı bir an
+       * için erişilemezse worker yine de kalksın, görev döngüsü zaten çalışmaya devam etsin.
+       * Sonraki açılış aynı işi tekrar dener ve tekillik anahtarı kopya üretmez.
+       */
+      void ensureRankingSchedule(db, opts.worldId).catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error('[ranking] anlik goruntu zinciri kurulamadi:', err);
+      });
     },
     async stop() {
       await Promise.all([scheduler.stop(), dispatcher.stop()]);

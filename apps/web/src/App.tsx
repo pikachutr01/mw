@@ -12,7 +12,8 @@ import { Auth } from './screens/Auth.tsx';
 import { AcademyScreen, BarracksScreen, BuildingsScreen, DefenseScreen } from './screens/City.tsx';
 import { CityHub } from './screens/CityHub.tsx';
 import { Messages } from './screens/Messages.tsx';
-import { CommandScreen, HelpScreen, OptionsScreen, TempleScreen } from './screens/Placeholders.tsx';
+import { CommandScreen } from './screens/Command.tsx';
+import { HelpScreen, OptionsScreen, TempleScreen } from './screens/Placeholders.tsx';
 import { World } from './screens/World.tsx';
 
 const queryClient = new QueryClient({

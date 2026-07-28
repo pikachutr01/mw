@@ -33,16 +33,6 @@ export const TempleScreen = (): React.ReactElement => (
   ]} />
 );
 
-/** Orijinalde Genel Durum, Sıralamalar ve İttifak buranın altındaydı. */
-export const CommandScreen = (): React.ReactElement => (
-  <Soon title="Komuta Merkezi" lines={[
-    'Genel Durum — puan, sıra (7/68), sıra değişimi, ittifak sırası, teknik seviyeleri',
-    'Tüm şehirlerin tablosu: altın/yemek ve birim sayıları',
-    'Sıralamalar — Oyuncu · İttifak · Kahraman (günde 3 kez: 00:00, 08:00, 16:00)',
-    'İttifak — üyeler, puan, sıra, rütbe, çevrimiçi durumu',
-  ]} />
-);
-
 export const HelpScreen = (): React.ReactElement => (
   <Soon title="Yardım" lines={[
     'Oyun kuralları ve ekran açıklamaları',

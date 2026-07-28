@@ -191,8 +191,8 @@ export interface WorldSlot {
     score: number;
     isCapital: boolean;
     isOwn: boolean;
-    /** Dünya sırası — canlı değil, son güncellemeden (§13.16). */
-    rank: number;
+    /** Dünya sırası — canlı değil, son anlık görüntüden (§13.16). Hiç alınmadıysa `null`. */
+    rank: number | null;
     /** İttifak adı — şema henüz yok, daima `null`. */
     alliance: string | null;
     protection: 'beginner' | 'vacation' | null;
@@ -258,6 +258,109 @@ export const useWorld = (k: number, d: number): UseQueryResult<{ slots: WorldSlo
   queryKey: ['world', k, d],
   queryFn: () => get<{ slots: WorldSlot[] }>(`/api/v1/world/${k}/${d}`),
   refetchInterval: 30_000,
+});
+
+/* ── Komuta Merkezi ────────────────────────────────────────────────────────── */
+
+export interface NamedType {
+  id: string;
+  name: string;
+}
+
+export interface OverviewCity {
+  id: number;
+  name: string;
+  coordinates: Coords;
+  isCapital: boolean;
+  resources: { gold: number; food: number };
+  production: { goldPerHour: number; foodPerHour: number };
+  buildings: Record<string, number>;
+  units: Record<string, number>;
+  defenses: Record<string, number>;
+}
+
+export interface Overview {
+  player: {
+    username: string;
+    score: number;
+    /** Bir sonraki puana kalan kaynak (1.000 kaynak = 1 puan). */
+    toNextPoint: number;
+    rank: number | null;
+    prevRank: number | null;
+    /** Pozitif = yukarı çıktı. Önceki anlık görüntü yoksa `null`. */
+    rankChange: number | null;
+    totalPlayers: number;
+    alliance: string | null;
+    allianceRank: number | null;
+    allianceRankChange: number | null;
+  };
+  ranking: { takenAt: string | null; nextAt: string };
+  techs: { id: string; name: string; level: number }[];
+  unitTypes: NamedType[];
+  defenseTypes: NamedType[];
+  cities: OverviewCity[];
+  totals: {
+    gold: number; food: number;
+    units: Record<string, number>;
+    defenses: Record<string, number>;
+  };
+  gameNow: string;
+  serverNow: string;
+}
+
+export type RankingKind = 'player' | 'alliance' | 'hero';
+
+export interface RankingRow {
+  rank: number;
+  prevRank: number | null;
+  change: number | null;
+  id: number;
+  name: string;
+  isMine: boolean;
+  /** Oyuncu sekmesi. */
+  score?: number;
+  cities?: number;
+  alliance?: string | null;
+  /** Kahraman sekmesi. */
+  owner?: string;
+  level?: number;
+  xp?: number;
+  dead?: boolean;
+}
+
+export interface RankingPage {
+  kind: RankingKind;
+  page: number;
+  pages: number;
+  pageSize: number;
+  total: number;
+  myRank: number | null;
+  myPage: number | null;
+  takenAt: string | null;
+  nextAt: string;
+  /** Dolu ise liste yerine bu sebep gösterilir (ör. ittifaklar henüz açılmadı). */
+  unavailable: string | null;
+  rows: RankingRow[];
+}
+
+/**
+ * Genel Durum. Yoklama aralığı 30 sn: kaynak burada **karar** için değil **döküm** için
+ * gösteriliyor; Şehir ekranındaki 5 saniyelik canlı sayaç bu tabloda gereksiz yük olurdu.
+ */
+export const useOverview = (): UseQueryResult<Overview> => useQuery({
+  queryKey: ['overview'],
+  queryFn: () => get<Overview>('/api/v1/command/overview'),
+  refetchInterval: 30_000,
+});
+
+/**
+ * Sıralama sayfası. ⚠️ Sıra günde 3 kez donuyor → yoklamaya gerek yok; `staleTime` uzun tutuldu,
+ * sayfa değiştirmek dışında yeniden istek atılmaz.
+ */
+export const useRankings = (kind: RankingKind, page: number): UseQueryResult<RankingPage> => useQuery({
+  queryKey: ['rankings', kind, page],
+  queryFn: () => get<RankingPage>(`/api/v1/command/rankings?kind=${kind}&page=${page}`),
+  staleTime: 5 * 60_000,
 });
 
 /**

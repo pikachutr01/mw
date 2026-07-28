@@ -171,6 +171,34 @@ export function CatalogIcon({
   );
 }
 
+/* ── Tablo başlığı/hücresi ─────────────────────────────────────────────────── */
+/**
+ * Dünya, Sıralamalar ve Genel Durum aynı tabloyu çiziyor. Bir zamanlar her ekran kendi `Th/Td`
+ * ikilisini tanımlıyordu; ikisi arasındaki 1 px'lik dolgu farkı bile sütunları farklı hizalıyordu.
+ */
+export function Th({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <th className={`display px-2 py-1.5 text-left text-[11px] font-semibold tracking-wide uppercase ${className}`}>
+      {children}
+    </th>
+  );
+}
+
+export function Td({
+  children, className = '', colSpan,
+}: { children: ReactNode; className?: string; colSpan?: number }) {
+  return (
+    <td colSpan={colSpan} className={`px-2 py-1 text-[13px] leading-tight ${className}`}>{children}</td>
+  );
+}
+
+/** İskelet çubuğu — nabız animasyonu "veri geliyor" der, boş satır "veri yok" derdi. */
+export function Skeleton({ w }: { w: string }) {
+  return (
+    <span className="block h-3 animate-pulse rounded bg-raised" style={{ width: w, maxWidth: '100%' }} />
+  );
+}
+
 type ButtonProps = {
   children: ReactNode;
   onClick?: () => void;

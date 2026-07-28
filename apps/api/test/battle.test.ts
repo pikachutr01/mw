@@ -106,6 +106,12 @@ async function unitsOf(cityId: number): Promise<Record<string, number>> {
   `);
   return Object.fromEntries(rows.map((r) => [String(r['type']), Number(r['count'])]));
 }
+async function scoreBaseOf(playerId: number): Promise<number> {
+  const rows = await h.db.execute<Record<string, unknown>>(sql`
+    SELECT score_base FROM players WHERE id = ${playerId}
+  `);
+  return Number(rows[0]!['score_base']);
+}
 async function defensesOf(cityId: number): Promise<Record<string, number>> {
   const rows = await h.db.execute<Record<string, unknown>>(sql`
     SELECT type, count FROM defenses WHERE city_id = ${cityId}
@@ -489,6 +495,51 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
     expect(defMsgs.map((x) => x['side'])).toContain('defender');
     expect(String(atkMsgs[0]!['subject'])).toMatch(/başarılı/);
     expect(String(defMsgs[0]!['subject'])).toMatch(/yağmalandı/);
+  });
+
+  /**
+   * ⭐ Doküman (GENEL DURUM): *"Ordularınızın savaştaki kayıpları … puan kaybetmenize neden
+   * olur."* Kayıp TÜR TÜR hesaplanmalı — motorun `lost` alanı yalnız toplam adettir ve onu
+   * kullanmak Ejderha ile Cüce'yi aynı bedele eşitlerdi.
+   */
+  it('⭐ savaş kaybı iki tarafın da PUANINI düşürür (kaybedilen birimin katalog bedeli kadar)', async () => {
+    // Yakın güçte iki ordu: İKİ taraf da gerçekten kayıp versin (5000'e 50'de saldıran
+    // hiç kimseyi kaybetmiyor ve testin yarısı ölçülmemiş kalıyordu).
+    await giveUnits(attackCity, 'dwarf', 5000);
+    await giveUnits(defendCity, 'dwarf', 4000);
+    // Puan tabanı savaştan bağımsız olarak doldurulur → düşüşü net ölçebilelim.
+    for (const id of [attacker, defender]) {
+      await h.db.execute(sql`
+        UPDATE players SET score = 100000, score_base = 100000000::numeric WHERE id = ${id}
+      `);
+    }
+    const before = { atk: await scoreBaseOf(attacker), def: await scoreBaseOf(defender) };
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 5000 }, at,
+    });
+    await runDue(m.missionId);
+
+    const result = (await h.db.execute<Record<string, unknown>>(sql`
+      SELECT result FROM battles WHERE world_id = ${worldId}
+    `))[0]!['result'] as {
+      attacker: { counts: Record<string, number> };
+      defender: { counts: Record<string, number> };
+    };
+
+    const dwarf = UNITS_BY_ID['dwarf']!;
+    const perUnit = dwarf.gold + dwarf.food;
+    const atkLost = 5000 - Math.trunc(result.attacker.counts['dwarf'] ?? 0);
+    const defLost = 4000 - Math.trunc(result.defender.counts['dwarf'] ?? 0);
+    const after = { atk: await scoreBaseOf(attacker), def: await scoreBaseOf(defender) };
+
+    // Kayıp motorun sonucundan okunuyor; puan düşüşü ona BİREBİR eşit olmalı.
+    expect(atkLost).toBeGreaterThan(0);
+    expect(defLost).toBeGreaterThan(0);
+    expect(before.atk - after.atk).toBe(perUnit * atkLost);
+    expect(before.def - after.def).toBe(perUnit * defLost);
   });
 
   it('⭐ ganimet savunandan SAVAŞ ANINDA düşer, saldırana DÖNÜŞ ANINDA eklenir', async () => {

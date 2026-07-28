@@ -49,22 +49,21 @@ export class WorldController {
      * ⭐ `rank` = oyuncunun dünya sırası. Doküman (DÜNYA): *"oyuncuların oyuncu adını, şehrinin
      * adını, ittifak adını ve kaçıncı sırada olduğunu görebilirsiniz"*.
      *
-     * ⚠️ Sıra **canlı hesaplanmaz** (§13.16): oyunun kendisi günde 3 kez sabitliyor. Sıralama
-     * anlık tablosu (önceki sırayı da saklayan) Komuta Merkezi turunda gelecek; şimdilik puana
-     * göre `RANK()` veriliyor — gerçek bir sayı, uydurma değil, yalnız donmuş sürümü eksik.
+     * ⚠️ Sıra **CANLI HESAPLANMAZ** (§13.16): `rankings` anlık görüntüsünden okunur — günde 3 kez
+     * donan sıra. Bir zamanlar burada `RANK() OVER (…)` vardı; doğru sayıyı veriyordu ama YANLIŞ
+     * sayıydı: Dünya ekranındaki sıra ile Sıralamalar ekranındaki sıra birbirini tutmuyordu.
+     * Anlık görüntü henüz alınmamışsa (yeni dünyanın ilk dakikaları) `null` döner ve ekran `-`
+     * yazar — tahmini bir sıra uydurmaktan iyidir.
      * ⚠️ `alliance` şeması henüz YOK → daima `null`. Sütun yerini şimdiden tutuyor.
      */
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      WITH ranked AS (
-        SELECT id, RANK() OVER (ORDER BY score DESC, id) AS rank
-          FROM players WHERE world_id = ${player.worldId}
-      )
       SELECT c.id, c.name, c.s, c.is_capital,
              p.id AS player_id, p.username, p.score, p.protected_until, p.vacation_until,
              r.rank
         FROM cities c
         JOIN players p ON p.id = c.player_id
-        JOIN ranked r ON r.id = p.id
+        LEFT JOIN rankings r
+          ON r.world_id = p.world_id AND r.kind = 'player' AND r.subject_id = p.id
        WHERE c.world_id = ${player.worldId} AND c.k = ${kk} AND c.d = ${dd}
        ORDER BY c.s
     `);
@@ -91,7 +90,7 @@ export class WorldController {
           score: Number(r['score']),
           isCapital: Boolean(r['is_capital']),
           isOwn: Number(r['player_id']) === player.playerId,
-          rank: Number(r['rank']),
+          rank: r['rank'] == null ? null : Number(r['rank']),
           alliance: null as string | null,
           // Yalnız SEBEP; bitiş zamanı verilmez (saldırıyı saniyesine planlamayı kolaylaştırırdı).
           protection: protectedUntil && protectedUntil > gameNow ? 'beginner'

@@ -15,6 +15,7 @@ import { sql } from 'drizzle-orm';
 import { LEVEL_BASED, UNITS_BY_ID, heroReviveSeconds } from '@mobiwar/catalog';
 import { calculateLoot, simulate, type LootResult, type SimulateInput, type SimulateResult } from '@mobiwar/engine';
 import type { CityService } from '../cities/city.service.ts';
+import { debitLosses } from '../scoring/score.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
 
 /**
@@ -121,6 +122,18 @@ export function createAttackHandler(cities: CityService): MissionHandler {
 
     // ── Kayıpları uygula ──────────────────────────────────────────────────────
     await applySurvivors(ctx.tx, targetCityId, result.defender.counts, defender.units);
+
+    /**
+     * ⭐ PUAN KAYBI (doküman GENEL DURUM: *"Ordularınızın savaştaki kayıpları … puan
+     * kaybetmenize neden olur"*). Motorun `lost` alanı TOPLAM adettir; puan bedeli birim
+     * türüne göre değiştiği için kayıp **tür tür** çıkarılır (öncesi − sonrası).
+     *
+     * ⚠️ Savunanın tabanla geri gelen birimleri `counts` içinde zaten duruyor → onlar
+     * kaybedilmiş sayılmaz ve puan götürmez; bu, savunma tabanının (§13.11.10) puan
+     * tarafındaki doğal karşılığı.
+     */
+    await debitLosses(ctx.tx, attackerPlayerId, perTypeLosses(attacker.units, result.attacker.counts));
+    await debitLosses(ctx.tx, defenderCity.playerId, perTypeLosses(defender.units, result.defender.counts));
 
     // ⭐ Yağma savunandan SAVAŞ ANINDA düşülür (§13.10.4): yoldaki mal kimsenin değildir,
     //    savunan geri alamaz, saldıran ancak dönüşte alır.
@@ -341,6 +354,18 @@ async function applySurvivors(
       UPDATE ${sql.raw(table)} SET count = ${left} WHERE city_id = ${cityId} AND type = ${id}
     `);
   }
+}
+
+/** Savaş öncesi/sonrası adetlerden tür tür kayıp. Artı yönde değişim (taban onarımı) sayılmaz. */
+function perTypeLosses(
+  before: Record<string, number>, after: Record<string, number>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, n] of Object.entries(before)) {
+    const lost = Math.trunc(n) - Math.max(0, Math.trunc(after[id] ?? 0));
+    if (lost > 0) out[id] = lost;
+  }
+  return out;
 }
 
 function warriorsOnly(counts: Record<string, number>): Record<string, number> {

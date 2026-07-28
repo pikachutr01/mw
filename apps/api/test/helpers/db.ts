@@ -58,6 +58,10 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
   // yoksa username/email tekilliği ikinci koşuda çakışır. (cities → players sırası önemli.)
   await h.db.execute(sql`DELETE FROM cities WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM players WHERE world_id = ${worldId}`);
+  // Sıralama anlık görüntüleri de dünya-kapsamlı: kalırsa bir sonraki koşuda ÖNCEKİ koşunun
+  // sırası "prev_rank" olarak görünür ve değişim testleri sessizce yanlış sonuç verir.
+  await h.db.execute(sql`DELETE FROM rankings WHERE world_id = ${worldId}`);
+  await h.db.execute(sql`DELETE FROM ranking_runs WHERE world_id = ${worldId}`);
 }
 
 /**

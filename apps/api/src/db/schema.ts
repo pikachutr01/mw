@@ -56,7 +56,19 @@ export const players = pgTable('players', {
   worldId: smallint('world_id').notNull().references(() => worlds.id),
   accountId: bigint('account_id', { mode: 'number' }).notNull().references(() => accounts.id),
   username: text('username').notNull(), // değiştirilemez
+  /**
+   * ⭐ PUAN — oyunun KENDİ dokümanından (GENEL DURUM): *"Puanlama, harcadığınız kaynak miktarına
+   * göre yapılır. Harcanmış her 1000 birim kaynağa karşılık 1 puan alırsınız. Ordularınızın
+   * savaştaki kayıpları ise aynı oranda puan kaybetmenize neden olur."*
+   *
+   * `score` gösterilen tam sayı, `scoreBase` ise onu üreten **net harcanan kaynak** (altın+yemek).
+   * İkisi birlikte tutuluyor çünkü tek başına `score` KAYIPLI olurdu: 900 birimlik bir harcama
+   * 0 puan yazar, ikincisi de 0 yazar — oyuncu 1.800 birim harcayıp 1 puan alamazdı. Kesirli
+   * tabanı saklayıp `score = floor(base/1000)` türetmek bu sızıntıyı kapatır (kaynak birikimindeki
+   * `numeric(20,6)` kararının aynısı).
+   */
   score: bigint('score', { mode: 'number' }).notNull().default(0),
+  scoreBase: numeric('score_base', { precision: 24, scale: 6 }).notNull().default('0'),
   isPremium: boolean('is_premium').notNull().default(false),
   protectedUntil: timestamp('protected_until', { withTimezone: true }),
   vacationUntil: timestamp('vacation_until', { withTimezone: true }),
@@ -390,6 +402,42 @@ export const missionHeroes = pgTable('mission_heroes', {
   // ⭐ Bir kahraman aynı anda YALNIZ BİR seferde olabilir; kısıtı sorgu değil indeks korur.
   uniqueIndex('mission_heroes_hero').on(t.heroId),
 ]);
+
+/* ═══ SIRALAMA (Komuta Merkezi → Sıralamalar) ═══════════════════════════════
+ * ⭐ SIRA CANLI HESAPLANMAZ. Oyun sırayı günde **3 kez** (00:00 · 08:00 · 16:00 oyun saati)
+ * dondurur; ekranda görünen "7/68 ▲2" ifadesindeki **değişim** ancak bir ÖNCEKİ donmuş sıra
+ * saklanırsa hesaplanabilir. Bu yüzden tablo hem `rank` hem `prev_rank` taşır — türetilemez,
+ * geçmiş veridir: anlık görüntü alınmadan kaydedilmezse bir daha geri getirilemez.
+ *
+ * `kind` çoklu sıralamayı tek tabloda tutar (`player` · `alliance` · `hero`) — üçü de aynı
+ * "sırala, öncekini kaydır" işleminden geçtiği için ayrı tablo aynı kodu üç kez yazdırırdı.
+ * `subject_id` bu yüzden FK DEĞİL: işaret ettiği tablo `kind`'a göre değişir.
+ */
+export const rankings = pgTable('rankings', {
+  worldId: smallint('world_id').notNull(),
+  /** player | alliance | hero */
+  kind: text('kind').notNull(),
+  subjectId: bigint('subject_id', { mode: 'number' }).notNull(),
+  rank: integer('rank').notNull(),
+  /** Bir önceki anlık görüntüdeki sıra. NULL = listeye ilk kez girdi. */
+  prevRank: integer('prev_rank'),
+  /** Sıralamayı belirleyen sayı: oyuncuda puan, kahramanda seviye×1e9+tecrübe. */
+  score: bigint('score', { mode: 'number' }).notNull().default(0),
+  takenAt: timestamp('taken_at', { withTimezone: true }).notNull(),
+}, (t) => [
+  uniqueIndex('rankings_pk').on(t.worldId, t.kind, t.subjectId),
+  index('rankings_order').on(t.worldId, t.kind, t.rank),
+]);
+
+/** Anlık görüntünün ne zaman alındığı — ekranda "son güncelleme" ve "sıradaki" bundan yazılır. */
+export const rankingRuns = pgTable('ranking_runs', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull(),
+  /** OYUN saatinde — bakımda duran saat sıralama takvimini de kaydırır. */
+  takenAt: timestamp('taken_at', { withTimezone: true }).notNull(),
+  entries: integer('entries').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('ranking_runs_world_taken').on(t.worldId, t.takenAt)]);
 
 /* ═══ SAVAŞ KAYDI (§5 determinizm + §13.10) ═════════════════════════════════
  * ⭐ Savaş **yeniden oynatılabilir** olmak zorundadır: `rng_seed` + `engine_version` +

@@ -128,6 +128,21 @@ async function main() {
   const msgs = await call('GET', '/api/v1/messages', { token: A });
   ok(typeof msgs.body?.unread === 'number', 'okunmamış sayacı var', msgs.body);
 
+  console.log('\n11. Komuta Merkezi');
+  const ov = await call('GET', '/api/v1/command/overview', { token: A });
+  ok(typeof ov.body?.player?.score === 'number', 'genel durum puan döndürüyor', ov.body);
+  ok(Array.isArray(ov.body?.cities) && ov.body.cities.length > 0, 'şehir tablosu dolu', ov.body);
+  ok(Array.isArray(ov.body?.techs) && ov.body.techs[0]?.name, 'teknik adları TÜRKÇE geliyor', ov.body?.techs?.[0]);
+  // ⭐ Puan harcamayla yazılıyor: 7. adımda Çiftlik yükseltmesi yapıldı (sonra iptal edildi),
+  //    yani taban artmış olmalı. Sıfır dönerse puanlama hattı kopmuş demektir.
+  ok(ov.body?.player?.toNextPoint <= 1000, 'sonraki puana kalan kaynak hesaplanıyor', ov.body?.player);
+
+  const rank = await call('GET', '/api/v1/command/rankings?kind=player', { token: A });
+  ok(Array.isArray(rank.body?.rows), 'oyuncu sıralaması listeleniyor', rank.body);
+  ok(rank.body?.nextAt?.endsWith(':00:00.000Z'), 'sıradaki anlık görüntü tam saatte', rank.body?.nextAt);
+  const ally = await call('GET', '/api/v1/command/rankings?kind=alliance', { token: A });
+  ok(typeof ally.body?.unavailable === 'string', 'ittifak sekmesi sebebiyle kapalı', ally.body);
+
   console.log(`\n${failures === 0 ? '✅ Duman testi TEMİZ' : `❌ ${failures} kontrol başarısız`}\n`);
   process.exit(failures === 0 ? 0 : 1);
 }
