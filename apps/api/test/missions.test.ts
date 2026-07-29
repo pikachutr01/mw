@@ -312,6 +312,84 @@ describe('casusluk', () => {
       target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 5, dwarf: 5 }, at,
     })).rejects.toThrow(/yalnız Casus Kuş/i);
   });
+
+  /**
+   * ⭐ KESİŞİM MODELİ (kullanıcı tasarımı, 2026-07-30): rakip kuşlar VURMAZ, ENGELLER.
+   * Eşit casuslukta rakipte gönderilen kadar kuş varsa hiçbir bilgi sızmaz — ve kimse ölmez.
+   */
+  it('⭐ TAM BLOK: rakipte eşit sayıda casus kuş → bilgi yok, ölü yok, kuşlar döner', async () => {
+    await giveUnits(home, 'spy_bird', 50);
+    await giveUnits(enemy, 'spy_bird', 50);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 50 }, at,
+    });
+    await runDue(m.missionId);
+
+    const gonderen = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    expect(gonderen['level']).toBeNull();              // bilgi SIZMADI
+    expect(gonderen['intel']).toBeNull();
+    expect(gonderen['birdsLost']).toBe(0);             // kuş kuşu vurmaz
+    expect(gonderen['birdsBlocked']).toBe(50);
+
+    const ret = await openReturn();
+    expect(ret).not.toBeNull();                        // engellenen kuşlar eve döner
+    const [mu] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count FROM mission_units WHERE mission_id = ${ret!.id} AND unit_type = 'spy_bird'
+    `);
+    expect(Number(mu!['count'])).toBe(50);
+  });
+
+  it('⭐ kule kapasitesi: eşiğin altı TAMAMEN vurulur, üstü sızar (256/300 mantığı)', async () => {
+    await giveDefenses(enemy, 'archer_tower', 30);     // eşit casuslukta K_vur = 30
+    await giveUnits(home, 'spy_bird', 61);
+    const at = await clock.gameNow(worldId);
+
+    // 30 kuş → hepsi vurulur, dönüş görevi bile yok.
+    const m1 = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 30 }, at,
+    });
+    await runDue(m1.missionId);
+    expect(await openReturn()).toBeNull();
+
+    // 31 kuş → 30 vurulur, 1 kuş bilgiyi getirir.
+    const m2 = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 31 }, at,
+    });
+    await runDue(m2.missionId);
+    const raporlar = (await messagesOf(me)).filter((x) => x['kind'] === 'spy_report');
+    const son = raporlar[raporlar.length - 1]!['body'] as Record<string, unknown>;
+    expect(son['birdsLost']).toBe(30);
+    expect(son['level']).not.toBeNull();
+    expect(son['intel']).not.toBeNull();
+  });
+
+  /** ⭐ Savunan HER casuslukta "Casusluk Önleme Raporu" alır (kullanıcı, 2026-07-30). */
+  it('⭐ savunan kuş vurulmasa bile Casusluk Önleme Raporu alır — sızan kademe yazılı', async () => {
+    await giveUnits(home, 'spy_bird', 8);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 8 }, at,
+    });
+    await runDue(m.missionId);
+
+    // Savunmasız şehir: hiç kuş vurulmadı ama rapor YİNE düştü.
+    const savunan = (await messagesOf(rival)).find((x) => x['kind'] === 'spy_report');
+    expect(savunan).toBeDefined();
+    expect(savunan!['subject']).toBe('Casusluk Önleme Raporu');
+    const body = savunan!['body'] as Record<string, unknown>;
+    expect(body['birdsSent']).toBe(8);
+    expect(body['birdsShot']).toBe(0);
+    expect(body['leakedLevel']).not.toBeNull();        // rakibin NE aldığını görür
+
+    // ⭐ Rapor çözüm ANINDA yazıldı — dönüş görevi hâlâ açıkken.
+    const ret = await openReturn();
+    expect(ret).not.toBeNull();
+  });
 });
 
 /* ═══ ŞEHİR KURMA ══════════════════════════════════════════════════════════ */

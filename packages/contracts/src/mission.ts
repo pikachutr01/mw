@@ -53,6 +53,8 @@ export const lootBreakdown = z.object({
   fromPlunder: resources,
   leftoverDebrisToDefender: resources,
   plunderNotCarried: resources,
-  effectivePlunderRate: z.number().nonnegative(),
+  // Eski kayıtlar tek oran taşır, yeniler kaynak başına ayrı oran (2026-07-30 havuz modeli).
+  effectivePlunderRate: z.number().nonnegative().optional(),
+  effectiveRates: z.object({ gold: z.number().nonnegative(), food: z.number().nonnegative() }).optional(),
 });
 export type LootBreakdown = z.infer<typeof lootBreakdown>;

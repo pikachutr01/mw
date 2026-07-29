@@ -170,6 +170,12 @@ export class CityController {
        * her açılışta ikinci bir gidiş-dönüş yapardı.
        */
       cave: caveResponse(await this.cave.state(cityId, gameNow)),
+      /**
+       * ⭐ SUR ONARIMI (§13.21.2, kullanıcı 2026-07-30): Savunma ekranı Sur satırında geri
+       * sayım + progress bar çizer, yükseltme butonu onarım boyunca kilitlenir. `integrity`
+       * onarım BAŞLARKENki oran — o anki değer istemcide `wallCurrentIntegrity` ile türetilir.
+       */
+      wallRepair: await this.wallRepair(cityId, gameNow),
       serverNow: new Date().toISOString(),
       gameNow: gameNow.toISOString(),
     };
@@ -397,6 +403,24 @@ export class CityController {
     } catch (err) {
       throw toHttp(err);
     }
+  }
+
+  /** Sur onarımı sürüyorsa penceresi; sürmüyorsa null (bitmişse bütünlük 1 sayılır). */
+  private async wallRepair(cityId: number, at: Date): Promise<Record<string, unknown> | null> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT wall_integrity, wall_repair_from, wall_repair_until FROM cities WHERE id = ${cityId}
+    `);
+    const until = rows[0]?.['wall_repair_until'];
+    if (until == null) return null;
+    const untilDate = toDate(until);
+    if (untilDate <= at) return null;
+    const from = rows[0]?.['wall_repair_from'];
+    return {
+      /** Onarım BAŞLARKENki bütünlük (0-1) — o anki değeri istemci türetir. */
+      integrity: Number(rows[0]?.['wall_integrity'] ?? 1),
+      from: from == null ? null : toDate(from).toISOString(),
+      until: untilDate.toISOString(),
+    };
   }
 
   /** Oyuncunun TÜM şehirlerindeki açık teknik araştırmaları (Akademiler ortak). */

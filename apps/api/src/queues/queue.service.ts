@@ -47,7 +47,9 @@ export type QueueErrorCode =
   | 'invalid_count'
   | 'queue_busy'
   /** Sur tamamen yıkık ve onarımı sürüyor → savunma birimi üretilemez (§13.21.2). */
-  | 'wall_destroyed';
+  | 'wall_destroyed'
+  /** Sur onarımdayken (kısmi hasar dahil) seviye yükseltilemez (kullanıcı, 2026-07-30). */
+  | 'wall_repairing';
 
 export interface QueueItem {
   id: number;
@@ -218,6 +220,12 @@ export class QueueService {
        */
       if (levelBased) {
         await this.assertNoOpenStructureQueue(tx as never, opts.cityId);
+        /**
+         * ⭐ ONARIMDAKİ SUR YÜKSELTİLEMEZ (kullanıcı kararı, 2026-07-30): tamirat — kısmi
+         * hasar dahil — bitmeden Sur seviyesi artırılamaz. Büyü Kalkanı etkilenmez; onarım
+         * zaten iptal edilemez (kuyruk kaydı yok, süre kendiliğinden dolar).
+         */
+        if (opts.type === 'wall') await this.assertWallNotRepairing(tx as never, opts.cityId, opts.at);
       } else {
         /**
          * ⭐ SUR TAM YIKILDIYSA SAVUNMA BİRİMİ ÜRETİLEMEZ (kullanıcı kararı, 2026-07-29).
@@ -359,6 +367,22 @@ export class QueueService {
     throw new QueueError(
       'wall_destroyed',
       'Sur tamamen yıkıldı — onarımı bitene kadar savunma birimi üretilemez.',
+      { repairUntil: untilDate.toISOString() },
+    );
+  }
+
+  /** Sur onarımı sürüyorsa (kısmi hasar dahil) SEVİYE yükseltmesini reddeder. */
+  private async assertWallNotRepairing(tx: Db, cityId: number, at: Date): Promise<void> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT wall_repair_until FROM cities WHERE id = ${cityId}
+    `);
+    const until = rows[0]?.['wall_repair_until'];
+    if (until == null) return;
+    const untilDate = until instanceof Date ? until : new Date(String(until));
+    if (untilDate <= at) return;
+    throw new QueueError(
+      'wall_repairing',
+      'Sur onarımdayken seviyesi artırılamaz — tamiratın bitmesini bekleyin.',
       { repairUntil: untilDate.toISOString() },
     );
   }

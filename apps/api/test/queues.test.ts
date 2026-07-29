@@ -694,9 +694,25 @@ describe('yıkık sur savunma üretimini kilitler', () => {
       .resolves.toBeTruthy();
   });
 
-  it('Sur yükseltmesi yıkıkken de yapılabilir — onarımın önü kesilmez', async () => {
+  /**
+   * ⭐ TERSİNE DÖNDÜ (kullanıcı, 2026-07-30): "tamirat sırasında sur seviyesi artırılamaz."
+   * Önceki kural yükseltmeye izin veriyordu; artık onarım — KISMİ hasar dahil — bitmeden
+   * Sur seviyesi yükseltilemez. Büyü Kalkanı etkilenmez.
+   */
+  it('onarımdaki Sur YÜKSELTİLEMEZ (kısmi hasarda bile)', async () => {
     const at = await clock.gameNow(worldId);
     await setWall(0, 120);
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at }))
+      .rejects.toMatchObject({ code: 'wall_repairing' });
+
+    await setWall(0.6, 120);   // kısmi hasar: birim üretimi serbest ama yükseltme yine kilitli
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at }))
+      .rejects.toMatchObject({ code: 'wall_repairing' });
+  });
+
+  it('onarım bitince Sur yükseltmesi tekrar açılır', async () => {
+    const at = await clock.gameNow(worldId);
+    await setWall(0.6, -5);    // bitiş geçmişte → onarım tamam sayılır
     await expect(queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at }))
       .resolves.toBeTruthy();
   });

@@ -71,7 +71,13 @@ interface BattleResultShape {
     fromDebris: { gold: number; food: number };
     fromPlunder: { gold: number; food: number };
     leftoverDebrisToDefender: { gold: number; food: number };
-    effectivePlunderRate: number;
+    effectivePlunderRate?: number;
+    effectiveRates?: { gold: number; food: number };
+  };
+  /** ⭐ Sur tam yıkılınca iptal edilen savunma üretimi + iadesi (2026-07-30). Eski savaşlarda YOK. */
+  wallProduction?: {
+    canceled: { type: string; left: number }[];
+    refunded: { gold: number; food: number };
   };
   /** ⭐ Mağara sonucu (§13.20.3). Eski savaşlarda YOK → alan opsiyonel. */
   cave?: {
@@ -153,7 +159,24 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
   }
 
   if (r.defender.wallIntegrity != null && r.defender.wallIntegrity < 1) {
-    notes.push(`Sur bütünlüğü %${Math.round(r.defender.wallIntegrity * 100)}'e düştü.`);
+    notes.push(r.defender.wallIntegrity <= 0
+      ? 'SUR TAMAMEN YIKILDI — onarımı bitene kadar savunma birimi üretilemez.'
+      : `Sur bütünlüğü %${Math.round(r.defender.wallIntegrity * 100)}'e düştü.`);
+  }
+
+  /**
+   * ⭐ İptal edilen savunma üretimi + iade YALNIZ SAVUNANA görünür (kullanıcı kararı,
+   * 2026-07-30): rakibin ne üretmekte olduğu casusluk gerektiren bir bilgidir, savaş raporu
+   * onu bedava vermemeli.
+   */
+  if (side === 'defender' && r.wallProduction && r.wallProduction.canceled.length > 0) {
+    const kalemler = r.wallProduction.canceled
+      .map((c) => `${nameOf(c.type)} ×${c.left}`).join(', ');
+    const iade = r.wallProduction.refunded;
+    notes.push(
+      `Sur yıkıldığı için savunma üretimi iptal edildi: ${kalemler}. `
+      + `İade (her emirde 1 ünite eksik): ${tr(iade.gold)} altın, ${tr(iade.food)} yemek.`,
+    );
   }
 
   const heroesDead = (side === 'attacker' ? r.attacker : r.defender).heroes.filter((h) => !h.alive);

@@ -472,6 +472,92 @@ export function spyEffectiveDiff(myEspionage: number, birds: number, theirEspion
   return Math.max(0, myEspionage) + bonus - Math.max(0, theirEspionage);
 }
 
+/* ═══ CASUSLUK KESİŞİMİ (kullanıcı tasarımı + sweep kalibrasyonu, 2026-07-30) ═══
+ *
+ * İki ayrı kapasite; ikisi de casusluk seviye FARKIYLA üstel ölçeklenir — en büyük çarpan
+ * bilinçli olarak seviye farkı (kullanıcı: "buradaki en büyük çarpan casusluk seviyesi farkı").
+ *
+ *   espK   = 2^clamp(rakipEsp − benimEsp, −6, +6)
+ *   K_vur  = (kule×wKule + elf×wElf) × espK      ← doküman: yalnız Kule + Elf VURUR
+ *   K_engel= rakipKuş × wKuş × espK              ← rakip kuşlar VURMAZ, ENGELLER (jam)
+ *   ölen   = min(gönderilen, round(K_vur))        (vurma yalnız kule/elf VARSA)
+ *   bilgi  = max(0, gönderilen − ölen − round(K_engel))
+ *
+ * `2^fark` tabanı bilerek: bilgi kademesi tarafındaki `log2(kuş)` ile AYNI eksen — +1 casusluk
+ * seviyesi tam olarak "kuşları ikiye katlamak" demektir, iki denklem tek cetvelde okunur.
+ * Deterministiktir (jitter yok): kullanıcının örneği de deterministik — savunma öyle bir
+ * değerdedir ki 256 kuşun tamamını vururken 300 kuştan 280'ini vurur, kalan 20 bilgiyi getirir.
+ *
+ * Ağırlıklar maliyet-temelli, sweep ile doğrulandı (`scripts/spy-balance.mjs`):
+ *   kuş 100+200=300 · kule 300+450=750 · elf 450+650=1100 kaynak. Engelleme başına maliyet:
+ *   kuş 300 (bire bir, en verimli — tek işi bu) < kule 750 (çift görevli savunma yapısı)
+ *   < elf 5.500 (savaşçı; anti-hava YAN görevi, wElf=0,2). Böylece "hatrı sayılır elf/kule/kuş"
+ *   gerçek bir engel ama adanmış sayaç her zaman kuş.
+ */
+export const SPY_CONSTANTS = {
+  /** Rakip casus kuşu başına ENGELLEME (jam) kapasitesi — bire bir, tam blok kuralının temeli. */
+  wBird: 1.0,
+  /** Okçu Kulesi başına VURMA kapasitesi. */
+  wTower: 1.0,
+  /** Elf başına VURMA kapasitesi — savaşçının yan görevi, kasıtlı düşük. */
+  wElf: 0.2,
+  /** Seviye farkı üssü tabanı (2 = her seviye ikiye katlar) ve kırpma sınırı (±6 → en çok 64×). */
+  espBase: 2,
+  espClamp: 6,
+} as const;
+
+export interface SpyInterceptionInput {
+  /** Gönderilen casus kuş sayısı. */
+  birds: number;
+  /** Saldıranın casusluk tekniği seviyesi. */
+  myEspionage: number;
+  /** Savunanın casusluk tekniği seviyesi. */
+  theirEspionage: number;
+  /** Savunan şehirdeki Okçu Kulesi adedi. */
+  towers: number;
+  /** Savunan şehirdeki Elf adedi. */
+  elves: number;
+  /** Savunan şehirdeki Casus Kuş adedi (vurmaz, ENGELLER). */
+  defenderBirds: number;
+}
+
+export interface SpyInterceptionResult {
+  /** Kule/Elf tarafından vurulan (ölen) kuşlar. */
+  killed: number;
+  /** Rakip kuşlarca engellenen kuşlar — ölmez, eve döner ama bilgi getiremez. */
+  blocked: number;
+  /** Bilgiyi getiren kuşlar: ≥1 ise casusluk raporu yazılır. */
+  infoBirds: number;
+  /** Eve dönen kuşlar (engellenenler dahil, ölenler hariç). */
+  survivors: number;
+}
+
+export function spyInterception(o: SpyInterceptionInput): SpyInterceptionResult {
+  const birds = Math.max(0, Math.trunc(o.birds));
+  const { wBird, wTower, wElf, espBase, espClamp } = SPY_CONSTANTS;
+  const diff = Math.max(0, o.theirEspionage) - Math.max(0, o.myEspionage);
+  const espK = espBase ** Math.max(-espClamp, Math.min(espClamp, diff));
+
+  // Doküman: kuşları yalnız Kule ve Elf vurabilir — yoksa kayıp da yok.
+  const towers = Math.max(0, o.towers);
+  const elves = Math.max(0, o.elves);
+  const killCapacity = towers + elves > 0
+    ? Math.round((towers * wTower + elves * wElf) * espK) : 0;
+  const killed = Math.min(birds, killCapacity);
+
+  // Rakip kuşlar VURMAZ, ENGELLER: eşit seviyede kuş kuşa — rakipte gönderdiğin kadar kuş
+  // varsa hiçbir bilgi sızmaz ama kimse ölmez (kullanıcının "kimse kimseden alamaz" açmazı).
+  const jamCapacity = Math.round(Math.max(0, o.defenderBirds) * wBird * espK);
+  const blocked = Math.min(birds - killed, jamCapacity);
+
+  return {
+    killed,
+    blocked,
+    infoBirds: Math.max(0, birds - killed - blocked),
+    survivors: birds - killed,
+  };
+}
+
 /** Etkin farkı bilgi kademesine çevirir. `fark` kesirli olabilir → aşağı yuvarlanır. */
 export function spyLevelFor(diff: number): SpyLevel {
   const step = Math.floor(diff);

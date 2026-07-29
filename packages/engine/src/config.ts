@@ -193,12 +193,16 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   debrisRate: 0.3,
 };
 
-/** Ganimet ayarları (§13.10.4). */
+/** Ganimet ayarları (§13.10.4 — havuz + kaynak-bazlı oran modeli, 2026-07-30). */
 export interface LootConfig {
-  /** Şehir kasasından yağma oranı. */
+  /** Havuzdan (kasa + enkaz) alınan tavan oran — havuz `povertyThreshold` üstündeyken. */
   plunderRate: number;
-  /** Yoksulluk sönümlemesi eşiği: oran × min(1, kaynak/threshold). */
+  /** Bu eşiğin üstünde oran sabit `plunderRate`; altında `floorThreshold`a doğru doğrusal iner. */
   povertyThreshold: number;
+  /** Bu eşiğin altında oran sabit `minRate` — sömürünün dibi (kullanıcı: 5.000). */
+  floorThreshold: number;
+  /** Taban oran — havuz `floorThreshold` altındayken (kullanıcı: %5). */
+  minRate: number;
   jitterMin: number;
   jitterMax: number;
   /**
@@ -213,6 +217,8 @@ export interface LootConfig {
 export const DEFAULT_LOOT_CONFIG: LootConfig = {
   plunderRate: 0.4,
   povertyThreshold: 100_000,
+  floorThreshold: 5_000,
+  minRate: 0.05,
   jitterMin: 0.85,
   jitterMax: 1.15,
   condition: 'attackerWon',

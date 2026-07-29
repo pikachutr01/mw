@@ -13,7 +13,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  LEVEL_BASED, UNITS_BY_ID, caveRepairSeconds, dwarvesToBreakCave, heroReviveSeconds,
+  LEVEL_BASED, UNITS_BY_ID, cancelRefund, caveRepairSeconds, dwarvesToBreakCave, heroReviveSeconds,
   heroLevelForXp,
   wallCurrentIntegrity,
   wallRepairSeconds,
@@ -26,7 +26,7 @@ import {
 import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
 import { toDate } from '../db/client.ts';
 import type { CityService } from '../cities/city.service.ts';
-import { debitLosses } from '../scoring/score.service.ts';
+import { debitLosses, debitRefund } from '../scoring/score.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
 
 /**
@@ -226,7 +226,10 @@ export function createAttackHandler(cities: CityService): MissionHandler {
     const wallLevel = Math.max(0, Math.trunc(defender.units['wall'] ?? 0));
     const integrityAfter = result.defender.wallIntegrity;
     let wallDestroyed = false;
-    let canceledDefense: { type: string; left: number }[] = [];
+    let wallProduction: {
+      canceled: { type: string; left: number }[];
+      refunded: { gold: number; food: number };
+    } = { canceled: [], refunded: { gold: 0, food: 0 } };
     if (wallLevel > 0 && integrityAfter != null && integrityAfter < 1) {
       /* Onarım süresi HER SEFERİNDE yeni hasara göre baştan hesaplanır: sur %40'tayken ikinci
        * saldırıda %0'a inerse tam yıkılma süresinin tamamını yeniden bekler. */
@@ -241,18 +244,29 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       `);
 
       /**
-       * ⭐ SUR TAM YIKILDI (§13.21.2, kullanıcı kararı 2026-07-29).
+       * ⭐ SUR TAM YIKILDI (§13.21.2, kullanıcı kararları 2026-07-29/30).
        *
        * Savunma birimleri surda yaşar; sur çökünce üretimlerinin de anlamı kalmaz:
        *   • süren ve kuyrukta bekleyen **savunma birimi** emirleri anında iptal edilir
        *     (o ana kadar üretilmiş olanlar şehirde KALIR — `materialize` iptalden önce koşar),
+       *   • kalan birimlerin bedeli "1 ünite eksik" kuralıyla İADE edilir — ganimet
+       *     hesabından SONRA kasaya girer, bir sonraki saldırının havuzuna kalır,
        *   • onarım bitene kadar yeni savunma birimi üretilemez (`queue.service`).
-       * Sur/Büyü Kalkanı yükseltmeleri (seviye taşıyan şerit) etkilenmez: onarım zaten sur'un
-       * kendi işi, oyuncunun yükseltme hakkını elinden almak anlamsız olurdu.
+       * Sur/Büyü Kalkanı yükseltmeleri (seviye taşıyan şerit) etkilenmez.
        */
       wallDestroyed = integrityAfter <= 0;
       if (wallDestroyed) {
-        canceledDefense = await cancelDefenseBand(ctx, targetCityId, defenderCity.playerId);
+        wallProduction = await cancelDefenseBand(ctx, targetCityId, defenderCity.playerId);
+        /* Kalıcı rapor `battles.result`'tan türetilir (`buildBattleReport`); iptal/iade bilgisi
+         * savaş yazıldıktan SONRA oluştuğu için satıra burada işlenir. Rapor bunu yalnız
+         * savunan tarafına not eder. */
+        if (wallProduction.canceled.length > 0) {
+          await ctx.tx.execute(sql`
+            UPDATE battles
+               SET result = result || ${JSON.stringify({ wallProduction })}::jsonb
+             WHERE id = ${battleId}
+          `);
+        }
       }
     }
 
@@ -313,7 +327,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       capturedHero,
       heroXp: { attacker: attackerHeroes.gained, defender: defenderHeroes.gained },
       wallDestroyed,
-      canceledDefense,
+      wallProduction,
       result,
       loot,
       night,
@@ -597,18 +611,20 @@ export interface CaveBreakResult {
  */
 async function cancelDefenseBand(
   ctx: HandlerContext, cityId: number, playerId: number,
-): Promise<{ type: string; left: number }[]> {
+): Promise<{ canceled: { type: string; left: number }[]; refunded: { gold: number; food: number } }> {
   const open = await ctx.tx.execute<Record<string, unknown>>(sql`
-    SELECT id, mission_id, item_type, count, done FROM queues
+    SELECT id, mission_id, item_type, count, done, spent_gold, spent_food FROM queues
      WHERE city_id = ${cityId} AND category = 'defense' AND target_level IS NULL
        AND completed_at IS NULL AND canceled_at IS NULL
      ORDER BY position
   `);
-  if (open.length === 0) return [];
+  if (open.length === 0) return { canceled: [], refunded: { gold: 0, food: 0 } };
 
   const canceled: { type: string; left: number }[] = [];
+  const refunded = { gold: 0, food: 0 };
   for (const q of open) {
-    const left = Math.max(0, Number(q['count'] ?? 0) - Number(q['done'] ?? 0));
+    const count = Math.max(1, Number(q['count'] ?? 1));
+    const left = Math.max(0, count - Number(q['done'] ?? 0));
     canceled.push({ type: String(q['item_type']), left });
     await ctx.tx.execute(sql`
       UPDATE queues SET canceled_at = ${ctx.at.toISOString()}::timestamptz WHERE id = ${q['id']}
@@ -619,22 +635,35 @@ async function cancelDefenseBand(
          WHERE id = ${q['mission_id']} AND status IN ('scheduled', 'running')
       `);
     }
-  }
 
-  await writeMessage(ctx, {
-    playerId,
-    kind: 'defense_band_canceled',
-    side: 'defender',
-    battleId: null,
-    subject: 'Sur yıkıldı: savunma üretimi durdu',
-    body: {
-      cityId,
-      canceled,
-      note: 'Sur tamamen yıkıldığı için süren ve bekleyen savunma birimi emirleri iptal edildi. '
-        + 'Onarım bitene kadar yeni savunma birimi üretilemez.',
-    },
-  });
-  return canceled;
+    /* ⭐ İADE (kullanıcı kararı, 2026-07-30) — normal iptal mantığının birebir aynısı:
+     * her emirden ÜRETİLMEMİŞ birimlerin bedeli, **1 ünite eksik** iade edilir (oyunun kendi
+     * dokümanı: "her iptal işlemi için 1 ünitenin ücreti eksik iade edilir"). Üretilmişlerin
+     * (done) harcaması şehirde birim olarak duruyor, onlar iade dışı — `queue.service.cancel`
+     * ile aynı efektif-harcama hesabı. */
+    if (left > 0) {
+      const spent = { gold: Number(q['spent_gold']), food: Number(q['spent_food']) };
+      const effective = {
+        gold: (spent.gold / count) * left,
+        food: (spent.food / count) * left,
+      };
+      const r = cancelRefund({ rule: 'minusOneUnit', spent: effective, count: left });
+      refunded.gold += r.gold;
+      refunded.food += r.food;
+    }
+  }
+  /* İade savaş SONRASI kasaya girer: bu savaşın ganimet havuzu çoktan hesaplandı, yani rakip
+   * bu parayı bu saldırıda alamaz — ama bir SONRAKİ saldırı onu kasada bulur (kullanıcı kararı).
+   * Doğrudan UPDATE yeterli: şehir bu transaction'da savaş başında `materialize` edildi
+   * (`cities.add`in yaptığı da bundan ibaret). Skor normal iptaldeki gibi geri alınır. */
+  if (refunded.gold > 0 || refunded.food > 0) {
+    await ctx.tx.execute(sql`
+      UPDATE cities SET gold = gold + ${refunded.gold}::numeric, food = food + ${refunded.food}::numeric
+       WHERE id = ${cityId}
+    `);
+    await debitRefund(ctx.tx as never, playerId, refunded);
+  }
+  return { canceled, refunded };
 }
 
 async function resolveCaveBreak(ctx: HandlerContext, o: {
@@ -952,8 +981,11 @@ async function writeBattleReports(ctx: HandlerContext, o: {
   };
   /** ⭐ Sur TAMAMEN yıkıldı mı (bütünlük %0)? */
   wallDestroyed?: boolean;
-  /** Sur yıkıldığı için iptal edilen savunma üretim emirleri. */
-  canceledDefense?: { type: string; left: number }[];
+  /** Sur yıkıldığı için iptal edilen savunma üretimi + iadesi — YALNIZ savunan görür. */
+  wallProduction?: {
+    canceled: { type: string; left: number }[];
+    refunded: { gold: number; food: number };
+  };
 }): Promise<void> {
   const won = o.result.winner === 'attacker';
   const base = {
@@ -977,13 +1009,11 @@ async function writeBattleReports(ctx: HandlerContext, o: {
       gained: o.heroXp ?? { attacker: [], defender: [] },
     },
     /**
-     * ⭐ SUR — yalnız bütünlük değil, TAM YIKIM ayrı bir olay: savunma üretimi durur.
-     * İki taraf da görür; saldıran için bu savaşın en somut kazanımı olabilir.
+     * ⭐ SUR — tam yıkım iki tarafa da görünür (saldıran için savaşın en somut kazanımı).
+     * İptal edilen üretim + iade ise YALNIZ savunanın gövdesinde (`wallProduction`, aşağıda):
+     * rakibin ne üretmekte olduğu casusluk gerektiren bir bilgidir (kullanıcı kararı 2026-07-30).
      */
-    wall: {
-      destroyed: o.wallDestroyed ?? false,
-      canceledDefense: o.canceledDefense ?? [],
-    },
+    wall: { destroyed: o.wallDestroyed ?? false },
   };
 
   await writeMessage(ctx, {
@@ -1025,6 +1055,8 @@ async function writeBattleReports(ctx: HandlerContext, o: {
       // ⭐ Savunma tabanı raporda ayrıca gösterilir (§13.11.10): "okçu kulesi 4 … korundu".
       defenseFloorRestored: o.result.defender.floorRestored,
       wallIntegrity: o.result.defender.wallIntegrity,
+      /** ⭐ Sur yıkılınca iptal edilen üretim + "1 ünite eksik" iadesi — yalnız savunan görür. */
+      wallProduction: o.wallProduction ?? { canceled: [], refunded: { gold: 0, food: 0 } },
       lost_resources: o.loot.fromPlunder,
       debrisRecovered: o.loot.leftoverDebrisToDefender,
       // Savunan KENDİ mağarasının tam dökümünü görür: kimin kaçtığı, onarımın ne zaman biteceği.

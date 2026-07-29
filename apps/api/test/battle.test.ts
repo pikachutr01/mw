@@ -1314,17 +1314,20 @@ describe('sur yıkımı ve onarımı', () => {
     expect(girdi.defender.wallIntegrity).toBeCloseTo(0.5, 1);
   });
 
-  it('tam yıkım: savunma üretimi iptal edilir ve oyuncuya bildirilir', async () => {
+  it('tam yıkım: üretim iptal, "1 ünite eksik" iade, bilgi YALNIZ savunanın raporunda', async () => {
     await setWallLevel(1);
     await giveUnits(attackCity, 'dwarf', 6000);
     const at = await clock.gameNow(worldId);
+    const kasa0 = await resourcesOf(defendCity);
 
-    // Süren bir savunma üretimi emri: iptal edilmeli.
+    /* Süren bir savunma emri: 10 sipariş, 2'si üretilmiş → 8 kalan. Emre 3000 altın / 4500
+     * yemek harcanmış olsun (birim başına 300/450). İade: kalan 8 birimin bedelinden 1 eksik
+     * → 7 birim = 2100 altın + 3150 yemek. */
     await h.db.execute(sql`
       INSERT INTO queues (world_id, city_id, player_id, category, item_type, count, done,
-                          per_unit_seconds, position, started_at, finish_at)
+                          per_unit_seconds, position, started_at, finish_at, spent_gold, spent_food)
       VALUES (${worldId}, ${defendCity}, ${defender}, 'defense', 'archer_tower', 10, 2,
-              60, 1, now(), now() + interval '1 hour')
+              60, 1, now(), now() + interval '1 hour', 3000, 4500)
     `);
 
     const m = await missions.sendAttack({
@@ -1343,7 +1346,94 @@ describe('sur yıkımı ve onarımı', () => {
     // ⭐ O ana kadar üretilmiş 2 birim iptalden ETKİLENMEZ.
     expect(Number(q!['done'])).toBe(2);
 
+    /* ⭐ İADE (kullanıcı, 2026-07-30): normal iptal kuralının aynısı — kalan 8 birimden 1
+     * eksik iade. Kasa: başlangıç − yağma + taşınamayan enkaz + İADE. Yağma/enkaz savaşa
+     * göre değişir; iadeyi net görmek için savaş raporundaki kalemleri düşerek doğrularız. */
+    const [battle] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT result FROM battles WHERE world_id = ${worldId}
+    `);
+    const res = battle!['result'] as {
+      loot: { fromPlunder: { gold: number; food: number };
+        leftoverDebrisToDefender: { gold: number; food: number } };
+      wallProduction?: { canceled: { type: string; left: number }[];
+        refunded: { gold: number; food: number } };
+    };
+    expect(res.wallProduction).toBeDefined();
+    expect(res.wallProduction!.canceled).toEqual([{ type: 'archer_tower', left: 8 }]);
+    expect(res.wallProduction!.refunded).toEqual({ gold: 2100, food: 3150 });
+
+    const kasa1 = await resourcesOf(defendCity);
+    const beklenenAltin = kasa0.gold - res.loot.fromPlunder.gold
+      + res.loot.leftoverDebrisToDefender.gold + 2100;
+    expect(kasa1.gold).toBeCloseTo(beklenenAltin, 0);
+
+    // ⭐ Eski ayrı mesaj KALKTI: bilgi artık savaş raporunun savunan gövdesinde.
     const msgs = await messagesOf(defender);
-    expect(msgs.some((x) => x['kind'] === 'defense_band_canceled')).toBe(true);
+    expect(msgs.some((x) => x['kind'] === 'defense_band_canceled')).toBe(false);
+    const rapor = msgs.find((x) => x['kind'] === 'battle_report');
+    const body = rapor!['body'] as Record<string, unknown>;
+    expect((body['wallProduction'] as Record<string, unknown>)['refunded'])
+      .toEqual({ gold: 2100, food: 3150 });
+
+    // Saldıranın gövdesinde İPTAL BİLGİSİ YOK (yalnız yıkım bilgisi var).
+    const atkMsgs = await messagesOf(attacker);
+    const atkRapor = atkMsgs.find((x) => x['kind'] === 'battle_report');
+    const atkBody = atkRapor!['body'] as Record<string, unknown>;
+    expect(atkBody['wallProduction']).toBeUndefined();
+    expect((atkBody['wall'] as Record<string, unknown>)['destroyed']).toBe(true);
+  });
+
+  /**
+   * ⭐ ARKA ARKAYA İKİ SALDIRI (kullanıcı garantisi, 2026-07-30): ikinci ordu, ilk savaşın
+   * TÜM sonuçları (iade kasada, sur hasarlı) uygulandıktan sonra savaşır — advisory lock
+   * aynı şehre düşen görevleri serileştirir.
+   */
+  it('çifte saldırı: ikinci savaş ilkinin iadesini kasada, surunu hasarlı bulur', async () => {
+    await setWallLevel(1);
+    await giveUnits(attackCity, 'dwarf', 12_000);
+    const at = await clock.gameNow(worldId);
+    await h.db.execute(sql`
+      INSERT INTO queues (world_id, city_id, player_id, category, item_type, count, done,
+                          per_unit_seconds, position, started_at, finish_at, spent_gold, spent_food)
+      VALUES (${worldId}, ${defendCity}, ${defender}, 'defense', 'archer_tower', 10, 0,
+              60, 1, now(), now() + interval '1 hour', 3000, 4500)
+    `);
+
+    const m1 = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 6000 }, at,
+    });
+    const m2 = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 6000 }, at,
+    });
+
+    // İkisini de vadeye getir; scheduler sırayla işler (lockCity serileştirir).
+    await h.db.execute(sql`
+      UPDATE missions SET execute_at = now() - interval '1 second'
+       WHERE id IN (${m1.missionId}, ${m2.missionId})
+    `);
+    const r = await scheduler().tick();
+    expect(r.dead).toBe(0);
+
+    const battles = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, result FROM battles WHERE world_id = ${worldId} ORDER BY id
+    `);
+    expect(battles).toHaveLength(2);
+
+    const b1 = battles[0]!['result'] as { wallProduction?: unknown;
+      loot: { fromPlunder: { gold: number } } };
+    const b2 = battles[1]!['result'] as { wallProduction?: unknown };
+    // İlk savaş üretimi iptal etti; ikincide iptal edilecek emir kalmadı.
+    expect(b1.wallProduction).toBeDefined();
+    expect(b2.wallProduction).toBeUndefined();
+
+    /* İkinci savaş sur'u İLK savaşın bıraktığı hâlde (onarım payıyla) bulur: savaşa giren
+     * bütünlük 1'den KÜÇÜK olmalı — kayıtlı input bunu kanıtlar. */
+    const [b2row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT input FROM battles WHERE world_id = ${worldId} ORDER BY id OFFSET 1
+    `);
+    const girdi = b2row!['input'] as { defender: { wallIntegrity?: number } };
+    expect(girdi.defender.wallIntegrity ?? 1).toBeLessThan(1);
   });
 });

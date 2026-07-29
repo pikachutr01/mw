@@ -9,9 +9,8 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  BUILDINGS_BY_ID, maxCities, spyEffectiveDiff, spyLevelFor, UNITS_BY_ID, type SpyLevel,
+  BUILDINGS_BY_ID, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor, UNITS_BY_ID, type SpyLevel,
 } from '@mobiwar/catalog';
-import { createRng } from '@mobiwar/engine';
 import type { CityService } from '../cities/city.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
 
@@ -125,14 +124,21 @@ export function createSupportHandler(cities: CityService): MissionHandler {
 /* ═══ CASUSLUK ═════════════════════════════════════════════════════════════ */
 
 /**
- * ⭐ Bilgi kademesi `fark = benimCasusluk + log2(kuş) − rakipCasusluk` (doküman, birebir).
+ * ⭐ CASUSLUK — KESİŞİM MODELİ (kullanıcı tasarımı, 2026-07-30 · kalibrasyon: spy-balance.mjs).
  *
- * ⚠️ **Kuş kaybı yalnız savunanda Elf veya Okçu Kulesi varsa** olur (§13.11.6): doküman
- * *"Casusluk tekniğiniz zayıf ise düşmanınız sizin casus kuşlarınızı fark edebilir ve onları
- * vurabilir"* diyor; vurabilecek birim yoksa vurulma da olmaz.
+ * Bilgi kademesi doküman-birebir: `fark = benimCasusluk + log2(GÖNDERİLEN kuş) − rakipCasusluk`.
+ * Kuş kaybı/engellenmesi katalogdaki `spyInterception`dan:
+ *   • **Kule + Elf VURUR** (doküman) — kapasiteleri sayıya ve casusluk seviye farkına bağlı,
+ *   • **rakip Casus Kuşlar ENGELLER** (vurmaz): eşit seviyede kuşa kuş — kimse bilgi alamaz
+ *     ama kimse ölmez,
+ *   • her iki kapasite de `2^(seviyeFarkı)` ile ölçeklenir → en büyük çarpan seviye farkı.
  *
- * ⚠️ **Tüm kuşlar ölürse ne rapor ne dönüş görevi** oluşur — ordu yok olmuştur (saldırıdaki
- * "tam kayıpta dönüş yok" kuralının ikizi).
+ * **Raporlama (kullanıcı kararı):** iki rapor da casusluğun ÇÖZÜLDÜĞÜ anda yazılır — kuşların
+ * eve dönüşü beklenmez. Savunan HER casuslukta "Casusluk Önleme Raporu" alır: kaç kuş geldi,
+ * kaçı vuruldu/engellendi, hangi bilgi sızdı. Gönderen de aynı anda kendi raporunu alır.
+ *
+ * ⚠️ **Tüm kuşlar ölürse dönüş görevi** oluşmaz — ordu yok olmuştur (saldırıdaki "tam kayıpta
+ * dönüş yok" kuralının ikizi). Engellenen kuşlar ölmez, eve döner.
  */
 export function createSpyHandler(): MissionHandler {
   return async (ctx) => {
@@ -158,65 +164,65 @@ export function createSpyHandler(): MissionHandler {
     const diff = spyEffectiveDiff(mine, birds, theirs);
     const level = spyLevelFor(diff);
 
-    // ── Kuş kaybı ────────────────────────────────────────────────────────────
+    // ── Kesişim: savunanın kulesi/elfi VURUR, kuşları ENGELLER ────────────────
     const defense = await ctx.tx.execute<Record<string, unknown>>(sql`
       SELECT
         (SELECT COALESCE(count,0) FROM units    WHERE city_id = ${targetCityId} AND type = 'elf')          AS elf,
+        (SELECT COALESCE(count,0) FROM units    WHERE city_id = ${targetCityId} AND type = 'spy_bird')     AS birds,
         (SELECT COALESCE(count,0) FROM defenses WHERE city_id = ${targetCityId} AND type = 'archer_tower') AS tower
     `);
-    const canShoot = Number(defense[0]?.['elf'] ?? 0) > 0 || Number(defense[0]?.['tower'] ?? 0) > 0;
-    // Fark ne kadar düşükse vurulma o kadar olası; fark ≥ 2'de artık fark edilmezler.
-    const risk = canShoot ? Math.min(0.9, Math.max(0, (2 - diff) * 0.25)) : 0;
-    // ⭐ Determinizm (§5): tohum görevin kimliğidir → aynı görev yeniden oynatılırsa aynı biter.
-    const rng = createRng(`spy:${ctx.mission.id}`);
-    let lost = 0;
-    for (let i = 0; i < birds; i++) if (rng.next() < risk) lost++;
-    const survivors = birds - lost;
+    const hit = spyInterception({
+      birds,
+      myEspionage: mine,
+      theirEspionage: theirs,
+      towers: Number(defense[0]?.['tower'] ?? 0),
+      elves: Number(defense[0]?.['elf'] ?? 0),
+      defenderBirds: Number(defense[0]?.['birds'] ?? 0),
+    });
+    const gotIntel = hit.infoBirds >= 1;
 
-    if (survivors <= 0) {
-      // Hiç kuş dönmedi → bilgi yok, dönüş görevi yok. Yalnız iki tarafa haber.
-      await writeMessage(ctx, {
-        playerId: spyPlayerId, kind: 'spy_report', side: 'spy',
-        subject: 'Casus kuşların vuruldu',
-        body: { targetCityId, birdsSent: birds, birdsLost: lost, level: null, at: ctx.at.toISOString() },
-      });
-      await writeMessage(ctx, {
-        playerId: target.playerId, kind: 'spy_report', side: 'target',
-        subject: 'Casusluk girişimi engellendi',
-        body: { cityId: targetCityId, birdsShot: lost, at: ctx.at.toISOString() },
-      });
-      await ctx.audit({ action: 'mission.spy.destroyed', entity: 'city', entityId: targetCityId!, after: { birds } });
-      return;
-    }
-
-    const intel = await gatherIntel(ctx.tx, targetCityId!, target.playerId, level);
+    // ── Gönderenin raporu — çözüm ANINDA (kuşlar daha yolda) ──────────────────
+    const intel = gotIntel ? await gatherIntel(ctx.tx, targetCityId!, target.playerId, level) : null;
     await writeMessage(ctx, {
       playerId: spyPlayerId, kind: 'spy_report', side: 'spy',
-      subject: `Casusluk raporu · ${target.name}`,
+      subject: gotIntel
+        ? `Casusluk raporu · ${target.name}`
+        : (hit.survivors <= 0 ? 'Casus kuşların vuruldu' : 'Casusluk engellendi'),
       body: {
         targetCityId, targetCityName: target.name, targetPlayer: target.username,
-        birdsSent: birds, birdsLost: lost, level, diff: Math.round(diff * 100) / 100,
+        birdsSent: birds, birdsLost: hit.killed, birdsBlocked: hit.blocked,
+        level: gotIntel ? level : null, diff: Math.round(diff * 100) / 100,
         intel, at: ctx.at.toISOString(),
       },
     });
-    // Savunan yalnız vurabildiyse haberdar olur — yoksa casusluk sessizdir (§13.11.6).
-    if (lost > 0) {
-      await writeMessage(ctx, {
-        playerId: target.playerId, kind: 'spy_report', side: 'target',
-        subject: 'Şehrinde casus kuş vuruldu',
-        body: { cityId: targetCityId, birdsShot: lost, at: ctx.at.toISOString() },
+
+    /* ── ⭐ CASUSLUK ÖNLEME RAPORU — savunan HER casuslukta alır (kullanıcı, 2026-07-30).
+     * Eski kural yalnız kuş vurulduysa haber veriyordu; artık sessiz casusluk YOK: kaç kuş
+     * geldi, kaçı vuruldu/engellendi ve hangi bilginin sızdığı savunana da yazılır. */
+    await writeMessage(ctx, {
+      playerId: target.playerId, kind: 'spy_report', side: 'target',
+      subject: 'Casusluk Önleme Raporu',
+      body: {
+        cityId: targetCityId,
+        birdsSent: birds, birdsShot: hit.killed, birdsBlocked: hit.blocked,
+        /** Rakibin aldığı bilgi kademesi — sızma yoksa null. */
+        leakedLevel: gotIntel ? level : null,
+        at: ctx.at.toISOString(),
+      },
+    });
+
+    // ── Dönüş: engellenenler dahil sağ kalanlar; hepsi öldüyse dönüş yok ─────
+    if (hit.survivors > 0) {
+      await scheduleReturn(ctx, {
+        homeCityId: originCityId,
+        units: { spy_bird: hit.survivors },
+        cargo: { gold: 0, food: 0 },
+        returnOf: 'spy',
       });
     }
-
-    await scheduleReturn(ctx, {
-      homeCityId: originCityId,
-      units: { spy_bird: survivors },
-      cargo: { gold: 0, food: 0 },
-      returnOf: 'spy',
-    });
     await ctx.audit({
       action: 'mission.spy.resolved', entity: 'city', entityId: targetCityId!,
-      after: { birds, lost, level, diff },
+      after: { birds, killed: hit.killed, blocked: hit.blocked, level: gotIntel ? level : null, diff },
     });
   };
 }

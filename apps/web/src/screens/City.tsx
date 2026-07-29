@@ -14,7 +14,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { cancelRefund, caveRepairSeconds } from '@mobiwar/catalog';
+import { cancelRefund, caveRepairSeconds, wallCurrentIntegrity } from '@mobiwar/catalog';
 import { nameOf } from '../lib/names.ts';
 import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
 import {
@@ -124,6 +124,36 @@ function ProgressRow({
       <div className="h-1.5 overflow-hidden rounded-full border border-border bg-raised">
         <div className="h-full bg-accent transition-[width] duration-1000 ease-linear"
           style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ⭐ SUR ONARILIYOR satırı (§13.21.2, kullanıcı 2026-07-30).
+ *
+ * `ProgressRow`dan ayrı, çünkü buradaki yüzde ZAMANIN değil BÜTÜNLÜĞÜN yüzdesi: sur onarım
+ * başındaki orandan 1'e doğrusal yürür (`wallCurrentIntegrity`) ve savaş gelirse o anki
+ * değerle savaşır — çubuk oyuncuya tam da o savaş-değerini gösteriyor. İptal edilemez.
+ */
+function WallRepairRow({ repair }: { repair: { integrity: number; from: string | null; until: string } }) {
+  useTick();
+  const now = new Date(serverNow());
+  const current = wallCurrentIntegrity(
+    repair.integrity, repair.from ? new Date(repair.from) : null, new Date(repair.until), now,
+  );
+  return (
+    <div className="mt-1.5 border-t border-border pt-1.5">
+      <div className="mb-1 flex items-center gap-2 text-[11px]">
+        <span className="text-warning">Sur onarılıyor</span>
+        <span className="tnum font-semibold text-warning">{remaining(repair.until) ?? 'birazdan biter…'}</span>
+        <span className="min-w-0 flex-1 truncate text-muted">
+          bütünlük <b className="tnum text-ink">%{Math.round(current * 100)}</b> — saldırı gelirse bu oranla savaşır
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full border border-border bg-raised">
+        <div className="h-full bg-warning transition-[width] duration-1000 ease-linear"
+          style={{ width: `${Math.round(current * 100)}%` }} />
       </div>
     </div>
   );
@@ -581,6 +611,10 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
   const queues = all.filter((q) => q.targetLevel == null)
     .sort((a, b) => (a.position ?? 1) - (b.position ?? 1));
 
+  // Sur onarımı sürüyor mu? (sv butonu kilidi + satır içi gösterge)
+  const wallRepairing = kind === 'defense' && city.wallRepair != null
+    && Date.parse(city.wallRepair.until) > serverNow();
+
   // Emir sınırı: savaşçıda Baraka, savunma biriminde Sur (savunma birimleri surda yaşar).
   const bandLimit = Math.max(1, kind === 'unit'
     ? (city.buildings['barracks'] ?? 1)
@@ -655,7 +689,9 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   )}
                   <Button size="sm"
                     disabled={unmet || slotsFull || enqueue.isPending
-                      || (!levelBased && (n <= 0 || !afford)) || (levelBased && !afford)}
+                      || (!levelBased && (n <= 0 || !afford)) || (levelBased && !afford)
+                      /* ⭐ Onarımdaki Sur yükseltilemez (kullanıcı, 2026-07-30). */
+                      || (u.id === 'wall' && wallRepairing)}
                     onClick={() => enqueue.mutate(
                       { category: kind, type: u.id, ...(levelBased ? {} : { count: n }) },
                       // ⭐ Emir kabul edilince adet kutusu boşalır (kullanıcı, 2026-07-29):
@@ -681,6 +717,11 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   tek bant sırayla işlediği için sıralı tek liste doğru yer. Satır içi ilerleme
                   yalnız SEVİYE taşıyan Sur / Büyü Kalkanı'nda kalıyor — onlar banda girmez ve
                   birim üretimiyle paralel akar (§13.21.3). */}
+              {/* ⭐ SUR ONARIMI (§13.21.2): geri sayım + progress bar + o anki bütünlük.
+                  Onarım İPTAL EDİLEMEZ → iptal butonu yok; süre dolunca sur tam sağlam. */}
+              {u.id === 'wall' && city.wallRepair ? (
+                <WallRepairRow repair={city.wallRepair} />
+              ) : null}
               {levelBased ? structureQueues.filter((q) => q.itemType === u.id).map((q) => (
                 <ProgressRow
                   key={q.id}

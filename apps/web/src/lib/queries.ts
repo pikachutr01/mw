@@ -81,6 +81,11 @@ export interface CityDetail {
   capacity: { castle: BudgetStatus; defense: BudgetStatus };
   /** ⭐ Mağara (§13.20) — Yapılar ekranı geri sayımı ve modalı bundan çiziyor. */
   cave: CaveState;
+  /**
+   * ⭐ Sur onarımı sürüyorsa penceresi (§13.21.2). `integrity` onarım BAŞLARKENki oran;
+   * o anki değer `wallCurrentIntegrity` ile türetilir. Onarım yokken null.
+   */
+  wallRepair: { integrity: number; from: string | null; until: string } | null;
   gameNow: string;
   serverNow: string;
 }

@@ -1,13 +1,20 @@
 /**
- * ⭐ GANİMET (SİSTEM PLANI §13.10.4 — kullanıcı tanımı, 2026-07-26)
+ * ⭐ GANİMET — HAVUZ + KAYNAK-BAZLI ORAN modeli (kullanıcı tarifi, 2026-07-30).
  *
- * Saldıran KAZANDIYSA iki kaynak da işler ve SIRA önemlidir:
- *   1) ENKAZ   — ölen birliklerin maliyeti × %30 (motorun `debris` çıktısı)
- *   2) YAĞMA   — şehir kasasından, KALAN taşıma kapasitesi kadar
- *                oran = %40 × min(1, kaynak/100.000)   ← yoksulluk sönümlemesi
+ * Saldıran KAZANDIYSA:
+ *   1. **Havuz** kurulur (altın ve yemek AYRI AYRI): `havuz = şehir kasası + enkaz`.
+ *      Enkaz motorun çıktısıdır: ölen askerler + savunma birimlerinin KALICI kayıpları
+ *      (onarım %50-70 ve min-4 tabanından sonra) × maliyet × %30.
+ *   2. **Oran** kaynak başına bağımsız hesaplanır (aşağıdaki `plunderRate`) ve üstüne
+ *      şans çarpanı (jitter 0,85–1,15) biner — rastgelelik savaşın dokusunun parçası
+ *      (kullanıcı kararı: sabit yüzdeler savaşın sonucunu etkileyen değerlere DOKUNMAZ).
+ *   3. **Alınan** = `havuz × oran`, taşıma kapasitesiyle orantılı kırpılır. Kapasite yetse
+ *      bile havuzun oranından fazlası ASLA alınmaz — eski "enkazın %100'ü alınır" davranışı
+ *      bilinçli olarak kaldırıldı: rakip arka arkaya saldırarak kalan ganimeti aynı oranla
+ *      almaya devam edebilir, tek seferde süpüremez.
  *
- * Kapasite yağmanın tamamına yetmiyorsa KISMİ alınır. Taşınamayan enkaz yok olmaz → savunanın
- * şehrine eklenir; taşınamayan yağma zaten şehirde kalır.
+ * Alınan miktar kasa/enkaz bileşenlerine ORANTILI bölünür: kasa payı savaş anında savunandan
+ * düşülür, enkaz payı dönüş yüküne biner. Alınmayan enkaz yok olmaz → savunanın şehrine eklenir.
  */
 import { DEFAULT_LOOT_CONFIG, type LootConfig } from './config.ts';
 import { createRng } from './rng.ts';
@@ -41,42 +48,44 @@ export interface LootResult {
   fromPlunder: Resources;
   /** Taşınamayıp SAVUNANIN şehrine eklenen enkaz. */
   leftoverDebrisToDefender: Resources;
-  /** Yağma için üretilen ama taşınamayan kısım (şehirde kalır, bilgi amaçlı). */
+  /** Oranca alınabilecekken kapasiteye sığmayan kısım (şehirde kalır, bilgi amaçlı). */
   plunderNotCarried: Resources;
-  /** Kullanılan efektif yağma oranı (rapor için). */
-  effectivePlunderRate: number;
+  /** Kullanılan efektif oranlar (rapor için) — kaynak başına AYRI. */
+  effectiveRates: { gold: number; food: number };
 }
 
 const ZERO: Resources = { gold: 0, food: 0 };
 const total = (r: Resources): number => r.gold + r.food;
 
-/**
- * Bir kaynak paketinden `amount` kadarını, altın/yemek ORANINI KORUYARAK alır.
- * (Taşıma kapasitesi tek bir toplam sayıdır; kısmi alımda bölüşüm orantılıdır.)
- */
-function takeProportional(pool: Resources, amount: number): Resources {
-  const t = total(pool);
-  if (t <= 0 || amount <= 0) return { ...ZERO };
-  if (amount >= t) return { ...pool };
-  const k = amount / t;
-  return { gold: pool.gold * k, food: pool.food * k };
-}
-
 const sub = (a: Resources, b: Resources): Resources => ({ gold: a.gold - b.gold, food: a.food - b.food });
 const add = (a: Resources, b: Resources): Resources => ({ gold: a.gold + b.gold, food: a.food + b.food });
 const rounded = (r: Resources): Resources => ({ gold: Math.round(r.gold), food: Math.round(r.food) });
+const scale = (r: Resources, k: number): Resources => ({ gold: r.gold * k, food: r.food * k });
 
-/** Yağma oranı: %40 × min(1, kaynak/100.000) — eşikte sıçrama yok, düzgün iniyor. */
-export function plunderRate(cityTotal: number, cfg: LootConfig = DEFAULT_LOOT_CONFIG): number {
-  if (cityTotal <= 0) return 0;
-  return cfg.plunderRate * Math.min(1, cityTotal / cfg.povertyThreshold);
+/**
+ * ⭐ YAĞMA ORANI — kaynak başına AYRI hesaplanır (kullanıcı tarifi, 2026-07-30):
+ *
+ *   havuz ≥ 100.000            → %40 sabit
+ *   5.000 < havuz < 100.000    → %40'tan %5'e DOĞRUSAL iner
+ *   havuz ≤ 5.000              → %5 sabit
+ *
+ * Girdi HAVUZDUR (kasa + enkaz, kullanıcı kararı): neyin yüzdesi alınıyorsa freni de o
+ * belirler. Örnek: 500k altın → %40 · 60k yemek → %25,4 · 5k → %5. Fakirleşen şehir her
+ * saldırıda daha küçük oranla soyulur — sömürünün dibi kendiliğinden kapanır.
+ */
+export function plunderRate(poolAmount: number, cfg: LootConfig = DEFAULT_LOOT_CONFIG): number {
+  if (poolAmount <= 0) return 0;
+  if (poolAmount >= cfg.povertyThreshold) return cfg.plunderRate;
+  if (poolAmount <= cfg.floorThreshold) return cfg.minRate;
+  const t = (poolAmount - cfg.floorThreshold) / (cfg.povertyThreshold - cfg.floorThreshold);
+  return cfg.minRate + t * (cfg.plunderRate - cfg.minRate);
 }
 
 export function calculateLoot(input: LootInput, cfg: LootConfig = DEFAULT_LOOT_CONFIG): LootResult {
   const empty: LootResult = {
     taken: { ...ZERO }, fromDebris: { ...ZERO }, fromPlunder: { ...ZERO },
     leftoverDebrisToDefender: { ...ZERO }, plunderNotCarried: { ...ZERO },
-    effectivePlunderRate: 0,
+    effectiveRates: { gold: 0, food: 0 },
   };
 
   // Saldıran kaybederse hiçbir şey almaz; enkazın TAMAMI savunanın şehrine eklenir.
@@ -84,38 +93,45 @@ export function calculateLoot(input: LootInput, cfg: LootConfig = DEFAULT_LOOT_C
     return { ...empty, leftoverDebrisToDefender: rounded(input.debris) };
   }
 
-  const capacity = Math.max(0, input.carryCapacity);
-
-  // 1) ÖNCE ENKAZ
-  const fromDebris = takeProportional(input.debris, Math.min(capacity, total(input.debris)));
-  const remainingCapacity = capacity - total(fromDebris);
-  const leftoverDebris = sub(input.debris, fromDebris);
-
-  // 2) SONRA YAĞMA — şartı sağlıyorsa
-  let fromPlunder: Resources = { ...ZERO };
-  let plunderNotCarried: Resources = { ...ZERO };
-  let effectiveRate = 0;
-
-  const plunderAllowed =
+  const lootAllowed =
     cfg.condition === 'attackerWon'
     || (cfg.condition === 'undefendedBefore' && input.defendedBefore === false);
-
-  if (plunderAllowed && remainingCapacity > 0) {
-    const cityTotal = total(input.cityResources);
-    const rng = createRng(`${input.seed}:plunder`);
-    const jitterK = rng.range(cfg.jitterMin, cfg.jitterMax);
-    effectiveRate = plunderRate(cityTotal, cfg) * jitterK;
-    const plunderPool = takeProportional(input.cityResources, cityTotal * effectiveRate);
-    fromPlunder = takeProportional(plunderPool, Math.min(remainingCapacity, total(plunderPool)));
-    plunderNotCarried = sub(plunderPool, fromPlunder);
+  if (!lootAllowed) {
+    return { ...empty, leftoverDebrisToDefender: rounded(input.debris) };
   }
 
+  // 1) HAVUZ — kaynak başına: kasa + enkaz.
+  const pool: Resources = add(input.cityResources, input.debris);
+
+  // 2) ORAN — kaynak başına bağımsız eğri × ortak jitter (0,85–1,15, seed'e bağlı).
+  const rng = createRng(`${input.seed}:plunder`);
+  const jitterK = rng.range(cfg.jitterMin, cfg.jitterMax);
+  const rateGold = Math.min(1, plunderRate(pool.gold, cfg) * jitterK);
+  const rateFood = Math.min(1, plunderRate(pool.food, cfg) * jitterK);
+
+  // 3) ALINAN = havuz × oran, kapasiteyle orantılı kırpılır.
+  const desired: Resources = { gold: pool.gold * rateGold, food: pool.food * rateFood };
+  const capacity = Math.max(0, input.carryCapacity);
+  const carryK = total(desired) > 0 ? Math.min(1, capacity / total(desired)) : 0;
+  const taken = scale(desired, carryK);
+  const notCarried = sub(desired, taken);
+
+  /* Alınan, kasa/enkaz bileşenlerine ORANTILI bölünür (kaynak başına): kasa payı savaş
+   * anında `trySpend` ile düşülecek, enkaz payı dönüş yüküne binecek. */
+  const debrisShareG = pool.gold > 0 ? input.debris.gold / pool.gold : 0;
+  const debrisShareF = pool.food > 0 ? input.debris.food / pool.food : 0;
+  const fromDebris: Resources = { gold: taken.gold * debrisShareG, food: taken.food * debrisShareF };
+  const fromPlunder = sub(taken, fromDebris);
+
+  // Alınmayan enkaz savunanın şehrine eklenir (yok olmaz).
+  const leftoverDebris = sub(input.debris, fromDebris);
+
   return {
-    taken: rounded(add(fromDebris, fromPlunder)),
+    taken: rounded(taken),
     fromDebris: rounded(fromDebris),
     fromPlunder: rounded(fromPlunder),
     leftoverDebrisToDefender: rounded(leftoverDebris),
-    plunderNotCarried: rounded(plunderNotCarried),
-    effectivePlunderRate: effectiveRate,
+    plunderNotCarried: rounded(notCarried),
+    effectiveRates: { gold: rateGold, food: rateFood },
   };
 }
