@@ -648,9 +648,15 @@ export class QueueService {
     queueId: number; playerId: number; direction: 'up' | 'down';
   }): Promise<void> {
     return this.db.transaction(async (tx) => {
+      /**
+       * ⚠️ Sorgu bir zamanlar `category = 'unit'` diye sabitti; savunma bandı gelince
+       * savunma emirlerinde **404** veriyordu (`/queues/:id/move` → satır bulunamadı).
+       * Artık iki bant da tanınıyor; `target_level IS NULL` koşulu Sur/Kalkan satırlarını
+       * dışarıda tutuyor (onlar banda girmez, sıralanacak bir şey yok).
+       */
       const rows = await tx.execute<Record<string, unknown>>(sql`
-        SELECT id, city_id, player_id, position FROM queues
-         WHERE id = ${opts.queueId} AND category = 'unit'
+        SELECT id, city_id, player_id, position, category FROM queues
+         WHERE id = ${opts.queueId} AND category IN ('unit', 'defense') AND target_level IS NULL
            AND completed_at IS NULL AND canceled_at IS NULL
          FOR UPDATE
       `);
@@ -667,7 +673,8 @@ export class QueueService {
 
       const swap = await tx.execute<Record<string, unknown>>(sql`
         SELECT id FROM queues
-         WHERE city_id = ${Number(q['city_id'])} AND category = 'unit'
+         WHERE city_id = ${Number(q['city_id'])} AND category = ${String(q['category'])}
+           AND target_level IS NULL
            AND completed_at IS NULL AND canceled_at IS NULL AND position = ${other}
          FOR UPDATE
       `);

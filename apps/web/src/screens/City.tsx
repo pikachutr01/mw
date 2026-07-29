@@ -414,7 +414,7 @@ function useProductionSync(producedTotal: number): void {
  * söyler.
  */
 function ProductionPanel({
-  city, queues, onCancel, onMove, noun = 'asker', limit,
+  city, queues, onCancel, onMove, noun = 'asker', limit, art = 'units',
 }: {
   city: CityDetail;
   queues: QueueRow[];
@@ -423,12 +423,16 @@ function ProductionPanel({
   /** Savunmada "asker" değil "birim" denir — aynı bant, farklı kelime. */
   noun?: string;
   limit: number;
+  /** ⚠️ Görsel klasörü: savunma birimlerinin resmi `assets/defenses/` altında. */
+  art?: 'units' | 'defenses';
 }) {
   const [collapsed, setCollapsed] = useCollapsed();
   const now = serverNow();
 
   // Süren emirlerin toplam üretimi — değiştiği anda (kısılmış) tazeleme tetikler.
   const progress = new Map<number, UnitProgress | null>();
+  // Bantta BEKLEYEN emir sayısı (üretimi süren hariç) — sıralama oklarının koşulu.
+  const waiting = queues.filter((q) => (q.position ?? 1) !== 1).length;
   let producedTotal = 0;
   for (const q of queues) {
     const p = (q.position ?? 1) === 1 ? unitProgress(q, now) : null;
@@ -459,7 +463,7 @@ function ProductionPanel({
             return (
               <li key={q.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
                 <div className="flex items-center gap-2.5">
-                  <CatalogIcon kind="units" id={q.itemType} size={40} alt={q.itemType} />
+                  <CatalogIcon kind={art} id={q.itemType} size={40} alt={q.itemType} />
                   <div className="min-w-0 flex-1">
                     <ItemName name={nameOf(q.itemType)} value={fmt(remaining)} />
                     <div className="text-[11px] text-muted">
@@ -468,7 +472,13 @@ function ProductionPanel({
                         : <>bant boşalınca başlar · <span className="tnum">{remaining}</span> {noun}</>}
                     </div>
                   </div>
-                  {!active ? (
+                  {/**
+                    * ⭐ Sıralama okları YALNIZ **en az iki bekleyen** emir varken görünür
+                    * (kullanıcı, 2026-07-29). Tek bekleyen emirde zaten gidecek başka yer yok;
+                    * ok göstermek "bir işe yarar" izlenimi verip tıklayınca hiçbir şey
+                    * yapmıyordu.
+                    */}
+                  {!active && waiting > 1 ? (
                     <span className="flex shrink-0 items-center gap-0.5">
                       <span className="tnum mr-1 text-[11px] text-muted">sıra {q.position}</span>
                       <Button size="sm" variant="ghost" title="Yukarı"
@@ -476,6 +486,8 @@ function ProductionPanel({
                       <Button size="sm" variant="ghost" title="Aşağı"
                         onClick={() => onMove(q.id, 'down')}>↓</Button>
                     </span>
+                  ) : !active ? (
+                    <span className="tnum shrink-0 text-[11px] text-muted">sıra {q.position}</span>
                   ) : null}
                   <Button size="sm" variant="danger" onClick={() => onCancel(q)}>İptal et</Button>
                 </div>
@@ -583,6 +595,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
           city={city}
           queues={queues}
           noun={kind === 'unit' ? 'asker' : 'birim'}
+          art={kind === 'unit' ? 'units' : 'defenses'}
           limit={bandLimit}
           onMove={(queueId, direction) => move.mutate({ queueId, direction })}
           onCancel={(q) => {
@@ -643,9 +656,13 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   <Button size="sm"
                     disabled={unmet || slotsFull || enqueue.isPending
                       || (!levelBased && (n <= 0 || !afford)) || (levelBased && !afford)}
-                    onClick={() => enqueue.mutate({
-                      category: kind, type: u.id, ...(levelBased ? {} : { count: n }),
-                    })}>
+                    onClick={() => enqueue.mutate(
+                      { category: kind, type: u.id, ...(levelBased ? {} : { count: n }) },
+                      // ⭐ Emir kabul edilince adet kutusu boşalır (kullanıcı, 2026-07-29):
+                      //    kalan sayı "hâlâ bir şey seçili" izlenimi veriyor ve yanlışlıkla
+                      //    ikinci kez üretmeye davet ediyordu. Hata olursa değer KORUNUR.
+                      { onSuccess: () => setCounts((c) => ({ ...c, [u.id]: '' })) },
+                    )}>
                     {levelBased ? `sv ${(have[u.id] ?? 0) + 1}` : 'Üret'}
                   </Button>
                 </div>

@@ -95,9 +95,17 @@ export async function materializeUnitQueues(
     const delta = producible - q.done;
 
     if (delta > 0) {
+      /**
+       * ⚠️ **GERÇEK HATA** (2026-07-29'da kullanıcı bildirdi): hedef tablo `units` diye
+       * SABİT yazılıydı. Savunma bandı eklendiğinde üretilen Okçu Kulesi/Balista `units`
+       * tablosuna düşüyor, Savunma ekranı ise `defenses`i okuduğu için **hiçbir şey
+       * görünmüyordu** — 15 birimlik sipariş bitiyor ve elde hiçbir şey olmuyordu.
+       * Üstelik sessiz: satırlar `units`te bir yerde birikiyordu.
+       */
+      const table = category === 'defense' ? 'defenses' : 'units';
       await runner.execute(sql`
-        INSERT INTO units (city_id, type, count) VALUES (${cityId}, ${q.itemType}, ${delta})
-        ON CONFLICT (city_id, type) DO UPDATE SET count = units.count + ${delta}
+        INSERT INTO ${sql.raw(table)} (city_id, type, count) VALUES (${cityId}, ${q.itemType}, ${delta})
+        ON CONFLICT (city_id, type) DO UPDATE SET count = ${sql.raw(table)}.count + ${delta}
       `);
       await runner.execute(sql`UPDATE queues SET done = ${producible} WHERE id = ${q.id}`);
       produced[q.itemType] = (produced[q.itemType] ?? 0) + delta;
