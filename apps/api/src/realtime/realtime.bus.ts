@@ -85,11 +85,29 @@ export function eventForOutbox(
 
   switch (topic) {
     // ⭐ Kullanıcının örneği: biri bize casus kuş gönderdiği ANDA görünmeli.
+    // ⚠️ `city:incoming_spy` 2026-07-30'a kadar EŞLENMEMİŞTİ: outbox yazılıyor ama switch'te
+    //    karşılığı olmadığı için default null → olay sessizce düşüyordu; savunan gelen
+    //    casusluğu ancak 60 sn'lik emniyet yoklamasında görüyordu. Aynı satıra bağlandı.
     case 'city:incoming_attack':
+    case 'city:incoming_spy':
       return {
         topic: 'missions:changed', worldId,
         playerIds: players(num(payload['defenderPlayerId'])),
         ref: { cityId: num(payload['targetCityId']), missionId: num(payload['missionId']) },
+      };
+
+    /**
+     * ⭐ BİRLEŞİK GÖREV BİTİŞİ (2026-07-30) — scheduler her Ordular-görünür görevi başarıyla
+     * işleyince yazar. Tek olay üç işi görür: (1) Ordular sayfasında satır ANINDA düşer,
+     * (2) başka sayfadayken sol menü rozeti kendiliğinden güncellenir, (3) payload gelecekte
+     * web push / FCM sink'inin bildirim üretmesine yetecek bilgiyi taşır (tip + şehirler).
+     * Nakliye varışında GÖNDERENİN listesi bu olaydan önce hiç tetiklenmiyordu.
+     */
+    case 'mission:completed':
+      return {
+        topic: 'missions:changed', worldId,
+        playerIds: players(num(payload['ownerPlayerId']), num(payload['targetPlayerId'])),
+        ref: { missionId: num(payload['missionId']), cityId: num(payload['targetCityId']) },
       };
 
     case 'battle:resolved':

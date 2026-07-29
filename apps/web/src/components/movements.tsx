@@ -222,11 +222,9 @@ export function MovementModal({ m, onClose }: { m: Movement; onClose: () => void
           </div>
         ) : null}
 
-        {m.direction === 'in' ? (
-          <div className="rounded-[var(--radius-sm)] border border-danger bg-danger/10 px-2.5 py-2 text-xs text-danger">
-            Bu hareket <b>sana doğru</b> geliyor. Ne getirdiği gizlidir — öğrenmek için casusluk gerekir.
-          </div>
-        ) : null}
+        {/* "Sana doğru geliyor / gizlidir" kutusu kaldırıldı (kullanıcı, 2026-07-30):
+            nakliye/destekte içerik zaten görünür, saldırıda casusluk zaten oyunun kuralı —
+            ek bilgilendirme gürültüsüne gerek yok. */}
 
         {!m.canCancel && m.direction === 'out' ? (
           <div className="text-xs text-muted">Görev işlenmeye başladı, artık iptal edilemez.</div>

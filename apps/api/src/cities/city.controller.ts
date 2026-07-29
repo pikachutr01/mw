@@ -176,6 +176,11 @@ export class CityController {
        * onarım BAŞLARKENki oran — o anki değer istemcide `wallCurrentIntegrity` ile türetilir.
        */
       wallRepair: await this.wallRepair(cityId, gameNow),
+      /**
+       * ⭐ Sol menü Tapınak NOKTASI için (2026-07-30): bu şehirde diriltilen kahraman var mı?
+       * Tapınak ekranının tamamını çekmek yerine tek boolean — menü her şehir yanıtında hazır.
+       */
+      heroReviving: await this.heroReviving(cityId),
       serverNow: new Date().toISOString(),
       gameNow: gameNow.toISOString(),
     };
@@ -403,6 +408,14 @@ export class CityController {
     } catch (err) {
       throw toHttp(err);
     }
+  }
+
+  /** Bu şehirde diriltilmekte olan kahraman var mı? (menü aktivite noktası) */
+  private async heroReviving(cityId: number): Promise<boolean> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM heroes WHERE city_id = ${cityId} AND status = 'reviving' LIMIT 1
+    `);
+    return rows.length > 0;
   }
 
   /** Sur onarımı sürüyorsa penceresi; sürmüyorsa null (bitmişse bütünlük 1 sayılır). */

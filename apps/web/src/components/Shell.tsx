@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { fmt, useTick } from '../lib/hooks.ts';
-import { armiesBadge, useCity, useMessages, useMovements } from '../lib/queries.ts';
+import { armiesBadge, useCity, useMessages, useMovements, type CityDetail } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
@@ -70,6 +70,31 @@ const PAGE_TITLE: [string, string][] = [
   ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'],
 ];
 
+/**
+ * ⭐ AKTİVİTE NOKTALARI (kullanıcı, 2026-07-30): aktif şehirde süren iş varsa ilgili menü
+ * satırının sağında küçük nokta yanar — ŞEHİR BAZLI: başka şehre geçince o şehrin işleri okunur.
+ * Akademi noktası araştırmayı BAŞLATAN şehirde görünür (akademiler ortak ama iptal oradan).
+ */
+export function cityActivity(d: CityDetail | undefined, cityId: number | null): Record<string, boolean> {
+  if (!d) return {};
+  const q = d.queues ?? [];
+  return {
+    '/barracks': q.some((x) => x.category === 'unit'),
+    '/defense': q.some((x) => x.category === 'defense') || d.wallRepair != null,
+    '/buildings': q.some((x) => x.category === 'building') || d.cave.repairing || d.cave.job != null,
+    '/academy': (d.techQueues ?? []).some((x) => x.cityId === cityId),
+    '/temple': d.heroReviving === true,
+  };
+}
+
+/** Menü satırındaki aktivite noktası — rozetle çakışmasın diye rozet yokken çizilir. */
+export function ActivityDot() {
+  return (
+    <span aria-label="bu şehirde süren iş var"
+      className="inline-block h-2 w-2 shrink-0 rounded-full bg-success shadow-[0_0_4px_var(--mw-color-success)]" />
+  );
+}
+
 /** Sol menü ve mobil alt barın ortak simgesi. */
 function MenuIcon({ id, size }: { id: string; size: number }) {
   return (
@@ -107,6 +132,9 @@ export function Shell({ children }: { children: ReactNode }) {
 
 /* ── Orta sütunun üstündeki küçük bilgi çubuğu ─────────────────────────────── */
 
+/** Mobilde Şehir sayfasına geri götüren rotalar (şehir alt ekranları). */
+const CITY_SCREENS = ['/barracks', '/buildings', '/defense', '/academy', '/temple'];
+
 function InfoBar() {
   const { cityId } = useActiveCity();
   const city = useCity(cityId);
@@ -123,27 +151,51 @@ function InfoBar() {
 
   const page = PAGE_TITLE.find(([p]) => pathname.startsWith(p))?.[1] ?? '';
 
+  /* ⭐ Pencere başlığı aktif sayfayı izler (kullanıcı, 2026-07-30); Ordular'da yalnız oyun adı. */
+  useEffect(() => {
+    document.title = page && !pathname.startsWith('/armies') ? `${page} · Mobiwar` : 'Mobiwar';
+  }, [page, pathname]);
+
+  const onCityScreen = CITY_SCREENS.some((r) => pathname.startsWith(r));
+
   return (
-    <div className="tex tex-header bevel mb-3 flex items-center justify-center gap-3 rounded-[var(--radius-md)]
-      border-2 border-strong bg-panel-header px-3 py-1.5 text-on-panel-header sm:gap-5">
-      <Res kind="gold" value={fmt(gold)} size={22} className="text-[15px] font-semibold" />
-      <Res kind="food" value={fmt(food)} size={22} className="text-[15px] font-semibold" />
+    <div className="tex tex-header bevel mb-3 flex items-center gap-2 rounded-[var(--radius-md)]
+      border-2 border-strong bg-panel-header px-2.5 py-1.5 text-on-panel-header
+      sm:justify-center sm:gap-5 sm:px-3">
+      {/* ⭐ Mobil geri butonu (kullanıcı, 2026-07-30): şehir alt ekranlarından Şehir'e dönüş. */}
+      {onCityScreen ? (
+        <NavLink to="/city" aria-label="Şehir sayfasına dön"
+          className="-ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)]
+            border border-transparent text-lg leading-none hover:border-border hover:bg-raised lg:hidden">
+          ‹
+        </NavLink>
+      ) : null}
+
+      <Res kind="gold" value={fmt(gold)} size={22} className="text-[12px] font-semibold sm:text-[15px]" />
+      <Res kind="food" value={fmt(food)} size={22} className="text-[12px] font-semibold sm:text-[15px]" />
 
       <span className="hidden h-5 w-px bg-on-panel-header/25 sm:block" />
 
       <span className="display hidden truncate text-sm font-semibold tracking-wide sm:block">
         {d?.name ?? '—'}
       </span>
-      <span className="tnum hidden text-xs opacity-80 sm:block">
+      {/* Koordinat mobilde de görünür (sayfa başlığının yerini alır — kullanıcı, 2026-07-30). */}
+      <span className="tnum text-[11px] opacity-80 sm:text-xs">
         {d ? `${d.coordinates.k}:${d.coordinates.d}:${d.coordinates.s}` : ''}
       </span>
 
       <span className="hidden h-5 w-px bg-on-panel-header/25 sm:block" />
 
-      <span className="display truncate text-sm font-semibold tracking-wider uppercase">{page}</span>
+      {/* Sayfa başlığı yalnız masaüstünde; mobilde yer koordinata bırakıldı. */}
+      <span className="display hidden truncate text-sm font-semibold tracking-wider uppercase sm:block">
+        {page}
+      </span>
 
-      <ConnectionDot />
-      <SpeedBadge speed={d?.speed} />
+      {/* ⭐ Mobilde göstergeler EN SAĞA yaslı (ml-auto); masaüstünde ortalı düzen sürer. */}
+      <span className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0 sm:gap-3">
+        <ConnectionDot />
+        <SpeedBadge speed={d?.speed} />
+      </span>
     </div>
   );
 }
@@ -242,6 +294,9 @@ function SideMenu() {
   const messages = useMessages();
   const movements = useMovements();
   const session = getSession();
+  const { cityId } = useActiveCity();
+  const city = useCity(cityId);
+  const activity = cityActivity(city.data, cityId);
   const unread = messages.data?.unread ?? 0;
   const armies = armiesBadge(movements.data?.movements ?? []);
 
@@ -270,7 +325,7 @@ function SideMenu() {
                 <span className="flex-1 truncate">{t.label}</span>
                 {badge > 0 ? (
                   <span className={`rounded-full px-1.5 text-[10px] leading-4 ${tone}`}>{badge}</span>
-                ) : null}
+                ) : activity[t.to] ? <ActivityDot /> : null}
               </NavLink>
             );
           })}

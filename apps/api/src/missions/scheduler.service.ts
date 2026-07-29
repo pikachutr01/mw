@@ -14,6 +14,14 @@ import type { GameClockService } from '../world/game-clock.service.ts';
 import type { HandlerContext, HandlerRegistry, Tx } from './handler-registry.ts';
 import { MissionRepository, type MissionRow } from './mission.repository.ts';
 
+/**
+ * Ordular sayfasında satır üreten görev tipleri (`mission.controller.ts` sorgusuyla aynı) —
+ * yalnız bunların bitişi `mission:completed` yayınlar; mağara iç işleri, echo vb. yaymaz.
+ */
+const ARMY_VISIBLE_TYPES: ReadonlySet<string> = new Set([
+  'attack', 'return', 'transport', 'support', 'spy', 'found_city', 'cave_return',
+]);
+
 export interface SchedulerOptions {
   worldId: number;
   workerId?: string;
@@ -143,6 +151,34 @@ export class SchedulerService {
       };
 
       await handler(ctx);
+
+      /**
+       * ⭐ BİRLEŞİK GÖREV BİTİŞİ (2026-07-30) — Ordular'da görünen her görev tipi için,
+       * handler'dan bağımsız TEK yerden `mission:completed` outbox olayı. Üç işi görür:
+       * Ordular satırının anlık düşmesi · sol menü rozetinin her sayfada güncellenmesi ·
+       * gelecekteki push sink'ine (offline oyuncu) yetecek payload. Handler'ların kendi
+       * olayları (battle:resolved, city:changed, …) veri tazelemeyi ayrıca sürdürür.
+       * Hedef şehrin SAHİBİ görev satırında yok → tek küçük SELECT (savunan da listesinde
+       * "gelen" satırı taşıyordu, onun ekranı da düşmeli).
+       */
+      if (ARMY_VISIBLE_TYPES.has(mission.type)) {
+        const owner = await tx.execute<Record<string, unknown>>(sql`
+          SELECT player_id FROM cities WHERE id = ${mission.targetCityId ?? -1}
+        `);
+        await tx.insert(outbox).values({
+          worldId: mission.worldId,
+          topic: 'mission:completed',
+          payload: {
+            missionId: mission.id,
+            type: mission.type,
+            ownerPlayerId: mission.ownerPlayerId,
+            originCityId: mission.originCityId,
+            targetCityId: mission.targetCityId,
+            targetPlayerId: owner[0] ? Number(owner[0]['player_id']) : null,
+            at: mission.executeAt.toISOString(),
+          },
+        });
+      }
 
       // Durum geçişi AYNI transaction'da: süreç burada ölürse görev 'running' kalır ve
       // reapStale onu geri kuyruğa alır — yarım iş kalmaz.

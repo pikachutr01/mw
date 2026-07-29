@@ -86,6 +86,8 @@ export interface CityDetail {
    * o anki değer `wallCurrentIntegrity` ile türetilir. Onarım yokken null.
    */
   wallRepair: { integrity: number; from: string | null; until: string } | null;
+  /** Bu şehirde diriltilmekte olan kahraman var mı? (menü aktivite noktası) */
+  heroReviving: boolean;
   gameNow: string;
   serverNow: string;
 }

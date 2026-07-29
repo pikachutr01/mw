@@ -9,6 +9,7 @@ import { fmt } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity } from '../lib/queries.ts';
 import { Panel, Res } from '../components/ui.tsx';
+import { ActivityDot, cityActivity } from '../components/Shell.tsx';
 
 const ITEMS = [
   { to: '/barracks', label: 'Baraka', icon: 'barracks', hint: 'Savaşçı üret' },
@@ -22,6 +23,8 @@ export function CityHub() {
   const { cityId } = useActiveCity();
   const city = useCity(cityId);
   const d = city.data;
+  // ⭐ Masaüstü sol menüyle AYNI aktivite noktaları (kullanıcı, 2026-07-30) — şehir bazlı.
+  const activity = cityActivity(d, cityId);
 
   return (
     <div className="space-y-3">
@@ -41,7 +44,10 @@ export function CityHub() {
                 <img src={`/assets/buildings/${it.icon}.png`} alt="" width={32} height={32}
                   className="h-8 w-8 shrink-0 object-contain" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-ink">{it.label}</span>
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                    {it.label}
+                    {activity[it.to] ? <ActivityDot /> : null}
+                  </span>
                   <span className="block text-[11px] text-muted">{it.hint}</span>
                 </span>
                 <span aria-hidden className="text-muted">›</span>

@@ -11,6 +11,7 @@ import { maxCities, spyEffectiveDiff, spyLevelFor, teleportCooldownSeconds } fro
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';
+import { battleHandlers } from '../src/missions/battle.handlers.ts';
 import { missionHandlers } from '../src/missions/mission.handlers.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
@@ -37,6 +38,8 @@ beforeAll(async () => {
   missions = new MissionService(h.db, cities);
   registry = new HandlerRegistry();
   for (const [type, handler] of Object.entries(missionHandlers(cities))) registry.register(type, handler);
+  // `return` handler'ı savaş modülünde yaşıyor — dönüş testleri için o da kayıtlı olmalı.
+  registry.register('return', battleHandlers(cities)['return']!);
 }, 60_000);
 
 afterAll(async () => { await h?.close(); });
@@ -151,6 +154,34 @@ describe('nakliye', () => {
     expect(ret).not.toBeNull();
     expect(ret!.payload['loot']).toEqual({ gold: 0, food: 0 });
     expect(ret!.payload['returnOf']).toBe('transport');
+
+    /* ⭐ BİRLEŞİK GÖREV BİTİŞİ (2026-07-30): varış anında scheduler `mission:completed`
+     * outbox'ı yazar — gönderenin Ordular listesi eskiden hiç tetiklenmiyordu, WS'i bu
+     * olay sürer; ileride push sink'i de buradan beslenecek. */
+    const [done] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM outbox
+       WHERE world_id = ${worldId} AND topic = 'mission:completed'
+         AND (payload->>'missionId')::bigint = ${m.missionId}
+    `);
+    expect(done).toBeDefined();
+    const p = done!['payload'] as Record<string, unknown>;
+    expect(p['type']).toBe('transport');
+    expect(Number(p['ownerPlayerId'])).toBe(me);
+    expect(Number(p['targetPlayerId'])).toBe(rival);
+
+    /* ⭐ GÖNDEREN RAPORU (2026-07-30): "Giden Nakliye Raporu" — alıcı farklı oyuncuysa yazılır. */
+    const gonderen = (await messagesOf(me))
+      .find((x) => x['kind'] === 'transport_report' && x['side'] === 'sender');
+    expect(gonderen).toBeDefined();
+    expect((gonderen!['body'] as Record<string, unknown>)['cargo']).toEqual({ gold: 8000, food: 0 });
+
+    /* ⭐ DÖNÜŞ RAPOR ÜRETMEZ (kullanıcı, 2026-07-30): ordu eve varınca posta DÜŞMEZ —
+     * yalnız mission:completed bildirimi. */
+    await runDue(ret!.id);
+    const donus = (await messagesOf(me)).find((x) => x['kind'] === 'return_report');
+    expect(donus).toBeUndefined();
+    // Birlikler yine de eve yerleşti (rapor kalktı, mekanik kalmadı değil).
+    expect((await unitsOf(home))['cargo_wagon']).toBe(3);
   });
 
   it('taşıma kapasitesi aşılamaz', async () => {

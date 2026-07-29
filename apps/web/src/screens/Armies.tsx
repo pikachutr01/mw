@@ -20,9 +20,6 @@ export function Armies() {
   useTick();
 
   const all = movements.data?.movements ?? [];
-  const incoming = all.filter((m) => m.direction === 'in').length;
-  const outgoing = all.filter((m) => m.direction === 'out').length;
-  const returning = all.filter((m) => m.direction === 'own').length;
 
   return (
     <>
@@ -39,12 +36,8 @@ export function Armies() {
               ))}
           </ul>
         )}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-3 py-2 text-[11px]">
-          {incoming > 0 ? <span className="font-semibold text-danger">⚠ {incoming} gelen</span> : null}
-          {outgoing > 0 ? <span className="text-warning">{outgoing} sefer sürüyor</span> : null}
-          {returning > 0 ? <span className="text-success">{returning} ordu dönüyor</span> : null}
-          <span className="text-muted">Ayrıntı ve iptal için satıra ya da simgeye tıkla.</span>
-        </div>
+        {/* Alt özet şeridi kaldırıldı (kullanıcı, 2026-07-30): hareketler zaten listede,
+            gelen saldırı/casusluk ayrıca CityStrip pulse'ı ve rozet rengiyle belli. */}
       </Panel>
 
       {open ? <MovementModal m={open} onClose={() => setOpen(null)} /> : null}

@@ -14,8 +14,34 @@ import { useState } from 'react';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import { useBattle, useMarkRead, useMessages, type MessageRow } from '../lib/queries.ts';
-import { Badge, Button, Empty, Panel, Res } from '../components/ui.tsx';
+import { Button, Empty, Panel, Res } from '../components/ui.tsx';
 import { Modal } from '../components/Modal.tsx';
+import { MissionIcon } from '../components/ui.tsx';
+
+/**
+ * ⭐ RAPOR TÜR KATALOĞU (kullanıcı, 2026-07-30): her rapor türünün kendi ikonu ve satır
+ * başlığı var — Ordular sayfasıyla AYNI görev ikonları (yeşil/kırmızı varyantlar ayrı PNG).
+ * Anahtar `kind:side`; `subject` artık ikinci satırda ayrıntı olarak yaşıyor.
+ * `return_report` yalnız ESKİ kayıtlar için (dönüş artık rapor üretmiyor, bildirim üretiyor).
+ */
+const REPORT_TYPE: Record<string, { icon: string; title: string }> = {
+  'battle_report:attacker': { icon: 'attack', title: 'Saldırı Raporu' },
+  'battle_report:defender': { icon: 'attack_in', title: 'Saldırı Önleme Raporu' },
+  'spy_report:spy': { icon: 'spy_out', title: 'Casusluk Raporu' },
+  'spy_report:target': { icon: 'spy_back', title: 'Casusluk Önleme Raporu' },
+  'transport_report:receiver': { icon: 'transport_back', title: 'Gelen Nakliye Raporu' },
+  'transport_report:sender': { icon: 'transport_out', title: 'Giden Nakliye Raporu' },
+  'support_report:receiver': { icon: 'support_out', title: 'Destek Raporu' },
+  'found_city_report:owner': { icon: 'found_city', title: 'Şehir Kurma Raporu' },
+  'return_report:owner': { icon: 'teleport', title: 'Ordu Döndü' },
+};
+
+function reportType(m: MessageRow): { icon: string | null; title: string } {
+  const hit = REPORT_TYPE[`${m.kind}:${m.side ?? ''}`];
+  if (hit) return hit;
+  if (m.kind === 'system') return { icon: null, title: 'Sistem' };
+  return { icon: null, title: m.subject };
+}
 
 type Tab = 'reports' | 'messages';
 
@@ -78,34 +104,49 @@ export function Messages() {
           <Empty>{tab === 'reports' ? 'Hiç raporun yok.' : 'Hiç mesajın yok.'}</Empty>
         ) : (
           <ul className="divide-y divide-border">
-            {visible.map((m, i) => (
-              <li key={m.id} className={i % 2 === 1 ? 'bg-row-alt' : ''}>
-                <button className="w-full px-3 py-2 text-left hover:bg-raised"
-                  onClick={() => openMessage(m)}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`flex items-center gap-1.5 text-sm ${
-                      m.readAt ? 'text-muted' : 'font-semibold text-ink'
-                    }`}>
-                      {/* Okunmamış olan ilk bakışta belli olmalı: kalın + nokta. */}
-                      {!m.readAt ? (
-                        <span aria-label="okunmadı"
-                          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-danger" />
-                      ) : null}
-                      {m.subject}
-                    </span>
-                    <span className="shrink-0 text-[11px] text-muted">
-                      {new Date(m.at).toLocaleString('tr-TR')}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-1.5">
-                    {m.side === 'attacker' ? <Badge tone="warning">saldıran</Badge> : null}
-                    {m.side === 'defender' ? <Badge tone="danger">savunan</Badge> : null}
-                    {m.kind === 'return_report' ? <Badge tone="success">dönüş</Badge> : null}
-                  </div>
-                  <Summary m={m} />
-                </button>
-              </li>
-            ))}
+            {visible.map((m, i) => {
+              const t = reportType(m);
+              const unread = !m.readAt;
+              return (
+                <li key={m.id} className={i % 2 === 1 ? 'bg-row-alt' : ''}>
+                  {/* ⭐ Tür ikonlu satır (kullanıcı, 2026-07-30). Okunmamış: sol accent şerit
+                      + hafif zemin + kalın başlık — eski "kalın + nokta" düzeninden daha net. */}
+                  <button
+                    className={`w-full px-3 py-2 text-left hover:bg-raised ${
+                      unread ? 'border-l-2 border-danger bg-danger/5' : 'border-l-2 border-transparent'
+                    }`}
+                    onClick={() => openMessage(m)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {t.icon ? <MissionIcon id={t.icon} size={26} title={t.title} /> : (
+                        <span className="inline-flex w-[26px] shrink-0 justify-center text-lg" aria-hidden>⚙</span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`truncate text-sm ${
+                            unread ? 'font-semibold text-ink' : 'text-ink/80'
+                          }`}>
+                            {t.title}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
+                            {new Date(m.at).toLocaleString('tr-TR')}
+                            {unread ? (
+                              <span aria-label="okunmadı"
+                                className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
+                            ) : null}
+                          </span>
+                        </div>
+                        {/* Ayrıntı satırı: sunucunun subject'i (tür başlığını tekrarlamıyorsa) */}
+                        {m.subject && m.subject !== t.title ? (
+                          <div className="truncate text-xs text-muted">{m.subject}</div>
+                        ) : null}
+                        <Summary m={m} />
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
 
@@ -192,7 +233,9 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
  */
 function PlainBody({ m }: { m: MessageRow }) {
   const b = m.body ?? {};
-  if (m.kind === 'spy_report') return <SpyBody body={b} />;
+  if (m.kind === 'spy_report') {
+    return m.side === 'target' ? <SpyDefenseBody body={b} /> : <SpyBody body={b} />;
+  }
 
   const loot = b['loot'] as { gold: number; food: number } | undefined;
   const cargo = b['cargo'] as { gold: number; food: number } | undefined;
@@ -233,6 +276,43 @@ function PlainBody({ m }: { m: MessageRow }) {
  * **eksik bölümler gösterilmez** (boş kutu değil, hiç yok) — oyuncu neyi göremediğini
  * "daha fazla kuş / daha yüksek Casusluk" mesajından anlar.
  */
+/**
+ * ⭐ CASUSLUK ÖNLEME RAPORU gövdesi (savunan tarafı) — alanları gönderen raporundan farklı:
+ * birdsShot/birdsBlocked/leakedLevel. Savunan HER casuslukta bu raporu alır (2026-07-30).
+ */
+function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
+  const sent = Number(body['birdsSent'] ?? 0);
+  const shot = Number(body['birdsShot'] ?? 0);
+  const blocked = Number(body['birdsBlocked'] ?? 0);
+  const leaked = body['leakedLevel'] as string | null | undefined;
+  const LEAK_LABEL: Record<string, string> = {
+    resources: 'kaynak miktarı',
+    economy: 'kaynak + Maden/Çiftlik seviyesi',
+    armyTotals: '+ toplam savaşçı ve savunma sayısı',
+    armyTypes: '+ birim tipleri',
+    armyCounts: '+ savaşçıların tek tek sayıları',
+    full: 'TAM RAPOR (teknikler + Kale/Sur/Kalkan dahil)',
+  };
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="text-xs text-muted">
+        Şehrinin üstünde <b className="tnum text-ink">{fmt(sent)}</b> casus kuş uçtu
+        {shot > 0 ? <span className="text-success"> · {fmt(shot)} tanesi vuruldu</span> : null}
+        {blocked > 0 ? <span className="text-success"> · {fmt(blocked)} tanesi engellendi</span> : null}
+      </div>
+      {leaked ? (
+        <div className="rounded-[var(--radius-sm)] border border-danger bg-danger/10 px-2.5 py-2 text-xs text-danger">
+          Rakip bilgi SIZDIRDI: {LEAK_LABEL[leaked] ?? leaked}.
+        </div>
+      ) : (
+        <div className="rounded-[var(--radius-sm)] border border-success bg-success/10 px-2.5 py-2 text-xs text-success">
+          Hiçbir bilgi sızmadı — casusluk tamamen engellendi.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SpyBody({ body }: { body: Record<string, unknown> }) {
   const intel = (body['intel'] ?? {}) as Record<string, unknown>;
   const res = intel['resources'] as { gold: number; food: number } | undefined;
@@ -252,11 +332,13 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
       <div className="text-xs text-muted">
         {fmt(sent)} casus kuş gönderildi
         {lost > 0 ? <span className="text-danger"> · {fmt(lost)} tanesi vuruldu</span> : ' · kayıp yok'}
+        {Number(body['birdsBlocked'] ?? 0) > 0
+          ? <span className="text-warning"> · {fmt(Number(body['birdsBlocked']))} tanesi engellendi</span> : null}
         {body['diff'] != null ? ` · etkin fark ${String(body['diff'])}` : ''}
       </div>
 
       {body['level'] == null ? (
-        <div className="text-danger">Hiçbir kuş dönmedi; bilgi alınamadı.</div>
+        <div className="text-danger">Bilgi alınamadı — kuşlar ya vuruldu ya da rakip kuşlarca engellendi.</div>
       ) : null}
 
       {res ? (

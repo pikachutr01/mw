@@ -50,6 +50,22 @@ export function createTransportHandler(cities: CityService): MissionHandler {
       subject: 'Nakliye ulaştı',
       body: { cityId: targetCityId, cargo, from: ctx.mission.originCityId, at: ctx.at.toISOString() },
     });
+    /* ⭐ GÖNDEREN DE RAPOR ALIR (kullanıcı, 2026-07-30 — "Giden Nakliye Raporu"): eskiden
+     * gönderen malın teslim edildiğini ancak ordusu dönünce dolaylı anlıyordu. Kendi kendine
+     * nakliyede (iki şehir de aynı oyuncunun) çift rapor yazılmaz — tek satır yeter. */
+    const senderPlayerId = ctx.mission.ownerPlayerId;
+    if (senderPlayerId != null && senderPlayerId !== target.playerId) {
+      await writeMessage(ctx, {
+        playerId: senderPlayerId,
+        kind: 'transport_report',
+        side: 'sender',
+        subject: `Nakliyen ulaştı · ${target.name}`,
+        body: {
+          targetCityId, targetCityName: target.name, targetPlayer: target.username,
+          cargo, at: ctx.at.toISOString(),
+        },
+      });
+    }
     await ctx.emit('city:changed', { cityId: targetCityId, playerId: target.playerId, reason: 'transport' });
 
     // Ordu boş döner; birlikler varışta kaynak şehre eklenir.

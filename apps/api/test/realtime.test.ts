@@ -99,6 +99,30 @@ describe('outbox → istemci olayı eşlemesi', () => {
     expect(e.worldId).toBe(1);
   });
 
+  /** ⚠️ 2026-07-30'a kadar eşlenmemişti — savunan gelen casusluğu 60 sn geç görüyordu. */
+  it('⭐ gelen CASUSLUK da anında savunana gider (eşlenmemiş topic kapatıldı)', () => {
+    const e = eventForOutbox('city:incoming_spy', {
+      missionId: 7, defenderPlayerId: 12, targetCityId: 34,
+    }, 1)!;
+    expect(e).not.toBeNull();
+    expect(e.topic).toBe('missions:changed');
+    expect(e.playerIds).toEqual([12]);
+  });
+
+  /**
+   * ⭐ BİRLEŞİK GÖREV BİTİŞİ (2026-07-30): scheduler her Ordular-görünür görev bitişinde
+   * yazar — sahibi VE hedef şehrin sahibi listelerini anında tazeler; payload gelecekteki
+   * push sink'ine yetecek kimlikleri taşır.
+   */
+  it('⭐ mission:completed iki tarafın Ordular listesini tazeler', () => {
+    const e = eventForOutbox('mission:completed', {
+      missionId: 11, type: 'transport', ownerPlayerId: 3, targetPlayerId: 4, targetCityId: 9,
+    }, 2)!;
+    expect(e.topic).toBe('missions:changed');
+    expect(e.playerIds.sort()).toEqual([3, 4]);
+    expect(e.ref['missionId']).toBe(11);
+  });
+
   it('savaş sonucu İKİ tarafa da gider', () => {
     const e = eventForOutbox('battle:resolved', {
       battleId: 9, attackerPlayerId: 3, defenderPlayerId: 4, cityId: 2,

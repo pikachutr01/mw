@@ -67,7 +67,10 @@ export function CityStrip() {
         {list.map((c) => {
           const active = c.id === cityId;
           const mine = all.filter((m) => m.cityId === c.id);
-          const incoming = mine.some((m) => m.direction === 'in');
+          /* ⭐ Pulse yalnız TEHLİKELİ gelenlerde (kullanıcı, 2026-07-30): saldırı ve casusluk.
+           * Nakliye/destek/mağara dönüşü dost hareketlerdir, alarm noktası üretmez. */
+          const incoming = mine.some((m) => m.direction === 'in'
+            && (m.type === 'attack' || m.type === 'spy'));
           return (
             <div key={c.id} className="flex w-24 shrink-0 flex-col items-center sm:w-28">
               <button

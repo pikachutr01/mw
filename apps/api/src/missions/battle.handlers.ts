@@ -382,17 +382,17 @@ export function createReturnHandler(cities: CityService): MissionHandler {
 
     const playerId = ctx.mission.ownerPlayerId;
     if (playerId != null) {
-      await writeMessage(ctx, {
-        playerId,
-        kind: 'return_report',
-        side: 'owner',
-        battleId: numOrNull(ctx.mission.payload['battleId']),
-        subject: 'Ordu geri döndü',
-        body: { cityId, units, loot, at: ctx.at.toISOString() },
-      });
+      /* ⭐ DÖNÜŞ RAPORU YAZILMAZ (kullanıcı kararı, 2026-07-30): posta kutusunu dört özdeş
+       * "Ordu geri döndü" satırıyla doldurmak yerine dönüş yalnız BİLDİRİM üretir —
+       * `mission:completed` (scheduler) Ordular listesini anında düşürür; ileride web push /
+       * FCM aynı olaydan beslenir. Eski `return_report` kayıtları arşivde durur, istemci
+       * onları soluk "Ordu Döndü" olarak çizmeye devam eder. */
       await ctx.emit('city:army_returned', {
         cityId, playerId, units, loot, at: ctx.at.toISOString(),
       });
+      /* Dönüş şehre BİRLİK + GANİMET yazar; `city:army_returned` yalnız `missions:changed`a
+       * eşlendiği için `['city']` tazelenmiyordu — asker/kaynak sayıları 60 sn bayat kalıyordu. */
+      await ctx.emit('city:changed', { cityId, playerId, reason: 'army_returned' });
     }
 
     await ctx.audit({
@@ -1099,10 +1099,6 @@ function readLootPayload(payload: Record<string, unknown>): { gold: number; food
   if (!loot || typeof loot !== 'object') return { gold: 0, food: 0 };
   const l = loot as Record<string, unknown>;
   return { gold: Math.max(0, Number(l['gold'] ?? 0)), food: Math.max(0, Number(l['food'] ?? 0)) };
-}
-
-function numOrNull(v: unknown): number | null {
-  return v == null ? null : Number(v);
 }
 
 /** Worker'a kaydedilecek tipler. */

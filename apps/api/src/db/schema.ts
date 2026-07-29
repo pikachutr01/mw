@@ -535,7 +535,7 @@ export const messages = pgTable('messages', {
   worldId: smallint('world_id').notNull().references(() => worlds.id),
   playerId: bigint('player_id', { mode: 'number' }).notNull()
     .references(() => players.id, { onDelete: 'cascade' }),
-  /** battle_report | return_report | system */
+  /** battle_report · spy_report · transport_report · support_report · found_city_report · system (return_report yalnız eski kayıtlarda — dönüş artık rapor üretmez, 2026-07-30) */
   kind: text('kind').notNull(),
   /** Oyuncunun bu raporda hangi tarafta olduğu: attacker | defender | owner */
   side: text('side'),
