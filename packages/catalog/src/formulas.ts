@@ -82,10 +82,12 @@ export const CAVE_CONSTANTS = {
 
 /**
  * ⭐ SUR SABİTLERİ (§13.21.2). İkisi de **kurgu** — doküman onarım süresini vermiyor.
- * Tamamen yıkılmış seviye 1 sur 8 saatte, seviye 20 sur 1 sa 38 dk'da toparlanır.
+ * Tamamen yıkılmış seviye 1 sur **12 saatte**, seviye 20 sur 2 sa 28 dk'da toparlanır.
+ * (Kullanıcı 14 saat önerdi ve makul bir değere çekilmesini istedi; 12 saat seçildi — sur
+ * tam yıkılınca savunma birimi ÜRETİLEMEDİĞİ için ceza zaten ağır.)
  */
 export const WALL_CONSTANTS = {
-  repairBaseSeconds: 8 * 3600,
+  repairBaseSeconds: 12 * 3600,
   repairDecayRate: 0.92,
 } as const;
 
@@ -195,7 +197,7 @@ export function caveTransferSeconds(area: number, caveLevel: number): number {
  * Doküman: *"Savaşlarda yıkılan sur savaş sonrasında belirli bir süre içinde yeniden onarılır."*
  * Süreyi söylemiyor; kullanıcı kurguladı (2026-07-29): **hem alınan hasara hem seviyeye** bağlı.
  *
- * `süre = 8 saat × hasarOranı × 0,92^(sv−1)`
+ * `süre = 12 saat × hasarOranı × 0,92^(sv−1)`
  *
  * • **Hasarla orantılı**, çünkü %20'ye düşmüş bir sur %70'te kalandan çok daha uzun sürmeli
  *   (kullanıcının verdiği örnek).
@@ -477,13 +479,73 @@ export function spyLevelFor(diff: number): SpyLevel {
   return SPY_LEVELS[Math.min(SPY_LEVELS.length - 1, step + 1)]!;
 }
 
-/** Kahraman diriltme maliyeti: (3000, 2000) × 1,5^seviye (§13.11.4b). */
+/**
+ * Kahraman diriltme maliyeti: **(3000, 2000) × 1,5^seviye** (§13.11.4b).
+ *
+ * ⭐ Taban ÖLÇÜLDÜ: oyunun kendi tapınak ekranında seviye 0 bir ölü kahraman için
+ * `3000 altın · 2000 yiyecek` yazıyor (`images/scr_itv03`). Yalnız seviye çarpanı bizim.
+ * Çarpan bilerek dik — seviye 10'da 173 bin, seviye 15'te 1,3 milyon altın. Süre de aynı yönde
+ * uzuyor (bkz. `heroReviveSeconds`): yüksek seviye kahramanı kaybetmek her iki eksende de ağır.
+ * ⚠️ Maliyet Tapınak seviyesinden **etkilenmez** (kullanıcı kararı) — Tapınak yalnız süreyi kısaltır.
+ */
 export function heroReviveCost(level: number): Cost {
   const k = 1.5 ** Math.max(0, level);
   return { gold: Math.round(3000 * k), food: Math.round(2000 * k) };
 }
 
-/** Kahraman diriltme süresi (saniye): 2 saat × 1,5^seviye / 1,4^(Tapınak−1). */
+/**
+ * Kahraman diriltme süresi (saniye): **9 saat × 1,10^Seviye × 0,93^Tapınak**.
+ * Alt sınır 15 dakika, üst sınır 48 saat.
+ *
+ * Yön (kullanıcı, 2026-07-29 ikinci düzeltme — *"mantıklı olan da bu"*):
+ *  • **Kahraman seviyesi UZATIR** — yüksek seviye kahramanı kaybetmek ağır olmalı. Maliyet de
+ *    aynı yönde artar.
+ *  • **Tapınak seviyesi KISALTIR** — Tapınak'ı yükseltmenin somut faydası bu. Maliyete etkisi yok.
+ *  • Buradaki Tapınak, kahramanın **o an bulunduğu şehrin** tapınağıdır. (Kahraman ÇIKMA
+ *    ihtimalindeki tapınak bambaşka: oyuncunun TÜM şehirlerinin toplamı.)
+ *
+ * Taban: tapınaksız bir şehirde ölen seviye 0 kahraman **9 saat** bekler — kahraman kıymetli bir
+ * ünite, ölümü oyunun en başında da hissedilmeli.
+ *
+ * Kalibrasyon: oyunun ekranında seviye 0 bir kahraman için `2:04:27` (7467 sn) görülüyor; tapınak
+ * seviyesi yazmıyor ama kahraman çıkabilmesi için yüksek olmalı. Model Tapınak 20 / seviye 0 için
+ * `2:06:29` veriyor — 2 dakika farkla oturuyor.
+ */
 export function heroReviveSeconds(level: number, temple: number): number {
-  return (7200 * 1.5 ** Math.max(0, level)) / 1.4 ** Math.max(0, temple - 1);
+  const raw = 32_400 * 1.1 ** Math.max(0, level) * 0.93 ** Math.max(0, temple);
+  return Math.min(48 * 3600, Math.max(900, Math.round(raw)));
+}
+
+/**
+ * ⭐ Biriken tecrübenin karşılığı olan seviye.
+ *
+ * Eşikler BİRİKİMLİ — seviye atlarken XP harcanmaz, yalnız bir sonraki eşiğe bakılır. Bu yüzden
+ * tek savaştan **birkaç seviye birden** çıkabilir ve seviye **kendiliğinden** yükselir: oyuncu
+ * hiçbir düğmeye basmaz (kullanıcı kararı 2026-07-29). Oyuncunun elle yaptığı tek iş, seviye
+ * başına gelen 3 puanı dağıtmak.
+ */
+export function heroLevelForXp(xp: number): number {
+  let level = 0;
+  while (level < 100 && xp >= heroXpForLevel(level + 1)) level += 1;
+  return level;
+}
+
+/**
+ * ⭐ SUR'UN O ANKİ BÜTÜNLÜĞÜ — onarım ilerledikçe doğrusal olarak 1'e yaklaşır.
+ *
+ * Savaşta hasar gören sur `from` anında `start` bütünlüğüyle onarıma girer, `until` anında tam
+ * sağlam olur. **Onarım sürerken gelen saldırıyı, sur o ana kadar onarılmış yüzdeyle karşılar**
+ * (kullanıcı kararı 2026-07-29): eskiden savaşa hep savaş-sonrası değerle giriyordu, yani
+ * onarımda geçen saatlerin hiçbir karşılığı yoktu.
+ *
+ * @param start onarım BAŞLARKENki bütünlük (savaş sonrası kalan oran, 0-1)
+ */
+export function wallCurrentIntegrity(
+  start: number, from: Date | null, until: Date | null, now: Date,
+): number {
+  if (until == null || until <= now) return 1;
+  const s = Math.min(1, Math.max(0, start));
+  if (from == null || from >= until) return s;
+  const oran = (now.getTime() - from.getTime()) / (until.getTime() - from.getTime());
+  return Math.min(1, s + (1 - s) * Math.min(1, Math.max(0, oran)));
 }

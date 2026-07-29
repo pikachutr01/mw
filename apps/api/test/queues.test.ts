@@ -644,3 +644,60 @@ describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur
     await expect(queues.enqueueTech({ cityId, playerId, type: 'blacksmithing', at })).resolves.toBeTruthy();
   });
 });
+
+/**
+ * ⭐ SUR TAM YIKILDIYSA SAVUNMA BİRİMİ ÜRETİLEMEZ (§13.21.2, kullanıcı kararı 2026-07-29).
+ * Kilit yalnız TAM yıkımda (bütünlük %0) ve yalnız birim şeridinde geçerli — kısmi hasarda
+ * sur ayakta, üretim sürer; Sur/Büyü Kalkanı yükseltmeleri hiçbir hâlde engellenmez.
+ */
+describe('yıkık sur savunma üretimini kilitler', () => {
+  async function setWall(integrity: number, repairMinutes: number | null): Promise<void> {
+    await h.db.execute(sql`
+      UPDATE cities
+         SET wall_integrity = ${integrity}::numeric,
+             wall_repair_from = ${repairMinutes == null ? null : sql`now()`},
+             wall_repair_until = ${repairMinutes == null
+    ? null
+    : sql`now() + (${repairMinutes} || ' minutes')::interval`}
+       WHERE id = ${cityId}
+    `);
+  }
+
+  beforeEach(async () => {
+    await giveResources(1e12, 1e12);
+    // ⚠️ Sur SEVİYESİ `defenses` tablosunda durur (`structureLevels`), `buildings`ta değil.
+    await h.db.execute(sql`
+      INSERT INTO defenses (city_id, type, count) VALUES (${cityId}, 'wall', 3)
+      ON CONFLICT (city_id, type) DO UPDATE SET count = 3
+    `);
+    await setTech('archery', 1);   // okçu kulesinin ön-şartı
+  });
+
+  it('sur %0 ve onarımdayken savunma birimi reddedilir', async () => {
+    const at = await clock.gameNow(worldId);
+    await setWall(0, 120);
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 1, at }))
+      .rejects.toMatchObject({ code: 'wall_destroyed' });
+  });
+
+  it('KISMİ hasarda üretim serbest — sur hâlâ ayakta', async () => {
+    const at = await clock.gameNow(worldId);
+    await setWall(0.35, 120);
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 1, at }))
+      .resolves.toBeTruthy();
+  });
+
+  it('onarım bitince kilit kalkar', async () => {
+    const at = await clock.gameNow(worldId);
+    await setWall(0, -5);            // bitiş anı geçmişte
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 1, at }))
+      .resolves.toBeTruthy();
+  });
+
+  it('Sur yükseltmesi yıkıkken de yapılabilir — onarımın önü kesilmez', async () => {
+    const at = await clock.gameNow(worldId);
+    await setWall(0, 120);
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at }))
+      .resolves.toBeTruthy();
+  });
+});

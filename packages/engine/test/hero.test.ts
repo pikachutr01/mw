@@ -1,182 +1,210 @@
 /**
- * ⭐ KAHRAMAN testleri — yetenek bütçesi (3 puan/seviye) + savaştaki davranış.
- * Referans ölçümler: proje kökündeki `KAHRAMAN_TESTLERI.md` (orijinal binary simülatör çıktıları).
+ * ⭐ KAHRAMAN — yetenek bütçesi + binary savaş modeli.
+ *
+ * Savaş satırlarının tamamı kullanıcının binary simülatörde koştuğu **Tur 2 / Tur 3** ölçümleri
+ * (`KAHRAMAN_TESTLERI_TUR2.md` ve `..._TUR3.md`). Eski `KAHRAMAN_TESTLERI.md` seti burada
+ * KULLANILMIYOR: o setin tamamı simetrik (iki tarafta aynı ordu) kurulmuştu ve bıçak-sırtı
+ * senaryoda motorun genel hatası kahramanın kendi etkisinden ayırt edilemiyordu.
+ *
+ * Model: kahraman = stat tablosu satır 12 (hp/magicHp 1200 · pAtk/pDef 240 · mAtk 300 · mDef 4000).
+ *   stat = round((sv+1) × taban × 1,07^sv + taban × (1 + 4,8 × yetenek))
+ *   havuz: faz 1 yok · faz 2 hp · faz 3 magicHp   ·   P: Alan = round(mDef × 0,005)
+ *   durum -= 100 × net/mDef, **yalnız 0'da ölür**
  */
 import { describe, expect, it } from 'vitest';
 import {
-  assertHeroSkills, DEFAULT_COMBAT_CONFIG, heroSkillBudget, mergeCombatConfig, simulate,
+  assertHeroSkills, DEFAULT_COMBAT_CONFIG, captureChance, heroSkillBudget, mergeCombatConfig, simulate,
 } from '../src/index.ts';
-import type { SimulateInput } from '../src/types.ts';
+import type { SimulateInput, UnitCounts } from '../src/types.ts';
 
-const TECH_10 = {
-  archery: 10, blacksmithing: 10, chemistry: 10, instinct: 10,
-  sorcery: 10, talisman: 10, armor: 10, masonry: 10,
-};
-const ARMY = { dwarf: 2000, elf: 1200, cavalry: 500, shaman: 300, cargo_wagon: 300 };
+type Hero = { level: number; fAtk?: number; fDef?: number; mAtk?: number; mDef?: number };
 
-function battle(hero: { level: number; fAtk?: number; fDef?: number; mAtk?: number; mDef?: number }, seed = 'hero'): SimulateInput {
+const AF: UnitCounts = { dwarf: 2000, elf: 1200, cavalry: 500, shaman: 200 };
+const DF: UnitCounts = { dwarf: 2600, elf: 1400, cavalry: 600, shaman: 200 };
+const AS: UnitCounts = { dwarf: 3000, elf: 1600, cavalry: 700, shaman: 200 };
+const DS: UnitCounts = { dwarf: 2000, elf: 1200, cavalry: 500, shaman: 200 };
+const AM: UnitCounts = { dragon: 35, dwarf: 600 };
+const DM: UnitCounts = { dragon: 40, dwarf: 800, shaman: 60 };
+
+const SEEDS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+
+/** Birkaç seed'in ortalaması (jitter üç değerli: 0,999 / 1,000 / 1,001). */
+function measure(a: UnitCounts, d: UnitCounts, hero: Hero | null, side: 'a' | 'd') {
+  const runs = SEEDS.map((seed) => {
+    const input: SimulateInput = {
+      seed,
+      attacker: {
+        counts: a, heroes: side === 'a' && hero ? [hero] : [],
+        temple: 20, heroCount: side === 'a' ? 1 : 0,
+      },
+      defender: {
+        counts: d, heroes: side === 'd' && hero ? [hero] : [],
+        temple: 20, heroCount: side === 'd' ? 1 : 0,
+      },
+    };
+    return simulate(input);
+  });
+  const mean = (f: (r: (typeof runs)[number]) => number): number =>
+    runs.reduce((s, r) => s + f(r), 0) / runs.length;
+  const heroes = runs
+    .map((r) => r[side === 'a' ? 'attacker' : 'defender'].heroes[0])
+    .filter((h): h is NonNullable<typeof h> => h != null);
   return {
-    seed,
-    attacker: { counts: ARMY, tech: TECH_10, heroes: [hero], temple: 20, heroCount: 1 },
-    defender: { counts: ARMY, tech: TECH_10 },
+    atkLost: mean((r) => r.attacker.lost),
+    defLost: mean((r) => r.defender.lost),
+    durum: heroes.length ? heroes.reduce((s, h) => s + h.durum, 0) / heroes.length : null,
+    turns: mean((r) => r.turns),
   };
 }
+
+const near = (got: number, want: number, tolPct = 5, floor = 4): void => {
+  expect(Math.abs(got - want), `${got.toFixed(0)} ≉ ${want}`)
+    .toBeLessThanOrEqual(Math.max(floor, want * (tolPct / 100)));
+};
 
 describe('yetenek bütçesi: seviye başına 3 puan', () => {
   it('seviye 8 kahraman en fazla 24 puan dağıtabilir', () => {
     const b = heroSkillBudget({ level: 8, fAtk: 12, fDef: 12 });
     expect(b.total).toBe(24);
-    expect(b.spent).toBe(24);
     expect(b.remaining).toBe(0);
     expect(b.valid).toBe(true);
   });
 
   it('bütçe aşımı yakalanır', () => {
-    const b = heroSkillBudget({ level: 8, fAtk: 20, fDef: 10 });
-    expect(b.valid).toBe(false);
+    expect(heroSkillBudget({ level: 8, fAtk: 20, fDef: 10 }).valid).toBe(false);
     expect(() => assertHeroSkills({ level: 8, fAtk: 20, fDef: 10 })).toThrow(/bütçe/);
   });
 
-  it('dağıtılmamış puan geçerlidir (kahraman puanını saklayabilir)', () => {
-    const b = heroSkillBudget({ level: 10 });
-    expect(b.total).toBe(30);
-    expect(b.remaining).toBe(30);
-    expect(b.valid).toBe(true);
+  it('dağıtılmamış puan geçerlidir', () => {
+    expect(heroSkillBudget({ level: 10, fAtk: 5 }).remaining).toBe(25);
   });
 
-  it('puan/seviye config ile değişir', () => {
-    const cfg = mergeCombatConfig({ hero: { pointsPerLevel: 5 } });
-    expect(heroSkillBudget({ level: 8 }, cfg).total).toBe(40);
+  it('seviye 0 kahramanın puanı yoktur', () => {
+    expect(heroSkillBudget({ level: 0 }).total).toBe(0);
   });
 });
 
-describe('yeteneklerin savaştaki etkisi', () => {
-  it('büyü yetenekleri fiziksel savaşta ETKİSİZ (kahramanın büyü tabanı 0)', () => {
-    const none = simulate(battle({ level: 10 }));
-    const magicAtk = simulate(battle({ level: 10, mAtk: 10 }));
-    const magicDef = simulate(battle({ level: 10, mDef: 10 }));
-    // KAHRAMAN_TESTLERI D3/D4: ikisi de H2 (yetenek 0) ile birebir aynı çıkmıştı.
-    expect(magicAtk.defender.lost).toBe(none.defender.lost);
-    expect(magicDef.defender.lost).toBe(none.defender.lost);
+describe('kahraman savaş modeli — Tur 2/3 altın ölçümleri', () => {
+  it.each([
+    ['kahramansız', null, 2543, 1223],
+    ['sv 5', { level: 5 }, 2494, 1346],
+    ['sv 10', { level: 10 }, 2426, 1517],
+    ['sv 15', { level: 15 }, 2314, 1822],
+    ['sv 20', { level: 20 }, 1950, 2875],
+  ] as [string, Hero | null, number, number][])('K · %s', (_ad, hero, atk, def) => {
+    const r = measure(AF, DF, hero, 'a');
+    near(r.atkLost, atk);
+    near(r.defLost, def);
   });
 
-  /**
-   * ⚠️ Y turu (2026-07-26) bir ara vardığım "üssel, puan başına ×1,18" çıkarımını ÇÜRÜTTÜ:
-   * o rakam yalnız 0-12 puanlık pencereden geliyordu. 24/45/60 puan ölçülünce puan başına kazanç
-   * yavaşlıyor (×1,244 → ×1,082 → ×1,043 → ×1,036 → ×1,018) ve şekil TOPLAMSAL/lineer çıkıyor.
-   * Bu test o hatayı bir daha yapmamızı engelliyor: getiri AZALAN olmalı.
-   */
-  it('fizSald getirisi puan başına AZALIR (üssel değil)', () => {
-    const own = (fAtk: number): number => {
-      // Kendi kaybındaki düşüş, kahraman ofansının doğrudan ölçüsü (savunan kaybı doyuyor).
-      const r = simulate(battle({ level: 15, fAtk }, 'x'));
-      return r.attacker.lost;
-    };
-    const s0 = own(0);
-    const s12 = own(12);
-    const s24 = own(24);
-    const s45 = own(45);
-
-    // Daha çok puan her zaman daha iyi…
-    expect(s12).toBeLessThan(s0);
-    expect(s24).toBeLessThan(s12);
-    expect(s45).toBeLessThan(s24);
-
-    // …ama puan başına kazanç azalıyor: ilk 12 puan, son 21 puandan daha çok iş yapıyor.
-    const ilk12PuanBasina = (s0 - s12) / 12;
-    const son21PuanBasina = (s24 - s45) / 21;
-    expect(ilk12PuanBasina).toBeGreaterThan(son21PuanBasina);
+  it('⭐ seviye 0 kahraman da savaşır (kahramansızdan farklı)', () => {
+    const yok = measure(AF, DF, null, 'a');
+    const sifir = measure(AF, DF, { level: 0 }, 'a');
+    expect(sifir.defLost).toBeGreaterThan(yok.defLost);
+    near(sifir.defLost, 1249);          // ölçüm: 1247-1251
   });
 
-  it('savunan kaybı DOYAR (öldürülecek ordu kalmıyor)', () => {
-    // Ölçüm: 12/24/45/60 puanda savunan kaybı 4015 → 4254 → 4269 → 4276; ordu 4300 birim.
-    const s24 = simulate(battle({ level: 15, fAtk: 24 }, 'doy'));
-    const s45 = simulate(battle({ level: 15, fAtk: 45 }, 'doy'));
-    const ordu = 2000 + 1200 + 500 + 300 + 300;
-    expect(s24.defender.lost).toBeGreaterThan(ordu * 0.95);
-    expect(s45.defender.lost).toBeGreaterThan(ordu * 0.95);
-    expect(s45.defender.lost).toBeLessThanOrEqual(ordu);
+  it.each([
+    ['sv 0 · fizSald 0', { level: 0 }, 1249],
+    ['sv 0 · fizSald 3', { level: 0, fAtk: 3 }, 1420],
+    ['sv 0 · fizSald 9', { level: 0, fAtk: 9 }, 1785],
+    ['sv 15 · fizSald 6', { level: 15, fAtk: 6 }, 2195],
+    ['sv 15 · fizSald 12', { level: 15, fAtk: 12 }, 2606],
+    ['sv 5 · fizSald 12', { level: 5, fAtk: 12 }, 2079],
+    ['sv 10 · fizSald 12', { level: 10, fAtk: 12 }, 2257],
+    ['sv 20 · fizSald 12', { level: 20, fAtk: 12 }, 3759],
+  ] as [string, Hero, number][])('fizSald · %s → savunan kaybı', (_ad, hero, def) => {
+    near(measure(AF, DF, hero, 'a').defLost, def);
   });
 
-  it('yüksek fizSald savaşı KISALTIR (ölçüm: 45 ve 60 puanda 4 tur)', () => {
-    expect(simulate(battle({ level: 15 }, 'tur')).turns).toBe(5);
-    expect(simulate(battle({ level: 15, fAtk: 45 }, 'tur')).turns).toBeLessThanOrEqual(4);
-    expect(simulate(battle({ level: 20, fAtk: 60 }, 'tur')).turns).toBeLessThanOrEqual(4);
+  it('⭐ yetenek katkısı SEVİYEDEN BAĞIMSIZ (12 puanın mutlak getirisi sabit)', () => {
+    const gain = (level: number): number =>
+      measure(AF, DF, { level, fAtk: 12 }, 'a').defLost - measure(AF, DF, { level }, 'a').defLost;
+    const oran = gain(20) / gain(5);
+    // Seviye-ölçekli olsaydı sv20 getirisi sv5'inkinin ~10 katı çıkardı; ölçüm neredeyse eşit.
+    expect(oran).toBeGreaterThan(0.75);
+    expect(oran).toBeLessThan(1.45);
   });
 
-  it('fizSald, kendi kaybını düşürmede fizSav’dan DAHA etkili', () => {
-    // Ölçüm: Y1 (24 fizSald) atk 688 · Y3 (45 fizSav) atk 908 → saldırı, savunmadan iyi korur.
-    const saldiri24 = simulate(battle({ level: 15, fAtk: 24 }, 'k'));
-    const savunma45 = simulate(battle({ level: 15, fDef: 45 }, 'k'));
-    expect(saldiri24.attacker.lost).toBeLessThan(savunma45.attacker.lost);
+  it('⭐ büyüSald savunanın kaybını ARTIRIR (büyü ağırlıklı ordu)', () => {
+    const yok = measure(AM, DM, null, 'a');
+    const b0 = measure(AM, DM, { level: 15 }, 'a');
+    const b10 = measure(AM, DM, { level: 15, mAtk: 10 }, 'a');
+    near(yok.defLost, 228);
+    near(b0.defLost, 721);
+    expect(b10.defLost).toBeGreaterThan(b0.defLost);   // ölçüm: 721 → 806
   });
 
-  it('büyüye harcanan puan ZİYAN olur (Y4 kanıtı)', () => {
-    // Y4: 15 fizSald + 15 fizSav + 15 büyü → atk 758; Y1: 24 fizSald tek başına → atk 688.
-    const dengeli = simulate(battle({ level: 15, fAtk: 15, fDef: 15, mAtk: 8, mDef: 7 }, 'z'));
-    const sadeceSaldiri = simulate(battle({ level: 15, fAtk: 24 }, 'z'));
-    expect(sadeceSaldiri.attacker.lost).toBeLessThan(dengeli.attacker.lost);
+  it('⭐ savunanda ÇOK Şaman varken büyü etkisiz kalır (eski D3/D4 körlüğü)', () => {
+    const kor: UnitCounts = { dragon: 40, dwarf: 800, shaman: 900 };
+    const b0 = measure(AM, kor, { level: 15 }, 'a');
+    const b40 = measure(AM, kor, { level: 15, mAtk: 40 }, 'a');
+    expect(b0.defLost).toBeLessThan(20);
+    expect(Math.abs(b40.defLost - b0.defLost)).toBeLessThan(30);
   });
 
-  it('fizSav saldıranın kaybını düşürür', () => {
-    const s0 = simulate(battle({ level: 10 }, 'y'));
-    const s10 = simulate(battle({ level: 10, fDef: 10 }, 'y'));
-    expect(s10.attacker.lost).toBeLessThan(s0.attacker.lost);
+  it('savunandaki kahraman kendi ordusunun kaybını düşürür', () => {
+    near(measure(AS, DS, null, 'd').defLost, 3396);
+    near(measure(AS, DS, { level: 15 }, 'd').defLost, 3125);
   });
 
-  it('seviye tek başına küçük etkilidir (orijinal: lvl5→15 yalnız %11)', () => {
-    const l5 = simulate(battle({ level: 5 }, 'z'));
-    const l15 = simulate(battle({ level: 15 }, 'z'));
-    const fark = (l5.attacker.lost - l15.attacker.lost) / l5.attacker.lost;
-    expect(fark).toBeGreaterThan(0);
-    expect(fark).toBeLessThan(0.25);
+  it.each([
+    [3000, 301, 1640],
+    [8000, 301, 380],
+  ])('X · savunan %i Cüce → kahraman ölür', (n, atk, def) => {
+    const r = measure({ dwarf: 300 }, { dwarf: n }, { level: 15 }, 'a');
+    near(r.atkLost, atk);
+    near(r.defLost, def);
+    expect(r.durum).toBe(0);
   });
 
-  /**
-   * ⚠️ Y turu tavanı ÇÜRÜTTÜ. Önce "tek kahraman orduyu ikame etmemeli" diye %50 tavan koymuştum;
-   * ölçüm tam puanlı kahramanın GERÇEKTEN ordu ölçeğinde olduğunu gösterdi (lvl20/60 puan:
-   * saldıran 4.300 birimin yalnız 318'ini kaybederek savunanı 4 turda siliyor).
-   * Varsayılan tavan artık ölçülen aralığın dışında; alan yalnız denge düğmesi olarak duruyor.
-   */
-  it('tam puanlı kahraman ordu ölçeğindedir (ölçülen davranış)', () => {
-    const full = simulate(battle({ level: 20, fAtk: 60 }, 'cap'));
-    const none = simulate(battle({ level: 20 }, 'cap'));
-    // Kendi kaybı en az yarıya inmeli — kahraman gerçekten belirleyici.
-    expect(full.attacker.lost).toBeLessThan(none.attacker.lost * 0.5);
-    // Varsayılan tavan ölçülen aralığı KISMIYOR.
-    expect(DEFAULT_COMBAT_CONFIG.hero.maxPoolShare).toBeGreaterThanOrEqual(1);
+  it('⭐ yaşayan kahraman orduyu ayakta tutar (savaş erken bitmez)', () => {
+    // 300 Cüce + kahraman vs 3000 Cüce: savaşçılar 3. turda biter, kahraman savaşı 5 tura taşır.
+    expect(measure({ dwarf: 300 }, { dwarf: 3000 }, { level: 15 }, 'a').turns).toBe(5);
   });
 
-  it('tavan düğmesi hâlâ çalışıyor (denge gerekirse kısılabilir)', () => {
-    const kisik = mergeCombatConfig({ hero: { maxPoolShare: 0.1 } });
-    const serbest = simulate(battle({ level: 20, fAtk: 60 }, 'knob'));
-    const kisilmis = simulate(battle({ level: 20, fAtk: 60 }, 'knob'), kisik);
-    expect(kisilmis.attacker.lost).toBeGreaterThan(serbest.attacker.lost);
+  it('⭐ ölen kahraman "ünite kaybı" sayılır (300 Cüce + kahraman → 301)', () => {
+    const r = measure({ dwarf: 300 }, { dwarf: 12000 }, { level: 15 }, 'a');
+    expect(r.durum).toBe(0);
+    near(r.atkLost, 301, 1, 1);
+  });
+
+  it("kahraman hasar alır ama 0'a inmedikçe ÖLMEZ", () => {
+    const r = measure(
+      { dragon: 30, dwarf: 1500 }, { dwarf: 1200, elf: 600, shaman: 60 }, { level: 15 }, 'd',
+    );
+    expect(r.durum!).toBeGreaterThan(60);
+    expect(r.durum!).toBeLessThan(90);       // ölçüm: %73,4-73,8
   });
 });
 
-describe('kahraman durumu (ölüm)', () => {
-  it('ezici düşman karşısında kahraman ölür (KAHRAMAN_TESTLERI X3)', () => {
-    const r = simulate({
-      seed: 'x3',
-      attacker: { counts: ARMY, tech: TECH_10, heroes: [{ level: 10, fAtk: 4, fDef: 3 }] },
-      defender: {
-        counts: { dwarf: 5000, elf: 3000, cavalry: 1200, shaman: 700, cargo_wagon: 500 },
-        tech: TECH_10,
-      },
-    });
-    expect(r.winner).toBe('defender');
-    expect(r.attacker.heroes[0]?.alive).toBe(false);
-    expect(r.attacker.heroes[0]?.durum).toBe(0);
+describe('kahraman çıkma ihtimali (28/28 ölçüm)', () => {
+  it.each([
+    [20, 0, 566, 2.83], [20, 0, 879, 4.395], [20, 0, 1017, 5.085],
+    [20, 1, 1011, 1.137], [20, 1, 1289, 1.450], [20, 1, 736, 0.828],
+  ])('Tapınak %i · %i kahraman · XP %i', (t, k, xp, beklenen) => {
+    expect(captureChance(t, k, xp)).toBeCloseTo(beklenen, 2);
   });
 
-  it('küçük düşman karşısında kahraman tam durumda kalır (X1)', () => {
-    const r = simulate({
-      seed: 'x1',
-      attacker: { counts: ARMY, tech: TECH_10, heroes: [{ level: 10, fAtk: 4, fDef: 3 }] },
-      defender: { counts: { dwarf: 500, elf: 300, shaman: 100 }, tech: TECH_10 },
+  it('XP 499 ve altında kahraman ÇIKMAZ', () => {
+    expect(captureChance(20, 0, 499)).toBe(0);
+    expect(captureChance(20, 0, 500)).toBeGreaterThan(0);
+  });
+
+  it('ceza ÇIKARMALIDIR (çarpımsal değil): 1 kahraman ihtimali ~4 kat düşürür', () => {
+    const oran = captureChance(20, 0, 1000) / captureChance(20, 1, 1000);
+    expect(oran).toBeGreaterThan(3.5);   // çarpımsal olsaydı yalnız 1,25 kat olurdu
+  });
+
+  it('5 kahramanı olan oyuncu yeni kahraman çıkaramaz', () => {
+    expect(captureChance(60, 5, 40000)).toBe(0);
+  });
+
+  it('ceza config ile ayarlanabilir (denge düğmesi)', () => {
+    const yumusak = mergeCombatConfig({
+      capture: { ...DEFAULT_COMBAT_CONFIG.capture, perHeroPenalty: 40 },
     });
-    expect(r.winner).toBe('attacker');
-    expect(r.attacker.heroes[0]?.durum).toBe(100);
+    expect(captureChance(20, 2, 2000, yumusak)).toBeGreaterThan(0);
+    expect(captureChance(20, 2, 2000)).toBe(0);   // varsayılan binary cezasıyla imkânsız
   });
 });

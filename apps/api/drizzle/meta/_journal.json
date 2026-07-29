@@ -99,6 +99,27 @@
       "when": 1785274757968,
       "tag": "0013_past_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785347198971,
+      "tag": "0014_hero_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785347213317,
+      "tag": "0015_hero_dead_until_drop",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785351599933,
+      "tag": "0016_wall_repair_from",
+      "breakpoints": true
     }
   ]
 }

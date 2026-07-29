@@ -7,11 +7,20 @@
 export interface CombatConfig {
   engineVersion: string;
 
-  /** [S] Sur: güç = power × sv^exp × bütünlük · bölücü = tough. */
-  wall: { power: number; tough: number; exp: number };
+  /** ⭐ [S] Sur — Büyü Kalkanı ile AYNI formül (bkz. magicShield), yalnız FİZİKSEL fazlarda hatta
+   *  ve bölücüsü ölçekli. 2026-07-29: tasarımsal power/tough/exp modeli kaldırıldı. */
+  wall: { base: number; durumMax: number };
 
-  /** [K] Büyü Kalkanı: büyü hasarını min(max, perLevel × etkinSeviye) kadar azaltır. */
-  magicShield: { perLevel: number; max: number; shamanPerLevel: number };
+  /**
+   * ⭐ [K] Büyü Kalkanı — binary mekanizması (2026-07-29, `combat.ts` §K'ya bak).
+   * Kalkan pasif çarpan DEĞİL; yalnız BÜYÜ fazında hatta olan, Sur'un ikizi bir savunma nesnesi:
+   *   güç = round(base^Sv × Alan × durum/100) → P'ye girer (hasarın bir kısmını üstüne çeker)
+   *   mitigasyon = mAtk × Sv × base^Sv × durum/100
+   *   durum(0..durumMax) net hasarla erir; ekrandaki yüzde budur.
+   * ⚠️ `base` binary'de 1,8. Oyunda seviye tavanı 40 → 1,8^40 ≈ 1,6e10; denge için düşürülebilir,
+   * ama binary doğrulama koşularında 1,8 kalmalı.
+   */
+  magicShield: { base: number; durumMax: number };
 
   /** [Z] Tuzak: tek kullanımlık salvo. */
   trap: {
@@ -44,7 +53,11 @@ export interface CombatConfig {
     debrisFromNetLosses: boolean;
   };
 
-  /** Şaman kalkanı kalibrasyon katsayısı [REKON]. */
+  /**
+   * Şaman kalkanı katsayısı. ⭐ Binary'de katsayı YOK (`FSUBR` ile ham stat çıkarılır) → 1,0.
+   * 2026-07-29'a kadar 0,85'ti; kullanıcının 8 ölçümlük kalkan serisi 1,0'ı kesinleştirdi
+   * (kalkan yüzdesi RMSE 40,8 → 0,53 puan).
+   */
   shieldCal: number;
 
   /** Karşı-yön (savunan→saldıran) kalibrasyonu [REKON]: motor saldıranı ~%1 az öldürüyordu. */
@@ -65,30 +78,66 @@ export interface CombatConfig {
    * lvl20 60 puan → 455k. Yüksek puanda **seviye terimi gürültü** kalıyor (lvl15 s45 ile
    * lvl20 s60 aynı doğruya oturuyor) — çünkü oyunda puan zaten seviyeye bağlı (3/seviye).
    */
+  /**
+   * ⭐ KAHRAMAN — binary modeli (2026-07-29, 60+ ölçümle doğrulandı).
+   * Statlar `heroStats()` içinde; buradaki sabitler o formülün düğmeleri.
+   */
   hero: {
-    /** Savunma katkısı: defBase + defPerLevel × seviye + defPerPoint × fizSav */
-    defBase: number;
-    defPerLevel: number;
-    defPerPoint: number;
-    /** Ofans katkısı: offLevelCoef × seviye² + offPerPoint × fizSald */
-    offLevelCoef: number;
-    offPerPoint: number;
+    /** Seviye teriminin üs tabanı — binary `FUN_0040d884`: 1,07. */
+    levelBase: number;
     /**
-     * Kahraman katkısına tavan (kendi ordusunun havuzunun/P'sinin katı olarak).
-     *
-     * ⚠️ **Y turu tavanı ÇÜRÜTTÜ:** ölçüm, tam puanlı kahramanın gerçekten **ordu ölçeğinde**
-     * olduğunu gösterdi (lvl20/60 puan: saldıran 4.300 birimin yalnız 318'ini kaybederek
-     * savunanı 4 turda siliyor). Bu yüzden varsayılan **2,0** = ölçülen aralıkta devre dışı.
-     * Alan yine de duruyor: denge gerekçesiyle kısmak istenirse tek config satırı (oyun tasarımı
-     * kararı olur, ölçüm değil).
+     * ⭐ Yetenek terimi: `taban × (1 + skillK × yetenek)` — **LİNEER ve seviyeden BAĞIMSIZ**.
+     * Binary asm'de bu terim `taban × 1,06^yetenek` yazıyor ama ölçüm onu 25 kat küçük buluyor.
+     * İki grup kesin sonuç verdi: L grubu (fizSald 12 sabit, sv 5/10/15/20 → katkı 68.866 /
+     * 69.392 / 69.813 / 71.731 = sabit) ve P grubu (sv 0, puan 1-9 → puan başına 5.260…5.624).
+     * Katsayı taraması net minimum veriyor: 4,0→%3,25 · 4,4→%1,58 · **4,8→%0,74** · 5,2→%1,86.
      */
-    maxPoolShare: number;
-    /** Seviye başına verilen geliştirme puanı (kullanıcı doğrulaması, 2026-07-26). */
+    skillK: number;
+    /**
+     * ⭐ BÜYÜ kanadının katsayısı (büyüSald→magicHp, büyüSav→mAtk). Fizikselden AYRI çünkü
+     * ölçüm öyle diyor: MK grubu (savunanda 900 Şaman) büyüSald 40'ta savunana yalnız 15 kayıp
+     * verdiriyor; fiziksel katsayı 4,8 ile aynı satır 787 kayıp veriyor.
+     * ⚠️ **DOĞRULANMADI** — M3/M4 ölçümü doygun çıktı (805/889 üzerinden 900). Temiz tarama
+     * gerekiyor: `mobiwar-kahraman-kalan-testler` madde 2.
+     */
+    skillKMagic: number;
+    /** mDef'in seviye üssü — yetenek terimi YOK (asm). */
+    mDefLevelBase: number;
+    /** Alan = round(mDef × areaK) — binary sabit 0x40dca8 = 0,005. */
+    areaK: number;
+    /** Durum düşüşü: `durum -= durumScale × net/mDef` — binary 100. */
+    durumScale: number;
+    /** Seviye başına verilen geliştirme puanı (oyun ekranından 5/5 doğrulandı). */
     pointsPerLevel: number;
-    /** Kahramanın bedava taşıdığı baskı eşiği (pool/P). */
-    durumMitigation: number;
-    /** Eşik üstü baskının durumu düşürme hızı. */
-    durumK: number;
+  };
+
+  /**
+   * ⭐ Kahraman çıkma ihtimali (28/28 ölçüm). `temple` = oyuncunun TÜM şehirlerinin tapınak
+   * seviyeleri TOPLAMI.
+   */
+  capture: {
+    /** Tapınak toplamı başına taban puan (binary 10). */
+    perTempleLevel: number;
+    /** Mevcut her kahramanın ÇIKARDIĞI ceza (binary 155 — çarpımsal değil). */
+    perHeroPenalty: number;
+    /** XP çarpanı (binary 0,000025 → 40.000 XP'de doyar). */
+    xpScale: number;
+    /** Bu XP'nin ALTINDA hiç kahraman çıkmaz (binary 499). */
+    xpGate: number;
+    /** Oyuncunun sahip olabileceği en fazla kahraman. */
+    maxHeroes: number;
+  };
+
+  /**
+   * ⭐ Savaşın ürettiği tecrübenin taraflar arasında paylaşımı (kullanıcı kararı, 2026-07-29).
+   * Her taraf KENDİ payını kendi sağ kalan kahramanları arasında seviyeyle ters orantılı böler;
+   * o tarafta kahraman yoksa (ya da hepsi öldüyse) o pay ziyan olur, karşı tarafa GEÇMEZ.
+   */
+  heroXpShare: {
+    /** Kazanan tarafın payı. */
+    winner: number;
+    /** Kaybeden tarafın payı — kahramanı sağ kaldıysa o da öğrenir. */
+    loser: number;
   };
 
   /** Gece görüşü: (1 − 3/(L+3)) × (1−base) + base. */
@@ -112,8 +161,8 @@ export interface CombatConfig {
 
 export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   engineVersion: '0.6.0',
-  wall: { power: 2500, tough: 12000, exp: 0.5 },
-  magicShield: { perLevel: 0.05, max: 0.6, shamanPerLevel: 50 },
+  wall: { base: 1.8, durumMax: 100 },          // ⭐ binary: kalkanla ortak (FUN_00413610/41338c)
+  magicShield: { base: 1.8, durumMax: 100 },   // ⭐ binary: FUN_00413610/41338c (1.8^Sv, durum 0..100)
   trap: { triggerMin: 0.75, triggerMax: 0.99, perGroundUnit: 0.2, gnomeDisarm: 1.5, power: 1.0 },
   gnomeSabotage: { perStruct: 4, max: 0.35 },
   repair: { min: 0.5, max: 0.7 },
@@ -123,19 +172,19 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
     protectedTypes: ['archer_tower', 'oil_cauldron', 'mangonel_tower', 'guard', 'ballista'],
     debrisFromNetLosses: true,
   },
-  shieldCal: 0.85,
-  counterK: 1.01,
+  shieldCal: 1.0,       // ⭐ binary ham çıkarma (eski 0,85 [REKON] yamasıydı)
+  counterK: 1.0,        // ⭐ 2026-07-29: 1,01 yaması kaldırıldı (24 ölçümde net minimum K=1,0)
   hero: {
-    defBase: 3000,
-    defPerLevel: 140,
-    defPerPoint: 420,
-    offLevelCoef: 75,
-    offPerPoint: 7400,
-    maxPoolShare: 2.0,
+    levelBase: 1.07,
+    skillK: 4.8,
+    skillKMagic: 1.0,   // 🟡 geçici — M3 ölçümüne oturuyor (801↔806), MK2 biraz düşük kalıyor
+    mDefLevelBase: 1.06,
+    areaK: 0.005,
+    durumScale: 100,
     pointsPerLevel: 3,
-    durumMitigation: 5.0,
-    durumK: 0.0002,
   },
+  capture: { perTempleLevel: 10, perHeroPenalty: 155, xpScale: 0.000025, xpGate: 499, maxHeroes: 5 },
+  heroXpShare: { winner: 2 / 3, loser: 1 / 3 },
   night: { base: 0.7 },
   turnSchedule: { 1: [], 2: [1, 3], 3: [1, 2, 3], 4: [1, 2, 3], 5: [1, 2, 3] },
   turn1GnomeSkirmish: false,

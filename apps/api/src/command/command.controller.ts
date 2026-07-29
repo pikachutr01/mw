@@ -182,7 +182,7 @@ export class CommandController {
     const rows = kind === 'hero'
       ? await this.db.execute<Record<string, unknown>>(sql`
           SELECT r.rank, r.prev_rank, r.subject_id, h.name, h.level, h.xp,
-                 h.dead_until, h.player_id, p.username AS owner
+                 h.status, h.player_id, p.username AS owner
             FROM rankings r
             JOIN heroes h ON h.id = r.subject_id
             JOIN players p ON p.id = h.player_id
@@ -234,7 +234,7 @@ export class CommandController {
             owner: String(r['owner']),
             level: Number(r['level']),
             xp: Number(r['xp']),
-            dead: r['dead_until'] != null,
+            dead: r['status'] !== 'alive',
             isMine: Number(r['player_id']) === player.playerId,
           }
           : {

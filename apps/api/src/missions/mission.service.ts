@@ -442,7 +442,7 @@ export class MissionService {
           UPDATE heroes SET city_id = ${target.id}
            WHERE id = ${heroId} AND player_id = ${opts.playerId} AND world_id = ${opts.worldId}
              AND city_id = ${opts.originCityId}
-             AND (dead_until IS NULL OR dead_until <= ${opts.at.toISOString()}::timestamptz)
+             AND status = 'alive'
           RETURNING id
         `);
         if (moved.length === 0) {
@@ -915,7 +915,7 @@ export class MissionService {
            AND player_id = ${opts.playerId}
            AND world_id = ${opts.worldId}
            AND city_id IS NOT NULL
-           AND (dead_until IS NULL OR dead_until <= ${opts.at.toISOString()}::timestamptz)
+           AND status = 'alive'
         RETURNING id
       `);
       if (rows.length === 0) {

@@ -620,3 +620,61 @@ export function useCancelMission() {
     onSuccess: () => invalidate(['missions', 'city']),
   });
 }
+
+/* ═══ TAPINAK / KAHRAMANLAR ═════════════════════════════════════════════════ */
+
+export interface HeroSkills { fAtk: number; fDef: number; mAtk: number; mDef: number }
+
+/** İstemcinin kendi durum sözlüğü (`k.java`): Şehirde · Görevde · Diriltiliyor · Yok Edildi. */
+export type HeroState = 'in_city' | 'on_mission' | 'dead' | 'reviving' | 'destroyed';
+
+export interface HeroRow {
+  id: number;
+  name: string;
+  level: number;
+  xp: number;
+  /** Bir sonraki seviyenin eşiği — ekranda `mevcut / eşik` yazar (oyunun kendi biçimi). */
+  xpForNext: number;
+  skills: HeroSkills;
+  pointsTotal: number;
+  pointsSpent: number;
+
+  state: HeroState;
+  reviveUntil: string | null;
+  disappearsAt: string | null;
+  reviveCost: { gold: number; food: number } | null;
+  reviveSeconds: number | null;
+}
+
+export interface TempleView {
+  templeLevel: number;
+  /** ⭐ Çıkma ihtimalinde kullanılan değer: oyuncunun TÜM şehirlerinin tapınak toplamı. */
+  templeTotal: number;
+  heroCount: number;
+  maxHeroes: number;
+  pointsPerLevel: number;
+  heroes: HeroRow[];
+}
+
+export const useTemple = (cityId: number | null): UseQueryResult<TempleView> => useQuery({
+  queryKey: ['temple', cityId],
+  queryFn: () => get<TempleView>(`/api/v1/cities/${cityId}/temple`),
+  enabled: cityId != null,
+  refetchInterval: SAFETY_NET_MS,
+});
+
+/** Kahraman aksiyonları — hepsi tapınağı ve şehri tazeler (diriltme kaynak harcar). */
+function useHeroAction<TBody>(path: (id: number) => string) {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body?: TBody }) =>
+      api(path(id), { method: 'POST', body: body as Record<string, unknown> | undefined }),
+    onSuccess: () => invalidate(['temple', 'city', 'cities']),
+  });
+}
+
+export const useHeroSkills = () => useHeroAction<HeroSkills>((id) => `/api/v1/heroes/${id}/skills`);
+export const useHeroRename = () => useHeroAction<{ name: string }>((id) => `/api/v1/heroes/${id}/rename`);
+export const useHeroRevive = () => useHeroAction<never>((id) => `/api/v1/heroes/${id}/revive`);
+export const useHeroReviveCancel = () =>
+  useHeroAction<never>((id) => `/api/v1/heroes/${id}/revive/cancel`);

@@ -23,16 +23,6 @@ function Soon({ title, lines }: { title: string; lines: string[] }) {
   );
 }
 
-/** §13.11.4 — kahramanlar şehrin tapınağında listelenir (referans `images/kahramanlar.jpeg`). */
-export const TempleScreen = (): React.ReactElement => (
-  <Soon title="Tapınak" lines={[
-    'Şehrin kahramanları: yetenek puanları, tecrübe (mevcut / sonraki seviye)',
-    'Görevde mi, şehirde mi, ölü mü',
-    'Dirilt · Seviye Arttır · Özellikler · Adını Değiştir',
-    'Kahramanlar seviye 0 olarak çıkar; ilk seviye için 500 tecrübe gerekir',
-  ]} />
-);
-
 export const HelpScreen = (): React.ReactElement => (
   <Soon title="Yardım" lines={[
     'Oyun kuralları ve ekran açıklamaları',

@@ -117,11 +117,19 @@ export const cities = pgTable('cities', {
    * ⭐ SUR BÜTÜNLÜĞÜ ve ONARIMI (§13.21.2). Doküman: *"Savaşlarda yıkılan sur savaş sonrasında
    * belirli bir süre içinde yeniden onarılır."*
    *
-   * `wallIntegrity` savaş sonrası kalan oran (0-1); onarım bitene kadar sur bu oranla savaşır,
-   * `wallRepairUntil` geçince tekrar 1 sayılır. İkisini birlikte tutmak şart: yalnız süre
-   * tutulsaydı onarım sırasında gelen ikinci saldırıda sur **tam güçle** savaşırdı.
+   * Üç alan birlikte anlam taşır:
+   *  • `wallIntegrity` — onarım BAŞLARKENki oran (savaş sonrası kalan, 0-1). Onarım ilerledikçe
+   *    DEĞİŞMEZ; o an geçerli bütünlük `wallCurrentIntegrity()` ile hesaplanır.
+   *  • `wallRepairFrom` / `wallRepairUntil` — onarımın başı ve sonu. ⭐ Onarım sürerken gelen
+   *    saldırıyı sur, **o ana kadar onarılmış yüzdeyle** karşılar (kullanıcı, 2026-07-29);
+   *    bunun için başlangıç anı da gerekli — yalnız bitiş tutulsaydı onarımda geçen saatler
+   *    hiçbir işe yaramazdı.
+   *
+   * ⭐ `wallIntegrity = 0` **ve** onarım sürüyorsa sur TAM YIKILMIŞ demektir: o şehirde onarım
+   * bitene kadar savunma birimi üretilemez (§13.21.2).
    */
   wallIntegrity: numeric('wall_integrity', { precision: 6, scale: 4 }).notNull().default('1'),
+  wallRepairFrom: timestamp('wall_repair_from', { withTimezone: true }),
   wallRepairUntil: timestamp('wall_repair_until', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
@@ -394,7 +402,7 @@ export const missionUnits = pgTable('mission_units', {
 
 /* ═══ KAHRAMAN (§13.11.4b/c) ════════════════════════════════════════════════
  * Kahraman ADET değil VARLIK: her biri kendi seviyesi, tecrübesi ve yetenek dağılımıyla
- * ayrı satırdır. Öldüğünde silinmez — `dead_until` ile Tapınak'ta diriltme sürecine girer
+ * ayrı satırdır. Öldüğünde silinmez — `status` ile Tapınak'ta diriltme sürecine girer
  * (§13.11.7), yani seviye ve yetenekleri korunur.
  */
 export const heroes = pgTable('heroes', {
@@ -417,11 +425,23 @@ export const heroes = pgTable('heroes', {
   fDef: integer('f_def').notNull().default(0),
   mAtk: integer('m_atk').notNull().default(0),
   mDef: integer('m_def').notNull().default(0),
-  /** Öldüyse dirilene kadar (OYUN saati). NULL = yaşıyor. */
-  deadUntil: timestamp('dead_until', { withTimezone: true }),
+  /**
+   * ⭐ KAHRAMAN DURUMU (istemcinin kendi sözlüğü, `g.java`/`k.java`):
+   *   `alive`     — şehirde ya da görevde, savaşa katılabilir
+   *   `dead`      — savaşta öldü, şehre döndü; oyuncu ÜCRET ödeyip diriltmeli
+   *   `reviving`  — diriltme başladı, `reviveUntil`da canlanır ("Diriltiliyor" · iptal edilebilir)
+   *   `destroyed` — ordunun tamamıyla birlikte yok oldu; geri getirecek kimse kalmadı.
+   *                  `destroyedAt`+1 saat boyunca tapınakta "Yok Edildi" görünür, sonra silinir.
+   */
+  status: text('status').notNull().default('alive'),
+  /** `reviving` iken diriltmenin biteceği an (OYUN saati). */
+  reviveUntil: timestamp('revive_until', { withTimezone: true }),
+  /** `destroyed` olduğu an — tapınakta 1 saat gösterilip sonra kayıt silinir. */
+  destroyedAt: timestamp('destroyed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('heroes_player').on(t.playerId),
+  index('heroes_status').on(t.status),
   index('heroes_city').on(t.cityId),
 ]);
 

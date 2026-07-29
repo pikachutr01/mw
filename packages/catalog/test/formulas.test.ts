@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildingCost, buildingTimeSeconds, castleBudget, caveCapacity, defenseCapacity,
-  dwarvesToBreakCave, farmOutput, heroXpForLevel, mineOutput, STARTING_RESOURCES,
+  dwarvesToBreakCave, farmOutput, heroLevelForXp, heroReviveCost, heroReviveSeconds,
+  heroXpForLevel, mineOutput, STARTING_RESOURCES, wallCurrentIntegrity, wallRepairSeconds,
   timeFromCost, trainingTimeSeconds, unitCost, unitTimeValue, UNITS_BY_ID,
 } from '../src/index.ts';
 
@@ -35,6 +36,115 @@ describe('kahraman tecrübesi', () => {
     expect(heroXpForLevel(1)).toBe(500);
     expect(heroXpForLevel(2)).toBe(1000);
     expect(heroXpForLevel(3)).toBe(1707);
+  });
+
+  it('eşikler BİRİKİMLİ: tek savaşta birkaç seviye birden atlanabilir', () => {
+    // 1800 XP seviye 0 bir kahramanı seviye 3'e taşır (500 · 1000 · 1707 aşıldı, 2707 aşılmadı).
+    const xp = 1800;
+    let level = 0;
+    while (xp >= heroXpForLevel(level + 1)) level += 1;
+    expect(level).toBe(3);
+  });
+});
+
+describe('kahraman diriltme', () => {
+  it('maliyet tabanı oyunun ekranından: seviye 0 → 3000 altın / 2000 yiyecek', () => {
+    expect(heroReviveCost(0)).toEqual({ gold: 3000, food: 2000 });
+    expect(heroReviveCost(5)).toEqual({ gold: 22_781, food: 15_188 });
+  });
+
+  /**
+   * ⭐ İKİ EKSEN TERS YÖNDE (kullanıcı, 2026-07-29 ikinci düzeltme):
+   * kahraman seviyesi süreyi UZATIR (ve maliyeti artırır), Tapınak seviyesi KISALTIR.
+   */
+  it('kahraman seviyesi süreyi UZATIR, tapınak KISALTIR', () => {
+    expect(heroReviveSeconds(0, 0)).toBe(32_400);                          // 9 sa — taban
+    expect(heroReviveSeconds(5, 0)).toBeGreaterThan(heroReviveSeconds(0, 0));
+    expect(heroReviveSeconds(10, 0)).toBeGreaterThan(heroReviveSeconds(5, 0));
+    expect(heroReviveSeconds(0, 5)).toBeLessThan(heroReviveSeconds(0, 0));
+    expect(heroReviveSeconds(0, 20)).toBeLessThan(heroReviveSeconds(0, 5));
+    // Tapınak yükseltmek seviyenin getirdiği cezayı dengeleyebilir.
+    expect(heroReviveSeconds(5, 10)).toBeLessThan(heroReviveSeconds(5, 0));
+  });
+
+  it('maliyet seviyeyle artar ama tapınaktan ETKİLENMEZ', () => {
+    expect(heroReviveCost(3).gold).toBeGreaterThan(heroReviveCost(0).gold);
+    // İmza zaten tapınak almıyor — kural burada belgeleniyor ki ileride yanlışlıkla eklenmesin.
+    expect(heroReviveCost.length).toBe(1);
+  });
+
+  it('alt sınır 15 dk, üst sınır 48 saat', () => {
+    expect(heroReviveSeconds(0, 60)).toBe(900);
+    expect(heroReviveSeconds(40, 0)).toBe(48 * 3600);
+  });
+
+  it('oyunun ekranındaki 2:04:27 ölçümüne tapınak 20 / seviye 0 ile oturur', () => {
+    /* `images/scr_itv03`: seviye 0 ölü kahraman, 2 sa 4 dk 27 sn = 7467 sn. Ekranda tapınak
+     * seviyesi yazmıyor; model 7589 sn veriyor — 2 dakika fark. Ölçümün hangi tapınakta
+     * alındığını bilmediğimiz için birebir tutturmaya çalışmıyoruz, 5 dakikalık bant yeter. */
+    expect(Math.abs(heroReviveSeconds(0, 20) - 7467)).toBeLessThan(300);
+  });
+
+});
+
+describe('kahraman seviyesi tecrübeden türer', () => {
+  it('eşik aşıldığı anda seviye yükselir — düğme yok', () => {
+    expect(heroLevelForXp(0)).toBe(0);
+    expect(heroLevelForXp(499)).toBe(0);
+    expect(heroLevelForXp(500)).toBe(1);
+    expect(heroLevelForXp(999)).toBe(1);
+    expect(heroLevelForXp(1000)).toBe(2);
+  });
+
+  /**
+   * ⭐ Kullanıcının örneği: seviye 3'teki kahraman tek savaşta 5. seviyeye kadar yetecek
+   * tecrübe kazanırsa ANINDA seviye 5 görünür ve 6 puan birikmiş olur.
+   */
+  it('tek savaşta birkaç seviye birden atlanır', () => {
+    const once = heroXpForLevel(3);          // seviye 3'ün eşiği
+    const hedef = heroXpForLevel(5);         // seviye 5'in eşiği
+    expect(heroLevelForXp(once)).toBe(3);
+    expect(heroLevelForXp(hedef)).toBe(5);
+    // Aradaki fark tek savaşta kazanılırsa iki seviye birden atlanır → 2 × 3 = 6 puan.
+    expect(heroLevelForXp(hedef) - heroLevelForXp(once)).toBe(2);
+  });
+});
+
+describe('sur onarımı', () => {
+  it('tam yıkım seviye 1\'de 12 saat, seviye yükseldikçe kısalır', () => {
+    expect(wallRepairSeconds(1, 0)).toBe(12 * 3600);
+    expect(wallRepairSeconds(10, 0)).toBeLessThan(wallRepairSeconds(1, 0));
+    expect(wallRepairSeconds(20, 0)).toBeLessThan(wallRepairSeconds(10, 0));
+  });
+
+  it('kısmi hasar, tam yıkım süresiyle ORANTILI', () => {
+    const tam = wallRepairSeconds(5, 0);
+    expect(wallRepairSeconds(5, 0.5)).toBeCloseTo(tam * 0.5, 0);
+    expect(wallRepairSeconds(5, 0.9)).toBeCloseTo(tam * 0.1, 0);
+    expect(wallRepairSeconds(5, 1)).toBe(0);          // sağlam sur onarılmaz
+  });
+
+  /** ⭐ Onarımda geçen süre boşa gitmez: sur, o ana kadar onarılmış yüzdeyle savaşa girer. */
+  it('onarım ilerledikçe bütünlük doğrusal olarak 1\'e yaklaşır', () => {
+    const from = new Date('2026-07-29T00:00:00Z');
+    const until = new Date('2026-07-29T12:00:00Z');
+    expect(wallCurrentIntegrity(0, from, until, from)).toBe(0);
+    expect(wallCurrentIntegrity(0, from, until, new Date('2026-07-29T06:00:00Z'))).toBeCloseTo(0.5, 6);
+    expect(wallCurrentIntegrity(0, from, until, new Date('2026-07-29T09:00:00Z'))).toBeCloseTo(0.75, 6);
+    // Bitince tam sağlam.
+    expect(wallCurrentIntegrity(0, from, until, until)).toBe(1);
+    expect(wallCurrentIntegrity(0, from, until, new Date('2026-07-30T00:00:00Z'))).toBe(1);
+  });
+
+  it('kısmi hasarda da aynı kural: %40\'tan başlayıp 1\'e yürür', () => {
+    const from = new Date('2026-07-29T00:00:00Z');
+    const until = new Date('2026-07-29T10:00:00Z');
+    expect(wallCurrentIntegrity(0.4, from, until, from)).toBeCloseTo(0.4, 6);
+    expect(wallCurrentIntegrity(0.4, from, until, new Date('2026-07-29T05:00:00Z'))).toBeCloseTo(0.7, 6);
+  });
+
+  it('onarım yoksa sur tam sağlamdır', () => {
+    expect(wallCurrentIntegrity(0.3, null, null, new Date())).toBe(1);
   });
 });
 

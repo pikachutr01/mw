@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
-    "dev": "node --watch --experimental-transform-types src/main.ts",
+    "dev": "tsc -p tsconfig.json && node --env-file=../../.env --watch dist/main.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest run"

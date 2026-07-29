@@ -14,9 +14,15 @@
 import { sql } from 'drizzle-orm';
 import {
   LEVEL_BASED, UNITS_BY_ID, caveRepairSeconds, dwarvesToBreakCave, heroReviveSeconds,
+  heroLevelForXp,
+  wallCurrentIntegrity,
   wallRepairSeconds,
+  pickHeroName,
 } from '@mobiwar/catalog';
-import { calculateLoot, simulate, type LootResult, type SimulateInput, type SimulateResult } from '@mobiwar/engine';
+import {
+  calculateLoot, createRng, DEFAULT_COMBAT_CONFIG, simulate,
+  type LootResult, type SimulateInput, type SimulateResult,
+} from '@mobiwar/engine';
 import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
 import { toDate } from '../db/client.ts';
 import type { CityService } from '../cities/city.service.ts';
@@ -41,8 +47,14 @@ interface SideState {
   /** Savunanın savaşa GİRERKENKİ sur bütünlüğü (0-1). Onarım sürüyorsa 1'den küçüktür. */
   wallIntegrity?: number;
   techs: Record<string, number>;
-  heroes: { id: number; level: number; fAtk: number; fDef: number; mAtk: number; mDef: number }[];
+  heroes: {
+    id: number; name: string; level: number; xp: number;
+    fAtk: number; fDef: number; mAtk: number; mDef: number;
+  }[];
+  /** Çıkma ihtimali için: oyuncunun TÜM şehirlerinin tapınak toplamı. */
   temple: number;
+  /** Diriltme süresi için: bu savaşın geçtiği şehrin kendi tapınağı. */
+  homeTemple?: number;
 }
 
 /* ═══ SALDIRI ═══════════════════════════════════════════════════════════════ */
@@ -213,27 +225,80 @@ export function createAttackHandler(cities: CityService): MissionHandler {
      */
     const wallLevel = Math.max(0, Math.trunc(defender.units['wall'] ?? 0));
     const integrityAfter = result.defender.wallIntegrity;
+    let wallDestroyed = false;
+    let canceledDefense: { type: string; left: number }[] = [];
     if (wallLevel > 0 && integrityAfter != null && integrityAfter < 1) {
+      /* Onarım süresi HER SEFERİNDE yeni hasara göre baştan hesaplanır: sur %40'tayken ikinci
+       * saldırıda %0'a inerse tam yıkılma süresinin tamamını yeniden bekler. */
       const seconds = wallRepairSeconds(wallLevel, integrityAfter);
       const until = new Date(ctx.at.getTime() + seconds * 1000);
       await ctx.tx.execute(sql`
         UPDATE cities
            SET wall_integrity = ${integrityAfter}::numeric,
+               wall_repair_from = ${ctx.at.toISOString()}::timestamptz,
                wall_repair_until = ${until.toISOString()}::timestamptz
          WHERE id = ${targetCityId}
       `);
+
+      /**
+       * ⭐ SUR TAM YIKILDI (§13.21.2, kullanıcı kararı 2026-07-29).
+       *
+       * Savunma birimleri surda yaşar; sur çökünce üretimlerinin de anlamı kalmaz:
+       *   • süren ve kuyrukta bekleyen **savunma birimi** emirleri anında iptal edilir
+       *     (o ana kadar üretilmiş olanlar şehirde KALIR — `materialize` iptalden önce koşar),
+       *   • onarım bitene kadar yeni savunma birimi üretilemez (`queue.service`).
+       * Sur/Büyü Kalkanı yükseltmeleri (seviye taşıyan şerit) etkilenmez: onarım zaten sur'un
+       * kendi işi, oyuncunun yükseltme hakkını elinden almak anlamsız olurdu.
+       */
+      wallDestroyed = integrityAfter <= 0;
+      if (wallDestroyed) {
+        canceledDefense = await cancelDefenseBand(ctx, targetCityId, defenderCity.playerId);
+      }
     }
 
-    await settleHeroes(ctx, defender.heroes, result.defender.heroes, defender.temple, targetCityId);
-    const attackerHeroesAlive = await settleHeroes(
-      ctx, attacker.heroes, result.attacker.heroes, attacker.temple, originCityId,
-    );
+    /* ── KAHRAMANLAR ────────────────────────────────────────────────────────────
+     * Sağ kalan SAVAŞÇI sayısı, ölen kahramanın kaderini belirler: sıfırsa kahramanı geri
+     * taşıyacak kimse yoktur → YOK EDİLİR. Savunanda "sağ kalan" şehirde kalan ordudur.  */
+    const attackerSurvivorCount = Object.values(warriorsOnly(result.attacker.counts))
+      .reduce((a, b) => a + b, 0);
+    const defenderSurvivorCount = Object.values(warriorsOnly(result.defender.counts))
+      .reduce((a, b) => a + b, 0);
+    const attackerWon = result.winner === 'attacker';
+
+    /* ⭐ Tecrübe TEK havuzdan iki tarafa: kazanan 2/3, kaybeden 1/3. Payını kullanamayan
+     * tarafın (kahramanı yok ya da hepsi öldü) payı ziyan olur, karşıya geçmez. */
+    const { winner: winShare, loser: loseShare } = DEFAULT_COMBAT_CONFIG.heroXpShare;
+    const defenderHeroes = await settleHeroes(ctx, {
+      before: defender.heroes,
+      after: result.defender.heroes,
+      homeTemple: defender.homeTemple ?? defender.temple,
+      homeCityId: targetCityId,
+      xpShare: result.xp * (attackerWon ? loseShare : winShare),
+      survivingUnits: defenderSurvivorCount,
+    });
+    const attackerHeroes = await settleHeroes(ctx, {
+      before: attacker.heroes,
+      after: result.attacker.heroes,
+      homeTemple: attacker.homeTemple ?? 0,
+      homeCityId: originCityId,
+      xpShare: result.xp * (attackerWon ? winShare : loseShare),
+      survivingUnits: attackerSurvivorCount,
+    });
+
+    /* ⭐ YENİ KAHRAMAN — yalnız kazanan tarafta, kendi şehrinde. */
+    const capturedHero = await maybeCaptureHero(ctx, {
+      playerId: attackerWon ? attackerPlayerId : defenderCity.playerId,
+      worldId: ctx.worldId,
+      cityId: attackerWon ? originCityId : targetCityId,
+      chance: result.captureChance,
+    });
 
     // ── Dönüş bacağı (§13.10.3) ───────────────────────────────────────────────
     // ⭐ Hayatta kalan birlik YOKSA dönüş görevi oluşturulmaz (§13.11.7): ordu yok olmuştur,
     //    ganimet de yoktur. Rapor "ordudan kimse dönmedi" der.
+    // ⚠️ ÖLÜ kahraman da dönüş görevine biner (birlikler taşır) — `carriedIds` ölüleri içerir.
     const survivors = warriorsOnly(result.attacker.counts);
-    const anySurvivor = Object.values(survivors).some((n) => n > 0) || attackerHeroesAlive.length > 0;
+    const anySurvivor = attackerSurvivorCount > 0;
     if (anySurvivor) {
       await scheduleReturn(ctx, { originCityId, battleId, units: survivors, loot });
     }
@@ -244,6 +309,11 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       defenderPlayerId: defenderCity.playerId,
       targetCityId,
       originCityId,
+      destroyedHeroes: [...attackerHeroes.destroyed, ...defenderHeroes.destroyed],
+      capturedHero,
+      heroXp: { attacker: attackerHeroes.gained, defender: defenderHeroes.gained },
+      wallDestroyed,
+      canceledDefense,
       result,
       loot,
       night,
@@ -351,6 +421,25 @@ async function loadTechs(tx: Tx, playerId: number): Promise<Record<string, numbe
   return out;
 }
 
+/**
+ * ⭐ KAHRAMAN ÇIKMA İHTİMALİNDEKİ "Tapınak" = oyuncunun **TÜM ŞEHİRLERİNDEKİ** tapınak
+ * seviyelerinin TOPLAMI — tek şehrin tapınağı değil (kullanıcı, oyunun kendi davranışı).
+ * Şehir sayısı arttıkça toplam da arttığı için bu, `Tapınak×10 − Kahraman×155` formülündeki
+ * çıkarmalı cezayı doğal biçimde aşılabilir kılıyor (tek şehirle 2. kahraman imkânsız olurdu).
+ *
+ * ⚠️ Dokümanın *"her şehirdeki tapınak kendi şehrine etki eder"* cümlesi DİRİLTME SÜRESİ için
+ * geçerli; oradaki hesap tek şehrin tapınağıyla yapılır (bkz. `settleHeroes`).
+ */
+async function loadTempleSum(tx: Tx, playerId: number): Promise<number> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT COALESCE(SUM(b.level), 0) AS total
+      FROM buildings b JOIN cities c ON c.id = b.city_id
+     WHERE c.player_id = ${playerId} AND b.type = 'temple'
+  `);
+  return Number(rows[0]?.['total'] ?? 0);
+}
+
+/** Tek şehrin tapınağı — diriltme süresi bunu kullanır. */
 async function loadTemple(tx: Tx, cityId: number): Promise<number> {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     SELECT level FROM buildings WHERE city_id = ${cityId} AND type = 'temple'
@@ -361,7 +450,7 @@ async function loadTemple(tx: Tx, cityId: number): Promise<number> {
 /** Saldıran ordu görevin kendisinden okunur — şehirden değil (birlikler yola çıkarken düşmüştü). */
 async function loadAttackerState(ctx: HandlerContext, playerId: number): Promise<SideState> {
   const heroRows = await ctx.tx.execute<Record<string, unknown>>(sql`
-    SELECT h.id, h.level, h.f_atk, h.f_def, h.m_atk, h.m_def
+    SELECT h.id, h.name, h.level, h.xp, h.f_atk, h.f_def, h.m_atk, h.m_def
       FROM mission_heroes mh JOIN heroes h ON h.id = mh.hero_id
      WHERE mh.mission_id = ${ctx.mission.id}
   `);
@@ -370,7 +459,8 @@ async function loadAttackerState(ctx: HandlerContext, playerId: number): Promise
     units: await loadMissionUnits(ctx.tx, ctx.mission.id),
     techs: await loadTechs(ctx.tx, playerId),
     heroes: heroRows.map(toHeroRow),
-    temple: ctx.mission.originCityId == null ? 0 : await loadTemple(ctx.tx, ctx.mission.originCityId),
+    temple: await loadTempleSum(ctx.tx, playerId),          // çıkma ihtimali: TÜM şehirlerin toplamı
+    homeTemple: ctx.mission.originCityId == null ? 0 : await loadTemple(ctx.tx, ctx.mission.originCityId),
   };
 }
 
@@ -385,8 +475,8 @@ async function loadDefenderState(
     tx.execute<Record<string, unknown>>(sql`SELECT type, count FROM units WHERE city_id = ${cityId}`),
     tx.execute<Record<string, unknown>>(sql`SELECT type, count FROM defenses WHERE city_id = ${cityId}`),
     tx.execute<Record<string, unknown>>(sql`
-      SELECT id, level, f_atk, f_def, m_atk, m_def FROM heroes
-       WHERE city_id = ${cityId} AND dead_until IS NULL
+      SELECT id, name, level, xp, f_atk, f_def, m_atk, m_def FROM heroes
+       WHERE city_id = ${cityId} AND status = 'alive'
     `),
   ]);
 
@@ -402,13 +492,15 @@ async function loadDefenderState(
    * kaynak birikimindeki desenin aynısı.
    */
   const wallRows = await tx.execute<Record<string, unknown>>(sql`
-    SELECT wall_integrity, wall_repair_until FROM cities WHERE id = ${cityId}
+    SELECT wall_integrity, wall_repair_from, wall_repair_until FROM cities WHERE id = ${cityId}
   `);
   const repairUntil = wallRows[0]?.['wall_repair_until'] == null
     ? null : toDate(wallRows[0]!['wall_repair_until']);
-  const wallIntegrity = repairUntil != null && repairUntil > at
-    ? Math.min(1, Math.max(0, Number(wallRows[0]?.['wall_integrity'] ?? 1)))
-    : 1;
+  const repairFrom = wallRows[0]?.['wall_repair_from'] == null
+    ? null : toDate(wallRows[0]!['wall_repair_from']);
+  const wallIntegrity = wallCurrentIntegrity(
+    Number(wallRows[0]?.['wall_integrity'] ?? 1), repairFrom, repairUntil, at,
+  );
 
   return {
     playerId,
@@ -416,14 +508,17 @@ async function loadDefenderState(
     wallIntegrity,
     techs: await loadTechs(tx, playerId),
     heroes: heroRows.map(toHeroRow),
-    temple: await loadTemple(tx, cityId),
+    temple: await loadTempleSum(tx, playerId),   // çıkma ihtimali: TÜM şehirlerin toplamı
+    homeTemple: await loadTemple(tx, cityId),    // diriltme süresi: bu şehrin tapınağı
   };
 }
 
 function toHeroRow(r: Record<string, unknown>): SideState['heroes'][number] {
   return {
     id: Number(r['id']),
+    name: String(r['name'] ?? ''),
     level: Number(r['level']),
+    xp: Number(r['xp'] ?? 0),
     fAtk: Number(r['f_atk']),
     fDef: Number(r['f_def']),
     mAtk: Number(r['m_atk']),
@@ -486,6 +581,62 @@ export interface CaveBreakResult {
  *  • **Onarımdaki mağara yeniden yıkılmaz**, süresi de baştan başlamaz.
  *  • **Boş mağara da yıkılır** — içeride asker olması şart değil.
  */
+/**
+ * ⭐ SUR TAM YIKILDI → savunma bandı boşaltılır (kullanıcı kararı, 2026-07-29).
+ *
+ * Çağrılmadan önce şehir **materialize** edilir: o ana kadar üretilmiş savunma birimleri şehre
+ * yazılmış olur ve iptalden ETKİLENMEZ — kullanıcının şartı buydu ("o zamana kadar geçen sürede
+ * üretilenler zaten üretilmiştir").
+ *
+ * ⚠️ **İade YOK.** İptal oyuncunun tercihi değil, savaşın sonucu; yarım kalan birimlerin taşı
+ * toprağı surla birlikte gitti. Bunun yerine oyuncuya ayrı bir mesaj düşüyor ki kaynağın nereye
+ * gittiği görünmez olmasın.
+ *
+ * Yalnız **birim bandı** temizlenir (`target_level IS NULL`); Sur/Büyü Kalkanı yükseltmeleri
+ * seviye taşıyan ayrı şerittedir ve dokunulmaz.
+ */
+async function cancelDefenseBand(
+  ctx: HandlerContext, cityId: number, playerId: number,
+): Promise<{ type: string; left: number }[]> {
+  const open = await ctx.tx.execute<Record<string, unknown>>(sql`
+    SELECT id, mission_id, item_type, count, done FROM queues
+     WHERE city_id = ${cityId} AND category = 'defense' AND target_level IS NULL
+       AND completed_at IS NULL AND canceled_at IS NULL
+     ORDER BY position
+  `);
+  if (open.length === 0) return [];
+
+  const canceled: { type: string; left: number }[] = [];
+  for (const q of open) {
+    const left = Math.max(0, Number(q['count'] ?? 0) - Number(q['done'] ?? 0));
+    canceled.push({ type: String(q['item_type']), left });
+    await ctx.tx.execute(sql`
+      UPDATE queues SET canceled_at = ${ctx.at.toISOString()}::timestamptz WHERE id = ${q['id']}
+    `);
+    if (q['mission_id'] != null) {
+      await ctx.tx.execute(sql`
+        UPDATE missions SET status = 'canceled', finished_at = now()
+         WHERE id = ${q['mission_id']} AND status IN ('scheduled', 'running')
+      `);
+    }
+  }
+
+  await writeMessage(ctx, {
+    playerId,
+    kind: 'defense_band_canceled',
+    side: 'defender',
+    battleId: null,
+    subject: 'Sur yıkıldı: savunma üretimi durdu',
+    body: {
+      cityId,
+      canceled,
+      note: 'Sur tamamen yıkıldığı için süren ve bekleyen savunma birimi emirleri iptal edildi. '
+        + 'Onarım bitene kadar yeni savunma birimi üretilemez.',
+    },
+  });
+  return canceled;
+}
+
 async function resolveCaveBreak(ctx: HandlerContext, o: {
   cityId: number;
   defenderPlayerId: number;
@@ -561,39 +712,154 @@ function warriorsOnly(counts: Record<string, number>): Record<string, number> {
 }
 
 /**
- * Kahraman sonuçları. Ölen kahraman **silinmez** — seviyesi ve yetenekleri korunur, `dead_until`
- * ile diriltme süresine girer (§13.11.7) ve sahibinin şehrine geri konur.
+ * ⭐ KAHRAMAN SONUÇLARI — ölüm, yok olma ve tecrübe (kullanıcı kararları, 2026-07-29).
  *
- * ⚠️ Buradaki `dead_until`, dokümandaki *ücretli* diriltmenin (§13.11.4b: `(3000,2000)×1,5^lvl`)
- * yerine geçmez; onun **otomatik kurtarma süresi**dir (aynı formülün süre bacağı). Oyuncunun
- * ücret ödeyip süreyi kısalttığı kuyruk akışı Faz 4'te eklenecek.
+ * **Ölüm:** kahraman YALNIZ durumu %0'a inince ölür (olasılık yok). Ölen kahraman silinmez;
+ * seviyesi ve yetenekleri korunur, ücretli diriltmeyi bekler (`status = 'dead'`).
  *
- * @returns hayatta kalan kahramanların id'leri
+ * **İki ölüm senaryosu:**
+ *  1. **Ordunun geri kalanı da yok olduysa → YOK EDİLDİ.** Kahramanı şehre taşıyacak kimse
+ *     kalmamıştır; kayıt `destroyed` olur ve `destroyedAt`+1 saat sonra tamamen silinir
+ *     (o süre boyunca tapınakta "Yok Edildi" görünür ve savaş raporunda özel not çıkar).
+ *  2. **Sağ kalan birlik varsa** kahramanı geri getirirler: dönüş boyunca "Görevde" görünür,
+ *     şehre varınca `dead` olur ve Dirilt menüsü açılır. Bu yüzden ölü kahraman da
+ *     `mission_heroes`te KALIR — dönüş görevine bağlanır (`scheduleReturn` taşır).
+ *
+ * **Tecrübe (kullanıcı kararı, 2026-07-29):** savaş tek bir XP havuzu üretir ve **iki taraf da**
+ * ondan öğrenir — kazanan **2/3**, kaybeden **1/3**. Her taraf kendi payını yalnız **sağ çıkan**
+ * kahramanları arasında böler; ölen kahraman payını alamaz, kahramanı olmayan (ya da hepsi ölen)
+ * tarafın payı ziyan olur — karşı tarafa GEÇMEZ. Taraf içi dağıtım seviyeyle TERS orantılı
+ * (`1/(seviye+1)`): tek kahraman payın tamamını alır, iki kahramandan düşük seviyeli daha
+ * çoğunu alır — yeni kahraman hızlı yetişsin diye.
+ *
+ * @returns şehre/dönüşe katılacak kahramanların id'leri (yok edilenler hariç)
  */
-async function settleHeroes(
-  ctx: HandlerContext,
-  before: SideState['heroes'],
-  after: { level: number; durum: number; alive: boolean }[],
-  temple: number,
-  homeCityId: number | null,
-): Promise<number[]> {
-  const alive: number[] = [];
-  for (let i = 0; i < before.length; i++) {
-    const hero = before[i]!;
+async function settleHeroes(ctx: HandlerContext, o: {
+  before: SideState['heroes'];
+  after: { level: number; durum: number; alive: boolean }[];
+  /** Diriltme süresi ŞEHRİN kendi tapınağına bağlıdır (doküman) — toplam değil. */
+  homeTemple: number;
+  homeCityId: number | null;
+  /** Bu tarafa DÜŞEN tecrübe (havuzun 2/3'ü ya da 1/3'ü) — taraf içinde bölünecek. */
+  xpShare: number;
+  /** Bu tarafın savaştan sağ çıkan SAVAŞÇI sayısı — 0 ise ölen kahraman YOK EDİLİR. */
+  survivingUnits: number;
+}): Promise<{
+  carriedIds: number[];
+  destroyed: { id: number; name: string; level: number }[];
+  gained: { id: number; name: string; xp: number }[];
+}> {
+  const carriedIds: number[] = [];
+  const destroyed: { id: number; name: string; level: number }[] = [];
+  const survivors: SideState['heroes'] = [];
+
+  for (let i = 0; i < o.before.length; i++) {
+    const hero = o.before[i]!;
     // Motor kahramanları girdi sırasıyla döndürür; eşleşme indeks üzerinden.
-    if (after[i]?.alive !== false) {
-      alive.push(hero.id);
+    const alive = o.after[i]?.alive !== false;
+    if (alive) {
+      survivors.push(hero);
+      carriedIds.push(hero.id);
       continue;
     }
-    const deadUntil = new Date(ctx.at.getTime() + heroReviveSeconds(hero.level, temple) * 1000);
+
+    if (o.survivingUnits <= 0) {
+      // ── 1) YOK EDİLDİ: geri taşıyacak kimse yok ────────────────────────────
+      // ⚠️ `city_id` KORUNUR (NULL'lanmaz): tapınak listesi şehir bazlı sorguluyor, kayıt
+      //    şehirsiz kalırsa "Yok Edildi" satırı hiçbir tapınakta görünmez — oysa 1 saat
+      //    boyunca kendi üssünde görünmesi gerekiyor. `sweepDestroyed` süresi dolunca siler.
+      await ctx.tx.execute(sql`
+        UPDATE heroes
+           SET status = 'destroyed', destroyed_at = ${ctx.at.toISOString()}::timestamptz,
+               city_id = ${o.homeCityId}, revive_until = NULL
+         WHERE id = ${hero.id}
+      `);
+      await ctx.tx.execute(sql`DELETE FROM mission_heroes WHERE hero_id = ${hero.id}`);
+      destroyed.push({ id: hero.id, name: hero.name, level: hero.level });
+      continue;
+    }
+
+    // ── 2) ÖLÜ olarak geri taşınır ───────────────────────────────────────────
+    // Savunanda dönüş yolu yok → doğrudan şehirde ölü. Saldıranda dönüş görevi taşır;
+    // `mission_heroes` kaydı KALIR ki dönüşte doğru şehre yerleşsin.
     await ctx.tx.execute(sql`
-      UPDATE heroes SET dead_until = ${deadUntil.toISOString()}::timestamptz, city_id = ${homeCityId}
+      UPDATE heroes SET status = 'dead', revive_until = NULL
        WHERE id = ${hero.id}
     `);
-    // Ölen kahraman dönüş görevine bağlı kalmamalı (tekil indeks onu bir sonraki sefere kilitlerdi).
-    await ctx.tx.execute(sql`DELETE FROM mission_heroes WHERE hero_id = ${hero.id}`);
+    carriedIds.push(hero.id);
   }
-  return alive;
+
+  // ── TECRÜBE: bu tarafın payı, SAĞ kalan kahramanlar arasında seviyeyle TERS orantılı ──
+  const gained: { id: number; name: string; xp: number }[] = [];
+  if (o.xpShare > 0 && survivors.length > 0) {
+    /* Ağırlık = 1/(seviye+1): seviye 0 → 1,00 · seviye 5 → 0,167 · seviye 15 → 0,0625.
+     * Tek kahraman varsa payın TAMAMINI alır (ağırlık kendi toplamına eşit). */
+    const weights = survivors.map((h) => 1 / (Math.max(0, h.level) + 1));
+    const total = weights.reduce((a, b) => a + b, 0);
+    /* Yuvarlama artığı SON kahramana yazılır ki dağıtılan toplam payı birebir tutsun —
+     * aksi hâlde üç kahramanlı savaşlarda 1-2 XP sessizce kaybolurdu. */
+    let left = Math.round(o.xpShare);
+    for (let i = 0; i < survivors.length; i++) {
+      const hero = survivors[i]!;
+      const share = i === survivors.length - 1
+        ? left
+        : Math.min(left, Math.round(o.xpShare * (weights[i]! / total)));
+      left -= share;
+      if (share <= 0) continue;
+      /**
+       * ⭐ SEVİYE **KENDİLİĞİNDEN** YÜKSELİR (kullanıcı kararı, 2026-07-29).
+       * XP savaş anında yazılır ve seviye aynı anda güncellenir; ordu daha dönüş yolundayken
+       * oyuncu tapınakta yeni seviyeyi görür. Tek savaşta birkaç eşik birden aşılabilir —
+       * `heroLevelForXp` hepsini birden verir, oyuncunun düğmeye basması gerekmez.
+       * Oyuncuya kalan tek iş, seviye başına gelen 3 puanı dağıtmak.
+       */
+      const newXp = hero.xp + share;
+      await ctx.tx.execute(sql`
+        UPDATE heroes SET xp = ${newXp}, level = ${heroLevelForXp(newXp)} WHERE id = ${hero.id}
+      `);
+      gained.push({ id: hero.id, name: hero.name, xp: share });
+    }
+  }
+
+  return { carriedIds, destroyed, gained };
+}
+
+/**
+ * ⭐ YENİ KAHRAMAN ÇIKMASI — yalnız KAZANAN tarafta, `captureChance` ile.
+ *
+ * İhtimal `(ToplamTapınak×10 − Kahraman×155) × min(1, XP×0,000025)`; XP > 499 kapısı ve
+ * en fazla 5 kahraman kuralı motorda. Yeni kahraman **seviye 0, 0 XP, puansız** çıkar ve
+ * kazanan tarafın o savaştaki şehrine yerleşir (saldıran kazandıysa çıkış şehri).
+ *
+ * @returns çıkan kahramanın adı (çıkmadıysa null) — savaş raporuna yazılır
+ */
+async function maybeCaptureHero(ctx: HandlerContext, o: {
+  playerId: number;
+  worldId: number;
+  cityId: number | null;
+  chance: number;
+}): Promise<string | null> {
+  if (o.cityId == null || o.chance <= 0) return null;
+  /* Determinizm (§5): rulo görevin kimliğinden türer → savaş yeniden oynatılınca aynı sonuç. */
+  const rng = createRng(`capture:${ctx.mission.id}:${o.playerId}`);
+  if (rng.next() * 100 >= o.chance) return null;
+
+  const [existing] = await ctx.tx.execute<Record<string, unknown>>(sql`
+    SELECT COUNT(*)::int AS n FROM heroes
+     WHERE player_id = ${o.playerId} AND status <> 'destroyed'
+  `);
+  if (Number(existing?.['n'] ?? 0) >= DEFAULT_COMBAT_CONFIG.capture.maxHeroes) return null;
+
+  const takenRows = await ctx.tx.execute<Record<string, unknown>>(sql`
+    SELECT name FROM heroes WHERE player_id = ${o.playerId} AND status <> 'destroyed'
+  `);
+  const taken = takenRows.map((r: Record<string, unknown>) => String(r['name']));
+  const name = pickHeroName(() => rng.next(), taken);
+  await ctx.tx.execute(sql`
+    INSERT INTO heroes (world_id, player_id, city_id, name, level, xp, status)
+    VALUES (${o.worldId}, ${o.playerId}, ${o.cityId}, ${name}, 0, 0, 'alive')
+  `);
+  return name;
 }
 
 async function writeBattle(ctx: HandlerContext, o: {
@@ -675,6 +941,19 @@ async function writeBattleReports(ctx: HandlerContext, o: {
   cave: CaveBreakResult;
   /** Bekleyen mağara emrinin savaştan sonraki hâli (yalnız savunanı ilgilendirir). */
   caveOrder: CaveStoreReconcile | null;
+  /** ⭐ Bu savaşta YOK EDİLEN kahramanlar (ordunun tamamıyla birlikte) — rapora özel not. */
+  destroyedHeroes?: { id: number; name: string; level: number }[];
+  /** ⭐ Savaştan çıkan yeni kahramanın adı (çıkmadıysa null). */
+  capturedHero?: string | null;
+  /** ⭐ Hangi kahramanın ne kadar tecrübe aldığı — iki taraf için ayrı. */
+  heroXp?: {
+    attacker: { id: number; name: string; xp: number }[];
+    defender: { id: number; name: string; xp: number }[];
+  };
+  /** ⭐ Sur TAMAMEN yıkıldı mı (bütünlük %0)? */
+  wallDestroyed?: boolean;
+  /** Sur yıkıldığı için iptal edilen savunma üretim emirleri. */
+  canceledDefense?: { type: string; left: number }[];
 }): Promise<void> {
   const won = o.result.winner === 'attacker';
   const base = {
@@ -683,6 +962,28 @@ async function writeBattleReports(ctx: HandlerContext, o: {
     turns: o.result.turns,
     night: o.night,
     at: ctx.at.toISOString(),
+    /**
+     * ⭐ KAHRAMAN NOTLARI — iki taraf da görür (kimin kahramanı yok edildiği herkesi ilgilendirir).
+     * `destroyedHeroes`: ordunun tamamıyla birlikte yok olan kahramanlar. Bunlar ölü olarak geri
+     * dönmez, hesaptan silinir (tapınakta 1 saat "Yok Edildi" görünür).
+     * `capturedHero`: savaştan çıkan yeni kahramanın adı.
+     */
+    heroes: {
+      destroyed: o.destroyedHeroes ?? [],
+      captured: o.capturedHero ?? null,
+      /** Savaşın ürettiği TOPLAM tecrübe havuzu — kazanan 2/3'ünü, kaybeden 1/3'ünü alır. */
+      xp: o.result.xp,
+      /** Havuzdan fiilen kimin ne kazandığı (ölen kahraman listede olmaz). */
+      gained: o.heroXp ?? { attacker: [], defender: [] },
+    },
+    /**
+     * ⭐ SUR — yalnız bütünlük değil, TAM YIKIM ayrı bir olay: savunma üretimi durur.
+     * İki taraf da görür; saldıran için bu savaşın en somut kazanımı olabilir.
+     */
+    wall: {
+      destroyed: o.wallDestroyed ?? false,
+      canceledDefense: o.canceledDefense ?? [],
+    },
   };
 
   await writeMessage(ctx, {

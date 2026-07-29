@@ -16,7 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { UNITS_BY_ID } from '@mobiwar/catalog';
+import { UNITS_BY_ID, wallRepairSeconds } from '@mobiwar/catalog';
 import { distance, travelSeconds } from '@mobiwar/engine';
 import { buildBattleReport, type BattleRow } from '../src/battles/battle-report.ts';
 import { CityService } from '../src/cities/city.service.ts';
@@ -1073,7 +1073,7 @@ describe('kahraman', () => {
 
     // Yola çıkarken şehirden ayrıldı.
     let row = (await h.db.execute<Record<string, unknown>>(sql`
-      SELECT city_id, dead_until FROM heroes WHERE id = ${heroId}
+      SELECT city_id, status FROM heroes WHERE id = ${heroId}
     `))[0]!;
     expect(row['city_id']).toBeNull();
 
@@ -1082,10 +1082,122 @@ describe('kahraman', () => {
     await runDue(Number(ret['id']));
 
     row = (await h.db.execute<Record<string, unknown>>(sql`
-      SELECT city_id, dead_until FROM heroes WHERE id = ${heroId}
+      SELECT city_id, status FROM heroes WHERE id = ${heroId}
     `))[0]!;
     expect(Number(row['city_id'])).toBe(attackCity);
-    expect(row['dead_until']).toBeNull();
+    expect(row['status']).toBe('alive');
+  });
+
+  /**
+   * ⭐ TECRÜBE PAYLAŞIMI (kullanıcı kararı, 2026-07-29): havuz TEK, kazanan 2/3'ünü, kaybeden
+   * 1/3'ünü alır. Kaybedenin kahramanı sağ kaldıysa o da öğrenir — eski kural "yalnız kazanan"dı.
+   */
+  it('tecrübeyi iki taraf da alır: kazanan 2/3, kaybeden 1/3', async () => {
+    /* Tecrübe ancak DENGELİ savaşta oluşur: xp = (kayıplar) × (kazananKaybı/kaybedenKaybı).
+     * 3000'e 3000 hem yüksek XP üretir hem iki tarafta da sağ birlik ve sağ kahraman bırakır. */
+    await giveUnits(attackCity, 'dwarf', 3000);
+    await giveUnits(defendCity, 'dwarf', 3000);
+    const at = await clock.gameNow(worldId);
+
+    const mk = async (playerId: number, cityId: number): Promise<number> => {
+      const r = await h.db.execute<Record<string, unknown>>(sql`
+        INSERT INTO heroes (world_id, player_id, city_id, name, level)
+        VALUES (${worldId}, ${playerId}, ${cityId}, ${'K-' + randomUUID().slice(0, 4)}, 0)
+        RETURNING id
+      `);
+      return Number(r[0]!['id']);
+    };
+    const atkHero = await mk(attacker, attackCity);
+    const defHero = await mk(defender, defendCity);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 3000 }, heroIds: [atkHero], at,
+    });
+    await runDue(m.missionId);
+
+    const xpOf = async (id: number): Promise<number> => Number((await h.db.execute<Record<string, unknown>>(
+      sql`SELECT xp FROM heroes WHERE id = ${id}`,
+    ))[0]!['xp']);
+    const atkXp = await xpOf(atkHero);
+    const defXp = await xpOf(defHero);
+
+    // İki kahraman da sağ çıktı → İKİSİ de öğrenir (eski kuralda kaybeden hiç almazdı).
+    expect(atkXp).toBeGreaterThan(0);
+    expect(defXp).toBeGreaterThan(0);
+
+    /* Kazananı savaş kaydından okuyoruz: savunma tabanı ve sur yüzünden eşit birlikle
+     * savunan kazanabiliyor — testin kimin kazandığını VARSAYMAMASI gerek. */
+    const [battle] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT winner FROM battles WHERE world_id = ${worldId}
+    `);
+    const winnerXp = battle!['winner'] === 'attacker' ? atkXp : defXp;
+    const loserXp = battle!['winner'] === 'attacker' ? defXp : atkXp;
+
+    // Kazananın payı kaybedenin tam iki katı (2/3 ÷ 1/3).
+    expect(winnerXp / loserXp).toBeCloseTo(2, 1);
+  });
+
+  /** Ölen kahraman payını alamaz — kendi tarafı kazanmış olsa bile. */
+  it('savaşta ölen kahraman tecrübe almaz', async () => {
+    await giveUnits(attackCity, 'dwarf', 4000);
+    await giveUnits(defendCity, 'dwarf', 20);
+    const at = await clock.gameNow(worldId);
+    const r = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level)
+      VALUES (${worldId}, ${defender}, ${defendCity}, ${'Olen-' + randomUUID().slice(0, 4)}, 0)
+      RETURNING id
+    `);
+    const defHero = Number(r[0]!['id']);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 4000 }, at,
+    });
+    await runDue(m.missionId);
+
+    const [row] = await h.db.execute<Record<string, unknown>>(
+      sql`SELECT xp, status FROM heroes WHERE id = ${defHero}`,
+    );
+    // Savunan ezildi: kahraman ya öldü ya yok edildi → her hâlükârda XP yok.
+    if (row && row['status'] !== 'alive') expect(Number(row['xp'])).toBe(0);
+  });
+
+  /**
+   * ⭐ ÖLÜ ve YOK EDİLMİŞ kahraman hiçbir sefere katılamaz (kullanıcı kararı 2026-07-29):
+   * saldırı, destek, nakliye — hepsi aynı `reserveHeroes` kapısından geçtiği için tek kural.
+   */
+  it.each(['dead', 'reviving', 'destroyed'])('%s kahraman sefere çıkamaz', async (status) => {
+    await giveUnits(attackCity, 'dwarf', 100);
+    const at = await clock.gameNow(worldId);
+    const r = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level, status)
+      VALUES (${worldId}, ${attacker}, ${attackCity}, ${'K-' + randomUUID().slice(0, 4)}, 2, ${status})
+      RETURNING id
+    `);
+    const heroId = Number(r[0]!['id']);
+    const ortak = {
+      originCityId: attackCity, playerId: attacker, worldId,
+      units: { dwarf: 10 }, heroIds: [heroId], at,
+    };
+
+    await expect(missions.sendAttack({ ...ortak, target: { k: 1, d: 1, s: 2 } }))
+      .rejects.toMatchObject({ code: 'hero_unavailable' });
+    await expect(missions.sendTransport({
+      ...ortak, target: { k: 1, d: 1, s: 2 }, cargo: { gold: 1, food: 1 },
+    })).rejects.toMatchObject({ code: 'hero_unavailable' });
+    // Destek yalnız KENDİ şehrine gider → saldırana ikinci bir şehir açıyoruz.
+    await cities.create({
+      worldId, playerId: attacker, name: 'saldiran-2', k: 1, d: 1, s: 3, isCapital: false, at,
+    });
+    await expect(missions.sendSupport({ ...ortak, target: { k: 1, d: 1, s: 3 } }))
+      .rejects.toMatchObject({ code: 'hero_unavailable' });
+
+    // Kahraman şehirde KALIR: reddedilen sefer onu yerinden oynatmamalı.
+    const [row] = await h.db.execute<Record<string, unknown>>(
+      sql`SELECT city_id FROM heroes WHERE id = ${heroId}`,
+    );
+    expect(Number(row!['city_id'])).toBe(attackCity);
   });
 
   it('aynı kahraman iki sefere birden gönderilemez', async () => {
@@ -1121,5 +1233,117 @@ describe('kahraman', () => {
       target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 },
       heroIds: [Number(hero[0]!['id'])], at,
     })).rejects.toThrow(/sefere çıkamaz/);
+  });
+});
+
+/**
+ * ⭐ SUR YIKIMI ve ONARIMI (§13.21.2, kullanıcı kararı 2026-07-29).
+ *
+ * Üç kural burada kilitleniyor:
+ *  1. Hasar gören sur onarıma girer; süre alınan hasarla orantılıdır.
+ *  2. Onarım sürerken gelen saldırıyı sur **o ana kadar onarılmış yüzdeyle** karşılar —
+ *     eskiden hep savaş-sonrası değerle giriyordu, yani onarımda geçen saatler ziyandı.
+ *  3. Sur TAM yıkılırsa savunma birimi üretimi iptal edilir ve onarım bitene kadar kilitlenir.
+ */
+describe('sur yıkımı ve onarımı', () => {
+  async function wallRow(): Promise<{ integrity: number; from: Date | null; until: Date | null }> {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT wall_integrity, wall_repair_from, wall_repair_until FROM cities WHERE id = ${defendCity}
+    `);
+    return {
+      integrity: Number(r!['wall_integrity']),
+      from: r!['wall_repair_from'] == null ? null : toDate(r!['wall_repair_from']),
+      until: r!['wall_repair_until'] == null ? null : toDate(r!['wall_repair_until']),
+    };
+  }
+  async function setWallLevel(level: number): Promise<void> {
+    await h.db.execute(sql`
+      INSERT INTO defenses (city_id, type, count) VALUES (${defendCity}, 'wall', ${level})
+      ON CONFLICT (city_id, type) DO UPDATE SET count = ${level}
+    `);
+  }
+
+  it('hasar gören sur onarıma girer; başlangıç anı da yazılır', async () => {
+    await setWallLevel(3);
+    await giveUnits(attackCity, 'dwarf', 4000);
+    await giveUnits(defendCity, 'dwarf', 50);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 4000 }, at,
+    });
+    await runDue(m.missionId);
+
+    const w = await wallRow();
+    expect(w.integrity).toBeLessThan(1);
+    expect(w.until).not.toBeNull();
+    // ⭐ Başlangıç anı olmadan onarım ilerlemesi hesaplanamaz.
+    expect(w.from).not.toBeNull();
+    expect(w.until!.getTime()).toBeGreaterThan(w.from!.getTime());
+    // Süre, o seviyedeki tam yıkım tavanıyla orantılı.
+    const beklenen = wallRepairSeconds(3, w.integrity);
+    expect((w.until!.getTime() - w.from!.getTime()) / 1000).toBeCloseTo(beklenen, 0);
+  });
+
+  it('onarımda geçen süre boşa gitmez: sur artan yüzdeyle savaşa girer', async () => {
+    await setWallLevel(3);
+    // Onarımın yarısını geçmiş bir sur kur: %0'dan başlamış, 10 saatin 5'i dolmuş.
+    await h.db.execute(sql`
+      UPDATE cities
+         SET wall_integrity = 0::numeric,
+             wall_repair_from  = now() - interval '5 hours',
+             wall_repair_until = now() + interval '5 hours'
+       WHERE id = ${defendCity}
+    `);
+    await giveUnits(attackCity, 'dwarf', 10);
+    await giveUnits(defendCity, 'dwarf', 10);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
+    });
+    await runDue(m.missionId);
+
+    const [battle] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT input FROM battles WHERE world_id = ${worldId}
+    `);
+    const girdi = battle!['input'] as { defender: { wallIntegrity?: number } };
+    // %0'dan başlayıp yarısı dolmuş onarım → savaşa ~%50 ile girer (eskiden %0 girerdi).
+    expect(girdi.defender.wallIntegrity).toBeCloseTo(0.5, 1);
+  });
+
+  it('tam yıkım: savunma üretimi iptal edilir ve oyuncuya bildirilir', async () => {
+    await setWallLevel(1);
+    await giveUnits(attackCity, 'dwarf', 6000);
+    const at = await clock.gameNow(worldId);
+
+    // Süren bir savunma üretimi emri: iptal edilmeli.
+    await h.db.execute(sql`
+      INSERT INTO queues (world_id, city_id, player_id, category, item_type, count, done,
+                          per_unit_seconds, position, started_at, finish_at)
+      VALUES (${worldId}, ${defendCity}, ${defender}, 'defense', 'archer_tower', 10, 2,
+              60, 1, now(), now() + interval '1 hour')
+    `);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 6000 }, at,
+    });
+    await runDue(m.missionId);
+
+    const w = await wallRow();
+    expect(w.integrity).toBe(0);                       // tam yıkıldı
+
+    const [q] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT canceled_at, done FROM queues WHERE city_id = ${defendCity} AND category = 'defense'
+    `);
+    expect(q!['canceled_at']).not.toBeNull();
+    // ⭐ O ana kadar üretilmiş 2 birim iptalden ETKİLENMEZ.
+    expect(Number(q!['done'])).toBe(2);
+
+    const msgs = await messagesOf(defender);
+    expect(msgs.some((x) => x['kind'] === 'defense_band_canceled')).toBe(true);
   });
 });

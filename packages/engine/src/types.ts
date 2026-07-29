@@ -80,34 +80,49 @@ export interface ScaledStats {
   unitPower: number;
 }
 
-export interface HeroState extends HeroInput {
-  /** 100'den başlar, hasar aldıkça düşer, 0'da ölür. */
-  durum: number;
+/** Kahramanın savaşa giren ölçeklenmiş statları (`heroStats()` üretir). */
+export interface HeroCombatStats {
+  hp: number;
+  magicHp: number;
+  pAtk: number;
+  pDef: number;
+  mAtk: number;
+  mDef: number;
+  /** Savaş "birim puanı" = Alan; savunma havuzu P'ye bu girer. */
+  unitPower: number;
 }
 
-export interface WallState {
-  level: number;
-  /** kalan bütünlük (SEVİYE biriminde) */
-  left: number;
-  base: number;
-  tough: number;
-  stats: ScaledStats;
+export interface HeroState extends HeroInput {
+  /**
+   * 100'den başlar, hasar aldıkça düşer. ⭐ Kahraman **YALNIZ durum 0'a inince** ölür
+   * (kullanıcı kararı 2026-07-29: olasılıklı ölüm yok).
+   */
+  durum: number;
+  /** Seviye + yeteneklerden hesaplanmış savaş statları. */
+  combat: HeroCombatStats;
 }
 
 /**
- * ⭐ BÜYÜ KALKANI BÜTÜNLÜĞÜ (§13.21) — Sur'un ikizi.
+ * ⭐ SUR ve BÜYÜ KALKANI — binary'de **AYNI NESNE SINIFI** (mekanizma 2026-07-29'da çözüldü).
  *
- * Binary'de kalkan, Sur ile **aynı listede** (savunma yapıları grubu) duran ve **aynı hasar
- * formülünden geçen** bir birimdir; simülatörün ekranında ikisi de yüzde olarak gösterilir
- * (`sub_412a78` = kalan, float). Tek farkı ne zaman hasar aldığı: Sur her fazda, kalkan
- * **yalnız büyü fazında**.
+ * Ordu yapısında iki ayrı alandır (Sur = ordu+0x10, Kalkan = ordu+0x98) ve savaş bağlamına
+ * ctx+0x5c / ctx+0x60 olarak bağlanırlar. `HasarKayipCekirdegi` bunlardan **faza göre yalnız
+ * birini** hatta alır: faz 1-2 (menzilli/yakın) → SUR · faz 3 (büyü) → KALKAN.
+ * İkisi de "adet" değil **seviye + durum(0..100)** taşır; ekranda gösterilen yüzde `durum`dur
+ * (`FUN_004132b0` = seviye>0 ? durum : 0). Tek yapısal farkları hasar bölücüsüdür:
+ * Sur ölçekli mDef, Kalkan HAM mDef kullanır (bkz. `gradeTakeHit`).
  */
-export interface ShieldState {
+export interface GradedStruct {
   level: number;
-  /** kalan bütünlük (SEVİYE biriminde) */
-  left: number;
+  /** DURUM: 0..100 (binary +0x80). Ekrandaki yüzde birebir budur. */
+  durum: number;
   stats: ScaledStats;
+  /** Seviye üssünün tabanı (binary 1,8) — denge düğmesi, `CombatConfig`ten gelir. */
+  base: number;
 }
+
+export type WallState = GradedStruct;
+export type ShieldState = GradedStruct;
 
 export interface Army {
   units: ArmyUnit[];

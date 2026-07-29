@@ -32,8 +32,11 @@ export const TECHS: readonly TechDef[] = [
     baseGold: 300, baseFood: 250,
   },
   {
+    /* ⭐ 2026-07-29: BÜYÜ KALKANI BU LİSTEDEN ÇIKARILDI. Binary'de Büyücülük uygulayıcısı
+     * (FUN_004118e8 → FUN_004124cc) yalnız SAVAŞÇI listesini gezip magicHp'yi ölçekler; Sur/Kalkan
+     * nesnelerine hiç dokunmaz. Kalkanın magicHp'si zaten 0 → etkisiz. Kalkanı güçlendiren TILSIM. */
     id: 'sorcery', name: { tr: 'Büyücülük' }, rate: 0.05, stat: 'matk',
-    units: ['shaman', 'pegasus', 'dragon', 'chaos', 'magic_shield'],
+    units: ['shaman', 'pegasus', 'dragon', 'chaos'],
     baseGold: 200, baseFood: 160,
   },
   {
@@ -50,10 +53,15 @@ export const TECHS: readonly TechDef[] = [
     baseGold: 250, baseFood: 200,
   },
   {
-    // "Büyü savunma gücünü %5 arttırır" — Mancınık/Kaos/Yük/Casus HARİÇ
+    /* "Büyü savunma gücünü %5 arttırır" — Mancınık/Kaos/Yük/Casus HARİÇ.
+     * ⭐ 2026-07-29: BÜYÜ KALKANI EKLENDİ. Binary'de Tılsım uygulayıcısı (FUN_00411988) savaşçıların
+     * mAtk'ini ölçekledikten sonra AYRICA `ordu+0x98` = KALKAN nesnesini alıp FUN_00413744 ile onun
+     * mAtk'ini `mAtk × (1 + sv×0,05)` yapar — kalkanın MİTİGASYONU budur. İkizi: Taş Ustalığı →
+     * FUN_00411a28 → `ordu+0x10` = SUR (FUN_004136a4, pAtk+pDef). Dokümanın "Büyücülük … Büyü
+     * Kalkanı" ifadesi yanıltıcı: Büyücülük büyü VURUŞ gücünü (magicHp) ölçekler, kalkanın 0. */
     id: 'talisman', name: { tr: 'Tılsım' }, rate: 0.05, stat: 'mmit',
     units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'ogre', 'gnome', 'shaman',
-      'oil_cauldron', 'guard'],
+      'oil_cauldron', 'guard', 'magic_shield'],
     baseGold: 250, baseFood: 200,
   },
   // ── Savaş statlarına doğrudan etkisi olmayan teknikler ───────────────────────

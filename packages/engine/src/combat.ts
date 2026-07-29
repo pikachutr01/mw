@@ -19,8 +19,8 @@ import {
 import { type CombatConfig, DEFAULT_COMBAT_CONFIG } from './config.ts';
 import { createRng, type Rng } from './rng.ts';
 import type {
-  Army, ArmyUnit, HeroState, ScaledStats, SideInput, SideResult, SimulateInput, SimulateResult,
-  ShieldState, UnitCounts, WallState,
+  Army, ArmyUnit, HeroCombatStats, HeroState, ScaledStats, SideInput, SideResult, SimulateInput, SimulateResult,
+  GradedStruct, ShieldState, UnitCounts, WallState,
 } from './types.ts';
 
 const round = (x: number): number => Math.round(x);
@@ -73,9 +73,15 @@ export function nightMultiplier(nightVision: number, cfg: CombatConfig = DEFAULT
 
 function buildArmy(side: SideInput, isDefender: boolean, cfg: CombatConfig): Army {
   const tech = side.tech ?? {};
+  /* ⭐ Seviye 0 kahraman da savaşır (ölçüm: sv0 puansız kahraman savunana 26 fazla kaybettiriyor).
+   * Eski filtre `level > 0` istiyordu → yeni çıkmış kahraman yok sayılıyordu. */
   const heroes: HeroState[] = (side.heroes ?? [])
-    .filter((h) => h && (h.level | 0) > 0)
-    .map((h) => ({ ...h, durum: 100 }));
+    .filter((h) => h && (h.level | 0) >= 0)
+    .map((h) => {
+      const st: HeroState = { ...h, durum: 100, combat: null as unknown as HeroCombatStats };
+      st.combat = heroStats(st, cfg);
+      return st;
+    });
   const heroLevel = heroes.reduce((m, h) => Math.max(m, h.level | 0), 0);
 
   const units: ArmyUnit[] = [];
@@ -92,43 +98,49 @@ function buildArmy(side: SideInput, isDefender: boolean, cfg: CombatConfig): Arm
     });
   }
 
-  // §S SUR — adet değil BÜTÜNLÜK. Seviye kalıcıdır; savaşta yıpranır, savaş sonrası onarılır.
+  /**
+   * ⭐⭐ §S SUR — 2026-07-29: TASARIMSAL MODEL KALDIRILDI, BİNARY FORMÜLÜNE DÖNÜLDÜ.
+   *
+   * Sur, Büyü Kalkanı ile **aynı nesne sınıfıdır** ve aynı fonksiyonlardan geçer; tek farkı hangi
+   * fazda hatta olduğu (Sur: menzilli+yakın · Kalkan: büyü) ve bölücüsünün ölçekli olması.
+   *
+   * Eski gerekçe ("binary suru P'nin %0,4'ü kadar kalıp ilk fazda yok oluyor, pratikte işlevsiz")
+   * suru grup C sanan yanlış analizden geliyordu. Gerçekte seviye ÜSSEL girer — Sv 5'te güç 5.668,
+   * mitigasyon 4.724, bölücü 56.685 → sur zaten "şehir savunmasının temel direği".
+   * Kullanıcı ölçümü (D3): gerçek sur **%87,5** kalırken tasarımsal model %17,2 diyordu.
+   * `cfg.wall.power/tough/exp` artık kullanılmıyor; yerine kalkanla ORTAK `cfg.wall.base` var.
+   */
   const wallLevel = isDefender ? Math.max(0, Math.trunc(side.counts['wall'] ?? 0)) : 0;
   let wall: WallState | null = null;
   if (wallLevel > 0) {
-    const masonryRate = TECHS_BY_ID['masonry']?.rate ?? 0.06;
-    const masonryFactor = 1 + Math.max(0, tech.masonry ?? 0) * masonryRate;
     const wallDef = UNITS_BY_ID['wall'] as UnitDef;
-    // ⭐ Onarım sürüyorsa sur HASARLI girer (§13.21.2); yüzde `left` üzerinden taşınır.
+    // ⭐ Onarım sürüyorsa sur HASARLI girer (§13.21.2): durum yüzde olarak taşınır.
     const startIntegrity = Math.min(1, Math.max(0, side.wallIntegrity ?? 1));
     wall = {
       level: wallLevel,
-      left: wallLevel * startIntegrity,
-      base: cfg.wall.power * wallLevel ** cfg.wall.exp * masonryFactor,
-      tough: cfg.wall.tough * masonryFactor,
+      durum: cfg.wall.durumMax * startIntegrity,   // binary +0x80 (Taş Ustalığı statlara işler)
       stats: applyTech(wallDef, tech),
+      base: cfg.wall.base,
     };
   }
 
   /**
-   * ⭐ BÜYÜ KALKANI BÜTÜNLÜĞÜ (§13.21, 2026-07-29 binary analizi).
+   * ⭐⭐ BÜYÜ KALKANI (§13.21 — binary mekanizması 2026-07-29'da ÇÖZÜLDÜ).
    *
-   * Kalkan bugüne kadar yalnız "gelen büyü havuzunu yüzdesel azaltan" pasif bir çarpandı ve
-   * **hiç yıpranmıyordu**. Binary'de ise Sur ile aynı savunma-yapıları listesinde duran, aynı
-   * hasar formülünden geçen bir birim: `HasarKayipCekirdegi` her savunan birime
-   * `pay − mitigasyon` uygular ve kalanı `mDef`e bölerek adetten (kalkanda: bütünlükten) düşer.
-   * Simülatörün Sur ve Büyü Kalkanı satırlarında yüzde göstermesinin sebebi de bu.
-   *
-   * Statlar katalogdan: mitigasyon **mAtk = 320/seviye**, dayanıklılık böleni **mDef = 2000**.
-   * Kalkanın nadiren düşmesinin sebebi bu ikili: payı 320×seviyeyi aşana kadar hiç yıpranmıyor.
+   * Kalkan bugüne kadar "gelen büyü havuzunu yüzdesel azaltan" pasif bir çarpandı ve hiç
+   * yıpranmıyordu. Binary'de ise Sur'un ikizi olan, **yalnız büyü fazında** hatta olan bir
+   * savunma nesnesi (ordu+0x98; Sur = ordu+0x10). Alanları: seviye(+0x14), Alan/birimPuanı(+0xc),
+   * stat bloğu(+0x20), **DURUM 0..100 (+0x80)**. Ekrandaki yüzde doğrudan durumdur.
+   * Formüller `gradePower` / `gradeStat` / `gradeTakeHit` içinde (§K).
    */
   const shieldLevel = isDefender ? Math.max(0, Math.trunc(side.counts['magic_shield'] ?? 0)) : 0;
   let shield: ShieldState | null = null;
   if (shieldLevel > 0) {
     shield = {
       level: shieldLevel,
-      left: shieldLevel,
-      stats: applyTech(UNITS_BY_ID['magic_shield'] as UnitDef, tech),
+      durum: cfg.magicShield.durumMax,                 // binary +0x80: 100'den başlar
+      stats: applyTech(UNITS_BY_ID['magic_shield'] as UnitDef, tech),  // ⭐ TILSIM mAtk'ı büyütür
+      base: cfg.magicShield.base,
     };
   }
 
@@ -150,56 +162,102 @@ function applyNight(army: Army, nightVision: number, cfg: CombatConfig): void {
 /* ── Kahraman ──────────────────────────────────────────────────────────────── */
 
 /**
- * Kahramanın KENDİ P'sine katkısı (savunma) — durum düştükçe azalır.
- * TOPLAMSAL: seviye tabanı + puan başına sabit. Ölçüm: lvl10/fizSav10 → 8.246,
- * lvl15/fizSav45 → 25.751 (puan başına ≈ 420).
+ * ⭐⭐ KAHRAMAN = STAT TABLOSU SATIR 12 (binary `FUN_0041440c`; 21 satır = 12 savaşçı +
+ * KAHRAMAN + 8 savunma yapısı). Eski "iki bileşenli efektif model" (heroOffPower/heroDefPower +
+ * durum eşiği, 6 uydurma katsayı) 2026-07-29'da KALDIRILDI — o model yapısal olarak yanlış bir
+ * iskeletin üstüne oturtulmuş bir eğri uydurmasıydı.
+ *
+ * Kullanıcının binary simülatörde koştuğu 60+ savaş (Tur 2 + Tur 3) şunları KANITLADI:
+ *   · Yetenek puanı 0 olan 12 satırın 12'si birebir → tabanlar, seviye terimi, faz eşlemesi,
+ *     `Alan = mDef × 0,005` ve durum formülü doğru.
+ *   · **Büyü ÇALIŞIYOR** — kahramanın büyü tabanı 0 değil, 1200 (fizikselle aynı).
+ *   · Yetenek terimi **LİNEER ve seviyeden BAĞIMSIZ** — asm'deki `1,06^yetenek` 25 kat küçük.
+ *
+ * Ölçüm ayrıntıları ve hâlâ açık maddeler: `mobiwar-kahraman-kalan-testler` hafızası.
  */
-function heroDefPower(h: HeroState, cfg: CombatConfig): number {
-  if ((h.level | 0) <= 0) return 0;
-  const { defBase, defPerLevel, defPerPoint } = cfg.hero;
-  const value = defBase + defPerLevel * (h.level | 0) + defPerPoint * Math.max(0, h.fDef ?? 0);
-  return round(value * h.durum / 100);
-}
+export const HERO_BASE_STATS = {
+  hp: 1200, magicHp: 1200, pAtk: 240, pDef: 240, mAtk: 300, mDef: 4000,
+} as const;
 
 /**
- * Kahramanın saldırı havuzuna katkısı (ofans) — durum düştükçe azalır.
- * TOPLAMSAL: seviye² tabanı + puan başına sabit. Yüksek puanda puan terimi baskın.
- * Ölçüm (lvl15): 0/6/12/24/45 puan → 16,9k / 62,7k / 100,7k / 166k / 346k · lvl20/60 → 455k.
+ * `FUN_0040d884` + ölçümden düzeltilmiş yetenek terimi:
+ *   stat = round((sv+1) × taban × levelBase^sv  +  taban × (1 + skillK × yetenek))
+ *   mDef = round((sv+1) × 4000 × mDefLevelBase^sv)     ← yetenek terimi YOK
+ *   Alan = round(mDef × areaK)
+ * Yetenek eşlemesi: fizSald→hp · fizSav→pAtk VE pDef · büyüSald→magicHp · büyüSav→mAtk.
  */
-function heroOffPower(h: HeroState, cfg: CombatConfig): number {
-  if ((h.level | 0) <= 0) return 0;
-  const { offLevelCoef, offPerPoint } = cfg.hero;
-  const lvl = h.level | 0;
-  const value = offLevelCoef * lvl * lvl + offPerPoint * Math.max(0, h.fAtk ?? 0);
-  return round(value * h.durum / 100);
+export function heroStats(h: HeroState, cfg: CombatConfig): HeroCombatStats {
+  const L = Math.max(0, h.level | 0);
+  const { levelBase, skillK, skillKMagic, mDefLevelBase, areaK } = cfg.hero;
+  const sk = (v: number | undefined): number => Math.max(0, v ?? 0);
+  /** k = puan başına kaç TABAN birimi. Fiziksel ve büyü kanatları AYRI ölçüldü (aşağıya bak). */
+  const g = (base: number, skill: number | undefined, k: number): number =>
+    round((L + 1) * base * levelBase ** L + base * (1 + k * sk(skill)));
+  const mDef = round((L + 1) * HERO_BASE_STATS.mDef * mDefLevelBase ** L);
+  const phys = g(HERO_BASE_STATS.pDef, h.fDef, skillK);   // pAtk ve pDef aynı değeri alır
+  return {
+    hp: g(HERO_BASE_STATS.hp, h.fAtk, skillK),
+    magicHp: g(HERO_BASE_STATS.magicHp, h.mAtk, skillKMagic),
+    pAtk: phys, pDef: phys,
+    mAtk: g(HERO_BASE_STATS.mAtk, h.mDef, skillKMagic),
+    mDef: mDef > 0 ? mDef : 1,
+    unitPower: round(mDef * areaK),
+  };
 }
+
+/** Yaşayan kahraman mı? Ölüm YALNIZ durum 0'a inince (kullanıcı kararı — olasılık yok). */
+const heroAlive = (h: HeroState): boolean => h.durum > 0;
 
 /**
- * ⚠️ Kahraman katkısına TAVAN: kendi ordusunun katkısının en fazla `maxPoolShare` katı.
- * Üssel yetenek etkisi 0-12 puan verisiyle kalibre edildi; oyuncunun seviye 15'te 45 puanı var
- * (3/seviye). Tavan olmadan tek kahraman orduyu ikame ederdi — bu bir DENGE kararıdır, ölçüm değil.
+ * Havuz katkısı — `FUN_0040e0c4` param_3 dalı (asm 0x40e188): **tip filtresi YOK**.
+ *   faz 1 (menzilli) → katkı YOK · faz 2 (yakın) → hp · faz 3 (büyü) → magicHp
+ * ⚠️ Durum GÜCÜ ÖLÇEKLEMEZ: kahraman ölene kadar tam güçtedir (binary'de katkı `stat × adet`,
+ * durum ayrı alanda tutulur).
  */
-function capHeroContribution(heroValue: number, armyValue: number, cfg: CombatConfig): number {
-  if (heroValue <= 0) return 0;
-  const cap = armyValue * cfg.hero.maxPoolShare;
-  return armyValue > 0 && heroValue > cap ? cap : heroValue;
+function heroPoolContribution(army: Army, type: 1 | 2 | 3): number {
+  if (type === 1) return 0;
+  return army.heroes.reduce(
+    (s, h) => (heroAlive(h) ? s + (type === 3 ? h.combat.magicHp : h.combat.hp) : s), 0);
 }
 
-const armyHeroDef = (a: Army, cfg: CombatConfig): number =>
-  a.heroes.reduce((s, h) => s + heroDefPower(h, cfg), 0);
-const armyHeroOff = (a: Army, cfg: CombatConfig): number =>
-  a.heroes.reduce((s, h) => s + heroOffPower(h, cfg), 0);
+/** P katkısı: Alan × adet (normal birim gibi). */
+const heroPowerSum = (army: Army): number =>
+  army.heroes.reduce((s, h) => (heroAlive(h) ? s + h.combat.unitPower : s), 0);
+
+/**
+ * `FUN_00412980` — kahraman normal bir birim gibi hasar alır:
+ *   net = Alan × havuz/P − faz statı ;  durum -= 100 × net/mDef ;  emilen = net
+ * Durum 0'a inince kahraman ÖLÜR. Döndürülen değer `lossMag`'e eklenir.
+ */
+function heroTakeHit(army: Army, pool: number, P: number, type: 1 | 2 | 3, cfg: CombatConfig): number {
+  let absorbed = 0;
+  for (const h of army.heroes) {
+    if (!heroAlive(h)) continue;
+    const mit = type === 1 ? h.combat.pAtk : type === 2 ? h.combat.pDef : h.combat.mAtk;
+    const net = (h.combat.unitPower * pool) / P - mit;
+    if (net <= 0) continue;
+    const drop = cfg.hero.durumScale * (net / h.combat.mDef);
+    if (drop < h.durum) { h.durum -= drop; absorbed += net; }
+    else { absorbed += h.combat.mDef * (h.durum / cfg.hero.durumScale); h.durum = 0; }
+  }
+  return absorbed;
+}
 
 /* ── Havuzlar ──────────────────────────────────────────────────────────────── */
 
 const alive = (a: Army): number => a.units.reduce((n, e) => n + Math.max(0, e.count), 0);
 
 /** Yenik kontrolü: yük/casus/gnom/tuzak SAYILMAZ (binary FUN_004114b0). */
+/**
+ * ⭐ Yaşayan kahraman orduyu AYAKTA TUTAR — `FUN_00411db4` üç listeye bakar: savaşçılar,
+ * **kahramanlar** (durum > 0) ve yapılar. Motor kahramanı saymayınca son savaşçı ölür ölmez
+ * savaş erken bitiyordu; ölçüm 5 tur derken motor 3 tur veriyordu (Tur 2 X grubu).
+ */
 const combatAlive = (a: Army, cfg: CombatConfig): number =>
   a.units.reduce(
     (n, e) => (NONCOMBAT.has(e.id) || e.count <= cfg.combatThreshold ? n : n + Math.max(0, e.count)),
     0,
-  );
+  ) + a.heroes.reduce((n, h) => (h.durum > 0 ? n + 1 : n), 0);
 
 /** §2 Saldırı havuzu (FUN_0040e0c4 faz 1): tür-eşleşen birimlerin Can/BüyüCan × Adet toplamı. */
 function combatPool(
@@ -219,47 +277,69 @@ function combatPool(
   }
   // Kahraman OFANSI yalnız fiziksel fazlarda. (Büyü yetenekleri etkisiz çünkü kahramanın
   // büyü TABAN statları 0 — binary formülü `taban × 1,06^yetenek` çarpımsaldır, 0×n = 0.)
-  if (type !== 3) pool += capHeroContribution(armyHeroOff(army, cfg), pool, cfg);
+  pool += heroPoolContribution(army, type);   // faz 2 → hp · faz 3 → magicHp · faz 1 → yok
   return pool;
 }
 
-const wallPower = (w: WallState | null): number => (w && w.left > 0 ? w.base * w.left : 0);
-
-/** §2 Savunma güç havuzu P: Σ BirimPuan×Adet + sur + kahraman gücü. */
-function powerSum(army: Army, useSnap: boolean, cfg: CombatConfig): number {
+/**
+ * §2 Savunma güç havuzu P: Σ BirimPuan×Adet + (sur | kalkan) + kahraman gücü.
+ *
+ * ⭐ FAZA BAĞLI (binary `HasarKayipCekirdegi`, param_10 dalı): faz 1-2'de **SUR**, faz 3'te
+ * **BÜYÜ KALKANI** P'ye girer. Hangisi P'de yer tutuyorsa gelen hasarın bir kısmını da ÜZERİNE
+ * ÇEKER — koruma tam olarak buradan gelir. (Eski sürüm suru her fazda P'ye koyuyordu.)
+ */
+function powerSum(army: Army, useSnap: boolean, cfg: CombatConfig, type: 1 | 2 | 3): number {
   let P = 0;
   for (const e of army.units) {
     if (PASSIVE_STRUCTS.has(e.id) || OUT_OF_BATTLE.has(e.id)) continue;
     const c = useSnap ? e.snap : e.count;
     P += e.stats.unitPower * Math.max(0, c);
   }
-  P += wallPower(army.wall);
-  return P + capHeroContribution(armyHeroDef(army, cfg), P, cfg);
+  P += gradePower(type === 3 ? army.shield : army.wall);   // faz3 → kalkan · faz1/2 → sur
+  return P + heroPowerSum(army);              // kahraman P'ye Alan×adet ile girer
 }
 
 /**
  * §2b ŞAMAN KALKANI (binary `atkSub`): savunan tarafın Şaman'ı gelen saldırı gücünü emer.
  * Yeterli Şaman ile gelen güç ≤ 0 olur → o taraf o fazda SIFIR kayıp alır.
  */
-function shamanShield(def: Army, cfg: CombatConfig): number {
+function shamanShield(def: Army, type: 1 | 2 | 3, cfg: CombatConfig): number {
   const sh = def.units.find((e) => e.id === 'shaman');
   if (!sh || sh.count <= 0) return 0;
-  return sh.stats.poolMagicHp * sh.count * cfg.shieldCal;
+  // ⭐ 2026-07-29: FAZA GÖRE STAT. Binary faz 1-2'de `sub_4121d4(şaman, 1)` = CAN, faz 3'te
+  // `(şaman, 2)` = BÜYÜCAN gönderir. Şaman'ın ikisi de 200 olduğu için teknik 0'da fark yoktu;
+  // hata ancak Büyücülük açılınca görünür (yalnız BüyüCan'ı büyütür). Kullanıcı E grubu yakaladı:
+  // Büyücülük 2'de savunan gerçekte 112 kaybederken motor 93 diyordu.
+  const stat = type === 3 ? sh.stats.poolMagicHp : sh.stats.poolHp;
+  return stat * sh.count * cfg.shieldCal;
 }
 
-/** §K BÜYÜ KALKANI: büyü fazında gelen havuzu yüzdesel azaltır; saldıranın Şamanları deler. */
-function magicShieldMultiplier(def: Army, atk: Army, cfg: CombatConfig): number {
-  const shield = def.units.find((e) => e.id === 'magic_shield');
-  if (!shield || shield.count <= 0) return 1;
-  const sorceryRate = TECHS_BY_ID['sorcery']?.rate ?? 0.05;
-  const effectiveLevel = shield.count * (1 + Math.max(0, def.tech.sorcery ?? 0) * sorceryRate);
-  let reduction = Math.min(cfg.magicShield.max, cfg.magicShield.perLevel * effectiveLevel);
-  const sh = atk.units.find((e) => e.id === 'shaman');
-  if (sh && sh.count > 0) {
-    reduction *= 1 / (1 + sh.count / (cfg.magicShield.shamanPerLevel * Math.max(1, shield.count)));
-  }
-  return 1 - reduction;
+/* ── §K BÜYÜ KALKANI (binary birebir) ──────────────────────────────────────────
+ *
+ * Kaynak fonksiyonlar: `KalkanGucPuani`(FUN_00413610) · `KalkanStat`(FUN_0041338c) ·
+ * `KalkanHamStat`(FUN_004132f4) · `KalkanHasar`(FUN_00413534) · `KalkanYuzde`(FUN_004132b0).
+ *
+ *   güç        = round(base^Sv × Alan × durum × 0,01)        → savunan P'sine eklenir
+ *   mitigasyon = mAtk × Sv × base^Sv × durum × 0,01
+ *   net        = güç × havuz/P − mitigasyon
+ *   düşüş      = 100 × net / mDef        ⚠️ faz 3'te bölücü **HAM** mDef (ölçeksiz) — kalkana özel
+ *   durum     -= düşüş ;  emilen(lossMag) = mDef × 0,01 × düşüş  (= net; yıkılışta kırpılır)
+ *
+ * Neden yüksek seviye "hiç yıpranmıyor" gibi görünüyor: mitigasyon Sv×base^Sv ile, güç yalnız
+ * base^Sv ile büyür → oran Sv×mAtk/Alan. Sv 4'te mitigasyon 13.437, güç 4.199 → `havuz/P` 3,2'yi
+ * aşmadıkça net ≤ 0 ve durum hiç düşmez. Sv 1'de ise mitigasyon 576 < güç 720 → kalkan erir.
+ */
+const gradeLvlF = (o: GradedStruct): number => o.base ** o.level;   // 1,8^Sv
+
+/** FUN_00413610: P'ye giren güç (binary'de tam sayıya yuvarlanır). */
+function gradePower(o: GradedStruct | null): number {
+  if (!o || o.level <= 0 || o.durum <= 0) return 0;
+  return Math.round(gradeLvlF(o) * o.stats.unitPower * o.durum * 0.01);
 }
+
+/** FUN_0041338c: stat × Sv × base^Sv × durum × 0,01 — mitigasyon VE faz 1-2 bölücüsü. */
+const gradeStat = (o: GradedStruct, stat: number): number =>
+  stat * o.level * gradeLvlF(o) * o.durum * 0.01;
 
 /** §G GNOM SABOTAJI: düşman gnomları savunma yapılarının vuruşunu düşürür. */
 function structSabotage(owner: Army, foe: Army, cfg: CombatConfig): number {
@@ -294,48 +374,29 @@ function applyLoss(e: ArmyUnit, net: number): number {
 }
 
 /**
- * ⭐ BÜYÜ KALKANI HASARI — Sur'unkiyle aynı formül, yalnız **büyü fazında**.
+ * ⭐ FUN_00413534 — Sur/Kalkan'ın DURUMU erir; emilen hasar `lossMag`'a yazılır (kazananı belirler).
  *
- * `net = kalkanPayı − mitigasyon × bütünlük`, `bütünlük -= net / tough`.
- *
- * ⚠️ **Kalkanın payı `P`'ye EKLENMEZ ve `lossMag`'a YAZILMAZ** (bilinçli kısıt). Sebep:
- * motorun 64 kalibrasyon testi binary simülatörünün ÇIKTILARINA (kayıp, enkaz, kazanan) göre
- * ayarlandı; kalkanı güç havuzuna sokmak her birimin payını ve dolayısıyla o çıktıları
- * kaydırırdı. Bütünlük burada **gözlemlenebilir bir durum** olarak hesaplanıyor; savaşın
- * sonucuna etkisi hâlâ kalibre edilmiş `magicShieldMultiplier` üzerinden.
- * Tam kalibrasyon (kalkanı P'ye sokup 64 testi yeniden ayarlamak) ayrı bir tur işidir.
+ * ⚠️ BÖLÜCÜ ASİMETRİSİ (FUN_0040e0c4): faz 1-2 (SUR) → `FUN_0041338c(obj,6)` = ÖLÇEKLİ mDef;
+ * faz 3 (KALKAN) → `FUN_004132f4(obj,6)` = HAM mDef. Sur'un kalkandan çok daha dayanıklı
+ * olmasının sayısal sebebi budur (Sv 5'te bölücü 56.685'e karşı 2.000).
  */
-function shieldTakeHit(s: ShieldState | null, pool: number, P: number): void {
-  if (!s || s.left <= 0 || P <= 0) return;
-  /**
-   * Normal birimin formülünün BİREBİR aynısı (`dealType` içindeki döngüye bak):
-   *   pay = birimPuanı × bütünlük × havuz / P     (birimPuanı = katalogdaki Alan = 400)
-   *   net = pay − mAtk × bütünlük                 (mAtk = 320, Tılsım ile ölçeklenir)
-   *   bütünlük -= net / mDef                      (mDef = 2000, dayanıklılık böleni)
-   *
-   * ⭐ Kalkanın **nadiren** düşmesinin sayısal sebebi buradadır: 400 > 320 olduğu için
-   * `havuz/P > 0,8` olana kadar net ≤ 0 kalır, yani kalkan hiç yıpranmaz. Ancak ezici bir
-   * büyü saldırısında oran eşiği aşar ve kalkan gözle görülür biçimde erir.
-   */
-  const net = (s.stats.unitPower * s.left * pool) / P - s.stats.mAtk * s.left;
-  if (net <= 0) return;
-  const tough = s.stats.mDef > 0 ? s.stats.mDef : 1;
-  s.left = Math.max(0, s.left - net / tough);
-}
-
-/** Sur hasarı: normal birimle aynı formül, "adet" yerine bütünlük azalır (sub_412db8). */
-function wallTakeHit(w: WallState | null, pool: number, P: number, type: 1 | 2 | 3): number {
-  if (!w || w.left <= 0) return 0;
-  const mit = type === 1 ? w.stats.pAtk : type === 2 ? w.stats.pDef : w.stats.mAtk;
-  const net = (wallPower(w) * pool) / P - mit * w.left;
-  if (net <= 0) return 0;
-  const dec = net / w.tough;
-  if (dec < w.left) {
-    w.left -= dec;
-    return net;
+function gradeTakeHit(
+  o: GradedStruct | null, pool: number, P: number, type: 1 | 2 | 3,
+): number {
+  if (!o || o.level <= 0 || o.durum <= 0 || P <= 0) return 0;
+  const mitStat = type === 1 ? o.stats.pAtk : type === 2 ? o.stats.pDef : o.stats.mAtk;
+  const net = (gradePower(o) * pool) / P - gradeStat(o, mitStat);
+  if (net <= 0) return 0;              // yüksek seviyede olağan durum: hiç yıpranmaz
+  const mDef = o.stats.mDef > 0 ? o.stats.mDef : 1;
+  const div = type === 3 ? mDef : gradeStat(o, mDef);
+  if (div <= 0) return 0;
+  const drop = (100 * net) / div;
+  if (drop < o.durum) {
+    o.durum -= drop;
+    return mDef * 0.01 * drop;         // = net
   }
-  const absorbed = w.tough * w.left;   // yıkılışta kırpılır
-  w.left = 0;
+  const absorbed = mDef * 0.01 * o.durum;   // yıkılışta kırpılır
+  o.durum = 0;
   return absorbed;
 }
 
@@ -345,20 +406,20 @@ function dealType(
 ): void {
   // Saldıran havuzu tur-başı FOTOĞRAFTAN (frozen) — iki yön de snapshot kullanır (eşzamanlılık).
   let pool = combatPool(atk, type, true, structSabotage(atk, def, cfg), cfg);
-  pool -= shamanShield(def, cfg);
+  pool -= shamanShield(def, type, cfg);
   if (pool <= 0) return;
-  if (type === 3) pool *= magicShieldMultiplier(def, atk, cfg);
-  if (poolK) pool *= poolK;              // karşı-yön kalibrasyonu (kalkandan SONRA → 0 kalan 0)
+  if (poolK) pool *= poolK;              // karşı-yön kalibrasyonu (şaman kalkanından SONRA → 0 kalan 0)
   pool *= jitter(rng);
 
   // Savunan P ve pay CANLI sayıdan; P faz başında sabit.
-  const P = powerSum(def, false, cfg);
+  const P = powerSum(def, false, cfg, type);
   if (P <= 0) return;
 
-  // §S SUR payına düşen hasarı alır (her fazda, büyü dahil).
-  def.lossMag += wallTakeHit(def.wall, pool, P, type);
-  // §K BÜYÜ KALKANI yalnız büyü fazında yıpranır (§13.21) ve HAM havuzu görür.
-  if (type === 3) shieldTakeHit(def.shield, pool, P);
+  /* ⭐ §S SUR / §K BÜYÜ KALKANI — binary'de ikisi AYNI ANDA hatta değil:
+   *   faz 1 (menzilli) + faz 2 (yakın) → SUR      (ctx+0x5c)
+   *   faz 3 (BÜYÜ)                     → KALKAN   (ctx+0x60)
+   * Eski sürüm suru büyü fazında da vuruyor, kalkanı ise hiç yıpratmıyordu. */
+  def.lossMag += gradeTakeHit(type === 3 ? def.shield : def.wall, pool, P, type);
 
   for (const e of def.units) {
     if (e.count <= 0) continue;
@@ -372,13 +433,8 @@ function dealType(
     def.lossMag += applyLoss(e, net);
   }
 
-  // §KAHRAMAN DURUM HASARI: eşik üstü baskı durumu düşürür, 0'da kahraman ölür.
-  const pressure = pool / P;
-  for (const h of def.heroes) {
-    if (h.durum <= 0) continue;
-    const hDmg = (pressure - cfg.hero.durumMitigation) * heroDefPower(h, cfg);
-    if (hDmg > 0) h.durum = Math.max(0, h.durum - hDmg * cfg.hero.durumK);
-  }
+  // §KAHRAMAN: normal bir birim gibi payını alır (FUN_00412980). Durum 0'da ölür.
+  def.lossMag += heroTakeHit(def, pool, P, type, cfg);
 }
 
 /** §2c HEDEFLİ SALDIRI (Tur1 skirmish'i için) — tek savunan birime yoğunlaşmış hasar. */
@@ -396,7 +452,7 @@ function dealTargeted(
   } else {
     pool = combatPool(atk, type, true, 0, cfg);
   }
-  if (opts.shield) pool -= shamanShield(def, cfg);
+  if (opts.shield) pool -= shamanShield(def, type, cfg);
   if (pool <= 0) return;
   pool *= jitter(rng);
   const P = target.stats.unitPower * target.count;   // defA = yalnız hedef
@@ -484,16 +540,29 @@ function debris(army: Army, heroLevel: number, cfg: CombatConfig): { gold: numbe
   return { gold, food };
 }
 
-/** §5/§6 Kahraman çıkma ihtimali (0-100) — KAZANANIN Tapınak seviyesine bağlı. */
-export function captureChance(temple: number, heroCount: number, xp: number): number {
+/**
+ * ⭐ §5/§6 KAHRAMAN ÇIKMA İHTİMALİ (0-100) — 28/28 ölçümle doğrulandı (2026-07-29).
+ *
+ *   ihtimal = (Tapınak×10 − Kahraman×155) × min(1, XP × 0,000025),   XP > 499 kapısıyla
+ *
+ * v0.6'da bunu çarpımsala çevirmiştik ("iki kahramandan sonra imkânsız oluyor"); ÖLÇÜM binary'yi
+ * tutuyor (çarpımsal sürüm 19/28). K=1 satırları ayrımı net yapıyor: %1,137↔%1,14 · %0,828↔%0,82.
+ *
+ * ⚠️ `temple` = oyuncunun **TÜM ŞEHİRLERİNDEKİ tapınak seviyelerinin TOPLAMI** (kullanıcı,
+ * oyunun kendi davranışı) — tek şehrin tapınağı değil.
+ * ⚠️ DENGE: 155 cezasıyla K=2 için toplam Tapınak ≥ 31 gerekir. Şehir sayısı arttıkça toplam da
+ * arttığı için bu, çok şehirli oyuncuyu ödüllendiren doğal bir kapı oluyor.
+ */
+export function captureChance(
+  temple: number, heroCount: number, xp: number,
+  cfg: CombatConfig = DEFAULT_COMBAT_CONFIG,
+): number {
   const T = Math.max(0, temple | 0);
   const K = Math.max(0, heroCount | 0);
-  if (!(xp > 499) || T <= 0 || K >= 5) return 0;
-  // v0.6: ceza ÇARPIMSAL ((5−K)/5) — binary'nin çıkarma cezası 2 kahramandan sonra ihtimali
-  // matematiksel olarak imkânsız kılıyordu, oysa doküman 5 kahramana kadar mümkün diyor.
-  const base = T * 10 * ((5 - K) / 5);
+  if (!(xp > cfg.capture.xpGate) || T <= 0 || K >= cfg.capture.maxHeroes) return 0;
+  const base = T * cfg.capture.perTempleLevel - K * cfg.capture.perHeroPenalty;
   if (base <= 0) return 0;
-  return Math.min(100, Math.max(0, base * Math.min(1, xp * 0.000025)));
+  return Math.min(100, Math.max(0, base * Math.min(1, xp * cfg.capture.xpScale)));
 }
 
 /**
@@ -605,7 +674,7 @@ export function simulate(input: SimulateInput, configOverride?: CombatConfig): S
   else if (winner === 'defender' && aLM > 0) xp = round((aLM + dLM) * (dLM / aLM) * 0.001);
 
   const winSide = winner === 'attacker' ? input.attacker : winner === 'defender' ? input.defender : null;
-  const capture = winSide ? captureChance(winSide.temple ?? 0, winSide.heroCount ?? 0, xp) : 0;
+  const capture = winSide ? captureChance(winSide.temple ?? 0, winSide.heroCount ?? 0, xp, cfg) : 0;
 
   return {
     winner,
@@ -645,7 +714,7 @@ function sideResult(army: Army): SideResult {
       durum: Math.round(h.durum * 100) / 100,
       alive: h.durum > 0,
     })),
-    wallIntegrity: army.wall ? army.wall.left / army.wall.level : null,
-    shieldIntegrity: army.shield ? army.shield.left / army.shield.level : null,
+    wallIntegrity: army.wall ? army.wall.durum / 100 : null,   // ⭐ binary: FUN_004132b0
+    shieldIntegrity: army.shield ? army.shield.durum / 100 : null,   // ⭐ binary: FUN_004132b0 (durum 0..100)
   };
 }

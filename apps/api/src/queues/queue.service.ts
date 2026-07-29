@@ -45,7 +45,9 @@ export type QueueErrorCode =
   | 'slot_busy'
   | 'tech_already_researching'
   | 'invalid_count'
-  | 'queue_busy';
+  | 'queue_busy'
+  /** Sur tamamen yıkık ve onarımı sürüyor → savunma birimi üretilemez (§13.21.2). */
+  | 'wall_destroyed';
 
 export interface QueueItem {
   id: number;
@@ -217,6 +219,13 @@ export class QueueService {
       if (levelBased) {
         await this.assertNoOpenStructureQueue(tx as never, opts.cityId);
       } else {
+        /**
+         * ⭐ SUR TAM YIKILDIYSA SAVUNMA BİRİMİ ÜRETİLEMEZ (kullanıcı kararı, 2026-07-29).
+         * Savunma birimleri surda yaşar; sur çökmüşken üretilecek yer yok. Kilit yalnız
+         * **tam yıkımda** (bütünlük %0) geçerli — kısmi hasarda sur ayakta, üretim sürer.
+         * Sur/Büyü Kalkanı yükseltmeleri bu daldan geçmez, yani onarım/yükseltme engellenmez.
+         */
+        await this.assertWallStanding(tx as never, opts.cityId, opts.at);
         const wall = Math.max(1, st.defenses['wall'] ?? 1);
         const open = await openUnitQueueCount(tx as never, opts.cityId, 'defense');
         if (open >= wall) {
@@ -330,6 +339,29 @@ export class QueueService {
   }
 
   /* ── Ortak yardımcılar ────────────────────────────────────────────────────── */
+
+  /**
+   * Sur tam yıkılmış ve onarımı sürüyorsa savunma birimi üretimini reddeder.
+   *
+   * "Tam yıkıldı" = onarım BAŞLARKENki bütünlük 0. Onarım ilerledikçe sur savaşa artan bir
+   * yüzdeyle giriyor ama **üretim yasağı onarımın sonuna kadar sürüyor** — kullanıcının şartı
+   * buydu: *"Surun onarımı tamamen bitene kadar da herhangi bir savunma birimi üretilemez."*
+   */
+  private async assertWallStanding(tx: Db, cityId: number, at: Date): Promise<void> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT wall_integrity, wall_repair_until FROM cities WHERE id = ${cityId}
+    `);
+    const until = rows[0]?.['wall_repair_until'];
+    if (until == null) return;
+    const untilDate = until instanceof Date ? until : new Date(String(until));
+    if (untilDate <= at) return;
+    if (Number(rows[0]?.['wall_integrity'] ?? 1) > 0) return;
+    throw new QueueError(
+      'wall_destroyed',
+      'Sur tamamen yıkıldı — onarımı bitene kadar savunma birimi üretilemez.',
+      { repairUntil: untilDate.toISOString() },
+    );
+  }
 
   private async loadCity(tx: Db, cityId: number, playerId: number): Promise<CityState> {
     const rows = await tx.execute<Record<string, unknown>>(sql`

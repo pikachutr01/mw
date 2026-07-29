@@ -1,0 +1,1 @@
+ALTER TABLE "heroes" DROP COLUMN "dead_until";
