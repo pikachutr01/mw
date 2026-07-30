@@ -17,7 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { UNITS_BY_ID, wallRepairSeconds } from '@mobiwar/catalog';
-import { distance, travelSeconds } from '@mobiwar/engine';
+import { distance, ENGINE_VERSION, travelSeconds } from '@mobiwar/engine';
 import { buildBattleReport, type BattleRow } from '../src/battles/battle-report.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
@@ -476,7 +476,7 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
     expect(String(battles[0]!['winner'])).toBe('attacker');
     // Determinizm künyesi kayıtlı → savaş yeniden oynatılabilir (§5).
     expect(Number(battles[0]!['rng_seed'])).toBeGreaterThan(0);
-    expect(String(battles[0]!['engine_version'])).toBe('0.6.0');
+    expect(String(battles[0]!['engine_version'])).toBe(ENGINE_VERSION);
     expect(String(battles[0]!['catalog_hash'])).toMatch(/^[0-9a-f]{8}$/);
 
     // Savunan silindi.
@@ -782,15 +782,23 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
 
     expect(atk.won).toBe(true);
     expect(def.won).toBe(false);
-    expect(atk.text).toMatch(/KAZANDIN/);
-    expect(def.text).toMatch(/KAYBETTİN/);
+    // Orijinal oyunun kalıpları (k.java): "Kazandınız !" / "Kaybettiniz !".
+    expect(atk.text).toMatch(/Kazandınız !/);
+    expect(def.text).toMatch(/Kaybettiniz !/);
     // Türkçe birim adları ve sayılar raporda.
     expect(atk.text).toMatch(/Cüce/);
     expect(def.text).toMatch(/Okçu Kulesi/);
     // Saldıran ALDIĞINI, savunan KAYBETTİĞİNİ görür.
     expect(atk.loot).not.toBeNull();
-    expect(atk.sections.some((s) => s.key === 'attacker')).toBe(true);
+    expect(atk.lootBreakdown).not.toBeNull();
+    expect(def.lootBreakdown).toBeNull();
+    // ⭐ Bölümler okuyanın perspektifinde: iki taraf da önce KENDİ ordusunu görür.
+    expect(atk.sections[0]!.key).toBe('myArmy');
+    expect(def.sections.some((s) => s.key === 'enemyArmy')).toBe(true);
     expect(def.sections.some((s) => s.key === 'defenderStructs')).toBe(true);
+    // ⭐ Zenginleştirme: koordinatlar savaş anında satıra işlendi.
+    expect(atk.coords?.target).toEqual({ k: 1, d: 1, s: 2 });
+    expect(atk.coords?.origin).toEqual({ k: 1, d: 1, s: 1 });
   });
 
   /**
@@ -837,12 +845,22 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(notes).toMatch(/Savunma tabanı devreye girdi/);
     expect(notes).toMatch(/Balista 3/);
     expect(notes).toMatch(/Okçu Kulesi 2/);
-    // Sur bütünlüğü de raporlanır; Sur SEVİYE olduğu için birim satırı olarak GÖRÜNMEZ.
+    // Sur bütünlüğü raporlanır; Sur SEVİYE olduğu için birim SATIRI olarak görünmez,
+    // ayrı bir Sur kartı/satırı olarak görünür.
     expect(notes).toMatch(/Sur bütünlüğü %25/);
-    expect(def.text).not.toMatch(/^\s*Sur:/m);
+    const struct = def.sections.find((s) => s.key === 'defenderStructs')!;
+    expect(struct.lines.some((l) => l.id === 'wall')).toBe(false);
+    expect(def.wall).toMatchObject({ level: 3, integrity: 0.25, destroyed: false });
+    expect(def.text).toMatch(/Sur: seviye 3 — bütünlük %25/);
+
+    /* ⭐ ESKİ ŞEKİL DEGRADE: bu sentetik result 2026-07-30 zenginleştirmesinden önceki
+     * kayıtları taklit eder (heroesDetail/coords YOK) → rapor boş kahraman listeleri ve
+     * null koordinatla, hatasız üretilmeli. */
+    expect(def.heroes).toEqual({ mine: [], enemy: [], captured: null });
+    expect(def.coords).toBeNull();
+    expect(def.cave).toBeNull();
 
     // Satırlarda "önce → sonra (kayıp)" dökümü var.
-    const struct = def.sections.find((s) => s.key === 'defenderStructs')!;
     const ballista = struct.lines.find((l) => l.id === 'ballista')!;
     expect(ballista).toMatchObject({ before: 20, after: 4, lost: 16, restoredByFloor: 3 });
     expect(def.text).toMatch(/Balista: 20 → 4 \(kayıp 16\) \[taban \+3\]/);

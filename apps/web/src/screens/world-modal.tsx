@@ -20,7 +20,7 @@ import {
   useAlliance, useAllianceInvite, useCatalog, useCity, useMissionOptions, useSendMission,
   type MissionOption, type WorldSlot,
 } from '../lib/queries.ts';
-import { Badge, Button, Empty, ErrorBox, Input, MissionIcon } from '../components/ui.tsx';
+import { AmountInput, Badge, Button, Empty, ErrorBox, MissionIcon } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 
 /**
@@ -223,8 +223,13 @@ function MissionForm({
   const D = origin ? distance(origin, target) : 0;
   const speed = hasUnits ? armySpeed(units) : null;
   const cartography = city.data?.techs['cartography'] ?? 0;
+  // Dünya hız çarpanı ve casus tabanı sunucu hesabıyla AYNI olmalı — yoksa gösterilen
+  // süre hızlı dünyada çarpan katı kadar yanlış çıkar.
+  const speedMultiplier = city.data?.speed?.travel ?? 1;
   const eta = type === 'teleport' ? 0
-    : speed ? travelSeconds({ distance: D, speed, cartography }) : null;
+    : speed
+      ? travelSeconds({ distance: D, speed, cartography, speedMultiplier, spy: type === 'spy' })
+      : null;
 
   // Taşıma kapasitesi ordudan gelir → oyuncu ne kadar yükleyebileceğini ANINDA görür.
   const capacity = Object.entries(units).reduce((sum, [id, n]) => {
@@ -301,8 +306,7 @@ function MissionForm({
                     {u.name} <span className="tnum text-muted">({fmt(left)})</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Input type="number" min={0} max={have} inputMode="numeric"
-                      className="tnum w-16 py-1 text-center" placeholder="0"
+                    <AmountInput min={0} max={have} placeholder="0"
                       value={picked[u.id] ?? ''}
                       onChange={(e) => setPicked({ ...picked, [u.id]: e.target.value })} />
                     <Button size="sm" variant="ghost"
@@ -324,65 +328,62 @@ function MissionForm({
         </>
       ) : null}
 
-      {/* ── Kargo ── */}
-      {rule.cargo ? (
-        <div className="space-y-1.5 rounded-[var(--radius-sm)] border border-border p-2.5">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-muted">Gönderilecek kaynak</span>
-            <span className={`tnum ${cargoFits ? 'text-muted' : 'font-semibold text-danger'}`}>
-              {fmt(cargoTotal)} / {fmt(capacity)} kapasite
-            </span>
+      {/**
+        * ⭐ SABİT ALT BÖLÜM (kullanıcı 2026-07-30): kargo + hata + başlat düğmesi modalın
+        * scroll'una KARIŞMAZ — birim listesi uzun olsa da hep görünür. `sticky bottom-0`
+        * modalın tek scroll gövdesi içinde alta yapışır; negatif kenar boşlukları paneli
+        * modal kenarlarına dayar.
+        */}
+      <div className="sticky bottom-0 -mx-3 -mb-3 space-y-2 border-t-2 border-strong bg-surface p-3">
+        {rule.cargo ? (
+          <div className="space-y-1.5 rounded-[var(--radius-sm)] border border-border p-2.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted">Gönderilecek kaynak</span>
+              <span className={`tnum ${cargoFits ? 'text-muted' : 'font-semibold text-danger'}`}>
+                {fmt(cargoTotal)} / {fmt(capacity)} kapasite
+              </span>
+            </div>
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-1.5">
+              <label>
+                <span className="mb-0.5 block text-[11px] text-muted">Altın</span>
+                <AmountInput min={0} placeholder="0"
+                  value={gold} onChange={(e) => setGold(e.target.value)} />
+              </label>
+              <label>
+                <span className="mb-0.5 block text-[11px] text-muted">Yemek</span>
+                <AmountInput min={0} placeholder="0"
+                  value={food} onChange={(e) => setFood(e.target.value)} />
+              </label>
+              {!affordCargo ? (
+                <span className="pb-1 text-[11px] text-danger">Şehrinin kaynağı yetmiyor.</span>
+              ) : type === 'support' ? (
+                <span className="pb-1 text-[11px] text-muted">Kaynak göndermek isteğe bağlı.</span>
+              ) : null}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <label className="flex-1">
-              <span className="mb-0.5 block text-[11px] text-muted">Altın</span>
-              <Input type="number" min={0} inputMode="numeric" className="tnum w-24 py-1 text-center"
-                value={gold} onChange={(e) => setGold(e.target.value)} placeholder="0" />
-            </label>
-            <label className="flex-1">
-              <span className="mb-0.5 block text-[11px] text-muted">Yemek</span>
-              <Input type="number" min={0} inputMode="numeric" className="tnum w-24 py-1 text-center"
-                value={food} onChange={(e) => setFood(e.target.value)} placeholder="0" />
-            </label>
-          </div>
-          {!affordCargo ? (
-            <div className="text-[11px] text-danger">Şehrinin kaynağı yetmiyor.</div>
-          ) : null}
-          {type === 'support' ? (
-            <div className="text-[11px] text-muted">Destekte kaynak göndermek isteğe bağlıdır.</div>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
 
-      <ErrorBox error={send.error} />
+        <ErrorBox error={send.error} />
 
-      <Button
-        className="w-full"
-        disabled={!canSend}
-        onClick={() => {
-          send.mutate(
-            {
-              type,
-              originCityId: cityId!,
-              target,
-              units,
-              ...(rule.cargo ? { cargo } : {}),
-            },
-            { onSuccess: onDone },
-          );
-        }}
-      >
-        {send.isPending ? 'Gönderiliyor…' : `${info?.title ?? type} başlat`}
-      </Button>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[var(--radius-sm)] border border-border px-2 py-1.5">
-      <div className="text-[11px] text-muted">{label}</div>
-      <div className="text-sm text-ink">{value}</div>
+        <Button
+          className="w-full"
+          disabled={!canSend}
+          onClick={() => {
+            send.mutate(
+              {
+                type,
+                originCityId: cityId!,
+                target,
+                units,
+                ...(rule.cargo ? { cargo } : {}),
+              },
+              { onSuccess: onDone },
+            );
+          }}
+        >
+          {send.isPending ? 'Gönderiliyor…' : `${info?.title ?? type} başlat`}
+        </Button>
+      </div>
     </div>
   );
 }

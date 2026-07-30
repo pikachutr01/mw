@@ -40,7 +40,7 @@ export interface CitySnapshot {
   goldPerHour: number;
   foodPerHour: number;
   /** Dünya hız çarpanları (1 = klasik). Arayüz "hızlandırılmış dünya" rozetini bundan çizer. */
-  speed: { resource: number; travel: number };
+  speed: { resource: number; travel: number; training: number; construction: number };
   buildings: Record<string, number>;
   resourcesAt: Date;
 }
@@ -104,7 +104,7 @@ export class CityService {
     const rows = await runner.execute<Record<string, unknown>>(sql`
       SELECT c.id, c.world_id, c.player_id, c.name, c.k, c.d, c.s, c.is_capital,
              c.gold, c.food, c.resources_at,
-             w.resource_multiplier, w.speed_multiplier
+             w.resource_multiplier, w.speed_multiplier, w.training_multiplier, w.construction_multiplier
         FROM cities c JOIN worlds w ON w.id = c.world_id
        WHERE c.id = ${cityId}
     `);
@@ -135,6 +135,8 @@ export class CityService {
       speed: {
         resource: Number(c['resource_multiplier'] ?? 1),
         travel: Number(c['speed_multiplier'] ?? 1),
+        training: Number(c['training_multiplier'] ?? 1),
+        construction: Number(c['construction_multiplier'] ?? 1),
       },
       buildings,
       resourcesAt: toDate(c['resources_at']),

@@ -70,7 +70,7 @@ export interface CityDetail {
   resources: { gold: number; food: number };
   production: { goldPerHour: number; foodPerHour: number };
   /** Dünya hız çarpanları (1 = klasik). Bilgi çubuğundaki ⚡ rozeti bunu okur. */
-  speed?: { resource: number; travel: number };
+  speed?: { resource: number; travel: number; training?: number; construction?: number };
   buildings: Record<string, number>;
   units: Record<string, number>;
   defenses: Record<string, number>;
@@ -317,9 +317,11 @@ export const useMessages = (): UseQueryResult<{ unread: number; items: MessageRo
   refetchInterval: SAFETY_NET_MS,
 });
 
-export const useWorld = (k: number, d: number): UseQueryResult<{ slots: WorldSlot[] }> => useQuery({
+export const useWorld = (k: number, d: number, enabled = true): UseQueryResult<{ slots: WorldSlot[] }> => useQuery({
   queryKey: ['world', k, d],
   queryFn: () => get<{ slots: WorldSlot[] }>(`/api/v1/world/${k}/${d}`),
+  // ⭐ Açılışta aktif şehrin diyarı bilinene kadar BEKLENİR (1:1 parlamasın diye).
+  enabled,
   // Diyar listesi nadiren değişir; şehir kurulunca `cities:changed` zaten tazeliyor.
   refetchInterval: SAFETY_NET_MS,
 });
@@ -452,6 +454,15 @@ export interface ReportLine {
   restoredByFloor?: number;
 }
 
+export interface ReportHeroLine {
+  name: string;
+  level: number;
+  alive: boolean;
+  destroyed: boolean;
+  /** Yalnız KENDİ kahramanlarında dolu; rakipte 0 (sızdırılmaz). */
+  xpGained: number;
+}
+
 export interface BattleReport {
   battleId: number;
   side: 'attacker' | 'defender';
@@ -460,8 +471,34 @@ export interface BattleReport {
   turns: number;
   night: boolean;
   at: string;
+  /** Kaynak (saldıran) → Hedef (savunan). Eski kayıtlarda null olabilir. */
+  coords: {
+    origin: { k: number; d: number; s: number } | null;
+    target: { k: number; d: number; s: number } | null;
+  } | null;
   sections: { key: string; title: string; lines: ReportLine[] }[];
+  heroes: {
+    mine: ReportHeroLine[];
+    enemy: ReportHeroLine[];
+    captured: { name: string; mine: boolean } | null;
+  };
+  wall: { level: number | null; integrity: number | null; destroyed: boolean } | null;
+  /** `escaped` yalnız savunanda dolar — mağaranın içi saldırana asla gitmez. */
+  cave: {
+    present: boolean;
+    broken: boolean;
+    required: number;
+    survivingDwarves: number;
+    reason: string | null;
+    escaped: Record<string, number> | null;
+    repairUntil: string | null;
+  } | null;
   loot: { gold: number; food: number } | null;
+  /** Yalnız saldıran: ortaya çıkan havuz vs fiilen taşınan. */
+  lootBreakdown: {
+    revealed: { gold: number; food: number };
+    carried: { gold: number; food: number };
+  } | null;
   notes: string[];
   text: string;
   provenance: { seed: number; engineVersion: string; catalogHash: string };

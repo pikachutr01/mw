@@ -8,11 +8,13 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { maxCities, spyEffectiveDiff, spyLevelFor, teleportCooldownSeconds } from '@mobiwar/catalog';
+import { travelSeconds } from '@mobiwar/engine';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';
 import { battleHandlers } from '../src/missions/battle.handlers.ts';
 import { missionHandlers } from '../src/missions/mission.handlers.ts';
+import { MissionController } from '../src/missions/mission.controller.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
@@ -334,6 +336,29 @@ describe('casusluk', () => {
     expect(ret!.payload['returnOf']).toBe('spy');
   });
 
+  /**
+   * ⭐ Casus seferi KUŞ TABANIYLA uçar (kullanıcı onayı 2026-07-30): `march()` motora
+   * `spy: true` geçirir → taban `baseSpySeconds` (120 sn), ordu tabanı (600 sn) DEĞİL.
+   * Bayrak düşerse süre ~5 kat uzar — bu test onu anında yakalar.
+   */
+  it('casus seferi kuş tabanını kullanır (600 sn ordu tabanı değil)', async () => {
+    await giveUnits(home, 'spy_bird', 3);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 3 }, at,
+    });
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM missions WHERE id = ${m.missionId}
+    `);
+    const seconds = Number((rows[0]!['payload'] as Record<string, unknown>)['travelSeconds']);
+    expect(seconds).toBe(travelSeconds({
+      distance: 1, speed: 6000, cartography: 0, speedMultiplier: 1, spy: true,
+    }));
+    expect(seconds).toBeLessThan(300);   // 120 sn taban + küçücük yol terimi
+  });
+
   it('yalnız Casus Kuş gönderilir', async () => {
     await giveUnits(home, 'dwarf', 5);
     await giveUnits(home, 'spy_bird', 5);
@@ -475,6 +500,82 @@ describe('şehir kurma', () => {
     expect(ret!.payload['returnOf']).toBe('found_city');
     const msg = (await messagesOf(me)).find((x) => x['kind'] === 'found_city_report');
     expect((msg!['body'] as Record<string, unknown>)['reason']).toBe('slot_taken');
+  });
+
+  /**
+   * ⭐ ŞEHİR KURMA YARIŞI GÖRÜNÜRLÜĞÜ (kullanıcı 2026-07-30): koordinatı ÖNCE kapan oyuncu,
+   * yoldaki kuruluş seferini şehrine GELEN SALDIRI olarak görür — kılıç simgesi, birleşim
+   * gizli, kaynak koordinat + oyuncu açık. Gönderenin kendi bacağı değişmez; üçüncü oyuncu
+   * hiçbir şey görmez. Varışta ordu savaşmadan döner ve iki tarafın listesi anında düşer.
+   */
+  it('⭐ YARIŞ: koordinatı kapan oyuncu yoldaki görevi GELEN SALDIRI olarak görür', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'dwarf', 20);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 8 }, units: { dwarf: 20 }, at,
+    });
+    await cities.create({
+      worldId, playerId: rival, name: 'kapkac', k: 1, d: 1, s: 8, isCapital: false, at,
+    });
+
+    const controller = new MissionController(missions, clock, h.db);
+    const rivalList = await controller.list({ player: { playerId: rival, worldId } } as never);
+    const incoming = (rivalList['movements'] as Record<string, unknown>[])
+      .find((x) => x['direction'] === 'in');
+    expect(incoming).toBeTruthy();
+    expect(incoming!['type']).toBe('attack');           // maskeli: kuruluş seferi olduğu belli olmaz
+    expect(incoming!['icon']).toBe('attack_in');
+    expect(incoming!['units']).toBeUndefined();         // birleşim gizli (§13.10.1)
+    expect(incoming!['origin']).toEqual({ k: 1, d: 1, s: 1 });
+    expect(incoming!['originPlayer']).not.toBeNull();
+    expect(Number(incoming!['cityId'])).toBeGreaterThan(0);   // çıpa: rakibin yeni şehri
+
+    // Gönderenin kendi bacağı DEĞİŞMEZ: hâlâ Şehir Kurma, birlikleri görünür.
+    const myList = await controller.list({ player: { playerId: me, worldId } } as never);
+    const out = (myList['movements'] as Record<string, unknown>[])
+      .find((x) => x['direction'] === 'out')!;
+    expect(out['type']).toBe('found_city');
+    expect(out['units']).toEqual({ dwarf: 20 });
+
+    // Üçüncü oyuncu hiçbir bacak görmez.
+    const third = await createPlayer(h, worldId, 'ucuncu');
+    const thirdList = await controller.list({ player: { playerId: third, worldId } } as never);
+    expect(thirdList['movements']).toEqual([]);
+
+    // Varışta savaşmadan dönüş + İKİ tarafın listesini düşüren bildirim.
+    await runDue(m.missionId);
+    const ob = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM outbox
+       WHERE world_id = ${worldId} AND topic = 'mission:completed'
+       ORDER BY id DESC LIMIT 1
+    `);
+    const payload = ob[0]!['payload'] as Record<string, unknown>;
+    expect(Number(payload['missionId'])).toBe(m.missionId);
+    expect(Number(payload['targetPlayerId'])).toBe(rival);
+  });
+
+  it('⭐ YARIŞ: gönderen iptal ederse koordinat sahibi de olayı alır', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'dwarf', 20);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 8 }, units: { dwarf: 20 }, at,
+    });
+    await cities.create({
+      worldId, playerId: rival, name: 'kapkac2', k: 1, d: 1, s: 8, isCapital: false, at,
+    });
+
+    await missions.cancelMission({ missionId: m.missionId, playerId: me, worldId, at });
+
+    const ob = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM outbox
+       WHERE world_id = ${worldId} AND topic = 'mission:canceled'
+       ORDER BY id DESC LIMIT 1
+    `);
+    expect(Number((ob[0]!['payload'] as Record<string, unknown>)['targetPlayerId'])).toBe(rival);
   });
 
   it('şehir limiti dolduysa gönderilemez — YOLDAKİ görevler de sayılır', async () => {

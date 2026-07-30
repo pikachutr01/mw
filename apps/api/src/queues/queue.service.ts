@@ -73,6 +73,15 @@ interface CityState {
   techs: Record<string, number>;
 }
 
+/**
+ * Süreyi dünya çarpanına böler; en az 1 sn (çarpan ne olursa olsun anlık bitiş yok).
+ * ⚠️ Yuvarlama YOK: birim-başına süreler kesirli saklanır (tembel materyalizasyon
+ * `done = elapsed / per_unit_seconds` hesabı yuvarlamayla kayardı) — çarpan 1'ken
+ * davranış bit-bit aynı kalır.
+ */
+const scaled = (seconds: number, multiplier: number): number =>
+  Math.max(1, seconds / Math.max(1, multiplier));
+
 export class QueueService {
   private readonly capacity = new CapacityService();
 
@@ -120,7 +129,11 @@ export class QueueService {
       const cost = buildingCost(opts.type, target);
       await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
-      const seconds = buildingTimeSeconds(opts.type, target, st.buildings['architect_school'] ?? 0);
+      const mult = await this.worldMultipliers(tx as never, st.worldId);
+      const seconds = scaled(
+        buildingTimeSeconds(opts.type, target, st.buildings['architect_school'] ?? 0),
+        mult.construction,
+      );
       return this.insert(tx as never, {
         ...st, cityId: opts.cityId, category: 'building', itemType: opts.type,
         targetLevel: target, count: null, cost, seconds, at: opts.at,
@@ -161,7 +174,10 @@ export class QueueService {
       const cost = { gold: def.gold * opts.count, food: def.food * opts.count };
       await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
-      const perUnit = trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 0);
+      const mult = await this.worldMultipliers(tx as never, st.worldId);
+      const perUnit = scaled(
+        trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 0), mult.training,
+      );
       // Sıra: ilk emir hemen başlar, sonrakiler bekler. `position` 1 = üretimi süren.
       const position = open + 1;
       const startAt = opts.at;
@@ -245,6 +261,7 @@ export class QueueService {
         }
       }
 
+      const mult = await this.worldMultipliers(tx as never, st.worldId);
       let cost: { gold: number; food: number };
       let seconds: number;
       let targetLevel: number | null = null;
@@ -260,7 +277,7 @@ export class QueueService {
         // Sur/Büyü Kalkanı maliyeti SEVİYE tabanlı: taban × 1,8^seviye (§13.9, motor kararını doğrular)
         cost = { gold: def.gold * 1.8 ** (targetLevel - 1), food: def.food * 1.8 ** (targetLevel - 1) };
         cost = { gold: Math.round(cost.gold), food: Math.round(cost.food) };
-        seconds = timeFromCost(cost, st.buildings['architect_school'] ?? 0);
+        seconds = scaled(timeFromCost(cost, st.buildings['architect_school'] ?? 0), mult.construction);
       } else {
         count = opts.count;
         // ⭐ Savunma kapasitesi: 25.000 × 1,30^(Sur−1); birim başına katalogdaki `area`
@@ -273,9 +290,11 @@ export class QueueService {
           );
         }
         cost = { gold: def.gold * count, food: def.food * count };
-        // ⭐ Savunma birimi süresi = 10(a+y)/1,4^MimarOkulu (§13.9 "S" kategorisi, k.java).
+        // ⭐ Savunma birimi süresi: `balanced` model — 190×((a+y+taşıma)/1000)^0,8 / 1,2^MimarOkulu.
         //    Mimar Okulu YOKSA bölen 1'dir — bu yüzden varsayılan 0, 1 değil.
-        seconds = trainingTimeSeconds(opts.type, st.buildings['architect_school'] ?? 0) * count;
+        seconds = scaled(
+          trainingTimeSeconds(opts.type, st.buildings['architect_school'] ?? 0), mult.training,
+        ) * count;
       }
 
       await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
@@ -338,7 +357,10 @@ export class QueueService {
       await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
       // Süre O ŞEHRİN akademisine bağlı (§13.9: a[187]="w" hangi şehir)
-      const seconds = techTimeSeconds(opts.type, target, st.buildings['academy'] ?? 0);
+      const mult = await this.worldMultipliers(tx as never, st.worldId);
+      const seconds = scaled(
+        techTimeSeconds(opts.type, target, st.buildings['academy'] ?? 0), mult.construction,
+      );
       return this.insert(tx as never, {
         ...st, cityId: opts.cityId, category: 'tech', itemType: opts.type,
         targetLevel: target, count: null, cost, seconds, at: opts.at,
@@ -385,6 +407,22 @@ export class QueueService {
       'Sur onarımdayken seviyesi artırılamaz — tamiratın bitmesini bekleyin.',
       { repairUntil: untilDate.toISOString() },
     );
+  }
+
+  /**
+   * ⭐ DÜNYA HIZ ÇARPANLARI (§13.7): `training` birim üretimini, `construction` bina/Sur/
+   * Kalkan/teknik sürelerini böler. Onarımlar (Sur/Mağara) bu çarpanların DIŞINDADIR.
+   */
+  private async worldMultipliers(
+    tx: Db, worldId: number,
+  ): Promise<{ training: number; construction: number }> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT training_multiplier, construction_multiplier FROM worlds WHERE id = ${worldId}
+    `);
+    return {
+      training: Math.max(1, Number(rows[0]?.['training_multiplier'] ?? 1)),
+      construction: Math.max(1, Number(rows[0]?.['construction_multiplier'] ?? 1)),
+    };
   }
 
   private async loadCity(tx: Db, cityId: number, playerId: number): Promise<CityState> {

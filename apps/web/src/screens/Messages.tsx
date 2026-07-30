@@ -13,7 +13,10 @@
 import { useState } from 'react';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
-import { useAllianceDecide, useBattle, useMarkRead, useMessages, type MessageRow } from '../lib/queries.ts';
+import {
+  useAllianceDecide, useBattle, useMarkRead, useMessages,
+  type MessageRow, type ReportHeroLine,
+} from '../lib/queries.ts';
 import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
 import { Modal } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
@@ -140,11 +143,12 @@ export function Messages() {
                             ) : null}
                           </span>
                         </div>
-                        {/* Ayrıntı satırı: sunucunun subject'i (tür başlığını tekrarlamıyorsa) */}
+                        {/* Ayrıntı satırı: sunucunun subject'i (tür başlığını tekrarlamıyorsa).
+                            ⭐ Ganimet/kayıp önizlemesi BİLEREK yok (kullanıcı 2026-07-30):
+                            liste tek tip kalır, sayılar detay modalında. */}
                         {m.subject && m.subject !== t.title ? (
                           <div className="truncate text-xs text-muted">{m.subject}</div>
                         ) : null}
-                        <Summary m={m} />
                       </div>
                     </div>
                   </button>
@@ -191,31 +195,6 @@ function Pagination({
   );
 }
 
-/** Listede tek satırlık özet — açmadan "ne oldu" sorusunun cevabı. */
-function Summary({ m }: { m: MessageRow }) {
-  const b = m.body ?? {};
-  const loot = b['loot'] as { gold: number; food: number } | undefined;
-  const lost = b['lost'] as number | undefined;
-
-  const hasLoot = !!loot && (loot.gold > 0 || loot.food > 0);
-  const bits: string[] = [];
-  if (typeof lost === 'number') bits.push(`kayıp ${fmt(lost)}`);
-  if (b['armyReturning'] === false) bits.push('ordudan kimse dönmedi');
-  if (bits.length === 0 && !hasLoot) return null;
-
-  return (
-    <div className="tnum mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
-      {bits.map((t) => <span key={t}>{t}</span>)}
-      {hasLoot ? (
-        <>
-          <Res kind="gold" value={fmt(loot!.gold)} size={13} />
-          <Res kind="food" value={fmt(loot!.food)} size={13} />
-        </>
-      ) : null}
-    </div>
-  );
-}
-
 function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
   return (
     <Modal title={m.subject} onClose={onClose} width="lg"
@@ -224,7 +203,7 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
         <div className="mb-2 text-[11px] text-muted">
           {new Date(m.at).toLocaleString('tr-TR')}
         </div>
-        {m.battleId ? <BattleReport battleId={m.battleId} /> : <PlainBody m={m} />}
+        {m.battleId ? <BattleReport battleId={m.battleId} /> : <PlainBody m={m} onDone={onClose} />}
       </div>
     </Modal>
   );
@@ -235,13 +214,13 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
  *
  * ⚠️ Birim adları **`nameOf` üzerinden** yazılır: ham `id` ekranda İngilizce görünürdü (§13.14).
  */
-function PlainBody({ m }: { m: MessageRow }) {
+function PlainBody({ m, onDone }: { m: MessageRow; onDone?: () => void }) {
   const b = m.body ?? {};
   if (m.kind === 'spy_report') {
     return m.side === 'target' ? <SpyDefenseBody body={b} /> : <SpyBody body={b} />;
   }
   if (m.kind === 'alliance_invite' || m.kind === 'alliance_application') {
-    return <AllianceRequestBody m={m} />;
+    return <AllianceRequestBody m={m} onDone={onDone} />;
   }
   if (m.kind === 'alliance_message') {
     return (
@@ -301,7 +280,7 @@ function PlainBody({ m }: { m: MessageRow }) {
  * döner ve hata kutusunda görünür. Davet: kabul eden BEN katılırım. Başvuru: ben (yönetici)
  * başvuranı kabul ederim.
  */
-function AllianceRequestBody({ m }: { m: MessageRow }) {
+function AllianceRequestBody({ m, onDone }: { m: MessageRow; onDone?: () => void }) {
   const b = m.body ?? {};
   const decide = useAllianceDecide();
   const inviteId = Number(b['inviteId'] ?? 0);
@@ -316,13 +295,14 @@ function AllianceRequestBody({ m }: { m: MessageRow }) {
         )}
       </p>
       <ErrorBox error={decide.error} />
+      {/* ⭐ Karar verilince modal KENDİLİĞİNDEN kapanır (kullanıcı 2026-07-30) — sonuç
+          zaten listede/ittifak ekranında görünür, "İşlendi." yazısına bakakalmak yok. */}
       <div className="flex gap-2">
         <Button size="sm" disabled={inviteId <= 0 || decide.isPending}
-          onClick={() => decide.mutate({ inviteId, accept: true })}>Kabul</Button>
+          onClick={() => decide.mutate({ inviteId, accept: true }, { onSuccess: onDone })}>Kabul</Button>
         <Button size="sm" variant="danger" disabled={inviteId <= 0 || decide.isPending}
-          onClick={() => decide.mutate({ inviteId, accept: false })}>Red</Button>
+          onClick={() => decide.mutate({ inviteId, accept: false }, { onSuccess: onDone })}>Red</Button>
       </div>
-      {decide.isSuccess ? <div className="text-xs text-success">İşlendi.</div> : null}
     </div>
   );
 }
@@ -463,19 +443,41 @@ function BattleReport({ battleId }: { battleId: number }) {
   if (battle.isError) return <div className="py-2 text-xs text-danger">Rapor okunamadı.</div>;
   if (!battle.data) return null;
   const r = battle.data;
+  const coordText = (x: { k: number; d: number; s: number } | null): string =>
+    x ? `${x.k}:${x.d}:${x.s}` : '—';
+  const escaped = Object.entries(r.cave?.escaped ?? {}).filter(([, n]) => n > 0);
 
   return (
     <div>
-      <div className={`mb-3 text-sm font-semibold ${r.won ? 'text-success' : 'text-danger'}`}>
-        {r.winner === 'draw' ? 'Berabere' : r.won ? 'Kazandın' : 'Kaybettin'} · {r.turns} tur
-        {r.night ? ' · gece savaşı' : ''}
+      {/* Sonuç başlığı — orijinal oyunun kalıbı (k.java): "Kazandınız !" / "Kaybettiniz !" */}
+      <div className={`display mb-1 text-base font-bold ${r.won ? 'text-success' : 'text-danger'}`}>
+        {r.winner === 'draw' ? 'Berabere' : r.won ? 'Kazandınız !' : 'Kaybettiniz !'}
+        <span className="ml-2 text-xs font-normal text-muted">
+          {r.turns} tur{r.night ? ' · gece savaşı' : ''}
+        </span>
       </div>
+      {r.coords ? (
+        <div className="tnum mb-3 text-xs text-muted">
+          Kaynak: <b className="text-ink">{coordText(r.coords.origin)}</b>
+          {' → '}Hedef: <b className="text-ink">{coordText(r.coords.target)}</b>
+        </div>
+      ) : null}
 
       {r.sections.map((s) => (
         <div key={s.key} className="mb-3">
           <div className="mb-1 text-xs font-semibold text-muted uppercase">{s.title}</div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] text-muted">
+                  <th className="py-0.5 text-left font-normal">Birim</th>
+                  <th className="py-0.5 text-right font-normal">Katılan</th>
+                  <th aria-hidden />
+                  <th className="py-0.5 text-right font-normal">Kalan</th>
+                  <th className="py-0.5 text-right font-normal">Ölen</th>
+                  <th aria-hidden />
+                </tr>
+              </thead>
               <tbody>
                 {s.lines.map((l) => (
                   <tr key={l.id} className="border-t border-border">
@@ -495,11 +497,70 @@ function BattleReport({ battleId }: { battleId: number }) {
         </div>
       ))}
 
+      <HeroStrip title="Kahramanların" heroes={r.heroes.mine} />
+      <HeroStrip title="Rakip kahramanlar" heroes={r.heroes.enemy} />
+      {r.heroes.captured?.mine ? (
+        <div className="mb-3 flex items-center gap-2 rounded-[var(--radius-sm)] border border-success bg-success/10 px-2.5 py-2">
+          <img src="/assets/hero/kahraman.png" alt="" width={34} height={34} />
+          <div className="text-xs text-success">
+            Savaştan yeni bir kahraman çıktı: <b>{r.heroes.captured.name}</b>!
+          </div>
+        </div>
+      ) : null}
+
+      {r.wall ? (
+        <div className="mb-2 rounded-[var(--radius-sm)] border border-border bg-raised px-2.5 py-2 text-xs">
+          <b className="text-ink">Sur</b>
+          <span className="tnum ml-2 text-muted">seviye {r.wall.level}</span>
+          {r.wall.destroyed ? (
+            <span className="ml-2 font-semibold text-danger">YIKILDI</span>
+          ) : r.wall.integrity != null ? (
+            <span className="tnum ml-2 text-muted">· bütünlük %{Math.round(r.wall.integrity * 100)}</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {r.cave?.present ? (
+        <div className="mb-2 rounded-[var(--radius-sm)] border border-border bg-raised px-2.5 py-2 text-xs">
+          <b className="text-ink">Mağara</b>
+          {r.cave.broken
+            ? <span className="ml-2 font-semibold text-danger">YIKILDI</span>
+            : <span className="ml-2 text-success">dayandı</span>}
+          {/* Saldırana tek işe yarar sayı: bir dahaki sefere kaç cüce gerektiği. */}
+          {r.side === 'attacker' && !r.cave.broken && r.cave.reason === 'not_enough_dwarves' ? (
+            <span className="tnum ml-2 text-muted">
+              (gereken {fmt(r.cave.required)} cüce · sağ kalan {fmt(r.cave.survivingDwarves)})
+            </span>
+          ) : null}
+          {escaped.length > 0 ? (
+            <div className="mt-1 text-muted">
+              Mağaradaki askerler şehre yola çıktı:{' '}
+              <span className="text-ink">
+                {escaped.map(([id, n]) => `${fmt(n)} ${nameOf(id)}`).join(', ')}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {r.loot ? (
-        <div className="mb-2 flex items-center gap-2 text-xs text-ink">
-          <span>{r.side === 'attacker' ? 'Ganimet:' : 'Yağmalanan:'}</span>
-          <Res kind="gold" value={fmt(r.loot.gold)} size={14} />
-          <Res kind="food" value={fmt(r.loot.food)} size={14} />
+        <div className="mb-2 space-y-1 text-xs">
+          <div className="flex items-center gap-2 text-ink">
+            <span>{r.side === 'attacker' ? 'Ganimet:' : 'Yağmalanan:'}</span>
+            <Res kind="gold" value={fmt(r.loot.gold)} size={14} />
+            <Res kind="food" value={fmt(r.loot.food)} size={14} />
+          </div>
+          {/* Oyuncu isteği (mesajlar.txt): ortaya çıkan ile taşınabilen ayrı yazılsın. */}
+          {r.lootBreakdown ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted">
+              <span>Ortaya çıkan:</span>
+              <Res kind="gold" value={fmt(r.lootBreakdown.revealed.gold)} size={13} />
+              <Res kind="food" value={fmt(r.lootBreakdown.revealed.food)} size={13} />
+              <span>· Taşınan:</span>
+              <Res kind="gold" value={fmt(r.lootBreakdown.carried.gold)} size={13} />
+              <Res kind="food" value={fmt(r.lootBreakdown.carried.food)} size={13} />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -510,6 +571,43 @@ function BattleReport({ battleId }: { battleId: number }) {
       {/* Determinizm künyesi: "sonuç neden böyle" tartışmasında kanıt oyuncunun elinde (§5). */}
       <div className="mt-3 border-t border-border pt-2 text-[10px] text-muted">
         motor {r.provenance.engineVersion} · katalog {r.provenance.catalogHash} · seed {r.provenance.seed}
+      </div>
+    </div>
+  );
+}
+
+/** Kahraman kartları — Tapınak'taki görsel dil: portre + ad + seviye + durum rozeti. */
+function HeroStrip({ title, heroes }: { title: string; heroes: ReportHeroLine[] }) {
+  if (heroes.length === 0) return null;
+  return (
+    <div className="mb-3">
+      <div className="mb-1 text-xs font-semibold text-muted uppercase">{title}</div>
+      <div className="flex flex-wrap gap-2">
+        {heroes.map((h) => (
+          <div key={h.name}
+            className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-raised px-2 py-1.5">
+            <img src="/assets/hero/kahraman.png" alt="" width={34} height={34}
+              className={h.alive ? '' : 'grayscale opacity-80'} />
+            <div>
+              <div className="text-xs font-medium text-ink">
+                {h.name} <span className="text-muted">sv {h.level}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px]">
+                {h.destroyed ? (
+                  /* Orijinal kalıp (k.java): "Yok Edildi !" */
+                  <span className="font-semibold text-danger">Yok Edildi !</span>
+                ) : h.alive ? (
+                  <span className="text-success">Sağ</span>
+                ) : (
+                  <span className="text-warning">Öldü</span>
+                )}
+                {h.xpGained > 0 ? (
+                  <span className="tnum text-muted">+{fmt(h.xpGained)} tecrübe</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

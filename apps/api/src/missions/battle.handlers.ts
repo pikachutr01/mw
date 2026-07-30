@@ -183,8 +183,9 @@ export function createAttackHandler(cities: CityService): MissionHandler {
      * Satır yukarıda yazıldığı için birleştiriyoruz; `writeBattle`'ı aşağı taşımak savaş
      * kaydının sırasını değiştirirdi ve determinizm künyesinin (§5) yerini oynatırdı.
      *
-     * ⚠️ İki tarafın gördüğü ayrı: `escaped` (mağaradan kimin kaçtığı) YALNIZ savunanın
-     * mesajında; savaş kaydına da girmiyor ki rapor ucu yanlışlıkla saldırana sızdırmasın.
+     * ⚠️ İki tarafın gördüğü ayrı: `escaped` (mağaradan kimin kaçtığı) buradaki ORTAK bloğa
+     * girmez — savunana özel veriler aşağıda `result.defenderPrivate` altına yazılır ve rapor
+     * ucu saldıran tarafta o anahtarı komple siler.
      */
     await ctx.tx.execute(sql`
       UPDATE battles SET result = result || ${JSON.stringify({
@@ -306,6 +307,49 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       cityId: attackerWon ? originCityId : targetCityId,
       chance: result.captureChance,
     });
+
+    /**
+     * ⭐ RAPOR ZENGİNLEŞTİRME (kullanıcı 2026-07-30): rapor modalı `battles.result`'tan
+     * türediği için kahraman kimlikleri, sur seviyesi, koordinatlar ve mağara dökümü satıra
+     * işlenir. Savunana özel veriler `defenderPrivate` altında toplanır — rapor ucu saldıran
+     * tarafta bu anahtarı komple SİLER (tek filtre noktası; alan alan maskeleme unutulamaz).
+     * Kahraman eşleşmesi savaşı çözen AYNI dizilerle yapılır (yeniden SELECT sıra bozar).
+     */
+    const heroLines = (
+      before: { id: number; name: string; level: number }[],
+      after: { alive: boolean }[],
+      settled: { destroyed: { id: number }[]; gained: { id: number; xp: number }[] },
+    ): Record<string, unknown>[] => before.map((h, i) => ({
+      id: h.id,
+      name: h.name,
+      level: h.level,                                  // savaşa girdiği seviye
+      alive: after[i]?.alive !== false,
+      destroyed: settled.destroyed.some((d) => d.id === h.id),
+      xpGained: settled.gained.find((g) => g.id === h.id)?.xp ?? 0,
+    }));
+    const coordRows = await ctx.tx.execute<Record<string, unknown>>(sql`
+      SELECT id, k, d, s FROM cities WHERE id IN (${originCityId}, ${targetCityId})
+    `);
+    const coordOf = (cid: number): { k: number; d: number; s: number } | null => {
+      const r = coordRows.find((x: Record<string, unknown>) => Number(x['id']) === cid);
+      return r ? { k: Number(r['k']), d: Number(r['d']), s: Number(r['s']) } : null;
+    };
+    await ctx.tx.execute(sql`
+      UPDATE battles SET result = result || ${JSON.stringify({
+      heroesDetail: {
+        attacker: heroLines(attacker.heroes, result.attacker.heroes, attackerHeroes),
+        defender: heroLines(defender.heroes, result.defender.heroes, defenderHeroes),
+        captured: capturedHero == null
+          ? null : { name: capturedHero, side: attackerWon ? 'attacker' : 'defender' },
+      },
+      wall: { level: wallLevel, destroyed: wallDestroyed },
+      coords: { origin: coordOf(originCityId), target: coordOf(targetCityId) },
+      defenderPrivate: {
+        cave: { escaped: cave.escaped, repairUntil: cave.repairUntil },
+      },
+    })}::jsonb
+       WHERE id = ${battleId}
+    `);
 
     // ── Dönüş bacağı (§13.10.3) ───────────────────────────────────────────────
     // ⭐ Hayatta kalan birlik YOKSA dönüş görevi oluşturulmaz (§13.11.7): ordu yok olmuştur,

@@ -390,6 +390,35 @@ describe('mağaranın savaşta yıkılması', () => {
     expect((await unitsOf(defendCity))['dwarf']).toBe(5);
   });
 
+  /**
+   * ⭐ Kaçış dönüşü SEFER sayılır (kullanıcı 2026-07-30): `speed_multiplier` süreyi böler.
+   * Normal doldur/boşalt şehir içi iştir — çarpandan ETKİLENMEZ; ikisi aynı testte kilitli.
+   */
+  it('kaçış dönüşü sefer çarpanına bölünür, doldurma bölünmez', async () => {
+    await h.db.execute(sql`UPDATE worlds SET speed_multiplier = 4 WHERE id = ${worldId}`);
+    await setBuilding(defendCity, 'cave', 1);
+    await giveUnits(defendCity, 'dwarf', 5);
+    const at = await clock.gameNow(worldId);
+    const area = UNITS_BY_ID['dwarf']!.area * 5;
+
+    const store = await cave.store({
+      cityId: defendCity, playerId: defender, units: { dwarf: 5 }, at,
+    });
+    const storeRow = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT execute_at FROM missions WHERE id = ${store.missionId}
+    `);
+    const storeSeconds = Math.round((toDate(storeRow[0]!['execute_at']).getTime() - at.getTime()) / 1000);
+    expect(storeSeconds).toBe(caveTransferSeconds(area, 1));
+    await runDue(store.missionId);
+
+    await attackWith(400);
+
+    const escapes = await openMissions('cave_return');
+    expect(escapes).toHaveLength(1);
+    expect(Number((escapes[0]!['payload'] as Record<string, unknown>)['seconds']))
+      .toBe(Math.max(1, Math.ceil(caveTransferSeconds(area, 1) / 4)));
+  });
+
   it('BOŞ mağara da yıkılır; seviye 0 mağara yıkılmaz', async () => {
     await setBuilding(defendCity, 'cave', 1);
     await attackWith(400);
@@ -571,6 +600,13 @@ describe('mağaranın savaşta yıkılması', () => {
     expect(atk.notes.some((n) => n.includes('mağarası YIKILDI'))).toBe(true);
     // Saldıranın notunda mağaranın içi geçmez.
     expect(atk.notes.join(' ')).not.toMatch(/kaç(ıyor|tı)/);
+    /* ⭐ SIZINTI KİLİDİ: bu çağrı controller MASKESİZ, doğrudan `battles.result` ile yapılıyor —
+     * `defenderPrivate` içeride dursa bile kurucu saldırana `escaped`/`repairUntil` VERMEZ.
+     * (Controller ayrıca anahtarı komple siler; bu iki katmanın İLKİ burada kilitli.) */
+    expect(atk.cave?.escaped).toBeNull();
+    expect(atk.cave?.repairUntil).toBeNull();
+    expect(def.cave?.escaped).not.toBeNull();
+    expect(JSON.stringify(atk)).not.toContain('escaped":{');
   });
 
   it('mağara dayanırsa rapor GEREKEN cüce sayısını yazar', async () => {

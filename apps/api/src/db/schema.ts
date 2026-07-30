@@ -26,12 +26,17 @@ export const worlds = pgTable('worlds', {
   pausedAt: timestamp('paused_at', { withTimezone: true }),
   /**
    * ⭐ DÜNYA HIZ ÇARPANLARI — oyunun temposunu tek yerden ayarlar (§13.7).
-   * `speed_multiplier`: sefer sürelerini böler (mesafe hızı).
+   * `speed_multiplier`: sefer sürelerini böler (mesafe hızı; mağara-kaçış dönüşü dahil).
    * `resource_multiplier`: Çiftlik/Maden üretimini çarpar.
-   * İkisi de 1 = klasik hız. **İleride admin panelinden yönetilecek.**
+   * `training_multiplier`: Baraka + Savunma BİRİM üretim sürelerini böler.
+   * `construction_multiplier`: bina + Sur/Büyü Kalkanı seviyesi + Akademi tekniği sürelerini böler.
+   * Onarımlar (Sur/Mağara) çarpan DIŞIDIR (kullanıcı kararı 2026-07-30).
+   * Hepsi 1 = klasik hız. **İleride admin panelinden yönetilecek.**
    */
   speedMultiplier: integer('speed_multiplier').notNull().default(1),
   resourceMultiplier: integer('resource_multiplier').notNull().default(1),
+  trainingMultiplier: integer('training_multiplier').notNull().default(1),
+  constructionMultiplier: integer('construction_multiplier').notNull().default(1),
   catalogHash: text('catalog_hash'),
   config: jsonb('config').notNull().default({}),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
@@ -450,6 +455,10 @@ export const missions = pgTable('missions', {
   index('missions_target_city').on(t.targetCityId, t.executeAt),
   index('missions_owner').on(t.ownerPlayerId, t.executeAt),
   uniqueIndex('missions_idempotency').on(t.worldId, t.idempotencyKey),
+  /* ⭐ Şehir kurma yarışı (2026-07-30): koordinatına şehir kurulan oyuncu yoldaki found_city
+   * görevlerini KOORDİNATTAN yakalar — kısmî indeks açık kuruluş seferleriyle sınırlı, boşa yakın. */
+  index('missions_found_city_coords').on(t.worldId, t.targetK, t.targetD, t.targetS)
+    .where(sql`${t.type} = 'found_city' AND ${t.status} IN ('scheduled', 'running') AND ${t.targetCityId} IS NULL`),
 ]);
 
 export const missionUnits = pgTable('mission_units', {

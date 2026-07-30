@@ -22,7 +22,7 @@ import { armiesBadge, useAlliance, useCity, useMessages, useMovements, type City
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
-import { Panel, Res } from './ui.tsx';
+import { Panel, Res, Skeleton } from './ui.tsx';
 
 /**
  * Sol menü sırası orijinaldeki gibi (`images/scr_web05` sol sütun). Mesajlar orijinalin **web**
@@ -175,13 +175,14 @@ function InfoBar() {
       <Res kind="gold" value={fmt(gold)} size={22} className="text-[12px] font-semibold sm:text-[15px]" />
       <Res kind="food" value={fmt(food)} size={22} className="text-[12px] font-semibold sm:text-[15px]" />
 
-      <span className="hidden h-5 w-px bg-on-panel-header/25 sm:block" />
+      {/* ⭐ Divider mobilde de görünür (kullanıcı 2026-07-30): yemek ile koordinat ayrışsın. */}
+      <span className="h-5 w-px shrink-0 bg-on-panel-header/25" />
 
       <span className="display hidden truncate text-sm font-semibold tracking-wide sm:block">
         {d?.name ?? '—'}
       </span>
-      {/* Koordinat mobilde de görünür (sayfa başlığının yerini alır — kullanıcı, 2026-07-30). */}
-      <span className="tnum text-[11px] opacity-80 sm:text-xs">
+      {/* Koordinat mobilde sayfa başlığının yerini alır ve VURGULU (kullanıcı, 2026-07-30). */}
+      <span className="tnum text-[12px] font-semibold sm:text-xs sm:font-normal sm:opacity-80">
         {d ? `${d.coordinates.k}:${d.coordinates.d}:${d.coordinates.s}` : ''}
       </span>
 
@@ -206,11 +207,15 @@ function InfoBar() {
  * Her şey 1x iken hiçbir şey çizilmez; rozet varsa oyuncu "bu dünya klasik değil" bilgisini
  * ilk bakışta alır. Değerler `worlds.speed_multiplier` / `worlds.resource_multiplier`.
  */
-function SpeedBadge({ speed }: { speed?: { resource: number; travel: number } }) {
+function SpeedBadge({ speed }: {
+  speed?: { resource: number; travel: number; training?: number; construction?: number };
+}) {
   if (!speed) return null;
   const rows: [string, number][] = [
     ['Kaynak üretimi', speed.resource],
     ['Sefer hızı', speed.travel],
+    ['Birim üretimi', speed.training ?? 1],
+    ['İnşaat/araştırma', speed.construction ?? 1],
   ];
   if (rows.every(([, v]) => v === 1)) return null;
 
@@ -359,6 +364,20 @@ function SideMenu() {
 function AlliancePanel() {
   const view = useAlliance(0);
   const a = view.data?.alliance;
+
+  /* ⭐ Yüklenirken "Henüz bir ittifakta değilsin" PARLAMASIN (kullanıcı 2026-07-30):
+   * veri gelene kadar iskelet satırları — üye olan oyuncu bir an bile "ittifaksız" görmez. */
+  if (view.isLoading) {
+    return (
+      <Panel title="İttifak">
+        <div className="space-y-2 p-3">
+          <Skeleton w="70%" />
+          <Skeleton w="55%" />
+          <Skeleton w="62%" />
+        </div>
+      </Panel>
+    );
+  }
 
   if (!a) {
     return (

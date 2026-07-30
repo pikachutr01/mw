@@ -121,7 +121,15 @@ export async function scheduleCaveEscape(ctx: HandlerContext, o: {
   const area = unitsArea(inside);
   if (area <= 0) return {};
 
-  const seconds = caveTransferSeconds(area, o.caveLevel);
+  /**
+   * ⭐ Kaçış dönüşü SEFER sayılır (kullanıcı kararı 2026-07-30): dünya sefer hızı çarpanı
+   * uygulanır. Normal doldur/boşalt şehir içi iştir, çarpansız kalır.
+   */
+  const mult = await ctx.tx.execute<Record<string, unknown>>(sql`
+    SELECT speed_multiplier FROM worlds WHERE id = ${ctx.worldId}
+  `);
+  const speedMultiplier = Math.max(1, Number(mult[0]?.['speed_multiplier'] ?? 1));
+  const seconds = Math.max(1, Math.ceil(caveTransferSeconds(area, o.caveLevel) / speedMultiplier));
   const executeAt = new Date(ctx.at.getTime() + Math.max(1, seconds) * 1000);
   const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
     INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id, target_city_id,

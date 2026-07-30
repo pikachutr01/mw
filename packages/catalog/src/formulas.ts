@@ -172,8 +172,9 @@ export function unitsArea(counts: Record<string, number>): number {
  * • Üs neden 0,8 değil (üretim süresiyle aynı olsun diye)? Kapasite seviye başına **2 katına**
  *   çıkıyor, süre yalnız %10 azalıyor. 0,8 üssüyle dolu mağarayı doldurmak seviye 20'de
  *   **233 saat** sürüyordu; √ ile 5 sa 49 dk. Karekök bu iki üssel arasındaki tek makul denge.
- * • Dünya hız çarpanı UYGULANMAZ: bu bir sefer değil, şehir içi iş — üretim süreleri de
- *   çarpanla ölçeklenmiyor.
+ * • Dünya hız çarpanı: doldur/boşalt şehir içi iş → çarpansız. TEK istisna mağara yıkılınca
+ *   şehre KAÇIŞ dönüşü — o bir sefer sayılır, `speed_multiplier` ÇAĞIRAN tarafta uygulanır
+ *   (kullanıcı kararı 2026-07-30; formül saf kalır).
  */
 export function caveTransferSeconds(area: number, caveLevel: number): number {
   if (area <= 0) return 0;

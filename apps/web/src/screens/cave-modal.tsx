@@ -19,7 +19,7 @@ import { useCancelCaveJob, useCaveJob } from '../lib/queries.ts';
 import { fmt, formatDuration, remaining } from '../lib/hooks.ts';
 import { nameOf } from '../lib/names.ts';
 import { Modal } from '../components/Modal.tsx';
-import { Button, CatalogIcon, Empty, ErrorBox, Input } from '../components/ui.tsx';
+import { AmountInput, Button, CatalogIcon, Empty, ErrorBox } from '../components/ui.tsx';
 
 type Tab = 'store' | 'withdraw';
 
@@ -135,8 +135,7 @@ export function CaveModal({
                     <span className="tnum ml-2 text-[11px] text-muted">{areaOf(id)} alan/birim</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Input type="number" min={0} max={have} inputMode="numeric"
-                      className="tnum w-20 py-1 text-center" placeholder="0"
+                    <AmountInput min={0} max={have} placeholder="0"
                       value={picked[id] ?? ''}
                       onChange={(e) => setPicked({ ...picked, [id]: e.target.value })} />
                     <Button size="sm" variant="ghost"

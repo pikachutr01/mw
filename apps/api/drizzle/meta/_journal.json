@@ -127,6 +127,20 @@
       "when": 1785423248539,
       "tag": "0017_alliances",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785436340274,
+      "tag": "0018_world_speed_multipliers",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785437864933,
+      "tag": "0019_found_city_coords_idx",
+      "breakpoints": true
     }
   ]
 }

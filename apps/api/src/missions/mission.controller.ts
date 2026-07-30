@@ -294,7 +294,7 @@ export class MissionController {
 
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       WITH my AS (
-        SELECT id FROM cities WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
+        SELECT id, k, d, s FROM cities WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
       )
       SELECT m.id, m.type, m.status, m.payload, m.owner_player_id,
              m.origin_city_id, m.target_city_id,
@@ -303,6 +303,14 @@ export class MissionController {
              tc.k AS tk, tc.d AS td, tc.s AS ts, tp.username AS tname,
              (m.origin_city_id IN (SELECT id FROM my)) AS origin_is_mine,
              (m.target_city_id IN (SELECT id FROM my)) AS target_is_mine,
+             -- ⭐ ŞEHİR KURMA YARIŞI (kullanıcı 2026-07-30): görevin target_city_id'si yoktur;
+             --    o koordinata ARADA şehir kurulduysa yeni sahip bu satırı koordinattan yakalar.
+             (m.type = 'found_city' AND m.target_city_id IS NULL AND EXISTS (
+                SELECT 1 FROM my WHERE my.k = m.target_k AND my.d = m.target_d AND my.s = m.target_s
+             )) AS target_coords_mine,
+             (SELECT my.id FROM my
+               WHERE my.k = m.target_k AND my.d = m.target_d AND my.s = m.target_s
+               LIMIT 1) AS coord_city_id,
              COALESCE(json_object_agg(mu.unit_type, mu.count)
                       FILTER (WHERE mu.unit_type IS NOT NULL), '{}'::json) AS units
         FROM missions m
@@ -315,7 +323,9 @@ export class MissionController {
          AND m.status IN ('scheduled', 'running')
          AND m.type IN ('attack', 'return', 'transport', 'support', 'spy', 'found_city',
                         'cave_return')
-         AND (m.origin_city_id IN (SELECT id FROM my) OR m.target_city_id IN (SELECT id FROM my))
+         AND (m.origin_city_id IN (SELECT id FROM my) OR m.target_city_id IN (SELECT id FROM my)
+              OR (m.type = 'found_city' AND m.target_city_id IS NULL AND EXISTS (
+                    SELECT 1 FROM my WHERE my.k = m.target_k AND my.d = m.target_d AND my.s = m.target_s)))
        GROUP BY m.id, oc.k, oc.d, oc.s, op.username, tc.k, tc.d, tc.s, tp.username
        ORDER BY m.created_at, m.id
     `);
@@ -329,7 +339,8 @@ export class MissionController {
       const returnOf = payload['returnOf'] == null ? 'attack' : String(payload['returnOf']);
       const canceled = payload['canceled'] === true;
       const mine = Boolean(r['origin_is_mine']);
-      const targetMine = Boolean(r['target_is_mine']);
+      const coordsMine = Boolean(r['target_coords_mine']);
+      const targetMine = Boolean(r['target_is_mine']) || coordsMine;
       const origin = r['ok'] == null
         ? null : { k: Number(r['ok']), d: Number(r['od']), s: Number(r['os']) };
       const target = r['tk'] == null
@@ -379,14 +390,24 @@ export class MissionController {
       }
       // GELEN bacak — çıpa: hedef şehir (benim).
       if (targetMine) {
-        const icon = type === 'return' ? (OUT_ICON[returnOf] ?? 'attack') : IN_ICON[type];
+        /**
+         * ⭐ Koordinatıma gelen ŞEHİR KURMA görevi bana SALDIRI olarak görünür (kullanıcı
+         * 2026-07-30): erken kuran oyuncu yaklaşan orduyu, varış saatini ve kaynağı görür ama
+         * bunun bir kuruluş seferi olduğunu BİLMEZ — kılıç simgesi, "Gelen saldırı" başlığı,
+         * birleşim gizli. Ordu varınca savaşmadan geri döner (varış handler'ı `slot_taken`).
+         */
+        const shownType = coordsMine ? 'attack' : type;
+        const icon = type === 'return' ? (OUT_ICON[returnOf] ?? 'attack') : IN_ICON[shownType];
         if (icon) {
           movements.push({
             ...base, key: `${r['id']}-in`,
+            type: shownType,
             // Kendi ordumun dönüşü "gelen tehdit" değil; yön `own` ile ayrılıyor.
             direction: type === 'return' ? 'own' : 'in',
             icon,
-            cityId: Number(r['target_city_id']),
+            cityId: r['target_city_id'] == null
+              ? Number(r['coord_city_id'])                   // koordinat çıpası (yarış satırı)
+              : Number(r['target_city_id']),
             // ⭐ SALDIRI/CASUSLUKTA birleşim GİZLİ (§13.10.1); nakliye/destekte açık — gelen
             //    yardımın ne getirdiğini görmek oyunun kendi mantığı.
             ...(type === 'return' || openCargo || isCave ? { units: r['units'] ?? {} } : {}),

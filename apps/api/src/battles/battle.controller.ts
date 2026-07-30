@@ -78,9 +78,14 @@ export class BattleController {
   async battle(@Param('id') id: string, @Req() req: AuthedRequest): Promise<Record<string, unknown>> {
     const player = req.player!;
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT id, world_id, attacker_player_id, defender_player_id, attacker_city_id, defender_city_id,
-             at, winner, night, rng_seed, engine_version, catalog_hash, input, result
-        FROM battles WHERE id = ${Number(id)}
+      SELECT b.id, b.world_id, b.attacker_player_id, b.defender_player_id,
+             b.attacker_city_id, b.defender_city_id,
+             b.at, b.winner, b.night, b.rng_seed, b.engine_version, b.catalog_hash, b.input, b.result,
+             oc.k AS ok, oc.d AS od, oc.s AS os, tc.k AS tk, tc.d AS td, tc.s AS ts
+        FROM battles b
+        LEFT JOIN cities oc ON oc.id = b.attacker_city_id
+        LEFT JOIN cities tc ON tc.id = b.defender_city_id
+       WHERE b.id = ${Number(id)}
     `);
     const b = rows[0];
     if (!b || Number(b['world_id']) !== player.worldId) throw new NotFoundException('Savaş bulunamadı.');
@@ -91,13 +96,28 @@ export class BattleController {
           : null;
     if (!side) throw new ForbiddenException('Bu savaşın tarafı değilsiniz.');
 
+    /**
+     * ⭐ SIZINTI KİLİDİ: savunana özel blok (`defenderPrivate` — mağara kaçış dökümü) saldıran
+     * tarafta anahtarıyla birlikte SİLİNİR. Rapor kurucusu ayrıca side'a bakar ama tek satırlık
+     * bu silme, ileride eklenen her yeni özel alanı da otomatik korur.
+     */
+    const result = { ...(b['result'] as Record<string, unknown>) };
+    if (side !== 'defender') delete result['defenderPrivate'];
+
+    const coord = (k: unknown, d: unknown, s: unknown): { k: number; d: number; s: number } | null =>
+      k == null ? null : { k: Number(k), d: Number(d), s: Number(s) };
     const battle: BattleRow = {
       id: Number(b['id']),
       at: toDate(b['at']),
       night: Boolean(b['night']),
       winner: String(b['winner']),
       input: b['input'] as BattleRow['input'],
-      result: b['result'] as BattleRow['result'],
+      result: result as unknown as BattleRow['result'],
+      // Eski kayıtlarda `result.coords` yok → şehirler hâlâ duruyorsa JOIN'den türet.
+      fallbackCoords: {
+        origin: coord(b['ok'], b['od'], b['os']),
+        target: coord(b['tk'], b['td'], b['ts']),
+      },
     };
 
     return {

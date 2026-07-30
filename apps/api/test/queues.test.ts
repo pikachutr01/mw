@@ -7,7 +7,10 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { buildingCost, defenseCapacity, UNITS_BY_ID } from '@mobiwar/catalog';
+import {
+  buildingCost, buildingTimeSeconds, defenseCapacity, techTimeSeconds, timeFromCost,
+  trainingTimeSeconds, UNITS_BY_ID,
+} from '@mobiwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
 import { CapacityService, DEFAULT_AREA_RULES } from '../src/cities/capacity.service.ts';
@@ -715,5 +718,79 @@ describe('yıkık sur savunma üretimini kilitler', () => {
     await setWall(0.6, -5);    // bitiş geçmişte → onarım tamam sayılır
     await expect(queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at }))
       .resolves.toBeTruthy();
+  });
+});
+
+/**
+ * ⭐ DÜNYA HIZ ÇARPANLARI (§13.7, kullanıcı 2026-07-30): `training_multiplier` birim
+ * üretimini, `construction_multiplier` bina/Sur seviyesi/teknik sürelerini böler.
+ * Varsayılan 1 → klasik hız; buradaki testler çarpanın GERÇEKTEN uygulandığını kilitler
+ * (kaynak/sefer çarpanlarının başına gelen "yarım kalmış sabit" tuzağı tekrarlanmasın).
+ */
+describe('dünya hız çarpanları üretim/inşaat sürelerini böler', () => {
+  async function setMultipliers(training: number, construction: number): Promise<void> {
+    await h.db.execute(sql`
+      UPDATE worlds SET training_multiplier = ${training}, construction_multiplier = ${construction}
+       WHERE id = ${worldId}
+    `);
+  }
+  /** Kesirli saniye korunur (ms hassasiyeti) — yuvarlama YOK. */
+  const durationOf = (q: { startedAt: Date; finishAt: Date }): number =>
+    (q.finishAt.getTime() - q.startedAt.getTime()) / 1000;
+
+  it('inşaat çarpanı bina süresini böler', async () => {
+    await setMultipliers(1, 4);
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    expect(durationOf(q)).toBe(Math.round(buildingTimeSeconds('farm', 2, 0) / 4));
+  });
+
+  it('birim çarpanı Baraka süresini böler (kesir korunur)', async () => {
+    await giveResources(1e9, 1e9);
+    await setLevel('barracks', 1);
+    await setTech('blacksmithing', 1);   // Cüce ön-şartı
+    await setMultipliers(2, 1);
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+    const perUnit = trainingTimeSeconds('dwarf', 1) / 2;
+    expect(Number(q.perUnitSeconds)).toBeCloseTo(perUnit, 1);
+    expect(durationOf(q)).toBeCloseTo(perUnit * 10, 1);
+  });
+
+  it('savunma birimi training, Sur seviyesi construction çarpanını kullanır', async () => {
+    await giveResources(1e12, 1e12);
+    await setTech('archery', 1);
+    await h.db.execute(sql`
+      INSERT INTO defenses (city_id, type, count) VALUES (${cityId}, 'wall', 3)
+      ON CONFLICT (city_id, type) DO UPDATE SET count = 3
+    `);
+    await setMultipliers(3, 5);
+    const at = await clock.gameNow(worldId);
+
+    const tower = await queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 4, at });
+    expect(Number(tower.perUnitSeconds)).toBeCloseTo(trainingTimeSeconds('archer_tower', 0) / 3, 1);
+
+    const wall = UNITS_BY_ID['wall']!;
+    const cost = {
+      gold: Math.round(wall.gold * 1.8 ** 3),   // mevcut sv 3 → hedef 4
+      food: Math.round(wall.food * 1.8 ** 3),
+    };
+    const up = await queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at });
+    expect(durationOf(up)).toBe(Math.round(timeFromCost(cost, 0) / 5));
+  });
+
+  it('teknik süresi construction çarpanına bölünür', async () => {
+    await giveResources(1e9, 1e9);
+    await setLevel('academy', 2);
+    await setMultipliers(1, 6);
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueTech({ cityId, playerId, type: 'blacksmithing', at });
+    expect(durationOf(q)).toBe(Math.round(techTimeSeconds('blacksmithing', 1, 2) / 6));
+  });
+
+  it('çarpan 1 iken süreler değişmez (klasik hız)', async () => {
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    expect(durationOf(q)).toBe(Math.round(buildingTimeSeconds('farm', 2, 0)));
   });
 });

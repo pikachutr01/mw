@@ -4,6 +4,14 @@
  *
  * Eski v0.6 JS motorundaki `global.__X` override'larının yerini bu nesne aldı.
  */
+
+/**
+ * ⭐ TEK KAYNAK motor sürümü (2026-07-30, "temiz başlangıç"): `package.json`, `/health`
+ * ve `battles.engine_version` hepsi buradan beslenir. `reference.test.ts` package.json
+ * ile senkron kalmasını kilitler.
+ */
+export const ENGINE_VERSION = '1.0.0';
+
 export interface CombatConfig {
   engineVersion: string;
 
@@ -160,7 +168,7 @@ export interface CombatConfig {
 }
 
 export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
-  engineVersion: '0.6.0',
+  engineVersion: ENGINE_VERSION,
   wall: { base: 1.8, durumMax: 100 },          // ⭐ binary: kalkanla ortak (FUN_00413610/41338c)
   magicShield: { base: 1.8, durumMax: 100 },   // ⭐ binary: FUN_00413610/41338c (1.8^Sv, durum 0..100)
   trap: { triggerMin: 0.75, triggerMax: 0.99, perGroundUnit: 0.2, gnomeDisarm: 1.5, power: 1.0 },

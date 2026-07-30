@@ -253,6 +253,30 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+/**
+ * ⭐ ADET KUTUSU — tüm sayı/adet girişleri AYNI sabit genişlikte (kullanıcı 2026-07-30).
+ *
+ * `Input`'u sarmıyor, çünkü oradaki `w-full` Tailwind ÇIKTI SIRASINDA `w-16/w-20/w-24`'ten
+ * sonra geldiği için çağıranların dar genişlik sınıfları hiç uygulanmıyordu (bütün adet
+ * kutuları sessizce %100 genişlikteydi). Genişlik burada inline style ile sabitlenir —
+ * sınıf sırası savaşına girmez, mobil/masaüstü aynı ölçüde kalır.
+ */
+export function AmountInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const { style, ...rest } = props;
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      {...rest}
+      style={{ width: '5rem', ...style }}
+      className={
+        'tnum shrink-0 rounded-[var(--radius-sm)] border border-border bg-raised px-2 py-1 '
+        + `text-center text-sm text-ink placeholder:text-muted ${props.className ?? ''}`
+      }
+    />
+  );
+}
+
 /** Hata kutusu — sunucunun alan hatası mesajını AYNEN gösterir (kodlar i18n'e hazır). */
 export function ErrorBox({ error }: { error: unknown }) {
   if (!error) return null;

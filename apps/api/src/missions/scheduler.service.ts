@@ -162,9 +162,24 @@ export class SchedulerService {
        * "gelen" satırı taşıyordu, onun ekranı da düşmeli).
        */
       if (ARMY_VISIBLE_TYPES.has(mission.type)) {
-        const owner = await tx.execute<Record<string, unknown>>(sql`
-          SELECT player_id FROM cities WHERE id = ${mission.targetCityId ?? -1}
-        `);
+        let targetPlayerId: number | null = null;
+        if (mission.targetCityId != null) {
+          const owner = await tx.execute<Record<string, unknown>>(sql`
+            SELECT player_id FROM cities WHERE id = ${mission.targetCityId}
+          `);
+          targetPlayerId = owner[0] ? Number(owner[0]['player_id']) : null;
+        } else if (mission.type === 'found_city') {
+          /* ⭐ Şehir kurma yarışı: görevin target_city_id'si yok; koordinatta ARADA kurulmuş
+           * bir şehir varsa sahibi "gelen saldırı" satırını taşıyordu — onun listesi de düşmeli.
+           * (Başarılı kuruluşta şehir az önce görev sahibine kurulmuştur → sahip = owner,
+           * bus'taki players() dedup'u çift olayı engeller.) */
+          const owner = await tx.execute<Record<string, unknown>>(sql`
+            SELECT c.player_id FROM cities c JOIN missions mm ON mm.id = ${mission.id}
+             WHERE c.world_id = mm.world_id
+               AND c.k = mm.target_k AND c.d = mm.target_d AND c.s = mm.target_s
+          `);
+          targetPlayerId = owner[0] ? Number(owner[0]['player_id']) : null;
+        }
         await tx.insert(outbox).values({
           worldId: mission.worldId,
           topic: 'mission:completed',
@@ -174,7 +189,7 @@ export class SchedulerService {
             ownerPlayerId: mission.ownerPlayerId,
             originCityId: mission.originCityId,
             targetCityId: mission.targetCityId,
-            targetPlayerId: owner[0] ? Number(owner[0]['player_id']) : null,
+            targetPlayerId,
             at: mission.executeAt.toISOString(),
           },
         });

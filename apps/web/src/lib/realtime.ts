@@ -47,8 +47,9 @@ export function onConnectionChange(fn: (s: ConnectionState) => void): () => void
 const INVALIDATES: Record<string, string[]> = {
   'missions:changed': ['missions'],
   'city:changed': ['city', 'catalog', 'overview'],
-  // Yeni şehir kurulması şehir ŞERİDİNİ de değiştirir.
-  'cities:changed': ['cities', 'city', 'world'],
+  // Yeni şehir kurulması şehir ŞERİDİNİ de değiştirir; ⭐ o koordinata YOLDA olan şehir
+  // kurma görevleri de yeni sahibe "gelen saldırı" olarak görünür hâle gelir → missions da tazelenir.
+  'cities:changed': ['cities', 'city', 'world', 'missions'],
   // Posta kutusuna düşen her satır — okunmamış rozeti anında güncellensin.
   'messages:changed': ['messages'],
   // Savaş hem raporu hem orduyu hem şehri değiştirir.

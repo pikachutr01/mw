@@ -15,7 +15,7 @@
 import { useState } from 'react';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
-import { Button, Input, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
+import { AmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
 import { TargetModal } from './world-modal.tsx';
 
 /**
@@ -53,12 +53,21 @@ const cityLabel = (name: string): string => name.replace(/\s+şehri$/i, '');
 export function World() {
   const { cityId } = useActiveCity();
   const city = useCity(cityId);
-  const [k, setK] = useState(1);
-  const [d, setD] = useState(1);
+  /**
+   * ⭐ AÇILIŞ DİYARI = AKTİF ŞEHRİN DİYARI (kullanıcı 2026-07-30). Oyuncu elle seçim
+   * yapana kadar `sel` null'dır ve görünüm aktif şehri izler; seçim yapınca sabitlenir.
+   * Şehir koordinatı gelene dek sorgu da atılmaz — 1:1 "parlaması" olmaz.
+   */
+  const [sel, setSel] = useState<{ k: number; d: number } | null>(null);
   const [target, setTarget] = useState<{ slot: WorldSlot; type?: string } | null>(null);
-  const world = useWorld(k, d);
 
   const home = city.data?.coordinates;
+  const k = sel?.k ?? home?.k ?? 1;
+  const d = sel?.d ?? home?.d ?? 1;
+  const world = useWorld(k, d, sel != null || home != null);
+  const setK = (n: number): void => setSel({ k: n, d });
+  const setD = (n: number): void => setSel({ k, d: n });
+
   const slots = world.data?.slots ?? [];
 
   return (
@@ -75,14 +84,13 @@ export function World() {
           </select>
           <span className="ml-1 shrink-0 text-[11px] text-muted">Diyar</span>
           <Button size="sm" variant="ghost" onClick={() => setD(Math.max(1, d - 1))}>−</Button>
-          <Input type="number" min={1} max={500} value={d} style={{ width: '4.5rem' }}
-            className="tnum py-1 text-center"
+          <AmountInput min={1} max={500} value={d}
             onChange={(e) => setD(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} />
           <Button size="sm" variant="ghost" onClick={() => setD(Math.min(500, d + 1))}>+</Button>
           {home ? (
             <Button size="sm" variant="ghost" className="ml-auto px-1.5 py-0.5"
               title="Kendi diyarıma dön"
-              onClick={() => { setK(home.k); setD(home.d); }}>
+              onClick={() => setSel(null)}>
               <img src="/assets/buildings/city.png" alt="" width={22} height={22}
                 className="icon-shadow h-[22px] w-auto object-contain" />
             </Button>
@@ -90,7 +98,7 @@ export function World() {
         </div>
       </Panel>
 
-      <Panel title="Diyar listesi" right="10 şehir">
+      <Panel title="Diyar listesi">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>

@@ -1,0 +1,1 @@
+CREATE INDEX "missions_found_city_coords" ON "missions" USING btree ("world_id","target_k","target_d","target_s") WHERE "missions"."type" = 'found_city' AND "missions"."status" IN ('scheduled', 'running') AND "missions"."target_city_id" IS NULL;

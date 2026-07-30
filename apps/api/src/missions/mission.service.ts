@@ -496,7 +496,7 @@ export class MissionService {
 
       const rows = await t.execute<Record<string, unknown>>(sql`
         SELECT id, world_id, type, status, owner_player_id, origin_city_id, target_city_id,
-               execute_at, created_at, payload
+               target_k, target_d, target_s, execute_at, created_at, payload
           FROM missions
          WHERE id = ${opts.missionId}
          FOR UPDATE
@@ -569,6 +569,15 @@ export class MissionService {
       if (targetCityId != null) {
         const c = await t.execute<Record<string, unknown>>(sql`
           SELECT player_id FROM cities WHERE id = ${targetCityId}
+        `);
+        targetPlayerId = c[0] == null ? null : Number(c[0]['player_id']);
+      } else if (type === 'found_city' && m['target_k'] != null) {
+        /* ⭐ Şehir kurma yarışı: koordinata arada şehir kurulduysa sahibi bu görevi "gelen
+         * saldırı" olarak görüyordu — iptali de anında görmeli (yoksa satır 60 sn bayat kalır). */
+        const c = await t.execute<Record<string, unknown>>(sql`
+          SELECT player_id FROM cities
+           WHERE world_id = ${opts.worldId} AND k = ${Number(m['target_k'])}
+             AND d = ${Number(m['target_d'])} AND s = ${Number(m['target_s'])}
         `);
         targetPlayerId = c[0] == null ? null : Number(c[0]['player_id']);
       }
@@ -677,7 +686,11 @@ export class MissionService {
       const cartography = await this.cartographyLevel(t, o.playerId);
       const speedMultiplier = await this.speedMultiplier(t, o.worldId);
       const D = distance(origin, o.target, this.map);
-      const seconds = travelSeconds({ distance: D, speed, cartography, speedMultiplier }, this.map);
+      // ⭐ Casus seferi KUŞ tabanını kullanır (baseSpySeconds) — 2026-07-30'a kadar bayrak
+      //    geçirilmiyordu ve casuslar ordu tabanıyla (600 sn) uçuyordu (kullanıcı onayıyla düzeltildi).
+      const seconds = travelSeconds(
+        { distance: D, speed, cartography, speedMultiplier, spy: o.type === 'spy' }, this.map,
+      );
       const executeAt = new Date(o.at.getTime() + seconds * 1000);
 
       const rows = await t.execute<Record<string, unknown>>(sql`

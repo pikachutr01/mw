@@ -11,8 +11,13 @@
  *   `text`     → hazır Türkçe döküm — bildirim/e-posta/hızlı görüntüleme için
  *
  * ⭐ **Görünürlük raporda da işler:** saldıran ve savunan AYNI savaşın farklı yüzünü görür.
- * Savunan, saldıranın ordusunun ne kadarının sağ kaldığını göremez (§13.10.1 "birleşim gizli");
- * saldıran da savunanın kasasında ne kaldığını göremez.
+ * Bölümler okuyanın perspektifine çevrilir (`myArmy` / `enemyArmy`); savunana özel veriler
+ * (`result.defenderPrivate` — mağara kaçış dökümü) controller'da saldırandan silinir ve
+ * burada da yalnız `side === 'defender'` iken okunur (§13.10.1).
+ *
+ * ⭐ GERİYE UYUM: 2026-07-30 zenginleştirmesinden (kahraman kimlikleri, sur seviyesi,
+ * koordinatlar, mağara dökümü) ÖNCEKİ savaş satırlarında yeni alanlar YOKTUR — hepsi
+ * opsiyoneldir ve yoksa rapor eski davranışına düşer (ör. "N kahraman düştü" notu).
  */
 import { LEVEL_BASED, UNITS_BY_ID } from '@mobiwar/catalog';
 
@@ -35,6 +40,17 @@ export interface ReportSection {
   lines: ReportLine[];
 }
 
+export interface ReportHeroLine {
+  name: string;
+  /** Savaşa girdiği seviye. */
+  level: number;
+  alive: boolean;
+  /** Ordunun tamamı yok olduğu için YOK EDİLDİ (diriltilemez). */
+  destroyed: boolean;
+  /** Bu savaştan kazandığı tecrübe — yalnız KENDİ kahramanlarında dolu, rakipte 0. */
+  xpGained: number;
+}
+
 export interface BattleReport {
   battleId: number;
   side: ReportSide;
@@ -44,9 +60,36 @@ export interface BattleReport {
   turns: number;
   night: boolean;
   at: string;
+  /** Kaynak (saldıranın şehri) → Hedef (savunanın şehri). Eski kayıtlarda şehir silindiyse null. */
+  coords: {
+    origin: { k: number; d: number; s: number } | null;
+    target: { k: number; d: number; s: number } | null;
+  } | null;
   sections: ReportSection[];
+  /** Kahramanlar okuyanın perspektifinde; `captured` = savaştan çıkan YENİ kahraman. */
+  heroes: {
+    mine: ReportHeroLine[];
+    enemy: ReportHeroLine[];
+    captured: { name: string; mine: boolean } | null;
+  };
+  /** Sur bilgisi — savunanda sur hiç yoksa null. */
+  wall: { level: number | null; integrity: number | null; destroyed: boolean } | null;
+  /** Mağara sonucu; `escaped` YALNIZ savunanda dolar (içerik saldırana ASLA gitmez). */
+  cave: {
+    present: boolean;
+    broken: boolean;
+    required: number;
+    survivingDwarves: number;
+    reason: string | null;
+    escaped: Record<string, number> | null;
+    repairUntil: string | null;
+  } | null;
   loot: { gold: number; food: number } | null;
-  wallIntegrity: number | null;
+  /** Yalnız saldıran: savaşta ORTAYA ÇIKAN (enkaz+yağma havuzu) ve fiilen TAŞINAN ganimet. */
+  lootBreakdown: {
+    revealed: { gold: number; food: number };
+    carried: { gold: number; food: number };
+  } | null;
   notes: string[];
   text: string;
 }
@@ -58,6 +101,15 @@ interface SideResultShape {
   floorRestored: Record<string, number>;
   heroes: { level: number; durum: number; alive: boolean }[];
   wallIntegrity: number | null;
+}
+
+interface RawHeroLine {
+  id: number;
+  name: string;
+  level: number;
+  alive: boolean;
+  destroyed: boolean;
+  xpGained: number;
 }
 
 interface BattleResultShape {
@@ -88,6 +140,21 @@ interface BattleResultShape {
     survivingDwarves: number;
     reason: string | null;
   };
+  /** ⭐ 2026-07-30 zenginleştirmesi — eski savaşlarda YOK. */
+  heroesDetail?: {
+    attacker: RawHeroLine[];
+    defender: RawHeroLine[];
+    captured: { name: string; side: ReportSide } | null;
+  };
+  wall?: { level: number; destroyed: boolean };
+  coords?: {
+    origin: { k: number; d: number; s: number } | null;
+    target: { k: number; d: number; s: number } | null;
+  };
+  /** Savunana ÖZEL blok — controller saldıran tarafta anahtarı komple siler. */
+  defenderPrivate?: {
+    cave?: { escaped: Record<string, number>; repairUntil: string | null };
+  };
 }
 
 export interface BattleRow {
@@ -97,6 +164,8 @@ export interface BattleRow {
   winner: string;
   input: { attacker: { counts: Record<string, number> }; defender: { counts: Record<string, number> } };
   result: BattleResultShape;
+  /** Eski kayıtlar için koordinat yedeği (controller'ın cities JOIN'i). */
+  fallbackCoords?: BattleReport['coords'];
 }
 
 const nameOf = (id: string): string => UNITS_BY_ID[id]?.name.tr ?? id;
@@ -126,13 +195,21 @@ function linesFor(
   return lines.sort((x, y) => y.lost - x.lost || x.id.localeCompare(y.id));
 }
 
+const toHeroLine = (h: RawHeroLine, mine: boolean): ReportHeroLine => ({
+  name: h.name,
+  level: h.level,
+  alive: h.alive,
+  destroyed: h.destroyed,
+  // Rakibin ne kadar XP kazandığı KENDİ bilgisidir — sızdırılmaz.
+  xpGained: mine ? h.xpGained : 0,
+});
+
 export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleReport {
   const r = battle.result;
   const won = r.winner === side;
+  const enemySide: ReportSide = side === 'attacker' ? 'defender' : 'attacker';
 
-  const attackerLines = linesFor(
-    battle.input.attacker.counts, r.attacker.counts, r.attacker.floorRestored, 'warrior',
-  );
+  const attackerLines = linesFor(battle.input.attacker.counts, r.attacker.counts, {}, 'warrior');
   const defenderUnitLines = linesFor(
     battle.input.defender.counts, r.defender.counts, r.defender.floorRestored, 'warrior',
   );
@@ -140,11 +217,34 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
     battle.input.defender.counts, r.defender.counts, r.defender.floorRestored, 'defense',
   );
 
+  // ⭐ Bölümler OKUYANIN perspektifinde: önce kendi ordun, sonra rakibinki.
+  const myLines = side === 'attacker' ? attackerLines : defenderUnitLines;
+  const enemyLines = side === 'attacker' ? defenderUnitLines : attackerLines;
   const sections: ReportSection[] = [
-    { key: 'attacker', title: 'Saldıran ordu', lines: attackerLines },
-    { key: 'defenderUnits', title: 'Savunan ordu', lines: defenderUnitLines },
+    { key: 'myArmy', title: 'Ordun', lines: myLines },
+    { key: 'enemyArmy', title: 'Rakip ordu', lines: enemyLines },
     { key: 'defenderStructs', title: 'Savunma birimleri', lines: defenderStructLines },
   ].filter((s) => s.lines.length > 0);
+
+  // ── Kahramanlar (zenginleştirilmiş kayıtlarda) ─────────────────────────────
+  const hd = r.heroesDetail;
+  const heroes: BattleReport['heroes'] = {
+    mine: (hd?.[side] ?? []).map((h) => toHeroLine(h, true)),
+    enemy: (hd?.[enemySide] ?? []).map((h) => toHeroLine(h, false)),
+    captured: hd?.captured ? { name: hd.captured.name, mine: hd.captured.side === side } : null,
+  };
+
+  // ── Sur ────────────────────────────────────────────────────────────────────
+  const wallLevel = r.wall?.level
+    ?? Math.max(0, Math.trunc(battle.input.defender.counts['wall'] ?? 0));
+  const integrity = r.defender.wallIntegrity;
+  const wall: BattleReport['wall'] = wallLevel > 0
+    ? {
+      level: wallLevel,
+      integrity,
+      destroyed: r.wall?.destroyed ?? (integrity != null && integrity <= 0),
+    }
+    : null;
 
   const notes: string[] = [];
   if (battle.night) notes.push('Savaş GECE gerçekleşti — vuruş gücü düştü (Gece Görüşü etkili).');
@@ -158,10 +258,10 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
     );
   }
 
-  if (r.defender.wallIntegrity != null && r.defender.wallIntegrity < 1) {
-    notes.push(r.defender.wallIntegrity <= 0
+  if (integrity != null && integrity < 1 && wallLevel > 0) {
+    notes.push(integrity <= 0
       ? 'SUR TAMAMEN YIKILDI — onarımı bitene kadar savunma birimi üretilemez.'
-      : `Sur bütünlüğü %${Math.round(r.defender.wallIntegrity * 100)}'e düştü.`);
+      : `Sur bütünlüğü %${Math.round(integrity * 100)}'e düştü.`);
   }
 
   /**
@@ -179,15 +279,31 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
     );
   }
 
-  const heroesDead = (side === 'attacker' ? r.attacker : r.defender).heroes.filter((h) => !h.alive);
-  if (heroesDead.length > 0) {
-    notes.push(`${heroesDead.length} kahraman düştü — Tapınak'ta diriltme sürecine girdi.`);
+  // Kahraman notu yalnız ESKİ kayıtlarda (heroesDetail yoksa) — yenilerde kartlar konuşur.
+  if (!hd) {
+    const heroesDead = (side === 'attacker' ? r.attacker : r.defender).heroes.filter((h) => !h.alive);
+    if (heroesDead.length > 0) {
+      notes.push(`${heroesDead.length} kahraman düştü — Tapınak'ta diriltme sürecine girdi.`);
+    }
+  }
+  if (heroes.captured?.mine) {
+    notes.push(`Savaştan yeni bir kahraman çıktı: ${heroes.captured.name}!`);
   }
 
   // Ganimet: saldıran ne ALDIĞINI, savunan ne KAYBETTİĞİNİ görür.
   let loot: { gold: number; food: number } | null = null;
+  let lootBreakdown: BattleReport['lootBreakdown'] = null;
   if (r.loot) {
     loot = side === 'attacker' ? r.loot.taken : r.loot.fromPlunder;
+    if (side === 'attacker') {
+      lootBreakdown = {
+        revealed: {
+          gold: r.loot.fromDebris.gold + r.loot.fromPlunder.gold,
+          food: r.loot.fromDebris.food + r.loot.fromPlunder.food,
+        },
+        carried: r.loot.taken,
+      };
+    }
     if (side === 'defender' && (r.loot.leftoverDebrisToDefender.gold > 0 || r.loot.leftoverDebrisToDefender.food > 0)) {
       notes.push(
         `Taşınamayan enkaz şehrinde kaldı: ${tr(r.loot.leftoverDebrisToDefender.gold)} altın, `
@@ -203,31 +319,43 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
   /**
    * ⭐ MAĞARA (§13.20.3) — **iki tarafa da** bildirilir (kullanıcı isteği 2026-07-28).
    *
-   * Ama aynı cümle değil: savunan kendi mağarasının yıkıldığını ve ordusunun kaçtığını bilmeli;
-   * saldıran ise **kaç cüceyle gelmesi gerektiğini** öğrenmeli — bu, bir sonraki saldırıyı
-   * planlanabilir kılan tek bilgi. Mağaranın İÇİ (kaç asker kaçtı) hiçbir koşulda saldırana
-   * gitmez: casusluğun bile göremediği bir bilgiyi bedava vermek olurdu.
+   * Ama aynı içerik değil: savunan kendi mağarasının tam dökümünü (kaçanlar + onarım bitişi)
+   * görür; saldıran yalnız SONUCU ve **kaç cüceyle gelmesi gerektiğini** öğrenir. Mağaranın
+   * İÇİ (kaç asker kaçtı) hiçbir koşulda saldırana gitmez: casusluğun bile göremediği bir
+   * bilgiyi bedava vermek olurdu.
    */
-  const cave = r.cave;
-  if (cave?.present) {
-    if (cave.broken) {
+  const rc = r.cave;
+  let cave: BattleReport['cave'] = null;
+  if (rc?.present) {
+    cave = {
+      present: true,
+      broken: rc.broken,
+      required: rc.required,
+      survivingDwarves: rc.survivingDwarves,
+      reason: rc.reason,
+      escaped: side === 'defender' ? (r.defenderPrivate?.cave?.escaped ?? null) : null,
+      repairUntil: side === 'defender' ? (r.defenderPrivate?.cave?.repairUntil ?? null) : null,
+    };
+    if (rc.broken) {
       notes.push(side === 'defender'
         ? 'MAĞARAN YIKILDI. İçerideki ordu şehre kaçıyor; mağara onarılana kadar kullanılamaz.'
-        : `Düşmanın mağarası YIKILDI (${tr(cave.survivingDwarves)} cüce yeterli oldu).`);
-    } else if (cave.reason === 'already_repairing') {
+        : `Düşmanın mağarası YIKILDI (${tr(rc.survivingDwarves)} cüce yeterli oldu).`);
+    } else if (rc.reason === 'already_repairing') {
       notes.push(side === 'defender'
         ? 'Mağaran zaten onarımdaydı; yeniden yıkılmadı ve onarım süresi uzamadı.'
         : 'Düşmanın mağarası zaten yıkıktı.');
-    } else if (cave.reason === 'not_enough_dwarves') {
+    } else if (rc.reason === 'not_enough_dwarves') {
       notes.push(side === 'defender'
-        ? `Mağaran dayandı: yıkılması için ${tr(cave.required)} cüce gerekiyordu, `
-          + `${tr(cave.survivingDwarves)} cüce sağ kaldı.`
-        : `Mağara yıkılmadı: ${tr(cave.required)} cüce gerekiyordu, `
-          + `${tr(cave.survivingDwarves)} cüce sağ kaldı.`);
+        ? `Mağaran dayandı: yıkılması için ${tr(rc.required)} cüce gerekiyordu, `
+          + `${tr(rc.survivingDwarves)} cüce sağ kaldı.`
+        : `Mağara yıkılmadı: ${tr(rc.required)} cüce gerekiyordu, `
+          + `${tr(rc.survivingDwarves)} cüce sağ kaldı.`);
     }
   }
 
-  return {
+  const coords = r.coords ?? battle.fallbackCoords ?? null;
+
+  const report: BattleReport = {
     battleId: battle.id,
     side,
     winner: r.winner,
@@ -235,32 +363,35 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
     turns: r.turns,
     night: battle.night,
     at: battle.at.toISOString(),
+    coords,
     sections,
+    heroes,
+    wall,
+    cave,
     loot,
-    wallIntegrity: r.defender.wallIntegrity,
+    lootBreakdown,
     notes,
-    text: renderText({ battle, side, won, sections, loot, notes }),
+    text: '',
   };
+  report.text = renderText(report);
+  return report;
 }
 
-function renderText(o: {
-  battle: BattleRow;
-  side: ReportSide;
-  won: boolean;
-  sections: ReportSection[];
-  loot: { gold: number; food: number } | null;
-  notes: string[];
-}): string {
-  const r = o.battle.result;
+function renderText(r: BattleReport): string {
   const out: string[] = [];
 
   const outcome = r.winner === 'draw'
     ? 'Savaş berabere bitti'
-    : o.won ? 'Savaşı KAZANDIN' : 'Savaşı KAYBETTİN';
-  out.push(`${outcome} — ${r.turns} tur${o.battle.night ? ' (gece savaşı)' : ''}`);
+    : r.won ? 'Kazandınız !' : 'Kaybettiniz !';
+  out.push(`${outcome} — ${r.turns} tur${r.night ? ' (gece savaşı)' : ''}`);
+  if (r.coords?.origin || r.coords?.target) {
+    const c = (x: { k: number; d: number; s: number } | null): string =>
+      x ? `${x.k}:${x.d}:${x.s}` : '—';
+    out.push(`Kaynak: ${c(r.coords.origin)} → Hedef: ${c(r.coords.target)}`);
+  }
   out.push('');
 
-  for (const s of o.sections) {
+  for (const s of r.sections) {
     out.push(`${s.title}:`);
     for (const l of s.lines) {
       const restored = l.restoredByFloor ? ` [taban +${l.restoredByFloor}]` : '';
@@ -269,12 +400,37 @@ function renderText(o: {
     out.push('');
   }
 
-  if (o.loot) {
-    const label = o.side === 'attacker' ? 'Ganimet' : 'Yağmalanan';
-    out.push(`${label}: ${tr(o.loot.gold)} altın, ${tr(o.loot.food)} yemek`);
+  const heroText = (h: ReportHeroLine): string => {
+    const durum = h.destroyed ? 'YOK EDİLDİ' : h.alive ? 'sağ' : 'öldü';
+    const xp = h.xpGained > 0 ? ` (+${tr(h.xpGained)} tecrübe)` : '';
+    return `  ${h.name} (sv ${h.level}): ${durum}${xp}`;
+  };
+  if (r.heroes.mine.length > 0) {
+    out.push('Kahramanların:');
+    for (const h of r.heroes.mine) out.push(heroText(h));
+    out.push('');
+  }
+  if (r.heroes.enemy.length > 0) {
+    out.push('Rakip kahramanlar:');
+    for (const h of r.heroes.enemy) out.push(heroText(h));
     out.push('');
   }
 
-  for (const n of o.notes) out.push(n);
+  if (r.wall?.level) {
+    const pct = r.wall.integrity == null ? null : Math.round(r.wall.integrity * 100);
+    out.push(`Sur: seviye ${r.wall.level}${r.wall.destroyed ? ' — YIKILDI' : pct != null ? ` — bütünlük %${pct}` : ''}`);
+  }
+
+  if (r.loot) {
+    const label = r.side === 'attacker' ? 'Ganimet' : 'Yağmalanan';
+    out.push(`${label}: ${tr(r.loot.gold)} altın, ${tr(r.loot.food)} yemek`);
+    if (r.lootBreakdown) {
+      out.push(`  Ortaya çıkan: ${tr(r.lootBreakdown.revealed.gold)} altın, ${tr(r.lootBreakdown.revealed.food)} yemek`
+        + ` · Taşınan: ${tr(r.lootBreakdown.carried.gold)} altın, ${tr(r.lootBreakdown.carried.food)} yemek`);
+    }
+    out.push('');
+  }
+
+  for (const n of r.notes) out.push(n);
   return out.join('\n').trimEnd();
 }

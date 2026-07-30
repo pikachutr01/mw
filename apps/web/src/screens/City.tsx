@@ -23,7 +23,7 @@ import {
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import {
-  Button, CatalogIcon, Empty, ErrorBox, Input, Panel, Requirements, Res,
+  AmountInput, Button, CatalogIcon, Empty, ErrorBox, Panel, Requirements, Res,
 } from '../components/ui.tsx';
 import { useConfirm } from '../components/Modal.tsx';
 import { CaveModal } from './cave-modal.tsx';
@@ -492,9 +492,10 @@ function ProductionPanel({
             const remaining = p ? p.remaining : (q.remaining ?? q.count ?? 0);
             return (
               <li key={q.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-                <div className="flex items-center gap-2.5">
+                {/* ⭐ MOBİL: kontroller sığmazsa alt satıra sağa yaslı iner (flex-wrap). */}
+                <div className="flex flex-wrap items-center gap-2.5">
                   <CatalogIcon kind={art} id={q.itemType} size={40} alt={q.itemType} />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-32">
                     <ItemName name={nameOf(q.itemType)} value={fmt(remaining)} />
                     <div className="text-[11px] text-muted">
                       {active
@@ -508,18 +509,20 @@ function ProductionPanel({
                     * ok göstermek "bir işe yarar" izlenimi verip tıklayınca hiçbir şey
                     * yapmıyordu.
                     */}
-                  {!active && waiting > 1 ? (
-                    <span className="flex shrink-0 items-center gap-0.5">
-                      <span className="tnum mr-1 text-[11px] text-muted">sıra {q.position}</span>
-                      <Button size="sm" variant="ghost" title="Yukarı"
-                        onClick={() => onMove(q.id, 'up')}>↑</Button>
-                      <Button size="sm" variant="ghost" title="Aşağı"
-                        onClick={() => onMove(q.id, 'down')}>↓</Button>
-                    </span>
-                  ) : !active ? (
-                    <span className="tnum shrink-0 text-[11px] text-muted">sıra {q.position}</span>
-                  ) : null}
-                  <Button size="sm" variant="danger" onClick={() => onCancel(q)}>İptal et</Button>
+                  <span className="ml-auto flex shrink-0 items-center gap-1">
+                    {!active && waiting > 1 ? (
+                      <span className="flex shrink-0 items-center gap-0.5">
+                        <span className="tnum mr-1 text-[11px] text-muted">sıra {q.position}</span>
+                        <Button size="sm" variant="ghost" title="Yukarı"
+                          onClick={() => onMove(q.id, 'up')}>↑</Button>
+                        <Button size="sm" variant="ghost" title="Aşağı"
+                          onClick={() => onMove(q.id, 'down')}>↓</Button>
+                      </span>
+                    ) : !active ? (
+                      <span className="tnum shrink-0 text-[11px] text-muted">sıra {q.position}</span>
+                    ) : null}
+                    <Button size="sm" variant="danger" onClick={() => onCancel(q)}>İptal et</Button>
+                  </span>
                 </div>
 
                 {active && p ? (
@@ -664,7 +667,9 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
 
           return (
             <li key={u.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              <div className="flex items-center justify-between gap-2">
+              {/* ⭐ MOBİL (kullanıcı 2026-07-30): satır dar ekranda İKİ KATLI — üstte ikon +
+                  ad/maliyet, altta sağa yaslı adet + Üret. `sm:`de eski tek satır düzeni. */}
+              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-between">
                 <CatalogIcon kind={kind === 'unit' ? 'units' : 'defenses'} id={u.id} alt={u.name} />
                 <div className="min-w-0 flex-1">
                   <ItemName name={u.name} value={levelBased ? `sv ${have[u.id] ?? 0}` : fmt(have[u.id] ?? 0)} />
@@ -680,10 +685,9 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   <Requirements requirementNames={u.requirementNames}
                     buildings={structureLevels} techs={city.techs} />
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex w-full shrink-0 items-center justify-end gap-1.5 sm:w-auto">
                   {levelBased ? null : (
-                    <Input type="number" min={1} inputMode="numeric" placeholder="adet"
-                      className="tnum w-16 py-1 text-center"
+                    <AmountInput min={1} placeholder="adet"
                       value={counts[u.id] ?? ''}
                       onChange={(e) => setCounts({ ...counts, [u.id]: e.target.value })} />
                   )}

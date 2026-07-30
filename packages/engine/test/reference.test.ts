@@ -6,8 +6,9 @@
  * v0.6 JS motoru: kazanan ✓ · tur ✓ · atk 1963-2028 · def 3879-3964 (bilinçli sapmalar, §v0.6).
  * Bu test motorun O DAVRANIŞTA kalmasını korur — birebir binary eşleşmesi HEDEF DEĞİL.
  */
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { simulate } from '../src/index.ts';
+import { ENGINE_VERSION, simulate } from '../src/index.ts';
 import type { SimulateInput } from '../src/types.ts';
 
 const REFERENCE: SimulateInput = {
@@ -85,9 +86,16 @@ describe('determinizm (seedli PRNG)', () => {
 
   it('sonuç motor sürümünü, katalog hash’ini ve seed’i taşır (yeniden oynatılabilirlik)', () => {
     const r = simulate(REFERENCE);
-    expect(r.engineVersion).toBe('0.6.0');
+    expect(r.engineVersion).toBe(ENGINE_VERSION);
+    expect(r.engineVersion).toMatch(/^\d+\.\d+\.\d+$/);
     expect(r.catalogHash).toMatch(/^[0-9a-f]{8}$/);
     expect(typeof r.seed).toBe('number');
+  });
+
+  /** ⭐ Sürümün ÜÇ kopyası vardı (package.json · index · config) — artık tek kaynak + bu kilit. */
+  it('package.json sürümü ENGINE_VERSION ile senkron', () => {
+    const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
+    expect(pkg.version).toBe(ENGINE_VERSION);
   });
 });
 
