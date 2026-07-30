@@ -504,9 +504,11 @@ describe('şehir kurma', () => {
 
   /**
    * ⭐ ŞEHİR KURMA YARIŞI GÖRÜNÜRLÜĞÜ (kullanıcı 2026-07-30): koordinatı ÖNCE kapan oyuncu,
-   * yoldaki kuruluş seferini şehrine GELEN SALDIRI olarak görür — kılıç simgesi, birleşim
-   * gizli, kaynak koordinat + oyuncu açık. Gönderenin kendi bacağı değişmez; üçüncü oyuncu
-   * hiçbir şey görmez. Varışta ordu savaşmadan döner ve iki tarafın listesi anında düşer.
+   * yoldaki kuruluş seferini şehrine GELEN SALDIRI olarak görür — kılıç simgesi, kaynak
+   * koordinat + oyuncu açık. **MASKE kalır, İÇERİK açıktır** (kullanıcı 2026-07-31): 20
+   * cüceyle gelen "saldırı" şüphe uyandırır ama görev tipi yine de belli olmaz.
+   * Gönderenin kendi bacağı değişmez; üçüncü oyuncu hiçbir şey görmez. Varışta ordu
+   * savaşmadan döner ve iki tarafın listesi anında düşer.
    */
   it('⭐ YARIŞ: koordinatı kapan oyuncu yoldaki görevi GELEN SALDIRI olarak görür', async () => {
     await setTech(me, 'colonization', 6);
@@ -527,7 +529,7 @@ describe('şehir kurma', () => {
     expect(incoming).toBeTruthy();
     expect(incoming!['type']).toBe('attack');           // maskeli: kuruluş seferi olduğu belli olmaz
     expect(incoming!['icon']).toBe('attack_in');
-    expect(incoming!['units']).toBeUndefined();         // birleşim gizli (§13.10.1)
+    expect(incoming!['units']).toEqual({ dwarf: 20 });  // ⭐ içerik AÇIK (2026-07-31)
     expect(incoming!['origin']).toEqual({ k: 1, d: 1, s: 1 });
     expect(incoming!['originPlayer']).not.toBeNull();
     expect(Number(incoming!['cityId'])).toBeGreaterThan(0);   // çıpa: rakibin yeni şehri
@@ -702,5 +704,137 @@ describe('ortak sefer kuralları', () => {
       originCityId: home, playerId: me, worldId,
       target: { k: 1, d: 1, s: 3 }, units: { spy_bird: 5 }, at,
     })).rejects.toThrow(/yalnız casusluk/i);
+  });
+});
+
+/* ═══ GELEN ORDU GÖRÜNÜRLÜĞÜ ═══════════════════════════════════════════════ */
+
+/**
+ * ⭐ İÇERİK KOŞULSUZ AÇIK (kullanıcı kararı 2026-07-31) — önceki "birleşim gizli, öğrenmek
+ * için casusluk gerekir" kuralı KALDIRILDI. Savunan gelen saldırıda hangi birimden kaç tane
+ * geldiğini, gelen casuslukta kaç kuş uçtuğunu ve orduda kimin kahramanı olduğunu görür.
+ *
+ * ⚠️ Bu, orijinal J2ME istemcisinden BİLİNÇLİ sapmadır: `k.java`'daki gelen-ordu kaydında
+ * birim alanı hiç yoktu (yalnız "Saldırı yaklaşıyor · Kaynak: koordinat").
+ *
+ * Gizli KALAN tek şey: saldıranın taşıdığı ganimet — dönüş bacağı savunanın listesinde
+ * hiç satır üretmiyor (bkz. `OUT_ICON`'da `return` anahtarının olmaması).
+ */
+describe('gelen ordu içeriği', () => {
+  const listFor = (playerId: number): Promise<Record<string, unknown>> =>
+    new MissionController(missions, clock, h.db)
+      .list({ player: { playerId, worldId } } as never);
+  const incomingOf = async (playerId: number): Promise<Record<string, unknown> | undefined> =>
+    ((await listFor(playerId))['movements'] as Record<string, unknown>[])
+      .find((x) => x['direction'] === 'in');
+
+  it('⭐ gelen SALDIRIDA birleşim TAM görünür', async () => {
+    await giveUnits(home, 'dwarf', 500);
+    await giveUnits(home, 'elf', 30);
+    const at = await clock.gameNow(worldId);
+    await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 500, elf: 30 }, at,
+    });
+
+    const incoming = await incomingOf(rival);
+    expect(incoming).toBeTruthy();
+    expect(incoming!['units']).toEqual({ dwarf: 500, elf: 30 });
+    expect(incoming!['icon']).toBe('attack_in');
+    expect(incoming!['origin']).toEqual({ k: 1, d: 1, s: 1 });
+    // ⚠️ Ganimet sızmaz: saldırı GİDİŞ payload'ında kaynak yükü yok.
+    expect(incoming!['cargo']).toBeNull();
+  });
+
+  it('⭐ gelen CASUSLUKTA kaç kuş geldiği görünür', async () => {
+    await giveUnits(home, 'spy_bird', 64);
+    const at = await clock.gameNow(worldId);
+    await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 64 }, at,
+    });
+
+    const incoming = await incomingOf(rival);
+    expect(incoming!['units']).toEqual({ spy_bird: 64 });
+    expect(incoming!['icon']).toBe('spy_back');
+  });
+
+  it('⭐ gelen orduda kahraman ADI ve SEVİYESİ görünür — statları ASLA', async () => {
+    await giveUnits(home, 'dwarf', 100);
+    const hero = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level, xp, f_atk, f_def, m_atk, m_def)
+      VALUES (${worldId}, ${me}, ${home}, 'Baturalp', 7, 5000, 9, 8, 3, 2)
+      RETURNING id
+    `);
+    const at = await clock.gameNow(worldId);
+    await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 100 },
+      heroIds: [Number(hero[0]!['id'])], at,
+    });
+
+    const incoming = await incomingOf(rival);
+    expect(incoming!['heroes']).toEqual([{ name: 'Baturalp', level: 7 }]);
+    // Yetenek dağılımı savaşı önceden simüle ettirir → sızmamalı.
+    expect(JSON.stringify(incoming)).not.toContain('f_atk');
+    expect(JSON.stringify(incoming)).not.toContain('fAtk');
+  });
+
+  it('kahramansız görevde kahraman listesi BOŞ dizi (alan hep var)', async () => {
+    await giveUnits(home, 'dwarf', 10);
+    const at = await clock.gameNow(worldId);
+    await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
+    });
+    expect((await incomingOf(rival))!['heroes']).toEqual([]);
+  });
+
+  it('birim × kahraman ÇARPIMI olmaz — sayılar bozulmaz (LATERAL kilidi)', async () => {
+    await giveUnits(home, 'dwarf', 300);
+    await giveUnits(home, 'elf', 40);
+    const heroes = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level, xp)
+      VALUES (${worldId}, ${me}, ${home}, 'Aybike', 3, 100),
+             (${worldId}, ${me}, ${home}, 'Cengiz', 5, 900)
+      RETURNING id
+    `);
+    const at = await clock.gameNow(worldId);
+    await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 300, elf: 40 },
+      heroIds: heroes.map((x) => Number(x['id'])), at,
+    });
+
+    const incoming = await incomingOf(rival);
+    expect(incoming!['units']).toEqual({ dwarf: 300, elf: 40 });   // 2 kahraman × 2 birim tuzağı
+    // Seviyeye göre azalan sıra (yüksek seviyeli tehdit önce).
+    expect(incoming!['heroes']).toEqual([
+      { name: 'Cengiz', level: 5 }, { name: 'Aybike', level: 3 },
+    ]);
+  });
+
+  it('⭐ outbox bildirimleri birim dökümü taşır (push zemini)', async () => {
+    await giveUnits(home, 'dwarf', 250);
+    await giveUnits(home, 'spy_bird', 8);
+    const at = await clock.gameNow(worldId);
+    await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 250 }, at,
+    });
+    await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 8 }, at,
+    });
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT topic, payload FROM outbox
+       WHERE world_id = ${worldId} AND topic IN ('city:incoming_attack', 'city:incoming_spy')
+    `);
+    const atk = rows.find((x) => x['topic'] === 'city:incoming_attack')!['payload'] as Record<string, unknown>;
+    const spy = rows.find((x) => x['topic'] === 'city:incoming_spy')!['payload'] as Record<string, unknown>;
+    expect(atk['units']).toEqual({ dwarf: 250 });
+    expect(atk['heroCount']).toBe(0);
+    expect(spy['birds']).toBe(8);
   });
 });

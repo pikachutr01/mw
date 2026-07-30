@@ -9,8 +9,12 @@
  * ⭐ TEK KAYNAK motor sürümü (2026-07-30, "temiz başlangıç"): `package.json`, `/health`
  * ve `battles.engine_version` hepsi buradan beslenir. `reference.test.ts` package.json
  * ile senkron kalmasını kilitler.
+ *
+ * Sürüm geçmişi: **1.0.0** temiz başlangıç · **1.1.0** (2026-07-31) ganimet taban oranı
+ * %5 → %20. Denge sabiti değiştiği için ara sürüm artışı: eski savaş kayıtları künyesinde
+ * 1.0.0 kalır, "bu savaş hangi dengeyle çözüldü" sorusu künyeden cevaplanabilir.
  */
-export const ENGINE_VERSION = '1.0.0';
+export const ENGINE_VERSION = '1.1.0';
 
 export interface CombatConfig {
   engineVersion: string;
@@ -209,7 +213,7 @@ export interface LootConfig {
   povertyThreshold: number;
   /** Bu eşiğin altında oran sabit `minRate` — sömürünün dibi (kullanıcı: 5.000). */
   floorThreshold: number;
-  /** Taban oran — havuz `floorThreshold` altındayken (kullanıcı: %5). */
+  /** Taban oran — havuz `floorThreshold` altındayken (kullanıcı 2026-07-31: %5 → **%20**). */
   minRate: number;
   jitterMin: number;
   jitterMax: number;
@@ -226,7 +230,7 @@ export const DEFAULT_LOOT_CONFIG: LootConfig = {
   plunderRate: 0.4,
   povertyThreshold: 100_000,
   floorThreshold: 5_000,
-  minRate: 0.05,
+  minRate: 0.20,
   jitterMin: 0.85,
   jitterMax: 1.15,
   condition: 'attackerWon',

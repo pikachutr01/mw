@@ -110,6 +110,21 @@ describe('outbox → istemci olayı eşlemesi', () => {
   });
 
   /**
+   * ⭐ 2026-07-31: gelen ordunun birim dökümü artık OUTBOX PAYLOAD'ında duruyor (push
+   * bildirimi "3.000 Cüce yaklaşıyor" diyebilsin). Ama WS olayı büyümemeli — 7500 baytı
+   * aşan olay `publish`te SESSİZCE düşer ve savunanın ekranı 60 sn bayat kalırdı.
+   */
+  it('⭐ birim dökümü OLAYA sızmaz (yalnız kimlik) — NOTIFY sınırı korunur', () => {
+    const big: Record<string, number> = {};
+    for (let i = 0; i < 200; i++) big[`unit_${i}`] = 999_999;
+    const e = eventForOutbox('city:incoming_attack', {
+      missionId: 5, defenderPlayerId: 12, targetCityId: 34, units: big, heroCount: 3,
+    }, 1)!;
+    expect(Object.keys(e.ref ?? {}).sort()).toEqual(['cityId', 'missionId']);
+    expect(JSON.stringify(e).length).toBeLessThan(300);
+  });
+
+  /**
    * ⭐ BİRLEŞİK GÖREV BİTİŞİ (2026-07-30): scheduler her Ordular-görünür görev bitişinde
    * yazar — sahibi VE hedef şehrin sahibi listelerini anında tazeler; payload gelecekteki
    * push sink'ine yetecek kimlikleri taşır.

@@ -66,12 +66,16 @@ const scale = (r: Resources, k: number): Resources => ({ gold: r.gold * k, food:
  * ⭐ YAĞMA ORANI — kaynak başına AYRI hesaplanır (kullanıcı tarifi, 2026-07-30):
  *
  *   havuz ≥ 100.000            → %40 sabit
- *   5.000 < havuz < 100.000    → %40'tan %5'e DOĞRUSAL iner
- *   havuz ≤ 5.000              → %5 sabit
+ *   5.000 < havuz < 100.000    → %40'tan %20'ye DOĞRUSAL iner
+ *   havuz ≤ 5.000              → %20 sabit
  *
  * Girdi HAVUZDUR (kasa + enkaz, kullanıcı kararı): neyin yüzdesi alınıyorsa freni de o
- * belirler. Örnek: 500k altın → %40 · 60k yemek → %25,4 · 5k → %5. Fakirleşen şehir her
- * saldırıda daha küçük oranla soyulur — sömürünün dibi kendiliğinden kapanır.
+ * belirler. Örnek: 500k altın → %40 · 60k yemek → %31,6 · 5k → %20.
+ *
+ * ⭐ TABAN %5 → %20 (kullanıcı, 2026-07-31): fakirleşen şehir hâlâ daha küçük oranla
+ * soyulur ama sömürünün dibi çok daha yukarıda kapanıyor — fakir şehri vurmak "kârsız"
+ * değil "daha az kârlı". Tavan (%40) ve eşikler (100k/5k) DEĞİŞMEDİ, yani orta ve geç
+ * oyun dengesi aynı kaldı; değişim yalnız erken oyunu ve yağmalanmış şehirleri etkiler.
  */
 export function plunderRate(poolAmount: number, cfg: LootConfig = DEFAULT_LOOT_CONFIG): number {
   if (poolAmount <= 0) return 0;

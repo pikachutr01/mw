@@ -221,8 +221,13 @@ export class MissionService {
                 ${`mission:${missionId}`})
       `);
 
-      // ⭐ Hedef oyuncu GÖRÜR: varış saati + kaynak şehir. Birleşim GİZLİ (§13.10.1) — bu yüzden
-      // bildirimde birim dökümü YOK; öğrenmek için casusluk gerekir.
+      /**
+       * ⭐ Hedef oyuncu GÖRÜR: varış saati + kaynak şehir + **birleşim** (kullanıcı 2026-07-31;
+       * eskiden birim dökümü bilerek dışarıda bırakılıyordu). Döküm payload'da duruyor ki
+       * gelecekteki push bildirimi "3.000 Cüce yaklaşıyor" diyebilsin.
+       * ⚠️ WS olayının kendisi bunu TAŞIMAZ (`realtime.bus.ts` yalnız kimlik yayar; büyük
+       * yük NOTIFY sınırına takılıp olayı sessizce düşürürdü) — istemci listeyi tazeler.
+       */
       await t.execute(sql`
         INSERT INTO outbox (world_id, topic, payload)
         VALUES (${opts.worldId}, 'city:incoming_attack',
@@ -232,6 +237,8 @@ export class MissionService {
                   targetCityId: target.id,
                   originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
                   arrivesAt: executeAt.toISOString(),
+                  units,
+                  heroCount: heroIds.length,
                 })}::jsonb)
       `);
 
@@ -728,7 +735,8 @@ export class MissionService {
       `);
 
       // ⭐ CASUSLUK GİDİŞİ HEDEFTE GÖRÜNÜR (kullanıcı, §13.11.6): kırmızı kuş simgesi. Kaç kuş
-      //    geldiği GİZLİ — bildirim yalnız "geliyor" der.
+      //    geldiği de GÖRÜNÜR (kullanıcı 2026-07-31; eskiden gizliydi) — savunan kuş sayısını
+      //    varıştan önce bilir ve karşı kuş üretip üretmeyeceğine karar verebilir.
       if (o.type === 'spy' && targetPlayerId != null && targetId != null) {
         await t.execute(sql`
           INSERT INTO outbox (world_id, topic, payload)
@@ -737,6 +745,7 @@ export class MissionService {
                     missionId, defenderPlayerId: targetPlayerId, targetCityId: targetId,
                     originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
                     arrivesAt: executeAt.toISOString(),
+                    birds: units['spy_bird'] ?? 0,
                   })}::jsonb)
         `);
       }

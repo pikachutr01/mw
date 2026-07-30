@@ -280,11 +280,17 @@ export class MissionController {
    * dizer (orijinal davranış — `images/mobil arayüz2.jpg`). Kendi şehirlerim arasındaki bir
    * nakliye İKİ hareket üretir: kaynakta `transport_out`, hedefte `transport_back`.
    *
-   * ⭐ GÖRÜNÜRLÜK MATRİSİ SORGUDA UYGULANIR (§13.10.1), istemciye ham liste ASLA gönderilmez:
-   *   • kendi görevlerim: tam döküm (birim listesi dahil)
-   *   • bana gelen saldırı: varış saati + kaynak koordinat — **birleşim GİZLİ** (`units` YOK)
-   *   • saldırı dönüş bacağı: hedefin sorgusuna hiç girmez (çünkü `target_city_id` saldıranın
-   *     kendi şehridir — savunanla eşleşmez)
+   * ⭐ GÖRÜNÜRLÜK: hangi hareketin KİME görüneceği sorguda belirlenir (§13.10.1); görünen
+   * hareketin İÇERİĞİ ise 2026-07-31'den beri koşulsuz tamdır (kullanıcı kararı — önceki
+   * "birleşim gizli, öğrenmek için casusluk gerekir" kuralı KALDIRILDI):
+   *   • kendi görevlerim: tam döküm + kahramanlar + yük/ganimet
+   *   • bana gelen saldırı/casusluk: varış saati + kaynak koordinat + **hangi birimden kaç
+   *     tane** + kahraman ad/seviye. Kaynak yükü yalnız nakliye/destekte vardır; saldırının
+   *     GİDİŞ payload'ında zaten yoktur, yani ganimet savaştan önce sızmaz.
+   *   • ⚠️ **saldırı dönüş bacağı savunanın sorgusuna GİRER** (dönüşün `origin_city_id`'si
+   *     savunanın şehridir, bkz. `battle.handlers.ts scheduleReturn`). Görünmemesinin TEK
+   *     sebebi `OUT_ICON`'da `'return'` anahtarının olmamasıdır — orası artık bir gizlilik
+   *     sınırı: oraya `return` eklenirse savunan saldıranın ganimetini görmeye başlar.
    */
   @Get()
   async list(@Req() req: AuthedRequest, @Query('cityId') cityId?: string): Promise<Record<string, unknown>> {
@@ -311,10 +317,23 @@ export class MissionController {
              (SELECT my.id FROM my
                WHERE my.k = m.target_k AND my.d = m.target_d AND my.s = m.target_s
                LIMIT 1) AS coord_city_id,
-             COALESCE(json_object_agg(mu.unit_type, mu.count)
-                      FILTER (WHERE mu.unit_type IS NOT NULL), '{}'::json) AS units
+             u.units, hr.heroes
         FROM missions m
-        LEFT JOIN mission_units mu ON mu.mission_id = m.id
+        -- ⭐ İki yan tablo LATERAL ile toplanır: tek JOIN kullansaydık birim x kahraman
+        --    kartezyen çarpımı doğar ve json_object_agg anahtar tekrarı üretirdi. Ayrıca
+        --    bu biçimde 9 kolonluk GROUP BY tamamen kalkıyor (iki indeks-taraması yeter).
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(json_object_agg(mu.unit_type, mu.count), '{}'::json) AS units
+            FROM mission_units mu WHERE mu.mission_id = m.id
+        ) u ON TRUE
+        LEFT JOIN LATERAL (
+          -- ⚠️ YALNIZ ad + seviye: kahramanın yetenek dağılımı savaşı önceden simüle
+          --    ettirir, o bilgi casuslukla bile bu netlikte alınmaz (kullanıcı kararı).
+          SELECT COALESCE(json_agg(json_build_object('name', h.name, 'level', h.level)
+                                   ORDER BY h.level DESC, h.id), '[]'::json) AS heroes
+            FROM mission_heroes mh JOIN heroes h ON h.id = mh.hero_id
+           WHERE mh.mission_id = m.id
+        ) hr ON TRUE
         LEFT JOIN cities oc ON oc.id = m.origin_city_id
         LEFT JOIN players op ON op.id = oc.player_id
         LEFT JOIN cities tc ON tc.id = m.target_city_id
@@ -326,7 +345,6 @@ export class MissionController {
          AND (m.origin_city_id IN (SELECT id FROM my) OR m.target_city_id IN (SELECT id FROM my)
               OR (m.type = 'found_city' AND m.target_city_id IS NULL AND EXISTS (
                     SELECT 1 FROM my WHERE my.k = m.target_k AND my.d = m.target_d AND my.s = m.target_s)))
-       GROUP BY m.id, oc.k, oc.d, oc.s, op.username, tc.k, tc.d, tc.s, tp.username
        ORDER BY m.created_at, m.id
     `);
 
@@ -349,21 +367,24 @@ export class MissionController {
         : { k: Number(r['tk']), d: Number(r['td']), s: Number(r['ts']) };
 
       /**
-       * ⭐ Nakliye/destek yükü GÖRÜNÜR (kullanıcı, 2026-07-28): şehrime gelen nakliyede kimin
-       * ne getirdiğini bilmeliyim. Saldırı ve casuslukta gizlilik matrisi (§13.10.1) aynen
-       * duruyor — orada birleşim de yük de gizli.
+       * ⭐ YÜK/GANİMET KOŞULSUZ (kullanıcı 2026-07-31): nakliye/destekte `cargo`, dönüşte
+       * `loot` alanı okunur. Saldırı/casusluk GİDİŞİNDE payload'da ikisi de yoktur → savunan
+       * savaştan önce kaynak bilgisi görmez; saldıran ise KENDİ dönüşünde ganimetini görür
+       * (o satırı yalnız sahibi görüyor, bkz. sınıf yorumundaki `OUT_ICON` notu).
        */
-      const isCave = type.startsWith('cave_');
-      const openCargo = type === 'transport' || type === 'support'
-        || (type === 'return' && (returnOf === 'transport' || returnOf === 'support'));
-      const cargo = openCargo
-        ? (payload['cargo'] ?? payload['loot'] ?? null) as Record<string, number> | null
-        : null;
+      const cargo = (payload['cargo'] ?? payload['loot'] ?? null) as Record<string, number> | null;
 
       const base = {
         id: Number(r['id']),
         type,
         cargo,
+        /**
+         * ⭐ İÇERİK HER HAREKETTE TAM (kullanıcı 2026-07-31): gelen saldırıda hangi birimden
+         * kaç tane geldiği ve orduda kimin kahramanı olduğu koşulsuz görünür. Eskiden bu
+         * alanlar yalnız kendi hareketlerimde ve gelen nakliye/destekte yazılıyordu.
+         */
+        units: r['units'] ?? {},
+        heroes: r['heroes'] ?? [],
         /** Dönüş bacağında hangi görevden dönüldüğü (arayüz "casusluk dönüşü" yazabilsin). */
         returnOf: type === 'return' ? returnOf : null,
         canceled: type === 'return' ? canceled : false,
@@ -382,7 +403,6 @@ export class MissionController {
           movements.push({
             ...base, key: `${r['id']}-out`, direction: 'out', icon,
             cityId: Number(r['origin_city_id']),
-            units: r['units'] ?? {},
             // İptal yalnız HENÜZ İŞLENMEMİŞ görevde mümkün; worker aldıysa savaş çözülüyordur.
             canCancel: status === 'scheduled' && CANCELABLE_TYPES.includes(type),
           });
@@ -392,9 +412,11 @@ export class MissionController {
       if (targetMine) {
         /**
          * ⭐ Koordinatıma gelen ŞEHİR KURMA görevi bana SALDIRI olarak görünür (kullanıcı
-         * 2026-07-30): erken kuran oyuncu yaklaşan orduyu, varış saatini ve kaynağı görür ama
-         * bunun bir kuruluş seferi olduğunu BİLMEZ — kılıç simgesi, "Gelen saldırı" başlığı,
-         * birleşim gizli. Ordu varınca savaşmadan geri döner (varış handler'ı `slot_taken`).
+         * 2026-07-30): erken kuran oyuncu yaklaşan orduyu, varış saatini, kaynağı ve
+         * **birleşimi** görür ama bunun bir kuruluş seferi olduğunu BİLMEZ — kılıç simgesi,
+         * "Gelen saldırı" başlığı. MASKE kalır, içerik açıktır (kullanıcı 2026-07-31): 20
+         * cüceyle "saldırı" gelmesi şüphe uyandırır, yorumu oyuncuya kalır. Ordu varınca
+         * savaşmadan geri döner (varış handler'ı `slot_taken`).
          */
         const shownType = coordsMine ? 'attack' : type;
         const icon = type === 'return' ? (OUT_ICON[returnOf] ?? 'attack') : IN_ICON[shownType];
@@ -408,9 +430,6 @@ export class MissionController {
             cityId: r['target_city_id'] == null
               ? Number(r['coord_city_id'])                   // koordinat çıpası (yarış satırı)
               : Number(r['target_city_id']),
-            // ⭐ SALDIRI/CASUSLUKTA birleşim GİZLİ (§13.10.1); nakliye/destekte açık — gelen
-            //    yardımın ne getirdiğini görmek oyunun kendi mantığı.
-            ...(type === 'return' || openCargo || isCave ? { units: r['units'] ?? {} } : {}),
             canCancel: false,
           });
         }
@@ -439,7 +458,13 @@ const OUT_ICON: Record<string, string> = {
   support: 'support_out',
   spy: 'spy_out',
   found_city: 'found_city',
-  // `return` giden bacak üretmez: kaynağı düşmanın şehridir, benim değil.
+  /**
+   * ⚠️ **GİZLİLİK SINIRI — `return` anahtarı BİLEREK YOK.**
+   * Dönüş görevinin `origin_city_id`'si SAVUNANIN şehridir (`scheduleReturn`), yani satır
+   * savunanın sorgusuna GİRER ve `origin_is_mine` true olur. Ekranda çıkmamasının tek sebebi
+   * burada karşılığının olmamasıdır. Buraya `return` eklenirse savunan, saldıranın taşıdığı
+   * ganimeti (artık `cargo` alanında açık) görmeye başlar. `missions.test.ts` bunu kilitliyor.
+   */
 };
 
 /**

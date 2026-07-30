@@ -24,6 +24,7 @@ import type { DbHandle } from '../src/db/client.ts';
 import { toDate } from '../src/db/client.ts';
 import { battleHandlers, isNightBattle } from '../src/missions/battle.handlers.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';
+import { MissionController } from '../src/missions/mission.controller.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
@@ -580,6 +581,43 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
     expect(Math.round(atkAfter.food)).toBe(loot.food);
     // Birlikler de geri döndü.
     expect((await unitsOf(attackCity))['dwarf']).toBeGreaterThan(0);
+  });
+
+  /**
+   * ⭐ GİZLİLİK SINIRI (2026-07-31): gelen ordunun içeriği açıldı ve ganimet artık `cargo`
+   * alanında görünüyor — ama YALNIZ sahibine. Savunanın listesinde dönüş bacağı hiç satır
+   * ÜRETMEZ; bunun sebebi sorgunun onu dışlaması DEĞİL (dönüşün `origin_city_id`'si savunanın
+   * şehridir, satır sorguya girer), `OUT_ICON`'da `return` karşılığının olmamasıdır.
+   * Oraya `return` eklenirse savunan saldıranın ganimetini görmeye başlar — bu test o kapıyı
+   * kilitliyor.
+   */
+  it('⭐ savunan saldırının DÖNÜŞ bacağını görmez — ganimet sızmaz', async () => {
+    await giveUnits(attackCity, 'cargo_wagon', 50);
+    await giveUnits(attackCity, 'dwarf', 3000);
+    await giveUnits(defendCity, 'dwarf', 10);
+    await setResources(defendCity, 200_000, 200_000);
+
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 3000, cargo_wagon: 50 }, at,
+    });
+    await runDue(m.missionId);
+
+    const controller = new MissionController(missions, clock, h.db);
+    const defList = await controller.list({ player: { playerId: defender, worldId } } as never);
+    const defRows = defList['movements'] as Record<string, unknown>[];
+    expect(defRows.filter((x) => x['type'] === 'return')).toHaveLength(0);
+    expect(JSON.stringify(defRows)).not.toContain('"cargo":{');
+
+    // Saldıran ise KENDİ dönüşünde ganimetini görür (kendi bilgisi).
+    const atkList = await controller.list({ player: { playerId: attacker, worldId } } as never);
+    const own = (atkList['movements'] as Record<string, unknown>[])
+      .find((x) => x['direction'] === 'own')!;
+    expect(own['type']).toBe('return');
+    const cargo = own['cargo'] as { gold: number; food: number };
+    expect(cargo.gold + cargo.food).toBeGreaterThan(0);
+    expect(own['units']).toBeTruthy();
   });
 
   /**

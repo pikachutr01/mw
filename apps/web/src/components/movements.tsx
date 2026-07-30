@@ -5,7 +5,7 @@
  * olamaz — oyuncu Baraka'dayken de gelen saldırının üstüne gelip ne olduğunu görebilmeli.
  */
 import { fmt, formatDuration, remaining, remainingClock, serverNow, useTick } from '../lib/hooks.ts';
-import { describeUnits } from '../lib/names.ts';
+import { describeHeroes, describeUnits } from '../lib/names.ts';
 import { useCancelMission, type Coords, type Movement } from '../lib/queries.ts';
 import { Button, ErrorBox, Res } from './ui.tsx';
 import { Modal, useConfirm } from './Modal.tsx';
@@ -99,7 +99,11 @@ export function MovementIcon({
 export function MovementTooltip({ m, x, y }: TipState) {
   const W = 250;
   const left = Math.min(x + 14, window.innerWidth - W - 8);
-  const top = Math.min(y + 14, window.innerHeight - 100);
+  /* ⚠️ Alt sınır, birim listesi uzayabildiği için gövde yüksekliğinden türetilir: gelen
+     saldırıda 6-8 birim tipi + kahraman satırı listelenebiliyor (2026-07-31). Sabit 100 px
+     varsayımı tooltip'i ekranın altından taşırıyordu. */
+  const rows = Object.keys(m.units ?? {}).length + (m.heroes?.length ? 1 : 0);
+  const top = Math.min(y + 14, window.innerHeight - (100 + Math.min(rows, 10) * 16));
 
   return (
     <div role="tooltip" style={{ left, top, width: W }}
@@ -120,6 +124,9 @@ export function MovementTooltip({ m, x, y }: TipState) {
         </div>
         {m.units && Object.keys(m.units).length > 0 ? (
           <div className="border-t border-border pt-0.5 text-muted">{describeUnits(m.units, fmt)}</div>
+        ) : null}
+        {m.heroes && m.heroes.length > 0 ? (
+          <div className="text-warning">{describeHeroes(m.heroes)}</div>
         ) : null}
       </div>
     </div>
@@ -202,8 +209,15 @@ export function MovementModal({ m, onClose }: { m: Movement; onClose: () => void
               <dd className="text-ink">{units}</dd>
             </>
           ) : null}
-          {/* ⭐ Nakliye/destek yükü AÇIK (kullanıcı): kendi şehrime gelen nakliyede kimin ne
-              taşıdığını görmeliyim. Saldırı/casuslukta birleşim gizli kalmaya devam ediyor. */}
+          {/* ⭐ Kahramanlar ad + seviye (kullanıcı 2026-07-31); yetenek dağılımı verilmez. */}
+          {m.heroes && m.heroes.length > 0 ? (
+            <>
+              <dt className="text-muted">Kahraman</dt>
+              <dd className="text-warning">{describeHeroes(m.heroes)}</dd>
+            </>
+          ) : null}
+          {/* ⭐ İçerik HER harekette açık (kullanıcı 2026-07-31). Yük yalnız nakliye/destekte
+              ve kendi dönüşümde dolu; saldırı gidişinde payload'da hiç yok. */}
           {m.cargo && (m.cargo.gold > 0 || m.cargo.food > 0) ? (
             <>
               <dt className="text-muted">Taşınan</dt>
@@ -223,8 +237,7 @@ export function MovementModal({ m, onClose }: { m: Movement; onClose: () => void
         ) : null}
 
         {/* "Sana doğru geliyor / gizlidir" kutusu kaldırıldı (kullanıcı, 2026-07-30):
-            nakliye/destekte içerik zaten görünür, saldırıda casusluk zaten oyunun kuralı —
-            ek bilgilendirme gürültüsüne gerek yok. */}
+            içerik zaten görünür — 2026-07-31'den beri gelen saldırıda bile. */}
 
         {!m.canCancel && m.direction === 'out' ? (
           <div className="text-xs text-muted">Görev işlenmeye başladı, artık iptal edilemez.</div>

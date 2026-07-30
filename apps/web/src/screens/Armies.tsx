@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { fmt, remaining, useTick } from '../lib/hooks.ts';
-import { describeUnits } from '../lib/names.ts';
+import { describeHeroes, describeUnits } from '../lib/names.ts';
 import { useMovements, type Movement } from '../lib/queries.ts';
 import { Empty, MissionIcon, Panel } from '../components/ui.tsx';
 import { coordText, MovementModal, titleOf } from '../components/movements.tsx';
@@ -66,8 +66,11 @@ function MovementRow({
             {' → '}
             <span className="tnum">{coordText(m.target)}</span>
           </span>
+          {/* ⭐ Birleşim HER harekette görünür (kullanıcı 2026-07-31) — "birleşim gizli"
+              metni kalktı. Boş kalabilen tek hâl: askerleri ölmüş, kahramanı dönen ordu. */}
           <span className="block truncate text-[11px] text-muted">
-            {describeUnits(m.units, fmt) || (m.direction === 'in' ? 'birleşim gizli' : '—')}
+            {[describeUnits(m.units, fmt), describeHeroes(m.heroes)].filter(Boolean).join(' · ')
+              || '—'}
           </span>
         </span>
         <span className={`tnum shrink-0 text-sm font-semibold ${tone}`}>{left ?? 'varıyor'}</span>

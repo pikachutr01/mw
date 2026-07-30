@@ -2,8 +2,11 @@
  * ⭐ GANİMET testleri — HAVUZ + KAYNAK-BAZLI ORAN modeli (kullanıcı tarifi, 2026-07-30).
  *
  * Kural: havuz = kasa + enkaz (kaynak başına AYRI) · oran %40 sabit (≥100k), 100k→5k arası
- * %40→%5 doğrusal, ≤5k'da %5 sabit · alınan = havuz × oran, kapasiteyle kırpılır. Kapasite
+ * %40→%20 doğrusal, ≤5k'da %20 sabit · alınan = havuz × oran, kapasiteyle kırpılır. Kapasite
  * yetse bile orandan fazlası alınmaz — rakip ancak arka arkaya saldırarak süpürebilir.
+ *
+ * ⭐ Taban %5 → %20 (kullanıcı, 2026-07-31). Tavan ve eşikler değişmediği için havuzu
+ * ≥100k olan testlerin sayıları AYNEN geçerli — yalnız taban koluna giren senaryolar güncellendi.
  */
 import { describe, expect, it } from 'vitest';
 import { calculateLoot, DEFAULT_LOOT_CONFIG, plunderRate } from '../src/index.ts';
@@ -17,20 +20,28 @@ describe('yağma oranı eğrisi (kaynak başına)', () => {
     expect(plunderRate(100_000)).toBeCloseTo(0.4, 10);
   });
 
-  it('100k → 5k arası %40 → %5 DOĞRUSAL iner', () => {
-    // Kullanıcının örneği: 60k yemek → %5 + (55/95) × %35 ≈ %25,3
-    expect(plunderRate(60_000)).toBeCloseTo(0.05 + (55_000 / 95_000) * 0.35, 10);
-    // Tam orta: 52.5k → %22,5
-    expect(plunderRate(52_500)).toBeCloseTo(0.225, 10);
+  it('100k → 5k arası %40 → %20 DOĞRUSAL iner', () => {
+    // 60k yemek → %20 + (55/95) × %20 ≈ %31,6
+    expect(plunderRate(60_000)).toBeCloseTo(0.20 + (55_000 / 95_000) * 0.20, 10);
+    // Tam orta: 52.5k → %30
+    expect(plunderRate(52_500)).toBeCloseTo(0.30, 10);
     // Eşiklerde sıçrama yok.
     expect(plunderRate(99_999)).toBeLessThan(0.4);
-    expect(plunderRate(5_001)).toBeGreaterThan(0.05);
+    expect(plunderRate(5_001)).toBeGreaterThan(0.20);
   });
 
-  it('5k ve altında %5 sabit — sömürünün dibi', () => {
-    expect(plunderRate(5_000)).toBeCloseTo(0.05, 10);
-    expect(plunderRate(1_000)).toBeCloseTo(0.05, 10);
+  it('5k ve altında %20 sabit — sömürünün dibi', () => {
+    expect(plunderRate(5_000)).toBeCloseTo(0.20, 10);
+    expect(plunderRate(1_000)).toBeCloseTo(0.20, 10);
     expect(plunderRate(0)).toBe(0);
+  });
+
+  /** ⭐ Taban sabitinin sessizce eski değerine dönmesini kilitler (kullanıcı kararı 2026-07-31). */
+  it('taban oran sabiti %20 (kullanıcı kararı)', () => {
+    expect(DEFAULT_LOOT_CONFIG.minRate).toBe(0.20);
+    expect(DEFAULT_LOOT_CONFIG.plunderRate).toBe(0.4);      // tavan DEĞİŞMEDİ
+    expect(DEFAULT_LOOT_CONFIG.povertyThreshold).toBe(100_000);
+    expect(DEFAULT_LOOT_CONFIG.floorThreshold).toBe(5_000);
   });
 });
 
@@ -46,7 +57,7 @@ describe('havuz modeli', () => {
 
     expect(r.taken.gold).toBe(200_000);                       // 500k × %40
     const foodRate = plunderRate(60_000);
-    expect(r.taken.food).toBe(Math.round(60_000 * foodRate)); // ~%25,3
+    expect(r.taken.food).toBe(Math.round(60_000 * foodRate)); // ~%31,6
     expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
     expect(r.effectiveRates.food).toBeCloseTo(foodRate, 10);
   });
@@ -99,7 +110,7 @@ describe('havuz modeli', () => {
     expect(r.plunderNotCarried.gold + r.plunderNotCarried.food).toBe(120_000);
   });
 
-  it('fakir şehir freni: 5k havuzdan tek saldırıda en fazla %5 çıkar', () => {
+  it('fakir şehir freni: 5k havuzdan tek saldırıda en fazla %20 çıkar', () => {
     const r = calculateLoot({
       winner: 'attacker',
       debris: { gold: 0, food: 0 },
@@ -107,8 +118,8 @@ describe('havuz modeli', () => {
       carryCapacity: BIG_CAP,
       seed: 'fakir',
     }, NO_JITTER);
-    expect(r.taken.gold).toBe(250);
-    expect(r.taken.food).toBe(250);
+    expect(r.taken.gold).toBe(1_000);
+    expect(r.taken.food).toBe(1_000);
   });
 });
 

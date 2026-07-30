@@ -41,7 +41,7 @@ export const mission = z.object({
   /** Sunucu otoritesi: geri sayım BUNDAN çizilir, istemci lokal saate güvenmez (§7). */
   executeAt: z.string().datetime(),
   createdAt: z.string().datetime(),
-  /** Hedef oyuncu görürse birleşim GİZLİ kalır (§13.10.1). */
+  /** ⭐ Birleşim hedef oyuncuya da TAM görünür (kullanıcı 2026-07-31, §13.10.1). */
   units: unitCounts.nullable(),
 });
 export type Mission = z.infer<typeof mission>;

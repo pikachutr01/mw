@@ -27,3 +27,9 @@ export function describeUnits(
     .map(([id, n]) => `${nameOf(id)} ${fmt(n)}`);
   return parts.join(' · ');
 }
+
+/** `[{name:'Baturalp', level:7}]` → "⚔ Baturalp sv 7" — ordu satırında kahraman özeti. */
+export function describeHeroes(heroes: { name: string; level: number }[] | undefined): string {
+  if (!heroes || heroes.length === 0) return '';
+  return heroes.map((h) => `⚔ ${h.name} sv ${h.level}`).join(' · ');
+}

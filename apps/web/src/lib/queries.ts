@@ -196,9 +196,17 @@ export interface Movement {
   canceled: boolean;
   /** Bu hareket iptal edilebilir mi (yalnız kendi, henüz işlenmemiş görevlerim)? */
   canCancel: boolean;
-  /** Yalnız KENDİ hareketlerimde dolu; yabancı harekette birleşim gizlidir (§13.10.1). */
-  units?: Record<string, number>;
-  /** Nakliye/destek yükü — saldırı ve casuslukta `null` (gizli). */
+  /**
+   * ⭐ HER harekette dolu (kullanıcı 2026-07-31): gelen saldırıda da hangi birimden kaç tane
+   * geldiği görünür. Boş nesne yalnız "tüm askerler öldü, kahraman dönüyor" hâlinde olur.
+   */
+  units: Record<string, number>;
+  /** Görevdeki kahramanlar — ad + seviye. Statlar sunucuda BİLEREK verilmez. */
+  heroes: { name: string; level: number }[];
+  /**
+   * Taşınan yük: nakliye/destekte kargo, dönüşte ganimet. Saldırı/casusluk GİDİŞİNDE `null`
+   * (payload'da yok) → savunan savaştan önce kaynak bilgisi görmez.
+   */
   cargo?: { gold: number; food: number } | null;
 }
 
