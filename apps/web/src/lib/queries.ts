@@ -226,8 +226,10 @@ export interface WorldSlot {
     isOwn: boolean;
     /** Dünya sırası — canlı değil, son anlık görüntüden (§13.16). Hiç alınmadıysa `null`. */
     rank: number | null;
-    /** İttifak adı — şema henüz yok, daima `null`. */
+    /** İttifak adı (ittifaksızsa null). */
     alliance: string | null;
+    /** Davet butonu için: hedef zaten bir ittifakta mı? */
+    hasAlliance?: boolean;
     protection: 'beginner' | 'vacation' | null;
   } | null;
 }
@@ -382,6 +384,8 @@ export interface RankingRow {
   /** Oyuncu sekmesi. ⚠️ Şehir sayısı BİLEREK yok — orijinal tabloda da yok (`scr_web02`). */
   score?: number;
   alliance?: string | null;
+  /** İttifak sekmesi (kullanıcı: Sıra · İttifak Adı · Puan · Sıra Değişimi). */
+  memberCount?: number;
   /** Kahraman sekmesi. */
   owner?: string;
   level?: number;
@@ -685,3 +689,91 @@ export const useHeroRename = () => useHeroAction<{ name: string }>((id) => `/api
 export const useHeroRevive = () => useHeroAction<never>((id) => `/api/v1/heroes/${id}/revive`);
 export const useHeroReviveCancel = () =>
   useHeroAction<never>((id) => `/api/v1/heroes/${id}/revive/cancel`);
+
+/* ═══ İTTİFAK (§13.15b) ══════════════════════════════════════════════════════ */
+
+export interface AllianceMember {
+  playerId: number;
+  username: string;
+  score: number;
+  /** 1 Asker · 2 Konsey Üyesi · 3 Lider (orijinal istemcinin `q` alanı). */
+  role: number;
+  worldRank: number | null;
+  /** ⭐ Çevrimiçilik yalnız ittifak üyeleri arasında görünür — başka hiçbir uç sızdırmaz. */
+  online: boolean;
+}
+
+export interface AllianceView {
+  alliance: {
+    id: number;
+    name: string;
+    text: string;
+    leader: string;
+    myRole: number;
+    score: number;
+    rank: number | null;
+    rankChange: number | null;
+    memberCount: number;
+    page: number;
+    pages: number;
+    members: AllianceMember[];
+  } | null;
+  canFound?: { ok: boolean; need: number; current: number };
+  pendingApplications?: number[];
+}
+
+export interface AllianceListRow {
+  id: number;
+  name: string;
+  memberCount: number;
+  score: number;
+  rank: number | null;
+}
+
+export const useAlliance = (page = 0): UseQueryResult<AllianceView> => useQuery({
+  queryKey: ['alliance', page],
+  queryFn: () => get<AllianceView>(`/api/v1/alliance?page=${page}`),
+  refetchInterval: SAFETY_NET_MS,
+});
+
+export const useAllianceSearch = (query: string): UseQueryResult<{ alliances: AllianceListRow[] }> =>
+  useQuery({
+    queryKey: ['alliances', query],
+    queryFn: () => get<{ alliances: AllianceListRow[] }>(
+      `/api/v1/alliances?query=${encodeURIComponent(query)}`),
+    staleTime: 30_000,
+  });
+
+/** İttifak aksiyonları — ittifak görünümü + ilgili sütunları taşıyan ekranlar tazelenir. */
+function useAllianceAction<TBody>(path: (body: TBody) => string, toBody?: (b: TBody) => unknown) {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (body: TBody) =>
+      api(path(body), { method: 'POST', body: (toBody ? toBody(body) : body) as Record<string, unknown> | undefined }),
+    onSuccess: () => invalidate(['alliance', 'alliances', 'overview', 'world', 'rankings', 'messages']),
+  });
+}
+
+export const useAllianceFound = () =>
+  useAllianceAction<{ name: string }>(() => '/api/v1/alliance');
+export const useAllianceLeave = () =>
+  useAllianceAction<void>(() => '/api/v1/alliance/leave', () => undefined);
+export const useAllianceDisband = () =>
+  useAllianceAction<void>(() => '/api/v1/alliance/disband', () => undefined);
+export const useAllianceRename = () =>
+  useAllianceAction<{ name: string }>(() => '/api/v1/alliance/rename');
+export const useAllianceText = () =>
+  useAllianceAction<{ text: string }>(() => '/api/v1/alliance/text');
+export const useAllianceBroadcast = () =>
+  useAllianceAction<{ text: string }>(() => '/api/v1/alliance/message');
+export const useAllianceApply = () =>
+  useAllianceAction<{ allianceId: number }>(() => '/api/v1/alliance/applications');
+export const useAllianceInvite = () =>
+  useAllianceAction<{ playerId: number }>(() => '/api/v1/alliance/invites');
+export const useAllianceMemberAction = () =>
+  useAllianceAction<{ playerId: number; action: 'kick' | 'promote' | 'demote' | 'transfer' }>(
+    (b) => `/api/v1/alliance/members/${b.playerId}/${b.action}`, () => undefined);
+/** Mesaj kutusundaki Kabul/Red — davet ve başvuru aynı uçtan karara bağlanır. */
+export const useAllianceDecide = () =>
+  useAllianceAction<{ inviteId: number; accept: boolean }>(
+    (b) => `/api/v1/alliance/invites/${b.inviteId}/${b.accept ? 'accept' : 'reject'}`, () => undefined);

@@ -141,7 +141,7 @@ async function main() {
   ok(Array.isArray(rank.body?.rows), 'oyuncu sıralaması listeleniyor', rank.body);
   ok(rank.body?.nextAt?.endsWith(':00:00.000Z'), 'sıradaki anlık görüntü tam saatte', rank.body?.nextAt);
   const ally = await call('GET', '/api/v1/command/rankings?kind=alliance', { token: A });
-  ok(typeof ally.body?.unavailable === 'string', 'ittifak sekmesi sebebiyle kapalı', ally.body);
+  ok(Array.isArray(ally.body?.rows), 'ittifak sıralaması şekil olarak doğru (boşsa unavailable dolu)', ally.body);
 
   console.log(`\n${failures === 0 ? '✅ Duman testi TEMİZ' : `❌ ${failures} kontrol başarısız`}\n`);
   process.exit(failures === 0 ? 0 : 1);

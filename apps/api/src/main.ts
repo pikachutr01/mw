@@ -7,6 +7,7 @@ import { TokenService } from './auth/token.service.ts';
 import { createDb } from './db/client.ts';
 import { RealtimeBus } from './realtime/realtime.bus.ts';
 import { RealtimeGateway } from './realtime/realtime.gateway.ts';
+import { setGateway } from './realtime/gateway-registry.ts';
 import { createWorker, type Worker } from './worker/worker.ts';
 
 /**
@@ -51,6 +52,8 @@ async function bootstrap(): Promise<void> {
     // Soket sunucusu Fastify'ın HTTP sunucusuna takılır → tek port, tek köken, CORS yok.
     gateway = new RealtimeGateway(handle.db, app.get(TokenService), bus);
     await gateway.attach(app.getHttpServer() as HttpServer);
+    // İttifak uçları çevrimiçi rozeti + oda senkronu için aynı instance'a buradan ulaşır.
+    setGateway(gateway);
 
     // eslint-disable-next-line no-console
     console.log(`[mobiwar] api hazır → http://localhost:${port}/healthz  ·  ws /ws  (ROLE=${role})`);

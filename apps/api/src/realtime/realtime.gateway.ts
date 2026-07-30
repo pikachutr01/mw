@@ -134,6 +134,36 @@ export class RealtimeGateway {
   }
 
   /**
+   * ⭐ ÜYELİK DEĞİŞTİ → soket odaları senkronu (§13.12 kuralı: *"ittifaktan atılan oyuncunun
+   * açık soketi anında düşer"*). El sıkışmada okunan `allianceId` soket ömrü boyunca donuktu;
+   * bu metot kick/ayrıl/katıl/dağıt anında ittifak controller'ından çağrılır:
+   *   • eski ittifak odasından `leave` + oradakilere "çevrimdışı" presence'ı (üye artık listede
+   *     görünmeyecek ama açık kalmış istemciler eski listeyi tazeleyene kadar yeşil görmesin),
+   *   • yeni odaya `join` + oradakilere "çevrimiçi" presence'ı.
+   */
+  setMembership(playerId: number, allianceId: number | null): void {
+    if (!this.io) return;
+    for (const [, socket] of this.io.of('/').sockets) {
+      const p = (socket.data as { player?: SocketPlayer }).player;
+      if (!p || p.playerId !== playerId) continue;
+      const oldAlliance = p.allianceId;
+      if (oldAlliance === allianceId) continue;
+
+      if (oldAlliance != null) {
+        void socket.leave(room.alliance(p.worldId, oldAlliance));
+        this.io.to(room.alliance(p.worldId, oldAlliance))
+          .emit('presence:update', { playerId, online: false });
+      }
+      p.allianceId = allianceId;
+      if (allianceId != null) {
+        void socket.join(room.alliance(p.worldId, allianceId));
+        this.io.to(room.alliance(p.worldId, allianceId))
+          .emit('presence:update', { playerId, online: true });
+      }
+    }
+  }
+
+  /**
    * Olayı odalara dağıtır.
    *
    * ⚠️ `worldId` YOKSA hiçbir şey gönderilmez. Oda adı dünya kimliğinden kuruluyor; onsuz
@@ -143,6 +173,15 @@ export class RealtimeGateway {
   private dispatch(event: RealtimeEvent): void {
     if (!this.io || event.worldId == null) return;
     const body = { topic: event.topic, ref: event.ref ?? {} };
+
+    // ⭐ İttifak odası: üyeler tek yayında; playerIds ayrıca bireysel gider (oda dışı kalanlar).
+    if (event.allianceId != null) {
+      this.io.to(room.alliance(event.worldId, event.allianceId)).emit(event.topic, body);
+      for (const playerId of event.playerIds) {
+        this.io.to(room.player(event.worldId, playerId)).emit(event.topic, body);
+      }
+      return;
+    }
 
     if (event.playerIds.length === 0) {
       this.io.to(room.world(event.worldId)).emit(event.topic, body);

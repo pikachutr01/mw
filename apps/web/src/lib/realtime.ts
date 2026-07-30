@@ -55,6 +55,9 @@ const INVALIDATES: Record<string, string[]> = {
   'battle:resolved': ['messages', 'missions', 'city'],
   // Sıralama günde 3 kez donuyor; donduğu an ekrandaki sıra bayatlamasın.
   'ranking:updated': ['rankings', 'overview', 'world'],
+  /* ⭐ İTTİFAK (2026-07-30): üyelik/metin/ad/dağıtma — ittifak ekranı + sağ panel + ittifak
+   * sütunlarını taşıyan görünümler tazelenir. */
+  'alliance:changed': ['alliance', 'alliances', 'overview', 'world', 'rankings'],
 };
 
 export function connectRealtime(queryClient: QueryClient): () => void {

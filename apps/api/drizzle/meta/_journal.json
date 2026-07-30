@@ -120,6 +120,13 @@
       "when": 1785351599933,
       "tag": "0016_wall_repair_from",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785423248539,
+      "tag": "0017_alliances",
+      "breakpoints": true
     }
   ]
 }

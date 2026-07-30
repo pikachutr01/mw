@@ -13,8 +13,8 @@
 import { useState } from 'react';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
-import { useBattle, useMarkRead, useMessages, type MessageRow } from '../lib/queries.ts';
-import { Button, Empty, Panel, Res } from '../components/ui.tsx';
+import { useAllianceDecide, useBattle, useMarkRead, useMessages, type MessageRow } from '../lib/queries.ts';
+import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
 import { Modal } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
 
@@ -24,7 +24,7 @@ import { MissionIcon } from '../components/ui.tsx';
  * Anahtar `kind:side`; `subject` artık ikinci satırda ayrıntı olarak yaşıyor.
  * `return_report` yalnız ESKİ kayıtlar için (dönüş artık rapor üretmiyor, bildirim üretiyor).
  */
-const REPORT_TYPE: Record<string, { icon: string; title: string }> = {
+const REPORT_TYPE: Record<string, { icon: string | null; title: string }> = {
   'battle_report:attacker': { icon: 'attack', title: 'Saldırı Raporu' },
   'battle_report:defender': { icon: 'attack_in', title: 'Saldırı Önleme Raporu' },
   'spy_report:spy': { icon: 'spy_out', title: 'Casusluk Raporu' },
@@ -34,6 +34,10 @@ const REPORT_TYPE: Record<string, { icon: string; title: string }> = {
   'support_report:receiver': { icon: 'support_out', title: 'Destek Raporu' },
   'found_city_report:owner': { icon: 'found_city', title: 'Şehir Kurma Raporu' },
   'return_report:owner': { icon: 'teleport', title: 'Ordu Döndü' },
+  /* İttifak satırları Mesajlar sekmesinde yaşar (doküman: davetler mesaj kutusunda). */
+  'alliance_invite:owner': { icon: null, title: 'İttifak Daveti' },
+  'alliance_application:owner': { icon: null, title: 'İttifak Başvurusu' },
+  'alliance_message:owner': { icon: null, title: 'İttifak Mesajı' },
 };
 
 function reportType(m: MessageRow): { icon: string | null; title: string } {
@@ -236,6 +240,17 @@ function PlainBody({ m }: { m: MessageRow }) {
   if (m.kind === 'spy_report') {
     return m.side === 'target' ? <SpyDefenseBody body={b} /> : <SpyBody body={b} />;
   }
+  if (m.kind === 'alliance_invite' || m.kind === 'alliance_application') {
+    return <AllianceRequestBody m={m} />;
+  }
+  if (m.kind === 'alliance_message') {
+    return (
+      <div className="space-y-1 text-sm">
+        <div className="text-xs text-muted">Gönderen: <b className="text-ink">{String(b['from'] ?? '')}</b></div>
+        <p className="whitespace-pre-wrap">{String(b['text'] ?? '')}</p>
+      </div>
+    );
+  }
 
   const loot = b['loot'] as { gold: number; food: number } | undefined;
   const cargo = b['cargo'] as { gold: number; food: number } | undefined;
@@ -280,6 +295,38 @@ function PlainBody({ m }: { m: MessageRow }) {
  * ⭐ CASUSLUK ÖNLEME RAPORU gövdesi (savunan tarafı) — alanları gönderen raporundan farklı:
  * birdsShot/birdsBlocked/leakedLevel. Savunan HER casuslukta bu raporu alır (2026-07-30).
  */
+/**
+ * ⭐ İTTİFAK DAVETİ / BAŞVURUSU — mesaj kutusunda Kabul/Red (orijinal t=8/9 akışı).
+ * Karar `alliance_invites` durum makinesine gider; istek çoktan sonuçlandıysa sunucu 409
+ * döner ve hata kutusunda görünür. Davet: kabul eden BEN katılırım. Başvuru: ben (yönetici)
+ * başvuranı kabul ederim.
+ */
+function AllianceRequestBody({ m }: { m: MessageRow }) {
+  const b = m.body ?? {};
+  const decide = useAllianceDecide();
+  const inviteId = Number(b['inviteId'] ?? 0);
+  const isInvite = m.kind === 'alliance_invite';
+  return (
+    <div className="space-y-2 text-sm">
+      <p>
+        {isInvite ? (
+          <><b>{String(b['by'] ?? '')}</b> seni <b>{String(b['allianceName'] ?? '')}</b> ittifağına davet etti.</>
+        ) : (
+          <><b>{String(b['by'] ?? '')}</b>, <b>{String(b['allianceName'] ?? '')}</b> ittifağına başvuru gönderdi.</>
+        )}
+      </p>
+      <ErrorBox error={decide.error} />
+      <div className="flex gap-2">
+        <Button size="sm" disabled={inviteId <= 0 || decide.isPending}
+          onClick={() => decide.mutate({ inviteId, accept: true })}>Kabul</Button>
+        <Button size="sm" variant="danger" disabled={inviteId <= 0 || decide.isPending}
+          onClick={() => decide.mutate({ inviteId, accept: false })}>Red</Button>
+      </div>
+      {decide.isSuccess ? <div className="text-xs text-success">İşlendi.</div> : null}
+    </div>
+  );
+}
+
 function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
   const sent = Number(body['birdsSent'] ?? 0);
   const shot = Number(body['birdsShot'] ?? 0);

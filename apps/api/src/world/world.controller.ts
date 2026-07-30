@@ -54,16 +54,17 @@ export class WorldController {
      * sayıydı: Dünya ekranındaki sıra ile Sıralamalar ekranındaki sıra birbirini tutmuyordu.
      * Anlık görüntü henüz alınmamışsa (yeni dünyanın ilk dakikaları) `null` döner ve ekran `-`
      * yazar — tahmini bir sıra uydurmaktan iyidir.
-     * ⚠️ `alliance` şeması henüz YOK → daima `null`. Sütun yerini şimdiden tutuyor.
+     * `alliance` = oyuncunun ittifak adı (LEFT JOIN — ittifaksızsa null).
      */
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT c.id, c.name, c.s, c.is_capital,
              p.id AS player_id, p.username, p.score, p.protected_until, p.vacation_until,
-             r.rank
+             r.rank, a.name AS alliance_name, p.alliance_id
         FROM cities c
         JOIN players p ON p.id = c.player_id
         LEFT JOIN rankings r
           ON r.world_id = p.world_id AND r.kind = 'player' AND r.subject_id = p.id
+        LEFT JOIN alliances a ON a.id = p.alliance_id
        WHERE c.world_id = ${player.worldId} AND c.k = ${kk} AND c.d = ${dd}
        ORDER BY c.s
     `);
@@ -91,7 +92,9 @@ export class WorldController {
           isCapital: Boolean(r['is_capital']),
           isOwn: Number(r['player_id']) === player.playerId,
           rank: r['rank'] == null ? null : Number(r['rank']),
-          alliance: null as string | null,
+          alliance: r['alliance_name'] == null ? null : String(r['alliance_name']),
+          /** Davet butonu için: hedef zaten bir ittifakta mı? (adı olmasa bile kimliği yeter) */
+          hasAlliance: r['alliance_id'] != null,
           // Yalnız SEBEP; bitiş zamanı verilmez (saldırıyı saniyesine planlamayı kolaylaştırırdı).
           protection: protectedUntil && protectedUntil > gameNow ? 'beginner'
             : vacationUntil && vacationUntil > gameNow ? 'vacation'

@@ -69,6 +69,12 @@ export async function takeSnapshot(runner: Runner, worldId: number, at: Date): P
      WHERE r.world_id = ${worldId} AND r.kind = 'hero'
        AND NOT EXISTS (SELECT 1 FROM heroes h WHERE h.id = r.subject_id)
   `);
+  // Dağıtılan ittifaklar sıralamadan düşer (kayıt silindiği için EXISTS bulamaz).
+  await runner.execute(sql`
+    DELETE FROM rankings r
+     WHERE r.world_id = ${worldId} AND r.kind = 'alliance'
+       AND NOT EXISTS (SELECT 1 FROM alliances a WHERE a.id = r.subject_id)
+  `);
 
   const players = await runner.execute<Record<string, unknown>>(sql`
     WITH ordered AS (
@@ -108,12 +114,31 @@ export async function takeSnapshot(runner: Runner, worldId: number, at: Date): P
   `);
 
   /**
-   * ⚠️ **İttifak sıralaması henüz YOK** — `alliances` şeması İttifak turunda geliyor. Burada
-   * bilerek boş bırakıldı; `kind = 'alliance'` sorgusu boş liste döner ve ekran "ittifak
-   * sıralaması henüz yok" der. Uydurma veri üretmiyoruz.
+   * ⭐ İTTİFAK SIRALAMASI (§13.15b, 2026-07-30) — puan = üyelerin puan TOPLAMI (kullanıcı
+   * kuralı). Yasaklı oyuncular oyuncu sıralamasından düştüğü gibi toplamdan da düşer.
+   * Üyesiz ittifak kalamaz (dağıtma siliyor) ama LEFT JOIN yine de 0 toplamla dayanıklı.
    */
+  const alliances = await runner.execute<Record<string, unknown>>(sql`
+    WITH totals AS (
+      SELECT a.id, COALESCE(SUM(p.score) FILTER (WHERE p.banned_at IS NULL), 0) AS score
+        FROM alliances a
+        LEFT JOIN players p ON p.alliance_id = a.id
+       WHERE a.world_id = ${worldId}
+       GROUP BY a.id
+    ), ordered AS (
+      SELECT id, score, RANK() OVER (ORDER BY score DESC, id ASC) AS rank FROM totals
+    )
+    INSERT INTO rankings (world_id, kind, subject_id, rank, prev_rank, score, taken_at)
+    SELECT ${worldId}, 'alliance', o.id, o.rank, NULL, o.score, ${ts}::timestamptz FROM ordered o
+    ON CONFLICT (world_id, kind, subject_id) DO UPDATE
+      SET prev_rank = rankings.rank,
+          rank = EXCLUDED.rank,
+          score = EXCLUDED.score,
+          taken_at = EXCLUDED.taken_at
+    RETURNING subject_id
+  `);
 
-  const entries = players.length + heroes.length;
+  const entries = players.length + heroes.length + alliances.length;
   await runner.execute(sql`
     INSERT INTO ranking_runs (world_id, taken_at, entries)
     VALUES (${worldId}, ${ts}::timestamptz, ${entries})

@@ -23,8 +23,10 @@ export interface RealtimeEvent {
   /** `missions:changed` · `messages:new` · `city:changed` · `battle:resolved` … */
   topic: string;
   worldId: number | null;
-  /** Olayın gideceği oyuncular. Boşsa dünya geneli yayın. */
+  /** Olayın gideceği oyuncular. Boşsa (ve allianceId de yoksa) dünya geneli yayın. */
   playerIds: number[];
+  /** Dolu ise olay AYRICA ittifak odasına da gider (`w{w}:a{id}`) — üyeler listeyi tazeler. */
+  allianceId?: number | null;
   /** Yalnız KİMLİK bilgisi — veri değil (yukarıdaki kural). */
   ref?: Record<string, number | string | null>;
 }
@@ -84,6 +86,21 @@ export function eventForOutbox(
     [...new Set(ids.filter((x): x is number => typeof x === 'number' && x > 0))];
 
   switch (topic) {
+    /**
+     * ⭐ İTTİFAK DEĞİŞTİ (üyelik/metin/ad/dağıtma, 2026-07-30) — ittifak odasındaki herkes +
+     * etkilenen oyuncular (atılan/ayrılan üye odadan düşmüş olabilir, kendi kanalından alır).
+     */
+    case 'alliance:changed': {
+      const ids = Array.isArray(payload['playerIds'])
+        ? (payload['playerIds'] as unknown[]).map((x) => Number(x)) : [];
+      return {
+        topic: 'alliance:changed', worldId,
+        playerIds: players(...ids),
+        allianceId: num(payload['allianceId']),
+        ref: { allianceId: num(payload['allianceId']) },
+      };
+    }
+
     // ⭐ Kullanıcının örneği: biri bize casus kuş gönderdiği ANDA görünmeli.
     // ⚠️ `city:incoming_spy` 2026-07-30'a kadar EŞLENMEMİŞTİ: outbox yazılıyor ama switch'te
     //    karşılığı olmadığı için default null → olay sessizce düşüyordu; savunan gelen

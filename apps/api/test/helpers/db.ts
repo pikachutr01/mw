@@ -57,6 +57,9 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
   // Dünya kimlikleri her koşuda 100'den başlıyor → önceki koşunun oyuncuları temizlenmeli,
   // yoksa username/email tekilliği ikinci koşuda çakışır. (cities → players sırası önemli.)
   await h.db.execute(sql`DELETE FROM cities WHERE world_id = ${worldId}`);
+  // İttifaklar oyunculardan ÖNCE: `alliances.leader_id` FK'sı oyuncu silinmesini engelliyor
+  // (players.alliance_id ise SET NULL ile kendiliğinden boşalır, sıra sorunu yaratmaz).
+  await h.db.execute(sql`DELETE FROM alliances WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM players WHERE world_id = ${worldId}`);
   // Sıralama anlık görüntüleri de dünya-kapsamlı: kalırsa bir sonraki koşuda ÖNCEKİ koşunun
   // sırası "prev_rank" olarak görünür ve değişim testleri sessizce yanlış sonuç verir.

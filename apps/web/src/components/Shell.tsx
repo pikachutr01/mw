@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { fmt, useTick } from '../lib/hooks.ts';
-import { armiesBadge, useCity, useMessages, useMovements, type CityDetail } from '../lib/queries.ts';
+import { armiesBadge, useAlliance, useCity, useMessages, useMovements, type CityDetail } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
@@ -63,6 +63,7 @@ const TABS = [
  */
 const PAGE_TITLE: [string, string][] = [
   ['/command/rankings', 'Sıralamalar'],
+  ['/command/alliance', 'İttifak'],
   ['/command', 'Genel Durum'],
   ['/armies', 'Ordular'], ['/barracks', 'Baraka'], ['/buildings', 'Yapılar'],
   ['/defense', 'Savunma'], ['/academy', 'Akademi'], ['/temple', 'Tapınak'],
@@ -350,15 +351,56 @@ function SideMenu() {
  * üç sütunlu düzenin dengesi onlara göre kuruldu — sonradan eklenince orta sütun daralıp
  * alışkanlık bozulmasın.
  */
-function SidePanels() {
-  return (
-    <div className="sticky top-3 space-y-3">
+/**
+ * ⭐ SAĞ SÜTUN İTTİFAK PANELİ (2026-07-30) — ekran görüntüsündeki "run.dll İttifağı" listesi:
+ * üye adları + Online/Offline renkli durum. Çevrimiçilik yalnız ittifak üyeleri arasında
+ * görünür; presence olayı geldikçe liste kendiliğinden tazelenir (`realtime.ts`).
+ */
+function AlliancePanel() {
+  const view = useAlliance(0);
+  const a = view.data?.alliance;
+
+  if (!a) {
+    return (
       <Panel title="İttifak">
         <div className="p-3 text-xs text-muted">
           Henüz bir ittifakta değilsin.
-          <div className="mt-1 text-[11px]">Kurmak için <b>Kale 5</b> gerekiyor.</div>
+          <NavLink to="/command/alliance"
+            className="mt-1 block text-[11px] text-accent hover:underline">
+            İttifak kur ya da bir ittifağa başvur →
+          </NavLink>
         </div>
       </Panel>
+    );
+  }
+
+  return (
+    <Panel title={`${a.name} İttifağı`}>
+      <ul className="divide-y divide-border">
+        {a.members.slice(0, 15).map((m) => (
+          <li key={m.playerId} className="flex items-center justify-between px-3 py-1 text-xs">
+            <span className="truncate">{m.username}</span>
+            <span className={`shrink-0 text-[10px] font-semibold ${
+              m.online ? 'text-success' : 'text-danger'}`}>
+              {m.online ? 'Online' : 'Offline'}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {a.memberCount > 15 ? (
+        <NavLink to="/command/alliance"
+          className="block px-3 py-1.5 text-[11px] text-accent hover:underline">
+          tüm {a.memberCount} üye →
+        </NavLink>
+      ) : null}
+    </Panel>
+  );
+}
+
+function SidePanels() {
+  return (
+    <div className="sticky top-3 space-y-3">
+      <AlliancePanel />
       <Panel title="Genel Sohbet">
         <div className="p-3 text-xs text-muted">Yakında.</div>
       </Panel>

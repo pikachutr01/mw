@@ -17,11 +17,11 @@ import { armySpeed, distance, travelSeconds } from '@mobiwar/engine';
 import { fmt, formatDuration } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import {
-  useCatalog, useCity, useMissionOptions, useSendMission,
+  useAlliance, useAllianceInvite, useCatalog, useCity, useMissionOptions, useSendMission,
   type MissionOption, type WorldSlot,
 } from '../lib/queries.ts';
 import { Badge, Button, Empty, ErrorBox, Input, MissionIcon } from '../components/ui.tsx';
-import { Modal } from '../components/Modal.tsx';
+import { Modal, useConfirm } from '../components/Modal.tsx';
 
 /**
  * Görev tipi → ekranda görünen ad ve simge (§13.14: İngilizce id görünmez).
@@ -73,6 +73,7 @@ export function TargetModal({
           {slot.city ? (
             <>
               Oyuncu: <b className="text-ink">{slot.city.username}</b>
+              {slot.city.alliance ? <> · İttifak: <b className="text-ink">{slot.city.alliance}</b></> : ''}
               {slot.city.isCapital ? ' · başkent' : ''}
               {slot.city.isOwn ? ' · senin şehrin' : ''}
             </>
@@ -80,6 +81,12 @@ export function TargetModal({
             'Bu koordinatta şehir yok — iskâna açık.'
           )}
         </div>
+
+        {/* ⭐ İTTİFAĞA DAVET (doküman: "dünya ekranında İttifak Daveti seçeneği") — yalnız
+            Konsey+Lider görür ve hedef ittifaksızsa (orijinal q>1 kapısı, g.java:1447). */}
+        {slot.city && !slot.city.isOwn && !slot.city.hasAlliance ? (
+          <InviteRow targetPlayerId={slot.city.playerId} targetName={slot.city.username} />
+        ) : null}
 
         {options.isLoading ? <Empty>Seçenekler yükleniyor…</Empty> : null}
         <ErrorBox error={options.error} />
@@ -109,6 +116,28 @@ export function TargetModal({
         ) : null}
       </div>
     </Modal>
+  );
+}
+
+/** İttifağa Davet satırı — davet yetkisi (Konsey+Lider) yoksa hiç çizilmez. */
+function InviteRow({ targetPlayerId, targetName }: { targetPlayerId: number; targetName: string }) {
+  const my = useAlliance(0);
+  const invite = useAllianceInvite();
+  const confirm = useConfirm();
+  const role = my.data?.alliance?.myRole ?? 0;
+  if (role < 2) return null;
+  return (
+    <div className="border-b border-border px-3 py-1.5">
+      <Button size="sm" variant="ghost" disabled={invite.isPending}
+        onClick={() => {
+          void confirm({
+            title: `${targetName} → ${my.data?.alliance?.name}`,
+            body: 'Oyuncuya ittifak daveti gönderilecek. Emin misiniz!',
+          }).then((ok) => { if (ok) invite.mutate({ playerId: targetPlayerId }); });
+        }}>İttifağa Davet</Button>
+      {invite.isSuccess ? <span className="ml-2 text-[11px] text-success">Davet gönderildi.</span> : null}
+      <ErrorBox error={invite.error} />
+    </div>
   );
 }
 

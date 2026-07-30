@@ -123,6 +123,15 @@ describe('outbox → istemci olayı eşlemesi', () => {
     expect(e.ref['missionId']).toBe(11);
   });
 
+  /** ⭐ İTTİFAK (2026-07-30): olay ittifak ODASINA + etkilenen oyunculara gider. */
+  it('⭐ alliance:changed ittifak odasını ve etkilenen oyuncuyu hedefler', () => {
+    const e = eventForOutbox('alliance:changed', { allianceId: 7, playerIds: [42] }, 3)!;
+    expect(e).not.toBeNull();
+    expect(e.topic).toBe('alliance:changed');
+    expect(e.allianceId).toBe(7);
+    expect(e.playerIds).toEqual([42]);
+  });
+
   it('savaş sonucu İKİ tarafa da gider', () => {
     const e = eventForOutbox('battle:resolved', {
       battleId: 9, attackerPlayerId: 3, defenderPlayerId: 4, cityId: 2,

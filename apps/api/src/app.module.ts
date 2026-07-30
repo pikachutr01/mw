@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AllianceController } from './alliance/alliance.controller.ts';
 import { AuthController } from './auth/auth.controller.ts';
 import { AuthGuard } from './auth/auth.guard.ts';
 import { AuthService } from './auth/auth.service.ts';
@@ -30,6 +31,7 @@ export { DB } from './db/tokens.ts';
 @Module({
   controllers: [
     HealthController, SimulateController, AuthController, CityController,
+    AllianceController,
     HeroController,
     MissionController, BattleController, WorldController, CommandController,
   ],

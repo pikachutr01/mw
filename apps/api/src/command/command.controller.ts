@@ -48,11 +48,15 @@ export class CommandController {
       this.db.execute<Record<string, unknown>>(sql`
         SELECT p.username, p.score, p.score_base, p.alliance_id,
                r.rank, r.prev_rank,
+               a.name AS alliance_name, ar.rank AS alliance_rank, ar.prev_rank AS alliance_prev_rank,
                (SELECT COUNT(*) FROM players WHERE world_id = ${player.worldId}
                   AND banned_at IS NULL) AS total_players
           FROM players p
           LEFT JOIN rankings r
             ON r.world_id = p.world_id AND r.kind = 'player' AND r.subject_id = p.id
+          LEFT JOIN alliances a ON a.id = p.alliance_id
+          LEFT JOIN rankings ar
+            ON ar.world_id = p.world_id AND ar.kind = 'alliance' AND ar.subject_id = p.alliance_id
          WHERE p.id = ${player.playerId}
       `),
       this.db.execute<Record<string, unknown>>(sql`
@@ -114,10 +118,10 @@ export class CommandController {
         prevRank,
         rankChange: rank != null && prevRank != null ? prevRank - rank : null,
         totalPlayers: Number(me['total_players'] ?? 0),
-        // ⚠️ İttifak şeması henüz yok → sütun yerini tutuyor, uydurma veri üretmiyoruz.
-        alliance: null as string | null,
-        allianceRank: null as number | null,
-        allianceRankChange: null as number | null,
+        alliance: me['alliance_name'] == null ? null : String(me['alliance_name']),
+        allianceRank: me['alliance_rank'] == null ? null : Number(me['alliance_rank']),
+        allianceRankChange: me['alliance_rank'] != null && me['alliance_prev_rank'] != null
+          ? Number(me['alliance_prev_rank']) - Number(me['alliance_rank']) : null,
       },
       ranking: {
         takenAt: takenAt?.toISOString() ?? null,
@@ -150,6 +154,10 @@ export class CommandController {
   ): Promise<Record<string, unknown>> {
     const player = req.player!;
     const kind: RankingKind = kindRaw === 'hero' || kindRaw === 'alliance' ? kindRaw : 'player';
+    const [meRow] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT alliance_id FROM players WHERE id = ${player.playerId}
+    `);
+    const myAllianceId = meRow?.['alliance_id'] == null ? null : Number(meRow['alliance_id']);
     const gameNow = await this.clock.gameNow(player.worldId);
     const takenAt = await lastSnapshotAt(this.db, player.worldId);
 
@@ -172,7 +180,12 @@ export class CommandController {
              WHERE r.world_id = ${player.worldId} AND r.kind = 'hero'
                AND h.player_id = ${player.playerId}
           `)
-        : [];
+        : await this.db.execute<Record<string, unknown>>(sql`
+            SELECT r.rank FROM rankings r
+              JOIN players p ON p.alliance_id = r.subject_id
+             WHERE r.world_id = ${player.worldId} AND r.kind = 'alliance'
+               AND p.id = ${player.playerId}
+          `);
     const myRank = mineRows[0]?.['rank'] == null ? null : Number(mineRows[0]!['rank']);
 
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -197,13 +210,22 @@ export class CommandController {
          * verilmesi Dünya ekranındaki gizlilik kuralıyla (§13.16.5) da çelişiyordu.
          */
         ? await this.db.execute<Record<string, unknown>>(sql`
-            SELECT r.rank, r.prev_rank, r.subject_id, r.score, p.username
+            SELECT r.rank, r.prev_rank, r.subject_id, r.score, p.username, a.name AS alliance_name
               FROM rankings r
               JOIN players p ON p.id = r.subject_id
+              LEFT JOIN alliances a ON a.id = p.alliance_id
              WHERE r.world_id = ${player.worldId} AND r.kind = 'player'
              ORDER BY r.rank LIMIT ${PAGE_SIZE} OFFSET ${offset}
           `)
-        : [];
+        /* ⭐ İttifak sekmesi (kullanıcı: Sıra · İttifak Adı · Puan · Sıra Değişimi). */
+        : await this.db.execute<Record<string, unknown>>(sql`
+            SELECT r.rank, r.prev_rank, r.subject_id, r.score, a.name,
+                   (SELECT COUNT(*)::int FROM players m WHERE m.alliance_id = a.id) AS member_count
+              FROM rankings r
+              JOIN alliances a ON a.id = r.subject_id
+             WHERE r.world_id = ${player.worldId} AND r.kind = 'alliance'
+             ORDER BY r.rank LIMIT ${PAGE_SIZE} OFFSET ${offset}
+          `);
 
     return {
       kind,
@@ -220,7 +242,7 @@ export class CommandController {
        * *"Bu dünyada hiç ittifak yok!"* · *"Bu dünyada hiç kahraman yok!"* — kendi cümlemizi
        * uydurmak yerine orijinalin ağzını kullanıyoruz (§13.14 adlandırma sözleşmesinin ruhu).
        */
-      unavailable: kind === 'alliance' ? 'Bu dünyada hiç ittifak yok!'
+      unavailable: kind === 'alliance' && total === 0 ? 'Bu dünyada hiç ittifak yok!'
         : kind === 'hero' && total === 0 ? 'Bu dünyada hiç kahraman yok!'
           : null,
       rows: rows.map((r) => ({
@@ -237,13 +259,19 @@ export class CommandController {
             dead: r['status'] !== 'alive',
             isMine: Number(r['player_id']) === player.playerId,
           }
-          : {
-            name: String(r['username']),
-            score: Number(r['score']),
-            // İttifak şeması gelene kadar orijinaldeki gibi "-" gösterilir (`scr_web02`).
-            alliance: null as string | null,
-            isMine: Number(r['subject_id']) === player.playerId,
-          }),
+          : kind === 'alliance'
+            ? {
+              name: String(r['name']),
+              score: Number(r['score']),
+              memberCount: Number(r['member_count'] ?? 0),
+              isMine: myAllianceId != null && Number(r['subject_id']) === myAllianceId,
+            }
+            : {
+              name: String(r['username']),
+              score: Number(r['score']),
+              alliance: r['alliance_name'] == null ? null : String(r['alliance_name']),
+              isMine: Number(r['subject_id']) === player.playerId,
+            }),
       })),
       gameNow: gameNow.toISOString(),
       serverNow: new Date().toISOString(),

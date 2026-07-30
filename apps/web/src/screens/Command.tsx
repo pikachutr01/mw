@@ -31,21 +31,25 @@ import {
 import { fmt } from '../lib/hooks.ts';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
+import { AllianceScreen } from './Alliance.tsx';
 
 export function CommandScreen(): React.ReactElement {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const onRankings = pathname.startsWith('/command/rankings');
+  const tab = pathname.startsWith('/command/rankings') ? 'rankings'
+    : pathname.startsWith('/command/alliance') ? 'alliance' : 'overview';
 
   return (
     <div className="space-y-2">
-      {/* Sekme = ROTA: geri tuşu çalışsın ve "sıralamada gör" gibi kısayollar bağlanabilsin. */}
+      {/* Sekme = ROTA: geri tuşu çalışsın ve "sıralamada gör" gibi kısayollar bağlanabilsin.
+          ⭐ İttifak orijinaldeki gibi Komuta Merkezi'nin ALTINDA (g.java:1415, ekran 17). */}
       <Tabs
-        value={onRankings ? 'rankings' : 'overview'}
-        onChange={(v) => navigate(v === 'rankings' ? '/command/rankings' : '/command')}
-        items={[['overview', 'Genel Durum'], ['rankings', 'Sıralamalar']]}
+        value={tab}
+        onChange={(v) => navigate(v === 'rankings' ? '/command/rankings'
+          : v === 'alliance' ? '/command/alliance' : '/command')}
+        items={[['overview', 'Genel Durum'], ['alliance', 'İttifak'], ['rankings', 'Sıralamalar']]}
       />
-      {onRankings ? <Rankings /> : <Overview />}
+      {tab === 'rankings' ? <Rankings /> : tab === 'alliance' ? <AllianceScreen /> : <Overview />}
     </div>
   );
 }
@@ -285,11 +289,15 @@ function Rankings(): React.ReactElement {
               <thead>
                 <tr className="tex-header border-b-2 border-strong bg-panel-header text-on-panel-header">
                   <Th className="w-12 text-center">Sıra</Th>
-                  <Th>{kind === 'hero' ? 'Kahraman' : 'Oyuncu'}</Th>
+                  <Th>{kind === 'hero' ? 'Kahraman' : kind === 'alliance' ? 'İttifak' : 'Oyuncu'}</Th>
                   {kind === 'hero'
                     ? <><Th className="w-16 text-center">Seviye</Th><Th className="w-24 text-right">Tecrübe</Th></>
-                    : <><Th className="w-24 text-right">Puan</Th><Th className="w-16 text-center">Değişim</Th>
-                      <Th className="w-28">İttifak</Th></>}
+                    : kind === 'alliance'
+                      /* ⭐ Kullanıcı tarifi: Sıra · İttifak Adı · Puan · Sıra Değişimi (+üye). */
+                      ? <><Th className="w-24 text-right">Puan</Th><Th className="w-16 text-center">Değişim</Th>
+                        <Th className="w-16 text-center">Üye</Th></>
+                      : <><Th className="w-24 text-right">Puan</Th><Th className="w-16 text-center">Değişim</Th>
+                        <Th className="w-28">İttifak</Th></>}
                   <Th className="w-10 text-center"> </Th>
                 </tr>
               </thead>
@@ -330,12 +338,16 @@ function Rankings(): React.ReactElement {
                               : changeTone(r.change) === 'danger' ? 'text-danger' : 'text-muted'}`}>
                             {changeMark(r.change)}
                           </Td>
-                          <Td className="max-w-[7rem] truncate text-muted">{r.alliance ?? '-'}</Td>
+                          {kind === 'alliance'
+                            ? <Td className="tnum text-center text-muted">{fmt(r.memberCount ?? 0)}</Td>
+                            : <Td className="max-w-[7rem] truncate text-muted">{r.alliance ?? '-'}</Td>}
                         </>
                       )}
                       <Td className="text-center">
-                        <MessageButton name={kind === 'hero' ? r.owner ?? r.name : r.name}
-                          disabled={r.isMine} />
+                        {kind === 'alliance' ? null : (
+                          <MessageButton name={kind === 'hero' ? r.owner ?? r.name : r.name}
+                            disabled={r.isMine} />
+                        )}
                       </Td>
                     </tr>
                   ))}

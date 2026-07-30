@@ -9,7 +9,7 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   bigint, bigserial, boolean, index, integer, jsonb, numeric, pgTable, smallint, text, timestamp,
-  uniqueIndex, uuid,
+  uniqueIndex, uuid, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 export const worlds = pgTable('worlds', {
@@ -72,7 +72,15 @@ export const players = pgTable('players', {
   isPremium: boolean('is_premium').notNull().default(false),
   protectedUntil: timestamp('protected_until', { withTimezone: true }),
   vacationUntil: timestamp('vacation_until', { withTimezone: true }),
-  allianceId: bigint('alliance_id', { mode: 'number' }),
+  /** İttifak üyeliği (§13.15b). FK döngüsel olduğu için tembel referans (alliances aşağıda). */
+  allianceId: bigint('alliance_id', { mode: 'number' })
+    .references((): AnyPgColumn => alliances.id, { onDelete: 'set null' }),
+  /**
+   * ⭐ İTTİFAK ROLÜ — orijinal istemcinin `q` alanı (`k.java`): **1 Asker · 2 Konsey Üyesi ·
+   * 3 Lider**, ittifaksızken NULL. `alliance_members` ara tablosu yerine kolon: oyuncu aynı anda
+   * tek ittifakta olabilir, her sorguda JOIN taşımak gereksiz.
+   */
+  allianceRole: smallint('alliance_role'),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -80,6 +88,57 @@ export const players = pgTable('players', {
   uniqueIndex('players_world_username').on(t.worldId, t.username),
   uniqueIndex('players_world_account').on(t.worldId, t.accountId),
   index('players_world_score').on(t.worldId, t.score),
+  // "Bu ittifakın üyeleri" sorgusu (üye listesi, puan toplamı, sıralama) tam bu indeksle çalışır.
+  index('players_alliance').on(t.worldId, t.allianceId),
+]);
+
+/* ═══ İTTİFAK (§13.15b) ══════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ İTTİFAK — kurma şartı Kale ≥ 5 (§13.15, config), ad 3-10 karakter ve dünya içinde
+ * benzersiz (büyük/küçük duyarsız), üye sayısı SINIRSIZ (doküman). Üyelik `players.allianceId`
+ * + `players.allianceRole`'de yaşar; bu tablo yalnız kimlik + metin + lider tutar.
+ */
+export const alliances = pgTable('alliances', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull().references(() => worlds.id),
+  name: text('name').notNull(),
+  leaderId: bigint('leader_id', { mode: 'number' }).notNull().references(() => players.id),
+  /** İttifak metni (≤500, orijinal `itMtn/itMtd.do`) — tüm üyeler görür, Konsey+Lider düzenler. */
+  text: text('text').notNull().default(''),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Benzersizlik büyük/küçük duyarsız: "RUN.dll" varken "run.DLL" kurulamaz.
+  uniqueIndex('alliances_world_name').on(t.worldId, sql`lower(${t.name})`),
+]);
+
+/**
+ * ⭐ DAVET + BAŞVURU durum makinesi. Mesaj kutusuna düşen satırlar yalnız BİLDİRİMDİR
+ * (`messages.kind = alliance_invite | alliance_application`); kabul/red bu tabloda işlenir —
+ * `messages` salt-okunur akıştır, durum taşımaz (savaş raporunun `battles`+`messages`
+ * ikilisiyle aynı desen).
+ *
+ * `kind`: `invite` = yönetim oyuncuyu çağırdı · `application` = oyuncu ittifağa başvurdu.
+ * Aynı ikili için aynı türde tek `pending` satır olabilir (kısmî unique indeks).
+ */
+export const allianceInvites = pgTable('alliance_invites', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull(),
+  allianceId: bigint('alliance_id', { mode: 'number' }).notNull()
+    .references(() => alliances.id, { onDelete: 'cascade' }),
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),                       // invite | application
+  /** Daveti gönderen / başvuran oyuncu (bilgi amaçlı; davet eden ittifaktan ayrılmış olabilir). */
+  createdBy: bigint('created_by', { mode: 'number' }).notNull(),
+  status: text('status').notNull().default('pending'), // pending | accepted | rejected | canceled
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  decidedBy: bigint('decided_by', { mode: 'number' }),
+}, (t) => [
+  uniqueIndex('alliance_invites_pending').on(t.allianceId, t.playerId, t.kind)
+    .where(sql`${t.status} = 'pending'`),
+  index('alliance_invites_player').on(t.playerId),
 ]);
 
 export const cities = pgTable('cities', {
