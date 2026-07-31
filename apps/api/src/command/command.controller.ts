@@ -254,6 +254,9 @@ export class CommandController {
           ? {
             name: String(r['name']),
             owner: String(r['owner']),
+            /* ⭐ Kahraman satırında `id` HEROID'dir; mesaj düğmesi oyuncuya yazacağı için
+               sahibinin kimliği ayrıca taşınır (2026-07-31). */
+            playerId: Number(r['player_id']),
             level: Number(r['level']),
             xp: Number(r['xp']),
             dead: r['status'] !== 'alive',
@@ -270,6 +273,8 @@ export class CommandController {
               name: String(r['username']),
               score: Number(r['score']),
               alliance: r['alliance_name'] == null ? null : String(r['alliance_name']),
+              /* Oyuncu sıralamasında `subject_id` zaten playerId; mesaj düğmesi için açık ad. */
+              playerId: Number(r['subject_id']),
               isMine: Number(r['subject_id']) === player.playerId,
             }),
       })),

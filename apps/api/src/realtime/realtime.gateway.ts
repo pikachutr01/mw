@@ -12,7 +12,9 @@
  * odasına yaz" saldırısı soket katmanına hiç ulaşamaz.
  *
  * ⚠️ **İstemci→sunucu tek istisna sohbettir** (§13.12.3): oyun durumu WS üzerinden DEĞİŞTİRİLEMEZ.
- * Bu gateway şu an istemciden HİÇBİR olay kabul etmiyor.
+ * 2026-07-31'de kabul edilen ÜÇ olay bu kuralı bozmuyor — hiçbiri kalıcı durum yazmaz:
+ *   `chat:open` / `chat:close` → yalnız oda katılımı · `chat:typing` → yalnız yayın.
+ * Mesaj GÖNDERME ve okundu işaretleme REST'te kaldı (token tazeliği + bu değişmez).
  */
 import { Server, type Socket } from 'socket.io';
 import type { Server as HttpServer } from 'node:http';
@@ -33,7 +35,27 @@ const room = {
   player: (worldId: number, playerId: number): string => `w${worldId}:p${playerId}`,
   world: (worldId: number): string => `w${worldId}:world`,
   alliance: (worldId: number, allianceId: number): string => `w${worldId}:a${allianceId}`,
+  /**
+   * ⭐ Sohbet odası — YALNIZ "yazıyor…" için (2026-07-31). Mesajın kendisi bu odadan GEÇMEZ;
+   * o, iki tarafın KİŞİSEL odasına gider ki pencere kapalıyken de rozet düşsün.
+   */
+  chat: (worldId: number, channelId: number): string => `w${worldId}:chat:${channelId}`,
 };
+
+/**
+ * Soket başına olay kovası — kötü niyetli bir istemci `chat:open` yağmuruyla adapter'ı
+ * hırpalamasın. Aşan olay SESSİZCE yutulur (hata döndürmek saldırganı bilgilendirir).
+ */
+class EventGate {
+  private hits: number[] = [];
+  allow(limit = 20, windowMs = 10_000): boolean {
+    const now = Date.now();
+    this.hits = this.hits.filter((t) => now - t < windowMs);
+    if (this.hits.length >= limit) return false;
+    this.hits.push(now);
+    return true;
+  }
+}
 
 export class RealtimeGateway {
   private io: Server | null = null;
@@ -103,7 +125,53 @@ export class RealtimeGateway {
     this.markOnline(p, +1);
     socket.emit('ready', { playerId: p.playerId, worldId: p.worldId });
 
+    /* ── SOHBET (§13.12.3) — üçü de yalnız oda/yayın işi, kalıcı durum yazmaz ───────── */
+    const gate = new EventGate();
+    socket.on('chat:open', (raw: unknown, ack?: (r: unknown) => void) => {
+      void this.onChatOpen(socket, p, gate, raw, ack);
+    });
+    socket.on('chat:close', () => this.leaveChat(socket, p));
+    socket.on('chat:typing', (raw: unknown) => {
+      if (!gate.allow()) return;
+      const channelId = Number((raw as { channelId?: unknown })?.channelId ?? 0);
+      // Yalnız AÇIK olduğu kanala yazıyor bildirimi gönderebilir (oda dışına sızmaz).
+      if (!Number.isInteger(channelId) || socket.data.chatChannelId !== channelId) return;
+      socket.to(room.chat(p.worldId, channelId)).emit('chat:typing', { channelId, playerId: p.playerId });
+    });
+
     socket.on('disconnect', () => this.markOnline(p, -1));
+  }
+
+  /**
+   * Sohbet penceresi açıldı: kanal odasına katıl.
+   *
+   * ⚠️ Yetki HER açılışta yeniden doğrulanır (§13.12.3) — soket ömrü uzun, üyelik değişebilir.
+   * ⚠️ Önce ESKİ kanaldan çıkılır: kullanıcı kuralı "aynı anda yalnız tek kişiyle sohbet",
+   *    sunucu da bunu zorlar (istemciye güvenilmez).
+   */
+  private async onChatOpen(
+    socket: Socket, p: SocketPlayer, gate: EventGate, raw: unknown, ack?: (r: unknown) => void,
+  ): Promise<void> {
+    if (!gate.allow()) return;
+    const channelId = Number((raw as { channelId?: unknown })?.channelId ?? 0);
+    if (!Number.isInteger(channelId) || channelId <= 0) { ack?.({ ok: false }); return; }
+
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM chat_participants pt JOIN chat_channels c ON c.id = pt.channel_id
+       WHERE pt.channel_id = ${channelId} AND pt.player_id = ${p.playerId} AND c.world_id = ${p.worldId}
+    `);
+    if (rows.length === 0) { ack?.({ ok: false }); return; }
+
+    this.leaveChat(socket, p);
+    await socket.join(room.chat(p.worldId, channelId));
+    socket.data.chatChannelId = channelId;
+    ack?.({ ok: true });
+  }
+
+  private leaveChat(socket: Socket, p: SocketPlayer): void {
+    const open = socket.data.chatChannelId as number | undefined;
+    if (open) void socket.leave(room.chat(p.worldId, open));
+    socket.data.chatChannelId = undefined;
   }
 
   /**

@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { armySpeed, distance, travelSeconds } from '@mobiwar/engine';
 import { fmt, formatDuration } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
+import { useOpenChat } from '../lib/chat-context.tsx';
 import {
   useAlliance, useAllianceInvite, useCatalog, useCity, useMissionOptions, useSendMission,
   type MissionOption, type WorldSlot,
@@ -50,6 +51,7 @@ export function TargetModal({
   onClose: () => void;
 }) {
   const { cityId } = useActiveCity();
+  const openChat = useOpenChat();
   const target = { k: coords.k, d: coords.d, s: slot.s };
   const options = useMissionOptions(cityId, target);
   const [picked, setPicked] = useState<string | null>(initialType ?? null);
@@ -81,6 +83,21 @@ export function TargetModal({
             'Bu koordinatta şehir yok — iskâna açık.'
           )}
         </div>
+
+        {/* ⭐ MESAJ (kullanıcı 2026-07-31): DM'nin İLK giriş noktası — orijinalde de dünya
+            menüsündeydi (`g.java:1440` case 12: Saldırı · Casusluk · Nakliye · Destek · Mesaj).
+            ⚠️ `InviteRow`'un İÇİNE konmaz: o, yetkisi olmayanda `null` döner ve mesaj düğmesi
+            de kaybolurdu. Onay sorulmaz (kullanıcı: "emin misiniz" gereksiz). */}
+        {slot.city && !slot.city.isOwn ? (
+          <div className="border-b border-border px-3 py-1.5">
+            <Button size="sm" variant="ghost"
+              onClick={() => {
+                const c = slot.city!;
+                onClose();                      // modal kapanır, sohbet penceresi açılır
+                openChat(c.playerId, c.username);
+              }}>Mesaj</Button>
+          </div>
+        ) : null}
 
         {/* ⭐ İTTİFAĞA DAVET (doküman: "dünya ekranında İttifak Daveti seçeneği") — yalnız
             Konsey+Lider görür ve hedef ittifaksızsa (orijinal q>1 kapısı, g.java:1447). */}

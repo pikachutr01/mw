@@ -59,7 +59,44 @@ const INVALIDATES: Record<string, string[]> = {
   /* ⭐ İTTİFAK (2026-07-30): üyelik/metin/ad/dağıtma — ittifak ekranı + sağ panel + ittifak
    * sütunlarını taşıyan görünümler tazelenir. */
   'alliance:changed': ['alliance', 'alliances', 'overview', 'world', 'rankings'],
+  /* ⭐ ÖZEL MESAJ (2026-07-31): sohbet listesi + açık pencerenin geçmişi tazelenir. Olay gövde
+   * taşımaz; balon metni tazelenen geçmişten gelir (tek doğru kaynak sunucu). */
+  'chat:message': ['chat', 'chat-history'],
 };
+
+/* ── Sohbetin istemci→sunucu ucu (§13.12.3) ─────────────────────────────────────
+ *
+ * ⚠️ Socket örneği DIŞARI VERİLMEZ: token yenilendiğinde `start()` soketi komple yeniden
+ * kuruyor ve `removeAllListeners()` çağırıyor. Bir bileşen referansı tutsaydı ölü sokete
+ * emit etmeye devam ederdi. Bunun yerine dinleyiciler MODÜL seviyesinde tutulur ve her yeni
+ * sokete yeniden bağlanır — `stateListeners` ile aynı desen.
+ */
+type Listener = (payload: Record<string, unknown>) => void;
+const chatListeners = new Map<string, Set<Listener>>();
+/** Açık sohbet kanalı — yeniden bağlanınca odaya YENİDEN katılmak için saklanır. */
+let openChatChannelId: number | null = null;
+
+export function onSocketEvent(topic: string, fn: Listener): () => void {
+  const set = chatListeners.get(topic) ?? new Set<Listener>();
+  set.add(fn);
+  chatListeners.set(topic, set);
+  return () => { set.delete(fn); };
+}
+
+/** Sohbet penceresi açıldı → kanal odasına katıl ("yazıyor…" bu odadan akar). */
+export function openChatChannel(channelId: number): void {
+  openChatChannelId = channelId;
+  socket?.emit('chat:open', { channelId });
+}
+
+export function closeChatChannel(): void {
+  openChatChannelId = null;
+  socket?.emit('chat:close');
+}
+
+export function sendTyping(channelId: number): void {
+  socket?.emit('chat:typing', { channelId });
+}
 
 export function connectRealtime(queryClient: QueryClient): () => void {
   const start = (): void => {
@@ -84,6 +121,10 @@ export function connectRealtime(queryClient: QueryClient): () => void {
       setState('online');
       // Kopukken kaçan olaylar olabilir → bağlanır bağlanmaz her şeyi tazele.
       void queryClient.invalidateQueries();
+      /* ⚠️ Tam yeniden bağlanmada socket.io odaları GERİ YÜKLEMEZ (yalnız kısa kesintide
+       * `connectionStateRecovery` çalışır) → açık sohbet varsa odaya yeniden katıl, yoksa
+       * "yazıyor…" sessizce ölür. */
+      if (openChatChannelId != null) socket?.emit('chat:open', { channelId: openChatChannelId });
     });
     socket.on('disconnect', () => setState('offline'));
     socket.on('connect_error', () => setState('offline'));
@@ -91,6 +132,20 @@ export function connectRealtime(queryClient: QueryClient): () => void {
     for (const [topic, keys] of Object.entries(INVALIDATES)) {
       socket.on(topic, () => {
         for (const key of keys) void queryClient.invalidateQueries({ queryKey: [key] });
+      });
+    }
+
+    /**
+     * Sohbet olayları ayrıca abonelere de dağıtılır (pencere balonu anında eklesin diye).
+     *
+     * ⚠️ Gateway olayı `{ topic, ref }` sarmalıyla yolluyor (`dispatch`), `chat:typing` ise
+     * doğrudan düz nesne. Abone her iki şekli de aynı görsün diye `ref` burada AÇILIR —
+     * bu kaçırıldığında balon düşüyor ama "okundu" işareti sessizce hiç tetiklenmiyordu.
+     */
+    for (const topic of ['chat:message', 'chat:typing']) {
+      socket.on(topic, (raw: Record<string, unknown>) => {
+        const payload = (raw?.['ref'] ?? raw ?? {}) as Record<string, unknown>;
+        for (const fn of chatListeners.get(topic) ?? []) fn(payload);
       });
     }
   };

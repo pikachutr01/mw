@@ -65,6 +65,10 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
   // sırası "prev_rank" olarak görünür ve değişim testleri sessizce yanlış sonuç verir.
   await h.db.execute(sql`DELETE FROM rankings WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM ranking_runs WHERE world_id = ${worldId}`);
+  /* Sohbet kanalları da dünya-kapsamlı; `players` silinince katılımcılar CASCADE ile gider ama
+   * KANAL satırı kalır ve "bu dünyada kaç DM kanalı var" sayan testler önceki koşuyu görür. */
+  await h.db.execute(sql`DELETE FROM chat_reports WHERE world_id = ${worldId}`);
+  await h.db.execute(sql`DELETE FROM chat_channels WHERE world_id = ${worldId}`);
 }
 
 /**

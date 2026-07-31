@@ -678,10 +678,25 @@ export const chatParticipants = pgTable('chat_participants', {
     .references(() => players.id, { onDelete: 'cascade' }),
   // Okunmamış sayısı buradan türetilir: COUNT(id > lastReadMessageId)
   lastReadMessageId: bigint('last_read_message_id', { mode: 'number' }).notNull().default(0),
+  /**
+   * ⭐ TEK TARAFLI SOHBET SİLME (kullanıcı, 2026-07-31): "sohbeti sil" bu çıpayı son mesajın
+   * id'sine zıplatır; o oyuncunun geçmiş sorgusu `id > cleared_before_message_id` ile filtreler.
+   *
+   * Neden `deleted_at` DEĞİL: kullanıcının istediği "sonra gelen yeni mesajla sohbet yeniden
+   * görünür ama eskiler gelmez" davranışı bu tek kolondan bedava çıkıyor. `deleted_at` olsaydı
+   * her yeni mesaj yolunda onu NULL'a çekmeyi hatırlamak gerekirdi — unutulacak bir adım.
+   * "İki taraf da silerse veri sunucuda kalır, yalnız bağ kopar" da kendiliğinden sağlanır:
+   * `chat_messages` satırlarına hiç dokunulmaz, iki tarafın da görünür penceresi boşalır.
+   */
+  clearedBeforeMessageId: bigint('cleared_before_message_id', { mode: 'number' }).notNull().default(0),
   mutedUntil: timestamp('muted_until', { withTimezone: true }),
   notify: boolean('notify').notNull().default(true),
   joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex('chat_participants_pk').on(t.channelId, t.playerId)]);
+}, (t) => [
+  uniqueIndex('chat_participants_pk').on(t.channelId, t.playerId),
+  /** "Sohbetlerim" listesi: oyuncunun kanalları tek indeks taramasıyla gelir. */
+  index('chat_participants_player').on(t.playerId),
+]);
 
 export const chatMessages = pgTable('chat_messages', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
@@ -711,6 +726,43 @@ export const chatBans = pgTable('chat_bans', {
   createdBy: bigint('created_by', { mode: 'number' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('chat_bans_player').on(t.playerId, t.until)]);
+
+/**
+ * ⭐ ŞİKAYET KAYDI (§13.12.4) — yalnız KAYIT üretir, otomatik ceza YOK (§9.1.1 değişmezi).
+ * Moderasyon paneli sonraki tur; kullanıcı: *"ileride bir anlaşmazlık durumunda veya hukuki
+ * olarak yöneticinin işine yarayabilir"*.
+ *
+ * ⚠️ FK'lerde CASCADE **bilerek yok** (yalnız `reporter_id` hariç): şikayet kaydı şikayet
+ * ettiği mesajdan, kanaldan ve hatta hedef oyuncudan **uzun yaşamalı**. Bu yüzden hedef
+ * oyuncu ve gövde DENORMALİZE tutulur.
+ */
+export const chatReports = pgTable('chat_reports', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull(),
+  channelId: bigint('channel_id', { mode: 'number' }).notNull(),
+  /** null = tüm sohbet/oyuncu şikayeti; dolu = tek mesaj şikayeti. */
+  messageId: bigint('message_id', { mode: 'number' }),
+  reporterId: bigint('reporter_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  /** Denormalize: mesaj/kanal silinse de kimin şikayet edildiği kalır. */
+  reportedPlayerId: bigint('reported_player_id', { mode: 'number' }).notNull(),
+  /** spam | abuse | scam | cheating | other */
+  reason: text('reason').notNull(),
+  note: text('note'),
+  /** ⭐ Şikayet ANINDAKİ gövde kopyası — retention silse de kanıt durur. */
+  bodySnapshot: text('body_snapshot'),
+  status: text('status').notNull().default('open'), // open | reviewed | actioned | dismissed
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  reviewedBy: bigint('reviewed_by', { mode: 'number' }),
+  resolution: text('resolution'),
+}, (t) => [
+  index('chat_reports_open').on(t.status, t.createdAt),
+  index('chat_reports_target').on(t.reportedPlayerId),
+  /** Aynı oyuncu aynı mesajı iki kez şikayet edemez (oyuncu şikayeti tekrarlanabilir). */
+  uniqueIndex('chat_reports_once').on(t.reporterId, t.messageId)
+    .where(sql`${t.messageId} IS NOT NULL`),
+]);
 
 export const playersRelations = relations(players, ({ one, many }) => ({
   account: one(accounts, { fields: [players.accountId], references: [accounts.id] }),

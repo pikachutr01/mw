@@ -14,9 +14,10 @@ import { useState } from 'react';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
-  useAllianceDecide, useBattle, useMarkRead, useMessages,
-  type MessageRow, type ReportHeroLine,
+  useAllianceDecide, useBattle, useChatConversations, useMarkRead, useMessages,
+  type ChatConversation, type MessageRow, type ReportHeroLine,
 } from '../lib/queries.ts';
+import { useOpenChat } from '../lib/chat-context.tsx';
 import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
 import { Modal } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
@@ -54,9 +55,21 @@ type Tab = 'reports' | 'messages';
 
 const isReport = (m: MessageRow): boolean => m.kind.endsWith('_report');
 
+/**
+ * ⭐ MESAJLAR SEKMESİ İKİ KAYNAKLI (kullanıcı kararı 2026-07-31): oyun mesajları (`messages`
+ * tablosu — ittifak daveti/başvurusu/toplu mesaj/sistem) ile **DM sohbetleri** (`chat_*`)
+ * TARİHE GÖRE TEK listede yaşar. Sunucuda birleştirme YOK: DM satırı `messages` tablosuna
+ * yazılmaz (rapor kutusunu kirletmemesi için), iki sorgu burada birleşir.
+ */
+type InboxRow =
+  | { kind: 'message'; at: string; unread: boolean; message: MessageRow }
+  | { kind: 'chat'; at: string; unread: boolean; chat: ChatConversation };
+
 export function Messages() {
   const messages = useMessages();
+  const chats = useChatConversations();
   const markRead = useMarkRead();
+  const openChat = useOpenChat();
   // ⭐ Açılışta RAPORLAR seçili (kullanıcı kararı): oyuncunun ilk merak ettiği savaş sonucudur.
   const [tab, setTab] = useState<Tab>('reports');
   const [open, setOpen] = useState<MessageRow | null>(null);
@@ -66,9 +79,23 @@ export function Messages() {
   const all = messages.data?.items ?? [];
   const reports = all.filter(isReport);
   const plain = all.filter((m) => !isReport(m));
-  const rows = tab === 'reports' ? reports : plain;
 
-  const unreadIn = (list: MessageRow[]): number => list.filter((m) => !m.readAt).length;
+  const reportRows: InboxRow[] = reports.map((m) => ({
+    kind: 'message', at: m.at, unread: !m.readAt, message: m,
+  }));
+  const messageRows: InboxRow[] = [
+    ...plain.map((m) => ({ kind: 'message' as const, at: m.at, unread: !m.readAt, message: m })),
+    ...(chats.data?.items ?? []).map((c) => ({
+      kind: 'chat' as const,
+      at: c.lastMessageAt ?? new Date(0).toISOString(),
+      unread: c.unreadCount > 0,
+      chat: c,
+    })),
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+
+  const rows = tab === 'reports' ? reportRows : messageRows;
+
+  const unreadIn = (list: InboxRow[]): number => list.filter((r) => r.unread).length;
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(page, pageCount - 1);
   const visible = rows.slice(current * pageSize, current * pageSize + pageSize);
@@ -80,11 +107,12 @@ export function Messages() {
 
   return (
     <div className="space-y-3">
-      <Panel title="Posta kutusu" right={`${messages.data?.unread ?? 0} okunmamış`}>
+      <Panel title="Posta kutusu"
+        right={`${(messages.data?.unread ?? 0) + (chats.data?.unread ?? 0)} okunmamış`}>
         <div className="flex gap-1 p-3">
-          {([['reports', 'Raporlar', reports], ['messages', 'Mesajlar', plain]] as const).map(
+          {([['reports', 'Raporlar', reportRows], ['messages', 'Mesajlar', messageRows]] as const).map(
             ([id, label, list]) => {
-              const n = unreadIn(list as MessageRow[]);
+              const n = unreadIn(list as InboxRow[]);
               return (
                 <button key={id} onClick={() => { setTab(id); setPage(0); }}
                   className={`relative flex-1 rounded-[var(--radius-sm)] border-2 px-2 py-1.5 text-xs ${
@@ -111,19 +139,53 @@ export function Messages() {
           <Empty>{tab === 'reports' ? 'Hiç raporun yok.' : 'Hiç mesajın yok.'}</Empty>
         ) : (
           <ul className="divide-y divide-border">
-            {visible.map((m, i) => {
+            {visible.map((row, i) => {
+              const alt = i % 2 === 1 ? 'bg-row-alt' : '';
+              const shell = `w-full px-3 py-2 text-left hover:bg-raised ${
+                row.unread ? 'border-l-2 border-danger bg-danger/5' : 'border-l-2 border-transparent'
+              }`;
+
+              /* ⭐ SOHBET SATIRI: tıklayınca pencere açılır (modal DEĞİL). Önizleme karşı
+                 tarafın son mesajının satıra sığdığı kadarı (kullanıcı 2026-07-31). */
+              if (row.kind === 'chat') {
+                const c = row.chat;
+                return (
+                  <li key={`c${c.channelId}`} className={alt}>
+                    <button className={shell} onClick={() => openChat(c.playerId, c.username)}>
+                      <div className="flex items-center gap-2.5">
+                        <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={26} height={26}
+                          className="icon-shadow h-[26px] w-[26px] shrink-0 object-contain" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`truncate text-sm ${
+                              row.unread ? 'font-semibold text-ink' : 'text-ink/80'
+                            }`}>{c.username}</span>
+                            <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
+                              {c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleString('tr-TR') : ''}
+                              {c.unreadCount > 0 ? (
+                                <span className="rounded-full bg-danger px-1.5 text-[10px] leading-4 text-on-accent">
+                                  {c.unreadCount}
+                                </span>
+                              ) : null}
+                            </span>
+                          </div>
+                          <div className="truncate text-xs text-muted">
+                            {c.lastFromMe ? 'Sen: ' : ''}{c.lastMessage ?? ''}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                );
+              }
+
+              const m = row.message;
               const t = reportType(m);
-              const unread = !m.readAt;
               return (
-                <li key={m.id} className={i % 2 === 1 ? 'bg-row-alt' : ''}>
+                <li key={m.id} className={alt}>
                   {/* ⭐ Tür ikonlu satır (kullanıcı, 2026-07-30). Okunmamış: sol accent şerit
                       + hafif zemin + kalın başlık — eski "kalın + nokta" düzeninden daha net. */}
-                  <button
-                    className={`w-full px-3 py-2 text-left hover:bg-raised ${
-                      unread ? 'border-l-2 border-danger bg-danger/5' : 'border-l-2 border-transparent'
-                    }`}
-                    onClick={() => openMessage(m)}
-                  >
+                  <button className={shell} onClick={() => openMessage(m)}>
                     <div className="flex items-center gap-2.5">
                       {t.icon ? <MissionIcon id={t.icon} size={26} title={t.title} /> : (
                         <span className="inline-flex w-[26px] shrink-0 justify-center text-lg" aria-hidden>⚙</span>
@@ -131,13 +193,13 @@ export function Messages() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className={`truncate text-sm ${
-                            unread ? 'font-semibold text-ink' : 'text-ink/80'
+                            row.unread ? 'font-semibold text-ink' : 'text-ink/80'
                           }`}>
                             {t.title}
                           </span>
                           <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
                             {new Date(m.at).toLocaleString('tr-TR')}
-                            {unread ? (
+                            {row.unread ? (
                               <span aria-label="okunmadı"
                                 className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
                             ) : null}

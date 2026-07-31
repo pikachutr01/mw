@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getSession, onSessionChange } from './lib/api.ts';
 import { connectRealtime } from './lib/realtime.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
+import { ChatProvider } from './lib/chat-context.tsx';
 import { ConfirmProvider } from './components/Modal.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
 import { Shell } from './components/Shell.tsx';
@@ -60,6 +61,9 @@ export function App() {
       <ConfirmProvider>
         <ActiveCityProvider>
           <BrowserRouter>
+            {/* ⭐ Sohbet penceresi ROTALARIN DIŞINDA: sayfa değişince kapanmaz, oyuncu
+                mesajlaşırken oyununu oynamaya devam eder (§13.12.5). */}
+            <ChatProvider>
             <Shell>
               <Routes>
                 {/* ⭐ Giriş sonrası HER KOŞULDA Ordular (kullanıcı kararı): oyun zamanlanmış
@@ -84,6 +88,7 @@ export function App() {
                 <Route path="*" element={<Navigate to="/armies" replace />} />
               </Routes>
             </Shell>
+            </ChatProvider>
           </BrowserRouter>
         </ActiveCityProvider>
       </ConfirmProvider>

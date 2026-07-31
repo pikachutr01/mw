@@ -18,7 +18,10 @@ import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { fmt, useTick } from '../lib/hooks.ts';
-import { armiesBadge, useAlliance, useCity, useMessages, useMovements, type CityDetail } from '../lib/queries.ts';
+import {
+  armiesBadge, useAlliance, useChatConversations, useCity, useMessages, useMovements,
+  type CityDetail,
+} from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
@@ -298,12 +301,14 @@ const BADGE_TONE: Record<string, string> = {
 
 function SideMenu() {
   const messages = useMessages();
+  const chats = useChatConversations();
   const movements = useMovements();
   const session = getSession();
   const { cityId } = useActiveCity();
   const city = useCity(cityId);
   const activity = cityActivity(city.data, cityId);
-  const unread = messages.data?.unread ?? 0;
+  /* ⭐ Rozet İKİ kaynağın toplamı (2026-07-31): posta kutusu + okunmamış özel mesajlar. */
+  const unread = (messages.data?.unread ?? 0) + (chats.data?.unread ?? 0);
   const armies = armiesBadge(movements.data?.movements ?? []);
 
   return (
@@ -431,10 +436,12 @@ function SidePanels() {
 
 function BottomBar() {
   const messages = useMessages();
+  const chats = useChatConversations();
   const movements = useMovements();
   const { pathname } = useLocation();
 
-  const unread = messages.data?.unread ?? 0;
+  /* ⭐ Rozet İKİ kaynağın toplamı (2026-07-31): posta kutusu + okunmamış özel mesajlar. */
+  const unread = (messages.data?.unread ?? 0) + (chats.data?.unread ?? 0);
   const armies = armiesBadge(movements.data?.movements ?? []);
 
   return (

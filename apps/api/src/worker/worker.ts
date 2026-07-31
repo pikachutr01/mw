@@ -82,6 +82,20 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
   dispatcher.on('*', async (row) => {
     const event = eventForOutbox(row.topic, row.payload, row.worldId);
     if (event) await opts.bus?.publish(event);
+
+    /**
+     * ⭐ PUSH ZEMİNİ (2026-07-31, kullanıcı: "bildirim sistemi entegre edildiğinde oraya
+     * bağlarız"). Buraya İKİNCİ bir `dispatcher.on(...)` EKLENMEMELİ — dispatcher tek `'*'`
+     * sink çağırıyor, ikincisi birincisini susturur. O yüzden push dalı aynı sink'in içinde.
+     *
+     * Bağlanacak akış: alıcı WS'te değilse (`gateway.isOnline(recipientId) === false`)
+     * `push_subscriptions`'tan aboneliğini bul → web-push/FCM'e yolla. Payload ZATEN hazır:
+     * `chat:dm` satırı `recipientId` ve `preview` taşıyor (`ChatService.send`).
+     * Eksik olan tek şey abonelik tablosu + VAPID/FCM anahtarları (§7.2).
+     */
+    if (row.topic === 'chat:dm') {
+      // TODO(push): notifyIfOffline(row.payload.recipientId, row.payload.preview)
+    }
   });
 
   return {

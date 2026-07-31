@@ -254,6 +254,22 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 /**
+ * Çok satırlı metin kutusu — ittifak metni, toplu mesaj ve sohbet yazma alanı aynı görünümü
+ * paylaşsın diye tek yerde (üç ekran aynı sınıf dizisini kopyalıyordu).
+ */
+export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={
+        'w-full rounded-[var(--radius-sm)] border border-border bg-raised p-2 text-sm '
+        + `text-ink placeholder:text-muted ${props.className ?? ''}`
+      }
+    />
+  );
+}
+
+/**
  * ⭐ ADET KUTUSU — tüm sayı/adet girişleri AYNI sabit genişlikte (kullanıcı 2026-07-30).
  *
  * `Input`'u sarmıyor, çünkü oradaki `w-full` Tailwind ÇIKTI SIRASINDA `w-16/w-20/w-24`'ten

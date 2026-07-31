@@ -191,6 +191,21 @@ export function eventForOutbox(
       };
 
     /**
+     * ⭐ ÖZEL MESAJ (2026-07-31) — İKİ tarafa da gider: alıcı balonu/rozeti görsün, gönderenin
+     * başka sekmesi/cihazı da senkronlansın.
+     *
+     * ⚠️ Olay GÖVDE TAŞIMAZ, yalnız kimlik: NOTIFY 8000 bayt sınırı ve "olay veri değil haber
+     * taşır" kuralı. İstemci olayı alınca geçmişi/listeyi tazeler. Önizleme metni outbox
+     * PAYLOAD'ında durur (push bildirimi ileride oradan besleneceği için) ama WS olayına girmez.
+     */
+    case 'chat:dm':
+      return {
+        topic: 'chat:message', worldId,
+        playerIds: players(num(payload['senderId']), num(payload['recipientId'])),
+        ref: { channelId: num(payload['channelId']), messageId: num(payload['messageId']) },
+      };
+
+    /**
      * Sıralama anlık görüntüsü — **dünya geneli** yayın (`playerIds` boş): sıra herkesinkini
      * aynı anda değiştirir, oyuncu başına olay üretmek 10.000 satırlık bir dünyada anlamsız olurdu.
      */

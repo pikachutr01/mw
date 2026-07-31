@@ -19,7 +19,9 @@ import {
   useAllianceLeave, useAllianceMemberAction, useAllianceRename, useAllianceSearch,
   useAllianceText, type AllianceMember,
 } from '../lib/queries.ts';
-import { Badge, Button, Empty, ErrorBox, Input, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
+import {
+  Badge, Button, Empty, ErrorBox, Input, Panel, Skeleton, Td, TextArea, Th,
+} from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 
 /** Rütbe adları — ekran görüntüsündeki yazımla ("Konsey Üyesi"; istemci içi string "Konsey"). */
@@ -297,10 +299,9 @@ function TextEditor({ initial, onClose }: { initial: string; onClose: () => void
   return (
     <Modal title="İttifak Metni" onClose={onClose} width="md">
       <div className="space-y-2">
-        <textarea
+        <TextArea
           value={text} maxLength={500} rows={6}
           onChange={(e) => setText(e.target.value)}
-          className="w-full rounded-[var(--radius-sm)] border border-border bg-raised p-2 text-sm text-ink"
           aria-label="İttifak metni"
         />
         <div className="text-right text-[11px] text-muted tnum">{text.length}/500</div>
@@ -325,10 +326,9 @@ function BroadcastBox({ onClose }: { onClose: () => void }) {
     <Modal title="İttifağa Mesaj" onClose={onClose} width="md">
       <div className="space-y-2">
         <p className="text-xs text-muted">Mesaj TÜM üyelerin posta kutusuna gönderilir.</p>
-        <textarea
+        <TextArea
           value={text} maxLength={500} rows={4}
           onChange={(e) => setText(e.target.value)}
-          className="w-full rounded-[var(--radius-sm)] border border-border bg-raised p-2 text-sm text-ink"
           aria-label="İttifak mesajı"
         />
         <ErrorBox error={send.error} />

@@ -8,7 +8,10 @@
  * besleniyor: aralığı düşürmek istemek, aslında WS eşlemesinde bir konunun eksik olduğunun
  * habercisidir — çözüm yoklamayı sıklaştırmak değil, olayı eklemektir.
  */
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useInfiniteQuery, useMutation, useQuery, useQueryClient,
+  type UseInfiniteQueryResult, type UseQueryResult,
+} from '@tanstack/react-query';
 import { api } from './api.ts';
 import { noteServerTime } from './hooks.ts';
 
@@ -391,6 +394,11 @@ export interface RankingRow {
   id: number;
   name: string;
   isMine: boolean;
+  /**
+   * Satırın oyuncusu. ⚠️ Kahraman sekmesinde `id` HEROID'dir — mesaj düğmesi bu alanı
+   * kullanmalı, `id`'yi değil. İttifak sekmesinde yoktur.
+   */
+  playerId?: number;
   /** Oyuncu sekmesi. ⚠️ Şehir sayısı BİLEREK yok — orijinal tabloda da yok (`scr_web02`). */
   score?: number;
   alliance?: string | null;
@@ -822,3 +830,125 @@ export const useAllianceMemberAction = () =>
 export const useAllianceDecide = () =>
   useAllianceAction<{ inviteId: number; accept: boolean }>(
     (b) => `/api/v1/alliance/invites/${b.inviteId}/${b.accept ? 'accept' : 'reject'}`, () => undefined);
+
+/* ── ÖZEL MESAJLAŞMA (§13.12) ──────────────────────────────────────────────────
+ *
+ * ⚠️ Sohbet, Mesajlar kutusundan AYRI bir veri yolu: rapor kutusu (`messages`) kalıcı ve
+ * oyuncu-bazlı, sohbet anlık ve kanal-bazlı. Mesajlar ekranı ikisini tarihe göre birleştirir
+ * (kullanıcı kararı 2026-07-31), ama sunucuda `messages` tablosuna DM satırı yazılmaz.
+ */
+
+export interface ChatConversation {
+  channelId: number;
+  playerId: number;
+  username: string;
+  lastMessage: string | null;
+  lastFromMe: boolean;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  /** Bu oyuncuyu BEN engelledim mi (yazma kutusu kapanır, sebebi söylenir)? */
+  blocked: boolean;
+}
+
+export interface ChatMessage {
+  id: number;
+  channelId: number;
+  senderId: number | null;
+  body: string;
+  createdAt: string;
+  /** İyimser balon: sunucu onayı gelene kadar soluk çizilir. */
+  pending?: boolean;
+}
+
+export const useChatConversations = (): UseQueryResult<{ items: ChatConversation[]; unread: number }> =>
+  useQuery({
+    queryKey: ['chat'],
+    queryFn: () => get<{ items: ChatConversation[]; unread: number }>('/api/v1/chat/conversations'),
+    refetchInterval: SAFETY_NET_MS,
+  });
+
+/**
+ * Sohbet geçmişi — **keyset sayfalama** (projede ilk `useInfiniteQuery`).
+ * Sunucu en YENİ mesajı önce döner; `before` bir sonraki sayfanın imleci (en eski görünen id).
+ */
+export const useChatHistory = (
+  channelId: number | null,
+): UseInfiniteQueryResult<{ pages: { items: ChatMessage[]; hasMore: boolean }[] }, Error> =>
+  useInfiniteQuery({
+    queryKey: ['chat-history', channelId],
+    enabled: channelId != null,
+    initialPageParam: null as number | null,
+    queryFn: ({ pageParam }) => get<{ items: ChatMessage[]; hasMore: boolean }>(
+      `/api/v1/chat/conversations/${channelId}/messages${pageParam ? `?before=${pageParam}` : ''}`,
+    ),
+    getNextPageParam: (last) => (last.hasMore && last.items.length > 0
+      ? last.items[last.items.length - 1]!.id
+      : undefined),
+  });
+
+/** Sohbeti aç (yoksa yaratır) → kanal kimliği. */
+export function useOpenConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (playerId: number) =>
+      api<{ channelId: number }>('/api/v1/chat/conversations', {
+        method: 'POST', body: { withPlayerId: playerId },
+      }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['chat'] }); },
+  });
+}
+
+/**
+ * Mesaj gönderme — **iyimser**: balon anında listeye eklenir (`useMarkRead` deseni).
+ * `clientMsgId` hem çift gönderimi (ağ tekrarı) hem çift balonu (WS yankısı) engeller.
+ */
+export function useSendChatMessage(channelId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { body: string; clientMsgId: string }) =>
+      api<ChatMessage>(`/api/v1/chat/conversations/${channelId}/messages`, {
+        method: 'POST', body: v,
+      }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['chat-history', channelId] });
+      void qc.invalidateQueries({ queryKey: ['chat'] });
+    },
+  });
+}
+
+export function useMarkChatRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (channelId: number) =>
+      api(`/api/v1/chat/conversations/${channelId}/read`, { method: 'POST' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['chat'] }); },
+  });
+}
+
+/** Sohbeti sil — YALNIZ bende; karşı tarafta aynen durur, sunucudan silinmez. */
+export function useClearConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (channelId: number) =>
+      api(`/api/v1/chat/conversations/${channelId}`, { method: 'DELETE' }),
+    onSuccess: (_d, channelId) => {
+      void qc.invalidateQueries({ queryKey: ['chat'] });
+      void qc.invalidateQueries({ queryKey: ['chat-history', channelId] });
+    },
+  });
+}
+
+export function useBlockPlayer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { playerId: number; blocked: boolean }) => (v.blocked
+      ? api('/api/v1/chat/blocks', { method: 'POST', body: { playerId: v.playerId } })
+      : api(`/api/v1/chat/blocks/${v.playerId}`, { method: 'DELETE' })),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['chat'] }); },
+  });
+}
+
+export const useReportChat = () => useMutation({
+  mutationFn: (v: { channelId: number; messageId?: number | null; reason: string; note?: string }) =>
+    api('/api/v1/chat/reports', { method: 'POST', body: v }),
+});

@@ -147,6 +147,23 @@ describe('outbox → istemci olayı eşlemesi', () => {
     expect(e.playerIds).toEqual([42]);
   });
 
+  /**
+   * ⭐ ÖZEL MESAJ (2026-07-31): olay İKİ tarafa gider (alıcı rozeti görsün, gönderenin başka
+   * sekmesi senkronlansın) ve **GÖVDE TAŞIMAZ** — yalnız kimlik. Gövde WS'e çıksaydı uzun
+   * mesajlar 7500 bayt guard'ına takılıp olayı SESSİZCE düşürebilirdi.
+   */
+  it('⭐ chat:dm iki tarafa gider ve GÖVDE taşımaz', () => {
+    const e = eventForOutbox('chat:dm', {
+      channelId: 5, messageId: 42, senderId: 7, recipientId: 9,
+      preview: 'gizli kalması gereken metin',
+    }, 3)!;
+    expect(e).not.toBeNull();
+    expect(e.topic).toBe('chat:message');
+    expect(e.playerIds.sort()).toEqual([7, 9]);
+    expect(Object.keys(e.ref ?? {}).sort()).toEqual(['channelId', 'messageId']);
+    expect(JSON.stringify(e)).not.toContain('gizli kalması');
+  });
+
   it('savaş sonucu İKİ tarafa da gider', () => {
     const e = eventForOutbox('battle:resolved', {
       battleId: 9, attackerPlayerId: 3, defenderPlayerId: 4, cityId: 2,

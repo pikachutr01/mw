@@ -24,6 +24,25 @@ export const chatChannel = z.object({
 });
 export type ChatChannel = z.infer<typeof chatChannel>;
 
+/**
+ * ⭐ SOHBET LİSTESİ SATIRI (kullanıcı, 2026-07-31): Mesajlar sekmesinde oyun mesajlarıyla
+ * tarihe göre TEK listede görünür; son mesajın satıra sığdığı kadarı önizlenir.
+ */
+export const chatConversation = z.object({
+  channelId: chatChannelId,
+  /** Karşı taraf — DM'de daima dolu. */
+  playerId,
+  username: z.string(),
+  lastMessage: z.string().nullable(),
+  /** Son mesajı ben mi yazdım (önizlemede "Sen: …" için)? */
+  lastFromMe: z.boolean(),
+  lastMessageAt: z.string().datetime().nullable(),
+  unreadCount: z.number().int().nonnegative(),
+  /** Bu oyuncuyu BEN engelledim mi (yazma kutusunu kapatıp sebebini söylemek için)? */
+  blocked: z.boolean(),
+});
+export type ChatConversation = z.infer<typeof chatConversation>;
+
 export const chatMessage = z.object({
   id: z.number().int().positive(),
   channelId: chatChannelId,
@@ -55,8 +74,29 @@ export const chatReadEvent = z.object({
   lastReadMessageId: z.number().int().nonnegative(),
 });
 
+/**
+ * ⭐ Pencere açılırken/kapanırken oda katılımı (2026-07-31). Mesaj GÖVDESİ bu odadan
+ * gelmez — o iki tarafın kişisel odasına gider ki pencere kapalıyken de ulaşsın. Kanal
+ * odasının tek işi "yazıyor…" bildirimi.
+ */
+export const chatOpenEvent = z.object({ channelId: chatChannelId });
+
 /** DM açma: karşı oyuncu AYNI DÜNYADA olmalı (sunucu doğrular, §13.12.1b). */
 export const openDmRequest = z.object({ withPlayerId: playerId });
+
+/** Mesaj gönderme (REST gövdesi — taşıma kararı §13.12.3'te REST'e çevrildi). */
+export const sendChatRequest = z.object({
+  body: z.string().trim().min(1).max(500),
+  clientMsgId: z.string().uuid(),
+});
+
+/** Şikayet: mesaj bazlı (messageId dolu) ya da oyuncu bazlı (null). */
+export const chatReportRequest = z.object({
+  channelId: chatChannelId,
+  messageId: z.number().int().positive().nullable().optional(),
+  reason: z.enum(['spam', 'abuse', 'scam', 'cheating', 'other']),
+  note: z.string().trim().max(500).optional(),
+});
 
 /** Sunucunun reddetme sebepleri — istemci bunları Türkçe metne çevirir (i18n, §13.14.2). */
 export const chatErrorCode = z.enum([
@@ -70,6 +110,19 @@ export const chatErrorCode = z.enum([
   'global_disabled',
   'global_account_too_new',
   'wrong_world',
+  /**
+   * ⭐ Karşı taraf beni engellemiş (2026-07-31). İstemci bunu **"Mesajınız iletilemedi!"**
+   * diye gösterir — "seni engelledi" DEMEZ (kullanıcı kararı): bir şeylerin ters gittiği
+   * anlaşılır ama engelin varlığı doğrulanmaz.
+   */
+  'blocked',
+  /** BEN onu engelledim → kendi yazma kutum kapalı; bu tarafta sebep AÇIKÇA söylenir. */
+  'blocked_by_me',
+  /** Aynı metin çok kısa sürede tekrar — mükerrer mesaj koruması. */
+  'duplicate_message',
+  'conversation_not_found',
+  /** Kendine mesaj gönderilemez. */
+  'self_message',
 ]);
 export type ChatErrorCode = z.infer<typeof chatErrorCode>;
 

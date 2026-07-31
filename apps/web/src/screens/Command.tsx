@@ -29,6 +29,7 @@ import {
   useOverview, useRankings, type NamedType, type Overview, type RankingKind,
 } from '../lib/queries.ts';
 import { fmt } from '../lib/hooks.ts';
+import { useOpenChat } from '../lib/chat-context.tsx';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { AllianceScreen } from './Alliance.tsx';
@@ -346,7 +347,7 @@ function Rankings(): React.ReactElement {
                       <Td className="text-center">
                         {kind === 'alliance' ? null : (
                           <MessageButton name={kind === 'hero' ? r.owner ?? r.name : r.name}
-                            disabled={r.isMine} />
+                            playerId={r.playerId ?? null} disabled={r.isMine} />
                         )}
                       </Td>
                     </tr>
@@ -371,15 +372,20 @@ function Rankings(): React.ReactElement {
  * Satır sonundaki mesaj düğmesi — orijinalde sıralama satırının menüsünde **Mesaj** vardı
  * (`g.java` case 106: *Mesaj · Dünyada Bul · İttifağa Davet*).
  *
- * ⚠️ DM (§13.12) henüz açılmadı; düğme yerini şimdiden tutuyor ve **sebebini söylüyor** — gizli
- * bir düğmeyi sonradan keşfettirmektense kapalı olduğunu göstermek doğru.
+ * ⭐ 2026-07-31'de ETKİNLEŞTİ: tıklayınca sohbet penceresi açılır.
+ * ⚠️ Kahraman sekmesinde satırın `id`'si HEROID'dir; bu yüzden sahibinin `playerId`'si
+ * sunucudan ayrıca geliyor — o olmadan yanlış kişiye sohbet açılırdı.
  */
-function MessageButton({ name, disabled }: { name: string; disabled: boolean }) {
-  if (disabled) return <span className="text-muted">—</span>;
+function MessageButton({ name, playerId, disabled }: {
+  name: string; playerId: number | null; disabled: boolean;
+}) {
+  const openChat = useOpenChat();
+  if (disabled || playerId == null) return <span className="text-muted">—</span>;
   return (
-    <Tooltip label={`${name} oyuncusuna mesaj — özel mesaj henüz açılmadı`}>
-      <button type="button" disabled aria-label={`${name} oyuncusuna mesaj`}
-        className="inline-flex cursor-not-allowed items-center opacity-45">
+    <Tooltip label={`${name} oyuncusuna mesaj`}>
+      <button type="button" aria-label={`${name} oyuncusuna mesaj`}
+        onClick={() => openChat(playerId, name)}
+        className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
         <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={20} height={20}
           className="icon-shadow h-5 w-5 object-contain" />
       </button>
