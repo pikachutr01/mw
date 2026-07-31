@@ -7,6 +7,7 @@ import { ActiveCityProvider } from './lib/city-context.tsx';
 import { ChatProvider } from './lib/chat-context.tsx';
 import { ConfirmProvider } from './components/Modal.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
+import { NotifyProvider } from './components/Toaster.tsx';
 import { Shell } from './components/Shell.tsx';
 import { Armies } from './screens/Armies.tsx';
 import { Auth } from './screens/Auth.tsx';
@@ -61,6 +62,10 @@ export function App() {
       <ConfirmProvider>
         <ActiveCityProvider>
           <BrowserRouter>
+            {/* ⭐ Bildirim şeridi de rotaların DIŞINDA (§7.2): gelen saldırı toast'ı, oyuncu
+                hangi ekranda olursa olsun görünmeli — sayfa değişimi onu düşürmemeli.
+                `BrowserRouter` İÇİNDE olmak zorunda: tıklanınca `useNavigate` ile gidiyor. */}
+            <NotifyProvider>
             {/* ⭐ Sohbet penceresi ROTALARIN DIŞINDA: sayfa değişince kapanmaz, oyuncu
                 mesajlaşırken oyununu oynamaya devam eder (§13.12.5). */}
             <ChatProvider>
@@ -89,6 +94,7 @@ export function App() {
               </Routes>
             </Shell>
             </ChatProvider>
+            </NotifyProvider>
           </BrowserRouter>
         </ActiveCityProvider>
       </ConfirmProvider>

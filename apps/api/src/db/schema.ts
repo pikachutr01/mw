@@ -51,6 +51,16 @@ export const accounts = pgTable('accounts', {
   // Tema/dil tercihi HESAP düzeyinde → web ve Flutter aynı tercihi görür (§13.13.4)
   uiTheme: text('ui_theme').notNull().default('system'), // system | light | dark
   uiLocale: text('ui_locale').notNull().default('tr'),
+  /**
+   * ⭐ BİLDİRİM TERCİHLERİ (§7.2) — `{ attack: false, production: false }` gibi.
+   *
+   * **Eksik anahtar = kategori varsayılanı** (`NOTIFY_DEFAULTS`), `false` = kapalı. Bu yüzden
+   * boş `{}` "hepsi varsayılan" demektir ve yeni bir kategori eklendiğinde eski satırlara
+   * dokunmak gerekmez — kolon eklemek yerine jsonb seçilmesinin tek sebebi bu.
+   *
+   * Tema/dil gibi HESAP düzeyinde: abonelik tarayıcıya ait, tarayıcı hesaba.
+   */
+  notifyPrefs: jsonb('notify_prefs').notNull().default({}),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   failedLogins: smallint('failed_logins').notNull().default(0),
@@ -762,6 +772,40 @@ export const chatReports = pgTable('chat_reports', {
   /** Aynı oyuncu aynı mesajı iki kez şikayet edemez (oyuncu şikayeti tekrarlanabilir). */
   uniqueIndex('chat_reports_once').on(t.reporterId, t.messageId)
     .where(sql`${t.messageId} IS NOT NULL`),
+]);
+
+/**
+ * ⭐ WEB PUSH ABONELİĞİ (§7.2) — bir satır = bir TARAYICI (ya da kurulu PWA).
+ *
+ * **Neden `account_id`, `player_id` değil:** abonelik tarayıcıya aittir, tarayıcı da hesaba.
+ * Aynı hesap iki dünyada oynuyorsa ikisinin bildirimi de aynı tarayıcıya düşmeli. Hedefleme
+ * yine oyuncu düzeyinde yapılır; `player → account → subscriptions` ile çözülür.
+ *
+ * `endpoint` push servisinin (FCM/Mozilla/Apple) ürettiği URL'dir ve **küresel benzersizdir** —
+ * unique kısıt bu yüzden ona konuyor: aynı tarayıcı ikinci kez abone olursa satır güncellenir,
+ * çoğalmaz.
+ *
+ * ⚠️ `fail_count`/`failed_at` olmadan bu tablo **çöple dolar**: kullanıcı izni geri aldığında
+ * push servisi 404/410 döner ve abonelik sonsuza kadar denenmeye devam ederdi.
+ */
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  accountId: bigint('account_id', { mode: 'number' }).notNull()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  endpoint: text('endpoint').notNull(),
+  /** Tarayıcının ürettiği ECDH açık anahtarı + auth secret (yük şifrelemesi için). */
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  /** `x-device-id` başlığıyla eşleşir (`sessions.device_id` emsali) — çıkışta temizlenebilsin. */
+  deviceId: text('device_id'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  failCount: smallint('fail_count').notNull().default(0),
+  failedAt: timestamp('failed_at', { withTimezone: true }),
+}, (t) => [
+  uniqueIndex('push_subscriptions_endpoint').on(t.endpoint),
+  index('push_subscriptions_account').on(t.accountId),
 ]);
 
 export const playersRelations = relations(players, ({ one, many }) => ({

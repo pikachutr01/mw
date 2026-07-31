@@ -10,7 +10,8 @@
  * ⭐ Okunmamış sayacı **iyimser** düşer: mesaja tıklandığı anda sol paneldeki rozet azalır,
  * sunucu yanıtı beklenmez (bkz. `useMarkRead`).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
@@ -72,6 +73,7 @@ export function Messages() {
   const openChat = useOpenChat();
   // ⭐ Açılışta RAPORLAR seçili (kullanıcı kararı): oyuncunun ilk merak ettiği savaş sonucudur.
   const [tab, setTab] = useState<Tab>('reports');
+  const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<MessageRow | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -104,6 +106,29 @@ export function Messages() {
     if (!m.readAt) markRead.mutate(m.id);
     setOpen(m);
   };
+
+  /**
+   * ⭐ DERİN BAĞLANTI `/messages?dm=<playerId>` (§7.2). Bildirim kataloğu DM bildirimlerine bu
+   * adresi koyuyor; hem toast tıklaması hem işletim sistemi push'u AYNI yere düşsün diye.
+   *
+   * Sohbet penceresi ad ister ama bildirimden yalnız kimlik geliyor → ad, sohbet listesinden
+   * çözülür. Bu yüzden liste yüklenene kadar beklenir. Adres, pencere açılınca temizlenir:
+   * kalırsa oyuncu sekmeyi kapattığında pencere kendini tekrar tekrar açardı.
+   */
+  const dmParam = params.get('dm');
+  useEffect(() => {
+    if (!dmParam) return;
+    const playerId = Number(dmParam);
+    const known = (chats.data?.items ?? []).find((c) => c.playerId === playerId);
+    if (!chats.data) return;                   // liste henüz gelmedi; gelince tekrar denenir
+    setTab('messages');
+    if (known) openChat(known.playerId, known.username);
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('dm');
+      return next;
+    }, { replace: true });
+  }, [dmParam, chats.data, openChat, setParams]);
 
   return (
     <div className="space-y-3">

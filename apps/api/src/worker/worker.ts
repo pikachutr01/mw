@@ -12,6 +12,8 @@ import { missionHandlers } from '../missions/mission.handlers.ts';
 import { echoHandler } from '../missions/echo.handler.ts';
 import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
+import { notificationForOutbox } from '../notify/notify.catalog.ts';
+import { NotifyService } from '../notify/notify.service.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
 import { createRankingSnapshotHandler, ensureRankingSchedule } from '../ranking/ranking.handler.ts';
@@ -24,6 +26,8 @@ export interface WorkerOptions {
   pollIntervalMs?: number;
   /** Gerçek zamanlı yol. Verilmezse olaylar yalnız outbox'ta kalır (testlerde böyle). */
   bus?: RealtimeBus;
+  /** Bildirim katmanı (toast + push). Verilmezse bildirim üretilmez — testlerde böyle. */
+  notifier?: NotifyService | null;
 }
 
 export interface Worker {
@@ -73,28 +77,29 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
   });
 
   /**
-   * ⭐ OUTBOX → GERÇEK ZAMANLI YOL.
+   * ⭐ OUTBOX → GERÇEK ZAMANLI YOL + BİLDİRİM.
    *
    * Teslim garantisi outbox'ta (§1); bu kanal onun **hızlı** ucu. Yayın başarısız olsa bile
    * satır teslim edilmiş sayılır: WS "kaçırılabilir" katmandır, kalıcı kayıt zaten DB'dedir.
    * Aksi hâlde bir soket hatası bildirimi sonsuza kadar yeniden denetirdi.
+   *
+   * ⚠️ Buraya İKİNCİ bir `dispatcher.on('*', …)` EKLENMEMELİ — `sinkFor` tek sink döndürür
+   * (`outbox.dispatcher.ts`), ikinci `'*'` birincisini susturur. Bu yüzden bildirim dalı
+   * ayrı bir sink değil, aynı sink'in içinde. (Konuya ÖZEL sink eklemek güvenli: tam eşleşme
+   * `'*'`den önce bakılır.)
+   *
+   * Aynı satırın iki okuyucusu var ve ikisi bilerek ayrı:
+   *   • `eventForOutbox`      → "istemci hangi sorguyu tazelesin" (kimlik taşır)
+   *   • `notificationForOutbox` → "insana ne yazacağız" (metin üretir)
+   * Bir olayın ekranı tazelemesi gerekir ama bildirim üretmesi gerekmeyebilir; tersi de doğru.
    */
   dispatcher.on('*', async (row) => {
     const event = eventForOutbox(row.topic, row.payload, row.worldId);
     if (event) await opts.bus?.publish(event);
 
-    /**
-     * ⭐ PUSH ZEMİNİ (2026-07-31, kullanıcı: "bildirim sistemi entegre edildiğinde oraya
-     * bağlarız"). Buraya İKİNCİ bir `dispatcher.on(...)` EKLENMEMELİ — dispatcher tek `'*'`
-     * sink çağırıyor, ikincisi birincisini susturur. O yüzden push dalı aynı sink'in içinde.
-     *
-     * Bağlanacak akış: alıcı WS'te değilse (`gateway.isOnline(recipientId) === false`)
-     * `push_subscriptions`'tan aboneliğini bul → web-push/FCM'e yolla. Payload ZATEN hazır:
-     * `chat:dm` satırı `recipientId` ve `preview` taşıyor (`ChatService.send`).
-     * Eksik olan tek şey abonelik tablosu + VAPID/FCM anahtarları (§7.2).
-     */
-    if (row.topic === 'chat:dm') {
-      // TODO(push): notifyIfOffline(row.payload.recipientId, row.payload.preview)
+    if (opts.notifier) {
+      const notes = notificationForOutbox(row.topic, row.payload, row.worldId);
+      if (notes.length > 0) await opts.notifier.deliver(notes);
     }
   });
 

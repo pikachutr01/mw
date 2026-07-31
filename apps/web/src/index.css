@@ -176,6 +176,29 @@ h1, h2, h3, .display {
 }
 
 /**
+ * ⭐ BİLDİRİM ŞERİDİ (toast) — kullanıcı tarifi: *"sağdan animasyonlu çıkıp birkaç saniye sonra
+ * yine sağa doğru kayarak kaybolan"*. Masaüstünde de mobilde de aynı yön.
+ *
+ * ⚠️ `prefers-reduced-motion` açık olan kullanıcıda kayma YAPILMAZ, yalnız solar. Hareket
+ * duyarlılığı olan oyuncuda ekranın kenarından fırlayan kutu gerçek bir rahatsızlık sebebi.
+ */
+@keyframes mw-toast-in {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes mw-toast-out {
+  from { transform: translateX(0);    opacity: 1; }
+  to   { transform: translateX(110%); opacity: 0; }
+}
+.mw-toast-in  { animation: mw-toast-in 260ms cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.mw-toast-out { animation: mw-toast-out 220ms cubic-bezier(0.5, 0, 0.8, 0.4) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mw-toast-in  { animation: none; opacity: 1; transform: none; }
+  .mw-toast-out { animation: none; opacity: 0; transform: none; }
+}
+
+/**
  * ⭐ SAYI KUTULARINDA OK YOK (kullanıcı kararı 2026-07-28). Tarayıcının artır/azalt okları
  * dar kutuda yerin yarısını yiyor ve dokunmatikte yanlışlıkla basılıyordu; adet zaten elle
  * yazılıyor ya da "hepsi" düğmesiyle dolduruluyor.

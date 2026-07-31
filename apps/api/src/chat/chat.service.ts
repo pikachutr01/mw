@@ -200,7 +200,8 @@ export class ChatService {
        * ⭐ Outbox: olay İKİ tarafa da gider (gönderene de — başka sekmesi/cihazı açık olabilir).
        * Yük yalnız KİMLİK + kısa önizleme taşır; tam gövde WS'e çıkmaz (NOTIFY 8000 bayt sınırı
        * ve "olay veri değil haber taşır" kuralı). İstemci olayı alınca geçmişi tazeler.
-       * `senderName`/`preview` push bildiriminin ileride kullanacağı alanlar.
+       * `senderName`/`preview` bildirim katmanının kullandığı alanlar (`notify.catalog.ts`):
+       * push başlığı "Ayla" olur, gövde önizleme. WS olayına bunlar GEÇMEZ.
        */
       await tx.execute(sql`
         INSERT INTO outbox (world_id, topic, payload)
@@ -208,6 +209,7 @@ export class ChatService {
         channelId: o.channelId,
         messageId: id,
         senderId: o.playerId,
+        senderName: peer.myName,
         recipientId: peer.playerId,
         preview: body.slice(0, 80),
       })}::jsonb)
@@ -395,18 +397,22 @@ export class ChatService {
   /** Karşı taraf + kendi katılımım (tek sorgu). */
   private async peerOf(
     tx: Tx, channelId: number, playerId: number, worldId: number,
-  ): Promise<{ playerId: number; clearedBefore: number }> {
+  ): Promise<{ playerId: number; clearedBefore: number; myName: string }> {
     const [r] = await tx.execute<Record<string, unknown>>(sql`
-      SELECT me.cleared_before_message_id, other.player_id AS other_id
+      SELECT me.cleared_before_message_id, other.player_id AS other_id, sender.username AS my_name
         FROM chat_participants me
         JOIN chat_channels c ON c.id = me.channel_id
         JOIN chat_participants other ON other.channel_id = c.id AND other.player_id <> me.player_id
+        -- Gönderenin adı push başlığı için ("Ayla: …"); zaten atılan sorguya iliştirildi ki
+        -- bildirim uğruna mesaj yolunda ikinci bir tur oluşmasın.
+        JOIN players sender ON sender.id = me.player_id
        WHERE me.channel_id = ${channelId} AND me.player_id = ${playerId} AND c.world_id = ${worldId}
     `);
     if (!r) throw new ChatError('not_a_member', 'Bu sohbete erişimin yok.');
     return {
       playerId: Number(r['other_id']),
       clearedBefore: Number(r['cleared_before_message_id'] ?? 0),
+      myName: String(r['my_name'] ?? ''),
     };
   }
 

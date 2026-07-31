@@ -142,7 +142,12 @@ export function connectRealtime(queryClient: QueryClient): () => void {
      * doğrudan düz nesne. Abone her iki şekli de aynı görsün diye `ref` burada AÇILIR —
      * bu kaçırıldığında balon düşüyor ama "okundu" işareti sessizce hiç tetiklenmiyordu.
      */
-    for (const topic of ['chat:message', 'chat:typing']) {
+    /**
+     * ⭐ `notify:show` — sohbetle AYNI kanaldan geçer ama sorgu TAZELEMEZ (`INVALIDATES`'te
+     * yok): bu olay ekrandaki veriyi değil, oyuncuya gösterilecek toast'ı taşır. İlgili
+     * sorgular zaten kendi olaylarıyla (`missions:changed`, `messages:changed`…) tazeleniyor.
+     */
+    for (const topic of ['chat:message', 'chat:typing', 'notify:show']) {
       socket.on(topic, (raw: Record<string, unknown>) => {
         const payload = (raw?.['ref'] ?? raw ?? {}) as Record<string, unknown>;
         for (const fn of chatListeners.get(topic) ?? []) fn(payload);

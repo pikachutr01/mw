@@ -148,6 +148,13 @@
       "when": 1785454014380,
       "tag": "0020_chat_dm",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785490235789,
+      "tag": "0021_push_notify",
+      "breakpoints": true
     }
   ]
 }

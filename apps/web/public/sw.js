@@ -32,3 +32,52 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', () => {
   // Kasıtlı olarak boş: `respondWith` çağrılmadığında tarayıcı isteği normal şekilde ağa götürür.
 });
+
+/*
+ * ⭐ WEB PUSH (§7.2) — yalnız oyuncu ÇEVRİMDIŞIYKEN buraya bir şey düşer. Uygulama açıkken
+ * sunucu push atmaz, WS üzerinden toast gönderir (`NotifyService.deliver` tek dallanma noktası).
+ *
+ * ⚠️ Yukarıdaki "hiçbir yanıt önbelleğe alınmaz" kuralı burada da geçerli: bu dal ağa da
+ * cache'e de dokunmaz, yalnız gelen yükü bildirime çevirir.
+ */
+self.addEventListener('push', (event) => {
+  /** Yük bozuksa bile bildirim GÖSTERİLİR: bazı tarayıcılar sessiz push'u izin iptaliyle cezalandırır. */
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+
+  const title = data.title || 'Mobiwar';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || '',
+      // `tag` aynı olanlar birikmez, ÜSTÜNE yazar: bir sohbetten üç mesaj = tek satır.
+      tag: data.tag || 'mobiwar',
+      renotify: true,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: data.url || '/armies' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/armies';
+
+  /*
+   * Açık bir sekme varsa YENİSİ AÇILMAZ, var olan öne getirilip oraya yönlendirilir. Aksi
+   * hâlde oyuncu her bildirimde bir sekme daha biriktirir ve iki sekme aynı oyunu açık tutar.
+   */
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (new URL(client.url).origin !== self.location.origin) continue;
+        return client.focus().then((focused) => focused.navigate(url).catch(() => focused));
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});

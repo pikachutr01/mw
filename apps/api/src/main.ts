@@ -5,9 +5,11 @@ import type { Server as HttpServer } from 'node:http';
 import { AppModule } from './app.module.ts';
 import { TokenService } from './auth/token.service.ts';
 import { createDb } from './db/client.ts';
+import { pushEnabled } from './notify/notify.limits.ts';
+import { NotifyService, defaultPushSender } from './notify/notify.service.ts';
 import { RealtimeBus } from './realtime/realtime.bus.ts';
 import { RealtimeGateway } from './realtime/realtime.gateway.ts';
-import { setGateway } from './realtime/gateway-registry.ts';
+import { getGateway, setGateway } from './realtime/gateway-registry.ts';
 import { createWorker, type Worker } from './worker/worker.ts';
 
 /**
@@ -32,15 +34,41 @@ async function bootstrap(): Promise<void> {
   const bus = new RealtimeBus(handle.sql);
 
   if (runWorker) {
+    /**
+     * ⭐ BİLDİRİM KATMANI (§7.2). Çevrimiçilik `getGateway()` üzerinden **teslim anında**
+     * okunur — worker gateway'den önce kurulduğu için referans değil, fonksiyon geçiliyor.
+     *
+     * ⚠️ `ROLE=worker` ayrımında `getGateway()` daima `null`'dır (kayıt yalnız API sürecinde
+     * doldurulur) → herkes çevrimdışı sayılır ve WS açıkken de push gider. Dağıtım profilimiz
+     * `ROLE=all`; aşağıdaki uyarı bu tuzağı sessiz bırakmamak için.
+     */
+    if (role === 'worker' && pushEnabled()) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[mobiwar] UYARI: ROLE=worker ile push açık. Bu süreç oyuncuların çevrimiçi olup '
+        + 'olmadığını GÖREMEZ (gateway kaydı yalnız API sürecinde dolu) → WS bağlıyken de push '
+        + 'gider. Tek süreçli profil için ROLE=all kullan.',
+      );
+    }
+    const notifier = new NotifyService(handle.db, {
+      bus,
+      isOnline: (playerId) => getGateway()?.isOnline(playerId) ?? false,
+      sender: defaultPushSender(),
+    });
+
     worker = createWorker(handle.db, {
       worldId: Number(process.env['WORLD_ID'] ?? 1),
       workerId: `worker-${process.pid}`,
       pollIntervalMs: Number(process.env['POLL_INTERVAL_MS'] ?? 1000),
       bus,
+      notifier,
     });
     worker.start();
     // eslint-disable-next-line no-console
-    console.log(`[mobiwar] worker çalışıyor (dünya ${process.env['WORLD_ID'] ?? 1})`);
+    console.log(
+      `[mobiwar] worker çalışıyor (dünya ${process.env['WORLD_ID'] ?? 1}) · `
+      + `push ${pushEnabled() ? 'AÇIK' : 'kapalı (VAPID anahtarı yok)'}`,
+    );
   }
 
   if (runApi) {

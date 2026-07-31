@@ -16,6 +16,7 @@ import { DB } from './db/tokens.ts';
 import { HealthController } from './health/health.controller.ts';
 import { MissionController } from './missions/mission.controller.ts';
 import { MissionService } from './missions/mission.service.ts';
+import { NotifyController } from './notify/notify.controller.ts';
 import { QueueService } from './queues/queue.service.ts';
 import { SimulateController } from './simulate/simulate.controller.ts';
 import { GameClockService } from './world/game-clock.service.ts';
@@ -36,6 +37,7 @@ export { DB } from './db/tokens.ts';
     AllianceController, ChatController,
     HeroController,
     MissionController, BattleController, WorldController, CommandController,
+    NotifyController,
   ],
   providers: [
     {

@@ -9,6 +9,7 @@ import { getSession, logout } from '../lib/api.ts';
 import { useTheme } from '../lib/hooks.ts';
 import { useCities } from '../lib/queries.ts';
 import { Badge, Button, Panel } from '../components/ui.tsx';
+import { NotifySettings } from '../components/NotifySettings.tsx';
 
 function Soon({ title, lines }: { title: string; lines: string[] }) {
   return (
@@ -46,6 +47,8 @@ export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): Rea
           </div>
         </div>
       </Panel>
+
+      <NotifySettings />
 
       <Panel title="Tema">
         <div className="flex gap-1 p-3 pb-1.5">
