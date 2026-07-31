@@ -255,7 +255,7 @@ function Placeholder() {
   const rows: [string, string, boolean][] = [
     ['Dünya', 'hız çarpanları · manuel sıralama', true],
     ['Ayarlar', 'işletim limitleri (sohbet · bildirim · posta)', true],
-    ['Bakım modu', 'donma · istemci perdesi · mutasyon kilidi', false],
+    ['Bakım modu', 'donma · istemci perdesi · mutasyon kilidi (Dünya sekmesinde)', true],
     ['Oturumlar', 'cihaz listesi · uzaktan çıkış', false],
     ['Motor sabitleri', 'savaş config\'i · önizleme', false],
     ['Katalog', 'birim/yapı/teknik fiyat ve süreleri', false],
@@ -264,7 +264,7 @@ function Placeholder() {
     ['Bakım/performans', 'tablo boyutları · temizlik görevleri', false],
   ];
   return (
-    <Panel title="Fazlar" right="Faz 1 bitti">
+    <Panel title="Fazlar" right="Faz 2 bitti">
       <ul className="divide-y divide-border">
         {rows.map(([name, desc, done]) => (
           <li key={name} className="flex items-baseline justify-between gap-3 px-3 py-2">

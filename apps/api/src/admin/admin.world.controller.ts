@@ -22,6 +22,7 @@ import { DB } from '../db/tokens.ts';
 import { scheduleSnapshot } from '../ranking/ranking.service.ts';
 import { SettingsError, SettingsService } from '../settings/settings.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
+import { WorldStateService } from '../world/world-state.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 
 /**
@@ -38,6 +39,16 @@ const multipliers = z.object({
 const settingsPatch = z.object({ values: z.record(z.string(), z.unknown()) });
 const resetPatch = z.object({ keys: z.array(z.string()).min(1).max(200) });
 
+/**
+ * Bakım metni. ⚠️ Metin ZORUNLU DEĞİL: bakımı başlatmak, metin yazmayı hatırlamaya bağlı
+ * olmamalı — acil bir durumda önce durdurulur, açıklama sonra eklenir (`PUT notice`).
+ */
+const pausePatch = z.object({
+  notice: z.string().trim().max(500).optional(),
+  /** Tahmini bitiş — GERÇEK zaman (bakımda oyun saati donuyor). */
+  etaMinutes: z.number().int().min(1).max(24 * 60).optional(),
+});
+
 @Controller('api/v1/admin')
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminWorldController {
@@ -45,6 +56,7 @@ export class AdminWorldController {
     @Inject(DB) private readonly db: Db,
     private readonly settings: SettingsService,
     private readonly clock: GameClockService,
+    private readonly worldState: WorldStateService,
   ) {}
 
   /* ── Dünyalar ─────────────────────────────────────────────────────────────── */
@@ -53,6 +65,7 @@ export class AdminWorldController {
   async worlds(): Promise<Record<string, unknown>> {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT w.id, w.name, w.state, w.clock_offset_ms, w.paused_at, w.started_at,
+             w.maintenance_notice, w.maintenance_eta,
              w.speed_multiplier, w.resource_multiplier, w.training_multiplier,
              w.construction_multiplier,
              (SELECT COUNT(*)::int FROM players p WHERE p.world_id = w.id)  AS players,
@@ -75,6 +88,8 @@ export class AdminWorldController {
             clockOffsetMs: Number(r['clock_offset_ms']), pausedAt,
           }).toISOString(),
           clockOffsetMs: Number(r['clock_offset_ms']),
+          notice: r['maintenance_notice'] == null ? null : String(r['maintenance_notice']),
+          eta: r['maintenance_eta'] == null ? null : toDate(r['maintenance_eta']).toISOString(),
           startedAt: toDate(r['started_at']).toISOString(),
           multipliers: {
             speedMultiplier: Number(r['speed_multiplier']),
@@ -175,6 +190,129 @@ export class AdminWorldController {
     // Zincirin kopmaması için düzenli görevin de yerinde olduğundan emin ol (tekrar dayanıklı).
     await scheduleSnapshot(this.db, worldId, gameNow);
     return { ok: true, missionId: Number(row!['id']), scheduledAt: gameNow.toISOString() };
+  }
+
+  /* ── Bakım modu ───────────────────────────────────────────────────────────── */
+
+  /**
+   * ⭐ BAKIMA AL — oyun saatini dondurur, mutasyonları kilitler, perdeyi açar.
+   *
+   * Üç şey aynı anda olur ve **üçünün de sırası önemli**:
+   *   1. `clock.pause()`  → `paused_at` yazılır; oyun saati o anda donar (§2).
+   *   2. `worlds.setNotice()` → perde metni + `pg_notify('mw_world')`; API süreçlerinin
+   *      bakım önbelleği tazelenir → `MaintenanceInterceptor` yazmaları reddetmeye başlar.
+   *   3. `outbox('world:maintenance')` → dispatcher WS'e yayar; istemci perdeyi açar.
+   *
+   * ⚠️ Perde (3) EN SONA bırakıldı: oyuncuya "bakım başladı" dedikten sonra hâlâ yazabildiği
+   * bir aralık kalmasın. Ters sırada, perdeyi görüp de son bir emri geçiren oyuncu olurdu.
+   *
+   * ⚠️ Zaten bakımdaysa `pause()` hiçbir şey yapmaz (idempotent) ama metin GÜNCELLENİR:
+   * "15 dakika daha sürecek" demek için bakımdan çıkıp girmek gerekmemeli.
+   */
+  @Post('worlds/:id/pause')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async pause(
+    @Param('id') id: string, @Body() body: unknown, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const parsed = pausePatch.safeParse(body ?? {});
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    const worldId = Number(id);
+    const before = this.worldState.get(worldId);
+    if (!before) throw new NotFoundException('Dünya bulunamadı.');
+
+    const clock = await this.clock.pause(worldId);
+    const eta = parsed.data.etaMinutes == null
+      ? null : new Date(Date.now() + parsed.data.etaMinutes * 60_000);
+    await this.worldState.setNotice(worldId, {
+      notice: parsed.data.notice?.length ? parsed.data.notice : null,
+      eta,
+      actorId: req.player!.accountId,
+    });
+    await this.announce(worldId, req.player!.playerId, 'admin.world.pause', {
+      paused: true, notice: parsed.data.notice ?? null, eta: eta?.toISOString() ?? null,
+    });
+
+    return {
+      ok: true, paused: true,
+      pausedAt: clock.pausedAt?.toISOString() ?? null,
+      gameNow: clock.gameNow.toISOString(),
+      // Zaten bakımdaydıysa panel "yeni başlatmadın, metni güncelledin" diyebilsin.
+      alreadyPaused: before.paused,
+    };
+  }
+
+  /**
+   * ⭐ BAKIMDAN ÇIKAR — donmuş süre `clock_offset_ms`e eklenir, oyun **kaldığı yerden** devam
+   * eder: bir kuyruğun kalan süresi bakımdan önceki değerin AYNISIDIR (bkz. `maintenance.test.ts`).
+   */
+  @Post('worlds/:id/resume')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async resume(
+    @Param('id') id: string, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const worldId = Number(id);
+    if (!this.worldState.get(worldId)) throw new NotFoundException('Dünya bulunamadı.');
+
+    const clock = await this.clock.resume(worldId);
+    await this.worldState.clearNotice(worldId);
+    await this.announce(worldId, req.player!.playerId, 'admin.world.resume', { paused: false });
+
+    return {
+      ok: true, paused: false,
+      gameNow: clock.gameNow.toISOString(),
+      clockOffsetMs: clock.clockOffsetMs,
+    };
+  }
+
+  /** Bakım devam ederken metni/tahmini güncelle (perde anında yenilenir). */
+  @Put('worlds/:id/notice')
+  @UseGuards(AdminStepUpGuard)
+  async setNotice(
+    @Param('id') id: string, @Body() body: unknown, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const parsed = pausePatch.safeParse(body ?? {});
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    const worldId = Number(id);
+    if (!this.worldState.get(worldId)) throw new NotFoundException('Dünya bulunamadı.');
+
+    const eta = parsed.data.etaMinutes == null
+      ? null : new Date(Date.now() + parsed.data.etaMinutes * 60_000);
+    await this.worldState.setNotice(worldId, {
+      notice: parsed.data.notice?.length ? parsed.data.notice : null,
+      eta,
+      actorId: req.player!.accountId,
+    });
+    await this.announce(worldId, req.player!.playerId, 'admin.world.notice', {
+      notice: parsed.data.notice ?? null, eta: eta?.toISOString() ?? null,
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Audit satırı + WS duyurusu, tek yerde.
+   *
+   * ⚠️ Duyuru **outbox üzerinden** gidiyor, doğrudan `RealtimeBus` üzerinden değil: bus
+   * `main.ts`te kuruluyor ve Nest DI'ında yok; ayrıca `ROLE=api`/`ROLE=worker` ayrıldığında
+   * doğrudan yayın yapan bir controller yalnız kendi sürecindeki soketlere ulaşırdı. Outbox
+   * satırı dispatcher tarafından (500 ms poll) alınıp `mw_realtime`e basılıyor — oyunun geri
+   * kalanıyla **aynı** yol.
+   */
+  private async announce(
+    worldId: number, playerId: number, action: string, payload: Record<string, unknown>,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${worldId}, 'world:maintenance', ${JSON.stringify({ worldId, ...payload })}::jsonb)
+      `);
+      await tx.execute(sql`
+        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+        VALUES (${worldId}, ${playerId}, ${action}, 'world', ${worldId},
+                ${JSON.stringify(payload)}::jsonb)
+      `);
+    });
   }
 
   /* ── Ayarlar ──────────────────────────────────────────────────────────────── */

@@ -328,6 +328,33 @@ export const useMessages = (): UseQueryResult<{ unread: number; items: MessageRo
   refetchInterval: SAFETY_NET_MS,
 });
 
+/**
+ * ⭐ BAKIM DURUMU (admin Faz 2) — perdenin İLK YÜKLEMEDEKİ kaynağı.
+ *
+ * WS olayı (`world:maintenance`) yalnız **değişim anını** taşır; bakım sürerken sayfayı açan
+ * oyuncu onu kaçırmış olur. Bu sorgu o boşluğu kapatır.
+ *
+ * ⚠️ Emniyet ağı burada **30 sn** — diğerlerinin yarısı. Gerekçe: bakımın BİTTİĞİNİ kaçırmak,
+ * başladığını kaçırmaktan daha can sıkıcı. Bakım bittiğinde WS olayı gelir ama tam o anda
+ * soketi kopuk olan oyuncu, perde kalkana kadar oyunun kapalı olduğunu sanır. Sunucu tarafı
+ * bu isteği **bellekten** karşılıyor (sorgu yok), yani sıklaştırmanın DB maliyeti sıfır.
+ */
+export interface WorldMaintenance {
+  paused: boolean;
+  state: string;
+  notice: string | null;
+  eta: string | null;
+  pausedAt: string | null;
+}
+
+export const useWorldState = (): UseQueryResult<WorldMaintenance> => useQuery({
+  queryKey: ['world-state'],
+  queryFn: () => get<WorldMaintenance>('/api/v1/world/state'),
+  refetchInterval: 30_000,
+  // Sekmeye dönen oyuncu perdeyi anında doğru görsün.
+  refetchOnWindowFocus: true,
+});
+
 export const useWorld = (k: number, d: number, enabled = true): UseQueryResult<{ slots: WorldSlot[] }> => useQuery({
   queryKey: ['world', k, d],
   queryFn: () => get<{ slots: WorldSlot[] }>(`/api/v1/world/${k}/${d}`),

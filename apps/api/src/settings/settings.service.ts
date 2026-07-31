@@ -81,11 +81,20 @@ export class SettingsService {
     setLiveSettings(this.snapshot(DEFAULT_WORLD).effective);
   }
 
-  /** Açılışta çağrılır: yükler ve kanalı dinlemeye başlar. */
-  async start(): Promise<void> {
+  /**
+   * Açılışta çağrılır: yükler ve kanalı dinlemeye başlar.
+   *
+   * ⚠️ `raw` burada da verilebiliyor çünkü **Nest'in örneği** DI fabrikasından ham bağlantısız
+   * çıkıyor; `main.ts` onu `app.get(SettingsService)` ile alıp bağlantıyı burada geçiriyor.
+   * Eskiden `main.ts` KENDİ örneğini kuruyordu ve Nest'inki hiç `load()` edilmiyordu: panel
+   * yeni açılan bir süreçte DB'deki değerleri değil şema varsayılanlarını gösteriyor, ancak
+   * ilk kayıttan sonra (o yol `load()` çağırıyor) doğruya dönüyordu.
+   */
+  async start(raw?: postgres.Sql | null): Promise<void> {
+    const conn = raw ?? this.raw;
     await this.load();
-    if (!this.raw) return;
-    const sub = await this.raw.listen(SETTINGS_CHANNEL, () => {
+    if (!conn) return;
+    const sub = await conn.listen(SETTINGS_CHANNEL, () => {
       // ⚠️ Yükleme hatası YUTULUR: ayar tazeleyememek oyunu durdurmayı hak etmez; süreç
       // eski (geçerli) anlık görüntüyle çalışmaya devam eder.
       void this.load().catch((err: unknown) => {

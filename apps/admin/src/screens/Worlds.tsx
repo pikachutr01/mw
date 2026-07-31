@@ -24,6 +24,8 @@ interface World {
   counts: { players: number; cities: number };
   lastRankingAt: string | null;
   settingsHash: string;
+  notice: string | null;
+  eta: string | null;
 }
 
 const MULTIPLIER_LABELS: [key: string, label: string, hint: string][] = [
@@ -142,6 +144,8 @@ function WorldCard({ world, onChanged, onNeedStepUp }: {
         </div>
       </div>
 
+      <MaintenancePanel world={world} onChanged={onChanged} onNeedStepUp={onNeedStepUp} />
+
       <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted">
         Ayar özeti <span className="tnum">{world.settingsHash}</span>
         {' · '}kuruluş {time(world.startedAt)}
@@ -149,6 +153,105 @@ function WorldCard({ world, onChanged, onNeedStepUp }: {
           ? ` · toplam duraklama ${Math.round(world.clockOffsetMs / 60_000)} dk` : ''}
       </div>
     </Panel>
+  );
+}
+
+/**
+ * ⭐ BAKIM MODU (Faz 2) — oyunun tamamını dondurup çözen düğme.
+ *
+ * ⚠️ Ekranda ne olacağını AÇIKÇA yazıyoruz. Bu düğme oyunun tamamını durduruyor; "Duraklat"
+ * yazıp geçmek, sonucun ne kadar geniş olduğunu gizlerdi. Metin bir kere okunacak diye
+ * yazılmıyor — düğmeye basacak kişi (çoğu zaman gece yarısı, aceleyle) neyin donduğunu
+ * hatırlamak zorunda kalmasın.
+ */
+function MaintenancePanel({ world, onChanged, onNeedStepUp }: {
+  world: World; onChanged: () => void; onNeedStepUp: () => void;
+}) {
+  const [notice, setNotice] = useState(world.notice ?? '');
+  const [etaMinutes, setEtaMinutes] = useState('');
+  const [busy, setBusy] = useState<null | 'pause' | 'resume' | 'notice'>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  useEffect(() => { setNotice(world.notice ?? ''); }, [world.notice]);
+
+  const call = async (kind: 'pause' | 'resume' | 'notice'): Promise<void> => {
+    setBusy(kind); setError(null);
+    const eta = Number(etaMinutes);
+    const body = kind === 'resume' ? {} : {
+      notice: notice.trim() || undefined,
+      etaMinutes: Number.isFinite(eta) && eta > 0 ? Math.trunc(eta) : undefined,
+    };
+    const path = kind === 'notice' ? 'notice' : kind;
+    try {
+      await api(`/api/v1/admin/worlds/${world.id}/${path}`, {
+        method: kind === 'notice' ? 'PUT' : 'POST', body,
+      });
+      onChanged();
+    } catch (err) {
+      if (needsStepUp(err)) onNeedStepUp(); else setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className={`border-t border-border px-3 py-3 ${world.paused ? 'bg-warning/10' : ''}`}>
+      <div className="mb-2 text-xs text-muted">
+        <b className="text-ink">Bakım modu.</b>{' '}
+        {world.paused ? (
+          <>
+            Dünya <b>DONMUŞ DURUMDA</b>. Oyun saati ilerlemiyor, tüm yazma uçları 503 dönüyor
+            ve oyunculara tam ekran perde görünüyor. ⚠️ Personel hesapları kilidin dışında —
+            senin yaptığın hamleler geçer.
+          </>
+        ) : (
+          <>
+            Bakıma alınca <b>her şey aniden donar</b>: yapı/birim/araştırma kuyrukları, yoldaki
+            ordular, kaynak birikimi. Oyuncular yazma yapamaz, ekranlarında perde açılır.
+            Bakımdan çıkınca her şey <b>kaldığı yerden</b> devam eder — kimse süre kaybetmez.
+          </>
+        )}
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <Field label="Oyunculara gösterilecek metin"
+          hint="Boş bırakılabilir; perde yine açılır, genel bir cümle yazar.">
+          <Input type="text" maxLength={500} value={notice}
+            placeholder="Sunucu bakımı yapılıyor…"
+            onChange={(e) => setNotice(e.target.value)} />
+        </Field>
+        {/* ⚠️ GERÇEK zaman: bakımda oyun saati donuk, tahmini bitişi oyun saatinde tutsaydık
+            perdedeki geri sayım hiç ilerlemezdi. */}
+        <Field label="Tahmini süre (dk)" hint="Gerçek zaman.">
+          <Input type="number" min={1} max={1440} step={1} value={etaMinutes}
+            className="w-28 tnum text-right"
+            onChange={(e) => setEtaMinutes(e.target.value)} />
+        </Field>
+      </div>
+
+      <ErrorBox error={error} />
+      <div className="mt-3 flex flex-wrap gap-2">
+        {world.paused ? (
+          <>
+            <Button disabled={busy !== null} onClick={() => void call('resume')}>
+              {busy === 'resume' ? 'Devam ettiriliyor…' : 'Bakımı bitir ve devam et'}
+            </Button>
+            <Button variant="ghost" disabled={busy !== null} onClick={() => void call('notice')}>
+              {busy === 'notice' ? 'Kaydediliyor…' : 'Metni güncelle'}
+            </Button>
+          </>
+        ) : (
+          <Button disabled={busy !== null} onClick={() => void call('pause')}>
+            {busy === 'pause' ? 'Donduruluyor…' : 'Bakıma al (oyunu dondur)'}
+          </Button>
+        )}
+        {world.eta ? (
+          <span className="self-center text-[11px] text-muted">
+            Tahmini bitiş: {new Date(world.eta).toLocaleString('tr-TR')}
+          </span>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

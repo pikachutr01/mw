@@ -25,6 +25,17 @@ export const worlds = pgTable('worlds', {
   /** Bakım başlangıcı (gerçek zaman). NULL = dünya çalışıyor. */
   pausedAt: timestamp('paused_at', { withTimezone: true }),
   /**
+   * Perdede oyuncuya AYNEN gösterilecek metin. NULL ise istemci genel bir cümle yazar —
+   * metnin yokluğu bakımı gizlememeli.
+   */
+  maintenanceNotice: text('maintenance_notice'),
+  /**
+   * ⚠️ Tahmini bitiş GERÇEK ZAMANDA: bakımda oyun saati donuyor, bunu oyun saatinde
+   * tutsaydık perdedeki geri sayım hiç ilerlemezdi.
+   */
+  maintenanceEta: timestamp('maintenance_eta', { withTimezone: true }),
+  maintenanceBy: bigint('maintenance_by', { mode: 'number' }),
+  /**
    * ⭐ DÜNYA HIZ ÇARPANLARI — oyunun temposunu tek yerden ayarlar (§13.7).
    * `speed_multiplier`: sefer sürelerini böler (mesafe hızı; mağara-kaçış dönüşü dahil).
    * `resource_multiplier`: Çiftlik/Maden üretimini çarpar.

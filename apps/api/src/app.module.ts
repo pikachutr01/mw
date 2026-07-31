@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminController } from './admin/admin.controller.ts';
 import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
 import { AdminWorldController } from './admin/admin.world.controller.ts';
@@ -24,6 +25,8 @@ import { NotifyController } from './notify/notify.controller.ts';
 import { QueueService } from './queues/queue.service.ts';
 import { SimulateController } from './simulate/simulate.controller.ts';
 import { GameClockService } from './world/game-clock.service.ts';
+import { MaintenanceInterceptor } from './world/maintenance.interceptor.ts';
+import { WorldStateService } from './world/world-state.service.ts';
 import { WorldController } from './world/world.controller.ts';
 
 export { DB } from './db/tokens.ts';
@@ -90,6 +93,17 @@ export { DB } from './db/tokens.ts';
      * anlık görüntü paylaşılan durum değil, **türetilmiş** durum.
      */
     { provide: SettingsService, useFactory: (db: Db) => new SettingsService(db), inject: [DB] },
+    /**
+     * ⭐ DÜNYA DURUMU — bakım kilidinin bellek-içi kaynağı. `SettingsService` ile aynı gerekçe
+     * ve aynı uyarı: `main.ts` kendi örneğini `LISTEN` bağlantısıyla kuruyor, buradaki Nest
+     * örneği ayrı olabilir. İkisi de aynı satırdan türetiliyor, paylaşılan durum yok.
+     */
+    { provide: WorldStateService, useFactory: (db: Db) => new WorldStateService(db), inject: [DB] },
+    /**
+     * ⭐ BAKIM KİLİDİ — GLOBAL. Interceptor seçilmesinin gerekçesi dosyanın başında; özeti:
+     * global guard'lar `AuthGuard`tan ÖNCE koşuyor, interceptor'lar SONRA → kimlik hazır.
+     */
+    { provide: APP_INTERCEPTOR, useClass: MaintenanceInterceptor },
     AuthGuard,
     AdminGuard,
     AdminStepUpGuard,

@@ -13,6 +13,7 @@ import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from './game-clock.service.ts';
+import { WorldStateService } from './world-state.service.ts';
 
 /** §13.16.1 — oyunun kendi dokümanından, BİREBİR. Koordinatlar 1-indekslidir. */
 export const WORLD_SHAPE = {
@@ -27,12 +28,37 @@ export const WORLD_SHAPE = {
 export class WorldController {
   constructor(
     private readonly clock: GameClockService,
+    private readonly worlds: WorldStateService,
     @Inject(DB) private readonly db: Db,
   ) {}
 
   @Get('shape')
   shape(): Record<string, unknown> {
     return WORLD_SHAPE;
+  }
+
+  /**
+   * ⭐ BAKIM DURUMU — perdenin İLK YÜKLEMEDEKİ kaynağı (admin Faz 2).
+   *
+   * WS olayı (`world:maintenance`) yalnız **değişim anını** taşır. Bakım sürerken sayfayı açan
+   * (ya da yenileyen) oyuncu o olayı kaçırmış olur; perdeyi bu uç açar.
+   *
+   * ⚠️ Bellek-içi önbellekten okunuyor → sorgu yok. İstemci bunu emniyet ağı olarak periyodik
+   * de yokluyor; her yoklamanın DB'ye inmesi anlamsız olurdu.
+   */
+  @Get('state')
+  state(@Req() req: AuthedRequest): Record<string, unknown> {
+    const worldId = req.player!.worldId;
+    const w = this.worlds.get(worldId);
+    return {
+      worldId,
+      state: w?.state ?? 'running',
+      paused: w?.paused ?? false,
+      pausedAt: w?.pausedAt?.toISOString() ?? null,
+      notice: w?.notice ?? null,
+      eta: w?.eta?.toISOString() ?? null,
+      serverNow: new Date().toISOString(),
+    };
   }
 
   /** Bir diyarın 10 şehir yeri. Dolu şehirde oyuncu adı + skor + koruma durumu görünür. */

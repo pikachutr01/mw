@@ -6,6 +6,7 @@ import { connectRealtime } from './lib/realtime.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
 import { ChatProvider } from './lib/chat-context.tsx';
 import { ConfirmProvider } from './components/Modal.tsx';
+import { MaintenanceCurtain } from './components/MaintenanceCurtain.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
 import { NotifyProvider } from './components/Toaster.tsx';
 import { Shell } from './components/Shell.tsx';
@@ -82,6 +83,11 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <OfflineBanner />
+      {/* ⭐ BAKIM PERDESİ (admin Faz 2) — rotaların ve `Shell`in DIŞINDA: sayfa değiştirmek onu
+          kapatamamalı. `OfflineBanner` ile aynı katman mantığı; ikisi aynı anda görünebilir
+          (bakım sırasında internet de gidebilir) ve şerit perdenin ÜSTÜNDE kalır (z-50 vs z-60
+          değil — şerit sayfanın tepesinde dar bir bant, perde ortada bir kutu). */}
+      <MaintenanceCurtain />
       {/* Onay diyaloğu GLOBAL: her çağıran kendi diyaloğunu kursa metinler ve davranış ayrışırdı. */}
       <ConfirmProvider>
         <ActiveCityProvider>

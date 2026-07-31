@@ -11,6 +11,7 @@ import { pushEnabled } from './notify/notify.limits.ts';
 import { NotifyService, defaultPushSender } from './notify/notify.service.ts';
 import { RealtimeBus } from './realtime/realtime.bus.ts';
 import { SettingsService } from './settings/settings.service.ts';
+import { WorldStateService } from './world/world-state.service.ts';
 import { RealtimeGateway } from './realtime/realtime.gateway.ts';
 import { getGateway, setGateway } from './realtime/gateway-registry.ts';
 import { createWorker, type Worker } from './worker/worker.ts';
@@ -37,6 +38,19 @@ async function bootstrap(): Promise<void> {
   const bus = new RealtimeBus(handle.sql);
 
   /**
+   * ⚠️ Nest uygulaması **servisleri başlatmadan ÖNCE** kuruluyor: bellek-içi servislerin
+   * (`SettingsService`, `WorldStateService`) sahibi Nest olmalı, çünkü controller'lar ve
+   * `MaintenanceInterceptor` **onun** örneğini enjekte ediyor. Burada ayrıca bir örnek kurup
+   * onu başlatsaydık — 2026-07-31'e kadar ayarlarda tam olarak bu oluyordu — Nest'inki hiç
+   * yüklenmez, panel DB'deki değerler yerine şema varsayılanlarını gösterir ve bakım kilidi
+   * boş bir haritaya bakardı.
+   */
+  const app = runApi
+    ? await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter())
+    : null;
+  app?.enableShutdownHooks();
+
+  /**
    * ⭐ AYARLAR — açılışta bir kez yüklenir, sonra **bellekten** okunur (§admin Faz 1).
    * Ham bağlantı `LISTEN mw_settings` için veriliyor: panelden bir değer kaydedilince tüm
    * süreçler milisaniyeler içinde tazeleniyor, yeniden başlatma gerekmiyor.
@@ -44,8 +58,16 @@ async function bootstrap(): Promise<void> {
    * ⚠️ Hem `ROLE=api` hem `ROLE=worker` profilinde çalışır ve **her ikisinde de gerekli**:
    * limitleri worker da okuyor (bildirim birleştirme, posta kotaları).
    */
-  const settings = new SettingsService(handle.db, handle.sql);
-  await settings.start();
+  const settings = app ? app.get(SettingsService) : new SettingsService(handle.db);
+  await settings.start(handle.sql);
+
+  /**
+   * ⭐ BAKIM DURUMU (§admin Faz 2) — yalnız API tarafında anlamlı: kilidi uygulayan
+   * `MaintenanceInterceptor`. Worker'ın bakım kontrolü ayrı ve zaten var: `SchedulerService`
+   * her turda `clock.read()` ile TAZE okuyor (turda bir sorgu, istekte değil).
+   */
+  const worldState = app ? app.get(WorldStateService) : null;
+  await worldState?.start(handle.sql);
 
   if (runWorker) {
     /**
@@ -88,9 +110,7 @@ async function bootstrap(): Promise<void> {
     );
   }
 
-  if (runApi) {
-    const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
-    app.enableShutdownHooks();
+  if (app) {
     const port = Number(process.env['PORT'] ?? 3002);
     await app.listen({ port, host: '0.0.0.0' });
 
@@ -109,6 +129,7 @@ async function bootstrap(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log(`[mobiwar] ${signal} alındı, kapatılıyor…`);
     await settings.stop();
+    await worldState?.stop();
     await gateway?.close();
     await worker?.stop();
     await handle.close();

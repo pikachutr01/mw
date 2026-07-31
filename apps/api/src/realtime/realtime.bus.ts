@@ -220,6 +220,24 @@ export function eventForOutbox(
       };
 
     /**
+     * ⭐ BAKIM MODU (admin Faz 2) — **dünya geneli** yayın: perde herkeste aynı anda açılıp
+     * kapanmalı. Olay kimlik değil DURUM taşıyor (`paused`, `notice`, `eta`) ve bu, "olay veri
+     * değil haber taşır" kuralının bilinçli tek istisnası: perdenin amacı zaten oyuncuyu
+     * sunucudan uzak tutmak; onu göstermek için istemciyi bir sorgu daha yapmaya zorlamak
+     * (üstelik tam da bakım anında, tüm istemciler aynı saniyede) tersine bir yük dalgası olurdu.
+     * Yük küçük ve sabit; NOTIFY'ın 8000 bayt sınırına yaklaşmıyor.
+     */
+    case 'world:maintenance':
+      return {
+        topic: 'world:maintenance', worldId, playerIds: [],
+        ref: {
+          paused: payload['paused'] === true ? 1 : 0,
+          notice: payload['notice'] == null ? null : String(payload['notice']),
+          eta: payload['eta'] == null ? null : String(payload['eta']),
+        },
+      };
+
+    /**
      * Sıralama anlık görüntüsü — **dünya geneli** yayın (`playerIds` boş): sıra herkesinkini
      * aynı anda değiştirir, oyuncu başına olay üretmek 10.000 satırlık bir dünyada anlamsız olurdu.
      */

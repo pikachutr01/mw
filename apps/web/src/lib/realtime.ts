@@ -56,6 +56,15 @@ const INVALIDATES: Record<string, string[]> = {
   'battle:resolved': ['messages', 'missions', 'city'],
   // Sıralama günde 3 kez donuyor; donduğu an ekrandaki sıra bayatlamasın.
   'ranking:updated': ['rankings', 'overview', 'world'],
+  /**
+   * ⭐ BAKIM MODU (admin Faz 2) — perde bu olayla açılıp kapanır.
+   *
+   * ⚠️ Olay yükünü DOĞRUDAN kullanmıyoruz, sorguyu tazeliyoruz: perdenin metni tek bir
+   * yerden (`/world/state`) gelsin. Yükten okusaydık ilk yüklemede sorgudan, değişimde
+   * olaydan gelen iki metin ayrışabilirdi. `world` da tazeleniyor çünkü bakımdan çıkınca
+   * diyar listesindeki geri sayımlar yeniden hesaplanmalı.
+   */
+  'world:maintenance': ['world-state', 'world'],
   /* ⭐ İTTİFAK (2026-07-30): üyelik/metin/ad/dağıtma — ittifak ekranı + sağ panel + ittifak
    * sütunlarını taşıyan görünümler tazelenir. */
   'alliance:changed': ['alliance', 'alliances', 'overview', 'world', 'rankings'],

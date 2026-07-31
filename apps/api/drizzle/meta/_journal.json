@@ -190,6 +190,13 @@
       "when": 1785601000000,
       "tag": "0026_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785602000000,
+      "tag": "0027_maintenance",
+      "breakpoints": true
     }
   ]
 }
