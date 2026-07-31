@@ -10,14 +10,17 @@ import { useCancelMission, type Coords, type Movement } from '../lib/queries.ts'
 import { Button, ErrorBox, Res } from './ui.tsx';
 import { Modal, useConfirm } from './Modal.tsx';
 
-/** Görev tipi → Türkçe ad. */
+/**
+ * Görev tipi → Türkçe ad. ⚠️ Bu adlar `titleOf`'ta **cümle içinde** kullanılıyor
+ * ("Şehir kurma gidiyor"), o yüzden yalnız ilk harf büyük — başlık kalıbı değil.
+ */
 export const TYPE_LABEL: Record<string, string> = {
   attack: 'Saldırı',
   return: 'Dönüş',
   transport: 'Nakliye',
   support: 'Destek',
   spy: 'Casusluk',
-  found_city: 'Şehir Kurma',
+  found_city: 'Şehir kurma',
   teleport: 'Teleport',
   // ⭐ Mağara işleri (§13.20): üçü de şehrin İÇİNDE geçer, hedef ve kaynak aynı şehirdir.
   cave_store: 'Mağaraya giriş',
@@ -28,17 +31,24 @@ export const TYPE_LABEL: Record<string, string> = {
 export const coordText = (c: Coords | null): string => (c ? `${c.k}:${c.d}:${c.s}` : '—');
 
 /**
- * Hareketin başlığı. Dönüş bacağında **hangi görevden dönüldüğü** yazılır ("Casusluk dönüşü"),
- * çünkü simge de aslına göre seçiliyor — sadece "Dönüş" deseydik simge ile metin çelişirdi.
+ * Hareketin başlığı — **görevin TANIMI**, tek kaynak.
+ *
+ * Liste önizlemesi, şerit tooltip'i ve detay modalı üçü de buradan besleniyor. Kullanıcı
+ * 2026-07-31'de metni "Saldırı yaklaşıyor / Saldırı gidiyor / Nakliye dönüşü" biçimine
+ * çevirmemizi istedi; ⚠️ ayrı bir "önizleme etiketi" fonksiyonu YAZILMADI, çünkü ikinci bir
+ * metin kaynağı kaçınılmaz olarak birincisinden kayardı (bildirim kataloğuyla aynı kural).
+ *
+ * Dönüş bacağında **hangi görevden dönüldüğü** yazılır ("Casusluk dönüşü"), çünkü simge de
+ * aslına göre seçiliyor — sadece "Dönüş" deseydik simge ile metin çelişirdi.
  */
 export function titleOf(m: Movement): string {
   if (m.direction === 'own' && m.returnOf) {
     return `${TYPE_LABEL[m.returnOf] ?? m.returnOf} dönüşü${m.canceled ? ' (iptal edildi)' : ''}`;
   }
   const name = TYPE_LABEL[m.type] ?? m.type;
-  // Mağara işlerinde "Gelen …" öneki anlamsız: karşı taraf yok, hareket şehrin kendi içinde.
+  // Mağara işlerinde yön eki anlamsız: karşı taraf yok, hareket şehrin kendi içinde.
   if (m.type.startsWith('cave_')) return name;
-  return m.direction === 'in' ? `Gelen ${name.toLowerCase()}` : name;
+  return m.direction === 'in' ? `${name} yaklaşıyor` : `${name} gidiyor`;
 }
 
 export interface TipState { m: Movement; x: number; y: number }
@@ -229,15 +239,14 @@ export function MovementModal({ m, onClose }: { m: Movement; onClose: () => void
           ) : null}
         </dl>
 
-        {m.direction === 'own' ? (
-          <div className="rounded-[var(--radius-sm)] border border-success bg-success/10 px-2.5 py-2 text-xs text-success">
-            ↩ Bu ordu <b>geri dönüyor</b>{m.canceled ? ' (görev iptal edildiği için)' : ''}.
-            Vardığında birlikler şehre, varsa ganimet kasaya eklenecek.
-          </div>
-        ) : null}
-
-        {/* "Sana doğru geliyor / gizlidir" kutusu kaldırıldı (kullanıcı, 2026-07-30):
-            içerik zaten görünür — 2026-07-31'den beri gelen saldırıda bile. */}
+        {/* ⚠️ İKİ bilgi kutusu da kaldırıldı, ikisi de aynı sebeple:
+            • "Sana doğru geliyor / gizlidir" (kullanıcı, 2026-07-30) — içerik zaten görünür.
+            • "Bu ordu geri dönüyor, ganimet kasaya eklenecek" (kullanıcı, 2026-07-31) —
+              saldırı dönüşünde ganimet zaten yukarıdaki `Taşınan` satırında yazıyor, nakliye
+              dönüşünde ise şehre hiçbir şey gelmiyor (yük alıcıya bırakıldı). Yani kutu
+              tekrar ya da düpedüz YANLIŞ bilgi veriyordu.
+            Dönüş olduğu bilgisi kaybolmadı: başlık zaten "Nakliye dönüşü" diyor ve iptal
+            edilmişse `titleOf` " (iptal edildi)" ekliyor. */}
 
         {!m.canCancel && m.direction === 'out' ? (
           <div className="text-xs text-muted">Görev işlenmeye başladı, artık iptal edilemez.</div>

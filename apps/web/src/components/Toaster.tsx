@@ -65,9 +65,25 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
   const show = useCallback((input: ToastInput): void => {
     const id = nextId.current;
     nextId.current += 1;
-    setToasts((list) => [...list.slice(-(MAX_STACK - 1)), { ...input, id, leaving: false }]);
+    setToasts((list) => [...list, { ...input, id, leaving: false }]);
     timers.current.set(id, setTimeout(() => remove(id), DWELL_MS));
   }, [remove]);
+
+  /**
+   * ⭐ YIĞIN SINIRI — fazlası **normal çıkış yolundan** düşer, kesilip atılmaz.
+   *
+   * ⚠️ Bir ara sınır `show` içinde `list.slice(-(MAX_STACK - 1))` ile uygulanıyordu ve iki
+   * kusuru vardı: (1) çıkış animasyonunu oynatan (`leaving`) kutular da sayıya giriyordu,
+   * (2) sınırı aşan kutu DOM'dan **anında** koparıldığı için sağa kayarak kaybolmuyor,
+   * yerinde patlıyordu — üstelik zamanlayıcısı `timers`'ta öksüz kalıyordu. Kullanıcı
+   * 2026-07-31'de "birbirine yakın tetiklenen notify'lar üst üste birikebilsin" dedi; birikme
+   * zaten vardı, düzgün olmayan çıkıştı. Artık fazlalık `remove()`'a veriliyor: aynı
+   * animasyon, aynı zamanlayıcı temizliği.
+   */
+  useEffect(() => {
+    const staying = toasts.filter((t) => !t.leaving);
+    for (const t of staying.slice(0, Math.max(0, staying.length - MAX_STACK))) remove(t.id);
+  }, [toasts, remove]);
 
   /* Sunucudan gelen bildirim → toast. Olay `{topic, ref}` sarmalını `realtime.ts` açıyor. */
   useEffect(() => onSocketEvent('notify:show', (payload) => {

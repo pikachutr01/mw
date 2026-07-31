@@ -198,7 +198,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 
 | Sayfa | Durum |
 |---|---|
-| **Ordular** | ✅ hareket listesi · detay modalı + görev iptali · şehir değiştirme |
+| **Ordular** | ✅ hareket listesi · detay modalı + görev iptali · şehir değiştirme. **Önizleme = görev tanımı + koordinat** ("Saldırı gidiyor / yaklaşıyor", `titleOf` tek kaynak); ordunun birleşimi yalnız modalde (2026-07-31) |
 | **Baraka / Savunma** | ✅ üretim bandı (sıralama + iptal) · Savunma'da Sur/Kalkan **paralel şerit** |
 | **Yapılar / Akademi** | ✅ kuyruk + iptal · Yapılar'da **Mağara modalı** (adına tıkla) |
 | **Dünya** | ✅ diyar listesi → modal (altı görev tipi) · **açılış aktif şehrin diyarından** · ittifak sütunu dolu · görev modalında sabit alt bölüm · **`/world/:k/:d` derin bağlantısı** |

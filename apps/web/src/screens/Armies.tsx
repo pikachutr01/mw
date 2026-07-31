@@ -8,8 +8,7 @@
  * şeritte tek bakışta görünüyor, ikinci bir özet paneli ekranı gereksiz uzatıyordu.
  */
 import { useState } from 'react';
-import { fmt, remaining, useTick } from '../lib/hooks.ts';
-import { describeHeroes, describeUnits } from '../lib/names.ts';
+import { remaining, useTick } from '../lib/hooks.ts';
 import { useMovements, type Movement } from '../lib/queries.ts';
 import { Empty, MissionIcon, Panel } from '../components/ui.tsx';
 import { coordText, MovementModal, titleOf } from '../components/movements.tsx';
@@ -58,6 +57,10 @@ function MovementRow({
       <button onClick={() => onOpen(m)}
         className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-raised">
         <MissionIcon id={m.icon} size={36} title={titleOf(m)} />
+        {/* ⭐ ÖNİZLEME = GÖREVİN TANIMI + NEREDEN NEREYE (kullanıcı kararı 2026-07-31).
+            Ordunun birleşimi (birim + kahraman dökümü) BİLEREK burada yok; satıra tıklayınca
+            açılan modalde tam dökümüyle duruyor. Sebep: liste "ne oluyor" sorusunu bir
+            bakışta cevaplamalı, "ne kadar askerle" sorusu ikinci adımın işi. */}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm text-ink">
             <b>{titleOf(m)}</b>
@@ -65,12 +68,6 @@ function MovementRow({
             <span className="tnum">{coordText(m.origin)}</span>
             {' → '}
             <span className="tnum">{coordText(m.target)}</span>
-          </span>
-          {/* ⭐ Birleşim HER harekette görünür (kullanıcı 2026-07-31) — "birleşim gizli"
-              metni kalktı. Boş kalabilen tek hâl: askerleri ölmüş, kahramanı dönen ordu. */}
-          <span className="block truncate text-[11px] text-muted">
-            {[describeUnits(m.units, fmt), describeHeroes(m.heroes)].filter(Boolean).join(' · ')
-              || '—'}
           </span>
         </span>
         <span className={`tnum shrink-0 text-sm font-semibold ${tone}`}>{left ?? 'varıyor'}</span>
