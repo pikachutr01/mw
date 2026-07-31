@@ -171,7 +171,14 @@ export function eventForOutbox(
         ref: { cityId: num(payload['cityId']) },
       };
 
-    // Yeni şehir ŞEHİR LİSTESİNİ de değiştirir → istemcide `cities` anahtarı da tazelenir.
+    /**
+     * Yeni şehir ŞEHİR LİSTESİNİ de değiştirir → istemcide `cities` anahtarı da tazelenir.
+     *
+     * ⭐ `city:renamed` aynı satıra bağlı (2026-07-31): ad; şehir şeridinde, Genel Durum
+     * tablosunun sütun başlığında ve dünya listesinde ayrı ayrı duruyor. `city:changed`
+     * deseydik yalnız o şehrin sorgusu tazelenir, şerit eski adı göstermeye devam ederdi.
+     */
+    case 'city:renamed':
     case 'city:founded':
       return {
         topic: 'cities:changed', worldId,

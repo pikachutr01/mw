@@ -26,6 +26,7 @@ import { DB } from '../db/tokens.ts';
 import { QueueError, QueueService } from '../queues/queue.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { CapacityService } from './capacity.service.ts';
+import { NAME_RULE_MESSAGE, renameRequest } from './city-name.ts';
 import { CityService } from './city.service.ts';
 
 /** Mağara emri: `{ units: { dwarf: 100, elf: 20 } }`. Tür süzgeci servistedir. */
@@ -184,6 +185,51 @@ export class CityController {
       serverNow: new Date().toISOString(),
       gameNow: gameNow.toISOString(),
     };
+  }
+
+  /* ── Şehir yönetimi (Seçenekler menüsü) ───────────────────────────────────── */
+
+  /**
+   * ⭐ **ŞEHİR ADI DEĞİŞTİR** — orijinalde Seçenekler menüsünün maddesi
+   * (`DecompiledSrc/src/g.java` case 63 → `a[5]`, ekran 62) ve işlem **seçili şehir**
+   * üzerinde yapılıyor (`teknik_ve_yapi_dokumantasyonu.md:934`).
+   *
+   * Kural `gameName`de: 3-10 karakter, Türkçe harf serbest (§C1). Sınır orijinal formdan
+   * geliyor (`g.java:1893` → `m.a(2, 10, "Şehir Adı", null)`).
+   *
+   * ⚠️ Ad benzersiz DEĞİL — oyunun kendisi de zorlamıyor. Kimlik `id`, ad yalnız etiket;
+   * benzersizlik dayatsaydık iki oyuncunun "Kayseri"si çakışır, üstelik ad ekranda hep
+   * koordinatla birlikte görünüyor.
+   */
+  @Post(':id/rename')
+  async rename(
+    @Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const parsed = renameRequest.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(NAME_RULE_MESSAGE);
+
+    const cityId = Number(id);
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM cities
+       WHERE id = ${cityId} AND player_id = ${player.playerId} AND world_id = ${player.worldId}
+    `);
+    if (!row) throw new NotFoundException('Şehir bulunamadı.');
+
+    const name = parsed.data.name;
+    /**
+     * ⚠️ Ad değişimi + olay **tek transaction'da** (§1): iki ayrı yazımda ad değişip olay
+     * düşmezse şehir şeridi eski adı göstermeye devam eder ve oyuncu "olmadı" sanıp tekrar dener.
+     */
+    await this.db.transaction(async (tx) => {
+      await tx.execute(sql`UPDATE cities SET name = ${name} WHERE id = ${cityId}`);
+      await tx.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${player.worldId}, 'city:renamed',
+                ${JSON.stringify({ cityId, playerId: player.playerId, name })}::jsonb)
+      `);
+    });
+    return { id: cityId, name };
   }
 
   /* ── Mağara (§13.20) ──────────────────────────────────────────────────────── */

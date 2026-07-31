@@ -13,3 +13,6 @@ export * from './prerequisites.ts';
 export * from './display-order.ts';
 export { catalogHash, CATALOG_VERSION } from './hash.ts';
 export { HERO_NAMES, pickHeroName } from './hero-names.ts';
+export {
+  NAME_MAX, NAME_MIN, NAME_PATTERN, NAME_RULE_MESSAGE, clampName, normalizeName,
+} from './name-rules.ts';

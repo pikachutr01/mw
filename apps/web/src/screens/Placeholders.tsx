@@ -9,6 +9,7 @@ import { logout } from '../lib/api.ts';
 import { useTheme } from '../lib/hooks.ts';
 import { Badge, Button, Panel } from '../components/ui.tsx';
 import { AccountPanel } from '../components/AccountPanel.tsx';
+import { CityAdminPanel } from '../components/CityAdminPanel.tsx';
 import { NotifySettings } from '../components/NotifySettings.tsx';
 
 function Soon({ title, lines }: { title: string; lines: string[] }) {
@@ -39,6 +40,9 @@ export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): Rea
     <div className="space-y-3">
       <AccountPanel />
 
+      {/* ⭐ Orijinalde de Seçenekler menüsünün maddesi (`g.java` case 63). */}
+      <CityAdminPanel />
+
       <NotifySettings />
 
       <Panel title="Tema">
@@ -61,7 +65,6 @@ export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): Rea
 
       <Soon title="Yakında" lines={[
         'Üyelik / premium',
-        'Şehir adı değiştirme · şehir terk etme',
         'Tatil moduna al',
       ]} />
 

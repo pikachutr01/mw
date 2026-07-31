@@ -9,7 +9,8 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  BUILDINGS_BY_ID, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor, UNITS_BY_ID, type SpyLevel,
+  BUILDINGS_BY_ID, clampName, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor,
+  UNITS_BY_ID, type SpyLevel,
 } from '@mobiwar/catalog';
 import type { CityService } from '../cities/city.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
@@ -388,14 +389,21 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
   };
 }
 
-/** Koloni adı: "<oyuncu> kolonisi N". Ekranda İngilizce id görünmez (§13.14). */
+/**
+ * Koloni adı: "Koloni N". Ekranda İngilizce id görünmez (§13.14).
+ *
+ * ⚠️ Eskiden `"<oyuncu> kolonisi N"` üretiyordu (ör. "abdullah kolonisi 2" = 19 karakter) ve
+ * 2026-07-31'de konan **3-10 karakter** sınırını daha ilk kolonide çiğniyordu — üstelik
+ * oyuncu o adı sonradan düzenleyemezdi, çünkü yeni ad kuralı 10'u geçen hiçbir şeyi kabul
+ * etmiyor. Kural koyup üreteci unutmak, kuralı kâğıt üstünde bırakmak olurdu.
+ * "Koloni 100"e kadar (10 karakter) sığar; şehir üst sınırı bunun çok altında.
+ */
 async function nextColonyName(tx: Tx, playerId: number): Promise<string> {
   const rows = await tx.execute<Record<string, unknown>>(sql`
-    SELECT username, (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS n
+    SELECT (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS n
       FROM players WHERE id = ${playerId}
   `);
-  const username = String(rows[0]?.['username'] ?? 'Koloni');
-  return `${username} kolonisi ${Number(rows[0]?.['n'] ?? 1)}`;
+  return clampName(`Koloni ${Number(rows[0]?.['n'] ?? 1)}`);
 }
 
 /* ═══ Ortak yardımcılar ════════════════════════════════════════════════════ */

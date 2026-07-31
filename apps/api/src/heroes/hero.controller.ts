@@ -19,6 +19,7 @@ import { heroLevelForXp, heroReviveCost, heroReviveSeconds, heroXpForLevel } fro
 import { DEFAULT_COMBAT_CONFIG } from '@mobiwar/engine';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import { NAME_RULE_MESSAGE, gameName } from '../cities/city-name.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDateOrNull, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
@@ -33,7 +34,12 @@ const skillsRequest = z.object({
   mAtk: z.number().int().nonnegative(),
   mDef: z.number().int().nonnegative(),
 });
-const renameRequest = z.object({ name: z.string().trim().min(2).max(24) });
+/**
+ * ⚠️ Sınır 2-24'ten **3-10**'a indi (kullanıcı kararı 2026-07-31): şehir adıyla aynı kural,
+ * kaynağı `@mobiwar/catalog` → `name-rules.ts`. Mevcut uzun adlar `0024_name_limits.sql`
+ * ile kırpıldı — yoksa oyuncu adını düzenlemek isterken kendi adını reddettirirdi.
+ */
+const renameRequest = z.object({ name: gameName });
 
 interface HeroRow {
   id: number;
@@ -171,7 +177,7 @@ export class HeroController {
     @Param('id') id: string, @Body() body: unknown, @Req() req: AuthedRequest,
   ): Promise<Record<string, unknown>> {
     const parsed = renameRequest.safeParse(body);
-    if (!parsed.success) throw new BadRequestException('Ad 2-24 karakter olmalı.');
+    if (!parsed.success) throw new BadRequestException(NAME_RULE_MESSAGE);
     const hero = await this.load(Number(id), req.player!.playerId);
     if (hero.status === 'destroyed') {
       throw new BadRequestException('Yok edilmiş kahramanın adı değiştirilemez.');
