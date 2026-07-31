@@ -26,6 +26,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { UNITS_BY_ID, caveCapacity, caveTransferSeconds, unitsArea } from '@mobiwar/catalog';
+import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
 import { toDate, type Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
 
@@ -72,7 +73,22 @@ export interface CaveState {
 export const CAVE_JOB_TYPES = ['cave_store', 'cave_withdraw'] as const;
 
 export class CaveService {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    /**
+     * ⭐ Dünya bazlı katalog sabitleri (§admin Faz 5). Verilmezse formüller kendi
+     * varsayılanlarını kullanır ve davranış **DEĞİŞMEZ** — testler bu yüzden onu geçmeden
+     * çalışmaya devam ediyor. Nesne değil FONKSİYON: panelden kaydedilen bir sabit bir
+     * sonraki istekte güncel olsun, süreç ömrü boyunca donmasın.
+     */
+    private readonly catalogFor?: (worldId: number) => CatalogConfig,
+  ) {}
+
+  /** Bu dünyanın etkin katalog sabitleri (yoksa varsayılan). */
+  private cat(worldId: number): CatalogConfig {
+    return this.catalogFor?.(worldId) ?? DEFAULT_CATALOG_CONFIG;
+  }
+
 
   /* ── Okuma ────────────────────────────────────────────────────────────────── */
 

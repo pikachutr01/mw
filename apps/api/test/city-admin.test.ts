@@ -18,6 +18,7 @@ import { CityController } from '../src/cities/city.controller.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { QueueService } from '../src/queues/queue.service.ts';
+import { SettingsService } from '../src/settings/settings.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
 import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
 
@@ -50,9 +51,14 @@ const nameOfCity = async (id: number): Promise<string> => {
 beforeAll(async () => {
   h = await setupTestDb();
   svc = new CityService(h.db);
+  /**
+   * ⚠️ `SettingsService` de geçiliyor (§admin Faz 5): controller ekrandaki fiyat/süreleri
+   * dünyanın etkin katalog sabitlerinden hesaplıyor. Hiç ayar kaydedilmemişse servis
+   * varsayılan config'i döndürür ve bu testlerin gördüğü değerler değişmez.
+   */
   ctl = new CityController(
     svc, new QueueService(h.db, svc), new CaveService(h.db),
-    new GameClockService(h.db), h.db,
+    new GameClockService(h.db), new SettingsService(h.db), h.db,
   );
 }, 60_000);
 

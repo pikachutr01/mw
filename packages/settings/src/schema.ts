@@ -45,6 +45,25 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     description: 'Savaş sonrası kahraman kazanma ihtimali (28/28 ölçüm, hepsi binary sabiti).',
   },
   {
+    id: 'economy',
+    label: 'Ekonomi ve süre',
+    description: '⭐ Oyunun temposunu belirleyen eğriler: üretim, maliyet büyümesi ve süre '
+      + 'modeli. ⚠️ Buradaki bir değişiklik SÜREN işleri etkilemez — kuyruk bitiş anı ve '
+      + 'sefer varış anı girerken hesaplanıp yazılıyor; yalnız bundan sonraki işler etkilenir.',
+  },
+  {
+    id: 'cave',
+    label: 'Mağara',
+    description: 'Kapasite ve yıkılma eşiği ÖLÇÜLDÜ (kapasite tablosu 20/20, cüce tablosu '
+      + '119/120); doldurma/boşaltma ve onarım süreleri kurgu.',
+  },
+  {
+    id: 'wall',
+    label: 'Sur onarımı',
+    description: 'Savaştan sonra surun kendini onarma süresi. Doküman süreyi vermiyor — '
+      + 'ikisi de kurgu (§13.21.2).',
+  },
+  {
     id: 'loot',
     label: 'Ganimet',
     description: 'Havuz + kaynak-bazlı yağma oranı (§13.10.4). Ölçüm değil TASARIM: '
@@ -429,6 +448,192 @@ export const SETTINGS: readonly SettingDef[] = [
     label: 'Rastgelelik — üst',
     type: 'number', default: 1.15, min: 0.1, max: 3, tag: 'design',
     description: 'Üst ucu. Alt uçtan küçük olmamalı.',
+  },
+
+  /* ── Ekonomi ve süre (Faz 5) ─────────────────────────────────────────────── */
+  {
+    key: 'economy.foodBase',
+    label: 'Çiftlik taban üretimi',
+    type: 'number', default: 6, min: 0.1, max: 1000, tag: 'measured', unit: 'yemek/sa',
+    description: 'Üretim = taban × seviye × oran^seviye. 40/40 seviyede birebir doğrulandı.',
+  },
+  {
+    key: 'economy.foodRate',
+    label: 'Çiftlik büyüme oranı',
+    type: 'number', default: 1.16, min: 1, max: 2, tag: 'measured',
+    description: '⚠️ Üstel: seviye 40ta 1,16^40 ≈ 380 kat. Küçük bir değişiklik geç oyunu '
+      + 'tamamen değiştirir.',
+  },
+  {
+    key: 'economy.goldBase',
+    label: 'Maden taban üretimi',
+    type: 'number', default: 5, min: 0.1, max: 1000, tag: 'measured', unit: 'altın/sa',
+    description: '40/40 seviyede birebir doğrulandı.',
+  },
+  {
+    key: 'economy.goldRate',
+    label: 'Maden büyüme oranı',
+    type: 'number', default: 1.15, min: 1, max: 2, tag: 'measured',
+    description: 'Çiftlikten biraz düşük — altın oyunda daha kıt olsun diye.',
+  },
+  {
+    key: 'economy.buildingCostRate',
+    label: 'Yapı maliyet oranı',
+    type: 'number', default: 1.8, min: 1, max: 3, tag: 'design',
+    description: 'Normal yapıların maliyet eğrisi: oran^(seviye−1).',
+  },
+  {
+    key: 'economy.economyCostRate',
+    label: 'Çiftlik/Maden maliyet oranı',
+    type: 'number', default: 1.33, min: 1, max: 3, tag: 'design',
+    description: '⚠️ **1,45 DEĞİL 1,33.** k.javada 1,45 yazıyordu ama o oran orijinalin '
+      + 'bilinmeyen tabanlarına aitti. Bizim tavanımız 40 ve 1,45 ile seviye 40 ekonomik '
+      + 'olarak ULAŞILAMAZ oluyordu (190 milyon kaynak, ~1 yıl geri ödeme). 1,33 ile 7,1 '
+      + 'milyon kaynak ve 20-36 gün.',
+  },
+  {
+    key: 'economy.techCostRate',
+    label: 'Teknik maliyet oranı',
+    type: 'number', default: 1.5, min: 1, max: 3, tag: 'design',
+    description: 'Teknik maliyeti: taban × oran^(seviye+1).',
+  },
+  {
+    key: 'economy.timeDecayRate',
+    label: 'Süre kısaltma oranı',
+    type: 'number', default: 1.2, min: 1, max: 3, tag: 'design',
+    description: 'Her hızlandırıcı yapı seviyesi süreyi böler. ⚠️ Orijinaldeki 1,4 yirmi '
+      + 'seviyede **836 kat** demekti; Baraka tek başına oyunun kaderini belirliyor ve '
+      + 'seviye 1deki oyuncu hiçbir şey üretemiyordu. 1,2 ile yirmi seviye 32 kat.',
+  },
+  {
+    key: 'economy.timeExponent',
+    label: 'Süre üssü',
+    type: 'number', default: 0.8, min: 0.1, max: 2, tag: 'design',
+    description: 'Pahalı birimi saniye başına daha verimli yapar. 1,0 olsaydı birim seçimi '
+      + 'yalnız maliyet verimliliğine inerdi.',
+  },
+  {
+    key: 'economy.unitTimeFactor',
+    label: 'Birim süre katsayısı',
+    type: 'number', default: 190, min: 1, max: 10000, tag: 'design',
+    description: 'Savaşçı ve savunma birimi → Cüce, Baraka 1de 1 dk 54 sn.',
+  },
+  {
+    key: 'economy.structureTimeFactor',
+    label: 'Yapı süre katsayısı',
+    type: 'number', default: 400, min: 1, max: 20000, tag: 'design',
+    description: 'Yapı/teknik/Sur/Kalkan → aynı maliyette birimin ~2 katı süre.',
+  },
+  {
+    key: 'economy.timeDivisorRate',
+    label: 'Süre böleni tabanı',
+    type: 'number', default: 1.4, min: 1, max: 3, tag: 'design',
+    description: 'Emekli süre modellerinin böleni; güncel modelde kullanılmıyor.',
+  },
+  {
+    key: 'economy.carryTimeWeight',
+    label: 'Taşıma kapasitesi ağırlığı',
+    type: 'number', default: 1, min: 0, max: 10, tag: 'design',
+    description: '1 birim taşıma kapasitesi kaç kaynak sayılır. Yalnız Yük Arabasında '
+      + 'anlamlı fark yaratır.',
+  },
+  {
+    key: 'economy.buildingCostMultiplier',
+    label: 'Yapı fiyat çarpanı',
+    type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
+    description: '⭐ TÜM yapı fiyatlarını topluca ölçekler; eğrinin şeklini bozmaz. '
+      + '⚠️ Yapı BAŞINA fiyat düzenleme burada YOK: 11 yapı × 2 kaynak = 22 satırlık düz bir '
+      + 'liste asıl soruyu ("fiyatlar genel olarak yüksek mi") cevaplamıyordu. Tek tek '
+      + 'düzenleme veri tarayıcısının işi (Faz 7).',
+  },
+  {
+    key: 'economy.unitCostMultiplier',
+    label: 'Birim fiyat çarpanı',
+    type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
+    description: 'TÜM birim fiyatlarını topluca ölçekler.',
+  },
+  {
+    key: 'economy.techCostMultiplier',
+    label: 'Teknik fiyat çarpanı',
+    type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
+    description: 'TÜM teknik fiyatlarını topluca ölçekler.',
+  },
+
+  /* ── Mağara ──────────────────────────────────────────────────────────────── */
+  {
+    key: 'cave.capacityBase',
+    label: 'Kapasite tabanı',
+    type: 'number', default: 50, min: 1, max: 100000, tag: 'measured', unit: 'alan',
+    description: 'Kapasite = taban × 2^(seviye−1). Tablo 20/20 doğrulandı.',
+  },
+  {
+    key: 'cave.breakBase',
+    label: 'Yıkma tabanı',
+    type: 'number', default: 100, min: 1, max: 1000000, tag: 'measured', unit: 'cüce',
+    description: 'Seviye 1 mağarayı yıkmak için gereken cüce (Demircilik 0). '
+      + 'cuce-magara.png tablosunun 119/120 hücresi bu formülle tutuyor.',
+  },
+  {
+    key: 'cave.breakRate',
+    label: 'Yıkma büyüme oranı',
+    type: 'number', default: 1.5, min: 1, max: 5, tag: 'measured',
+    description: 'Her seviye mağaraya %50 dayanıklılık (doküman + tablo).',
+  },
+  {
+    key: 'cave.blacksmithingRelief',
+    label: 'Demircilik indirimi',
+    type: 'number', default: 0.05, min: 0, max: 1, tag: 'measured',
+    description: '⚠️ **TOPLAMSAL payda** (1 + 0,05·d), üssel DEĞİL. Ayrım büyük: Demircilik '
+      + '30da üssel model 0,21 verirken gerçek tablo 0,40 diyor.',
+  },
+  {
+    key: 'cave.transferFactor',
+    label: 'Doldurma/boşaltma katsayısı',
+    type: 'number', default: 25, min: 1, max: 1000, tag: 'design',
+    description: 'süre = katsayı × √alan / oran^(sv−1). 25 → seviye 1de dolu mağara 2 dk 57 sn.',
+  },
+  {
+    key: 'cave.transferDecayRate',
+    label: 'Doldurma kısalma oranı',
+    type: 'number', default: 1.1, min: 1, max: 3, tag: 'design',
+    description: 'Doküman: her mağara seviyesi doldurma/boşaltmayı %10 azaltır.',
+  },
+  {
+    key: 'cave.minTransferSeconds',
+    label: 'En kısa transfer',
+    type: 'int', default: 5, min: 0, max: 3600, tag: 'design', unit: 'sn',
+    description: 'Tek birimlik işlem bile anlık olmasın (istismar tamponu).',
+  },
+  {
+    key: 'cave.repairBaseSeconds',
+    label: 'Onarım tabanı',
+    type: 'int', default: 72000, min: 60, max: 604800, tag: 'design', unit: 'sn',
+    description: 'Yıkılan mağaranın onarımı (20 saat). ⚠️ Bir ara 26 saatti; kullanıcı '
+      + '2026-07-28de indirdi — mağara yıkılınca oyuncunun en değerli ordusu bir gün boyunca '
+      + 'korumasız kalıyordu.',
+  },
+  {
+    key: 'cave.repairDecayRate',
+    label: 'Onarım kısalma oranı',
+    type: 'number', default: 0.9, min: 0.1, max: 1, tag: 'design',
+    description: 'Her seviye onarımı %10 kısaltır — mağarayı yükseltmek yalnız kapasite '
+      + 'değil dayanıklılık da kazandırmalı.',
+  },
+
+  /* ── Sur onarımı ─────────────────────────────────────────────────────────── */
+  {
+    key: 'wall.repairBaseSeconds',
+    label: 'Sur onarım tabanı',
+    type: 'int', default: 43200, min: 60, max: 604800, tag: 'design', unit: 'sn',
+    description: 'Tamamen yıkılmış seviye 1 sur bu sürede (12 saat) toparlanır. Süre alınan '
+      + 'hasarla ORANTILI: %20ye düşmüş sur, %70te kalandan çok daha uzun sürer.',
+  },
+  {
+    key: 'wall.repairDecayRate',
+    label: 'Sur onarım kısalma oranı',
+    type: 'number', default: 0.92, min: 0.1, max: 1, tag: 'design',
+    description: 'Seviye 20 sur 2 sa 28 dkda toparlanır. Dokümanda böyle bir bilgi yok, '
+      + 'bilerek eklendi: Suru yükseltmek toparlanma hızı da kazandırmalı.',
   },
 ] as const;
 

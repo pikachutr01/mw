@@ -8,6 +8,7 @@ export * from './types.ts';
 export * from './units.ts';
 export * from './techs.ts';
 export * from './buildings.ts';
+export * from './config.ts';
 export * from './formulas.ts';
 export * from './prerequisites.ts';
 export * from './display-order.ts';

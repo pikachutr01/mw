@@ -14,7 +14,7 @@
 | 2 | Bakım modu uçtan uca | ✅ **bitti** (2026-07-31) |
 | 3 | Oturum ve cihaz yönetimi | ✅ **bitti** (2026-07-31) |
 | 4 | Savaş motoru sabitleri | ✅ **bitti** (2026-07-31) |
-| 5 | Katalog sabitleri | ⏳ |
+| 5 | Katalog sabitleri | ✅ **bitti** (2026-07-31) |
 | 6 | Oyuncu ve moderasyon (+ `chat_bans` canlandırma) | ⏳ |
 | 7 | Veri tabanı tarayıcı + aksiyonlar | ⏳ |
 | 8 | Bakım/performans | ⏳ |
@@ -437,6 +437,83 @@ buna değmiyor.
 | `loot.condition` | Sayı değil kip seçimi (üç değerden biri); ayrı editör ister |
 | `engineVersion` | Türev — savaş künyesinin kimliği, elle değiştirilecek bir şey değil |
 | `chat.bodyMax` | `contracts`taki `max(500)` ile aynı sayı olmak zorunda; panelden değişseydi istemci geçerli saydığı mesajı sunucuya reddettirirdi |
+
+---
+
+## Katalog sabitleri (Faz 5)
+
+**26 sabit**, üç grup: `economy` · `cave` · `wall`. Kullanıcının istediği "temel fiyatlar,
+temel süreler, büyüme oranları" bunlar.
+
+### Formüller: isteğe bağlı son parametre
+
+```ts
+buildingCost(id, level, cfg = DEFAULT_CATALOG_CONFIG)
+```
+
+⚠️ **İmza kırılmadı.** Parametresiz çağıran (176 motor testi, 48 katalog testi, istemci) hiç
+değişmedi ve sonucu aynı; API çağrıları `settings.catalog(worldId)` geçiriyor.
+`ECONOMY_CONSTANTS` / `CAVE_CONSTANTS` / `WALL_CONSTANTS` hâlâ dışa aktarılıyor ama artık
+`config.ts`ten türetiliyor — **sayıların hiçbiri değişmedi**.
+
+Servisler config'i **fonksiyon** olarak alıyor (`catalogFor?: (worldId) => CatalogConfig`),
+nesne olarak değil: panelden kaydedilen fiyat bir sonraki istekte geçerli olsun diye. Verilmezse
+formüller varsayılanı kullanır ve davranış değişmez — testler bu yüzden onu geçmeden çalışıyor.
+
+### ⭐ Fiyat: yapı BAŞINA değil, üç çarpan
+
+`economy.buildingCostMultiplier` · `unitCostMultiplier` · `techCostMultiplier`.
+
+⚠️ Katalogda 11 yapı + 12 teknik + 21 birim var, her birinin altın/yemek tabanı ayrı: **~90
+ayar**. Panelde 90 satırlık düz bir liste hem kullanılamaz olurdu hem de asıl soruyu
+(*"fiyatlar genel olarak yüksek mi"*) 90 kez düzenlemeye zorlardı. Tek tek düzenleme **veri
+tarayıcısının işi (Faz 7)**; bu üç çarpan dengeyi kaydırmak için gereken düğme ve eğrinin
+şeklini bozmuyor.
+
+⚠️ Birim fiyatında yuvarlama **adetle çarpımdan sonra**: birim başına yuvarlasaydık 100 birimlik
+sipariş ile 100 kez 1 birimlik sipariş farklı tutar öderdi ve oyuncu ucuz olanı bulurdu (testte).
+
+### Ölçümler (canlı, gerçek HTTP)
+
+```
+yapı fiyatı      9.898 → 29.694   (× 3,00 — tam)
+birim fiyatı       200 → 100      (× 0,5)
+yemek/saat       2.844 → 5.796    (foodRate 1,16 → 1,2) · altın/saat DEĞİŞMEDİ
+```
+
+**⭐ Süren kuyruk:** fiyat üç katına çıkarıldıktan sonra `finish_at` ve `spent_*` **birebir aynı
+kaldı**. İptal **9.897** iade etti — ödenen 9.898'in karşılığı, güncel (üç kat) fiyatın değil.
+
+Varsayılana dönünce her değer eski hâline döndü.
+
+### Kısıt 3 zaten kapalıymış
+
+Plan *"`cancelRefund` iadeyi katalogdan yeniden hesaplıyor"* diyordu. **Bu iddia bayattı**: hem
+`queue.service.cancel` hem savaş sonrası sur-iptali yolu `queues.spent_gold/spent_food` okuyor.
+Düzeltilecek bir şey yoktu; onun yerine davranışı **teste bağladım** — fiyatlar oynatılabilir
+hâle gelince kimse "iadeyi güncel fiyattan hesaplayalım" diye değiştirmesin.
+
+### Katalog özeti artık ayarları da kapsıyor
+
+`catalogHash(cfg?)`. ⚠️ `cfg` verilmediğinde özet **eskisiyle birebir aynı** kalır — varsayılan
+config'te yüke `c` alanı eklenmiyor. Eklenseydi tüm eski `battles.catalog_hash` değerleri
+"başka bir katalog" gibi görünürdü.
+
+### ⚠️ Canlı ölçümün yakaladığı hata
+
+`CityService`e katalog köprüsü eklenmiş ama **üretim formüllerinde kullanılmamıştı**. Birim
+testleri geçiyordu (formül doğru), ayar kaydediliyordu, hash değişiyordu — ama oyuncunun gördüğü
+yemek/saat sabit kalıyordu. Ekrandaki sayının ayarla ayrışması panelin en sinsi hata sınıfı;
+artık testle kilitli.
+
+### ⛔ Panele AÇILMAYANLAR
+
+| Alan | Neden |
+| :-- | :-- |
+| Yapı/birim/teknik BAŞINA fiyat | ~90 ayar; çarpanla çözüldü, tek tek düzenleme Faz 7 |
+| 21 birim × 11 savaş statı | Motor verisi ve çoğu binary'den ölçülmüş; Faz 4 kapsamı zaten savaş sabitleri |
+| `trainTimeAreaDecay`, `originalTrainFactor`, `originalDivisorRate` | **Emekli** süre modelleri; yalnız arşiv/karşılaştırma için duruyor |
+| `heroXpForLevel` eğrisi | 80/80 doğrulanmış kapalı formül, sabiti yok |
 
 ---
 

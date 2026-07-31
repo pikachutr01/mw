@@ -23,7 +23,11 @@ import {
   applySettings, validatePatch, type EffectiveSettings, type SettingValue,
 } from '@mobiwar/settings';
 import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
+import {
+  catalogHash, mergeCatalogConfig, type CatalogConfig, type DeepPartialCatalog,
+} from '@mobiwar/catalog';
 import type { Db } from '../db/client.ts';
+import { catalogOverrides } from './catalog.ts';
 import { combatOverrides, lootOverrides } from './combat.ts';
 import { setLiveSettings } from './live.ts';
 
@@ -53,6 +57,8 @@ export class SettingsService {
   private rows = new Map<number, Record<string, SettingValue>>();
   /** worldId → o dünyanın en son `settings_revisions.id`si (yoksa satır yok). */
   private revisions = new Map<number, number>();
+  /** worldId → birleştirilmiş katalog config'i (sıcak yolda kopyalama olmasın diye). */
+  private catalogs = new Map<number, CatalogConfig>();
   private unlisten: (() => Promise<void>) | null = null;
   private loaded = false;
 
@@ -76,6 +82,7 @@ export class SettingsService {
     }
     this.rows = next;
     this.snapshots.clear();
+    this.catalogs.clear();
 
     /**
      * Revizyon kimlikleri de burada yükleniyor: `battles.settings_revision_id` sıcak yolda
@@ -166,6 +173,36 @@ export class SettingsService {
   loot(worldId: number): Partial<LootConfig> | undefined {
     const s = this.snapshot(worldId);
     return lootOverrides(s.effective, s.overridden);
+  }
+
+  /**
+   * ⭐ KATALOG OVERRIDE'I (Faz 5) — ekonomi eğrileri, süre modeli, mağara ve sur sabitleri.
+   * Aynı sözleşme: değiştirilmiş ayar yoksa `undefined` → formüller varsayılanı aynen kullanır.
+   */
+  catalogOverride(worldId: number): DeepPartialCatalog | undefined {
+    const s = this.snapshot(worldId);
+    return catalogOverrides(s.effective, s.overridden);
+  }
+
+  /**
+   * Formüllere geçirilecek TAM katalog config'i (birleştirilmiş).
+   *
+   * ⚠️ Sonuç **önbelleğe alınıyor**: `mergeCatalogConfig` her çağrıda üç nesne kopyalıyor ve
+   * bu fonksiyon sıcak yolda (her fiyat/süre hesabında) çağrılıyor. Önbelleksiz hâli
+   * "0 sorgu" iddiasını bozmazdı ama sıcak yola gereksiz çöp üretirdi.
+   * Anlık görüntü tazelenince (`load()`) bu önbellek de temizlenir.
+   */
+  catalog(worldId: number): CatalogConfig {
+    const hit = this.catalogs.get(worldId);
+    if (hit) return hit;
+    const built = mergeCatalogConfig(this.catalogOverride(worldId));
+    this.catalogs.set(worldId, built);
+    return built;
+  }
+
+  /** O dünyanın etkin katalog özeti — `battles.catalog_hash`e yazılır. */
+  catalogHash(worldId: number): string {
+    return catalogHash(this.catalog(worldId));
   }
 
   /**

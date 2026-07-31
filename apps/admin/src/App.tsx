@@ -262,13 +262,13 @@ function Placeholder() {
     ['Bakım modu', 'donma · istemci perdesi · mutasyon kilidi (Dünya sekmesinde)', true],
     ['Oturumlar', 'cihaz listesi · uzaktan çıkış', true],
     ['Motor sabitleri', 'savaş config\'i · önizleme (Ayarlar sekmesinde)', true],
-    ['Katalog', 'birim/yapı/teknik fiyat ve süreleri', false],
+    ['Katalog', 'ekonomi eğrileri · fiyat çarpanları · mağara/sur (Ayarlar sekmesinde)', true],
     ['Oyuncular ve moderasyon', 'arama · şikayet kuyruğu · ban', false],
     ['Veri tabanı', 'tablo tarayıcı · küratörlü aksiyonlar · ham kip', false],
     ['Bakım/performans', 'tablo boyutları · temizlik görevleri', false],
   ];
   return (
-    <Panel title="Fazlar" right="Faz 4 bitti">
+    <Panel title="Fazlar" right="Faz 5 bitti">
       <ul className="divide-y divide-border">
         {rows.map(([name, desc, done]) => (
           <li key={name} className="flex items-baseline justify-between gap-3 px-3 py-2">

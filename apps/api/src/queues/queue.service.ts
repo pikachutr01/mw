@@ -15,6 +15,7 @@ import {
   buildingCost, buildingTimeSeconds, cancelRefund, checkRequirement, techCost, techTimeSeconds,
   timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
 } from '@mobiwar/catalog';
+import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
 import { CapacityService } from '../cities/capacity.service.ts';
 import { openUnitQueueCount, promoteNext, rescheduleUnitChain } from './unit-queue.ts';
 import { CityService } from '../cities/city.service.ts';
@@ -85,7 +86,23 @@ const scaled = (seconds: number, multiplier: number): number =>
 export class QueueService {
   private readonly capacity = new CapacityService();
 
-  constructor(private readonly db: Db, private readonly cities: CityService) {}
+  constructor(
+    private readonly db: Db,
+    private readonly cities: CityService,
+    /**
+     * ⭐ Dünya bazlı katalog sabitleri (§admin Faz 5). Verilmezse formüller kendi
+     * varsayılanlarını kullanır ve davranış **DEĞİŞMEZ** — testler bu yüzden onu geçmeden
+     * çalışmaya devam ediyor. Nesne değil FONKSİYON: panelden kaydedilen bir sabit bir
+     * sonraki istekte güncel olsun, süreç ömrü boyunca donmasın.
+     */
+    private readonly catalogFor?: (worldId: number) => CatalogConfig,
+  ) {}
+
+  /** Bu dünyanın etkin katalog sabitleri (yoksa varsayılan). */
+  private cat(worldId: number): CatalogConfig {
+    return this.catalogFor?.(worldId) ?? DEFAULT_CATALOG_CONFIG;
+  }
+
 
   /* ── Yapı yükseltme ───────────────────────────────────────────────────────── */
 
@@ -126,12 +143,13 @@ export class QueueService {
         );
       }
 
-      const cost = buildingCost(opts.type, target);
+      const cfg = this.cat(st.worldId);
+      const cost = buildingCost(opts.type, target, cfg);
       await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
       const mult = await this.worldMultipliers(tx as never, st.worldId);
       const seconds = scaled(
-        buildingTimeSeconds(opts.type, target, st.buildings['architect_school'] ?? 0),
+        buildingTimeSeconds(opts.type, target, st.buildings['architect_school'] ?? 0, cfg),
         mult.construction,
       );
       return this.insert(tx as never, {
@@ -176,7 +194,8 @@ export class QueueService {
 
       const mult = await this.worldMultipliers(tx as never, st.worldId);
       const perUnit = scaled(
-        trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 0), mult.training,
+        trainingTimeSeconds(opts.type, st.buildings['barracks'] ?? 0, 'balanced',
+          this.cat(st.worldId)), mult.training,
       );
       // Sıra: ilk emir hemen başlar, sonrakiler bekler. `position` 1 = üretimi süren.
       const position = open + 1;
@@ -277,7 +296,10 @@ export class QueueService {
         // Sur/Büyü Kalkanı maliyeti SEVİYE tabanlı: taban × 1,8^seviye (§13.9, motor kararını doğrular)
         cost = { gold: def.gold * 1.8 ** (targetLevel - 1), food: def.food * 1.8 ** (targetLevel - 1) };
         cost = { gold: Math.round(cost.gold), food: Math.round(cost.food) };
-        seconds = scaled(timeFromCost(cost, st.buildings['architect_school'] ?? 0), mult.construction);
+        seconds = scaled(
+          timeFromCost(cost, st.buildings['architect_school'] ?? 0, this.cat(st.worldId)),
+          mult.construction,
+        );
       } else {
         count = opts.count;
         // ⭐ Savunma kapasitesi: 25.000 × 1,30^(Sur−1); birim başına katalogdaki `area`
@@ -293,7 +315,8 @@ export class QueueService {
         // ⭐ Savunma birimi süresi: `balanced` model — 190×((a+y+taşıma)/1000)^0,8 / 1,2^MimarOkulu.
         //    Mimar Okulu YOKSA bölen 1'dir — bu yüzden varsayılan 0, 1 değil.
         seconds = scaled(
-          trainingTimeSeconds(opts.type, st.buildings['architect_school'] ?? 0), mult.training,
+          trainingTimeSeconds(opts.type, st.buildings['architect_school'] ?? 0, 'balanced',
+            this.cat(st.worldId)), mult.training,
         ) * count;
       }
 
@@ -353,13 +376,14 @@ export class QueueService {
         throw new QueueError('tech_already_researching', 'Bu teknik başka bir şehirde araştırılıyor.');
       }
 
-      const cost = techCost(opts.type, target);
+      const cfg = this.cat(st.worldId);
+      const cost = techCost(opts.type, target, cfg);
       await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
 
       // Süre O ŞEHRİN akademisine bağlı (§13.9: a[187]="w" hangi şehir)
       const mult = await this.worldMultipliers(tx as never, st.worldId);
       const seconds = scaled(
-        techTimeSeconds(opts.type, target, st.buildings['academy'] ?? 0), mult.construction,
+        techTimeSeconds(opts.type, target, st.buildings['academy'] ?? 0, cfg), mult.construction,
       );
       return this.insert(tx as never, {
         ...st, cityId: opts.cityId, category: 'tech', itemType: opts.type,

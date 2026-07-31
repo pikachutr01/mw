@@ -24,6 +24,7 @@ import { CaveError, CaveService, type CaveState } from '../cave/cave.service.ts'
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { QueueError, QueueService } from '../queues/queue.service.ts';
+import { SettingsService } from '../settings/settings.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { CapacityService } from './capacity.service.ts';
 import { NAME_RULE_MESSAGE, renameRequest } from './city-name.ts';
@@ -74,6 +75,7 @@ export class CityController {
     private readonly queues: QueueService,
     private readonly cave: CaveService,
     private readonly clock: GameClockService,
+    private readonly settings: SettingsService,
     @Inject(DB) private readonly db: Db,
   ) {}
 
@@ -361,6 +363,12 @@ export class CityController {
     const gameNow = await this.clock.gameNow(player.worldId);
     const snap = (await this.cities.snapshot(cityId, gameNow))!;
     void owner;
+    /**
+     * ⭐ Oyuncunun EKRANDA gördüğü fiyat ve süreler de dünyanın etkin katalog sabitlerinden
+     * (§admin Faz 5). Burada varsayılanı kullansaydık ekrandaki fiyat ile `queue.service`in
+     * gerçekten tahsil ettiği fiyat ayrışırdı — kullanıcının fark edeceği ilk hata bu olurdu.
+     */
+    const cfg = this.settings.catalog(player.worldId);
 
     const techRows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT type, level FROM techs WHERE player_id = ${player.playerId}
@@ -385,9 +393,10 @@ export class CityController {
         const available = next <= b.maxLevel;
         return {
           id: b.id, name: b.name.tr, level, maxLevel: b.maxLevel,
-          nextCost: available ? buildingCost(b.id, next) : null,
+          nextCost: available ? buildingCost(b.id, next, cfg) : null,
           // ⭐ Bir sonraki seviyenin SÜRESİ (saniye) — oyuncu maliyetle birlikte bunu da görmeli.
-          nextSeconds: available ? Math.round(buildingTimeSeconds(b.id, next, architect)) : null,
+          nextSeconds: available
+            ? Math.round(buildingTimeSeconds(b.id, next, architect, cfg)) : null,
           requirements: BUILDING_REQUIREMENTS[b.id] ?? {},
           requirementNames: nameRequirements(BUILDING_REQUIREMENTS[b.id]),
         };
@@ -395,9 +404,9 @@ export class CityController {
       units: orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER).map((u) => ({
         // `carry` nakliye/destek formunun kapasite göstergesi için gerekiyor (§NAKLİYE).
         id: u.id, name: u.name.tr, area: u.area, speed: u.speed, carry: u.carry,
-        cost: unitCost(u.id, 1),
+        cost: unitCost(u.id, 1, cfg),
         /** Bir birimin üretim süresi: `((a+y)/10)^0,8 × 65 / 1,4^Baraka`. Adetle çarpılır. */
-        seconds: Math.round(trainingTimeSeconds(u.id, barracks)),
+        seconds: Math.round(trainingTimeSeconds(u.id, barracks, 'balanced', cfg)),
         requirements: UNIT_REQUIREMENTS[u.id] ?? {},
         requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
       })),
@@ -413,13 +422,13 @@ export class CityController {
             gold: Math.round(u.gold * 1.8 ** (nextLevel - 1)),
             food: Math.round(u.food * 1.8 ** (nextLevel - 1)),
           }
-          : unitCost(u.id, 1);
+          : unitCost(u.id, 1, cfg);
         return {
           id: u.id, name: u.name.tr, area: u.area, levelBased, current, cost,
           // İki dal da AYNI kural: 10(a+y)/1,4^MimarOkulu. Fark yalnız maliyetin seviyeli olması.
           seconds: levelBased
-            ? Math.round(timeFromCost(cost, architect))
-            : Math.round(trainingTimeSeconds(u.id, architect)),
+            ? Math.round(timeFromCost(cost, architect, cfg))
+            : Math.round(trainingTimeSeconds(u.id, architect, 'balanced', cfg)),
           requirements: UNIT_REQUIREMENTS[u.id] ?? {},
           requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
         };
@@ -428,8 +437,8 @@ export class CityController {
         const level = techs[t.id] ?? 0;
         return {
           id: t.id, name: t.name.tr, level,
-          nextCost: techCost(t.id, level + 1),
-          nextSeconds: Math.round(techTimeSeconds(t.id, level + 1, academy)),
+          nextCost: techCost(t.id, level + 1, cfg),
+          nextSeconds: Math.round(techTimeSeconds(t.id, level + 1, academy, cfg)),
           requirements: TECH_REQUIREMENTS[t.id] ?? {},
           requirementNames: nameRequirements(TECH_REQUIREMENTS[t.id]),
         };

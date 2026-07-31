@@ -4,92 +4,24 @@
  * (Çiftlik 40/40 · Maden 40/40 · Kahraman XP 80/80 · Mağara cüce 119/120).
  */
 import { BUILDINGS_BY_ID, STARTING_BUILDINGS } from './buildings.ts';
+import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from './config.ts';
 import { TECHS_BY_ID } from './techs.ts';
 import { UNITS_BY_ID } from './units.ts';
 
 /** Sabitler `k.java:10-15`'ten. */
-export const ECONOMY_CONSTANTS = {
-  foodBase: 6,
-  foodRate: 1.16,
-  goldBase: 5,
-  goldRate: 1.15,
-  /** yapı maliyeti eğrisi: `buildingCostRate^(seviye−1)` */
-  buildingCostRate: 1.8,
-  /**
-   * Çiftlik/Maden eğrisi: `seviye × economyCostRate^(seviye−1)`.
-   *
-   * ⚠️ **1,45 DEĞİL 1,33** (2026-07-28, kullanıcı onayı). `k.java`'daki sabit 1,45'ti ama o oran
-   * orijinalin (bilmediğimiz) tabanlarına ve muhtemelen başka bir seviye tavanına aitti. Bizim
-   * tavanımız **40** ve 1,45 ile maliyet `1,45^L`, üretim `1,16^L` büyüdüğü için seviye 40
-   * ekonomik olarak **ulaşılamaz** oluyordu: 190 milyon kaynak, geri ödemesi ~1 yıl.
-   * 1,33 ile seviye 40 = 7,1 milyon kaynak, geri ödeme 20-36 gün — gerçek bir geç-oyun hedefi.
-   */
-  economyCostRate: 1.33,
-  /** teknik maliyeti: base × techCostRate^(level+1) */
-  techCostRate: 1.5,
-  /** süre böleni tabanı: /1.4^(ilgili yapı seviyesi) */
-  timeDivisorRate: 1.4,
-  /* ── SÜRE MODELİ (§13.11.3, kullanıcı kurgusu 2026-07-27) ─────────────────── */
-  /** Her hızlandırıcı yapı seviyesi süreyi %16,7 kısaltır (bölen `1,2^seviye`). */
-  timeDecayRate: 1.2,
-  /** Üs: `k.java`'nın kendi üssü. Pahalı birimi saniye başına daha verimli yapar (bkz. §13.11.3). */
-  timeExponent: 0.8,
-  /** Savaşçı ve savunma birimi katsayısı → Cüce, Baraka 1'de 1 dk 54 sn. */
-  unitTimeFactor: 190,
-  /** Yapı / teknik / Sur / Büyü Kalkanı katsayısı → aynı maliyette birimin ~2 katı süre. */
-  structureTimeFactor: 400,
-  /** 1 birim taşıma kapasitesi = 1 kaynak sayılır (yalnız Yük Arabası'nda anlamlı fark yaratır). */
-  carryTimeWeight: 1,
-
-  /* ── Emekli süre modelleri (yalnız denge düğmesi) ─────────────────────────── */
-  /** ⛔ Model A: `area × 0.95^(Baraka−1)`. */
-  trainTimeAreaDecay: 0.95,
-  /** ⛔ Model B (k.java): `(⌊(a+y)/10⌋)^0.8 × 65 / 1.4^Baraka`. */
-  originalTrainFactor: 65,
-  originalDivisorRate: 1.4,
-} as const;
-
 /**
- * ⭐ MAĞARA SABİTLERİ (§13.20). İlk dördü **ölçülmüş veriden** gelir ve denge düğmesi DEĞİLDİR;
- * son dördü bizim kurgumuzdur ve serbestçe ayarlanabilir.
+ * ⭐ VARSAYILAN SABİTLER — artık `config.ts`ten TÜRETİLİYOR (§admin Faz 5).
+ *
+ * ⚠️ Sayılar oraya taşındı ama **hiçbiri değişmedi**; buradaki üç dışa aktarım geriye dönük
+ * uyum için duruyor (testler ve istemci bunları okuyor). Çalışma zamanında geçersiz kılınmış
+ * değeri isteyen, formüle `cfg` geçirmeli — bu üçü daima VARSAYILANI gösterir.
+ *
+ * Sayıların gerekçeleri (neden 1,33, neden 20 saat…) kullanıldıkları formülün başında;
+ * veri ile o verinin anlamı ayrı yerlerde durmasın diye oraya bırakıldı.
  */
-export const CAVE_CONSTANTS = {
-  /* ── Ölçülmüş ─────────────────────────────────────────────────────────────── */
-  /** Kapasite tablosu: 50 · 100 · 200 … 26.214.400 (20/20). */
-  capacityBase: 50,
-  /** `cuce-magara.png`: seviye 1'de 100 cüce (Demircilik 0). */
-  breakBase: 100,
-  /** Her seviye mağaraya %50 dayanıklılık (doküman + tablo). */
-  breakRate: 1.5,
-  /** Demircilik seviyesi başına payda +0,05 (TOPLAMSAL — üssel değil). */
-  blacksmithingRelief: 0.05,
-
-  /* ── Kurgu (denge düğmesi) ────────────────────────────────────────────────── */
-  /** `süre = transferFactor × √alan / 1,1^(sv−1)`. 25 → seviye 1'de dolu mağara 2 dk 57 sn. */
-  transferFactor: 25,
-  /** Doküman: her mağara seviyesi doldurma/boşaltmayı %10 azaltır. */
-  transferDecayRate: 1.1,
-  /** Tek birimlik işlem bile anlık olmasın (istismar tamponu). */
-  minTransferSeconds: 5,
-  /**
-   * Yıkılan mağaranın onarımı: **20 saat**, her seviye %10 kısa (§13.20.2).
-   * ⚠️ Bir ara 26 saatti; kullanıcı 2026-07-28'de "biraz daha insaflı olsun" diyerek indirdi —
-   * mağara yıkılınca oyuncunun en değerli ordusu bir gün boyunca korumasız kalıyordu.
-   */
-  repairBaseSeconds: 20 * 3600,
-  repairDecayRate: 0.9,
-} as const;
-
-/**
- * ⭐ SUR SABİTLERİ (§13.21.2). İkisi de **kurgu** — doküman onarım süresini vermiyor.
- * Tamamen yıkılmış seviye 1 sur **12 saatte**, seviye 20 sur 2 sa 28 dk'da toparlanır.
- * (Kullanıcı 14 saat önerdi ve makul bir değere çekilmesini istedi; 12 saat seçildi — sur
- * tam yıkılınca savunma birimi ÜRETİLEMEDİĞİ için ceza zaten ağır.)
- */
-export const WALL_CONSTANTS = {
-  repairBaseSeconds: 12 * 3600,
-  repairDecayRate: 0.92,
-} as const;
+export const ECONOMY_CONSTANTS = DEFAULT_CATALOG_CONFIG.economy;
+export const CAVE_CONSTANTS = DEFAULT_CATALOG_CONFIG.cave;
+export const WALL_CONSTANTS = DEFAULT_CATALOG_CONFIG.wall;
 
 export interface Cost {
   gold: number;
@@ -97,15 +29,15 @@ export interface Cost {
 }
 
 /** Çiftlik üretimi (yemek/saat) — 40/40 seviyede birebir doğrulandı. */
-export function farmOutput(level: number): number {
+export function farmOutput(level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   if (level <= 0) return 0;
-  return Math.floor(ECONOMY_CONSTANTS.foodBase * level * ECONOMY_CONSTANTS.foodRate ** level);
+  return Math.floor(cfg.economy.foodBase * level * cfg.economy.foodRate ** level);
 }
 
 /** Maden üretimi (altın/saat) — 40/40 seviyede birebir doğrulandı. */
-export function mineOutput(level: number): number {
+export function mineOutput(level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   if (level <= 0) return 0;
-  return Math.floor(ECONOMY_CONSTANTS.goldBase * level * ECONOMY_CONSTANTS.goldRate ** level);
+  return Math.floor(cfg.economy.goldBase * level * cfg.economy.goldRate ** level);
 }
 
 /** Kahraman seviye atlama tecrübesi — XP(1)=500, XP(L)=round(XP(L−1) × (1 + 1/√(L−1))). 80/80 doğru. */
@@ -132,18 +64,18 @@ export function heroXpForLevel(level: number): number {
  * ⚠️ Tek uyuşmayan hücre (Demircilik 4 · Mağara 22 → tabloda 415.667, formül 415.657) tablonun
  * KENDİ içinde de tutarsız: komşularıyla ×1,5 zinciri kurulmuyor. Basım hatası kabul edildi.
  */
-export function dwarvesToBreakCave(caveLevel: number, blacksmithing: number): number {
+export function dwarvesToBreakCave(caveLevel: number, blacksmithing: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   if (caveLevel <= 0) return Infinity;          // yapılmamış mağara yıkılamaz
   return Math.round(
-    (CAVE_CONSTANTS.breakBase * CAVE_CONSTANTS.breakRate ** (caveLevel - 1))
-    / (1 + CAVE_CONSTANTS.blacksmithingRelief * Math.max(0, blacksmithing)),
+    (cfg.cave.breakBase * cfg.cave.breakRate ** (caveLevel - 1))
+    / (1 + cfg.cave.blacksmithingRelief * Math.max(0, blacksmithing)),
   );
 }
 
 /** ⭐ ÖLÇÜLMÜŞ: mağara kapasitesi (ALAN cinsinden) — 50 × 2^(sv−1), 20/20 doğrulandı. */
-export function caveCapacity(caveLevel: number): number {
+export function caveCapacity(caveLevel: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   if (caveLevel <= 0) return 0;
-  return CAVE_CONSTANTS.capacityBase * 2 ** (caveLevel - 1);
+  return cfg.cave.capacityBase * 2 ** (caveLevel - 1);
 }
 
 /** Birim adetlerinin toplam ALANI — mağara kapasitesi bu birimde ölçülür. */
@@ -176,12 +108,12 @@ export function unitsArea(counts: Record<string, number>): number {
  *   şehre KAÇIŞ dönüşü — o bir sefer sayılır, `speed_multiplier` ÇAĞIRAN tarafta uygulanır
  *   (kullanıcı kararı 2026-07-30; formül saf kalır).
  */
-export function caveTransferSeconds(area: number, caveLevel: number): number {
+export function caveTransferSeconds(area: number, caveLevel: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   if (area <= 0) return 0;
   const level = Math.max(1, caveLevel);
-  const raw = (CAVE_CONSTANTS.transferFactor * Math.sqrt(area))
-    / CAVE_CONSTANTS.transferDecayRate ** (level - 1);
-  return Math.max(CAVE_CONSTANTS.minTransferSeconds, Math.round(raw));
+  const raw = (cfg.cave.transferFactor * Math.sqrt(area))
+    / cfg.cave.transferDecayRate ** (level - 1);
+  return Math.max(cfg.cave.minTransferSeconds, Math.round(raw));
 }
 
 /**
@@ -208,22 +140,22 @@ export function caveTransferSeconds(area: number, caveLevel: number): number {
  *
  * @param integrity savaş sonrası kalan bütünlük, 0-1 arası
  */
-export function wallRepairSeconds(wallLevel: number, integrity: number): number {
+export function wallRepairSeconds(wallLevel: number, integrity: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   const damage = Math.min(1, Math.max(0, 1 - integrity));
   if (damage <= 0 || wallLevel <= 0) return 0;
   return Math.max(
     60,
     Math.round(
-      WALL_CONSTANTS.repairBaseSeconds * damage
-      * WALL_CONSTANTS.repairDecayRate ** (Math.max(1, wallLevel) - 1),
+      cfg.wall.repairBaseSeconds * damage
+      * cfg.wall.repairDecayRate ** (Math.max(1, wallLevel) - 1),
     ),
   );
 }
 
-export function caveRepairSeconds(caveLevel: number): number {
+export function caveRepairSeconds(caveLevel: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   const level = Math.max(1, caveLevel);
   return Math.round(
-    CAVE_CONSTANTS.repairBaseSeconds * CAVE_CONSTANTS.repairDecayRate ** (level - 1),
+    cfg.cave.repairBaseSeconds * cfg.cave.repairDecayRate ** (level - 1),
   );
 }
 
@@ -239,10 +171,10 @@ export function castleBudget(castleLevel: number): number {
 }
 
 /** Maliyet eğrisinin ham değeri (ölçeksiz). */
-function costCurve(buildingId: string, level: number): number {
+function costCurve(buildingId: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   return BUILDINGS_BY_ID[buildingId]?.economyCostCurve
-    ? level * ECONOMY_CONSTANTS.economyCostRate ** (level - 1)
-    : ECONOMY_CONSTANTS.buildingCostRate ** (level - 1);
+    ? level * cfg.economy.economyCostRate ** (level - 1)
+    : cfg.economy.buildingCostRate ** (level - 1);
 }
 
 /**
@@ -256,28 +188,35 @@ function costCurve(buildingId: string, level: number): number {
  * Bu yorum olmadan taban görünmeyen bir seviyenin fiyatıydı: kullanıcı "Çiftlik 3 altın 4 yemek"
  * dediğinde ekranda **9/12** çıkıyordu (çünkü 3/4 seviye 1'in fiyatıydı, oyuncu ise 1→2'yi görür).
  */
-export function buildingCost(buildingId: string, level: number): Cost {
+export function buildingCost(buildingId: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
   const def = BUILDINGS_BY_ID[buildingId];
   if (!def) throw new Error(`Bilinmeyen yapı: ${buildingId}`);
   if (level <= 0) return { gold: 0, food: 0 };
   const firstPaid = (STARTING_BUILDINGS[buildingId] ?? 0) + 1;
-  const k = costCurve(buildingId, level) / costCurve(buildingId, firstPaid);
-  return { gold: Math.round(def.baseGold * k), food: Math.round(def.baseFood * k) };
+  const k = costCurve(buildingId, level, cfg) / costCurve(buildingId, firstPaid, cfg);
+  // ⭐ Fiyat çarpanı EN SONDA ve yuvarlamadan ÖNCE: eğri bozulmasın, yalnız ölçek kaysın.
+  const m = cfg.economy.buildingCostMultiplier;
+  return { gold: Math.round(def.baseGold * k * m), food: Math.round(def.baseFood * k * m) };
 }
 
 /** Teknik maliyeti: base × 1.5^(seviye+1). */
-export function techCost(techId: string, level: number): Cost {
+export function techCost(techId: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
   const def = TECHS_BY_ID[techId];
   if (!def) throw new Error(`Bilinmeyen teknik: ${techId}`);
-  const k = ECONOMY_CONSTANTS.techCostRate ** (level + 1);
+  const k = cfg.economy.techCostRate ** (level + 1) * cfg.economy.techCostMultiplier;
   return { gold: Math.round(def.baseGold * k), food: Math.round(def.baseFood * k) };
 }
 
 /** Birim maliyeti sabittir (adet başına). */
-export function unitCost(unitId: string, count = 1): Cost {
+export function unitCost(unitId: string, count = 1, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
   const def = UNITS_BY_ID[unitId];
   if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
-  return { gold: def.gold * count, food: def.food * count };
+  /**
+   * ⚠️ Yuvarlama ADET ile çarpımdan SONRA: birim başına yuvarlasaydık 100 birimlik sipariş
+   * ile 100 kez 1 birimlik sipariş farklı tutar öderdi ve oyuncu ucuz olanı bulurdu.
+   */
+  const m = cfg.economy.unitCostMultiplier;
+  return { gold: Math.round(def.gold * count * m), food: Math.round(def.food * count * m) };
 }
 
 /**
@@ -296,16 +235,18 @@ export function unitCost(unitId: string, count = 1): Cost {
  * başına oyunun kaderini belirler ve seviye 1'deki oyuncu hiçbir şey üretemez. 1,2 ile yirmi
  * seviye **32 kat** kazandırır — hissedilir ama tek eksenli değil.
  */
-function timeCurve(value: number, factor: number, level: number): number {
+function timeCurve(
+  value: number, factor: number, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): number {
   return (
-    (factor * (Math.max(0, value) / 1000) ** ECONOMY_CONSTANTS.timeExponent)
-    / ECONOMY_CONSTANTS.timeDecayRate ** Math.max(0, level)
+    (factor * (Math.max(0, value) / 1000) ** cfg.economy.timeExponent)
+    / cfg.economy.timeDecayRate ** Math.max(0, level)
   );
 }
 
 /** Maliyeti olan her YAPISAL kalemin süresi (yapı · teknik · Sur · Büyü Kalkanı). */
-export function timeFromCost(cost: Cost, divisorLevel: number): number {
-  return timeCurve(cost.gold + cost.food, ECONOMY_CONSTANTS.structureTimeFactor, divisorLevel);
+export function timeFromCost(cost: Cost, divisorLevel: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
+  return timeCurve(cost.gold + cost.food, cfg.economy.structureTimeFactor, divisorLevel, cfg);
 }
 
 /**
@@ -315,13 +256,17 @@ export function timeFromCost(cost: Cost, divisorLevel: number): number {
  * Orijinaldeki özel dal (`/1,2^sv`, 10× çarpansız) 1,4'lük bölenin kaçışını frenlemek içindi;
  * bölen 1,2'ye inince frene gerek kalmadı ve özel dal sessiz bir tutarsızlık kaynağı olurdu.
  */
-export function buildingTimeSeconds(buildingId: string, level: number, architectSchool: number): number {
-  return timeFromCost(buildingCost(buildingId, level), architectSchool);
+export function buildingTimeSeconds(
+  buildingId: string, level: number, architectSchool: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): number {
+  return timeFromCost(buildingCost(buildingId, level, cfg), architectSchool, cfg);
 }
 
 /** Teknik araştırma süresi (saniye). Hızlandıran: **o şehrin Akademi'si**. */
-export function techTimeSeconds(techId: string, level: number, academy: number): number {
-  return timeFromCost(techCost(techId, level), academy);
+export function techTimeSeconds(
+  techId: string, level: number, academy: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): number {
+  return timeFromCost(techCost(techId, level, cfg), academy, cfg);
 }
 
 /**
@@ -338,10 +283,10 @@ export function techTimeSeconds(techId: string, level: number, academy: number):
  * taşımak bedava gelirdi: bu terimle değeri 2.000 → 5.000 olur, süresi 2,1 katına çıkar.
  * Diğer birimlerde etki ihmal edilebilir (Ejderha +%0,5) — kasıtlı olarak **hedefli** bir düzeltme.
  */
-export function unitTimeValue(unitId: string): number {
+export function unitTimeValue(unitId: string, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   const def = UNITS_BY_ID[unitId];
   if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
-  return def.gold + def.food + ECONOMY_CONSTANTS.carryTimeWeight * def.carry;
+  return def.gold + def.food + cfg.economy.carryTimeWeight * def.carry;
 }
 
 /** `balanced` = yürürlükteki model. Diğer ikisi ⛔ emekli, yalnız karşılaştırma için (§13.11.3). */
@@ -369,26 +314,27 @@ export function trainingTimeSeconds(
   unitId: string,
   sourceLevel: number,
   model: TrainingTimeModel = 'balanced',
+  cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
 ): number {
   const def = UNITS_BY_ID[unitId];
   if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
   const lvl = Math.max(0, sourceLevel);
 
   if (model === 'area') {                      // ⛔ Model A — süre = Alan × 0,95^(Baraka−1)
-    return def.area * ECONOMY_CONSTANTS.trainTimeAreaDecay ** (Math.max(1, lvl) - 1);
+    return def.area * cfg.economy.trainTimeAreaDecay ** (Math.max(1, lvl) - 1);
   }
   if (model === 'original') {                  // ⛔ Model B — k.java'nın ham sayıları
     if (def.kind === 'defense') {
-      return (10 * (def.gold + def.food)) / ECONOMY_CONSTANTS.originalDivisorRate ** lvl;
+      return (10 * (def.gold + def.food)) / cfg.economy.originalDivisorRate ** lvl;
     }
     // `k.java` maliyeti onda birine TAM SAYI bölmesiyle indiriyor (long/long).
     return (
-      (Math.floor((def.gold + def.food) / 10) ** ECONOMY_CONSTANTS.timeExponent
-        * ECONOMY_CONSTANTS.originalTrainFactor)
-      / ECONOMY_CONSTANTS.originalDivisorRate ** lvl
+      (Math.floor((def.gold + def.food) / 10) ** cfg.economy.timeExponent
+        * cfg.economy.originalTrainFactor)
+      / cfg.economy.originalDivisorRate ** lvl
     );
   }
-  return timeCurve(unitTimeValue(unitId), ECONOMY_CONSTANTS.unitTimeFactor, lvl);
+  return timeCurve(unitTimeValue(unitId, cfg), cfg.economy.unitTimeFactor, lvl, cfg);
 }
 
 /**

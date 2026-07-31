@@ -15,6 +15,7 @@ import {
   COLONY_STARTING_RESOURCES, LEVEL_BASED, STARTING_BUILDINGS, STARTING_RESOURCES,
   farmOutput, mineOutput,
 } from '@mobiwar/catalog';
+import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
 import type { Tx } from '../missions/handler-registry.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { materializeUnitQueues } from '../queues/unit-queue.ts';
@@ -51,7 +52,22 @@ export interface CitySnapshot {
 type Runner = Db | Tx;
 
 export class CityService {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    /**
+     * ⭐ Dünya bazlı katalog sabitleri (§admin Faz 5). Verilmezse formüller kendi
+     * varsayılanlarını kullanır ve davranış **DEĞİŞMEZ** — testler bu yüzden onu geçmeden
+     * çalışmaya devam ediyor. Nesne değil FONKSİYON: panelden kaydedilen bir sabit bir
+     * sonraki istekte güncel olsun, süreç ömrü boyunca donmasın.
+     */
+    private readonly catalogFor?: (worldId: number) => CatalogConfig,
+  ) {}
+
+  /** Bu dünyanın etkin katalog sabitleri (yoksa varsayılan). */
+  private cat(worldId: number): CatalogConfig {
+    return this.catalogFor?.(worldId) ?? DEFAULT_CATALOG_CONFIG;
+  }
+
 
   /**
    * Şehri `at` anına kadar ilerletir (tembel birikim). Aynı transaction'da çağrılabilir.
@@ -63,16 +79,24 @@ export class CityService {
   async materialize(cityId: number, at: Date, runner: Runner = this.db): Promise<void> {
     const rows = await runner.execute<{ farm: number; mine: number } & Record<string, unknown>>(sql`
       SELECT
-        COALESCE(MAX(CASE WHEN type = 'farm' THEN level END), 0) AS farm,
-        COALESCE(MAX(CASE WHEN type = 'mine' THEN level END), 0) AS mine
-      FROM buildings WHERE city_id = ${cityId}
+        COALESCE(MAX(CASE WHEN b.type = 'farm' THEN b.level END), 0) AS farm,
+        COALESCE(MAX(CASE WHEN b.type = 'mine' THEN b.level END), 0) AS mine,
+        MAX(c.world_id) AS world_id
+      FROM buildings b JOIN cities c ON c.id = b.city_id
+     WHERE b.city_id = ${cityId}
     `);
     const farm = Number(rows[0]?.farm ?? 0);
     const mine = Number(rows[0]?.mine ?? 0);
 
-    // Üretim hızları katalogdaki DOĞRULANMIŞ formüllerden (§13.8, 40/40 seviyede birebir).
-    const foodPerHour = farmOutput(farm);
-    const goldPerHour = mineOutput(mine);
+    /**
+     * Üretim hızları katalogdaki DOĞRULANMIŞ formüllerden (§13.8, 40/40 seviyede birebir).
+     * ⚠️ Dünyanın etkin katalog sabitleriyle (§admin Faz 5): panelden `foodRate` değiştirilince
+     * biriken kaynak da değişmeli. İlk yazımda `cat()` yardımcısı eklenmiş ama BURADA
+     * kullanılmamıştı — canlı ölçümde yakalandı (ayar kaydedildi, üretim değişmedi).
+     */
+    const cfg = this.cat(Number(rows[0]?.['world_id'] ?? 0));
+    const foodPerHour = farmOutput(farm, cfg);
+    const goldPerHour = mineOutput(mine, cfg);
 
     // ⭐ Dünya kaynak çarpanı (`worlds.resource_multiplier`) burada uygulanır — TEK yerde,
     //    çünkü oyuncunun gördüğü her kaynak sayısı bu fonksiyondan geçiyor.
@@ -133,8 +157,12 @@ export class CityService {
       gold: Math.floor(Number(c['gold'])),
       food: Math.floor(Number(c['food'])),
       // ⚠️ Gösterilen üretim de çarpanı içerir; içermezse oyuncu "sayaç yazandan hızlı akıyor" der.
-      goldPerHour: mineOutput(buildings['mine'] ?? 0) * Number(c['resource_multiplier'] ?? 1),
-      foodPerHour: farmOutput(buildings['farm'] ?? 0) * Number(c['resource_multiplier'] ?? 1),
+      goldPerHour:
+        mineOutput(buildings['mine'] ?? 0, this.cat(Number(c['world_id'])))
+        * Number(c['resource_multiplier'] ?? 1),
+      foodPerHour:
+        farmOutput(buildings['farm'] ?? 0, this.cat(Number(c['world_id'])))
+        * Number(c['resource_multiplier'] ?? 1),
       speed: {
         resource: Number(c['resource_multiplier'] ?? 1),
         travel: Number(c['speed_multiplier'] ?? 1),

@@ -66,8 +66,21 @@ export { DB } from './db/tokens.ts';
       }),
     },
     { provide: GameClockService, useFactory: (db: Db) => new GameClockService(db), inject: [DB] },
-    { provide: CityService, useFactory: (db: Db) => new CityService(db), inject: [DB] },
-    { provide: CaveService, useFactory: (db: Db) => new CaveService(db), inject: [DB] },
+    /**
+     * ⭐ Katalog sabitleri panelden (§admin Faz 5): servisler `settings.catalog(worldId)`i
+     * FONKSİYON olarak alıyor — panelden kaydedilen fiyat/süre bir sonraki istekte geçerli
+     * olsun diye. Fonksiyon verilmezse formüller varsayılanı kullanır ve davranış değişmez.
+     */
+    {
+      provide: CityService,
+      useFactory: (db: Db, s: SettingsService) => new CityService(db, (w) => s.catalog(w)),
+      inject: [DB, SettingsService],
+    },
+    {
+      provide: CaveService,
+      useFactory: (db: Db, s: SettingsService) => new CaveService(db, (w) => s.catalog(w)),
+      inject: [DB, SettingsService],
+    },
     {
       provide: MissionService,
       // Nakliye/destek kaynağı şehirden düşerken tembel birikim uygulanmalı → CityService şart.
@@ -76,8 +89,9 @@ export { DB } from './db/tokens.ts';
     },
     {
       provide: QueueService,
-      useFactory: (db: Db, cities: CityService) => new QueueService(db, cities),
-      inject: [DB, CityService],
+      useFactory: (db: Db, cities: CityService, s: SettingsService) =>
+        new QueueService(db, cities, (w) => s.catalog(w)),
+      inject: [DB, CityService, SettingsService],
     },
     {
       provide: AuthService,
