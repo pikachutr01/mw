@@ -14,11 +14,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
+import { SessionsScreen } from './screens/Sessions.tsx';
 import { SettingsScreen } from './screens/Settings.tsx';
 import { WorldsScreen } from './screens/Worlds.tsx';
 
-/** Faz 1'de iki ekran var; kalanlar sırayla açılacak. */
-type Tab = 'worlds' | 'settings' | 'soon';
+/** Faz 3 sonunda üç ekran; kalanlar sırayla açılacak. */
+type Tab = 'worlds' | 'settings' | 'sessions' | 'soon';
 
 export function App() {
   const [session, setSessionState] = useState<AdminSession | null>(getSession);
@@ -74,7 +75,9 @@ export function App() {
               ? <WorldsScreen onNeedStepUp={() => setStepUpOpen(true)} />
               : tab === 'settings'
                 ? <SettingsScreen worldId={session.worldId} onNeedStepUp={() => setStepUpOpen(true)} />
-                : <Placeholder />}
+                : tab === 'sessions'
+                  ? <SessionsScreen onNeedStepUp={() => setStepUpOpen(true)} />
+                  : <Placeholder />}
           </>
         ) : null}
       </main>
@@ -84,7 +87,8 @@ export function App() {
 
 function Tabs({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
   const items: [Tab, string][] = [
-    ['worlds', 'Dünya'], ['settings', 'Ayarlar'], ['soon', 'Sıradakiler'],
+    ['worlds', 'Dünya'], ['settings', 'Ayarlar'], ['sessions', 'Oturumlar'],
+    ['soon', 'Sıradakiler'],
   ];
   return (
     <div className="flex gap-1">
@@ -256,7 +260,7 @@ function Placeholder() {
     ['Dünya', 'hız çarpanları · manuel sıralama', true],
     ['Ayarlar', 'işletim limitleri (sohbet · bildirim · posta)', true],
     ['Bakım modu', 'donma · istemci perdesi · mutasyon kilidi (Dünya sekmesinde)', true],
-    ['Oturumlar', 'cihaz listesi · uzaktan çıkış', false],
+    ['Oturumlar', 'cihaz listesi · uzaktan çıkış', true],
     ['Motor sabitleri', 'savaş config\'i · önizleme', false],
     ['Katalog', 'birim/yapı/teknik fiyat ve süreleri', false],
     ['Oyuncular ve moderasyon', 'arama · şikayet kuyruğu · ban', false],
@@ -264,7 +268,7 @@ function Placeholder() {
     ['Bakım/performans', 'tablo boyutları · temizlik görevleri', false],
   ];
   return (
-    <Panel title="Fazlar" right="Faz 2 bitti">
+    <Panel title="Fazlar" right="Faz 3 bitti">
       <ul className="divide-y divide-border">
         {rows.map(([name, desc, done]) => (
           <li key={name} className="flex items-baseline justify-between gap-3 px-3 py-2">

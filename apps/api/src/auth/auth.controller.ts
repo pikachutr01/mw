@@ -1,6 +1,6 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, HttpException,
-  HttpStatus, Inject, Post, Req, UnauthorizedException, UseGuards,
+  BadRequestException, Body, ConflictException, Controller, Delete, Get, HttpCode, HttpException,
+  HttpStatus, Inject, Param, Post, Req, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { loginRequest, registerRequest } from '@mobiwar/contracts';
 import { sql } from 'drizzle-orm';
@@ -9,8 +9,22 @@ import { extractDeviceContext } from '../abuse/device-context.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { EmailError, EmailTokenService } from '../mail/email-token.service.ts';
+import { getGateway } from '../realtime/gateway-registry.ts';
 import { AuthError, AuthService, type AuthResult } from './auth.service.ts';
 import { AuthGuard, type AuthedRequest } from './auth.guard.ts';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * İptal edilen oturumların açık soketlerini de kapatır.
+ *
+ * ⚠️ Gateway kaydı `ROLE=worker` profilinde boştur ve **bu sorun değil**: HTTP tarafı zaten
+ * anında ölüyor (`AuthGuard` her istekte `revoked_at`e bakar). Soket kapatma "hemen" için,
+ * "doğruluk" için değil — bu yüzden `?.` ile sessizce geçilebilir.
+ */
+function dropSockets(sessionIds: readonly string[]): number {
+  return getGateway()?.revokeSessions(sessionIds) ?? 0;
+}
 
 const registerBody = registerRequest.extend({ worldId: z.number().int().positive().default(1) });
 const loginBody = loginRequest.extend({ worldId: z.number().int().positive().default(1) });
@@ -69,6 +83,50 @@ export class AuthController {
     return { ok: true };
   }
 
+  /* ── Aktif cihazlar (§admin Faz 3) ─────────────────────────────────────────── */
+
+  /**
+   * ⭐ OYUNCUNUN KENDİ CİHAZ LİSTESİ — zincir başına tek satır.
+   *
+   * ⚠️ Liste `sessions.chain_id` üzerinden gruplanır. Satır kimliğiyle gruplasaydık dönmeli
+   * refresh yüzünden aynı telefon 15 dakikada bir yeni satır olarak görünürdü ve oyuncunun
+   * "çıkar" dediği satır zaten ölü olurdu (bkz. `0028_session_chains.sql`).
+   */
+  @Get('sessions')
+  @UseGuards(AuthGuard)
+  async sessions(@Req() req: AuthedRequest): Promise<Record<string, unknown>> {
+    const p = req.player!;
+    return {
+      items: await this.auth.listSessions(p.accountId, p.sessionId),
+      serverNow: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Bir cihazı çıkar. ⚠️ Kendi cihazını da çıkarabilir (istemci bunu "çıkış" gibi ele alır) —
+   * engellemek yapay bir kural olurdu: uzaktaki cihazı düşürebilen kişi zaten oturumun sahibi.
+   */
+  @Delete('sessions/:chainId')
+  @UseGuards(AuthGuard)
+  async revokeSession(
+    @Param('chainId') chainId: string, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    if (!UUID_RE.test(chainId)) throw new BadRequestException('Geçersiz cihaz kimliği.');
+    const p = req.player!;
+    const ids = await this.auth.revokeChain(p.accountId, chainId);
+    return { ok: true, revoked: ids.length, sockets: dropSockets(ids), self: ids.includes(p.sessionId) };
+  }
+
+  /** "Diğer tüm cihazlardan çık" — parola değişmeden yapılabilen en hızlı toparlanma. */
+  @Post('sessions/revoke-others')
+  @HttpCode(200)
+  @UseGuards(AuthGuard)
+  async revokeOthers(@Req() req: AuthedRequest): Promise<Record<string, unknown>> {
+    const p = req.player!;
+    const ids = await this.auth.revokeOtherChains(p.accountId, p.sessionId);
+    return { ok: true, revoked: ids.length, sockets: dropSockets(ids) };
+  }
+
   /* ── E-posta doğrulama ve şifre (§9.2) ─────────────────────────────────────── */
 
   /** Hesap durumu — doğrulama şeridi ve Seçenekler paneli bunu okur. */
@@ -123,7 +181,17 @@ export class AuthController {
     await this.mail(() => this.emails.resetPassword({
       token: parsed.data.token,
       password: parsed.data.password,
-      revokeAll: (id) => this.auth.revokeAll(id),
+      /**
+       * ⭐ Parola değişimi tüm oturumları düşürür — ve artık **açık soketleri de** kapatır
+       * (§admin Faz 3). Eskiden yalnız DB satırları iptal ediliyordu; soket ancak token
+       * yenilenirken (15 dakikaya kadar) fark ediyordu. Parola değiştirmenin amacı tam olarak
+       * "davetsiz misafiri şimdi at" olduğu için o gecikme kabul edilemez.
+       */
+      revokeAll: async (id) => {
+        const ids = await this.auth.revokeAllIds(id);
+        dropSockets(ids);
+        return ids.length;
+      },
     }));
   }
 
@@ -137,7 +205,17 @@ export class AuthController {
       accountId: req.player!.accountId,
       current: parsed.data.currentPassword,
       next: parsed.data.newPassword,
-      revokeAll: (id) => this.auth.revokeAll(id),
+      /**
+       * ⭐ Parola değişimi tüm oturumları düşürür — ve artık **açık soketleri de** kapatır
+       * (§admin Faz 3). Eskiden yalnız DB satırları iptal ediliyordu; soket ancak token
+       * yenilenirken (15 dakikaya kadar) fark ediyordu. Parola değiştirmenin amacı tam olarak
+       * "davetsiz misafiri şimdi at" olduğu için o gecikme kabul edilemez.
+       */
+      revokeAll: async (id) => {
+        const ids = await this.auth.revokeAllIds(id);
+        dropSockets(ids);
+        return ids.length;
+      },
     }));
   }
 

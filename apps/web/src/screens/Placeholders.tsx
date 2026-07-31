@@ -10,6 +10,7 @@ import { useTheme } from '../lib/hooks.ts';
 import { Badge, Button, Panel } from '../components/ui.tsx';
 import { AccountPanel } from '../components/AccountPanel.tsx';
 import { CityAdminPanel } from '../components/CityAdminPanel.tsx';
+import { DevicesPanel } from '../components/DevicesPanel.tsx';
 import { NotifySettings } from '../components/NotifySettings.tsx';
 
 function Soon({ title, lines }: { title: string; lines: string[] }) {
@@ -42,6 +43,10 @@ export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): Rea
 
       {/* ⭐ Orijinalde de Seçenekler menüsünün maddesi (`g.java` case 63). */}
       <CityAdminPanel />
+
+      {/* ⭐ Aktif cihazlar HESAP panelinin hemen ardında: ikisi de "hesabım" konusu ve
+          oyuncu şüphelendiğinde ikisine art arda bakıyor (cihazı çıkar → parolayı değiştir). */}
+      <DevicesPanel />
 
       <NotifySettings />
 

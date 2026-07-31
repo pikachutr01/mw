@@ -14,7 +14,7 @@
  */
 import { io, type Socket } from 'socket.io-client';
 import type { QueryClient } from '@tanstack/react-query';
-import { getSession, onSessionChange } from './api.ts';
+import { getSession, onSessionChange, setSession } from './api.ts';
 
 export type ConnectionState = 'connecting' | 'online' | 'offline';
 
@@ -137,6 +137,20 @@ export function connectRealtime(queryClient: QueryClient): () => void {
     });
     socket.on('disconnect', () => setState('offline'));
     socket.on('connect_error', () => setState('offline'));
+
+    /**
+     * ⭐ OTURUM UZAKTAN KAPATILDI (§admin Faz 3) — oyuncu başka bir cihazından "bu cihazı çıkar"
+     * dedi, ya da parola değişti.
+     *
+     * ⚠️ Bu olay olmasaydı da güvenlik sağlamdı (her HTTP isteği 401 alırdı) ama kullanıcı
+     * deneyimi kötü olurdu: ekran açık kalır, soket sessizce kopar ve istemci bunu ağ arızası
+     * sanıp **yeniden bağlanmayı denemeye devam ederdi**. Olay, kopmanın sebebini söylüyor:
+     * yerel oturum hemen düşürülür, `App.tsx` giriş ekranına döner.
+     */
+    socket.on('session:revoked', () => {
+      setSession(null);
+      queryClient.clear();
+    });
 
     for (const [topic, keys] of Object.entries(INVALIDATES)) {
       socket.on(topic, () => {

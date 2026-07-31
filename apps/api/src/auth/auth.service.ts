@@ -29,6 +29,22 @@ export type AuthErrorCode =
   | 'invalid_refresh'
   | 'world_not_found';
 
+/** "Aktif Cihazlar" listesinin bir satırı — zincir başına tek. */
+export interface SessionSummary {
+  chainId: string;
+  platform: string | null;
+  deviceModel: string | null;
+  osVersion: string | null;
+  appVersion: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  lastSeenAt: string;
+  firstSeenAt: string;
+  expiresAt: string;
+  /** Bu satır, isteği yapan oturumun kendisi mi? */
+  current: boolean;
+}
+
 export interface AuthResult extends TokenPair {
   accountId: number;
   playerId: number;
@@ -194,7 +210,7 @@ export class AuthService {
   async refresh(refreshToken: string, ctx: DeviceContext): Promise<AuthResult> {
     const hash = hashRefreshToken(refreshToken);
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT s.id, s.account_id, s.expires_at, s.revoked_at,
+      SELECT s.id, s.account_id, s.expires_at, s.revoked_at, s.chain_id,
              p.id AS player_id, p.world_id, p.username
         FROM sessions s
         JOIN players p ON p.account_id = s.account_id
@@ -213,23 +229,110 @@ export class AuthService {
     return this.issueSession(
       Number(s['account_id']), Number(s['player_id']), Number(s['world_id']),
       String(s['username']), ctx,
+      /**
+       * ⭐ Zincir TAŞINIR — yenileme yeni bir cihaz değil, aynı cihazın yeni token neslidir.
+       * Bunu geçirmeseydik `issueSession` yeni bir zincir açar ve "Aktif Cihazlar" listesi
+       * 15 dakikada bir yeni satırla dolardı.
+       */
+      String(s['chain_id']),
     );
   }
 
+  /**
+   * Çıkış. ⚠️ **Zincirin tamamı** kapatılır, yalnız bu satır değil: aynı cihazın elinde kalmış
+   * eski bir refresh token'ı çıkıştan sonra oturumu diriltememeli.
+   */
   async logout(sessionId: string): Promise<void> {
     await this.db.execute(sql`
-      UPDATE sessions SET revoked_at = now() WHERE id = ${sessionId}::uuid AND revoked_at IS NULL
+      UPDATE sessions SET revoked_at = now()
+       WHERE chain_id = (SELECT chain_id FROM sessions WHERE id = ${sessionId}::uuid)
+         AND revoked_at IS NULL
     `);
   }
 
-  /** Bir hesabın tüm oturumlarını düşür (parola değişimi / şüpheli erişim). */
+  /* ── Oturum ve cihaz listesi (§admin Faz 3) ─────────────────────────────────── */
+
+  /**
+   * Hesabın aktif cihazları — **zincir başına tek satır**.
+   *
+   * ⚠️ Zincirin EN SON satırı temsil eder (`DISTINCT ON … ORDER BY created_at DESC`): cihaz
+   * modeli/uygulama sürümü zaman içinde değişebilir ve oyuncu güncel olanı görmeli. Zincirin
+   * başlangıcı ayrı bir alan (`firstSeenAt`) olarak veriliyor — "bu cihaz ne zamandan beri
+   * bağlı" sorusunun cevabı orada.
+   */
+  async listSessions(accountId: number, currentSessionId: string): Promise<SessionSummary[]> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT DISTINCT ON (s.chain_id)
+             s.chain_id, s.id, s.platform, s.device_model, s.os_version, s.app_version,
+             s.ip, s.ua, s.last_seen_at, s.expires_at,
+             (SELECT MIN(created_at) FROM sessions f WHERE f.chain_id = s.chain_id) AS first_seen,
+             (SELECT bool_or(f.id = ${currentSessionId}::uuid) FROM sessions f
+               WHERE f.chain_id = s.chain_id) AS is_current
+        FROM sessions s
+       WHERE s.account_id = ${accountId} AND s.revoked_at IS NULL AND s.expires_at > now()
+       ORDER BY s.chain_id, s.created_at DESC
+    `);
+    return rows
+      .map((r) => ({
+        chainId: String(r['chain_id']),
+        platform: r['platform'] == null ? null : String(r['platform']),
+        deviceModel: r['device_model'] == null ? null : String(r['device_model']),
+        osVersion: r['os_version'] == null ? null : String(r['os_version']),
+        appVersion: r['app_version'] == null ? null : String(r['app_version']),
+        ip: r['ip'] == null ? null : String(r['ip']),
+        userAgent: r['ua'] == null ? null : String(r['ua']),
+        lastSeenAt: toDate(r['last_seen_at']).toISOString(),
+        firstSeenAt: toDate(r['first_seen']).toISOString(),
+        expiresAt: toDate(r['expires_at']).toISOString(),
+        current: r['is_current'] === true,
+      }))
+      // ⚠️ Sıralama JS'te: `DISTINCT ON` kendi ORDER BY'ını dayatıyor (chain_id önce olmak
+      // zorunda), oysa oyuncu listeyi "en son görülen üstte" bekliyor.
+      .sort((a, b) => (a.current === b.current
+        ? b.lastSeenAt.localeCompare(a.lastSeenAt)
+        : (a.current ? -1 : 1)));
+  }
+
+  /**
+   * Bir cihazı (zinciri) düşürür. Düşen oturumların kimlikleri DÖNER — çağıran onları soket
+   * katmanına verip açık bağlantıları da anında kapatabilsin.
+   *
+   * ⚠️ `account_id` koşulu pazarlıksız: zincir kimliği tahmin edilemez ama sahiplik kontrolü
+   * tahmin edilemezliğe bırakılmaz.
+   */
+  async revokeChain(accountId: number, chainId: string): Promise<string[]> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      UPDATE sessions SET revoked_at = now()
+       WHERE account_id = ${accountId} AND chain_id = ${chainId}::uuid AND revoked_at IS NULL
+      RETURNING id
+    `);
+    return rows.map((r) => String(r['id']));
+  }
+
+  /** "Diğer tüm cihazlardan çık" — bu zincir hariç hepsi. */
+  async revokeOtherChains(accountId: number, currentSessionId: string): Promise<string[]> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      UPDATE sessions SET revoked_at = now()
+       WHERE account_id = ${accountId} AND revoked_at IS NULL
+         AND chain_id <> (SELECT chain_id FROM sessions WHERE id = ${currentSessionId}::uuid)
+      RETURNING id
+    `);
+    return rows.map((r) => String(r['id']));
+  }
+
+  /** Bir hesabın tüm oturumlarını düşür (parola değişimi / şüpheli erişim / admin). */
   async revokeAll(accountId: number): Promise<number> {
+    return (await this.revokeAllIds(accountId)).length;
+  }
+
+  /** `revokeAll`ın soket katmanına verilebilen hâli. */
+  async revokeAllIds(accountId: number): Promise<string[]> {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       UPDATE sessions SET revoked_at = now()
        WHERE account_id = ${accountId} AND revoked_at IS NULL
       RETURNING id
     `);
-    return rows.length;
+    return rows.map((r) => String(r['id']));
   }
 
   /**
@@ -238,20 +341,23 @@ export class AuthService {
    */
   private async issueSession(
     accountId: number, playerId: number, worldId: number, username: string, ctx: DeviceContext,
+    /** Verilirse zincir DEVAM EDER (yenileme); verilmezse yeni bir cihaz zinciri açılır. */
+    chainId?: string,
   ): Promise<AuthResult> {
     const sessionId = randomUUID();
+    const chain = chainId ?? randomUUID();
     const refresh = this.tokens.newRefreshToken();
     const access = await this.tokens.signAccess({
       sub: String(accountId), pid: playerId, wid: worldId, sid: sessionId,
     });
 
     await this.db.execute(sql`
-      INSERT INTO sessions (id, account_id, refresh_hash, ip, ua, device_id, platform,
+      INSERT INTO sessions (id, chain_id, account_id, refresh_hash, ip, ua, device_id, platform,
                             os_version, device_model, app_version, timezone, locale, expires_at)
-      VALUES (${sessionId}::uuid, ${accountId}, ${refresh.hash}, ${ctx.ip}, ${ctx.userAgent},
-              ${ctx.deviceId}, ${ctx.platform}, ${ctx.osVersion ?? null}, ${ctx.deviceModel ?? null},
-              ${ctx.appVersion ?? null}, ${ctx.timezone ?? null}, ${ctx.locale ?? null},
-              ${refresh.expiresAt.toISOString()}::timestamptz)
+      VALUES (${sessionId}::uuid, ${chain}::uuid, ${accountId}, ${refresh.hash}, ${ctx.ip},
+              ${ctx.userAgent}, ${ctx.deviceId}, ${ctx.platform}, ${ctx.osVersion ?? null},
+              ${ctx.deviceModel ?? null}, ${ctx.appVersion ?? null}, ${ctx.timezone ?? null},
+              ${ctx.locale ?? null}, ${refresh.expiresAt.toISOString()}::timestamptz)
     `);
     await this.db.execute(sql`UPDATE players SET last_seen_at = now() WHERE id = ${playerId}`);
 

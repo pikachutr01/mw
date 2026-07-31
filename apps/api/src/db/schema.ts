@@ -349,6 +349,15 @@ export const sessions = pgTable('sessions', {
   accountId: bigint('account_id', { mode: 'number' }).notNull()
     .references(() => accounts.id, { onDelete: 'cascade' }),
   refreshHash: text('refresh_hash').notNull(),
+  /**
+   * ⭐ ZİNCİR KİMLİĞİ (§admin Faz 3) — ilk girişte üretilir, her `refresh()`te **taşınır**.
+   *
+   * ⚠️ Bir CİHAZ = bir zincir, bir SATIR = bir token nesli. Dönmeli refresh her yenilemede
+   * yeni satır açtığı için satır kimliği cihazı temsil edemez: oyuncunun telefonu listede 15
+   * dakikada bir yeni bir satır gibi görünürdü ve "bu cihazı çıkar" dediği satır zaten ölü
+   * olurdu. Liste zincir başına tek satır gösterir, iptal tüm zinciri kapatır.
+   */
+  chainId: uuid('chain_id').notNull(),
   ip: text('ip'),
   /** Web'de User-Agent; mobilde YOK (orada platform/os/model kullanılır). */
   ua: text('ua'),

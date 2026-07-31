@@ -28,6 +28,13 @@ interface SocketPlayer {
   worldId: number;
   accountId: number;
   allianceId: number | null;
+  /**
+   * ⭐ Oturum kimliği soket üstünde TAŞINIR (§admin Faz 3): oyuncu başka bir cihazdan
+   * "bu cihazı çıkar" dediğinde iptal edilen oturumun soketini bulup düşürebilmek için.
+   * Sokete yalnız `playerId` yazsaydık aynı oyuncunun TÜM sekmelerini düşürmek zorunda
+   * kalırdık — oysa iptal edilen tek bir cihazdır.
+   */
+  sessionId: string;
 }
 
 /** Oda adları tek yerde — elle string birleştirmek yalıtım hatasının en kolay yolu. */
@@ -100,6 +107,7 @@ export class RealtimeGateway {
           worldId: claims.wid,
           accountId: Number(claims.sub),
           allianceId: pRows[0]?.['alliance_id'] == null ? null : Number(pRows[0]['alliance_id']),
+          sessionId: claims.sid,
         };
         (socket.data as { player?: SocketPlayer }).player = player;
         next();
@@ -229,6 +237,32 @@ export class RealtimeGateway {
           .emit('presence:update', { playerId, online: true });
       }
     }
+  }
+
+  /**
+   * ⭐ OTURUM İPTAL EDİLDİ (§admin Faz 3) — o oturuma ait açık soketleri **anında** düşürür.
+   *
+   * ⚠️ Bugüne kadar iptal edilen bir oturumun soketi ancak token yenilenirken (15 dakikaya
+   * kadar) fark ediyordu. HTTP tarafı zaten anında ölüyordu (`AuthGuard` her istekte
+   * `revoked_at`e bakıyor) ama soket açık kaldığı için oyuncu olayları almaya devam ediyordu —
+   * "telefonumu çıkardım ama hâlâ bildirim geliyor" tam olarak bu.
+   *
+   * ⚠️ Önce **olay**, sonra `disconnect`: istemci kopmayı ağ arızasından ayırabilsin ve yeniden
+   * bağlanmayı denemek yerine giriş ekranına dönsün. Sırayı ters kursaydık istemci sonsuz
+   * yeniden bağlanma döngüsüne girerdi.
+   */
+  revokeSessions(sessionIds: readonly string[]): number {
+    if (!this.io || sessionIds.length === 0) return 0;
+    const targets = new Set(sessionIds);
+    let closed = 0;
+    for (const [, socket] of this.io.of('/').sockets) {
+      const p = (socket.data as { player?: SocketPlayer }).player;
+      if (!p || !targets.has(p.sessionId)) continue;
+      socket.emit('session:revoked', { reason: 'revoked' });
+      socket.disconnect(true);
+      closed++;
+    }
+    return closed;
   }
 
   /**

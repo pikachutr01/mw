@@ -12,7 +12,7 @@
 | 0 | Rol · guard · adım yükseltme · `apps/admin` iskeleti | ✅ **bitti** (2026-07-31) |
 | 1 | Ayarlar altyapısı · dünya ekranı · manuel sıralama | ✅ **bitti** (2026-07-31) |
 | 2 | Bakım modu uçtan uca | ✅ **bitti** (2026-07-31) |
-| 3 | Oturum ve cihaz yönetimi | ⏳ |
+| 3 | Oturum ve cihaz yönetimi | ✅ **bitti** (2026-07-31) |
 | 4 | Savaş motoru sabitleri | ⏳ |
 | 5 | Katalog sabitleri | ⏳ |
 | 6 | Oyuncu ve moderasyon (+ `chat_bans` canlandırma) | ⏳ |
@@ -261,6 +261,84 @@ için tüm istemcileri aynı saniyede bir sorgu daha yapmaya zorlamak tersine bi
 şema varsayılanlarını gösteriyordu (ilk kayıttan sonra kendiliğinden düzeliyordu — bu yüzden
 Faz 1 doğrulamasında görünmedi). `main.ts` artık `app.get(SettingsService)` ile **Nest'in**
 örneğini alıp `start(rawSql)` çağırıyor; `WorldStateService` de aynı yoldan besleniyor.
+
+---
+
+## Oturum ve cihaz yönetimi (Faz 3)
+
+### ⚠️ Sorun: oturum kimliği her yenilemede DEĞİŞİYORDU
+
+`auth.service.refresh()` eski satırı `revoked_at` ile kapatıp **yeni satır** açıyor. Güvenlik
+için doğru — tek kullanımlık refresh sayesinde çalıntı token bir kez işler, sonra gerçek
+kullanıcının oturumu düşer ve hırsızlık **fark edilir**. Ama cihaz listesi için kırıktı:
+oyuncunun telefonu 15 dakikada bir listede yeni bir satır gibi görünür, "bu cihazı çıkar"
+dediği satır ise **zaten ölü** olurdu.
+
+**Çözüm `sessions.chain_id`:** ilk girişte üretilir, her yenilemede taşınır.
+
+```
+bir CİHAZ  = bir zincir  (chain_id)
+bir SATIR  = bir token nesli (id)
+```
+
+Dönmeli refresh mantığına **hiç dokunulmadı**; satırlara yalnız ortak bir kimlik eklendi.
+Geçmiş satırlar `chain_id = id` ile dolduruldu — her biri kendi zincirinin başı sayılır.
+⚠️ `device_id`'ye göre gruplamak daha "akıllı" görünürdü ama yanlış olurdu: aynı cihazda arka
+arkaya iki kez giriş gerçekten iki ayrı oturumdur.
+
+### Ölçüm (canlı, gerçek HTTP)
+
+```
+ilk giriş                → satır 1 · zincir 1 · liste 1
+4 kez /auth/refresh      → satır 5 · zincir 1 · LİSTE 1      ← zincir olmasaydı liste 5 olurdu
+ikinci cihazdan giriş    → zincir 2 · liste 2 · "bu cihaz" 1 tane
+cihazı çıkar             → liste 1 · o cihazın refresh'i 401 · access'i 401
+```
+
+### ⭐ İptal edilen oturumun soketi ANINDA düşer
+
+```
+DELETE /auth/sessions/:chainId
+  → session:revoked olayı @ +8 ms
+  → disconnect ("io server disconnect") @ +13 ms
+```
+
+⚠️ **Önce olay, sonra `disconnect`.** Sırayı ters kursaydık istemci kopmayı ağ arızasından
+ayıramaz ve sonsuz yeniden bağlanma döngüsüne girerdi. Bugüne kadar iptal edilen bir oturumun
+soketi ancak token yenilenirken (15 dakikaya kadar) fark ediyordu — HTTP tarafı zaten anında
+ölüyordu (`AuthGuard` her istekte `revoked_at`e bakar) ama soket açık kaldığı için olaylar
+akmaya devam ediyordu.
+
+Aynı yol **parola değişimi/sıfırlamada da** çalışıyor: `revokeAll` artık soketleri de kapatıyor.
+
+### Uçlar
+
+| Uç | Kim | İş |
+| :-- | :-- | :-- |
+| `GET /api/v1/auth/sessions` | oyuncu | kendi cihazları (zincir başına tek satır) |
+| `DELETE /api/v1/auth/sessions/:chainId` | oyuncu | bir cihazı çıkar |
+| `POST /api/v1/auth/sessions/revoke-others` | oyuncu | bu cihaz hariç hepsi |
+| `GET /api/v1/admin/players/lookup?q=` | admin | oyuncu ara (dar kapsam; künye Faz 6) |
+| `GET /api/v1/admin/players/:id/sessions` | admin | **aynı servis metodu** (`listSessions`) |
+| `POST /api/v1/admin/players/:id/revoke-sessions` | admin + StepUp | tüm oturumları düşür |
+
+⚠️ Admin listesi oyuncununkiyle **aynı metottan** geliyor. İki ayrı sorgu yazsaydık zamanla
+ayrışır ve "oyuncu şunu görüyor, ben bunu" tartışması çıkardı.
+
+⚠️ `revokeChain` her zaman `account_id` koşuluyla çalışır: zincir kimliği tahmin edilemez ama
+sahiplik kontrolü tahmin edilemezliğe bırakılmaz (testte).
+
+### `last_seen_at` ne anlama geliyor
+
+Zincirin **en son satırının** oluşma anı, yani "token en son ne zaman yenilendi". Her istekte
+güncelleseydik istek başına bir yazma olurdu; yenileme zaten ~15 dakikada bir olduğu için
+bedava ve yeterince taze.
+
+### Kapsam dışı (bilinçli)
+
+**Tek aktif oturum zorlaması** yok — kullanıcının kararı: *"ileride"*. Şema hazır (`chain_id`
++ `platform`), kural uygulanmıyor. Uygulanacağı gün tek yer değişecek: `issueSession` yeni
+zincir açmadan önce diğerlerini iptal eder.
 
 ---
 

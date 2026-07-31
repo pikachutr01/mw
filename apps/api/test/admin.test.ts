@@ -58,8 +58,9 @@ async function makeStaff(role: 'player' | 'moderator' | 'admin'): Promise<{
   `);
   const sessionId = randomUUID();
   await h.db.execute(sql`
-    INSERT INTO sessions (id, account_id, refresh_hash, expires_at)
-    VALUES (${sessionId}::uuid, ${accountId}, ${`h-${tag}`}, now() + interval '30 days')
+    INSERT INTO sessions (id, chain_id, account_id, refresh_hash, expires_at)
+    VALUES (${sessionId}::uuid, ${sessionId}::uuid, ${accountId}, ${`h-${tag}`},
+            now() + interval '30 days')
   `);
   return { accountId, playerId: Number(ply!['id']), sessionId };
 }
@@ -159,9 +160,9 @@ describe('adım yükseltme', () => {
 
     const otherSession = randomUUID();
     await h.db.execute(sql`
-      INSERT INTO sessions (id, account_id, refresh_hash, expires_at)
-      VALUES (${otherSession}::uuid, ${s.accountId}, ${`h2-${otherSession.slice(0, 8)}`},
-              now() + interval '30 days')
+      INSERT INTO sessions (id, chain_id, account_id, refresh_hash, expires_at)
+      VALUES (${otherSession}::uuid, ${otherSession}::uuid, ${s.accountId},
+              ${`h2-${otherSession.slice(0, 8)}`}, now() + interval '30 days')
     `);
     const other = asReq({ ...s, sessionId: otherSession });
     await guard.canActivate(asContext(other));

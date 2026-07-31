@@ -355,6 +355,48 @@ export const useWorldState = (): UseQueryResult<WorldMaintenance> => useQuery({
   refetchOnWindowFocus: true,
 });
 
+/* ── Aktif cihazlar (§admin Faz 3) ─────────────────────────────────────────── */
+
+export interface DeviceRow {
+  chainId: string;
+  platform: string | null;
+  deviceModel: string | null;
+  osVersion: string | null;
+  appVersion: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  lastSeenAt: string;
+  firstSeenAt: string;
+  current: boolean;
+}
+
+/**
+ * ⚠️ Emniyet ağı yoklaması **yok**: cihaz listesi yalnız Seçenekler ekranı açıkken görünür ve
+ * kendiliğinden değişmez. Sürekli yoklamak, hiç kimsenin bakmadığı bir listeyi tazelemek olurdu.
+ */
+export const useDevices = (): UseQueryResult<{ items: DeviceRow[] }> => useQuery({
+  queryKey: ['devices'],
+  queryFn: () => get<{ items: DeviceRow[] }>('/api/v1/auth/sessions'),
+});
+
+export function useRevokeDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (chainId: string) =>
+      api(`/api/v1/auth/sessions/${chainId}`, { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['devices'] }); },
+  });
+}
+
+export function useRevokeOtherDevices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api('/api/v1/auth/sessions/revoke-others', { method: 'POST', body: {} }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['devices'] }); },
+  });
+}
+
 export const useWorld = (k: number, d: number, enabled = true): UseQueryResult<{ slots: WorldSlot[] }> => useQuery({
   queryKey: ['world', k, d],
   queryFn: () => get<{ slots: WorldSlot[] }>(`/api/v1/world/${k}/${d}`),

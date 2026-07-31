@@ -17,9 +17,11 @@ import { sql } from 'drizzle-orm';
 import { SETTINGS, SETTING_GROUPS } from '@mobiwar/settings';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
+import { AuthService } from '../auth/auth.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { scheduleSnapshot } from '../ranking/ranking.service.ts';
+import { getGateway } from '../realtime/gateway-registry.ts';
 import { SettingsError, SettingsService } from '../settings/settings.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { WorldStateService } from '../world/world-state.service.ts';
@@ -39,6 +41,9 @@ const multipliers = z.object({
 const settingsPatch = z.object({ values: z.record(z.string(), z.unknown()) });
 const resetPatch = z.object({ keys: z.array(z.string()).min(1).max(200) });
 
+/** Admin listesinde "bu cihaz" satırı yoktur — hiçbir oturumla eşleşmeyen bir kimlik. */
+const EMPTY_UUID = '00000000-0000-0000-0000-000000000000';
+
 /**
  * Bakım metni. ⚠️ Metin ZORUNLU DEĞİL: bakımı başlatmak, metin yazmayı hatırlamaya bağlı
  * olmamalı — acil bir durumda önce durdurulur, açıklama sonra eklenir (`PUT notice`).
@@ -57,6 +62,7 @@ export class AdminWorldController {
     private readonly settings: SettingsService,
     private readonly clock: GameClockService,
     private readonly worldState: WorldStateService,
+    private readonly auth: AuthService,
   ) {}
 
   /* ── Dünyalar ─────────────────────────────────────────────────────────────── */
@@ -313,6 +319,86 @@ export class AdminWorldController {
                 ${JSON.stringify(payload)}::jsonb)
       `);
     });
+  }
+
+  /* ── Oturumlar (§admin Faz 3) ─────────────────────────────────────────────── */
+
+  /**
+   * Bir oyuncunun aktif cihazları. Destek sorusu neredeyse her zaman şu: *"hesabıma girilmiş
+   * olabilir mi?"* — cevabı bu liste veriyor.
+   *
+   * ⚠️ Oyuncunun kendi ucundan (`/auth/sessions`) FARKLI bir sorgu değil, **aynı servis
+   * metodu**: iki ayrı sorgu yazsaydık admin ile oyuncu farklı listeler görebilirdi ve
+   * hangisinin doğru olduğu tartışılırdı. `currentSessionId` yerine boş bir UUID geçiliyor —
+   * admin için "bu cihaz" diye bir satır yok.
+   */
+  /**
+   * Oyuncu arama — kullanıcı adı ya da e-posta parçası.
+   *
+   * ⚠️ Kapsamı DAR tutuldu (yalnız kimlik + ad): tam oyuncu künyesi Faz 6'nın işi. Buradaki
+   * tek amacı oturum listesine bir oyuncu seçebilmek; şimdiden zengin bir arama yazmak, Faz 6'da
+   * ikinci bir arama kodu doğurur ve ikisi ayrışırdı.
+   */
+  @Get('players/lookup')
+  async lookup(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const raw = String((req as unknown as { query?: Record<string, unknown> }).query?.['q'] ?? '');
+    const q = raw.trim().slice(0, 60);
+    if (q.length < 2) return { items: [] };
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT p.id, p.username, p.world_id, a.email, a.role, p.last_seen_at
+        FROM players p JOIN accounts a ON a.id = p.account_id
+       WHERE p.username ILIKE ${'%' + q + '%'} OR a.email ILIKE ${'%' + q + '%'}
+       ORDER BY p.last_seen_at DESC NULLS LAST LIMIT 20
+    `);
+    return {
+      items: rows.map((r) => ({
+        id: Number(r['id']),
+        username: String(r['username']),
+        worldId: Number(r['world_id']),
+        email: String(r['email']),
+        role: String(r['role']),
+        lastSeenAt: r['last_seen_at'] == null ? null : toDate(r['last_seen_at']).toISOString(),
+      })),
+    };
+  }
+
+  @Get('players/:playerId/sessions')
+  async playerSessions(@Param('playerId') playerId: string): Promise<Record<string, unknown>> {
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT p.account_id, p.username, a.email, a.role
+        FROM players p JOIN accounts a ON a.id = p.account_id WHERE p.id = ${Number(playerId)}
+    `);
+    if (!row) throw new NotFoundException('Oyuncu bulunamadı.');
+    const accountId = Number(row['account_id']);
+    return {
+      playerId: Number(playerId),
+      username: String(row['username']),
+      email: String(row['email']),
+      role: String(row['role']),
+      items: await this.auth.listSessions(accountId, EMPTY_UUID),
+    };
+  }
+
+  /** Tüm oturumları düşür. Açık soketler de anında kapanır. */
+  @Post('players/:playerId/revoke-sessions')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async revokePlayerSessions(
+    @Param('playerId') playerId: string, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT account_id, world_id FROM players WHERE id = ${Number(playerId)}
+    `);
+    if (!row) throw new NotFoundException('Oyuncu bulunamadı.');
+
+    const ids = await this.auth.revokeAllIds(Number(row['account_id']));
+    const sockets = getGateway()?.revokeSessions(ids) ?? 0;
+    await this.db.execute(sql`
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      VALUES (${Number(row['world_id'])}, ${req.player!.playerId}, 'admin.sessions.revoke',
+              'player', ${Number(playerId)}, ${JSON.stringify({ revoked: ids.length, sockets })}::jsonb)
+    `);
+    return { ok: true, revoked: ids.length, sockets };
   }
 
   /* ── Ayarlar ──────────────────────────────────────────────────────────────── */
