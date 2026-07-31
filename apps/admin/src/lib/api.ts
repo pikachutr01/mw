@@ -97,9 +97,16 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
   throw new AdminApiError(res.status, code, message);
 }
 
-/** Panel girişi — oyunun `/auth/login` ucunu kullanır; yetki kontrolü `/admin/me`de. */
+/**
+ * Panel girişi — oyunun `/auth/login` ucunu kullanır; yetki kontrolü `/admin/me`de.
+ *
+ * ⚠️ Alan **`username`**, `email` DEĞİL. İlk sürümde forma e-posta koymuştum ve uç 400
+ * döndürüyordu: `loginRequest` (`packages/contracts/src/auth.ts:24`) `username` bekliyor ve
+ * üstelik `max(10)` — bir e-posta adresi doğrulamayı iki ayrı sebeple geçemiyordu.
+ * Oyunun kimlik alanı kullanıcı adıdır; e-posta yalnız doğrulama ve şifre sıfırlama için var.
+ */
 export async function login(o: {
-  email: string; password: string; worldId: number;
+  username: string; password: string; worldId: number;
 }): Promise<AdminSession> {
   const r = await api<{
     accessToken: string; refreshToken: string;

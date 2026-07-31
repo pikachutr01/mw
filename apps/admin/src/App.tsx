@@ -62,7 +62,7 @@ export function App() {
 /* ═══ Giriş ═════════════════════════════════════════════════════════════════ */
 
 function LoginScreen({ onDone }: { onDone: (s: AdminSession) => void }) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -72,7 +72,7 @@ function LoginScreen({ onDone }: { onDone: (s: AdminSession) => void }) {
     setBusy(true);
     setError(null);
     try {
-      onDone(await login({ email, password, worldId: 1 }));
+      onDone(await login({ username, password, worldId: 1 }));
     } catch (err) {
       setError(err);
     } finally {
@@ -86,9 +86,12 @@ function LoginScreen({ onDone }: { onDone: (s: AdminSession) => void }) {
         <h1 className="display text-center text-lg tracking-wide text-ink">MOBIWAR · YÖNETİM</h1>
         <Panel title="Giriş">
           <div className="space-y-3 p-3">
-            <Field label="E-posta">
-              <Input type="email" required autoComplete="username"
-                value={email} onChange={(e) => setEmail(e.target.value)} />
+            {/* ⚠️ KULLANICI ADI, e-posta değil: oyunun `/auth/login` ucu `username` bekliyor
+                (`loginRequest`, en fazla 10 karakter). E-posta yalnız doğrulama ve şifre
+                sıfırlama akışlarında kullanılıyor. */}
+            <Field label="Kullanıcı adı">
+              <Input type="text" required autoComplete="username" maxLength={10}
+                value={username} onChange={(e) => setUsername(e.target.value)} />
             </Field>
             <Field label="Parola">
               <Input type="password" required autoComplete="current-password"
