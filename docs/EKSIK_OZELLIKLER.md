@@ -118,12 +118,17 @@ barakada savaşçı olmamalı. Bizde hiç yok (`Placeholders.tsx:70` "yakında" 
 - `players.is_premium` kolonu var, **hiçbir kod okumuyor**. Ürün kararı + ödeme akışı gerekiyor.
 
 ### 1.8 Admin paneli / moderasyon
-Admin controller'ı yok. ✅ **Oyuncu tarafı 2026-07-31'de girdi**: Şikayet Et (`skMsj.do?m=`)
-kayıt üretiyor (`chat_reports`), Blokla (`msBlk.do`) çalışıyor (`player_blocks`).
-**Eksik olan YÖNETİCİ tarafı:** şikayet inceleme ekranı · ban/susturma (`chat_bans` tablosu
-var, okuyan kod yok) · dünya sabitleri yönetimi (hız çarpanları elle SQL ile değişiyor —
-`schema.ts:34` "ileride admin panelinden") · `audit_log` görüntüleme · çoklu hesap **analizi**
-(toplama ✅ çalışıyor, skorlama/rapor ❌).
+✅ **BÜYÜK ÖLÇÜDE BİTTİ** (2026-07-31, admin Faz 0-6 — künye `docs/ADMIN_PANELI.md`).
+
+Biten: ayrı `apps/admin` uygulaması · rol + adım yükseltme · dünya çarpanları ve manuel
+sıralama · bakım modu (donma + perde + mutasyon kilidi) · oturum/cihaz yönetimi ·
+**savaş motoru sabitleri** (38) · **katalog sabitleri** (26) · **şikayet kuyruğu** ·
+⭐ **sohbet yasağı artık gerçekten işliyor** (`chat_bans` ölü bir tabloydu).
+
+**Kalan:** veri tabanı tarayıcı + küratörlü aksiyonlar + ham kip (Faz 7) ·
+bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görüntüleme ·
+çoklu hesap **analizi** (toplama ✅ çalışıyor, skorlama/rapor ❌ — künyede sayı olarak
+gösteriliyor ama §9.1.1 gereği otomatik karar üretmiyor).
 
 ---
 

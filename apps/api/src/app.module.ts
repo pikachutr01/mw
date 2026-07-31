@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminController } from './admin/admin.controller.ts';
 import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
+import { AdminModerationController } from './admin/admin.moderation.controller.ts';
 import { AdminWorldController } from './admin/admin.world.controller.ts';
 import { SettingsService } from './settings/settings.service.ts';
 import { AllianceController } from './alliance/alliance.controller.ts';
@@ -47,7 +48,7 @@ export { DB } from './db/tokens.ts';
     MissionController, BattleController, WorldController, CommandController,
     NotifyController,
     // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
-    AdminController, AdminWorldController,
+    AdminController, AdminWorldController, AdminModerationController,
   ],
   providers: [
     {

@@ -23,10 +23,17 @@ import { ChatError, ChatService } from './chat.service.ts';
 
 const idParam = z.coerce.number().int().positive();
 
-function toHttp(err: unknown): Error {
+export function toHttp(err: unknown): Error {
   if (!(err instanceof ChatError)) return err as Error;
   const body = { code: err.code, message: err.message, retryAfterSeconds: err.retryAfterSeconds };
   if (err.code === 'not_a_member') return new ForbiddenException(body);
+  /**
+   * ⚠️ Sohbet yasağı 403 — `blocked`ten FARKLI olarak açıkça söylenen bir karar. `blocked`
+   * 400'de tutuluyor ki durum kodundan "beni engellemiş" çıkarılamasın; yasak ise oyuncuya
+   * zaten sebebiyle birlikte bildiriliyor, saklanacak bir şey yok. 400 "isteğin bozuk"
+   * demek olurdu ve yanlış olurdu.
+   */
+  if (err.code === 'chat_banned') return new ForbiddenException(body);
   if (err.code === 'wrong_world' || err.code === 'conversation_not_found') {
     return new NotFoundException(body);
   }

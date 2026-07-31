@@ -74,6 +74,12 @@ export class ChatService {
     const key = dmKey(o.playerId, o.withPlayerId);
     return this.db.transaction(async (txn) => {
       const tx = txn as unknown as Tx;
+      /**
+       * ⚠️ Yasak YENİ konuşma açmayı da kapatır. Yalnız `send`i kapatsaydık banlı oyuncu
+       * karşı tarafın listesinde boş bir konuşma açabilir ve bu tek başına bir taciz aracı
+       * olurdu (bildirim düşmese bile ad görünür).
+       */
+      await this.assertNotBanned(tx, o.worldId, o.playerId);
       const [existing] = await tx.execute<Record<string, unknown>>(sql`
         SELECT id FROM chat_channels WHERE world_id = ${o.worldId} AND dm_key = ${key}
       `);
@@ -101,6 +107,55 @@ export class ChatService {
       `);
       return channelId;
     });
+  }
+
+  /* ── Sohbet banı (§admin Faz 6) ───────────────────────────────────────────── */
+
+  /**
+   * ⭐ Oyuncunun AKTİF sohbet banı (yoksa `null`).
+   *
+   * ⚠️ `chat_bans` tablosu 2026-07-31'e kadar **tamamen ölüydü**: satır yazılabiliyordu ama
+   * `chat.service`te tek satır kontrol yoktu, yani banlı oyuncu mesaj yazmaya devam ediyordu.
+   * Faz 6'da canlandırıldı.
+   *
+   * ⚠️ `until IS NULL` = **süresiz** ban. `until > now()` süreli. Süresi geçmiş satır
+   * SİLİNMEZ — moderasyon geçmişi kalıcı olmalı; yalnız etkisiz sayılır.
+   */
+  private async activeBan(tx: Tx, worldId: number, playerId: number): Promise<{
+    scope: string; until: Date | null; reason: string | null;
+  } | null> {
+    const [row] = await tx.execute<Record<string, unknown>>(sql`
+      SELECT scope, until, reason FROM chat_bans
+       WHERE world_id = ${worldId} AND player_id = ${playerId}
+         AND (until IS NULL OR until > now())
+       ORDER BY until IS NULL DESC, until DESC
+       LIMIT 1
+    `);
+    if (!row) return null;
+    return {
+      scope: String(row['scope']),
+      until: row['until'] == null ? null : new Date(String(row['until'])),
+      reason: row['reason'] == null ? null : String(row['reason']),
+    };
+  }
+
+  /**
+   * Banlıysa fırlatır. ⚠️ Mesaj **kimseye** gönderilemez (kullanıcı kararı: *"bir oyuncu chat
+   * banı alırsa kimseye mesaj yazamayacak"*) ama **okumaya devam eder**: kendisine yazılanı
+   * görebilmeli, yoksa ceza "sohbetten silinmek" olurdu.
+   */
+  private async assertNotBanned(tx: Tx, worldId: number, playerId: number): Promise<void> {
+    const ban = await this.activeBan(tx, worldId, playerId);
+    if (!ban) return;
+    const until = ban.until
+      ? `${ban.until.toLocaleString('tr-TR')} tarihine kadar`
+      : 'süresiz olarak';
+    const reason = ban.reason ? ` Sebep: ${ban.reason}` : '';
+    throw new ChatError(
+      'chat_banned',
+      `Sohbet yasağın var — ${until} mesaj gönderemezsin.${reason}`,
+      ban.until ? Math.max(1, Math.ceil((ban.until.getTime() - Date.now()) / 1000)) : undefined,
+    );
   }
 
   /* ── Mesaj gönderme ───────────────────────────────────────────────────────── */
@@ -138,6 +193,15 @@ export class ChatService {
           createdAt: new Date(String(retry['created_at'])).toISOString(),
         };
       }
+
+      /**
+       * ⭐ SOHBET YASAĞI (§admin Faz 6) — yeniden deneme kontrolünden SONRA, engelden ÖNCE.
+       *
+       * ⚠️ Yeniden denemeden SONRA olmalı: ban gelmeden önce gönderilmiş bir mesajın ağ
+       * tekrarı "yasaklısın" hatası almamalı — o mesaj zaten yazıldı, istemci yalnız
+       * cevabını kaçırdı.
+       */
+      await this.assertNotBanned(tx, o.worldId, o.playerId);
 
       /* 1) ENGEL — iki yön iki farklı sonuç (yukarıdaki değişmez 3). */
       const blocks = await tx.execute<Record<string, unknown>>(sql`

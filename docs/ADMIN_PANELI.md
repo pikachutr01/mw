@@ -15,7 +15,7 @@
 | 3 | Oturum ve cihaz yönetimi | ✅ **bitti** (2026-07-31) |
 | 4 | Savaş motoru sabitleri | ✅ **bitti** (2026-07-31) |
 | 5 | Katalog sabitleri | ✅ **bitti** (2026-07-31) |
-| 6 | Oyuncu ve moderasyon (+ `chat_bans` canlandırma) | ⏳ |
+| 6 | Oyuncu ve moderasyon (+ `chat_bans` canlandırma) | ✅ **bitti** (2026-07-31) |
 | 7 | Veri tabanı tarayıcı + aksiyonlar | ⏳ |
 | 8 | Bakım/performans | ⏳ |
 
@@ -514,6 +514,66 @@ artık testle kilitli.
 | 21 birim × 11 savaş statı | Motor verisi ve çoğu binary'den ölçülmüş; Faz 4 kapsamı zaten savaş sabitleri |
 | `trainTimeAreaDecay`, `originalTrainFactor`, `originalDivisorRate` | **Emekli** süre modelleri; yalnız arşiv/karşılaştırma için duruyor |
 | `heroXpForLevel` eğrisi | 80/80 doğrulanmış kapalı formül, sabiti yok |
+
+---
+
+## Oyuncu ve moderasyon (Faz 6)
+
+### ⭐ `chat_bans` artık ölü değil
+
+Tablo 2026-07-31'e kadar **tamamen ölüydü**: satır yazılabiliyordu ama `chat.service`te tek
+satır kontrol yoktu — panelden ban verilse bile oyuncu mesaj yazmaya devam ediyordu.
+
+Kontrol iki yere kondu: `send()` ve `openConversation()`.
+
+⚠️ **Yeni konuşma açmak da kapalı.** Yalnız `send`i kapatsaydık banlı oyuncu karşı tarafın
+listesinde boş bir konuşma açabilirdi ve bu tek başına bir taciz aracı olurdu.
+
+⚠️ **Yasak kontrolü, yeniden-deneme kontrolünden SONRA.** Ban gelmeden önce yazılmış bir
+mesajın ağ tekrarı "yasaklısın" hatası almamalı — o mesaj zaten yazıldı, istemci yalnız
+cevabını kaçırdı (testte).
+
+⚠️ Yasaklı oyuncu **okumaya devam eder**. Okumayı da kapatsaydık ceza "sohbetten silinmek"
+olurdu ve oyuncu kendisine ne yazıldığını göremezdi (kullanıcı kararı).
+
+⚠️ **HTTP 403**, 400 değil. `blocked` bilerek 400'de tutuluyor ki durum kodundan "beni
+engellemiş" çıkarılamasın; yasak ise oyuncuya zaten sebebiyle bildiriliyor. Canlı ölçümde 400
+dönüyordu — 400 "isteğin bozuk" demek ve yanlıştı; testle sabitlendi.
+
+### Ölçüm (canlı, gerçek HTTP)
+
+```
+yasaksız mesaj                 → 201
+panelden yasak                 → 200 (7 gün)
+yasaklıyken mesaj              → 403 chat_banned + sebep + retryAfterSeconds
+karşı taraf mesaj              → 201   (yasak yalnız yasaklıyı bağlar)
+yasaklının okuması             → 200, 2 mesaj
+yasağı kaldır → mesaj          → 201
+yasak geçmişi                  → satır DURUYOR, active:false, veren: wstest
+```
+
+### Yasak kaldırma satırı SİLMEZ
+
+`until` geçmişe çekilir. Silseydik *"bu oyuncu daha önce ban yemiş miydi"* sorusu cevapsız
+kalır ve tekrarlayan davranışı görmek imkânsızlaşırdı.
+
+### Şikayet kuyruğu
+
+`chat_reports` de bugüne kadar yalnız **biriktiriliyordu**. Panel artık okuyor.
+
+⚠️ Gösterilen metin şikayet ANINDAKİ kopya (`body_snapshot`), canlı mesaj değil — şikayet
+edilen kişi mesajı silerek kanıtı yok edemesin.
+
+⚠️ Şikayeti **kapatmak** ile **ceza vermek** ayrı iki işlem ve ayrı iki `audit_log` satırı.
+Tek düğmede birleştirseydik geçmişte hangisinin olduğu ayırt edilemezdi. Durum sözlüğü
+şemadan birebir: `reviewed | actioned | dismissed`.
+
+### §9.1.1 değişmezi korundu: otomatik ceza YOK
+
+Künyede cihaz/IP paylaşım sayıları görünüyor ama hiçbiri kendiliğinden ban üretmiyor. Ekranda
+açıkça yazıyor: *"Cihaz/IP paylaşımı tek başına suç değildir (ev, iş, internet kafe). Karar
+senin."* Tarayıcı doğrulamasında dev ortamı bunu güzel gösterdi: `127.0.0.1 · 50 oyuncu`
+uyarı renginde çıkıyor ve hiçbir anlam taşımıyor.
 
 ---
 
