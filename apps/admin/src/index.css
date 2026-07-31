@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+
+/**
+ * ⭐ Panelin görsel dili oyunun **aynı tasarım jetonlarından** gelir
+ * (`packages/design-tokens`) — ayrı bir palet uydurmak iki yerde renk bakımı demekti.
+ *
+ * ⚠️ Ama oyunun `index.css`'i KOPYALANMADI: oradaki doku/derinlik katmanı (parşömen lifi,
+ * dövme taş, `tex`/`bevel` sınıfları) oyunun atmosferi için var. Yönetim paneli **yoğun veri**
+ * ekranı: tablo, form, uzun liste. Doku burada okunabilirliği düşürür. Jetonlar ortak,
+ * uygulama farklı — kasıtlı.
+ */
+@import '@mobiwar/design-tokens/css';
+
+@theme inline {
+  --color-bg: var(--mw-color-bg);
+  --color-surface: var(--mw-color-surface);
+  --color-raised: var(--mw-color-surface-raised);
+  --color-border: var(--mw-color-border);
+  --color-strong: var(--mw-color-border-strong);
+  --color-ink: var(--mw-color-text-primary);
+  --color-muted: var(--mw-color-text-muted);
+  --color-accent: var(--mw-color-accent);
+  --color-accent-hover: var(--mw-color-accent-hover);
+  --color-on-accent: var(--mw-color-on-accent);
+  --color-danger: var(--mw-color-danger);
+  --color-warning: var(--mw-color-warning);
+  --color-success: var(--mw-color-success);
+  --color-info: var(--mw-color-info);
+  --color-panel-header: var(--mw-color-panel-header);
+  --color-on-panel-header: var(--mw-color-on-panel-header);
+  --color-row-alt: var(--mw-color-row-alt);
+
+  --font-display: var(--mw-font-display);
+  --font-body: var(--mw-font-body);
+  --font-mono: var(--mw-font-mono);
+
+  --radius-sm: var(--mw-radius-sm);
+  --radius-md: var(--mw-radius-md);
+  --radius-lg: var(--mw-radius-lg);
+}
+
+/**
+ * ⭐ PANEL **HER ZAMAN GECE**. Oyunda tema seçilebilir; burada seçilemez ve seçilmemeli:
+ * yönetim ekranı uzun süre açık kalan, yoğun sayı okunan bir yer. Tek bir görünüm hem
+ * bakımı hem kontrast doğrulamasını yarıya indiriyor.
+ */
+:root {
+  color-scheme: dark;
+}
+
+html {
+  background: var(--mw-color-bg);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--mw-color-text-primary);
+}
+
+/** Sayı sütunları kaymasın — kaynak, süre ve kimlik sütunlarının hepsi tabular. */
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.display {
+  font-family: var(--font-display);
+}

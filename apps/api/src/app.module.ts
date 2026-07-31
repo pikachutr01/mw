@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AdminController } from './admin/admin.controller.ts';
+import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
 import { AllianceController } from './alliance/alliance.controller.ts';
 import { AuthController } from './auth/auth.controller.ts';
 import { AuthGuard } from './auth/auth.guard.ts';
@@ -38,6 +40,8 @@ export { DB } from './db/tokens.ts';
     HeroController,
     MissionController, BattleController, WorldController, CommandController,
     NotifyController,
+    // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
+    AdminController,
   ],
   providers: [
     {
@@ -76,6 +80,8 @@ export { DB } from './db/tokens.ts';
       inject: [DB, TokenService, GameClockService],
     },
     AuthGuard,
+    AdminGuard,
+    AdminStepUpGuard,
   ],
 })
 export class AppModule {}

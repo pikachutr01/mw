@@ -61,6 +61,16 @@ export const accounts = pgTable('accounts', {
    * Tema/dil gibi HESAP düzeyinde: abonelik tarayıcıya ait, tarayıcı hesaba.
    */
   notifyPrefs: jsonb('notify_prefs').notNull().default({}),
+  /**
+   * ⭐ YETKİ — `player | moderator | admin` (§admin paneli Faz 0).
+   *
+   * HESAP düzeyinde çünkü yetki dünyalardan bağımsız: bir admin her dünyayı yönetir. Oyuncu
+   * içi roller (ittifak lideri/konsey) ayrı yerde (`players.alliance_role`).
+   *
+   * ⚠️ Bu değer **access token'a gömülmez**; `AdminGuard` her istekte buradan okur. Token'a
+   * gömseydik rol geri alındığında 15 dakika (token ömrü) boyunca geçerli kalırdı.
+   */
+  role: text('role').notNull().default('player'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   failedLogins: smallint('failed_logins').notNull().default(0),
@@ -344,6 +354,14 @@ export const sessions = pgTable('sessions', {
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  /**
+   * ⭐ ADIM YÜKSELTME (§admin Faz 0) — yıkıcı admin işlemlerinde parola yeniden sorulur ve
+   * yükseltme bu ana kadar geçerli sayılır.
+   *
+   * Neden TOKEN'da değil OTURUMDA: access token durumsuz ve imzalı; içine yazılan yükseltme
+   * geri alınamazdı. Burada durunca "yükseltmeyi iptal et" tek UPDATE.
+   */
+  elevatedUntil: timestamp('elevated_until', { withTimezone: true }),
 }, (t) => [
   index('sessions_account').on(t.accountId, t.createdAt),
   index('sessions_device').on(t.deviceId),
