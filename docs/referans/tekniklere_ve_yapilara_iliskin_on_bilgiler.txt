@@ -1,0 +1,786 @@
+TEKNİKLER
+
+Büyücülük:
+Büyücülük Şamanların iyileştirme yeteneklerini ve büyü gücü olan savaşçıların büyü kapasitelerini artırır. Savaşçıların büyüye karşı dayanıklılıklarını etkilemez. 
+ 
+Ön Şartlar : 
+- Akademi : 8 
+- Kimya : 2  
+
+Casusluk:
+Casusluk yeteneği üstün olan hükümdarlar, rakipleri hakkında daha fazla bilgi sahibi olabilirler. 
+ 
+Ön Şartlar : 
+- Akademi : 2  
+
+
+Demircilik: 
+Demircilik, silah yapım ustalarının becerilerini artırarak savaşçılar için daha iyi silahlar üretmelerini sağlar. 
+ 
+Ön Şartlar : 
+- Akademi : 1  
+
+
+Gece Görüş:
+Saat 00:00'dan sabah 08:00'a kadar olan zaman gece olarak nitelendirilir. Gece gerçekleşen savaşlarda savaşçıların savaşabilmesi daha da zorlaşır. Gece gerçekleşen saldırılarda Gece Görüş seviyesi ne kadar yüksekse savaşçıların vuruş ve savunma gücü o kadar artar. 
+ 
+Ön Şartlar : 
+- Akademi : 10 
+- Casusluk : 12  
+
+
+Haritacılık:
+Haritacılık seviyesi yükseldikçe, orduların diğer şehirlere ulaşım süreleri kısalır. 
+ 
+Ön Şartlar : 
+- Akademi : 3
+
+
+İçgüdü:
+İçgüdü, Ejderha ve Ogre gibi yaratıkların savaşçılık yeteneklerini artırır. 
+ 
+Ön Şartlar : 
+- Akademi : 10  
+
+
+Kimya:
+Uzaktan savaş ünitelerinin attıkları taşlar ve oklar, kimya yeteneği ile yanıcı hale getirilebilir. Bu şekilde atılan taşlar ve oklar düştükleri yerde etrafa alev saçarak çok daha etkili olurlar. Kimyanın geliştirilmesi bu kimyasal maddelerin içeriğini geliştirip vereceği hasarı artırır. 
+ 
+Ön Şartlar : 
+- Akademi : 4 
+- Demircilik : 4  
+
+
+Okçuluk:
+Okçuluk, hükümdarlıklardaki savaşçıların ok kullanım ve ok yapım tekniklerini geliştirir. Ok kullanan savaşçılar, yani Elfler ve Pegasuslar'ın saldırı güçlerini seviyesi oranında artırır. 
+ 
+Ön Şartlar : 
+- Akademi : 2  
+
+
+Sömürgecilik:
+Sömürgecilik boş alanlara yeni şehirler kurulmasını; bu şekilde kaynak üretiminin artışını ve savaşma alanının genişletilmesini sağlar. Sömürgecilik tekniğinin her üç seviyesinde yeni bir şehir kurulabilir. 
+ 
+Ön Şartlar : 
+- Akademi : 7 
+- Haritacılık : 5  
+
+
+Taş Ustalığı:
+Taş Ustalığı sayesinde taş ustaları daha iyi binalar inşa ederek hem şehrin savunmasına, hem de gelişmesine katkıda bulunurlar. 
+ 
+Ön Şartlar : 
+- Akademi : 6 
+- Demircilik : 5  
+
+
+Tılsım:
+Tılsım, savaşçıları büyüyle yapılan saldırılara karşı korur. 
+ 
+Ön Şartlar : 
+- Akademi : 9 
+- Büyücülük : 3  
+
+
+Zırh:
+Zırh sayesinde demir ustaları daha iyi zırhlar yaparak ordunun dayanıklılığını arttırır. 
+ 
+Ön Şartlar : 
+- Akademi : 1  
+
+
+
+YAPILAR
+Akademi:
+Akademi, çeşitli savaş ve ekonomi tekniklerin geliştirildiği yapıdır. Geliştirilen teknikler krallığın tüm şehirleri için ortaktır. Bir şehirdeki akademinin seviyesi yükseldikçe, sadece o akademideki tekniklerin yapılma süresi kısalır. Gerekli seviyeye ulaşmamış akademilerde bazı teknikler ilerletilemez. 
+ 
+Ön Şartlar : 
+- Kale : 2  
+
+
+Baraka:
+Şehrin çevresindeki köylerden toplanan savaşçıların eğitilerek şehir ordusuna katıldığı yapıdır. Barakanın seviyesi yükseldikçe savaşçıların eğitim hızı artar. Bu şekilde daha kısa zamanda, daha çok savaşçı üretilebilir. Eğer bazı savaşçılar üretemiyorsanız, bunun nedeni henüz gerekli Baraka seviyesine ulaşılmaması olabilir.  
+
+
+Çiftlik:
+Şehrin yiyecek üretimi çiftlik tarafından yapılır. Çiftlik seviyesi ne kadar yükseltilirse, saat başına çiftlikte üretilen yiyecek miktarı da o kadar artar. Yiyecek çiftliklerden üretilebildiği gibi savaşlarda ganimet olarak da elde edilebilir.  
+(Seviyeye göre saatlik yemek üretimleri tablosu mevcut. 1 seviyeden 40 seviyeye kadar olan veriler var.)
+
+
+Kale:
+Kaleler, hükümdarların ordularını ve şehirlerini yönettikleri yerlerdir. Şehirlerde yapılacak diğer birçok yapının seviyelerinin ilerletilebilmesi kalenin seviyesine bağlıdır. Kale seviyelerine bakılarak bir şehrin gelişmişlik seviyesi hakkında fikir yürütülebilir. Artırılan her bir Kale seviyesi için diğer yapıların toplam 10 seviye ilerletilebilmesi mümkün olmaktadır.
+
+
+Maden:
+Şehirde kazılan madenlerden altın çıkarılır. Altın madenin seviyesi ne kadar yükseltilirse, saat başına madenden çıkarılan altın miktarı da o kadar artar. Özellikle yeni kurulan bir şehirde maden, seviyesi öncelikle yükseltilmesi gereken yapıdır. Altın, madenlerden çıkarılabildiği gibi savaşlarda ganimet olarak da elde edilebilir.  
+(Seviyeye göre saatlik altın üretimleri tablosu mevcut. 1 seviyeden 40 seviyeye kadar olan veriler var.)
+
+
+Mağara:
+Mağaralar cüceler tarafından kazılan yapılardır ve gerektiğinde savaşçıları düşman saldırılarından korumak için kullanılır. Mağaralara savaşçıları doldurmak ve boşaltmak için gereken süre, savaşçıların toplam kapladığı alana göre değişmektedir. Mağaralarda yiyecek ve altın depolanamaz. Mağarada bulunan savaşçılar şehir savunmasına katılamazlar. 
+ 
+Ön Şartlar : 
+- Mimar Okulu : 1 
+(Seviyeye göre mağara kapasiteleri tablosu mevcut. 1 seviyeden 20 seviyeye kadar olan veriler var. Ama bu veriler sanırım java dosyalarında da mevcut. 50-100-200-400 şeklinde giden örüntü mağaraya ait)
+
+
+Mimar Okulu:
+Mimar okulunda yetişen yapı ustaları okulun seviyesi arttıkça, diğer şehir yapıları ve savunma ünitelerini daha kısa zamanda yapabilir hale gelir.  
+
+
+Tapınak:
+Tapınak, şehirdeki kahramanların yer aldığı yapıdır. Tapınak seviyesi artırıldığında hem savaşlarda kahraman çıkma olasılığı yükselir, hem de savaşta kaybedilen kahramanların dirilme süresi kısalır. 
+ 
+Ön Şartlar : 
+- Kale : 3 
+- Mimar Okulu : 3 
+- Büyücülük : 6  
+
+
+Teleport:
+Teleport sayesinde oyuncu bir şehrinden Boyut Geçidi olan başka bir şehrine zaman gerekmeksizin ordularını gönderebilir. Teleport ile kaynak taşıması yapılamaz. Teleport kullanıldıktan sonra tekrar kullanılmak için belirli bir süre gerekir. Teleport seviyesi artırılarak kısaltılabilir. 
+ 
+Ön Şartlar : 
+- Kale : 12 
+- Mimar Okulu : 12 
+- Büyücülük : 12  
+
+
+KAHRAMAN MEKANİĞİ:
+Diğer savaşçılar gibi üretilemeyen sadece büyük savaşların sonunda çıkabilen bir savaşçıdır. Tapınak seviyeniz ne kadar yüksekse ordunuzdan bir kahraman çıkma ihtimali o kadar yüksek olur. Savaşlarda topladıkları tecrübe puanları belirli değerleri aştığında seviye atlama hakkına sahip olurlar. Seviye atlayan Kahramanlar seviye puanı kazanır ve bu puanlar kahramanın fiziksel ya da büyü güçlerini artırmak için kullanılır. Bu şekilde Kahramanlar kişiselleştirilebilir. Kahramanlar seviyelerine göre içinde bulundukları ordunun da güçlerini artırırlar.  
+
+Ön Şartlar : 
+Tapınak : 1 
+Büyücülük : 5 
+
+Özellikler : 
+Hız : 200 
+Kapasite : 0 
+Alan : 5 
+
+Teknikler : 
+Kahramanlar tekniklerden etkilenmezler.  
+(Seviyelere göre gereken tecrübe puanları tablosu 1 seviyeden 80 seviyeye kadar mevcut.)
+
+
+SAVUNMA YAPILARI:
+Balista:
+Balistalar çok büyük ve etkili okların atılabildiği makinalardır. Bu oklar ile çok uzak mesafelerdeki savaşçılar vurulabilir. Özellikle Ejderha ve Pegasus gibi uçan ünitelere karşı kullanılır.  
+
+Özellikler : 
+- Alan : 900 
+ 
+Ön Şartlar : 
+- Kale : 6 
+- Okçuluk : 10 
+- Sur : 6 
+ 
+Etkilendiği Teknikler : 
+- Okçuluk 
+- Taş Ustalığı 
+
+
+Büyü Kalkanı:
+Büyü kalkanı saldıran ordudaki büyü gücü olan ünitelerin etkilerini azaltmak için kullanılır. Büyü kalkanının her seviyesi daha fazla büyü koruması sağlar.  
+
+Özellikler : 
+- Alan : 1000 
+ 
+Ön Şartlar : 
+- Büyücülük : 8 
+- Sur : 10 
+ 
+Etkilendiği Teknikler : 
+- Büyücülük 
+
+
+Kazancı:
+Kazancılar surun üzerinde, yakın savaşta etkili ünitelerdir. Düşman ordusu sura saldırırken, kazancılar büyük kazanlarla kızgın yağ dökerek düşmana ciddi zarar verebilirler.  
+
+Özellikler : 
+- Alan : 150 
+ 
+Ön Şartlar : 
+- Kale : 3 
+- Kimya : 3 
+- Sur : 3 
+ 
+Etkilendiği Teknikler : 
+- Zırh 
+- Tılsım 
+- Kimya 
+
+
+Mangonel:
+Mangonel Kuleleri sur üzerine monte edilmiş, büyük taş kütlelerini çok uzaklara fırlatabilen ünitelerdir. Mangonel Kuleleri şehre saldıran ordu henüz uzaktayken fırlattıkları kayalarla karada geniş bir alanda bulunan tüm düşman savaşçılarına ciddi zarar verebilirler.  
+
+Özellikler : 
+- Alan : 257 
+ 
+Ön Şartlar :               
+- Kale : 5 
+- Kimya : 6 
+- Sur : 5 
+ 
+Etkilendiği Teknikler : 
+- Kimya 
+- Taş Ustalığı 
+
+
+Muhafız:
+Muhafızlar kale savunmasında hem surlardan saldıran orduya karşı ok atabilen, hem de yakın savaşlarda kılıç ile savaşabilen güçlü kale muhafızlarıdır. Muhafızlar sadece bulundukları şehrin savunmasıyla görevlidirler, başka şehirlere göreve gönderilemezler.  
+
+Özellikler : 
+- Alan : 180 
+ 
+Ön Şartlar : 
+- Kale : 4 
+- Demircilik : 4 
+- Zırh : 3 
+- Sur : 4 
+ 
+Etkilendiği Teknikler : 
+- Demircilik 
+- Zırh 
+- Tılsım 
+
+
+Okçu Kulesi:
+Okçu Kuleleri sur savunmasının önemli bir kısmını oluştururlar. Hem canlı, hem mekanize savaşçılar için etkili vuruş gücüne sahiptirler. Güçlü vuruş menzilleri sayesinde uzaktaki üniteler için bile etkilidirler.  
+
+Özellikler : 
+- Alan : 24 
+ 
+Ön Şartlar : 
+- Okçuluk : 1 
+- Sur : 1 
+ 
+Etkilendiği Teknikler : 
+- Okçuluk 
+- Taş Ustalığı 
+
+
+Sur:
+Şehrin çevresini olduğu gibi kuşatan taş duvardır. Sur üzerine yerleştirilen diğer savunma birimleri ve elf okçuları şehir savunmasının temel direğini oluşturur. Sur yıkılmadığı sürece şehir savunmasını yapan savaşçılara çok önemli bir koruma görevini üstlenir. Savaş sonunda yıkılan ya da zarar gören surlar savaş sonunda tamir edilir.  
+
+Özellikler : 
+- Seviye 1 için Alan : 1000 
+ 
+Ön Şartlar : 
+Önşart Yok 
+ 
+Etkilendiği Teknikler : 
+- Taş Ustalığı 
+
+
+Tuzak:
+Tuzaklar surun dış çevresine yerleştirilir. Saldıran ordu şehre yaklaşmadan, yer ünitelerine ciddi zararlar verirler. Gnomlar tarafından sabote edilmeye açıktırlar.  
+
+Özellikler : 
+- Alan : 3 
+ 
+Ön Şartlar : 
+- Sur : 1 
+ 
+Etkilendiği Teknikler : 
+- Demircilik 
+
+
+SAVAŞÇILAR:
+Casus Kuş:
+Saldırılardan önce saldırılacak şehir hakkında bilgi toplama amaçlı kullanılırlar. Gönderildikleri şehrin üstünde uçarak; şehir yapıları, savunma yapıları, savaşçıları gibi bilgileri rapor ederler. Casus Kuşlar casusluk sırasında Savunma Kuleleri ve Elfler tarafından vurulabilirler.  
+
+Özellikler : 
+- Hız : 6000 
+- Kapasite : 0 
+- Alan : 1 
+ 
+Ön Şartlar : 
+- Baraka : 3 
+- Casusluk : 1 
+ 
+Etkilendiği Teknikler : 
+- Casusluk 
+
+
+Cüce:
+Cüceler savaşlardaki becerileri, fiziksel güçleri ve büyüye karşı dayanıklılıkları ile bilinirler. Kısa boyları, iri cüsseleri ve kullandıkları büyük baltaları ile yakın çarpışmalarda çok etkilidirler. Havadan gelen saldırılara karşı ise savunmasızdırlar.  
+
+Özellikler : 
+- Hız : 100 
+- Kapasite : 10 
+- Alan : 9 
+ 
+Ön Şartlar : 
+- Baraka : 1 
+- Demircilik : 1 
+ 
+Etkilendiği Teknikler : 
+- Demircilik 
+- Zırh 
+- Tılsım 
+ 
+Ekstra Özellikler : 
+Cüceler yeterince fazla sayıda olduklarında düşmanın mağarasını yıkabilirler.
+
+
+Ejderha:
+Ejderhalar uçma yeteneğine sahip, muazzam cüsselerdeki yaratıklardır. Ağızlarından saçtıkları alevleri en güçlü silahlarıdır. Kalın derileri ejderhaları saldırılara karşı bir zırh gibi korumaktadır. Büyü güçleri çok yüksek ve büyülere karşı son derece dirençlidirler. Kaostan sonra bir ordunun en güçlü silahlarıdır.  
+
+Özellikler : 
+- Hız : 160 
+- Kapasite : 300 
+- Alan : 750 
+ 
+Ön Şartlar : 
+- Baraka : 10 
+- Büyücülük : 12 
+ 
+Etkilendiği Teknikler : 
+- İçgüdü 
+- Zırh 
+- Tılsım 
+- Büyücülük 
+
+
+Elf:
+Elfler okçuluktaki inanılmaz yetenekleri ve büyüler üzerindeki hâkimiyetleri ile tanınırlar. Hem yerdeki, hem de uçan savaşçılara karşı etkilidirler. Ancak, göğüs göğüse çarpışmalara karşı önemli zaafiyetleri vardır.  
+
+Özellikler : 
+- Hız : 120 
+- Kapasite : 4 
+- Alan : 12 
+ 
+Ön Şartlar : 
+- Baraka : 3 
+- Okçuluk : 1 
+ 
+Etkilendiği Teknikler : 
+- Okçuluk 
+- Zırh 
+- Tılsım 
+- Büyücülük 
+ 
+Ekstra Özellikler : 
+Casus Kuşları vurabilmek için şehrinizde Elf veya Okçu Kulesi bulunmalıdır.  
+
+
+Gnom:
+Gnomlar teknik konulardaki yetenekleri ile tanınırlar. Savaş alanında karşı tarafın kurduğu tuzakları bozabilir ve düşmanın savunma ünitelerini sabote edebilirler. Diğer savaşçılara göre saldırı ve savunma güçleri zayıftır.  
+
+Özellikler : 
+- Hız : 120 
+- Kapasite : 4 
+- Alan : 25 
+ 
+Ön Şartlar : 
+- Baraka : 6 
+- Demircilik : 3 
+ 
+Etkilendiği Teknikler : 
+- Demircilik 
+- Zırh 
+- Tılsım 
+
+
+Kaos:
+Kaoslar sadece çok büyük hükümdarlıkların sahip olabileceği, dünyanın en güçlü yaratıklarıdır. Onlarca Ejderha gücünde olan Kaos, çok geniş bir alanda pek çok savaşçıyı bir anda yok edebilir. Bir Kaosu yok etmek çok zordur.  
+
+Özellikler : 
+- Hız : 80 
+- Kapasite : 0 
+- Alan : 40000 
+ 
+Ön Şartlar : 
+- Baraka : 15 
+- Büyücülük : 20 
+ 
+Etkilendiği Teknikler : 
+- İçgüdü 
+- Büyücülük 
+
+
+Mancınık:
+Mancınıklar saldırı amaçlı silahlardır. Attıkları büyük kaya kütleleri ve ateş topları, düşman şehrinin direncini kırarak ordunun saldırısına destek verir. Büyü güçleri yoktur. Zayıf yanları; Gnomlar tarafından kolayca sabote edilebilmeleridir.  
+
+Özellikler : 
+- Hız : 100 
+- Kapasite : 0 
+- Alan : 240 
+ 
+Ön Şartlar : 
+- Baraka : 8 
+- Kimya : 5 
+ 
+Etkilendiği Teknikler : 
+- Zırh 
+- Kimya 
+
+
+Ogre:
+Ogre Ejderhadan sonra gelen en dayanıklı yaratıktır. İri cüsseleri ve devasa tokmakları sayesinde geniş bir alanda bulunan savaşçılara etkili vuruş güçleri vardır. Ogreler cüsseleri sayesinde savunma yapılarına karşı da son derece etkilidir. Büyülere karşı dayanıksızlardır.  
+
+Özellikler : 
+- Hız : 100 
+- Kapasite : 500 
+- Alan : 666 
+ 
+Ön Şartlar : 
+- Baraka : 8 
+- İçgüdü : 6 
+ 
+Etkilendiği Teknikler : 
+- Demircilik 
+- Zırh 
+- Tılsım 
+- İçgüdü 
+
+
+Pegasus:
+Pegasus binicileri, ustalıkla kullandıkları mızrak ve okları ile tanınırlar. Pegasusların uçma yetenekleri sayesinde yerden gelebilecek tehlikelerden kolaylıkla kurtulabilirler. Büyü güçleri olmasına karşın büyülere karşı hassastırlar.  
+
+Özellikler : 
+- Hız : 160 
+- Kapasite : 40 
+- Alan : 80 
+ 
+Ön Şartlar : 
+- Baraka : 7 
+- Okçuluk : 5 
+ 
+Etkilendiği Teknikler : 
+- Okçuluk 
+- Zırh 
+- Tılsım 
+- Büyücülük 
+
+
+Süvari:
+İhtişamlı atları ve devasa kılıçları ile bilinirler. Kullandıkları kalın zırhlar ile özellikle oklara karşı çok dayanıklıdırlar. Göğüs göğüse çarpışmalarda karşı konulması güç bir hâkimiyete sahiptirler. Büyülere karşı cüceler kadar dayanıklı değillerdir.  
+
+Özellikler : 
+- Hız : 140 
+- Kapasite : 40 
+- Alan : 52 
+ 
+Ön Şartlar : 
+- Baraka : 4 
+- Demircilik : 3 
+ 
+Etkilendiği Teknikler : 
+- Demircilik 
+- Zırh 
+- Tılsım 
+
+
+Şaman:
+Şamanlar, canlıları iyileştirebilen özel güçleri ile bilinirler. Şamanların savaşçılık güçleri yok gibidir, ancak savaşta çevresindeki canlıları iyileştirebilmeleri sayesinde etkin rol oynarlar. Şamanlar düşmanın Büyü Kalkanı'na karşı da etkilidir.  
+
+Özellikler : 
+- Hız : 120 
+- Kapasite : 1 
+- Alan : 18 
+ 
+Ön Şartlar : 
+- Baraka : 5 
+- Büyücülük : 4 
+ 
+Etkilendiği Teknikler : 
+- Zırh 
+- Tılsım 
+- Büyücülük 
+
+
+Yük Arabası:
+Yük Arabaları bir şehirden diğerine yük taşıması amacı ile kullanılan, büyük hayvanların çektiği arabalardır. Bu arabaların yük taşıma kapasiteleri diğer savaşçılara göre çok yüksektir. Bu özellikleri ile savaşlarda ganimetin taşınması ve şehirler arasında kaynak transferi gibi amaçlarla kullanılırlar.  
+
+Özellikler : 
+- Hız : 140 
+- Kapasite : 5000 
+- Alan : 8 
+ 
+Ön Şartlar : 
+- Baraka : 3 
+- Haritacılık : 1 
+
+
+
+Bazı diğer önemli bilgiler:
+- Tatil modu en az 2 günlük yani 48 saatlik bir dondurma opsiyonudur. 48 saat tamamlanmadan tatil modundan çıkamazsınız. Hesabınız tatil modunda olduğu sürece diğer kullanıcılar tarafından şehirlerinize saldırılamaz ancak şehirlerinizde de hiçbir üretim ve ilerletme de yapılamaz. 
+- Tatil moduna girebilmek için şehirlerinizde hiçbir üretim, ilerletme ve gelen yada giden ordu olmamalıdır. Kontrol ederek, eğer üretim ya da ilerletmeniz varsa bitmesini bekleyerek veya bunları iptal ederek yeniden deneyiniz.
+- Terketmek istediğiniz şehrin başkentiniz olmadığından emin olun. Başkent terkedilemez. Eğer terketmek istediğiniz şehir sonradan kurduğunuz bir şehir ise; terk etmeniz için o şehrin barakasında hiç savaşçının olmaması gerekmektedir. Ayrıca o şehre gelen ya da o şehirden giden bir hareket (Saldırı, Nakliye, vb.) bulunmamalı ve o şehirde herhangi bir üretim veya ilerletme olmamalıdır.
+- Konsey ittifak liderinin oluşturduğu bir üst yetki organıdır. Konsey üyeleri, diğer üyeleri ittifağa davet etme ve ittifaktan üye çıkartma yetkilerine sahiptir.
+- Dünya menüsünden ya da Komuta Merkezi'ndeki Arama menüsünden ittifağınıza dahil etmek istediğiniz oyunculara davet mesajı göndererek ittifağınıza diğer oyuncuları da dahil edebilirsiniz. İttifağınıza dahil edeceğiniz oyuncu sayısında bir sınırlama bulunmamaktadır.
+- İttifak kurmak için Komuta Merkezi>>İttifak>>İttifak Kur seçeneğini kullanabilirsiniz. Eğer aynı isimde başka bir ittifak yoksa ittifak ismini yazarak kendi ittifağınızı oluşturabilirsiniz. İttifak ismi en az 3, en fazla 10 karakterden oluşabilir. Ittifak kurabilmeniz için ekstra paket aboneliğiniz olmalıdır.
+- Bir ittifağa katılmak için Komuta Merkezi'nde Arama menüsüne girerek katılmak istediğiniz ittifağı bulmanız gerekmektedir. Katılmak istediğiniz ittifağı bulduğunuzda bu ittifağa katılmak istediğinize dair bir mesaj gönderme seçeneği görüntülenecektir. İttifağa katılma talebiniz ittifağın yönetimince onaylanırsa size cevaben onay mesajınız, eğer kabul edilmez ise yine cevap olarak ret mesajı gelecektir. 
+Ayrıca bir ittifağın yöneticileri sizi ittifaklarına katılmaya davet de edebilir. Böyle bir durumda mesaj kutunuza gelecek olan ittifak davet mesajını kabul ederek o ittifağa üye olabilirsiniz.
+- Dünya menüsünden diğer oyuncuların şehirlerini görebilir, casusluk, saldırı, nakliye ve destek gibi görevleri gerçekleştirebilirsiniz. Ayrıca Komuta Merkezi'nden Arama yaparak diğer oyuncuları görebilir, başkentlerinin koordinatlarına ulaşabilirsiniz. (Diğer şehirlerinin değil)
+- Dünyalar belli bir grup kullanıcının bir arada oyun oynadığı ve belirli bir tarihte açılan oyun dünyasını temsil eder. Her bir dünya kıtalardan, kıtalar diyarlardan, diyarlar ise şehirlerden oluşur. Bir dünyada 10 kıta, bir kıtada 500 diyar ve bir diyarda da 10 şehir bulunmaktadır
+- Koordinatlar 3 sayıdan oluşan ve bulunduğunuz dünya üzerindeki herhangi bir şehrin yerini gösteren bir bilgidir. Koordinatlarda soldan ilk sayı kıtayı, ortadaki sayı diyarı, en sağdaki sayı ise şehri ifade eder. Ör: 1:45:10'un anlamı 1. kıtadaki, 45. diyarın, 10. şehridir. Koordinatlar aracılığı ile rakiplerinizin veya ittifak kurduğunuz dostlarınızın sizin şehirlerinize olan uzaklığını belirleyebilir, saldırı ve savunma için gerekli yol sürelerini tahmin ederek buna göre stratejiler geliştirebilirsiniz.
+-  Şifre en az 3, en fazla 8 karakter olabilir. Boşluk kullanılamaz.
+- a. Kullanıcı adı üyeye özeldir ve tektir. Oyunda aynı kullanıcı adına sahip birden fazla oyuncu olamaz. 
+b. Kullanıcı adı en az 3, en fazla 10 karakter olabilir. Boşluk ve noktalama işaretleri kullanılamaz. 
+c. Sakıncalı takma isimler kullanıcı adı olarak kullanılamaz. Bu tarz adları kullanan kişiler tespit edildiklerinde hesapları silinir.  
+d. Kullanıcı adı değiştirilemez.
+- Her bir dünya belirli bir tarihte başlayan belli bir oyun periyodunu temsil eder. Oyun ile ilgili tüm aksiyonlar aynı dünyadaki oyuncular arasında gerçekleşebilir. Dünyalar birbirinden tamamen ayrı bir yapıda olduğundan birinden diğerine herhangi bir şekilde transfer vb. yapılamaz. Bir kullanıcının birden fazla dünya da hesabı olabilir.
+- Dünyalar arası geçiş yapılamaz. Oyundaki tüm kullanıcıların eşit şartlarda oynayabilmeleri için dünyalar arası geçiş yapılmamaktadır. Zaten teknik olarak da mümkün değildir. Ancak diğer bir dünyada da oynamak isteyen bir oyuncu orada yeni hesap açabilir. (Birden fazla dünya seçeneği olduğu durumlarda)
+
+Bizim binary simülatör için özel not:
+Simülatör ile yapacağınız testleri bir kaç kez deneyiniz. Özellikle savunmada tuzak olduğu durumlarda rastgele vuruş ihtimali çok fazla artacağı için savaşın sonucu değişkenlik gösterebilir.
+
+Oyun resimlerinden elde ettiğim bir veriye göre 0 seviye bir kahramanın dirilmesi için gereken ganimet miktarı: 3000 altın 2000 yemek. 
+
+Cücelerin mağara yıkmaları için gereken sayı ve demircilik seviyesine göre dağılımı images klasörü altındaki cuce-magara.png resminde var. Gerekirse tablo olarak çıkartabilirim. Ayrıca bu klasörün altında oyunun mobil,web ve televizyon ekranlarına ait görüntüleri de var. Resimlerdeki özellikle savaşçı üretim maliyetlerine dikkat etme, onlar eski versiyona ait. Biz binary simülatör üzerinden ulaştığımız verileri kullanacağız. Bu resimlerden daha çok tasarım için kullanacağımız renk paletlerini, konumlandırmayı gibi şeyleri örnek olarak alabiliriz. Ayriyeten proje ana dizininde bulunan prod_notlar.txt dosyasında eski oyunculardan edinilen ve oyuna dair olması veya daha önceden olduğu iddia edilen veyahut da olsa güzel olabilecek düşünceler mevcut. Bu dosyadaki verilere yenileri eklenecek, yine kontrol ederiz. Ama buradaki maddelerin doğrudan eklenmesine gerek yok. Belki kimisi gerçekten de çözümlediğimiz java dosyalarında vardır. Belki olması iyi olabilir. Bunu sen de muhakeme edersin.
+
+Yeni Bilgiler:
+
+BARAKA 
+
+Baraka, Mobiwar'da savaşçıların üretildiği yapıdır. Her şehir ayrı bir barakaya sahiptir ve tüm yapılarda olduğu gibi barakanın da bir seviyesi vardır. Daha gelişmiş savaşçıların üretilebilmesi için Baraka seviyesinin artırılması ön koşuldur. Baraka seviyesi yapılar menüsünün altından artırılabilir. Barakanın seviyesi arttıkça üretim hızı da artacaktır. Ön koşuları sağlanmış savaşçılar baraka menüsüne girilerek üretilebilir. Üretilen savaşçılar o şehrin barakasına eklenir. Üretimi tamamlanmış ve şehrin barakasına yerleştirilmiş savaşçılar artık göreve hazırdırlar. 
+
+Barakada asker üretimi devam ederken üretimi iptal edebilirsiniz. Ancak bu iptal işleminin bir maliyeti vardır. Herhangi bir ünite üretimi devam ediyorken bu üretimi iptal ederseniz, mevcut üretimdeki savaşçının üretimi için harcadığınız kaynağı (altın ve yemek) geri alamazsınız. Eğer aynı anda birden fazla sipariş verdiyseniz (10 elf, 20 süvari, 2 ejderha gibi) her iptal işlemi için 1 ünitenin ücreti eksik iade edilir. Özellikle Kaos veya Ejderha gibi pahalı ünitelerin üretimini iptal ederken bu durum göz önünde bulundurulmalıdır. 
+
+YAPILAR 
+
+Yapılar şehirlerin gelişimini sağlayan, altın ve yemek üretiminin yapıldığı, saldırı ve savunma amaçlı ünitelerin oluşturulduğu ve benzeri işlerin gerçekleştirildiği yerlerdir. Her şehrin yapılar bölümünde o şehire ait bina seviyeleri kontrol edilir. Şehrinizdeki tüm yapıların kademe seviyelerini buradan görebilir ve yükseltebilirsiniz. Devam eden bir yapımı da bu bölümden iptal edebilirsiniz. Yapıların iptal edilmesi ile ilgili olarak bilinmesi gereken önemli bir nokta devam eden yapım iptal edildiğinde, o ana kadar bu yapının üretimi için harcanan kaynak iade edilmez. Örneğin 100 altın ve 100 yemeğe inşa edilen bir yapı %20 oranında tamamlanmışken iptal edildiğinde 80 altın ve 80 yemek iade edilir. 
+
+Yapılar menüsünde tüm binaların seviye artırımı yapılmasına ek olarak, mağaraya asker doldurma veya dolu mağaradaki ünitelerin boşaltılması işlemleri de yapılabilir. 
+
+MobiWar’da yapılar bir kez inşa edildikten sonra yıkılamazlar ve seviyeleri düşürülemez. Savaşlarda da zarar görmezler. 
+
+Yapılan her yapı şehirde 1 birimlik bir alan kaplar. Arttırılan her kale seviyesi 10 birimlik ek yeni alan açılmasını sağlar. 
+
+SAVUNMA 
+
+Savunma ünitelerinin üretiminin yapılabildiği alandır. Savunma ünitelerinin daha kısa sürede yapılması mimar okulunun seviyesi ile ilgilidir. Mimar Okulu seviyesi ne kadar yüksekse savunma ünitelerinin üretimi de o kadar kısa sürede gerçekleşir. Aynı zamanda çoğu savunma ünitesinin ön koşulunda sur seviyesi vardır. Sur seviyesi arttıkça yeni savunma üniteleri de üretilebilir. Savunma üniteleri hareket etmezler ve sadece şehir savunmasında etkilidirler. Savaşlarda yıkılan sur savaş sonrasında belirli bir süre içinde yeniden onarılır. Savaş sonrasında zarar gören savunma üniteleri ise %50 - %70 arası bir oranda yenilenir. 
+
+AKADEMİ 
+
+Tekniklerin seviyelerinin ilerletilebildiği ve mevcut teknik seviyelerinin görülebildiği alandır. Akademide geliştirilen her bir teknik tüm şehirlerde geçerlidir. Akademi seviyesi binalar bölümünden yükseltilebilir. Eğer akademide mevcut bir teknik ilerletme görevi varsa o şehrin akademi seviyesi ilerletilemez ancak bu durum diğer şehirlerdeki akademi seviyelerini etkilemez. Ayrıca diğer şehirlerinizdeki akademilerinizde, farklı bir tekniği ilerletebilirsiniz. Akademi ekranında ilerletilen tüm teknikler birlikte gözlenebilir, ilerleme çubuğu mevcut akademideki tekniğin durumu hakkında bilgi verir. Diğer akademilerde ilerletilen teknikler içinse kalan süre bilgisi bulunur. 
+
+Akademi seviyesi ne kadar yüksekse bir tekniğin tamamlanma süresi o kadar kısa olur. Herhangi bir şehrin akademisinde ilerletilen tekniğin ne kadar süreceği o şehrin akademi seviyesine bağlı olarak kısalır, diğer şehirleri etkilemez ve diğer şehirlerden etkilenmez. 
+
+TEKNİKLER 
+
+Akademiden görülebilen ve ilerletile tekniklerin açıklamalarını oyun içindeki bilgi ekranlarından görebilirsiniz. Tekniklerin ne şekilde ve hangi oranda etki ettiği ile ilgili detaylar şu şekildedir: 
+
+Okçuluk: Uzak vuruş yapan ünitelerin uzak vuruş gücünü %5 arttırır. (Elf, Pegasus, Okçu Kulesi, Balista) 
+
+Demircilik: Yakın vuruş yapan ünitelerin yakın vuruş gücünü %5 arttırır. (Cüce, Süvari, Ogre, Gnom, Tuzak, Muhafız)  
+
+Haritacılık: Tüm ünitelerin hızını %5 arttırır.  
+
+Büyücülük: Büyülü vuruş yapan ünitelerin büyü vuruş gücünü %5 arttırır. (Şaman, Pegasus, Ejderha, Kaos, Büyü Kalkanı)  
+
+Zırh: Zırh giyen ünitelerin zırh gücünü (fiziksel defans gücünü) %6 arttırır. (Kaos hariç tüm savaşçılar.)  
+
+Kimya: Bu tekniği kullanan ünitelerin vuruş gücünü %5 arttırır. (Mancınık, Kazancı, Mangonel)  
+
+Taş Ustalığı: Bu tekniği kullanan savunma ünitelerinin fiziksel savunma gücünü %6 arttırır. (Okçu Kulesi, Mangonel, Balista, Sur)  
+
+Sömürgecilik: Her 3 seviye artırımı 1 ek şehir inşa etme imkânı sunar. Başkentinize ek olarak 4 Şehir daha kurabilirsiniz. 
+
+Gece Görüş: Gece savaşlarında ordu ve savunmanın vuruş gücü azalır. Gece görüş tekniğinin her kademesi belli bir oranda (logaritmik bir oran) bu vuruş gücünü arttırır.  
+
+İç Güdü: Bu tekniği kullanan ünitelerinin vuruş gücünü %5 arttırır. (Ejderha, Ogre, Kaos)  
+
+Tılsım: Bu tekniği kullanan ünitelerinin büyü savunma gücünü %5 arttırır. (Mancınık hariç tüm üniteler.) 
+
+MİMAR OKULU 
+
+İlerletilen her bir seviye Mimar Okulu savunma ünitelerinin ve tüm yapıların yapım süresini %4 kısaltır.  
+
+TAPINAK - KAHRAMANLAR 
+
+Tapınakta kahramanlarınız varken onların seviye artırımını ve tecrübe puanlarının dağılımını buradan yapabilirsiniz. Tapınak seviyesi binalar bölümünden artırılabilir. Tapınak seviyesinin yükseltilmesi iki olayı etkiler: 
+
+Birincisi savaşlarda kahraman çıkma olasılığını arttırır, 
+
+İkincisi savaşta ölen kahramanın diriltilme süresini kısaltır. 
+
+Her şehirdeki tapınak seviyesi kendi şehrine etki eder. Yani sadece o şehirdeki saldırı ya da savunma görevlerindeki kahraman çıkma olasılığını etkiler. Aynı şekilde o şehirdeki bir saldırı ya da savunmada ölen kahramanın diriltilme süresini belirler. 
+
+Bir savaştan kahraman çıkabilmesi için, savaşın belli bir büyüklüğün üstünde olması gerekir. Savaşın büyüklüğü arttıkça kahraman çıkma olasılığı da artar. Büyük bir savaş, büyük ve güçleri birbirine yakın orduların yaptığı bir savaştır. Bu yüzden ordular arasındaki güç dengesi açıldıkça kahraman çıkma olasılığı da düşer. Bir oyuncunun sahip olabileceği en fazla kahraman sayısı 5’tir. Çıkan her kahraman yeni kahraman çıkma olasılığını düşürür. Bir oyuncu beş kahramana sahip olduktan sonra tapınak seviyesinin artırılması sadece diriltilme süresinin kısaltılmasını etkiler. Sonuç olarak kahraman çıkması dört ayrı durumdan etkilenir; 
+
+Tapınak seviyesi 
+
+Savaşın büyüklüğü (orduların büyüklüğü ve aralarındaki güç dengesi) 
+
+Kahraman sayısı 
+
+Büyük savaşlar kahramanın daha çok tecrübe puanı kazanmasını sağlar ancak kahramanın çıktığı ilk savaş o kahramana tecrübe puanı kazandırmaz. 
+
+MAĞARA 
+
+Mağara şehrin içinde yer alan ve gizli bir geçitle ulaşılabilen oldukça güvenli bir yapıdır. Surlarınız yıkılıp kaleniz düşse bile mağaradaki askerlerinize hiçbir şey olmaz. Kısacası mağaradaki askerler savaşa katılmazlar. Ayrıca düşmanlarınızın casus kuşları mağaradaki askerleri göremezler. Mağara seviyenizi her arttırdığınızda mağara kapasitesi 2 katına çıkar ve mağaranın doldurma boşaltma %10 azalır. 
+
+Mağaralar elbette ki yenilmez değildirler. Cüceler mağaraları yıkabilir ancak 1. seviye mağarayı yıkmak için en az 150 cüce gerekir. Mağaralar yıkıldıktan sonra ordu savaşa yine katılmaz ve şehre kaçar. Bu nedenle mağara yıkılsa bile ordunuzun şehre dönmesi mağara boşaltma süresi kadar olur. Mağara yıkıldıktan sonra kendini onarması 24 saat sürer. Bu süre kısalmaz. 
+
+Mağara seviyesinin her bir kademe ilerletilmesi Mağaraya %50 dayanıklılık sağlar. Yani 1 seviye mağarayı yıkmak için 150 cüce lazımken, 2. seviye mağarayı 225 cüce yıkabilir. Seviye arttıkça yıkmak için gereken cüce sayısı da aynı oranda artar.  
+
+Saldıran oyuncunun demircilik seviyesi arttıkça mağaranın yıkılması için gereken cüce sayısı azalır. Aşağıdaki tabloda verilen cüce sayıları demircilik seviyesinin sıfır olduğu durumlar içindir. Yani aşağıdaki sayılarda belirtilen kadar cüce ile, ilgili seviyedeki mağarayı kesin olarak yıkabilirsiniz. Demircilik ne kadar yüksekse gereken cüce sayısı o kadar azalır.  
+
+
+DÜNYA 
+
+Dünya menüsünden diğer şehirleri görebilirsiniz. Ayrıca tüm görev seçenekleri de (saldırı, nakliye, casusluk, destek, şehir kurma ve teleport) yalnızca dünya menüsünden yapılabilir. Herhangi bir oyuncunun yerleşmediği boş alanlar (iskâna açık şehirler) "-" ile gösterilir. Bu boş alanlara şehir kurmak için dünya ekranındaki "Şehir Kur" seçeneğini kullanabilirsiniz. 
+
+Dünya menüsünde oyuncuların oyuncu adını, şehrinin adını, ittifak adını ve kaçıncı sırada olduğunu görebilirsiniz. 
+
+SALDIRI 
+
+Saldırı yapmak istediğiniz oyuncuya ordu göndermeniz saldırı görevidir. Bunun için: 
+
+Saldırı yapmak istediğiniz şehri dünya menüsünden bulun, 
+
+Saldırı seçeneğini seçin, 
+
+Görevi başlattığınız şehrinize ait barakadaki askerler ve varsa tapınaktaki kahramanları göreceksiniz, 
+
+Bunlardan istediğiniz miktardaki askeri seçip ordu oluşturarak saldırı görevini başlatabilirsiniz. 
+
+Oyuncunun size uzaklığına göre hesaplanan süre sonunda savaş gerçekleşecektir. Saldırı görevlerinin sürelerini ise "Ordular" ekranından takip edebilirsiniz. Saldırı görevi ile ilgili çeşitli kısıtlamalar söz konusudur. Bir oyuncunun bir şehrine 24 saat içinde en fazla 3 kez saldırılabilir. 4. saldırıyı yapmaya çalıştığınızda günlük saldırı limitini doldurduğunuza dair hata mesaj alırsınız. 
+
+NAKLİYE 
+
+Altın ve/veya yemek transferi için nakliye görevini kullanabilirsiniz. Bunun için: 
+
+Nakliye yapmak istediğiniz şehri dünya menüsünden bulun, 
+
+Nakliye seçeneğini seçin, 
+
+Şehrinize ait barakadaki ünitelerden gerektiği kadar seçin, 
+
+Transfer etmek istediğiniz malzeme miktarını yazın. 
+
+Böylece Nakliye görevini başlatabilirsiniz. Nakliye görevlerinin sürelerini ise "Ordular" ekranından takip edebilirsiniz. 
+
+DESTEK 
+
+Askerlerinizi bir şehirden diğerine taşımak için destek yapabilirsiniz. Bunun için: 
+
+Destek göndermek istediğiniz şehri dünya menüsünden bulun, 
+
+Destek seçeneğini seçin, 
+
+Görevi başlattığınız şehrinize ait barakadaki askerler ve varsa tapınaktaki kahramanlardan istediğiniz miktardaki savaşçıyı seçin. 
+
+Destek görevi için gereken süre dolduğunda askerleriniz artık gönderdiğiniz şehrin barakasına, kahramanlar ise o şehrin tapınağına yerleşir. Destek görevinde orduyla birlikte kaynak da gönderebilirsiniz. Destek görevlerinin sürelerini ise "Ordular" ekranından takip edebilirsiniz. 
+
+CASUSLUK 
+
+Başka bir oyuncunun kaynak miktarını, bina seviyelerini, teknik seviyelerini, ordu ve savunma bilgilerini görmek için casusluk görevinden yararlanabilirsiniz. Bunun için: 
+
+Casusluk yapmak istediğiniz şehri dünya menüsünden bulun, 
+
+Casusluk seçeneğini seçin, 
+
+Şehrinize ait barakadaki casus kuşlardan istediğiniz sayıda seçerek Casusluk görevini başlatın. 
+
+Casusluk seviyeniz ne kadar yüksekse alacağınız bilgi de o kadar fazla olacaktır. Ayrıca daha fazla sayıda casus kuş göndererek de daha fazla bilgi alabilirsiniz. Casusluk tekniğiniz zayıf ise düşmanınız sizin casus kuşlarınızı fark edebilir ve onları vurabilir. Casusluk görevlerinin sürelerini ise "Ordular" ekranından takip edebilirsiniz. 
+
+Gönderdiğiniz casus kuşlar 2'nin kaçıncı kuvvetine denk geliyorsa size o kadar fazla casusluk seviyesi etkisi sağlar. Örneğin 8 casus kuş yollarsanız 2^3=8 olduğundan, casusluk tekniğiniz düşmanınızınkinden 3 seviye fazla gibi davranır ve buna göre bilgi alırsınız. Aynı şekilde 16 kuş yolarsanız 2^4 = 16 olduğundan 4 seviye fazlaymış gibi bilgi alabilirsiniz.  
+
+Casusluk yaptığınız oyuncu ile casusluk tekniği farkınız daha fazla bilgi almanızı sağlar bu bilgilerin detayları tam olarak şu şekildedir: 
+
+Fark < 0 ise Kaynak bilgisi alırsınız. 
+
+Fark = 0 ise Kaynak bilgisine ek olarak Altın Madeni ve Çiftlik seviyesini alırsınız. 
+
+Fark = 1 ise ikinci maddeye ek olarak toplam savaşçı ve savunma ünitesi sayısı alırsınız. 
+
+Fark = 2 ise üçüncü maddeye ek olarak savaşçı ve savunma ünite tipleri bilgisini de alırsınız. 
+
+Fark = 3 ise dördüncü maddeye ek olarak savaşçıların tek tek sayılarını da görebilirsiniz. 
+
+Fark = 4 ise beşinci maddeye ek olarak Tekniklerini, Kale, Sur ve büyü kalkanı seviyesi bilgilerini görebilrsiniz. 
+
+ŞEHİR KURMA 
+
+Dünya ekranında gördüğünüz boş koordinatlara yeni şehirler kurabilirsiniz. Bunun için: 
+
+Şehir kurmak istediğiniz yeri dünya menüsünden bulun, 
+
+Şehir Kur seçeneğini seçin, 
+
+Şehrinize ait barakadaki savaşçılardan istediğiniz sayıda seçerek Şehir Kurma görevini başlatın. 
+
+Sömürgecilik tekniğinin her üç kademesinde yeni bir şehir kurulabilir. Bir oyuncu en fazla 5 şehre sahip olabilir. 
+
+Ordunuz şehir kurmaya giderken, seçtiğiniz yere başka bir oyuncu tarafından şehir kurulabilir. Bu durumda ordunuz şehir kuramadan geri dönecektir, başka bir yer seçip tekrar şehir kurmayı deneyebilirsiniz. Şehir Kurma görevlerinin sürelerini ise "Ordular" ekranından takip edebilirsiniz. 
+
+TELEPORT 
+
+Kendi şehirleriniz arasında ordularınızın büyülü bir transferini sağlar. Bu işlem anlık olarak gerçekleşir. Kaynaklarınızı teleport ile gönderemezsiniz. Teleport yapmak için teleport yapacağınız her iki şehrinizde de Teleport binası en az 1. seviyede olmalıdır. 
+
+Teleport yapmak istediğiniz şehri dünya menüsünden bulun, 
+
+Teleport seçeneğini seçin, 
+
+Şehrinize ait barakadaki askerlerden istediğiniz sayıda seçerek Teleport görevini başlatın. 
+
+Teleport görevi bittiğinde ilk şehrinizdeki askerler teleport olarak seçtiğiniz diğer şehre anında taşınmış olur. Bu işlemden sonra teleport binası tekrar hazır hale gelinceye kadar kullanılamaz. Teleport binası seviyesini ilerlettiğinizde teleportun kendini hazır hale getirme süresi %2 kısalır. 
+
+ORDU EKRANI 
+
+Nakliye, saldırı, casusluk ve şehir kurma görevlerini "ordu" ekranından görebilirsiniz. Bu görevlerden aynı anda bir şehirde, en fazla baraka seviyeniz kadar gerçekleştirebilirsiniz. Örneğin bir şehrinizde baraka seviyeniz 3 iken 2 nakliye ve 1 saldırı görevi yaptığınızda ordu hareketi limitiniz dolmuş olur. Bundan sonra yeni bir görev verebilmek için daha önceki görevlerden birinin sona ermesini beklemeniz gerekecektir. Baraka seviyesini yükselterek de ordu gönderme limitinizi yükseltebilirsiniz.  
+
+MESAJLAR 
+
+Mesajlar bölümünde size gelen tüm mesajları, görev raporlarını ve ittifak davetlerini görebilirsiniz. "Sadece Mesajlar" ve "Sadece Raporlar" seçenekleri ile mesajlarınızı sadece mesajları veya sadece raporları görecek şekilde filtreleyebilirsiniz. Tekrar bu ekrana girdiğinizde ya da filtreyi kaldır seçeneğini seçtiğinizde tüm mesajlarınız tekrar görüntülenecektir. 
+
+GÖREV RAPORLARI 
+
+Gerçekleşen bir göreve ait gelen mesajlardır. Mesajın geldiği an görev zamanını gösterir. Mesajın içeriğinde ise göreve ait bilgiler vardır. Nakliye için transfer edilen kaynak miktarı, savaş için savaşan orduların kayıp ve ganimetleri gibi bilgiler yer alır. Casusluk görevinde ise casusluk tekniğinize göre düşman hakkında edindiğiniz bilgiler görev raporlarında yer alır. 
+
+GENEL DURUM - PUANLAMA 
+
+Genel Durum ekranı tüm şehirlerinizdeki ordu ve kaynak durumunu gösterir. Ayrıca tekniklerinizin seviyesi ve sıralamanız hakkında da istatistikler içerir. Puanlama, harcadığınız kaynak miktarına göre yapılır. Harcanmış her 1000 birim kaynağa karşılık 1 puan alırsınız. Ordularınızın savaştaki kayıpları ise aynı oranda puan kaybetmenize neden olur. 
+
+SIRALAMALAR 
+
+Buradan tüm oyuncuların sıralama ve sıralama değişim bilgisini görebilirsiniz. Aynı şekilde "İttifak" butonu ile ittifakların, "Kahraman" butonu ile de kahramanların sıralama ve sıra değişim bilgisini görmeniz mümkündür. 
+
+İTTİFAK 
+
+İttifak bir manevi birliktelik ortamıdır. İttifak seçeneğinden: 
+
+Arkadaş grubunuz için yeni bir ittifak kurabilirsiniz. 
+
+Bir ittifaka üye iseniz ittifak içi mesajlaşma yapabilir ve üyelerin çevrimiçi/çevrimdışı durum bilgilerini ittifak ekranında görebilirsiniz. 
+
+Eğer ittifak yöneticisiyseniz ittifak yönetimi ile ilgili işlemleri bu ekrandan gerçekleştirebilirsiniz. 
+
+Başka bir oyuncuyu kendi ittifağınıza davet etmek için, dünya ekranında "İttifak Daveti" seçeneğini kullanmanız gerekir. 
+
+ARAMA 
+
+Aramak istediğiniz sözcüklere göre: 
+
+Aradığınız oyuncular hakkında sıralama, başkent ve ittifak bilgilerini bulabilirsiniz. 
+
+Aradığınız şehirlerin listesine ulaşabilirsiniz. 
+
+Aradığınız ittifakların listesine ulaşabilir ve başvurabilirsiniz. 
+
+ŞEHİR ADI DEĞİŞTİR 
+
+Şehirlerinizin adını değiştirmek için bu menüyü kullanabilirsiniz. Ad değiştirme işlemi seçili olan şehir için geçerlidir. 
+
+ŞEHİR TERK ETME 
+
+Mobiwar'da başkentiniz dışındaki şehirlerinizi terk edebilirsiniz. Terk edilen şehirdeki binalar silinir ve kaynaklar(altın ve yemek) yok olur. Terk edilen şehrin yapı ve savunma üniteleri sayesinde kazanılmış puanlarınız varsa bunları da kaybedersiniz. Bir şehri terk edebilmeniz için o şehirde gelen giden ordular, üretim, ilerletme gibi hiçbir aktivite bulunmamalıdır. 
+
+TATİL MODU 
+
+Belli bir süre oyundaki hesabınızla ilgilenemeyecekseniz, hesabınızı tatil moduna alabilirsiniz, yani dondurabilirsiniz. Tatil modundayken diğer oyuncular sizin şehirlerinize saldıramazlar. Ancak şehirlerdeki tüm kaynak üretimi de durur. Tatil moduna girebilmek için şehirlerinizde gelen giden ordular, üretim, ilerletme gibi hiçbir aktivite bulunmamalıdır. Tatil moduna alınan bir hesap tatil modundan en az iki gün sonra çıkarılabilir. 
+
+ŞİFRE DEĞİŞTİRME 
+
+Mevcut şifrenizi değiştirmek için bu menüden yararlanabilirsiniz. 
+
+Şifreniz en az 3 en fazla 8 karakter olabilir. 
+
+Türkçe karakter boşluk ve noktalama işareteri içermemelidir. 
+
+ 

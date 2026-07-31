@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mobiwar Simulator v0.6.0 — Web</title>
+  <style>
+    :root {
+      --bg: #0e1116;
+      --bg2: #151b24;
+      --panel: #1a2230;
+      --panel2: #212c3d;
+      --edge: #2c3a4f;
+      --edge2: #3a4d68;
+      --ink: #e8eef7;
+      --muted: #93a4bd;
+      --gold: #e7b35a;
+      --gold2: #f2c877;
+      --red: #e05a5a;
+      --green: #5bd08a;
+      --blue: #5aa9e7;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0
+    }
+
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.3;
+      padding: 8px;
+      font-size: 12px;
+    }
+
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto
+    }
+
+    header.app {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 6px 8px
+    }
+
+    header.app h1 {
+      font-size: 15px;
+      margin: 0;
+      letter-spacing: .2px
+    }
+
+    header.app .v {
+      color: var(--gold2);
+      font-weight: 700
+    }
+
+    header.app p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      margin-left: auto;
+      max-width: 640px;
+      text-align: right
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.05fr 1.15fr .8fr;
+      gap: 8px
+    }
+
+    @media (max-width:1080px) {
+      .grid {
+        grid-template-columns: 1fr 1fr
+      }
+    }
+
+    @media (max-width:720px) {
+      .grid {
+        grid-template-columns: 1fr
+      }
+    }
+
+    .panel {
+      border: 1px solid var(--edge);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column
+    }
+
+    .panel>h2 {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      padding: 5px 8px;
+      color: var(--gold2);
+      background: var(--panel2);
+      border-bottom: 1px solid var(--edge)
+    }
+
+    .panel>h2 small {
+      color: var(--muted);
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 400
+    }
+
+    .body {
+      padding: 6px 8px
+    }
+
+    .span2 {
+      grid-column: span 2
+    }
+
+    @media (max-width:720px) {
+      .span2 {
+        grid-column: span 1
+      }
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+      font-weight: 600;
+      padding: 2px 3px;
+      text-align: center
+    }
+
+    td {
+      padding: 1px 3px;
+      vertical-align: middle
+    }
+
+    td.nm {
+      font-size: 11.5px;
+      white-space: nowrap
+    }
+
+    td.nm small {
+      color: var(--muted);
+      font-size: 9.5px;
+      margin-left: 4px
+    }
+
+    tr.r:hover {
+      background: #ffffff08
+    }
+
+    .rem {
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      font-size: 11.5px;
+      min-width: 38px
+    }
+
+    .rem.dead {
+      color: var(--red)
+    }
+
+    .rem.win {
+      color: var(--green)
+    }
+
+    .dash {
+      text-align: center;
+      color: var(--muted)
+    }
+
+    input[type=number] {
+      width: 100%;
+      min-width: 42px;
+      padding: 2px 3px;
+      border-radius: 5px;
+      border: 1px solid var(--edge2);
+      background: #0d1420;
+      color: var(--ink);
+      font-size: 11.5px;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+
+    input[type=number]:focus {
+      outline: none;
+      border-color: var(--gold)
+    }
+
+    input.dim {
+      opacity: .5
+    }
+
+    .hcol {
+      width: 46px
+    }
+
+    .tag {
+      display: inline-block;
+      font-size: 9px;
+      padding: 0 4px;
+      border-radius: 10px;
+      border: 1px solid var(--edge2);
+      color: var(--muted);
+      margin-left: 3px
+    }
+
+    .tag.ok {
+      color: var(--green);
+      border-color: #2f5a43
+    }
+
+    .subttl {
+      color: var(--gold2);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+      margin: 6px 0 2px
+    }
+
+    .heroctl {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px
+    }
+
+    .heroctl label {
+      color: var(--muted);
+      font-size: 10.5px
+    }
+
+    .heroctl input {
+      width: 52px
+    }
+
+    .chk {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      margin: 6px 0 2px
+    }
+
+    .chk input {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--gold)
+    }
+
+    .actions {
+      margin: 8px 0;
+      display: flex;
+      justify-content: center
+    }
+
+    button.fight {
+      font-size: 14px;
+      font-weight: 800;
+      color: #20160a;
+      cursor: pointer;
+      padding: 8px 40px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(180deg, var(--gold2), var(--gold))
+    }
+
+    button.fight:active {
+      transform: translateY(1px)
+    }
+
+    .result .body {
+      min-height: 70px
+    }
+
+    .verdict {
+      font-size: 16px;
+      font-weight: 800;
+      text-align: center;
+      margin: 2px 0 6px
+    }
+
+    .verdict.att {
+      color: var(--blue)
+    }
+
+    .verdict.def {
+      color: var(--gold2)
+    }
+
+    .verdict.draw {
+      color: var(--muted)
+    }
+
+    .rstats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 6px
+    }
+
+    .stat {
+      border: 1px solid var(--edge);
+      border-radius: 7px;
+      padding: 5px 8px;
+      background: #0f1622
+    }
+
+    .stat .k {
+      font-size: 9.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .3px
+    }
+
+    .stat .val {
+      font-size: 15px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      margin-top: 1px
+    }
+
+    .rlog {
+      margin-top: 8px;
+      padding: 6px 10px;
+      border: 1px dashed var(--edge2);
+      border-radius: 7px;
+      background: #0c1220;
+      color: var(--muted);
+      font-size: 11.5px;
+      white-space: pre-line;
+      text-align: center;
+      line-height: 1.55
+    }
+
+    .placeholder {
+      color: var(--muted);
+      text-align: center;
+      padding: 14px
+    }
+
+    .note {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 10px;
+      text-align: center
+    }
+
+    .note code {
+      color: var(--gold2)
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header class="app">
+      <h1>Mobiwar Simulator <span class="v">v0.6.0</span> — Web</h1>
+      <p>Hasar formülü/tur akışı binary'den (Ghidra) · teknikler, Sur, Tuzak, Büyü Kalkanı ve Gnom
+        <b>oyun dokümanı mantığına</b> göre · kahraman &amp; XP <code>[REKON]</code></p>
+    </header>
+
+    <div class="grid">
+      <!-- SAVAŞÇILAR -->
+      <section class="panel">
+        <h2>Savaşçılar</h2>
+        <div class="body">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Ünite</th>
+                <th>Saldıran</th>
+                <th>Kalan</th>
+                <th>Savunan</th>
+                <th>Kalan</th>
+              </tr>
+            </thead>
+            <tbody id="warriors"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- KAHRAMANLAR + GECE -->
+      <section class="panel">
+        <h2>Kahramanlar <small>(0–5 · savaşa katılır)</small></h2>
+        <div class="body">
+          <div class="hero-side" data-side="attacker">
+            <div class="heroctl"><span class="subttl" style="margin:0">Saldıran</span>
+              <label>Adet</label><input type="number" class="h-count" min="0" max="5" value="0">
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="text-align:left">Kahraman</th>
+                  <th>F.Sld</th>
+                  <th>F.Svn</th>
+                  <th>B.Sld</th>
+                  <th>B.Svn</th>
+                  <th>Lvl</th>
+                </tr>
+              </thead>
+              <tbody class="h-rows"></tbody>
+            </table>
+          </div>
+          <div class="hero-side" data-side="defender" style="margin-top:8px">
+            <div class="heroctl"><span class="subttl" style="margin:0">Savunan</span>
+              <label>Adet</label><input type="number" class="h-count" min="0" max="5" value="0">
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="text-align:left">Kahraman</th>
+                  <th>F.Sld</th>
+                  <th>F.Svn</th>
+                  <th>B.Sld</th>
+                  <th>B.Svn</th>
+                  <th>Lvl</th>
+                </tr>
+              </thead>
+              <tbody class="h-rows"></tbody>
+            </table>
+          </div>
+
+          <label class="chk"><input type="checkbox" id="nightOn"> 🌙 Gece Savaşı</label>
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Gece Görüş</th>
+                <th>Saldıran</th>
+                <th>Savunan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="r">
+                <td class="nm">Seviye</td>
+                <td><input type="number" id="nvAtk" min="0" value="0"></td>
+                <td><input type="number" id="nvDef" min="0" value="0"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TEKNİKLER -->
+      <section class="panel">
+        <h2>Teknikler</h2>
+        <div class="body">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Teknik</th>
+                <th>Saldıran</th>
+                <th>Savunan</th>
+              </tr>
+            </thead>
+            <tbody id="techs"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SAVUNMA -->
+      <section class="panel span2">
+        <h2>Savunma Yapıları <small>(yalnızca savunan)</small></h2>
+        <div class="body">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Yapı</th>
+                <th>Savunan</th>
+                <th>Kalan</th>
+                <th style="width:40%"></th>
+              </tr>
+            </thead>
+            <tbody id="defenses"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SONUÇ -->
+      <section class="panel result">
+        <h2>Sonuç</h2>
+        <div class="body" id="result">
+          <div class="placeholder">Orduları kurup <b>Savaştır</b>'a bas.</div>
+        </div>
+      </section>
+    </div>
+
+    <div class="actions"><button class="fight" id="fight">⚔️ Savaştır</button></div>
+  </div>
+
+  <script src="mobiwar-engine.js"></script>
+  <script>
+    (function () {
+      const E = window.MobiwarEngine;
+      const fmt = new Intl.NumberFormat('tr-TR');
+      const $ = (s, r = document) => r.querySelector(s);
+      const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+      // Teknikler — v0.6 doküman modeli (etki = vuruş gücü / savunma). Taş Ustalığı: yalnız SAVUNAN.
+      const TECHS = [
+        { id: 'okculuk', name: 'Okçuluk', note: '+%5 uzak vuruş (Elf, Pegasus, Okçu K., Balista)' },
+        { id: 'demircilik', name: 'Demircilik', note: '+%5 yakın vuruş (Cüce, Süvari, Ogre, Gnom, Tuzak, Muhafız)' },
+        { id: 'buyuculuk', name: 'Büyücülük', note: '+%5 büyü vuruşu (Şaman, Pegasus, Ejderha, Kaos, Büyü Kalkanı)' },
+        { id: 'zirh', name: 'Zırh', note: '+%6 fiziksel savunma (Kaos hariç savaşçılar, Kazancı, Muhafız)' },
+        { id: 'kimya', name: 'Kimya', note: '+%5 vuruş (Mancınık, Kazancı, Mangonel)' },
+        { id: 'tasusta', name: 'Taş Ustalığı', note: '+%6 fiz. savunma (Okçu K., Mangonel, Balista, Sur)', defOnly: true },
+        { id: 'icgudu', name: 'İçgüdü', note: '+%5 vuruş (Ejderha, Ogre, Kaos)' },
+        { id: 'tilsim', name: 'Tılsım', note: '+%5 büyü savunması (Mancınık/Kaos hariç, + Kazancı/Muhafız)' },
+      ];
+
+      // --- Savaşçılar ---
+      const wRoot = $('#warriors');
+      E.WARRIORS.forEach(u => {
+        const tr = document.createElement('tr'); tr.className = 'r';
+        tr.innerHTML =
+          `<td class="nm">${u.name}</td>` +
+          `<td><input type="number" min="0" value="0" data-a="${u.id}"></td>` +
+          `<td class="rem" data-ar="${u.id}">0</td>` +
+          `<td><input type="number" min="0" value="0" data-d="${u.id}"></td>` +
+          `<td class="rem" data-dr="${u.id}">0</td>`;
+        wRoot.appendChild(tr);
+      });
+
+      // --- Savunma yapıları (Tapınak hariç: savaş yapısı değil) ---
+      const dRoot = $('#defenses');
+      E.DEFENSES.filter(u => u.id !== 'tapinak').forEach(u => {
+        const tr = document.createElement('tr'); tr.className = 'r';
+        tr.innerHTML =
+          `<td class="nm">${u.name}</td>` +
+          `<td><input type="number" min="0" value="0" data-d="${u.id}"></td>` +
+          `<td class="rem" data-dr="${u.id}">0</td><td></td>`;
+        dRoot.appendChild(tr);
+      });
+
+      // --- Teknikler ---
+      const tRoot = $('#techs');
+      TECHS.forEach(t => {
+        const tr = document.createElement('tr'); tr.className = 'r';
+        const atk = t.defOnly ? `<td class="dash">–</td>`
+          : `<td><input type="number" min="0" value="0" data-ta="${t.id}"></td>`;
+        tr.innerHTML =
+          `<td class="nm">${t.name}</td>` +
+          atk + `<td><input type="number" min="0" value="0" data-td="${t.id}"></td>`;
+        tRoot.appendChild(tr);
+      });
+      // Tapınak seviyesi + Kahramanlar sayısı (teknik değil; §5 kahraman çıkma ihtimali)
+      const extra = [
+        { id: 'tapinaktek', name: 'Tapınak', note: '→ kahraman çıkma ihtimali' },
+        { id: 'kahramanlar', name: 'Kahramanlar', note: '→ yalnız ihtimali düşürür (−155/adet)' },
+      ];
+      extra.forEach(t => {
+        const tr = document.createElement('tr'); tr.className = 'r';
+        tr.innerHTML =
+          `<td class="nm" style="color:var(--gold2)">${t.name}</td>` +
+          `<td><input type="number" min="0" value="0" data-ta="${t.id}"></td>` +
+          `<td><input type="number" min="0" value="0" data-td="${t.id}"></td>`;
+        tRoot.appendChild(tr);
+      });
+
+      // --- Kahraman satırları (Adet'e göre üret) ---
+      function renderHeroes(side) {
+        const box = $(`.hero-side[data-side="${side}"]`);
+        const n = Math.max(0, Math.min(5, parseInt($('.h-count', box).value || 0) || 0));
+        const tb = $('.h-rows', box);
+        tb.innerHTML = '';
+        for (let i = 0; i < n; i++) {
+          const tr = document.createElement('tr'); tr.className = 'r';
+          tr.innerHTML =
+            `<td class="nm">Kahraman ${i + 1}</td>` +
+            ['fSl', 'fSv', 'bSl', 'bSv', 'lvl'].map(k => `<td class="hcol"><input type="number" min="0" value="0" data-h="${k}"></td>`).join('');
+          tb.appendChild(tr);
+        }
+      }
+      $$('.hero-side .h-count').forEach(inp => {
+        const side = inp.closest('.hero-side').dataset.side;
+        inp.addEventListener('input', () => renderHeroes(side));
+      });
+
+      // --- Girdi toplama ---
+      const numA = id => Math.max(0, parseInt($(`[data-a="${id}"]`)?.value || 0) || 0);
+      const numD = id => Math.max(0, parseInt($(`[data-d="${id}"]`)?.value || 0) || 0);
+      function counts(side) {
+        const out = {};
+        E.UNITS.forEach(u => {
+          if (u.kind === 'd' && side !== 'defender') return;
+          out[u.id] = side === 'attacker' ? numA(u.id) : numD(u.id);
+        });
+        return out;
+      }
+      function tech(side) {
+        const a = side === 'attacker';
+        const g = id => Math.max(0, parseInt($(`[data-t${a ? 'a' : 'd'}="${id}"]`)?.value || 0) || 0);
+        return {
+          okculuk: g('okculuk'), demircilik: g('demircilik'), buyuculuk: g('buyuculuk'),
+          zirh: g('zirh'), kimya: g('kimya'),
+          tasusta: a ? 0 : g('tasusta'),          // Taş Ustalığı yalnız savunan
+          icgudu: g('icgudu'), tilsim: g('tilsim')
+        };
+      }
+      function heroes(side) {
+        const box = $(`.hero-side[data-side="${side}"]`);
+        return $$('.h-rows tr', box).map(tr => {
+          const v = k => Math.max(0, parseInt($(`[data-h="${k}"]`, tr)?.value || 0) || 0);
+          return { fSl: v('fSl'), fSv: v('fSv'), bSl: v('bSl'), bSv: v('bSv'), lvl: v('lvl') };
+        });
+      }
+      const tapVal = side => Math.max(0, parseInt($(`[data-t${side === 'attacker' ? 'a' : 'd'}="tapinaktek"]`)?.value || 0) || 0);
+      const kahVal = side => Math.max(0, parseInt($(`[data-t${side === 'attacker' ? 'a' : 'd'}="kahramanlar"]`)?.value || 0) || 0);
+
+      // --- Sonuç ---
+      function pct2(x) { const v = Math.round(x * 100); return `%${Math.floor(v / 100)},${String(v % 100).padStart(2, '0')}`; }
+      const stat = (k, v) => `<div class="stat"><div class="k">${k}</div><div class="val">${v}</div></div>`;
+      // Kahraman savaş-sonrası DURUM% satırı (ölürse "ÖLDÜ"). res.heroes = motor çıktısı.
+      function heroDurumLine(side, label) {
+        const hs = (res => (res && res[side]) || [])(window.__lastHeroes);
+        const list = hs;
+        if (!list || !list.length) return '';
+        const parts = list.map((h, i) =>
+          h.alive ? `Kahraman ${i + 1} (Lv${h.lvl}) durum %${h.durum.toFixed(1)}` : `Kahraman ${i + 1} (Lv${h.lvl}) ÖLDÜ`);
+        return `\n${label} kahraman durumu: ` + parts.join(' · ');
+      }
+      function render(res) {
+        window.__lastHeroes = res.heroes;  // heroDurumLine için
+        E.UNITS.forEach(u => {
+          const a = $(`[data-ar="${u.id}"]`), d = $(`[data-dr="${u.id}"]`);
+          if (a) {
+            const c = res.counts.attacker[u.id] ?? 0, s = counts('attacker')[u.id] || 0;
+            a.textContent = fmt.format(c); a.className = 'rem' + (s > 0 && c <= 0 ? ' dead' : '');
+          }
+          if (d) {
+            const s = (counts('defender')[u.id] || 0);
+            // SUR adet değil BÜTÜNLÜK (%) ile raporlanır — seviyesi düşmez, savaş sonrası onarılır.
+            if (u.id === 'sur') {
+              const w = res.wall && res.wall.defender;
+              d.textContent = s > 0 ? `Sv${s} · %${((w ?? 1) * 100).toFixed(1)}` : '0';
+              d.className = 'rem' + (s > 0 && (w ?? 1) <= 0 ? ' dead' : '');
+            } else {
+              const c = res.counts.defender[u.id] ?? 0;
+              d.textContent = fmt.format(c); d.className = 'rem' + (s > 0 && c <= 0 ? ' dead' : '');
+            }
+          }
+        });
+        const map = { attacker: ['Saldıran kazandı', 'att'], defender: ['Savunan kazandı', 'def'], draw: ['Berabere', 'draw'] };
+        const [txt, cls] = map[res.winner];
+        $('#result').innerHTML =
+          `<div class="verdict ${cls}">${txt}</div>` +
+          `<div class="rstats">` +
+          stat('Saldıran Kaybı', fmt.format(res.attacker.lost)) +
+          stat('Savunan Kaybı', fmt.format(res.defender.lost)) +
+          stat('Süre', res.turns + ' tur') +
+          stat('Enkaz Altın', fmt.format(res.debris.gold)) +
+          stat('Enkaz Yemek', fmt.format(res.debris.food)) +
+          stat('Deneyim [REKON]', fmt.format(res.xp)) +
+          `</div>` +
+          `<div class="rlog">` +
+          `Saldıran ${fmt.format(res.attacker.lost)} ünite, Savunan ${fmt.format(res.defender.lost)} ünite kaybetti. Savaş ${res.turns} tur sürdü.\n` +
+          `Enkaz: ${fmt.format(res.debris.gold)} Altın, ${fmt.format(res.debris.food)} Yemek. Deneyim: ${fmt.format(res.xp)}.\n` +
+          `Kahraman çıkma ihtimali ${pct2(res.captureChance)}.` +
+          heroDurumLine('attacker', 'Saldıran') + heroDurumLine('defender', 'Savunan') +
+          `</div>`;
+      }
+
+      $('#fight').addEventListener('click', () => {
+        const cfg = {
+          attacker: {
+            counts: counts('attacker'), tech: tech('attacker'), heroes: heroes('attacker'),
+            tapinak: tapVal('attacker'), kahramanlar: kahVal('attacker')
+          },
+          defender: {
+            counts: counts('defender'), tech: tech('defender'), heroes: heroes('defender'),
+            tapinak: tapVal('defender'), kahramanlar: kahVal('defender')
+          },
+          night: $('#nightOn').checked,
+          nvAtk: Math.max(0, parseInt($('#nvAtk').value || 0) || 0),
+          nvDef: Math.max(0, parseInt($('#nvDef').value || 0) || 0),
+        };
+        try { render(E.simulate(cfg)); }
+        catch (err) { $('#result').innerHTML = `<div class="placeholder" style="color:var(--red)">Hata: ${err.message}</div>`; console.error(err); }
+      });
+    })();
+  </script>
+</body>
+
+</html>

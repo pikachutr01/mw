@@ -1,0 +1,57 @@
+ -Dünya haritası yukarıdan aşağıya 10 sıra
+- Belki rastgele konumlara bot şehirler yerleştirilebilir.
+- Saldırı süresi saldırıyı başlatma ekranında gösterilmeli
+- Verilecek ilk ganimetler en azından 1 cüce ve 1 yük arabası üretebilecek kadar olabilir
+- Kişiler arasında özel mesajlaşma sistemi
+- İttifak sohbeti
+- İttifak mesajı. Tüm ittifak üyelerine veya yönetime
+- Belki arkadaş ekleme sistemi
+- İttifak kurabilmek için özel bir koşul eklenebilir.  elçilik gibi bi yapı eklenebilir 3 olunca ittifağa katılmak mümkün 10 yapınca ittifak kurmak mümkün gibi
+- Oyuncular kayıt olunca diyardaki 10 şehrin 4 veya 5 tanesi dolunca diğer diyarlar dolmaya başlasın
+- Oyuncu puanları 8 saatte bir (0-8-16) güncellenir
+- İttifak mesajlarını yönetici ve yönetici yardımcısı gönderebilir
+- Savaş başlatılınca iptal etme seçeneği olacak. Saldırılan şehre giderken geçen süre boyunca geçen süre geri dönüş süresi olacak. Yani gittiği kadar sürede geri dönecek
+- Puanlama sisteminde harcanan 1000 kaynak başına 1 puan şeklinde. 
+- ganimet miktarı çiftlik ve maden seviyelerine göre saatlik olarak düzgün artmalı
+- Oyun hızını duruma göre artırıp azaltabileceğimiz bir sabit olmalı. Bu sabite göre kaynak üretim hızları, bina yükseltme süreleri, ordu hareket hızları gibi zaman gerektiren tüm şeyler ayarlanabilmeli
+- Şehir adı değiştirme olsun ama bir süre zarfı boyunca bir kere değiştirilebilsin
+- Bu zorlama bir fikir. Mobil versiyon için savaşı görünüm olarak simüle edip kullanıcıya gösterebilir miyiz? savaş sonucuna göre oluşturulacak bir animasyon.
+- Saldırılan şehirde oluşan ganimetin %40 ı saldıran tarafından alınabilir. Altın ve yemek yakın seviyelerde olacak şekilde
+- Savunanın şehrindeki ganimet 300k altına düşerse de çok çok az seviyelerde ganimet alınır
+- 1 oyuncu bir başka oyuncunun bir şehrine günde 3 defadan fazla saldıramaz
+- İttifak üyelerinin çevrimiçi durumlarını görebilme
+- Akademi içinde bir teknik yükseltilirken yapılar kısmında akademinin seviyesi yükseltilemez
+- Barakada asker üretimi yapılırken yapılar kısmından barakanın seviyesi yükseltilemez
+- Teleport kullanınca tekrar kullanabilmek için bir süre beklemek gerekir
+- İttifak açıklaması olacak
+- Baraka seviyesi yükseldikçe barakada üretilen askerlerin üretim süreleri her seviye için belirli oranda azalmalı
+- Savunma kısmında sur seviyesi yükseldikçe savunma birimlerinin üretim süreleri her seviye için belirli oranda azalmalı
+- Barakada asker üretimi kuyruğa alınabilmeli
+- Savaş raporunda kaybedilen üniteler gösterilmeli
+- Saldırı başlatırken tüm orduyu seçme seçeneği eklenmeli
+- Saldırıya giden ordunun saldıracağı şehre ulaşım süresi ekranda gösterilmeli. Saldırı altındaki kişi için de gösterilmeli. Ama gelen saldırının içeriğindeki ordunun ne olduğunu görüp görememe konusunu yine konuşacağız
+- Yapılarda kale seviyesi arttıkça diğer yapıların seviyeleri toplam 10 adet yükseltilebilir. Her kale seviyesi diğer yapı yükseltmeleri için 10 artış sağlar
+- Casusluk yaparken sadece casus kuş birimi seçilebilmeli
+- Ordu savaştan döndüğünde savaştan getirdiği ganimet hesaba anında eklenip sayfaya anında yansımalı
+- Casusluk yapan kişiyle casusluk yapılan kişinin casusluk teknik seviyeleri arasındaki farka göre casusluk sonucu edinilen bilgi sayısı değişir. Bunu başka yerde detaylı olarak açıklarım yine
+- Kale geliştirirken diğer hiçbir yerden yapı veya teknik geliştirmeye izin verilmemesi hakkında yine konuşacağız. Aslında kale birimi yapılar kısmında olduğu için, kale yükseltilmesi sırasında yapılar bölümündeki diğer binaların yükseltilmesine izin verilmeyecek. Akademi, savunma gibi yerlerde üretim ve yükseltmeler yapılabilir.
+- Asker üretimi barakada iptal edilirse geçen süreye bağlı olarak altın ve yemeğin kalan süre boyunca denk gelen kısmı geri iade edilir. Toplu üretimlerde askerler sırayla teker teker üretilirler, henüz üretimi başlamamış askerlerin hepsinin kaynağı geri verilir.
+- Başka oyuncuların şehirlerine ordu desteği gönderilemez. Sadece nakliye adı altında kaynak gönderilebilir. Bir oyuncu diğer oyuncuya nakliye gönderecekse tüm şehirleri için toplam 1 milyon altın ve 1 milyon yemek sınırı olacak
+- Savaş raporunda saldırılan kişinin ordusunun ne olduğu, savunma birimleri gösterilmeli. Bu bilgi yine casusluk seviyesinin farkına göre değişen seviyelerde olmalı.
+- Yapılar kısmında yapılan yükseltmeler ile savunma ksımında yapılan yükseltmeler birbirini engellemez. İkisinden de ayrı ayrı yükseltme yapılabilir.
+- Aralarında 10 kattan fazla puan farkı bulunan oyuncular birbirine saldırı yapamaz. Düşük puanlarda 0 puan durumu iyi hesaplanmalı.
+- Savaş sonrası sur hasar alabilir. Alınan hasar sonrası kendi kendine otomatik bir tamir sürecine girer. Sur seviyesi arttıkça onarım süresi kısalabilir.
+- Sömrügecilik tekniğinin her 3 seviyesinde 1 ekstra şehir kurma hakkı verilir. Toplamda 5 şehir hakkı vardır.
+- İttifaktan çıkıp başka bir ittifağa katılmak için 24 saat beklenmesi gereklidir. (Süre değişken olabilir)
+- Savaş raporunda kaybedilen ganimet de yazılabilir
+- Casusluk raporunda casusluk yaptığımız şehrin adı ve tıklanabilir koordinatı olabilir
+- Casusluk yapılan şehirdeki casus kuş sayısı bizim gönderdiğimiz sayıdan üstel olarak fazla ise bizim kuşların ölme ihtimali artar. ÜStel mantığını tekniklere_ve_yapilara.md şeklindeki dosyasında bulabilirsin.
+- Oyuncu sıralaması güncellemesi 8 saatte bir olacak. Bu sıralama güncelleme için sağlam bir mantık kurmak lazım. Tüm oyuncuların güncelleme anında sahip oldukları ordu, yapı vs gibi birimleri üzerinden harcanan her 1000 kaynağa karşı 1 puan mantığı uygulanmalı. Altın ve yemek toplamı şeklinde olabilir. Her oyuncunun güncelleme sonrası yaşadığı sıra değişimi sıralamasının yanında gösterilmeli.
+- Puan kaybedince kaybedilen birimin toplam maliyetleri kadar puana eş değer puan kaybedilir
+- Şehrimize gelen saldırılarda sladıran ordunun ddetayını casusluk seviyesine göre görebiliriz. Casusluk seviyemiz azsa ordu hakkında daha az bilgi alırız.
+
+
+--------------------
+- İttifaktan atma olayını sadece lidere vereceğiz.
+
+- Orijinal oyunda gelen ordunun içeriğinin görünmesi mantığı olmayabilir. Sadece saldırı yaklaşıyor şeklinde bir bilgi varmış.

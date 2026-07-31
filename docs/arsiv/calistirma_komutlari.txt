@@ -1,0 +1,6 @@
+İlk terminal: docker compose -f compose.dev.yml up -d && pnpm db:migrate && pnpm build
+İkinci terminal: node dist/main.js     cd C:/Projects/misc/ghidra/mw/apps/api && node --env-file=../../.env dist/main.js
+üçüncü terminal: pnpm --filter @mobiwar/web dev
+
+Bir şeyler test giderse: node apps/api/scripts/smoke.mjs http://localhost:3002
+API'nin bütün uçlarını gerçek HTTP'den geçirir, "API mi bozuk arayüz mü" sorusunu tek seferde cevaplar

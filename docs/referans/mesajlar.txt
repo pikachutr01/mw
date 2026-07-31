@@ -1,0 +1,1311 @@
+mobiwar: Oyun, orijinal MobiWar dokümanları esas alınarak mümkün olduğunca birebir şekilde hazırlanmıştır.
+Ganimetlerin hızlı tükendiğinin farkındayım. Ancak bu sistem de eski MobiWar'daki mekaniklere sadık kalınarak uygulanmıştır.
+Bu nedenle başlangıçta önceliğiniz Baraka ve Demircilik geliştirmek olmalı. Ardından Cüce birlikleri üretip düzenli saldırılar gerçekleştirerek ganimet toplamanızı tavsiye ederim. Bu stratejiyi izlediğinizde kaynak sıkıntısı yaşamayacağınızı düşünüyorum.
+WAMPIR55: mobil uygulama olacakmı tarayıcı tabanlı biraz zor oluyor
+mobiwar: Mobil uygulama ilerde olacaktır şuan eksik bişey varmı yokmu diye oynuyorum
+mobiwar: herhangi bir sorunla karşılaşırsanız vurdan iletebilirsiniz
+WAMPIR55: dünya haritası eskisi gibi değil sadece üstten aşağıya 10 sıra vardı
+WAMPIR55: ilerde 0 layıp tekrar başlatma olacakmı olacaksa fazla kasmayalım
+mobiwar: Dünya haritası böyle daha iyi değil mi?
+WAMPIR55: eski sistem daha iyi gibiydi bu şekilde 4 yandan sıkıştırılma olabilir Buda bıkkınlık yapablir
+WAMPIR55: saldırı süresi nasıl olacak 1 kare yanındaki mesafeye
+WAMPIR55: artı bot şehirler olabilir yeni başlayanlar gelişmeleri kolay olabilir ganimet üreten.yada savaşta sıfırlanan toparlanması için
+WAMPIR55: kira böylece sıfırlanan oyunu bırakıp gitmez
+WaXLorD: Beyler selam iyi oyunlar herkese
+ahmetbatar: Kaynak aşırı yavaş artıyor bu kadar zor değildi orijinalinde
+ahmetbatar: Bu hızla bir aya anca ilk cücemi anca çıkartırum bu da oyuny sıkıcı yapar kimse girnes oyuna günde bi kere gir çık olur
+WaXLorD: Saldırıyı nasıl iptal ediyoruz çözdünüz mü
+ahmetbatar: Daha asker üretenedm ki çözem onu :))
+WaXLorD: Ben direk cüceyle arabaya yöneldim
+WaXLorD: Bi yere gönderdim nereye gitti onu da bilmiyorum daha 14 saati var gidiyor 😂 gelicek inşallah
+WaXLorD: Cotanak28 hatırlıyor gibiyim seni önceki oyunda da vardın sanki
+mobiwar: Arkadaşlar üretimler birebir eski sistemle aynı işliyor, çiftlik maden üstüne tıklarsanız orda detayları yazıyor hangi seviyede ne kadar üretim var diye
+mobiwar: Seçenekler kısmından istediğiniz temayı kullanabilirsiniz
+mobiwar: Şuan için bot şehirler düşünmüyorum ama etkinlik çıkartabilirim, kaynak x5 hızda verilsin gibisinden.
+Saldırı iptalini not aldım gün içinde güncelleyeceğim.
+patrone: Çıkış yap tıklanınca emin misiniz şeklinde çıkan bir confirmation dialog, modern mobil görünümde sidebar da rehber de toggle butonlar tıklanınca, giriş yap kayıt ol tıklanınca sidebar ın kapanması sorunu, yine modern görünümde Mobilde tepedeki navbar ın iki satıra çıkması hoş gözükmüyor. Gerekirse bazı ögeleri dropdown içine alıp burayı tek satır yapmak şart. Ve bende navbar ın sticky olması yerine aşağı çektikçe yukarı slide olarak kaybolması, aşağı çekince geri gözükmesi daha iyi olacaktır.
+patrone: Tek prompt ile çözülür
+mobiwar: Tasarıma çok takılmayın oyunu oynayın bakalım nasıl olmuş varmı bir eksik felan
+patrone: İyi diyon da sen bizim e posta adresimizi nereden buldun. Adın metin demir mi. Öyle gökten inme gibi birden çıkıverdin
+mobiwar: Daha önce mobiwar yapmıştım ama savaş mekaniğinde sorun vardı, daha önce oraya kaydolduğunuz için epostalarınız kayıtlı kalmış, mobiwar oynayan oyunculara erişim en mantıklı o şekilde olurdu eposta kaydı olan herkese mail gönderdim
+WaXLorD: Günlük görevler olabilir yapanlar için hediye olarak süre hızlandırmalar gibi
+WaXLorD: Birde saldırı süresi önceden şu kadar sürecek şeklinde görünmüyor
+WaXLorD: Verilen ilk ganimetler 1 cüce ve 1 yük arabası yapabilecek kadar olsa çok daha harika olur
+ahmetbatar: Waxlord senin oyundaki adın önceden çotanak28 miydi
+Baskentliia: Merhaba mobiwar gerçekten açıldı mı ?🤪
+KinG: Selamlar :))
+KinG: Yerimizi aldık bakalım :).
+mobiwar: aleyküm selam
+seyho: Reisler selam herkese
+KinG: A.s
+Mehmet09: Uygulamasi olsa daha iyi sanki
+KinG: Hg gözüm :)
+KinG: İttifak kurmam. Lazım hemen 😁😁
+seyho: Eksikleri çok gibi ama iyi iş çıkmış
+caldion: Herkese merhabalar ShadoW dan Caldion olarak yerimizi aldık 😀
+Baskentliia: Herkes çevresine söylesin yayalım
+Exxe: Selam ekip arıyorum
+seyho: Oo shadow hg
+KinG: Kara bukuttuk biz :)
+Exxe: Caldion
+seyho: Yıllarca davetler attık oyunlar açılmadı daha kimse dinlemez😂
+caldion: Hoşbuldum herkese iyi oyunlar diliyorum
+zaydek: Selam herkese
+Exxe: Unutmuşum la ilk ne yapıyoduk hızlı gelişim için ajsjshs
+zaydek: Nokia 6300 dan deli gibi oynardık aga be
+Exxe: Çiftlik falan mı yükseltiyorduk akademi mi basıyorduk
+seyho: Kayıtların sms onayıyla yapılması şart
+seyho: Aha ben n70den yardırırdım
+mobiwar: Eski oyuncuların hepsine mail ve sms gönderdim herkes oyunu oynasın elinden geldiğince yaysın güzel bir iş çıkarttık bari yaptığımız işe değsin, özel premium ile güçlenme felan yok herkes eşit şartlarda yükselecek bir haftalığına ganimet x5 yapacam herkes ordusunu bşilangıç olarak kurabilsin diye
+caldion: Telif vs yemez değil mi yoksa oyunun haklarını mı satın aldınız
+zaydek: Bana nasıl sms geldi harbi ona şaşkınım
+seyho: Bakmakmlzm mobiwar ismi tescilli mi
+mobiwar: Telif yemez hocam yese bile isim değiştirir görsel değiştirir devam ederiz, şuan telif hakkı kimsede değil firmalarla görüştüm
+caldion: Emeklerinize sağlık, mobil versiyon olacak mı yoksa sadece site üzerinden mi devam edecek
+mobiwar: şuan için site üzerinden devam edecek ilerde android ios versiyonları çıkartırız
+HAKAN: oyuna küçükken aşıktım inşallah başarılarınızın devamını dilerim
+Exxe: Yanlış hatırlamıyorsam oyunun telif hakkı turkcellde
+caldion: Anladım çok teşekkür ediyorum
+Exxe: Caldion başvuru kabul ediyor musun ?
+mobiwar: 2008 de turkcell deydi şuan telif hakkı kimsede değil
+caldion: Bir kaç kişilik kontenjan kabul edeceğim ittifaktaki eski arkadaşlarımızdan dönen olursa diye bekleyeceğim. O yüzden anlayışınız için teşekkür ediyorum
+Exxe: Eskilerden dönen olurda hemen dönerler mi bilmem
+Hocucpocus: Selam arkadaşlar. Çocukluğumuza dönmüşüz :)
+patrone: Aleyküm selam. Bir anda 25 kişi nasıl birleşip geldiniz :)
+mobiwar: aleyküm selam
+jerso53: Selamünaleyküm
+jerso53: Oyunun uygulaması çıkacak mı
+Exxe: İlerleyen zamanda çıkacakmış
+Hocucpocus: Bana sms geldi öyle girdim de bu oyunu oynarkenki numaram değişti nasıl bulup sms gönderdiniz 😂
+seyho: Eskilerin dönmesi önemli ama yenilere de ulaşmalıyız yoksa oyun tutmaz
+seyho: Uygulamalar olmadan yeni oyuncu zor toplanır
+Exxe: Evet bende onu anlamadım numaramızı nereden buldun
+Exxe: Sanırım daha önce bir mobiwar projesine kayıt yaptırmıştık orada ki datayı kullandı
+mobiwar: Arkadaşlar şuan ki ganimet ile zorlanıyoruz diyenler var sizce öyle bişey varmı zaten zor olması gerekmez mi herşeyi bir anda yapsak anlamı kalmaz diye düşünüyorum
+patrone: Birkaç sene önce mobiwar2 gibi bir projeye atılım yapmıştı yönetici, oradan e posta ve telefonlara ulaşmıştır
+patrone: Açık beta gibi değerlendirebilirsin. Şu anki kaynak kısıtlılığı production için ideal ama oyunu limitlerde test edebilmek için de biraz bol kaynak lazım. Mesela 5000 karışık orduya karşı 5000 karışık ordunun savaşı farklı senaryolarda ne çıkıyor. Kullanıcılar farklı senaryolar test edip geri bildirim vermeli
+caldion: Metin bey gelen mesajlara cevap verilmiyor
+mobiwar: Genel Sohbet de mi yoksa şehirlerden gelen mesajlar mı?
+Szr: Selam Aleyküm
+kaos: selamun aleyküm öncelikle hayırlı olsun oyun bir şey soracağım bir arkadaş daha denemişti teliften program yarıda kaldı ona benzemeyecek inşallah durum
+caldion: İttifak üyemiz mesaj göndermiş cevap veremiyorum
+Exxe: Genel sohbet iyi bence kalmalı ama ittifak sohbeti eklenebilir
+sanalseyyah: szr eskilerin szr i misin :)
+Szr: Evet:) ben szr
+sanalseyyah: bycopra belki hatırlarsın
+Szr: Telefonuma mesaj geldiği gibi damladım oyuna🤣🤣
+seyho: Hg sezer
+Szr: Kardeşim ismin inan yabancı gelmiyor
+Szr: Ooo osman kardeşim hoş buldum
+sanalseyyah: Bende aynı mesaj geldigi an girdim ne günlerdi be :) aynı ittifakta sıkı kankaydık ya😀
+Szr: Tunç sen misin yoksa
+mobiwar: itifak mesajını kaldırıp itifak sohbeti ekleyeceğim daha iyi olur gibi siz ne düşünüyorsunuz?
+ottway: merhaba ben eski skandal
+seyho: Eskiden de öyleydi ittifak içi genel mesajlar yollanıyordu
+seyho: Özel mesaj vardı bi de ittifak genel mesajı
+Exxe: İttifak mesajı kalmalı mesela ittifak üst yetkilileri kullanabilir ama ayrıca herkesin kullanabileceği bir ittifak sohbeti iyi olur
+Exxe: Arkadaş ekleme de gelebilir bu da iyi olur
+sanalseyyah: Aynen tunç bak nasıl bildin :)
+Szr: Bilirim kardeşim bizi az sahura kaldırmadın 🤣🤣
+Szr: Kurtuluş abiyi de davet edeyim mi
+Beter: Kolay gelsin eskilerden kım var
+Szr: Benim sürekli kavga ettiğim biri vardı adını unuttum ya
+sanalseyyah: Dogru diyorsun :) davet et tabikide
+mobiwar: İtifak kurmak için bir binanın işte şu seviyede olması lazım gibisinden bişey ekleyelim mi bu şekilde herkes itifak kurabiliyor?
+Szr: Çotanak28 diye biri vardı neyse geçen clash royalde o nickte biriyle aynı klanda denk geldik adam eski mobiwar oyuncusu çıktı onu da davet edeyim
+Szr: Çotanak28 diye biri vardı neyse geçen clash royalde o nickte biriyle aynı klanda denk geldik adam eski mobiwar oyuncusu çıktı onu da davet edeyim
+Szr: Çotanak28 diye biri vardı neyse geçen clash royalde o nickte biriyle aynı klanda denk geldik adam eski mobiwar oyuncusu çıktı onu da davet edeyim
+gezgin1143: Eski oyuncuyum wayy bee heyecNlandım
+gezgin1143: Eskilerden kim var
+Szr: Herkes eski 🤣
+gezgin1143: 😂
+mobiwar: Çevrenizde tanıdığınız kim varsa çağırın oyuncu sayımız bir anda 49 kişi oldu 200 kişi olsak tamamdır savaşlar daha canlı olur
+Szr: Forum sitelerinde duyuru yapsak belki gelen olur
+Szr: Mobiwarfan sayfası duruyorsa oradan da duyuru yaparız
+patrone: İttifak kurmanın ön şartı olmalı bence de. Kale seviyesi belirleyici olabilir.
+mobiwar: Kale kaç olunca itifak kurulsun sizce?
+seyho: Eskiden hangi binaya bağlıydı hatırlamıyorum ama elçilik gibi bi yapı eklenebilir 3 olunca ittifağa katılmak mümkün 10 yapınca ittifak kurmak mümkün gibi
+seyho: Eskiden hangi binaya bağlıydı hatırlamıyorum ama elçilik gibi bi yapı eklenebilir 3 olunca ittifağa katılmak mümkün 10 yapınca ittifak kurmak mümkün gibi
+seyho: Eskiden hangi binaya bağlıydı hatırlamıyorum ama elçilik gibi bi yapı eklenebilir 3 olunca ittifağa katılmak mümkün 10 yapınca ittifak kurmak mümkün gibi
+seyho: Eskiden hangi binaya bağlıydı hatırlamıyorum ama elçilik gibi bi yapı eklenebilir 3 olunca ittifağa katılmak mümkün 10 yapınca ittifak kurmak mümkün gibi
+seyho: Eskiden hangi binaya bağlıydı hatırlamıyorum ama elçilik gibi bi yapı eklenebilir 3 olunca ittifağa katılmak mümkün 10 yapınca ittifak kurmak mümkün gibi
+seyho: Ulan her basışta bida yolluyormuş kusura bakmayın 😂
+patrone: Kelenin seviyeleri için istenen kaynak ve süreyi bilemiyorum. Öyle bir seviyede ayarlaman lazım ki bu kullanıcı oyunu oynamaya hevesli dedirtecek seviye olmalı. 3,4 veya 5 duruma göre
+patrone: Mükerrer mesaj için de önlem olmalı :))
+Sedat: Selam
+Beyezan: aynen ya mail gelince fak ettim
+mobiwar: aleyküm selam
+Beyezan: görevpay siteme ekleyim bunu hemen herkez üye olsun oynasın
+Beyezan: ne ara yaptın ya
+mobiwar: Şuan en büyük 2 forum sitesine yazdım R10 ve FORUMTR oyuncular zamanla kazanırız şuan için bile güzel bir oyuncu kitlesine ulaşabildik 50kişi olduk
+Beyezan: @mobiwar hayırlı olsun
+seyho: Uygulaması olmayan bi oyuna oyuncu çekmek zor olur bence şuan buglara ve eksiklere odaklanalım eksi oyuncular olarak
+Beyezan: bana yazar msın sana bir şey danışacam telegram varmı fatih3r yazabilir misin
+caldion: Sayın admin oyunda önceden 1.kıta 1. Diyardan başlardık başkente ama burda 8-9 karışık dağıtmış buna bir düzeltme yapılacak mı
+seyho: Evet o da var random atmış eskiden mesela 1. Diyardakş 10 şehrin 3 ya da 4 tanesi dolunca diğer diyardan spawlanıtodu yeni kayıt ama böyle de fena değil sadece oyuncu sayısı az diye çevrelerimiz boş
+caldion: Bu konuda düzenleme yapılırsa bence daha derli toplu olur düşüncesindeyim
+mobiwar: Arkadaşlar elimden geldiğince herşeyle ilgilenmeye çalışacam, şuan için ufak tefek eksikler çıkabilir ama oyun akışında bir sorun yok, şuan yaptığım şeyleri söyleyeyim, itifak sohbeti ekleyecem puanlar 8 saatte bir güncellensin, itifak mesajını sadece yöneticiler gönderebilsin, arkadaş ekleme, mesaja cevap yazma, birde buraya yazılan mesajlar hepsi tek seferde geliyor onu yukarı gittikce eski mesajlar yüklensin şeklinde ayarlayacam, elimden geldiğince sizin yazdıklarınızı not düşüyorum.
+caldion: Teşekkür ederiz
+mobiwar: Onu birazdan kontrol edeceğim not aldım
+seyho: İttifaklarda görev yetki vs aktif mi şuan kimse olmadığı için göremiyorum varsa da😀
+mobiwar: itifak da yetki vs var
+mobiwar: birazdan güncelleme yapacağım itifak sohbeti mesaja cevap arkadaş ekleme vs
+Beyezan: mobiwar bana yazar mısın
+mobiwar: Yazdım, mesajlar kısmından istediğiniz kişiye yazabilirsiniz.
+caldion: Değerli admin size de mesaj gönderebilirsek yada Ares yapsanız adınızı tam olsa admin adı Ares ti önceden
+mobiwar: Admin benim hocam mobiwar olarak yazdım buraya yazarsanız sorularınıza cevap veririm
+caldion: Tamamdır,teşekkür ederim
+zaydek: Saldırı iptal etme yok muydu
+mobiwar: onu not almıştım saldırı iptalini şimdi onu da yapıp güncelleme atarım
+zaydek: Bekliyorum iptal etmem lazım 😂
+mobiwar: birazdan güncellemeyi atarım iptal edilebilir sonrasında
+Sauron: Merhabalar, bende similatör bile var , eğer yardımcı olucak ise benimle iletişime geçebilirsin. Ekran görüntüleri felan eskiye dair bir kaç bir şeyler var , haberin olsun , bide bana sorarsan isen eskiye sadık kalıp , app store ve play storeye getirebilir isen cok iyi olur
+seyho: Puanlama sistemi eskisi gibi mi 1000 kaynak başına 1 puandı
+seyho: Harcanan yani
+Exxe: Şuanlık açık betasını oynuyoruz gibi düşünelim arkadaşlar eğer başarılı bir sayıya ulaşılırsa gerekli yardım yapılır mobil uygulama için
+seyho: Aynen beta mantığıyla eski müdavimler olarak bugları ve eksikleri bulup bildirelim eskisi gibi en mükemmel yapıya ulaşmasını sağlayalım her şeyin. mobiwarı mobiwar yapan ince dinamikleri ve hassas dengeleriydi yine aynı standardı yakalamazsa tutmaz
+Exxe: Aynen
+Exxe: Güncellemeyi atmadan önce soruma cevap verebilirsen çok sevinirim @mobiwar
+seyho: Admin herkese sınırsız kaynak bassın bence hızlıca keşifler yapabilmemiz için
+Exxe: Seyho mantığı anlamış bende bu konu ile ilgili görüşecektim
+mobiwar: mobiwar simulatör bende de var hocam.
+Puanlama sistemi eskisi gibi 1000 harcanan kaynak başına 1 puan
+ahmetbatar: @mobiwar üstat şimdi açık arıyor gibi oluyor ama şuan maden 4.seviye saatte 34 vermesi lazım test ettim bi saattir oyuna girmedim 18 artmış altın onu bi kontrol et istersen sorun var orda
+patrone: Aslında en önemli detay savaş simülasyonu. Savaşların tur mantığı. Orduların tekniklerden kazandığı özellikler, savaşçıların birbirine karşı üstünlüklerinin etkili şekilde uygulanması en iyi şekilde yansıtılabilirse geri kalan her şey halledilir. Bence en zor detayı orası. Oluşacak ganimet hesabı vs
+mobiwar: hemen kontrol edeyim
+ahmetbatar: Online olmadıgımız için mi az artıyor sorun mu var tam olarak bilemedim ama bi saatte olması gereknin yarısı olmuş
+mobiwar: şuan ona bakıyorum ahmet hocam
+ahmetbatar: Tamamdır yine bişeyler bulursam paylaşırım umarım yine eskisi gibi tutturabiliriz şu oyunu 15 yıl felan oldu daha böyle zevkli oyun olmadı bunca zamandır
+mobiwar: hocam inceledim dediğin gibi bir sorun vardı onu da düzelttim
+seyho: Aynen savaş dinamikleri çok önemli ama onu bire bir tutturmak imkansız bence daha önce simülatörü çözebilen duymadım farklı bi dilde yazılmış sanırım.
+mobiwar: şuan savaş iptali de aktif olarak çalışıyor
+ahmetbatar: Emeğine sağlık hocam bakalım eski müdavimlerle inşallah dinamiğide tuttururuz onun mantığını çözen biri vardı simülatörün ama ismi aklıma gelmedi şmdi
+seyho: Netin hocam bize kaynak yüklesene Matrix misali 😄 böylece hızlı şekilde test edelim her şeyi
+seyho: Metin prd
+entrika44: kral günümüzde kimse kaynak için bu kadar beklemez. clash of clans bile bunu düzeltti. şu kaynak işi dediğin gibi çok kolay olmasın ama 2008 yılındaki gibi de çok uğraştırmasın. en azından keyif alarak oynayalım
+ahmetbatar: Peki hocam belirli bi saat online olmadıgımız kaynak toplama sınırlı mı oluyor yani mesela 15saat girmedim ama kaynak toplama sadece 10 saat topladı gibi bi durum var mı yoksa olmadıgımız zaman her daim kaynak topluyor mu
+seyho: Şimdi fark ettim eskiden askerler birden fazla teknikten etkileniyordu diye hatırlıyorum. Üretim için de mesela ejderha hem büyücülük hem zırhtan etkileniyorsa üretmek için de hem büyü örneğin 5 zırh 10 gibi 2 şartı olmuyor muydu
+ahmetbatar: Evet ejderhada iki şart vardı
+ahmetbatar: Büyü 7 zırh 12ydi sanırım
+seyho: 3 teknikten etkilenenler dr vardı hatta
+patrone: Arkadaşlar savaşçıların üretim koşulları birebir aynı. orijinal kaynaktan alınmışlar
+ahmetbatar: 3 teknik kaostu sanırım
+entrika44: mesela benim şimdi taşım bitti ordum da yok yapacak işim kalmadı diye oyunu kapatıcam ve yarın bu saatlere kadar girmeyecem ki kaynaklarla ordu basıp bir şeyler yapabileyim
+mobiwar: Dünya 1 hızını *3 olarak ayarladım artık daha hızlı gelişebilirsiniz.
+caldion: Maden ve çiftlik biraz daha verse daha iyi olur fikrindeyim çünkü artmıyor
+mobiwar: @entrika44 şimdi ona da çözüm bulacam herkesi 1.kıtaya getirecem ki savaşlar daha canlı olsun
+mobiwar: @caldion orda bir hata vardı düzelttim
+ahmetbatar: Teşekkürler metin hocam hayırlısıyla inşallah zamanla uygulamasıda çıkınca bu oyun tekrar patlar
+caldion: Teşekkürler
+ahmetbatar: Metin hocam peki online olmadıgımız zaman sürekli kaynak toplama devam ediyor mu yoksa belirli bi saatten sonra toplama sınıra ulaşıyor mu
+seyho: Eski sisteme göre daha fazla üretime okeyim ama çok bolluk olursa oyuna çok emek verenle az emek veren arasında çok fark kalmaz mesela genelde 2 sabit 3 seyyar şehir kullanırdık 2 barakadan ful asker basabilecek kadar kaynak üretilmemeli Ordu patlatan ya da etrafı iyi sömüren stabil pasif oynayana fark atabilmeli i
+seyho: Bunlar ince dinamikler ama mobiwarı mobiwar yapan da bunlardı
+Beyezan: kısacası efsanne geri döndü
+mobiwar: Online olmasanız bile oyun kaynak toplamaya devam eder, siz oyunda olmasanız bile kaynaklarınız toplanır biri size saldırırsa kaynaklarınızı alabilir, bu şekilde aktif olmayan oyunculara saldırarak kaynaklarını toplayabilirsiniz.
+Sauron: Ben oyun dinamiklerinin eskisi gibi kalmasından yanayım , zaten bunu başaramayan belli bi noktaya kadar oynayıp oyunu bırakıyordu ve bizde o kişiyi casustan bulup bu oyuncu pasif bir oyuncu diyip oralara sömürge atıyorduk, keyfi de oydu zaten. Bir anda gelişme olursa pek tadı kalmaz diye düşünüyorum
+ahmetbatar: Eski sistem devam ediyor o güzel olmuş bi yerden sonra tıkanma ihtimaline karşı oynamayanlardan kaynak toplanır
+mobiwar: Seçenekler kısmından şehir adınızı değiştirebilirsiniz ama şuna dikkat edin şehir adları 30 günde bir değiştirilebilir
+Sauron: Kahraman var mı ? Gerçi çok zor çıkıyordu, ah nerede olasılıklar hesaplıyorduk, forum da lazım buna savaşları görmek için
+entrika44: hocam bir de bot şehir eklemeyi düşünmüyorsanız bile güncel oyunlardaki gibi haritaya rastgele şekilde çiftlik, taş ocağı kampları eklerseniz hem millete kaynak toplama için farklı bir seçenek sunmuş olursunu bu sayede insanlar her yarım saatte veya saat başı oyuna girip askerleriyle ilgilenir hem de insanlar taktiksel olarak harekete geçip insanların şehirlerindense oralara saldırıp önce ordularını temizlemeye falan çalışır, orduları nerede onu tahmin etmeye çalışırlar
+entrika44: bu da oyuna derinlik ekler diye düşünüyorum
+mobiwar: Kahraman var hocam onu da yaptım büyük ordulardan çıkar
+ahmetbatar: Yok hocam o taş ocağı gibi şeyler mobiwarın tadını kaçırır bence onun olmaması ayrı bi tat
+ahmetbatar: @Entrika44 malatyalı mısın?
+mobiwar: Şuan için bot şehirler düşünmüyorum zaten birazdan herkesin şehrini yeniden konumlandıracam herkes birbirine yakın olacak
+Exxe: Aresti dimi mobiwarda adminin adı 😄
+Baskentliia: Oyun eskisi gibi kalsın
+ahmetbatar: Aynen aresti ali ciihan :)
+Sauron: Katılıyorum, taş ocağı felan cok saçma, zaten taş ocağı istesek diğer oyunları oynardık, birebir özüne sadık kalırsa zamanla oturacak zaten belli bir seviyeden sonra 2. Dünyayı isteyeceğiz
+Sauron: Çokta yakın olmasın hocam, bi de tekrar 0 dan başlatma olayı var mı ?
+entrika44: @ahmetbatar aynen kral
+ahmetbatar: Bende malatyalıyım senn eski oyunda nick neydi
+Sauron: Sana tavsiyem mağazalara getirmen oyunu en kisa sürede, ahh ne uykusuz kalırdım lisede bee , heyecanlandırdı resmen
+ahmetbatar: Gece beni yataga geçmem için uyandırıyorlar sene 2009 felandı ben gözüm kapalı oyunu açıp orduları gönderip geri yatmışım halen daha dalgasını geçiyorlar bu oyun yüzüne uykular az bölünmedi :D
+Exxe: Mağazaya bu haliyle gelemez gelişim ve modernize edilmeli ama halledilir görsel şeyler onlar basit. Metin hocam zor olanı yapmış zaten.
+mobiwar: Şehirler yeniden yerleştirildi bundan sonraki kayıtlarda 1.kıta da başkentler olacak her diyarda en az 4 başkent olacak
+Sauron: Bide ustam orjinal oyunda hileli hatalar mevcut idi. O kısımlara da dikkat etmen gerekecek, bundan oyle bir sey olmasini istemem
+ahmetbatar: Uçuk bi fikir olacak ama android uygulaması için isteğe bağlı savaş görselleri felan yapılabilir mi kuş bakışı yada uzaktan görünüm olarak savaşı izlemek gibi
+mobiwar: Hocam şuan için web tarafını oturtalım ilerde android ve ios uygulama yapmaya başlandığında oyunculardan öneri alırım
+ahmetbatar: Hadi inşallah
+mobiwar: Birazdan herkese bir ganimet eklemesi yapacam ilk şehirler olarak ordu oluşturabilecek düzeye gelebilmeniz açısından
+seyho: Eskiden daldığımız şehirdeki kaynakların %40ını alırdık bu yine böyle mi
+mobiwar: Not aldım hocam birazdan kontrol ederim
+Sauron: Yük arabasına bağlı degilmiydi , yuzde 40 dan fazlaydı bence , ordular da işin içine girince değişiyordu
+mobiwar: herkese 25000 ganimet eklemesi yapıldı bu sayede ordu basabilecek düzeye gelebilirsiniz.
+ahmetbatar: Ordu sayısı maksimum taşınabilen ganimeti belirliyordu ama her seferinde sahip oldugu ganimetin %40ı alınabiliyordu sadece
+ahmetbatar: Ve yanlış bilmiyorsam 300k ya düştükten sonra kaç kere saldırırsan saldır hiçbirşey alamıyordun
+ahmetbatar: Peki bi yere 3 kere saldırma gibi bişey var mıydı hatırlayanınız var mı.. sanki belirli bi sayıdan fazla bi şehre saldıramıyordu bi oyuncu
+caldion: 1 günde en fazla 3 kez saldırı yapılabiliyordu
+ahmetbatar: Tek bi şehre miydi oyuncuya mıydı
+caldion: Tek bir şehre
+caldion: Oyuncu olacaktı pardon
+caldion: Tek bir oyuncuya
+caldion: Diye aklımda kaldı
+ahmetbatar: Ben şehir diye hatırlıyorum çnkü birinin bi kaç eşhri oluyordu her birine 3 kere saldırabiliyorduk ayro ayrı öyle kalmış aklımda
+ahmetbatar: Ne oyunmuş arkadaş 15 yıl oldu nerdeyae halen hatırlıyoruz herşeyini :))
+gezgin1143: Gecemizi gündüzümüze kattık oynadık hatırlamamak mümkünmü 🫣
+ahmetbatar: Valla ben bu kadar aklımda kaldıgını yeni fark ettm :D
+mobiwar: Arkadaşlar şimdi baktım dökümanlarda %40 gibi bir ifade yok, ben onu %25 olarak ayarlamışım ve kalan asker sayısına bağlı şehre geri geliyor mesela 1milyon ganimet bile kazanmış olsanız eğer sadece 1 tane yük arabanız tek kaldıysa başka asker kalmadıysa 5000 ganimet geri gelir
+ahmetbatar: 5 yada 10bindi yük arabası kapasitesi ama ordudan dolayı ekstra ganimet çıkıyor muydu hatırlamıyorum ancak şehirde olan ganimetin %40ı oldugunu ve günde en fazla 3 kez saldırıyı net hatırlıyorum
+caldion: İttifak üyeleri çevrimiçi çevrimdışı olmaları, ittifak açıklaması olacak mı
+mobiwar: Bir oyuncu ile kısıtlarsak diğer şehirlerine hiç saldırı olmaz o yüzden bence şehir başına 3 saldırı daha mantıklı olabilir, birde şöyle bişey size danışayım diyelim ben ahmet in bir şehrine 3 defa saldırdım başkası saldıramayacak mı yoksa başkası isterse saldırabilir mi?
+ahmetbatar: Bi oyuncu diğer bir oyuncu günde 3 kere saldırabilir.. mesela ben 3 hakkı bitirdim ama sen yine 3 saldırı yapabilirsin o kişiye gün içinde
+mobiwar: caldion eklerim onu ganimeti de %25 den %40 a çıkartırız
+haqan: Merhaba her sayfada 10 şehir sığacak şekilde bir görünüm olursa daha iyi olur. Eski oyunda öyleydi ve kendi şehirlerimizle boş kalan yerleri kapatarak stratiji yapılıyordu
+caldion: Kısıtlama tek oyuncu içindi mesela ben saldırdım 3 kez ben artık gün bitene kadar saldıramam ama başka oyuncu saldırabiliyordu 3 hakkı dolana kadar
+ahmetbatar: Sen bana bi günde 3 kere saldırırsın her bi şehrime 3 er kez ama başka oyuncuda saldırabilir
+ahmetbatar: Bi asker üretip saldırır ve zamanı deneyecem haritadanyanyana olmamıza rağmen farklı diyarda olan oyuncu kısa sürede gelememeli eski haritayla şmdi ki haritanın öyle bi skntısı olabilir
+mobiwar: Şuanki haritanın eskisinden bir farkı yok dediğiniz şeyleri şimdi güncelliyorum.
+@haqan aslında her satır bir sayfa demek ben onu haritada gösterdiğim için öyle bir görüntü gözüküyor
+haqan: Bir de akademide bir şey yükseltilirken yapılar içinde akademi de yükseltiliyor. Eski oyunda yükseltilemiyordu öyle bir kural vardı bir tarafın bitmesini bekliyordun
+ahmetbatar: Şmdi şöyle bişey denedm hocam
+ahmetbatar: 1:2:5 e saldırı denedm 29 sn gösterdi 1:4:6 ise 32 sn
+ahmetbatar: Normalde 1:4:6 ya yapılan saldırı 1-2dakka arası sürmesi lazım
+mobiwar: Dünya 1 3x hızda olduğu için bu şekilde hızlı gidebiliyorsun
+mobiwar: 1x e indirirsem dediğin gibi olur
+imcox01: 15 yıl önce E 250 telefonda oynadığımız oyun mu bu
+mobiwar: @haqan not aldım onu ayarlarım şimdi
+ahmetbatar: 3x olsa dahi hocam 2 diyar uzaktaki yer ile hemrn bitişiğimdeki yere saldırmam arasında 3 sn olması bence dediğim gibi oldugunu gösteriyor ben 1:2:6 da görünğyorum biri yanım biri 2 diyar ötesi
+mobiwar: @imcox01 evet
+mobiwar: @ahmetbatar bi bakayım hocam senin bir önerin varmı peki
+ahmetbatar: Her diyar tek sayyfa olsa eski oyundaki gibi daha iyi olur şuan ki haritada farklı diyar dahi olsa kare formatı oldugu için dibinde gibi oluyor
+ahmetbatar: Mesela ben 1:2:6 dayım 1:3:6 ve 1:2:5 şehri aynı mesafede oluyor şuanki haritaya göre
+imcox01: Oha yaa tuvalette oynarken telefonu düşürmüştüm ve ekran bembeyaz oldu. Yeni telefon da alamamıştım :( :( 1 hafta moral bozukluğundan uyuyamadım
+haqan: Bir de mesela barakda asker basıyorum aynı zamanda yapılardan barakayı da yükseltebiliyorum. Buna izin vermemesi lazım
+ahmetbatar: Yada harita bu formatta olacak her 10a 10 lare bi diyar olabilir
+ahmetbatar: Metin hoca en son bizi vuracak sürekli açık arıyoruz :)
+ahmetbatar: Bu arada bu teleport olayı nasıl oluyordu hatırlayan var mı
+ahmetbatar: Ondada sınır gibi bişey vardı galiba
+ahmetbatar: Mimar okulu sistemi çalışıyor yükselttikçe süre kısalıyor
+caldion: Kullanınca belli bir süre beklemek gerekiyordu
+ahmetbatar: Ama baraka arttıkça askerlerin üretim süresi azalmıyor
+Sauron: Benim görsel olarak bir önerim var , atıyorum barakayı seviye yükseltiyorum yeşil bi buton geri sayıyordu , ustde geri olmasi benim biraz tuhafıma gitti ama yapılabilirse olabilir
+ahmetbatar: Evet tüm üretimler için yeşil bar vardı
+ahmetbatar: Yapılar için savunmada bulunan akademi vs hepsinde o yeşil bar vardı
+caldion: Admin saldırı veya savunma raporu açılmıyor önizleme gibi görülüyor
+caldion: Arkadaşlar amacımız adminimize yardımcı olmak olduğu için eksikleri biz görüp yazalım eski oyuncular olarak idare ederiz ama yeni gelen oyuncu bunu idare etmek istemez
+caldion: Arkadaşlar amacımız adminimize yardımcı olmak olduğu için eksikleri biz görüp yazalım eski oyuncular olarak idare ederiz ama yeni gelen oyuncu bunu idare etmek istemez
+caldion: Arkadaşlar amacımız adminimize yardımcı olmak olduğu için eksikleri biz görüp yazalım eski oyuncular olarak idare ederiz ama yeni gelen oyuncu bunu idare etmek istemez
+caldion: Arkadaşlar amacımız adminimize yardımcı olmak olduğu için eksikleri biz görüp yazalım eski oyuncular olarak idare ederiz ama yeni gelen oyuncu bunu idare etmek istemez
+caldion: Arkadaşlar amacımız adminimize yardımcı olmak olduğu için eksikleri biz görüp yazalım eski oyuncular olarak idare ederiz ama yeni gelen oyuncu bunu idare etmek istemez
+mobiwar: Şuan savaş kısmını %40 yaptım
+birde şehirlere saldırıyı günde 3 kez olacak şekilde yaptım
+İttifak üyeleri çevrimiçi çevrimdışı olduklarını gösteren iconlar ekledim, ittifak açıklaması ekledim sadece admin ve yöneticiler düzenleyebilir
+ahmetbatar: Baraka yükseldikçe üretim süresi düşmüyor ve savunma kısmında da sur yükseldikçe üretim süreleri düşüyordu
+haqan: Barakada asker basarken mesela 10 cüce 10 elf emir gönderdim ikisi de aynı anda ilerliyor üretimi. Önce ilk emir verdiğim 10 cüce üretilmeli bittikten sonra 10 elf in üretim süresi başlamalı. Hepsi aynı anda ilerlememeli sürelerin
+ahmetbatar: Bide oyunda altın ve et vardı burda altın ve buğday sanırım :)
+caldion: Mesela savaşta hangi askerden kaç kayıp var yazmıyor savunma raporunda
+haqan: Saldırı gönderirken asker sayılarını yazarken hepsini seç diye bir buton olmalı. Bütün askeri seçip göndermek için kısayoldan
+ahmetbatar: Hocam biri bana saldırabilir mi bi cüce var sadece 3 5 askerle rahat alır ordan daha rahat anlaşılır savaş raporu
+ahmetbatar: 1:2:6
+ahmetbatar: Hemdr gelen saldırı uyarısı var mı onu görürüz
+haqan: Saldırı başlattıktan sonra ana ekranda saldırıya giden ordunun kaç saniye sonra varacağı geri sayım olarak gözükmeli. Bu yok oyunda en önemli şey bu
+ahmetbatar: Haqan hocam askerin varsa bana saldırı gönderbeilir misin tek cüce bar şehirde
+haqan: Aynı şekilde gelen saldırıyı da ana ekranda görwbilmeliyiz geri sayım sayacıyla kaç asker geldiğini GÖRMEDEN
+patrone: En ölümcül mekanik bu
+ahmetbatar: Aynen son 10sn kala kaçıramıyoeduk sanırım orduyu
+haqan: Ahmetbatar kordinat söyler misin
+ahmetbatar: 1:2:6
+ahmetbatar: Bi saldırı gönder bakalım raporda kaybımı yazacak mı sende
+ahmetbatar: Başlatınca haber ver hocam bakam gelen saldırı görebiliyor muyuz
+ahmetbatar: Kayıplar görnmüyor raporda
+WaXLorD: Kayıplar yazmıyor ya benim cüce gitti ama yazmıyo
+ahmetbatar: Gelen saldırıyı da göremiyoruz
+ahmetbatar: Çotanak kaç yıl oldu yine denk geldik en son facebookta konuşmuştuk kaç yıl önce :D
+mobiwar: dediklerinizi not aldım şimdi bakacam hepsine
+ahmetbatar: Ben kaçar saat geç olmuş farkına bile varmadık sabah mesai var inşallah yine görüşürüz cümleten hayırlı geceler
+mobiwar: Dünya kısmını dediğiniz gibi liste şeklinde yaptım
+ahmetbatar: Hocam orduyu bş yere saldırıya gönderiyorum 29sn diyor 5 saniye sonra geri çektiğimde kalan 24 saniyeyi sayıyorno bitmeden geri dönmüyor normalde 5sn gittiyse 5sn de geri gelmeli ama kalan 24 sn geri sayımı bekliyor geri gelmek için
+ahmetbatar: Ve hocam dünya haritası liste halinde olmasına rağmen mesafeler yine 10a 10 kare formatında kalmış sanırım diyarlar şehirler kıtalar arası süreler bence gözden geçirilip düzeltilmeli
+ahmetbatar: Örnek veriyorum benim koordinat 1:2:6 şuan 1:2:10a 40sn de gidiyorsam 1:3:6ya 2dakkada gidebilmeliyim
+ahmetbatar: Kaleyi her bi seviye yükselttiğimizde 10 yükseltme hakkı oluyor yapılar örnek veriyor kale 1 sevşye baraka 4 maden 4 akademi2 oldugunda toplam 10 seviye oluyor kale 2 olmadan yükseltmeye devam edememem lazım
+haqan: CASUSLUK İÇİN SADECE CASUS KUŞ GÖNDERİLEBİLMELİ. HER ASKERİ CASUS OLARAK GÖNDERİYOR OYUNDA
+ahmetbatar: Şuan kale 2 seviye bende maden 15 öiftlik 15 akademi 3 baraka 4 toplam 37 seviye artmış bunların yapabilmem için kalenin 4 olması lazım normalde
+ahmetbatar: Bu sefer kesin kaçıyorum ben oyun yine gece uykusuz bırakmaya başladı iyi gecelr :D
+haqan: ORDU SAVAŞTAN DÖNDÜĞÜ ZAMAN GETİRDİĞİ GANİMETİ OTOMATİK OLARAK EKLEMİYOR SAYFA DEĞİŞTİRMEK VEYA YENİLEMEK GEREKİYOR
+caldion: Birde şöyle bişey vardı casusluk seviyesi ne kadar yüksekse o kadar görebiliyorduk rakibinki bizden daha yüksekse sadece altın ve yemek görebiliyorduk
+haqan: EVET YAPILAR BÖLÜMÜDEN 5 VEYA 10 BİRİM GELİŞTİRME YAPTIĞIN ZAMAN KALEYİ 1 BİRİM ARTTIRMAN GEREKİYORDU. VE KALE GELİŞTİRİLİRKEN BAŞKA HİÇ BİR YERDEN GELİŞTİRME YAPMAYA MÜSADE ETMİYORDU
+ahmetbatar: Asker üretimi iptal ettiğimizde örnek 1000 asker üretime verdik 5 üretti 995 üretmeye devam ediyor o an Üretim sırasında olan bi askerşn %10unu kesip 994 tanenşn ganimeti geri veriyordu
+mobiwar: Dediklerinizi not aldım düzeltme yapacağım
+ahmetbatar: Kale yükseltilirken yapılarda üretime izin verilmiyor
+ahmetbatar: Admin ne güzel geceleri rahat uyuyorduk ikidir uyuyam diyorum gidemiyorum:D ne ettin sen bize 😂
+mobiwar: Kale yükseltilirken yapılarda üretime izin verilmiyor
+Bunu derken neyi kastettiğini anlamadım
+ahmetbatar: Yapılarda kaleyi yükselttiğimşz esnada yapı kısmında olan baraka akademi gibi şeyler kale yükseltmesi bitene kadar yükseltilemşyordu
+mobiwar: anladım hocam not aldım düzeltirim onu da
+patrone: Yanlış hatırlamıyorsam savunmadaki Tuzak birimi için 400 altın 0 yemek ücreti vardı
+ahmetbatar: Ve her 1 kale seviyesi yapılar kısmındakilerim toplam 10 seviye yükselmesine izin veriyor örnek olarak kale 1 ise yapılar kısmında diğer ünitelerin tamamının toplam seviyesi en fazla 10 olabilşyor 2 ise 20 o şekilde gidiyor
+ahmetbatar: Bende şuan kale 2 seviye ama sadece maden ve çiftlik toplam seviyesi 30u geçmiş durumda
+FGP: Saldırılarda tüm orduyu seç şeklinde buton olabilir
+haqan: OYUNUN ORİJİNALİNDE BAŞKA BİR OYUNCUYA DESTEK ADI ALTINDA BİR ALTIN YEMEK GÖNDERİMİ YAPILAMIYORDU. BUNU NEDEN KOYDUNUZ. İLERİDE 1 DEN FAZLA HESAPLAMA OYNAMAK İSTEYENLERİN İŞİNİ KOLAYLAŞTIRIR
+ahmetbatar: Tapınağın akademi ve yapı özel şartı olmasına rağmen tıkladım ve 2 seviyeye yükseldi
+Sauron: Tuzak birimi icindogru söylüyor
+ahmetbatar: Kale 3 mimar okulu 3 büyücülğk 6 istiyor tapınak ama o şartları sağlamadan yükseltebildim belki diğer özel şartlarda da sorun olabilir kontrol etmekte fayda var
+ahmetbatar: Eski oyunda orduyu destek olarak gönderebiliyor muyduk ittifaktakilere?
+haqan: SAVAŞ RAPORU ALTINDA ÖZEL YETENEKLER DİYE BİR KISIM VAR. ORASI YAZI RENGİNDEN DOLAYI OKUYAMIYOR SİYAH EKRANDA
+caldion: Evet eski oyunca ganimet gönderebiliyorduk ittifak üyelerimize nakliye olarak. Sarı renkte görülüyordu ekranda
+ahmetbatar: Aynen şmdi hatırladım sarı teker işareti vardı
+caldion: Limiti vardı 1 m altın 1 m yemek şeklinde
+ahmetbatar: Ganimet mi gönderiliyordu asker mi onu hatırlayamadım
+caldion: 1 oyuncu 1 oyuncuya günlük limitle gönderebiliyordu
+haqan: SAVAŞ RAPORU KISMI ÇOK EKSİK KAÇ ASKERİMİZ ÖLDÜ KARŞI ŞEHİRDE KAÇ ASKER KAÇ SAVUNMA VARDI BUNLARIN GÖZÜKMESİ GEREKLİ.
+caldion: Ganimet gönderebiliyordu
+ahmetbatar: Savaş raporunda sanki karşının net rakamı görmemiz için casuslukla alakalı bi durum vardı casusluk düşük olunca sadece karşınınckayıpları görüyorduk
+haqan: EVET AMA HERKESE GİRMİYORDU GALİBA SADECE KENDİ İTTİFAK ÜYELERİNEYDİ DİYE HATIRLIYORUM
+caldion: Bizim casusluk rakibin casusluktan üstünse evet ama değilse sadece ganimet
+ahmetbatar: Nakliye sadece ittifak üyelerineydi
+ahmetbatar: Yok hocam savaş raporu için diyorum casusluk düşük oldugunda savaş raporunda karşının sdece kayıplarını görüyorduk tüm askerlerinş görmğyorduk
+patrone: 10 kat düşük ve 10 kat yüksek oyuncuya saldırmama kuralı da vardı
+ahmetbatar: Bi ara denemiştik bi cüce gönderip tüm askerleri görelm diye ama işe yaramamıştı ordan aklımda kalmış
+caldion: Bende onu diyorum hem casusluk raporunda hemde savaş raporunda casusluk üstünlüğü vardı
+caldion: Arkadaşlar deneme amaçlı saldırı yapıyoruz kimse kızmasın 😀
+ahmetbatar: Saldır hocam saldır kızılacak devir değil canım bu hızla bu ay tğm eksikler giderilir oyunda :D
+ahmetbatar: Bide çiftliği yükseltirken savunmada bulunan üniteleri yükseltemiyoruz onun düzeltilmesi lazım
+caldion: Birde şöyle bir şey vardı mesela ittifak içinde lider konsey üyesi asker gibi sınıflamalar vardı burada da var. Oyun kendi mareşal ünvanı, subay ünvanıda veriyordu savaş yapmışsa o sıralar
+ahmetbatar: Savunma kısmında yapılan yükseltmeler ile yapılar kısmındaki yükseltmeler birbirine bağlı değildi
+patrone: Savaşçı fiyatları konusunda net hatırlayanlar var mı acaba? Şu anki birimlerin fiyatları doğru mudur? Her askerde altın yemekten fazla
+ahmetbatar: Gnomda sadece altın vardı
+ahmetbatar: Kaosta yanlış bilmiyorsam 10m altın 10m et vardı
+mobiwar: Kaos 10m değildi 1m di
+caldion: 1 m evet
+ahmetbatar: Bi sıfır fazla söylemişim o zaman :)
+ahmetbatar: Mancınıkta altın etin 2 katıydı sanırım
+ahmetbatar: Yük arabası 1k et 1k altındı sanırım
+ahmetbatar: Gnomlar sanırım savunmadaki tuzakları bozuyordu mancınıklarda kazancılara çok etkiliydi
+ahmetbatar: Savunmadaki balista ejderhaları avlıyordu
+ahmetbatar: Bide pegasusları
+ahmetbatar: Şamanlar büyü kalkanlarının gücünü azaltıyordu
+mobiwar: Gnomlar şuan da öyle zaten tuzakları bozabiliyorlar
+mobiwar: Şuan elimde baya güncelleme birikti onları yapıyorum bitsin güncelleme atarım
+ahmetbatar: Denemedim henüz hocam aklımdaki bilgileri söylüyorum hatırladıklarımı
+ahmetbatar: Savunma kısmında ürettiklerimiz saldırı ile azalıyordu ancak sur hasar alıyor muydu almıyor muydu orayı tam hatırlayamadım hatırlayan var mı surun hasar alıp almama olayını
+patrone: Bilgi istişare aşaması değerli. Temelin iyi atılması lazım.
+caldion: Evet alıyordu tamir ediliyordu belli bir süre
+ahmetbatar: Söyledşm mi hatırlamıyorum sur yükseltirken yapılar kısmında herhangi birşeyi yükseltemiyorz şuanda
+patrone: Sur hasar alıyordu, hatta kendi kendini onarma aşamasına giriyordu da bu süreçte geliştirme yapılamıyordu sanırım
+patrone: Mağara da aynı şekilde patlayınca tamir oluyordu
+ahmetbatar: Sur hasarlı şuan bende anca onarım diye bi buton çıkmıyor %75 hasarlı yazuyor sadece
+ahmetbatar: Bende şuan hasarlı ve yükseltebildim o zaman onunda düzeltilmesi lazım
+ahmetbatar: Hasarlıyken hem yükseltilebiliyor hem onarım diye bi buton felan çıkmıyor
+patrone: Yüzde yüz emin değilim yükseltilip yükseltilmemesi konusunda ama sanki bir kısıtlama vardı gibi
+ahmetbatar: Büyü kalkanı da mı sur gibi hasar alıyordu
+gezgin1143: 🤣
+gezgin1143: Savunma ve savaş raporları tam gelmiyor sanırım
+ahmetbatar: Şimdi dikkat ettim surun yanında tarih var ve saat 14 felan yazıyor sanırım otomatik onarım var
+patrone: Onun hasar aldığını hatırlamıyorum. Sur hasarında bahsettiğimiz geri sayım barı çıkıyordu. Tamirat sırasında tekrar saldırı alırsa ne olacak, nasıl bir asker dengesinde hasar alıyor. Her birimin detaylı kontrolü lazım
+ahmetbatar: Sur olayı içşn biraz uğraştırıcı hesap lazım gibi duruyor
+ahmetbatar: Ama otomatik onarımı varmış onu gördüm
+ahmetbatar: Sur seviyesi arttıkça otomatik onarım kısalmalı orijinalinde var mıydı hatırlamıyorum ama bu iyi olabilir
+haqan: SÖNÜRGECİLİĞİ ARTTIRMAMA RAĞMEN YENİ ŞEHİR KURAMAZSINIZ DİYOR HATA VAR
+caldion: Her 3 seviye sömürgeciliğe 1 şehir kurma hakkı vermesi gerekir
+mobiwar: 1) Akademi yükseltilirken araştırma başlatılamıyor, araştırma sırasında
+Akademi yükseltilemiyor (iki yönlü kilit).
+mobiwar: 2) Baraka yükseltilirken asker üretimi başlatılamıyor, üretim sırasında
+Baraka yükseltilemiyor (iki yönlü kilit).
+mobiwar: 3) Savunma birimlerinin üretim hızı artık Mimar Okulu değil, Sur seviyesine
+göre hesaplanıyor (eskiden yanlış binaya bakıyordu).
+mobiwar: 4) Aynı şehir/kategoride art arda verilen üretim emirleri artık PARALEL değil,
+SIRALI ilerliyor (önceki emir bitmeden sonraki başlamıyor).
+mobiwar: 5) Bir orduyu geri çağırdığınızda (iptal), dönüş süresi artık KALAN mesafe
+kadar değil, o ana kadar KAT EDİLEN mesafe kadar sürüyor (5 sn gittiyse
+5 sn'de geri dönüyor, kalan süreyi beklemiyor).
+mobiwar: 6) Kale her seviyesinde diğer TÜM binaların toplam seviyesine 10 seviye hak
+açıyor (ör. Kale 2 ise diğer binaların toplamı en fazla 20 olabilir).
+Bu kural artık gerçekten uygulanıyor.
+mobiwar: 7) Casusluk görevine artık SADECE Casus Kuş gönderilebiliyor (eskiden her
+asker gönderilebiliyordu).
+Baskentliia: haqan ona buna saldırmayı bırak sakin ol
+Sistem daha yeni kuruldu sakin ol
+mobiwar: 8) Üretim iptalinde artık: bekleyen tüm birimlerin ücreti tam iade ediliyor,
+o an üretim hattında olan 1 birimin ücretinden sadece %10 kesiliyor
+(%90'ı iade ediliyor) — eskiden o birimin ücreti tamamen kayboluyordu.
+mobiwar: 9) Destek (Nakliye tur=3) ile altın/yemek gönderimi artık SADECE kendi
+ittifak üyelerinize yapılabiliyor, ve tek seferde en fazla 1.000.000
+altın / 1.000.000 yemek gönderilebiliyor.
+mobiwar: 10) Tapınak binası için Kale 3, Mimar Okulu 3, Büyücülük 6 ön şartı eklendi
+(eskiden şartlar kontrol edilmeden yükseltilebiliyordu).
+mobiwar: 11) Saldırılarda artık "10 kat kuralı" var: kendi puanınızın 10 katından
+fazla veya 1/10'undan az puana sahip oyunculara saldıramazsınız.
+mobiwar: 12) Modern (koyu) temada savaş raporundaki "Özel Yetenekler" kutusu artık
+okunabilir (önceden koyu arka planda koyu yazı görünüyordu).
+mobiwar: 13) Savaş/Savunma raporlarına artık HANGİ ASKERDEN KAÇ KAYIP olduğu ayrı
+ayrı yazılıyor (önceden sadece toplam Atak/Savunma Gücü yazıyordu).
+mobiwar: 14) Admin panelindeki Arşiv sayfasında (admin/arsiv.php) uzun mesaj/rapor
+metinleri artık "Tümünü Gör" butonuyla açılan bir pencerede tam ve
+satır satır okunabiliyor (önceden tek satırda kırpılmış görünüyordu).
+mobiwar: 15) Genel Sohbet ve İttifak Sohbeti'nde aynı oyuncu aynı mesajı 15 saniye
+içinde tekrar gönderemiyor (mükerrer mesaj engeli).
+mobiwar: 16) Saldırı/Nakliye/Casusluk/Şehir Kurma ekranlarına "Tümünü Seç" butonu
+eklendi — tüm askerleri tek tıkla maksimum sayıda seçer.
+mobiwar: 17) Yapılar, Akademi, Baraka ve Savunma sayfalarındaki inşaat/araştırma/
+üretim kutularına canlı İLERLEME ÇUBUĞU (progress bar) eklendi.
+haqan: Baskentliia test yapıyorum. Neden saldırmak yasak mı
+mobiwar: 18) Genel Durum ana ekranına iki yeni tablo eklendi:
+- "Ordu Hareketlerim": giden tüm ordu hareketlerimin canlı geri sayımı.
+- "⚠️ Gelen Saldırılar": bana gelen saldırıların canlı geri sayımı —
+SAVAŞ SİSİ kuralı gereği kaç asker geldiği GÖSTERİLMİYOR, sadece
+saldırganın adı ve varış süresi gösteriliyor.
+ahmetbatar: @mobiwar hocam şuan dünya 3x hızda mı normal hızda mı
+mobiwar: Arkadaşlar bu güncellemeler hepsi aktif şuan
+mobiwar: 3x hızda
+ahmetbatar: O zaman sorun var hocam çnkü dakikada 23 altın artıyor maden seviyesi normali o 3x oldugu için dakikada 69 artması lazımdı
+haqan: SAVAŞ RAPORUNDA 0 KAYIP OLUNCA YAZIYOR KAYIP YOK DİYE. AMA KAYIP OLUNCA ŞU KADAR KAYIP VAR DİYE YAZMIYOR. AYRICA HEP YÜK ARABASINDAN KAYIP OLUYOR
+mobiwar: maden çiftlik üretimleri buna dahil değil sadece bina ve asker üretim hızları gibi şeyler
+ahmetbatar: Tamam o zaman hocam skntı yok 3x deyinxe hepsine diye sandım
+mobiwar: Güncellemeyi yeni yaptım denedin mi son güncellemeden sonra
+ahmetbatar: Barakayı yükseltince askerlerin üreitm süresinin de düşmesi lazım şuan cüce halen 7 dakka görünüyor
+ahmetbatar: Gençler peki bizşm şehrimize saldırı içşn yola çıkmış orduya casus kuş atabiliyor muyduk
+haqan: BARAKA SİSTEMİNDEKİ ASKER BASIM HATASI ÇOK ÖNEMLİ. AKERLERİ TEK TEK BASTIĞIM ZAMAN HEPSİ AYNI ANDA ÜRETİLMİŞ OLUYOR. MESELA CÜCEYE 1 YAZAN YERİ DEĞİŞTİRMEYİP 10 DEFA ÜRETE BASARSAM 10 TANE CÜCE 2 DK SONRA HAZIR OLUYOR. AMA ÜRET KISMINA 10 YAZIP ÜRETE BASARSAM 2*10 DK SORA ÜRETİLMİŞ OLUYOR
+caldion: Hayır yoldaki orduya casus kuş yollanmaz sabit koordinatı olmadığı için
+mobiwar: şuan asker üretimine bakıyorum dediğin gibi cüce 7 dk yazıyor ama 2dk da üretilebiliyor
+ahmetbatar: Doğru diyon bi cüce gönderip gece uykumuzu mahvediyorlardı göremediğimiz için tetikte oluyorduk
+ahmetbatar: 3x ten dolayı 2 dakka olabilir hocam
+mobiwar: işte 3x olunca süreyi de ona göre yazması lazım düzelteceğim şimdi
+mobiwar: 3 defa cüceye bastım şimdi birer birer üretmesi lazım bakalım dediğin gibi 2dk da hepsini mi üretecek yoksa ayrı ayrı mı üretecek
+ahmetbatar: Haqan hocamın dediği gibi üst üste ürete bastıgımızda aynı askerden birden fazla asker üretilebiliyor ve 2 dakka sonunda birden fazla cüce oluyor
+mobiwar: Ben denedim şimdi öyle olmadı?
+haqan: PUANIM YÜKSEL OLDUĞU İÇİN DÜŞÜK PUANLI OYUNCULARA SALDIRAMIYORUM. AMA 0 PUANLI OYUNCULARA SALDIRABLİYORUM HATA VAR
+ahmetbatar: Daha yeni 2 tane cüce bastım 2 dk sonunda 2 cüce çıktı bende
+mobiwar: 1 er asker cüceyi 3 defa ürettim biri bitince otomatik diğerine geçti hepsi birlikte üretilmedi
+mobiwar: @haqan bakayım ona da
+ahmetbatar: Birazdan yine deneyeyim ganimetleri bitirdim beklemem lazım biraz :D
+ahmetbatar: Bu arada sanırım 1000 puan yada 100 puana ulaşmamış oyunculara da saldıramıyorduk öyle bi kısıtlama vardı belirli puan altına hiçbir şekilde saldırılamıyordu
+mobiwar: belki daha önce öyle bir sorun olabilirdi ama güncelleme yaptım şuan öyle bir sorun yok
+ahmetbatar: Bi kaç dakikaya tekrar deneyecem hocam nolur nolmaz teyit edelm ganimeti bekliyorum b ikaç dakka
+haqan: BARAKADAKİ SORUN DÜZELDİ
+ahmetbatar: Diğer askerlerde öyle sorun var mı peki?
+mobiwar: genel düzeltme yaptım tek asker için değil
+ahmetbatar: Cüce düzelmiş ikinci girdiğimde 4 dk yazıyor
+haqan: OYUNUCUNUN PUANINI SIRALAMALARDAN GÖRÜYORUM BELLİ ARALIKLARLA GÜNCELLENİYOR AMA HARİTALARDAKİ PUANI ANINDA GÜNCEL OLARAK OLARAK GÖZÜKÜYOR. BUNUN DÜZELTİLMESİ GEREK
+haqan: DÜNYA KISMINDA YANİ
+ahmetbatar: Elinize emeğinize sağlık gerçekten daha kaçayım bnde size iyi eğlenceler
+ahmetbatar: Aynı şekilde ittifaktada anlık puan görünüyor
+ahmetbatar: İttifak çıkışlarında da yeniden girmek için belirli bi süre şartı
+ahmetbatar: İyi gecelr :)
+mobiwar: iyi geceler hocam bende birkaç not almıştım onları yapıp uyurum yarın devam ederiz
+haqan: SÖNÜRGECİLİK 2 OLMASINA RAĞMEN YENİ ŞEHİRLER KURAMIYORUM. AYRICA SÖMÜRGECİLİK 0 DAN 1 YAPTIM SONRA HEMEN 2 YAPABİLDİM ARADA ENGELLER OLMASI LAZIM YOKSA OYUNCU HEMEN 4 ŞEHRE ULAŞIR
+caldion: Sömürgecilik 3 olduğu zaman şehir kurabilmeniz gerekir
+mobiwar: Sömürgecilik 3 ün katlarında şehir kurulabiliyor
+caldion: Admin 3 olduktan sonra akademi vs şartları oluyordu sanki
+caldion: Yani 3 ten sonra hemen 4 yapamıyorduk şartı karşılamadan
+mobiwar: şartları hatırlamadığım için akademi 7 olsun yeterli demişim
+caldion: Tamam o zaman
+haqan: Düşmanın uçan birlikleri karşısında Cüceleriniz savunmasız kaldı (+%30 Cüce kaybı).
+SAVAŞ RAPORUNDA BÖYLE YAZIYOR AMA 0 CÜCE KAYBIM VAR
+FGP: Farklı şehirler kurunca ne gibi faydası oluyor
+mobiwar: @haqan not aldım bakacağım ona da
+mobiwar: @FGP kendine destek birlikleri gönderebiliyorsun, ordaki ganimeti kendine gönderebiliyorsun felan
+caldion: Admin saldıran kişinin hangi şehir koordinatından saldırdığıda yazıyordu
+Exxe: Casus gönderdiğimizde oyuncunun adı yazmıyor raporda kime casus attığımızı bilemiyoruz
+haqan: Hedef: caldion'in Şehri — Kazandınız
+Sizin Kayıplarınız
+11 Cüce
+17 Elf
+7 Süvari
+2 Pegasus
+16 Yük Arabası
+Düşman Kayıpları
+4 Cüce
+4 Elf
+5 Süvari
+1 Pegasus
+1 Casus Kuş
+5 Yük Arabası
+2 Okçu Kulesi
+1 Tuzak
+1 Kazancı
+Atak Gücü: 8.606,2 Savunma Gücü: 3.952,1
+Ganimet: 🪙 286, 🌾 10.672
+MESELA BU SALDIRIDA VERİLEN KAYBA GÖRE ELDE EDİLEN GANİMET ZARARA SOKUYOR. SAVAŞTA SADECE ŞEHİRDE OLAN GANİMETİ ALMIYORDUN. EĞER ASKER KAYBI VARSA ONDAN DA GANİMET ÇIKIYORDU
+WaXLorD: Kendi şehrimizde kaybedilen savaşta ganimet kayıpları da yazsa iyi olur bence. Sağolsun haqan darlayıp duruyor 😁
+haqan: SAVAŞTA KARŞI TARAFIN ASKERİNİ NE KADAR ÖLDÜRÜRSEN O KADAR FAZLA GANİMET ÇIKMASI LAZIM. SADECE ŞEHİRDEKİ GANİMETİ VERİYOR GALİBA ŞUANDAKİ SİSTEM ÖLEN ASKERDEN GANİMET ÜRETMİYOR GİBİ
+caldion: Evet doğru dedin hakan savaştaki ortamdan da ganimet çıkması gerekiyor
+mobiwar: not aldım hocam
+caldion: Koordinatıda not alabilirseniz admin sizden ricam
+mobiwar: @caldion bot aldım yapıyorum şuan
+haqan: DÜNYA SEKMESİNE BASTIĞIMIZDA KARŞIMIZA ÇIKAN HARİTA EKRANINI AŞAĞIYA KAYDIRMA GEREKSİNİMİ OLMADAN TAM EKRANDA SIĞDIRABİLİRSEN GÜZEL OLUR DAHA KULLANIŞLI OLUR
+haqan: BÜTÜN ODUYU 2. ŞEHRE GÖNDERDİM ORDU KAYBOLDU GÖZÜKMÜYOR
+haqan: AYRICA KURDUĞUM ŞEHRİ TEKRAR GERİ YIKABİLMELİYİM BÖYLE BİR SEKME GÖREMEDİM
+mobiwar: Birim maliyetleri (Gnom sadece altın, Mancınık 8000/4000, Yük Arabası 1000/1000, Kaos 1M/1M)
+mobiwar: "10 kat kuralı" — 0 puanlı oyunculara saldırı artık doğru şekilde engelleniyor
+mobiwar: "Cüceleriniz savunmasız kaldı" ve "uçan birlikleriniz tuzaktan etkilenmedi" mesajları artık sadece gerçekten geçerliyse gösteriliyor (0 kayıpla birlikte yanlış uyarı sorunu)
+mobiwar: Ganimet sistemi: artık sadece şehir deposundaki kaynak değil, öldürülen düşman askerlerinin değerinin bir kısmı da ganimete ekleniyor
+mobiwar: Savunma Raporu'na kaybedilen ganimet de yazılıyor
+mobiwar: Casusluk raporuna hedef oyuncu/şehir adı eklendi
+mobiwar: İttifaktan ayrılma/atılma sonrası 24 saat bekleme süresi eklendi
+mobiwar: Sur onarımına canlı geri sayım eklendi (otomatik onarım zaten çalışıyordu)
+mobiwar: @haqan şimdi şehir kurdum deniyeceğim dediğini
+mobiwar: tüm orduyu diğer şehre gönderdim ordu kaybolmadı
+WaXLorD: Savaşçıların birim güçleride görünse iyi olur diye düşünüyorum. Yanlış hatırlamıyorsam önceki oyunda 1 ejder yaklaşık 100 pegasus gücündeydi veya 1 kaos 100 ejder gücünde gibi
+mobiwar: Savaşcıların detaylarını isimlerine tıklayarak bakabilirsiniz, örneğin barakadayken cüce isminin üstüne tıklayın detay yazar
+FGP: BU RAPOR İÇİN 35 ELF GÖNDERDİM YAKLAŞIK 20 TANESİNİ KAYBETTİM Bİ HATA OLABİLİR Mİ ?
+Kaynaklar: 1820.00 altın, 5733.82 yemek Çiftlik Seviye: 13 Maden Seviye: 16 Toplam Birim: 0 Okçuluk: 3 Demircilik: 3 Haritacılık: 1 Büyücülük: 0 Casusluk: 1 Zırh: 0 Kimya: 0 Taş Ustalığı: 0 Sömürgecilik: 0 Gece Görüş: 0 İç Güdü: 0 Tılsım: 0
+seyho: Ganinet olayı şöyleydi iki tarafın da total zaiywtının üretim maliyeti çarpı 0.40 yani yüzde 40ını savaşı kazanan alır
+seyho: Artı kazanan saldıransa savaşın olduğu şehirin o anki ganimetinin %40ı
+ahmetbatar: Kale seviyesi ile yapıların toplam seviyesi birbirine bağlanmış ancak yapılara tıkladıgımızda üstte alan yazıyor fakat yapılardaki toplam seviye ile alan yazan yerde görünen rakam aynı değil bende toplam 39 ama şuan 8/30 yazıyor
+haqan: ORDUM KAYBOLDU. YENİ ŞEHİR KURMAK İÇİN ORDUMU GÖNDERDİĞİMDE HEPSİ KAYBOLDU AMA PUANIM DÜŞMEDİ DURUYOR
+mobiwar: @FGP O rapor casusluk mu?
+mobiwar: @haqan dün ordu kaybolması ile alakalı bir sorun vardı ama giderdik şuan bir sorun olmaması lazım
+Baskentliia: Her girip çıktığımızda şifre istiyor buna da bir çözüm bulursan iyi olur oturumun açık kalması lazım direkt web sayfasına tıklayıp girmem lazım kullanıcı adı şifreyle uğraşmamam lazım
+WaXLorD: Az önce başka oyuncu casusluk yaptı ama benden ne gördüğünü de rapor olarak alsak iyi olur bence
+FGP: Evet benim yazdığım casusluk raporu
+Baskentliia: yemek ve altın çok yavaş artıyor normal mi ?
+haqan: @mobiwar ordu kaybolması düzeldiyde benim ordular 0 hala kayboldu ordu ve sıralama puanım hala ordum varmış gibi puanlıyor beni
+Exxe: @haqan Ben dün gece de sana sürekli casus attım ordun hiç yoktu zaten 2 şehrinde de :D
+Exxe: Sen savunmalı şehirlere saldırıp durdun belki ölmüştür ordun
+haqan: Exxe 2. Şehri kurmaya tüm orduyu gönderdim şehir kuruldu ama içinde ordu gözükmedi kayboldu. Sonra 2. Şehri yıktım belki ana şehirde gözükür diye yine gözükmedi puanım da yüksek olarak kaldı düşük puanlılara da saldıramıyorum 1 cüce üretsem bile 😀
+haqan: Bana casusluk attın ama casusluk mesajı bana gelmemiş. Casus gönderdi diye mesaj gelmesi lazım orijinal oyunda öyleydi.
+Exxe: ne kadar ordu gönderdin koloniye
+Exxe: Bu arada casus raporu sorunu çözüldü sanırım WaxLorD'a rapor gitmiş.
+Exxe: Wax ile sana peş peşe casus attım ona gitmesi sana gitmemesi tuhaf olmuş
+patrone: Eski oyunda premium sistemi vardı. Oyun için ekstra ayrıcalık sağlamıyordu ama tam ne verdiğini de hatırlamıyorum
+patrone: Bir önerim olacak. Belki normal belki premium özelliğinde anlık Web bildirimleri özelliği olsun. Şehrimize gönderilen casusluk veya saldırıları anlık bildirim ile alalım
+patrone: Böylece aksiyon almak için vaktimiz olur
+Exxe: ücretsiz giriş kapsıyordu yanlış hatırlamıyorsam ve extra +1 inşaat çok önemli bir olayı yoktu ahaha
+patrone: Evet zaten en önemli olayı da çok bir olayının olmaması idi :)
+Exxe: oyuncu sayısını arttırabilirsek ben tekrardan ücretli olması taraftarıyım
+patrone: Aylık 3 TL :)
+Exxe: 40 kontördü bir ara ahaha
+Exxe: ücretli giriş zor da aylık 100 TL'ye premium verilebilir yine 500 oyuncu olsa 50 bin tl ek gelir :D
+Baskentliia: kayıt olmak isteyenler kayıt olamıyor hata veriyor admin bakarmısın
+WaXLorD: Yok bana gelen casusluklarda gözükmüyor raporlarda anlık gördüm ben
+WaXLorD: Az önce dabbe adlı oyuncu saldırmış olması lazım ama oda gözükmüyor raporlarda
+mobiwar: Girişlerde beni hatırla özelliği geldi artık onu işaretlediğiniz zaman 1 ay boyunca tekrar giriş yapmanıza gerek kalmaz
+mobiwar: Puan kazanma
+Kural: harcadığınız her 1000 birim kaynak (altın + yemek toplamı) = 1 puan.
+-Bina yükseltme
+-Teknik araştırma
+-Asker/savunma üretimi
+mobiwar: Puan kaybetme
+Savaşta asker kaybettiğinizde, kaybedilen birimlerin toplam kaynak değeri her birimin altın+yemek maliyeti × kaybedilen adet) üzerinden aynı 1000'e bölme formülüyle puan düşülüyor. Bu hem saldırana hem savunana (kim kayıp verdiyse) uygulanıyor — puan asla 0'ın altına inmiyor.
+mobiwar: @haqan başken dışındaki şehirlerinizi yıktığınızda ordan size hiçbişey dönmez siliniz
+mobiwar: casusluk raporu düzeltildi artık her iki tarafa da casusluk raporu gidiyor
+mobiwar: Kayıt olma sorunu düzelttim, sürekli güncelleme attığımız için bazen başka sayfalara etki edebiliyor. Size kayıt olamıyoruz diyen olursa düzeldiğini söyleyebilirsineniz iyi olurdu.
+Baskentliia: yemek ve altın çok yavaş artıyor normal mi ?
+Eski mobiwar da da böyle miydi ?
+bütün parayı yemeği bitirdik.
+Bunun artmasını beklemek çok zor.
+Bir gariplik var mı ? Yoksa her şey normal mi ?
+mobiwar: @Baskentliia hocam çiftlik ve maden seviyelerinize bağlı ganimet artar eğer onları yükseltmeyip direk başka şeylere odaklandıysanız normaldir 1 seviyede çiftlik 6 maden ise 5 ganimet verir 16.seviyede çiftlik 1031 ganimet maden ise 748 altın vermektedir.
+Baskentliia: teşekkürler
+mobiwar: @Baskentliia Ganimet konusunda herkes bana mesaj atıyor bunu dünya hızına göre arttıracağım şimdi 3x hızda olacak şekilde bu sayede herkes hızlı bir şekilde ordu üretebilir
+mobiwar: Artık ganimet 3x hızda yüklenir bu sayede kimse ganimet sorunu yaşamaz sanırım
+seyho: olm bana dalıp durmayın lan ahaha
+mobiwar: Ekranın sağına hareketleri ekledim nasıl olmuş sizce?
+haqan: @mobiwar orduyu 2. Şehre kurmaya gittiğimde kayboldu ordu 2. Şehir kuruldu ama şehrin içinde ordu yoktu. İşin garip tarafı dediğim gibi ordu gitti ama puan duruyor
+mobiwar: Kontrol ediyorum hemen
+haqan: Bak şimdi yine yeni şehir kurdum 1 cüceyle. Cüce kayboldu yok
+haqan: 1.1.9 dan 1.1.8 e şehir kurdum gönderdiğim asker kayboldu
+mobiwar: evet baktım bende de öyle oldu, peki size birşey soracam, tüm şehirlerin teknik ve yapıları başkentin seviyeleri mi kullanılıyordu?
+Hani bu şekilde olması normal çünkü demircilik seviyesi yeni şehirde 0 olduğu için kabul edemiyor
+haqan: Akademi ortak olur yeni kurulan şehirde akademi olmaz ayrıca
+Baskentliia: Bir şey soracağım nakliye destek yapılabiliyordu siz mi kaldırdınız az önce bir test ettim ama başarılı oldu şu an yapamıyorum tekrar
+haqan: Yapılar ortak olmaz
+mobiwar: Nakliye ve destek sadece kendi şehirlerine ve itifakındakilere yapabilirsiniz
+patrone: Destek aynı ittifak bile olsa başkasına yapılmıyordu, sadece nakliye
+haqan: Savunma, yapılar ve baraka ortak olmaz ama akademi tek olur ana şehirden de girse başka şehirden de girse aynı akademiyi görür
+mobiwar: Akademi tek mi öyleydi hatırlamadım şimdi ya kafam karıştı :)
+Destek konusunu güncelliyeyim o zaman
+mobiwar: @haqan yapılar da ortak olabilir mi hatırlamadım açıkcası çünkü baraka seviyesi düşükse gene sorun olmaz mı?
+haqan: Evet tek bir akademi var oyunda
+patrone: Bir de şöyle bir olay vardı. Kahraman çıkması için önemli olan tapınak seviyesi tüm şehirlerin tapınak seviyelerinin toplamı idi. Belki zaten vardır ama bir detay
+haqan: Yani tek akademi olması lazım
+patrone: Ben de tek akademi diye hatırlıyorum
+mobiwar: Peki neye göre asker yollanacak baraka seviyesi düşükse?
+Exxe: Yeni kurduğunuz şehirde akademi hariç hepsi 0 dan başlar arkadaşlar. Yeni şehirde asker üretmek istiyorsanız baraka yükseltin
+Exxe: Yeni şehir adı üstünde sadece akademiniz aynı kalır onun dışında sıfırdan başlamış gibi olursunuz. Yeni şehire tekrardan savunma basmanız falan gerek yani
+WAMPIR55: 10 kat zayıf olana saldır engeli olacakmı
+mobiwar: @WAMPIR55 var zaten
+ozkn: Bu üretim bekleme süreleri çok kısa kalıyor bir yapı için ilerleyen seviyelerde 3 gün beklerdik
+mobiwar: Akademiyi sadece başkente bağladım
+Yeni şehir kurarken kaybolan askerler sorunu düzelttim
+Tapınak da kahraman çıkma olasılığını düşürdüm, kahraman ismi değiştirilebilir yaptım.
+Saldırılarda artık istenirse kahraman savaşa gönderilir istenmezse gönderilmez.
+Kahraman bir savaşta ne kadar tecrübe alırsa alsın max 1 seviye gelişir.
+mobiwar: @ozkn Şuan oyun 3x hızda ondan hızlı oluyor ilerde bu süre kısalacak, eksik gördüğünüz şeyleri yazın hallederiz oyun şuan baya iyi oldu
+Szr: Hatırladığım kadarıyla toplamda 10 yapı yükselttiğinde kaleyi de 1 defa yükseltmek kazındı
+Baskentliia: İttifak üyelerine nakliye veya destek yapmayı deniyorum Hiç birim seçilmedi hatası alıyorum. Nakliye veya destek yapamıyorum
+mobiwar: @Szr Onu şöyle yaptım kale 1 iken yapılar 10.seviyeye kadar yükselir, kale 2 iken 20 ye kadar yükselir, 3 iiken 30 a kadar yükselir. Böyle bişey yaptım bilmiyorum iyi mi oldu kötü mü
+Exxe: Kahraman aldığı tecrübeye göre seviye alsın ilerde çok büyük savaşlar olacak 1 seviye alması normal olmaz o zaman
+Szr: @mobiwar hıı o zaman sıkıntı yok oyuncular için avantaj sağlar
+Szr: Gece uyurken şehrimi delik deşik etmişler 🤣🤣
+mobiwar: @Baskentliia barakada askerin yoktur önce asker üretmen lazım
+mobiwar: @Exxe Bilemedim ya diğer oyuncular ne düşünüyor bu konuda ben büyük bir savaş gerçekleştirdim kahraman direk 80 level oldu
+mobiwar: Birazdan 2 güncelleme atacağım biri baraka seviyesine bağlı asker basma süreleri kısalacak, ikincisi baraka seviyesine bağlı max saldırı olacak diyelim baraka 1 ise aynı anda max 1 şehre saldırı yapabilirsiniz ikinci saldırıya izin vermez, üçüncü güncelleme de savaş simulatörü
+mobiwar: Güncellemeyi atttık savaş simulatörü aktif
+Exxe: Onu şöyle düzenleyebilirsin mümkünse her birim başına 5 exp alabilir yani 100 cüce ye saldırdık kahraman 400-500 tecrübe alırsa senin dediğin mantık oturuyor benim dediğim de oturuyor. Mesela 10. Seviyeden 11. Seviye için 2k tecrübe isteyecek mesela yani 11 seviye yapmak için 2k asker kesmemiz gerekecek
+Exxe: @mobiwar
+Exxe: 11 den 12 ye 3k ya da 4k tecrübe isteyebilir. Bu noktada kahramanın orduya katkısı önemli ne kadar güçlendiriyor orduyu bunun mantığını oturtmadan 100. Seviyr de olsa kahraman anlamı yok
+mobiwar: @Exxe not aldım bakarım
+Exxe: Ben mesela kahramanda stat özelliğini hatırlayamadım var mı yok mu emin değilim ama bu statlar ne işe yarıyor. Diğer bir konu da 5000 vs 5000 den aşağısında kahraman çıkmaması gerek bence çünkü hatırladığım kadarıyla kazanmak zordu ama orduya etkisi çok büyüktü
+mobiwar: Onu güncelledim artık kolay kolay kahraman çıkmaz
+mobiwar: Arkadaşlar bir bakın varmı bir eksik şuan için önemli çoğu şey bitti aklıma bişey gelmedi
+patrone: Savunmadaki Tuzak birimi 400 altın 0 yemek denilmişti.
+ozkn: Altın madeni yemeğe göre daha az mı kaynaklardan üretiliyor bana mı öyle geliyor fikriniz nedir
+haqan: Savaş simulatöründe akademi de olması lazım
+haqan: Ayrıca şehrimize saldırıya gelen ordu olursa eğer bizim casusluk seviyemiz çok üstünse gelen orunun içeriğini görebilmemiz gerekli
+haqan: Kahramanın 4 5 tane özelliği vardı hangi özelliğini geliştirirsek ordunun o yönüne çok etki ediyordu mesela süvarileri çok olan orduysak güç özelliği ya da askerleri iyileştirme özellikleri fibi şeyler vardı tam hatırlayamadım
+patrone: Elinde eski mobiwar oyununun yüklü olduğu tuşlu telefonu olan var mı? Hatıra diye saklıyor olabilir belki. Varsa o telefondan ciddi önemli bilgiler elde edebiliriz
+mobiwar: Bana sorarsanız herşey birebir aynı olmasına bile gerek yok şuan zaten %90 a yakın özellikler aynı, ganimet eskiden yavaş ilerliyordu şimdi ise herkes yeni oyunlara alışmış, yeni oyunlar bol keçeden ganimet dağıtıyor oyuncuyu alıştırmak için herkes mobiwar da öyleydi düşüncesine kapılmış eskiden mobiwar çok zor ilerlerdi böyle basit değildi ben 3x hız yapmışım halen belki bazıları için ilerleme yavaş geliyordur
+haqan: Ganimetler dediğiniz gibi fazla olabilir ama savaş hızı azaltılabilir savunan kişinin aksiyon alabilmesi için
+caldion: İlk günden kahraman çıkmış
+haqan: Bir de genel sohbet dışında ittifak dışındaki oyuncuya mesaj gönderebileceğimiz bir sekme olması lazım. Dünya da üzerine tıkalyınca ya da arama kısmına adını yazdığımızda oyuncuya mesaj gönderebilmeliyiz
+Rafarl: Var zaten haqan
+Hakan28: Nerde var göremedim dünyada üzerine basınca veya arama kısmında çıkmoyor
+Hakan28: Bir de aynı maille birden fazla hesap açılıyor
+Rafarl: Mesajlar kısmına oyuncunun adını yaz
+Hakan28: Ordan pratik olmaz bence dünya kısmında yanımıza gelen oyuncuya mesaj yazmak için kolay olur orda olması.
+Hakan28: Oyun tam faaliyete geçtiği zaman bu genel sohbet gereksiz olur bence kaldırılabilir. İttifak içinde dönüyor muhabbet genelde
+Exxe: Arkadaşlar bu söylediğim yanlış anlaşılmasın ama mobiwar gerçekten zor bir oyundu mobiwarda her şeyinizi verseniz bir kaç ayda geleceğiniz maden seviyesine yarım günde geldiniz. Kahraman konusunda bende sizinle aynı fikirdeyim özel olmalı ama onub dışındaki bir çok şey zamanla stabilleşecek sanırım bu kadar hızlı ilerlememizin sebebi bir nevi oyunu test ediyoruz
+patrone: Haklısın bu konuda. Ayrıca şöyle bir şey fark ettim. Bir kullanıcı casus gönderdiğinde geldiği gözüküyor ama bu casusun dönüşü de gözüküyor. Dönüşünü bizim değil sadece gönderenin görmesi lazım. Savaş için de aynı
+Exxe: Evet biz görürsek adam dönüşümüzü hesaplayıp vurur bizi ahaha
+haqan: @mobiwar benim hesabıma bakabilir misin söylediğim gibi ikinci şehri kurarken tüm orduyu göndermiştim kaybolmuştu. Daha sonra akademiyi düzeltince bu sorun düzeldi galiba. Ama benim ordu gitti ama sıralamam sanki ordu hala var gibi puanlıyor . Puanımı güncelleyebilir misin ya da orduyu
+haqan: @mobiwar bir de daha önce söylediğim gibi ana menüden dünya sekmesine tıklayınca alt alta olan 10 tane kordinat sekmesini aşağı kaydırma ihitiyacı olmadan hepsini tam ekranda görebileceğimiz bir görüntü olursa daha kullanışlı olur
+Exxe: @haqan mevcut puanın normal yaptığın geliştirmelere göre
+Exxe: Mesela benimde pek fazla ordum yok 800 küsür puandayım yaptığın geliştirmede puan veriyor
+haqan: Ordu puan vermiyor mu benim ordum kaybolduktan sonra puanım geri düşmedi hiç
+haqan: Asıl puanı ordunun vermesi lazım. Eski oyunda hatırlarsanız 0 lanıp düşük sıralamadakilerden ganimet kasarak tekrar büyüme olayı vardı. Ordunu kaybedince toparlanmak için fırsat oluyordu
+Exxe: Ordu puan veriyor ama sende hep cüce vardı örneğin 5 cüce 1 puan 100 cüce kaybedince 20 puan düşüyosun gibi düşün
+haqan: İşte düşmedim onu söylüyorum pegasus vardı 30 küsür süvari 50 küsür elf vardı kayboldu aynı puanda kaldım
+haqan: Hata oldu oyunda
+Exxe: Evet sende biraz sıkıntı olmuş senin bina gelişimlerin çok kötü hakan mevcut ilerlemelerinle max 60-70 puan olman lazım
+Exxe: Tabi binalarını göremedim ama akademin kötü madenlerin nasıl 7-8 hiç mi geliştirmedin maden
+Exxe: Pardon 8-9muş
+seyho: Puan yapı ordu fark etmez arkadaşlar 1000 kaynak başına 1000 puan bazıları yapı ağırlıklı olurdu bazısı komple ordu 2 sabit şehirle oynardık Ordu patlayınca sırada çok geriye düşerdik
+seyho: 4 sabitle oynayan pek düşmezdi ztn çoğu puanı sabit yapılardan geliyor olurdu
+haqan: Exxe yapıların çok puan vermemesi gerekir. Asıl puanın ordulardan gelmesi daha iyi olur oyunun orijinali öyleydi. Ordunu kaybedince çok geriye düşüyordun. Geriye düşünce de aşağıdakilere saldırabiliyordun. Böylece strateji yapabiliyordun. Yapı ağırlıklı oynayanlara karşı böyle bir avantajın oluyordu.
+haqan: 1 başkent bi de uzakta bi yerde 2. Şehri sabit yapıyordun. 2. Şehre de teleport yapıyordun. Kalan iki şehirle dünya üzerinde gezinti yaptırıyordun ordunu. İstediğin yerden saldırı yapabilmek için.
+Exxe: Yapı ya da asker farketmez 1000 kaynak 1 puan ediyor nereye harcadığın önemli değil. Tabi ki puanın çoğu ordudan geliyordu mobiwarda her yapıyı fullesen bile gelebileceğin max puan sınırı belli o ayrı bir konu ama oyun başındayız sen orayı farketmedin haqan oyun başında kimi yağmalayacaksın ondan bahsediyorum ben
+haqan: Ben yağmalamaktan bahsetmiyorum şuan oyunun test aşamasında değil miyiz neyi eksik yanlış farkettiysek söylemeye çalışıyoruz yoksa niye burda zaman harcayalım
+haqan: Oyunu açan metin daha önce de açma girişimi olmuştu o zaman da test etmiştik sonra herkes sıfırlanmıştı yeniden başlamıştı. Ama o zamanki hataların aynısı yine olduğu gibi duruyor. Tekrar baştan başlamış olduk yani
+haqan: Bir de 10 kat kuralı belli bir puana kadar işlememeli. Mesela şuan 200 puan ola birisi 0 puanlılara saldırıp ganimet kasamıyor. Bunun bir barajı olmalı. Örneğin 5000 puanı geçtikten sonra bu 10 kat kuralı olmaya başlamalı. Yoksa 3 5 günde çok hızlı gelişirsin sonra tıkanıp kalırsın daha yavaş ilerlersin
+cotanak28: Casusluk veya saldırı yaparken ordunun ne kadar sürede gideceğini görevi başlatmadan önce görmeliyiz
+haqan: Evet bu da önemli
+Sauron: Millet hemen ordu basmaya başlamış 😂
+Sauron: Biraz gelişin, gizli , sakin takılın yaw, maden felan bassın herkes de çoğalsın ganimet 10 cüce beni cezbetmiyor
+Sauron: Şöyle 1 milyon yemek, altın felan görmek istiyorum
+ahmetbatar: Bu arada konuşuldu mu bilmiyorum ama yeni kurduğumuz şehirlere ordu ve ganimet gönderip alınabiliyrdu burda var mı dikat etmedm
+Relaxes: Casusluk sonucunda casuslanan kişinin sur seviyesi görülebilmeli. ayrıca savaş sonucu daha gerçekçi olmalı. Akademisi daha düşük olduğu halde 1 birimle saldırıp savunmadan ve ordudan daha fazla zaiyat verdirebiliyor
+ahmetbatar: Bide bence sur onarım süresi fazla uzun görünüyor -checkpoint
+mobiwar: @ahmetbatar Evet yeni şehir kurarken gönderebiliyorsun
+haqan: Yapıların üstünde 7/20 yazan sayaç takılı kaldı bende ne kadar yükseltme yaparsam yapayım değişmiyor
+mobiwar: @haqan Onun mantığı şu 1 seviye ve üstü olan yapıların kapladığı alana sende şuan 7 tane 1 ve üstü yapı var sanırım
+WaXLorD: Sunucu hata veriyor sürekli
+ahmetbatar: Savunma kısmında yüksekltme yaparken yapılar kısmında yükseltme yapılamıyor birbirine bağlı değildi iki kısımda
+ahmetbatar: Kale seviyesi ve diğer yapıların seviyesinin artması olayı da skntılı sanırım şuan diğer yapılarımın seviye 57 ama kale 5 normalde 6 olmasını istemesi gerekli
+test12345: sunucu hatası veriliyor kontrol edermisiniz ?
+Beyezan: Akademide sunucu hatası veriyor
+haqan: @mobiwar her yükseltme yapıldığında yapılar sayacında ilerleme olması lazım. Yapılarda her yükseltme 1 alan kaplaması lazım. Yoksa kale yükseltmenin mantığı olmaz ki.
+SAKARYALI: Bu oyunun amacı ney :)
+Exxe: @SAKARYALI Bu oyunun amacı kaçmak kovalamak vurmak vurulmak sevmek sevilmek ne ararsan hepsi burada AHAHA
+baskin2: Eskiden popülerdi nokia symbian da :)
+Exxe: yine popüler olur ya eksiklikler tamamlanınca. Oyuncu çekmek lazım
+baskin2: Ben 2.3 sene oynadım genel sralamada ilk 24 idim :)
+baskin2: Eskilerin tadı kalmadıda eskilerde kaldo hersey :)
+baskin2: Bu ara gece calısıyorum millet uyurken çökerim omlara😂
+Exxe: herkes pasif oynuyor zaten gelişmiyorlar
+HAKAN: Beni seven çok sürekli ziyaret 😂😂😂
+baskin2: Maksat eskileri anmak :)
+Exxe: Ben adilim herkese eşit şekilde ziyaret admini bile yokladım ahaha
+HAKAN: Yanımdasın zatin reis 😂😂
+Exxe: Aaa evet şimdi gördüm Yeşil ay ya şehir ismin o kalmış aklımda
+HAKAN: 😂😂
+Nimda: Bu oyunun tadı dokunmatik ekranla çıkmıyor tuşlu Android'e dönmem gerek acil 😂
+HAKAN: Biraz öyle ama türk oyunu olduğu için oynuyorum birde eski çocukluk anıları canlandırıyor 😂
+haqan: 1 milyon kaynak oldu bir anda
+Nukiel: herşey fullendi heklendi galiba oyun
+mobiwar: Herkese 1.000.000 ganimet ve 1000 er savaşcı verdim test etmeniz için
+mobiwar: Savaşı bir deneyim bakalım eksik bişey farkederseniz söyleyin
+mobiwar: Herkesin teknik savunmaları farklı sadece asker verdim
+Turhan799: Adamdan 3 m ganimet aldım nasıl 1 m verdin 😂
+Turhan799: 2.5 m daha aldım
+pegasus: Raporda rakibin sur seviyesi 4 ve 1000 olarak gözüküyor
+karacocuk0307: Kahraman olayı varmı oyunda
+karacocuk0307: Büyük savaşlar sonunca çıkan kahraman
+karacocuk0307: Test sürümü mu şuan yeniden güncelleme gelip sıfırlancakmi admin
+pegasus: Onun dışında simülatörde tapınak geliştirmelerini etkisi yok
+pegasus: Akademi geliştirmelerinin*
+pegasus: Ayrıca kahraman çıkma ihtimali de yazmıyor simalatörde tapınak seçeneği de yok
+Exxe: Evet planı o yönde savaşı simüle ediyoruz şuan eksiklik var mı diye
+pegasus: Simalatörde denemeler yaptım kazandığınız savaşta sayılar arttıkça kayıplar da artıyor o kısımda da sıkıntı var
+Exxe: kahraman çıkma ihtimali son güncellemeden sonra %0'a yükselmiş ahahahaha
+karacocuk0307: Eskiden 5 kahramanım vardı eski oyun çok güzeldi geceleri milleti patlatmak için uyanirdik
+Exxe: bu oyun mobiwarın önüne geçer daha iyisi olabilir. Sadece savaş olayını düzgün oturtmak mesele geri kalan her şey çok basit şeyler
+karacocuk0307: Zor be ustam
+gezgin1143: admin bol keseden dağıtıyor sanırım =)
+karacocuk0307: Eskiden kaos rüyada görürdük şimdi 1000 tane var maşallah 😅
+Exxe: 1m altın yemeğe sabitliyecek askerleri de sabitleyecek 2k ya şimdi rahat rahat saldırıngördüğünüz eksikleri bildirin diye bol keseden verdi
+Exxe: öyle demişti en son
+gezgin1143: verdiklerini geri almıyacağı için bu kadar gelişmeyle oyunun tadı kalmayacak
+Exxe: @gezgin1143 Oyun daha başlamadı ki ilk gün oyun test ediliyor denmişti :D
+karacocuk0307: Bence oyun deneme şuan
+Exxe: İlk günden bugüne kadar bir çok şey gelişti eksiklikler eklendi mesela etiket atma yoktu o bile geldi arkadaş ekleme geldi
+karacocuk0307: Diğer oyunlar gibi oyuna girilse birde
+Exxe: Tarayıcı üstünde oyun son halini aldığında uygulama yazılacakmış iphone ve android için
+karacocuk0307: Admini tebrik etmek lazım ilk kez bu kadar yakın oyun gördüm mobiwara
+karacocuk0307: Emek olduğu belli
+Exxe: Dedim ya bence çok az biir işi kaldı mobiwardan daha iyi olabilir.
+pegasus: Aslında test sürümü olduğu için kahraman olayı da olsa iyi olur belki eskisinden daha dengeli bir seviyeye gelirdi
+pegasus: İnsanların tepkilerini de görürdük
+Exxe: kahraman kolay çıkıyordu onu düzeltti ama şimdi de kahraman çıkmıyor ahaha
+karacocuk0307: Eskiden de büyük savaşlarda çıkardı kolay değildi
+Exxe: bana kalırsa özel kahramanları işe almakta güzel olabilirdi mesela parayla işe alıcaksın ordu generalliği gibi ama elit generaller savaşlardan elde edilebilir olacak bilmiyorum bu fikre yükseldim ahah
+pegasus: İhtimal varsa kahraman çıkarıp denesek iyi olur şu an simalasyonda ihtimal göremedim :(
+pegasus: @Exxe olabilir tabi ama o noktaya daha var gibi
+Exxe: yok ya admin başarılı 5 dakikada hallediyor ahha
+gezgin1143: HERKESTE KAHRAMANDA VARMI
+pegasus: @Exxe hahaha
+pegasus: @gezgin1143 şu an için yok
+gezgin1143: BENDE SABAHKİ SAVAŞTA ÇIKTI
+gezgin1143: YADA KAHRAMAN DEĞİL HİÇ BİRŞEY ANLAMADIM
+gezgin1143: @pegasus BENDE TAPINAKTA BİR ASLAN VAR =) İSMİNİ DEĞİŞTİRDİM
+FGP: Bana gelmemiş kahraman ya üzüldüm şuan 😁
+Nukiel: Pegasus kuş atıyosun tedirgin oluyorum 🤣🤣
+gezgin1143: ben sabah savaşta çıkardım kahramanı muhtemelen savunmadan
+pegasus: @Nukiel 😂
+gezgin1143: kahramanı hediye etmemiş admin zaten savaştan çıktı kahraman =)
+Nukiel: Sabah sağa sola saldırıyodumda durdum ordu herkeste var şimdi 😅
+gezgin1143: @Nukiel 😂
+BABA06: @Nukiel 😂
+mobiwar: Simulatörü güncelledim gerçek savaş verisi ile birebir aynı ve kahraman çıkma olasılığını da ekledim
+haqan: @mobiwar tasarım konusuna da el atarsanız ve android sürüm olursa bu haliyle oynanabilir oyun ufak tefek şeyler kaldı
+mobiwar: haqan sende tasarım nasıl görünüyor ekran alıp https://hizliresim.com yükleyip link atar mısın sende nasıl göründüğünü merak ettim
+haqan: https://resmim.net/i/ESAXQC
+haqan: Bu ana ekranda hükümdarlık bilgilerini kaldırıp gelen giden savaş görsellerini şehir simgelerinin altına taşıyabilirsiniz orijinal oyunda oöyledi ve daha kullanışlıydı
+haqan: @mobiwar puan sisteminde sorun var gibi. Benim ordular duruyor ama puanım 5 e düştü
+cotanak28: Bi yeri yaparken bi yer yıkılıyor 😂
+haqan: 👤 haqan
+🌙
+Çıkış
+MobiWar
+Genel Durum
+Ordular
+Baraka
+Yapılar
+Savunma
+Akademi
+Mağara
+Tapınak
+Teleport
+Dünya
+Mesajlar
+Genel Sohbet
+İttifak
+İttifak Sohbeti
+Arkadaşlar
+Sıralamalar
+Arama
+Savaş Simülatörü
+Seçenekler
+Oyunu Kapat
+Yeni Mesaj
+Alıcı
+Kullanıcı Adı
+Konu
+Konu
+Mesajınız
+Mesajınızı buraya yazın...
+Mesajlar
+⚔️
+Savaş Raporu
+ZAFER
+2026-07-17 14:14:20
+Gönderen: Sistem
+Sonuç
+Hedef: loveman'in Şehri — Kazandınız
+Saldıran Ordusu (savaşa katılan toplam birlik)
+19831 Cüce
+19831 Elf
+19813 Süvari
+19841
+mobiwar: Herşeyi eskiye göre bağlı kalmayın arkadaşlar mobiwar 2008 yılından kalmaydı, eskiden yılan oyunu tek vardı bu oyun ondan dolayı ultra lüx bişeydi şimdi eskiye bağlı kalırsak oyun gelişmez yerinde sayar, senin ekran çok dar bir ekran olduğu için herşey çok sıkışıyor ona bir bakayım senin için nasıl bişey yaparız diye
+Nimda: Herkese eşit asker verilmedi mi ben anlamadım bana verilen askerin 2 karıyla saldırı yapiliyor herkese farklı mi verildi bu asker sayıları
+haqan: @mobiwar şimdi bu savaş raporuna göre verilen kayba göre ortaya çıkan yani kazanılan ganimet çok az. Ortaya çıkan ganimet ve taşınabilen ganimet olarak ikiye ayrılması lazım orijinal oyunda öyleydi. 2. 3. Saldırıyı yaparak tüm ganimeti alıyorduk.
+gezgin1143: 2 kahramanım oldu bu kadar basit olmamalı
+haqan: @bir de savaş raporlarında saldıran ve savunanın hangi şehirleri olduğunu anlamak için yanında koordinatları yazabilir.
+mobiwar: @haqan Gördüğün eksiklikleri yanına not alıp bana toplu mesaj olarak gönderebilir misin
+gezgin1143: bu puan olayında bi sorun var sanırım 29 a düştüm
+mobiwar: Saldırı yemiş olabilir misin?
+cotanak28: Birkaç kişilik grupla Whatsapp grubu tarzı bir şey oluşturup bunları deneseniz böyle biçok insan denek olduk naptığımız belli değil
+Relaxes: Savaş zayiatı iki toplam 900m kazanılan ganimet toplam 6m
+Relaxes: Şimdi baktım yük arabası yetersizmiş tamam
+haqan: Evet whatsap grubu yapılabilir
+gezgin1143: birtane savunmada diğerini saldırıda çıktı
+gezgin1143: @mobiwar saldırı yaptım 1100 puan düşmesi mümkünmü
+gezgin1143: kayıp verdim ama hepsi değil sonuçta kazanıldı
+mobiwar: Kaybın varsa puanın düşer normalde sendeki askerleri ürettiğinde çok büyük bir puanın olur 1100 puan sana hiçbişey gelir, bğyğk orduda 1100 puan bişey değil bence
+mobiwar: Bu akşam savaşcıların üretilme süreleri ile alakalı bir çalışma yapacağız ondan sonra gerçek üretim devreye girer
+gezgin1143: askerler hediye geldiği için o zaman bu kadar puan düştü diyelim iyi eksiye inmedik =)
+cotanak28: Teleportla ordu gönderirken hepsini seç seçeneği koyulmalı. Mağarada savaşçıların barakada tıkladığımızda alanları yazıyor ona göre kapasite dolduruyorlardı
+cotanak28: Bir ittifaktan çıkıp diğerine girmek için 24 saat bekle diyo o da çok mantıklı değil
+gezgin1143: birde destek olayında savaşçı desteği atmak sizce ne kadar mantıklı
+gezgin1143: asker desteğinin iptal olması gerekmezmi adil bir oyun için
+haqan: evet orijinal oyunda öyle bir şey yoktu
+gezgin1143: şöyle düşünüyorum katılmayanlar olabilir ama düşünün birine saldıracağız tüm ittifak bir olup destek atıyor o zaman ne anlamı varki herkez kendi mkanları ve zamanıyla ordusunu basmalı yani bir destek ganimet olabilir ama zaman kazanılacak birşey olmamalı
+oyunun tamamen tadı kaçar yeni gelen hiçbirşey yapamadan oyunu bırakmak zorunda kalır
+cotanak28: Orijinalde düşük puanlı oyuncu yüksek puanlı oyuncuya nakliye yaparsa geri ödeme yapmalı diye kural da gelmişti yapmayıp şikayet edilen bikaç gün banlanıyodu 😅
+gezgin1143: ganimet olayındada zaten bir sınırlandırma olmalı
+gezgin1143: ganimet dışında gönderilen herşey oyunun tadını kaçıracağını düşünüyorum
+mobiwar: destek olayını düzeltiyorum normalde öyleydi de güncelleme attıkca onu da bozmuşuz 😂
+haqan: @mobiwar bir de birisine saldırdığın zaman ordun bariz üstünse senin yük arabalarının 0 hasar alması lazım. savaşta arabalar en arkada beklediği için zarar görmüyordu savaşı kazanırsan. öyle bir şey vardı. ama savaş raporlarında her birim askerden bir miktar eksilme oluyor. şamanı fazla olan ordu daha az zarar görmesi lazım buna da dikkat edildi mi
+Sauron: Oyun 0 lanıcak mı ?
+cotanak28: Bi de tatil modu vardı 😅
+mobiwar: @cotanak28 tatil modu var seçenekler de ama basma derim 48 saat boyunca iptal edemezsin 😂
+mobiwar: @Sauron evet
+gezgin1143: birde yükseltme süreleri çok kısa 3 güne herşey yükselmiş olacak oyunu fullenecek
+mobiwar: Yükselme süreleri değişecek zaten böyle olmayacak
+Sauron: Tamam , ona göre hareket edelim de üzülmeyelim 🤣🤣🤣
+haqan: @mobiwar savaş sonuçlarında ciddi sorun var. akademisi 0 olan hesaptan ana hesabıma saldırı yaptım daha fazla orduyla karşılamama rağmen kaybettim
+haqan: Sonuç
+Saldırgan: Hakan28'in Şehri — Kaybettiniz
+Saldıran Ordusu (savaşa katılan toplam birlik)
+10000 Cüce
+10000 Elf
+10000 Süvari
+10000 Pegasus
+1000 Ejderha
+1000 Mancınık
+1000 Ogre
+1000 Şaman
+1000 Casus Kuş
+1000 Yük Arabası
+1000 Gnom
+1000 Kaos
+Sizin Kayıplarınız
+5821 Cüce
+5821 Elf
+4675 Süvari
+5826 Pegasus
+448 Ejderha
+448 Mancınık
+448 Ogre
+448 Şaman
+448 Casus Kuş
+448 Yük Arabası
+448 Gnom
+289 Kaos
+214 Okçu Kulesi
+197 Tuzak
+217 Kazancı
+227 Mangonel
+210 Muhafız
+214 Balista
+Düşman Kayıpları
+2835 Cüce
+haqan: savunan her birimden 12k olmasına rağmen saldıran kazanıyor. saldıranın akademisi de 0
+haqan: Düşman Kayıpları
+2835 Cüce
+2835 Elf
+3133 Süvari
+2835 Pegasus
+284 Ejderha
+284 Mancınık
+284 Ogre
+284 Şaman
+284 Casus Kuş
+284 Yük Arabası
+284 Gnom
+142 Kaos
+haqan: @mobiwar savaş simulasyonunu kontrol etmelisin
+mobiwar: @haqan kontrol ettim bir sorun bulamadım orda akşam gene testler yapacağım
+Relaxes: Birliklerin saldırı gücü fazla savunma gücü az. Mesela elf için saldırı gücü 65 savunma gücü 35 gibi birşey. Dolayısıyla saldıran 100 elf savunan 150 elfi yeniyor. Aslında saldırı ve savunma gücü aynı olsa daha mantıklı olur
+gezgin1143: Yokmu ya saldıracak 🤣
+gezgin1143: Test edelim
+mobiwar: Saldırı savunma güçleri orjinal oyundan alındı eskiden de öyleydi zaten
+gezgin1143: Seviyelerin yüksek olmasına rağmen bir casuslu koşuyla o kadar bilgi görmesi mümkün olmamalı hatta rapor bile almamalı
+gezgin1143: Bir adet casus kuşuyla görmediği bilgim kalmadı
+patrone: Casusluk seviyen kaç ki
+gezgin1143: 2 seviyem 1 adet kime göndersem tüm bilgiler geliyor casus kuşlarında bilgi alamadan kaybettiğimizi hatırlıyorum yanlışım yoksa
+Borucu: Gezgin burda mısın 😀
+gezgin1143: Evet
+gezgin1143: @Borucu Gönder gelsin 🤣
+Borucu: Az çık oyundan da 😁
+gezgin1143: Nere çıkim 🤣
+Borucu: Ben borucu geliyorum 😁
+gezgin1143: Keyfin nasıl isterse
+gezgin1143: Bol şans
+Borucu: Misilleme geliyor 😁
+gezgin1143: Saldırı altındayım 🤣 destek lazım
+gezgin1143: Ganimetim cezbetti sanırım
+karacocuk0307: Bende harcadım orduyu bı 1000 kaos daha alabilirmiyim
+karacocuk0307: 😅
+Borucu: Nasıl yaptın o kadarını
+gezgin1143: Savunmayla 🤣
+gezgin1143: Saldırı alıyorum ondan
+gezgin1143: @karacocuk0307 🤣🤣🤣🤣🤣🤣🤣🤣
+gezgin1143: Araban yetmez almaya 🤣
+Borucu: Yetmedi 😁
+Borucu: Ne diyeceğim sen kahramanı nasıl çıkartın tapınak kaç seviye
+gezgin1143: 2 adet kahramanım var 1ini saldırı yaparak diğerini savunma yaparak kazandım
+Nukiel: @dabbe kral sendeki 1500 kaosu açıklar mısın 😂
+gezgin1143: Üçüncü kahramanı bekliyordum ama olmadı senle birlikte bir saldırı daha geldi çünkü
+gezgin1143: Sanırım herkes fake hesap açmış ordularını ana hesabına yolluyor
+gezgin1143: @Borucu Tapınak şu an beş ama birini birinci seviyedeyken diğerini üçüncü seviyedeyken kazandım
+Borucu: Yok benim bir tane var
+Nukiel: oyunun 3. gününde hilesini bulmuşlar 😂
+gezgin1143: @Nukiel Ben de onu anladığım için dedim ya destek olarak ordu kaldırılsın
+gezgin1143: Yoksa herkes hesap açar oradan Ordu kasıp ana hesabına gönderir
+Nukiel: aynen ordu destek olmasın
+Nukiel: katılıyorum
+gezgin1143: Adil bir oyun olmaz
+test12345: herkes onlarca hesap açıp destek alıyor
+Milyonlarca ganimet oluyor
+test12345: Haksızlığ dur deyin
+gezgin1143: Şu an için oyun geliştiriliyor zaten hesaplar sıfırlanacak Admin soyledigine göre
+test12345: umarım öyle olur
+gezgin1143: Ben de bunu hesap açmıştım öyle fark ettim
+gezgin1143: Tabi ben fark ettiğimde diğer hesabımı saldırıdan dolayı tüm orduyu neredeyse kaybetmiştim
+gezgin1143: Şuanki şartlar altında zaten oynanmaz
+gezgin1143: Açıkları görüp bildirmemiz lazımki daha iyi olsun
+gezgin1143: @mobiwar Kale onarım süresi ve kahraman dirilme süresi çok uzun değil mi
+gezgin1143: Şimdi eski oyunu özlediğimi daha çok fark ettim umarım telif hakkı açmazlar
+Nukiel: @dabbe kral yorulma diye yanına şehir kurdum 😂
+gezgin1143: Ganimet ihtiyacı olan saldırabilir arabanız çok olsun 🫣
+karacocuk0307: Maşallah biz fakirlikten kiriliyoruz
+gezgin1143: @karacocuk0307 🤣🤣🤣🤣 konum at ne lazım
+Nukiel: sabah iyiydi ya herkese ganimet ordu iyi olmadı 😂
+karacocuk0307: Fakirdik ama mutluyduk😅
+gezgin1143: @karacocuk0307 😂
+ahmetbatar: Yapılar kısmında yükseltme yaparken savunma kısmında sur vs yükseltemşyoruz onun düzeltilmesi lazm
+gezgin1143: yükseltmeleri sıraya alabilirsek güzel olmazmı
+gezgin1143: birde kale kaçıncı seviyeye kadar
+ahmetbatar: Teleportun ön şartı var ama ön şartı sağlamdan yükseltebiliyorum
+gezgin1143: baraka yükseltmeme rağmen ordu süresi azalmıyor
+Nukiel: sürelerle ilgili akşam çalışma olcak demişti
+ahmetbatar: Ordu üretim süresi azalıyor onda sorun yok
+gezgin1143: Evet çok az bir süre şuan azaldı
+Relaxes: Tadı kaçtı
+test12345: Savunma ve saldırılarda hata var bence sonuçlar yanlış
+Saldırıyoruz sonuç yanlış savunuyoruz sonuç yanlış
+gezgin1143: maalesef ki öyle çok dengesiz sonuçlar
+patrone: ben karamsar konuşunca benden pek hoşlanmıyor ama ilk adrenalin atlatılınca sorgulamalar başlayacağını biliyordum. Savaş simüle sistemi birkaç saat hatta birkaç günde halledilebilecek bir mantık değil. Bu tür oyunlarda yapımcı mühendisler hep birlikte ne kadar çaba veriyorlar. Yapay zekaya komut verirken en ince ayrıntısın bilerek vermek gerekiyor
+Sauron: Akademi oyunda etkili idi çok iyi hatırlıyorum , zamanla denge oturacaktır, ama şu dediğimin arkasındayım app store ve play store gelmesi gerekiyor. Oyunun haklarını zamanında arastirdim , satın bile almayı düşündüm isim hakkı halen ali de diye biliyorum. Her neyse tadını çıkarın, fantastik şeyler yapın , şaşırdın bizi
+Sauron: Sur ' un da etkisi bayagi büyüktü, bende similator oldugu icin deneyip bakıyordum hep eskiden
+patrone: Simülatör bende de. Defalarca tersine mühendislikle simülatörün içindeki dengeyi araştırmayı denedim ama başarılı olamadım. O programın içinde en hassas dengeleri barındıran sistem var. Akademideki tekniklerin askerlere hangi seviyede ne oranda etki ettiği gibi karmaşık bir yapı
+Sauron: Aslında tek tek bulunur o teknik de biraz zaman ve güzel bir not tutumu gerekiyor
+test12345: Zamanla olur umarım
+test12345: buraya kadar bile çok güzel iş başardılar.
+Bu seviyeye getirmeleri gayet güzel
+patrone: umutsuzluğa kapılmadan hep birlikte sağlam bir altyapı kurulabilir
+mobiwar: Arkadaşlar şu kafadan çıkın bence; mobiwar ın %100 aynısı ortaya çıksın istiyorsunuz ama öyle bişey imkansız %100 aynısı olmasın ne olacak %95 aynı olsun. O eksikler yerine yeni özellikler çıkartalım.
+mobiwar: BU OYUN 2008 YILLARINDAN KALMA BİŞEY, O ZAMANLAR HERKES YILAN OYUNU OYNUYORDU İLK STRATEJİ OYUNLARINDAN BİRİYDİ NORMALDİR BU KADAR ESKİYE BAĞIMLI KALMANIZ, MADEN ESKİDEN 1.SEVİYEDE SAATTE 6 ALTIN VERİYORDU ŞİMDİ AYNISINI YAPTIM HERKES DİYOR GANİMET ÇOK AZ GELİYOR. BU KAFADAN ÇIKIP YENİ ÖZELLİKLER İÇİN ADIM ATARSAK ESKİ MOBİWAR DAN ÇOK DAHA HARİKA OYUN YAPARIZ.
+Sauron: @mobiwar eskiye sadık kalıp, üstüne katarak devam edilmeli zaten. Ama çok sınır dışına çıkılmaması gerektiğini düşünüyorum, çünkü bu oyunu 40 yasinda ki adam da oynuyordu, liseye giden bende oynuyordum. Zaten oyunda tutunamayanlar illaki oluyordu olacakta, onlarda bizim somurgelerimiz oluyordu Lakin 1 yıl ,2 yıl sonra oyuna gelip oynayanlarda oluyordu.
+Exxe: Admin doğru söylüyor
+Relaxes: Gözlerime bakacak delikanlı arıyorum
+Relaxes: Seni seçtim Exxe kaç yeğenim geliyorum :)))
+Relaxes: Kuş atmadan orduyu gönderdim gitti böyle daha heyecanlı :)
+Exxe: Bakılır ahshahs
+test12345: @Relaxes aynen öyle riski alacan 🤣
+Relaxes: @test12345 sıra sende kaç geliyorum :)
+Exxe: 400m kaynağım oldu ahaha
+Relaxes: @Exxe anlaşmalı olduğumuzu belli etme banlanırız 😂
+Exxe: Ahahahah 😂
+Karga: Relaxes exxe ye ganimet sağlıyor admşn banla 😂
+Exxe: Ya zaten sıfırlanacak şu düzenlemeleri yapılsın oyunun
+Karga: Dur bakiyim bi ordu basayım 1. Sıraya yerleşecebilecek miyim :)
+Exxe: Beni briinci yaptı kardeşim ahaha
+Karga: 180m lik ordu basacam bende 2. Olacacam :)
+Karga: Relaxes in benim yan hesabım olduğunu umarım anlamazlar admin banlama :)
+test12345: Düşmanın kayıbı daha fazla nasıl oluyorda Yenilgi oluyor anlamış değilim
+Sizin Kayıplarınız
+186 Cüce
+185 Elf
+182 Süvari
+185 Pegasus
+23 Ejderha
+23 Mancınık
+23 Ogre
+23 Şaman
+23 Casus Kuş
+23 Yük Arabası
+23 Gnom
+62 Kaos
+Düşman Kayıpları
+683 Cüce
+700 Elf
+462 Süvari
+683 Pegasus
+54 Ejderha
+54 Mancınık
+54 Ogre
+45 Şaman
+31 Casus Kuş
+45 Yük Arabası
+54 Gnom
+72 Kaos
+162 Okçu Kulesi
+162 Tuzak
+162 Kazancı
+162 Mangonel
+162 Muhafız
+162 Balista
+Borucu: @Relaxes geliyorum
+Relaxes: @Borucu geldikleri gibi giderler😀
+Borucu: @Relaxes ana şehrini bulamadım güçsüz kalıyorsun 😁
+Borucu: Savun geliyor büyük ordu
+dabbe: @Nukiel kanka 2. Sehrimden yolladım onları destek yani ama kırıp gecirdiker kalmadı 😀
+dabbe: Arkadaşlar sohbeti yeni keşfettim de anca okudum harbiden herşey sifirlanacak mi
+Sauron: Evet , o yüzden fantezi yapın
+Nukiel: @dabbe 2 saat oyundaydım o ara değilde 10 dk bakmadım o arada dalmışsın yoksa kaçırırdım orduyu 🤣
+Nukiel: @dabbe aynen eksikleri görmek adına test amaçlı şu an
+Nukiel: @Sauron kral sende boş durmamışın 1 saat benim puanı sıfırlamışsın 🤣
+Sauron: Similatörde gece gorus yok, bilginize
+Sauron: @Nukiel kral para lazımdı, kusura bakma , yoksa savunma odaklı oynayacağım
+Sauron: Gündüz yaptığım savaşın aynısını gece kaybediyorum.
+Sauron: Saldıran ve savunan Teknik seviyelerine gece görüş eklenirse iyi olur, eskisinde var mıydı hatırlamıyorum ama admin bi bakıverir
+dabbe: @Nukiel eyvallah saol kıracak ordu cokta puanlar sıfır dalamiyosun😀
+Sauron: Dalamıyorsun, üstüne kilitlendi oyun , adam senden güçsüz ama ordusu kırılmamış ve 1000 kaos var
+Nukiel: He yaa puanlar 0 ama orduları full dalamıyoz ordu bırakmadınız ki 😅
+Sauron: Bi de savaş raporunda saldırının koordinati yazarsa sevinirim. İlla o an görmek zorunda değiliz, en azindan adam sömürgecilik şehrinden de saldırdı ise o koordinat a sonradan da bakabilmem gerekir
+Sauron: @kaos , guzel savaş olacaktı ama kaçırdım 🤣🤣
+Sauron: @mobiwar bi de soyle bir sey var dostum , mağara kapasitesi 100, ben buraya 100 kaos koyabilirim. Ama 100 elf ile eşit degil. Mantık olarak kişi sayısı değilde alan olmalı , yani 100 kaos ile 100 elf ayni sey degil. 100 kaosun girdiği mağaraya 1000 elf girmeli gibi düşün, bi de mağaraya yıkıldı mi onarım suresi görülmüyor, ya da ben göremedim
+BABA06: Beyler kahramana nasıl seviye kastiriyoruz
+gezgin1143: Savaşarak
+kaos: kardeş şansına küs arkadaş casuslamış ben saldırmış oldum k.bakma artık :)
+kaos: kahraman kaçlık orduda çıkar acaba 10 a bastım tapınağı ama tık yok hala
+BABA06: 20 lik tapinakta çıkardım
+kaos: yuh be o kadar mı zor yandık desene
+BABA06: Kanka ordu çok yoktu ama yinede cikti
+kaos: 20-50k arası salıyorum yinede tık yok 15 savaş attım rahat şans işi galiba birazda karşıdada ordu oluyor yine birşeyler çıkmadı
+BABA06: Kanka 27 k ordusu vardı adamın çıktı.
+Sauron: @mobiwar , bide soyle bir şey söylemek istiyorum. Daha önceden savaş olmuş ve karşı oyuncunun savunmasında ki sur yapım aşamasında, ama tekrar oyuncuya savaş açılmış. Bu similatorda 0 olarak mi geçer yoksa yine seviyesi o anki seviye ile mi geçer? Similatore ya da casus kuşa sur hasarli ya da degil gibi bir sey gösterilebilir mi ? Ya da oyle mi kalmalı
+kaos: ✨ Bu savaşta yeni bir kahraman ortaya çıktı: Tuna! sonunda ya :)
+kaos: 10k ordu attım 11 lv tapınak çıktı 15. savaşta
+BABA06: Hayırlı olsun reis😀
+kaos: eyvallah herşey sıfırlancakmış sonradan gördüm yazıyı sevinemedim bile :)
+BABA06: @kaos Sıfırlama bizi teğet geçse iyi olurdu😀
+Szr: @mobiwar üstadım casusluk raporlarında casus kuşları karşı taraf gönderiyor ise casusluk yapılan kişiye casus önleme raporu olarak meaaj atılsa daha pratik olur bir de saldırıya uğradığımda saldırı sonunda şehir savunma raporu olarak mesaj gelse daha iyi olmaz mı
+ahmetbatar: Kale seviyesini yükseltmenin bi anlamı yok onu yükseltmeden diğer hepsini yükseltmeye devam edebiliyoruz
+ahmetbatar: Şehir kurmaya gönderdiğimiz orduyu şehir kurmayı iptal edip geri çağıramıyoruz
+Sauron: @Szr bu dediğin olmaz dostum, oyunun amacı bu zaten
+Szr: @Sauron orijinal mobiwarda vardı bu dediklerim
+ahmetbatar: Aynen vardı casus kuş geldiğinde kırmızı kuş görünüyordu saldırı geldiğinde kırmızı kılıç felan vardı yani
+Szr: @ahmetbatar sonra saldırı bitince şehir savunma raporu başarılı ya da başarısız yazıyordu. Casusluk bitince casusluk önleme raporu geliyordu
+Voyagerroc: Selam millet
+ahmetbatar: Aynen öyle hocam şmdi size casuslul yapıldı diye bi uyarı çıkıyor aslında benzer şeyler yazıyor ama orjinalinden farklı yinede
+ahmetbatar: Asker üretim hızlarında da skntı var baraka 19 ama cüce üretimi halen bi dakkanın üstünde normalde bi kaç sn olması lazım şuanda yanlış bilmiyorsam 20 olunca cüce ve elf bir sn de üretiliyordu
+ahmetbatar: Süvari 10sn felandı
+ahmetbatar: Genel olarak yapılar ve akademi süreleri çok kısa ancak ordu üretim hızları savunma üretim hızları çok düşük
+ahmetbatar: Halen daha kale seviyesine bağlı olarak diğer ünitelerin seviyesini yükseltme sorun oluyor
+ahmetbatar: Yeni şehir kurunca belki olur dedim kurdum genel seviye 56 ama kale seviyesi 3 şuanda
+test12345: ÖN ŞARTLAR
+Kale : 12
+Mimar Okulu : 12
+Büyücülük : 12
+Ön şartları sağlamıyorum fakat üretim gerçekleşiyor.
+Bir çok yerde böyle hata var.
+@mobiwar
+Borucu: Kahraman geliştirme yok mu şu an ?
+BABA06: Borucu senin sabah ordunu bitirdim bu yeni ordu tekrar nasıl oldu sende
+Borucu: Diğer şehirdeydi
+Borucu: Saldır gelsin
+BABA06: Dostum 0 dan ordu almışsın nasıl oluyor admin sana ordumu atıyor.
+patrone: Abra kadabra yapıyor herhalde 😃
+mobiwar: Arkadaşlar bulduğunuz hataları tek tek okudum ve düzelttim bilginiz olsun.
+Borucu savaşcı istedi test amaçlı ona asker verdim herkese asker veririm birazdan amacımız şuan test etmek, bu savaşcı üretim süreleri ve binalardaki gereksinimler konusunda bana yardımcı olabilecek biri varmıdır?
+BLADE: Şehirlerimiz arasında ordu desteğide gönderilemiyor
+Nukiel: @mobiwar Nasıl bir yardım istiyorsun admin
+Nukiel: @BLADE teleport ile gönderiliyor
+mobiwar: Nakliye: Kendi şehirlerinize ve ittifak üyelerinize ganimet (altın/yemek) gönderebiliyorsunuz — asker gönderilemiyor (sadece Yük Arabası taşıyıcı olarak gidebiliyor).
+Destek: Sadece kendi şehirlerinize asker gönderilebiliyor — ittifak üyelerine gönderilemiyor, ganimet de taşınamıyor.
+mobiwar: Teleport: Sadece kendi şehirleriniz arasında (her iki şehir için de sizinle eşleşmeli), anlık/direkt asker transferi yapıyor (gerçek bir "yolculuk" yok, hemen gerçekleşiyor). Her kullanımdan sonra bir bekleme süresi başlıyor (taban 1 saat, Teleport binası seviyesi arttıkça bu süre kısalıyor — her seviye %2, en fazla %80'e kadar), o süre dolmadan aynı şehirden tekrar teleport yapamıyorsunuz.
+mobiwar: @Nukiel Baraka seviyesine bağlı hangi asker ne kadar sürede üretilmeli ile alakalı bir tablo lazım bana, birde hangi yükseltmede hangi gereksinimler lazım gibisinden
+Nukiel: @mobiwar Anladım admin yapay zekayla birlikte bir çalışma yapayım ama söz vermeyim bakalım düzgün bir şey çıkacak mı 👍🏻
+Relaxes: Yapay zekaya sordum ben birşey bulamadı. Az çok hatırladığım elf 6 saniyeydi ama barak seviyesi tam hatırlayamadım. Sanırım 20.seviyede 6 saniye olabilir. Ayrıca bence bina ve teknik süreleri eskisi kadar olmamalı.çünkü bu zamanda dünya kadar oyun varken kimse 3 gün yapımını bekleyeyim de şunu üreteyim diye beklemez diye düşünüyorum. Ayrıca ordusu birkez vurulan kişi direk oyunu bırakır eski bağlılığı göstermez çünkü eski ittifak muhabbetleri ve arkadaşlıkları yok.
+ozkn: Çok doğru.
+patrone: En kritik problem oyunun ekonomisini iyi yönetmek. Ne çok kolay ne de çok zor.
+patrone: Bu arada MobiWar topluluğu olarak bir telegram kanalı oluştursak kimler katılım sağlar
+patrone: Ben pek çok oyuncunun pay to Win mantığını görmezse bazı şeylere katlanabileceği düşüncesindeyim. Elmas vererek tamamla, para vererek hemen yükselt gibi dinamiklerden bence pek çok kişi illallah demiştir
+Turhan799: Şöyle bir deneme yaptım eski oyunun sistemine göre yapay zeka kullanarak değerlendirme yapılabilinir https://eu.wps.com/cms/docs/d/cbTaaa1Z3LszKywU?sa=601.1245
+Nukiel: @Turhan799 güzel olmuş eline sağlık bende böyle bir şey düşünmüştüm baraka seviyesi artınca yüzde kaç düşürdün
+mobiwar: Bunu tüm baraka seviyelerine göre ayarlama şansın varmı?
+Nukiel: bende yaptım birşeyler mail atayım admin
+mobiwar: Yukarıda whatsapp gurubu var isterseniz oraya gönderin
+Nukiel: tamamdır
+caldion: Admin 30 bin puanım vardı saldırıdığım kişiyi yendim bende 0 landım o da 0 landı bu konuya bir düzenleme getirirseniz eğer çok iyi olur herkes için
+caldion: Elimde ordumun çoğunluğu kalmasına rağmen kazanın 0 olmaması gerekmez mi puan düşecektir illaki ama 0 ladı
+mobiwar: Gönderilen resim
+Görsel test
+mobiwar: @caldion Bakıyorum hemen
+caldion: Barakada üretime verince puan veriyordu şu an vermiyor
+mobiwar: @caldion Onu kaldırdım ürettiği kadar puan veriyor artık, nedeni de şu 8 saatte bir puan yenilendiğini herkes biliyor ondan dolayı yenilenmeye dk kala tüm parasıyla ordu basıyor puanı uçuyor sıralamada ilk sıralara gidiyor sıralama yenilendikten sonra orduyu geri iptal ediyordu bu sayade 8 saat boyunca sıralamada kalıyordu, o yüzden kaldırdım ürettikce puan geliyor
+haqan: @mobiwar saldırı savunma ve casusluk raporlarında koordinatlar yazılabilir oyuncuların yanında. hangi şehre casus kuş atıldığı unutuluyor
+mobiwar: Raporlarda yazmıyor mu ekledim diye hatırlıyorum
+mobiwar: @caldion Senin sorununa baktım bir sorun gözükmüyor o şekilde puan kaybetmenin sebebi şu, ben size manuel bir ordu gönderdim normalde o orduya sahip olduğunuzda puanınız en az : 2.137.400 puan olur fakat siz orduyu kaybettiğinizde 30.000 puan kaybettiğinizi söylüyorsunuz o yüzden normal bişey çünkü küçük bir ordu kaybetmediniz kaybettiğiniz ordunun değeri 30000 in üstündeydi puanlar eksiye inmediği için sıfır puanda bıraktı
+konyali: Yeni şehir kurunca orduyu geri getiremiyorsun
+Raporlarda veya kişi ustune tiklanmiyor
+Tiklansa tüm şehirler kordinatlar vs gelmiyor
+Saldırı da yada savunma da az da olsa ordu kaybetsen puanın sıfırlanıyor
+Puan sistemini tekrar duzenlesen lyl olur
+İnsanlara torpil yapıyorsun 2 gün sonra oyun oturunca gebe onlari kollamayacagini ne bileceğiz.
+Kahraman isimleri şehir isimleri değişince eski yeni her yerde değişmeli
+Bir tane gelistirme az 2 olsa daha mantıklı
+konyali: Savaşlarda ölen asker kalan asker raporlar çok sıkıntılı
+Oyuncu üstüne tıklanamiyor vs vs
+konyali: Ganimet oranını şehirdeki paraya göreyede ekledin mi emin olamadim
+Yüzde 20 çok az
+Yük arabası taşıma kapasitesine göre taşınıyor sanki
+Kahraman cikma ihtimali var mı göremedim
+konyali: Onun dışında oyuna girerken hala heyecanlaniyoruz eline sağlık kardeşim
+mobiwar: Sorularına tek tek cevap vereyim :
+Yeni şehir kurunca orduyu geri getiremiyorsun (Gün içinde düzeltilmişti)
+Raporlarda veya kişi ustune tiklanmiyor (Dünya bunun için yeterli diye düşünüyorum ama kolaylık açısından değerlendireceğim)
+Saldırı da yada savunma da az da olsa ordu kaybetsen puanın sıfırlanıyor (Onun açıklamasını yukarı da yazdım Size büyük ordu verdim kaybedince çok puanınız gidiyor)
+mobiwar: Puan sistemini tekrar duzenlesen lyl olur (Düzelttim artık puan kaybedince kırmızı kazanınca yeşil oluyor)
+İnsanlara torpil yapıyorsun 2 gün sonra oyun oturunca gebe onlari kollamayacagini ne bileceğiz. (Oyunda test edin diye ordu veriyorum sıfırlanınca genel sohbet kalkacak sadece destek den bana ulaşılabilecek)
+Kahraman isimleri şehir isimleri değişince eski yeni her yerde değişmeli (mesajlara gelen raporlar haricinde her yerde değişiyor)
+mobiwar: Bir tane gelistirme az 2 olsa daha mantıklı (İlerde Premium olarak verilebilir)
+mobiwar: Yük arabası taşıma kapasitesine göre taşınıyor sanki
+her yük arabası 5000 kapasitesi var savaşlarda 2500 2500 getirir yada 3000 2000 yani toplamda her araca 5000 ekleyecek şekilde taşır
+mobiwar: Kahraman cikma ihtimali var mı göremedim
+Kahraman çıkma ihtimali çok düşük Savaş simulatöründen test edebilirsin
+mobiwar: Dünyayı 1x e geri aldım ve savaşcı sürelerinde güncelleme yaptım
+haqan: @mobiwar şu haliyle android bir uygulamada olsa biraz da tasarım düzeltilirse oyun akıcı gibi
+mobiwar: Şuan sadece savaşı test etmek gerek oyun bir düzene girdi yapı savunma akademi gereksinimlerini girecem bitiyor
+Turhan799: Her seviye için uygun bir şekilde yapay zeka tarafından yaptım düzenlenebilir https://eu.wps.com/cms/docs/d/cbTaafFUmquPunVJ?sa=601.1245
+Turhan799: Eski oyunun seviyelerine göre ayarlattım süreleri
+ahmetbatar: Üstat barakadaki asker üretim süreleri daha iyileştirilmiş ama savunmadakş üretimler halen çok yüksek süre bence onu da gözden geçirmekte fayda var
+Turhan799: İsterse admin onlarla da ilgili ufak bı çalışma yaparım
+ahmetbatar: Ek olarakta savunma raporunda hangi şehrimize saldırıldıgını koordinat olarak görsek daha iyivolur o eksik kalmış
+ahmetbatar: Oyun mekaniği olarakta şöyle bi durum gördüm mesela adam bana saldırıyor fark olarak ordusu %30 benden fazla ancak benm savunmam olmasına rağmen benm askerlerin %75i giderken karşı tarafın 3te 1i anca gidiyor sanki biraz daha iyileştirişebilir gibi savaş mekaniği
+mobiwar: savunma için de yaparsan iyi olurdu savaşcı için ayarladım
+Turhan799: Tamam ilgileniyorum
+mobiwar: @haqan Seçenekler sayfasına mobil tema ekledim onu bir dene bakalım nasıl
+Turhan799: https://eu.wps.com/cms/docs/d/cbTaav34j1fFg71c?sa=601.1245 gene düzenlenebilir yapay zeka tarafından yapıldı
+Sauron: @mobiwar mobil tema cok iyi olmuş , yazi fontu hariç , oda basittir senin icin , ben cok begendim
+Relaxes: Savaşçı üretim süreleri düzeltmesi gayet iyi olmuş.
+Lakşn oyunda ki ilk düzeltilmesi gereken şey bence savaş mantığı. Hatırladığıma göre eskiden; 100k orduya sakdırmak için bizde aynı birliklerle aynı miktarda yani 100k ordu ile salsırsak teknikleri yüksek olan savaşı kazanır ve kaybettiği ordunun daha fazlasını inşaa edecek kadar ganimet alırdı.
+Şimdi ki sistemde ise şehrinde 100k ordusu olan birine 65k ordu ile saldırsam savaşı yine kazanırım
+Relaxes: Yani eskiden güçlüler zayıfları vururdu. Şimdi ise zayıfların güçlüleri vurduğu bir sistem var. Bu durum mantıklı değil. Ayrıca düzeltildi mi bilmiyorum yine de söyleyeyim savaşı kazanan kişi yük arabası zayiatı vermemeli. Yine ekstra olarak savaşı kazanırsak ama arabalar ganimeti taşımaya yetmezse savaş sonucu olulan ama taşınamayan ganimet savunan kişinin şehrinde kalmalı ki tekrar saldırıp kalanı alabilelim
+pegasus: @Relaxes daha detaylı olmak gerekirse simalatörde 10001 vs 10000 cüce savaştırın oluşan ganimeti 650 araba taşıyabiliyor ama arabayı savaşa dahil ederseniz oluşan ganimeti ve kayıpları düşününce bunun 3.5 katını yollamanız gerekiyor
+pegasus: Savaşta geri planda duran birimlerin kayıpları karşı tarafın anti ünitelerine oranla olsa daha iyi olur
+haqan: @mobiwar baktım ama bence en güzeli mobil uyumlu tema. Retro lan hoşuma gitmedi ama geliştirilebilir tabi. Bu oyun yazı tabanlı simulasyon oyunu olsuğu için yazıların fontundan sekmelerin yerine kadar çok önemli aslında. Çünkü belli süre sonra parmaklar otomatikleşiyor yazılara basarken. Eski oyunda yağma askeri gönderirken yarım saatte 100 150 savaş gönderiyordum hepsini aynı ayarlayıp. Yağma şehirlerin koordinatlarını liste yapmıştım kağıda. 😀mobil uyumlu temenın gece modunun siyahını tam....
+haqan: Siyah yapabilirsen oled ekranda süper durur
+Relaxes: Oyun ne zaman sıfırlanacak
+Relaxes: Tahmini
+haqan: Gönderilen resim
+@mobiwar bu temada bu dünya görüntüsü sayfa boyutu açısından sıkıntılı bence daha öncede belirtmiştim. Üsteki simgeler küçülterek 10 tane kordinatın aşağı kaydırma ihtiyacı duymadan tek sayfada gözükmesi iyi olur
+haqan: @mobiwar arkadaş eklemenin mantığı kalmamış bence onu kaldırabilrsin. Ana oyunda da böyle bir şey yoktu zaten. İttifak dışındakilere nakliye gönderilememesi yapılmış. O yüzden arkadaş edinmenin mantığı kalmamış
+haqan: @mobiwar dünya da yazan oyuncu puanlarında sıkıntı var gibi yine az önce puanım 300 küsüe dü savaştan sonra 3 e düştü sonra 100 e çıktı birden 15 dk içinde
+mobiwar: Sendedeki ordunun maliyetini hesapla ve sonra 1000 e böl bakalım normalde puanın kaç olması lazım :) Ordun çok güçlü savaş kaybedince ççok ordun gidiyor bu da puan kaybetmene neden oluyor
+mobiwar: arkadaş ekleme mantığı değişecek zaten online mı değil mi görebileceksin felan, düşmanını kandırıp arkadaş ekleyip oyunda olmadığı anda saldırıp ordusunu sıfırlayabilirsin mesela :)
+mobiwar: @haqan bi bakayım dünya ya bir ayar çekerim şuan savaş kısmıyla çok uğraşıyorum ondan oraya şuan bakamıyorum
+mobiwar: Not aldım ama ilgilenirim
+haqan: Gönderilen resim
+Savaşa gönderdiğim orduyu iptal edip geri çekebileceğim bir buton yok. İşaretlediğim yere tıklayınca bu seçenek çıkabilir ordunun içeriği gözükebilir @mobiwar
+WAMPIR55: @mobiwar çok haince bir fikir arkadaş ekleyip online mi bakmak :)
+haqan: Gönderilen resim
+@mobiwar bu savaş raporlarında alt alta çok uzun oluyor ve karışık oluyor kimin ordusu kaybı vs. İşaretlediğim gibi kayıpları toplam ordunun yanına çekip kırmızı yazıyla gösterilebilir. Aynı şekilde savunan da bu şekilde yapılabilir
+haqan: @mobiwar orijinal oyunda yanlış hatırlamıyorsam çiftlik ve maden en fazla 20 ye kadar geliştiriliyordu. Orijinale sadık kalmak istenirse bu şekilde yapılabilir.
+haqan: Savaşa giden orduyu iptal etme varmış şimdi gördüm. Daha kolay bir yere alınabilir gösterdiğim şekildeki gibi olabilir
+caldion: haqan benim üzerimden örnek vermesen be kardeşim ,ikidir benim şehrime yaptığın saldırı vs admine örnek olarak gösteriyorsun lütfen😂
+caldion: Anlatmak istediğin durumu bidahakine başka oyuncu üzerinden de gösterebilirsin iyi oyunlar herkese :)
+WAMPIR55: 20 svy değil di maden ler 40 a kadar çıkıyor du ama 40 gören yoktu
+WAMPIR55: oyuna extradan ticaret ekleyebilirsin eti olan altını olmayan takas edebilir 1e 1 olarak
+mobiwar: Arkadaşlar eski oyunun simulatöründe testler yapa yapa gerçek verilerle birebir uyuşan savaş mantığında oyunda düzeltmeler yaptım şuan eski savaş simulatöründe bir savaş yapıyorum aynısını bizde yapıyorum iki savaş raporu da birebir tutuyor çok büyük ordularda biraz fark oluyor o da normaldir siz de testlerinizi yapabilirsiniz.
+Trceza: 10 kat kuralı yok mu bu oyunda? 1.19.1 de ki adam bana nasıl saldırabiliyor
+Trceza: Yakınında şehir kuran kişinin sana saldırma süresi çok düşük tutulmuş. 30 saniyede saldırı mı olur? Orduyu evde bırakıp bir sigara içeyim desen adam o zaman dilimin de ordunu katleder
+test12345: Birisi bana saldırabilir mi ? Bir hata yı ortaya çıkaracağım ?
+WAMPIR55: 10 kat saldıramıyorum
+CEDAY: Herkese merhaba
+HAKAN: Merhaba hoş geldin
+HAKAN: Arkadaşlar dememe yapmak isteyen saldırabilir
+gezgin1143: Deneme yapmak isteyen benim şehrimede saldırabilir😂 yol geçen hanı olmuş zaten 🤣
+Turhan799: 😂
+Turhan799: Arada sırada uğruyorum 😂
+BABA06: Dur bı denemede ben atayım 😀
+CEDAY: Nasıl oyun eskisigibimi yoksa çok eksik varmı
+Trceza: Ganimet lazım. Arabalarla saldırabilecek biri var mı? Zar zor üç beş ordu topladım telef etmeyin ha😄
+gezgin1143: @Trceza Ne lazım
+gezgin1143: @BABA06 deneme dal gitsin 🤣
+Trceza: Yaw adam bütün orduyla saldırıyor vicdansız
+Trceza: Az bi ordu yaptım ona göz koydular
+Trceza: @gezgin1143 ganimet lazım yaa. Hiç bişeyim yok
+Szr: @gezgin1143 yav sen bana elini kolunu sallayarak saldırıyorsun ama ben sana saldırmaya kalkınca 10 kat kuralı devreye giriyor bu nasıl iştir 🤣
+Szr: @mobiwar biri bana saldırıyor ama ben ona saldırmak istediğimde 10 kat kuralı devreye giriyor
+Relaxes: @Trceza ne kadar lazım
+pegasus: @mobiwar yeni seyahat süreleri aşırı uzun olmuş
+pegasus: Savaşlarda kahramanların hepsi exp almıyor
+pegasus: Birden fazla girince ilk sıradaki exp alıyor
+pegasus: Baraka arada buga girip iki birimi aynı anda üretiyor
+pegasus: Bazen de hiç üretim yapmıyor bar ilerlemeyor ama süre azalıyor sonuç olarak ünite üretilmiyor
+Trceza: Relaxes varsa 100 er bin alabilirim yaa
+mobiwar: Kahraman daki sorun gün içinde giderilmişti arkadaşlar şuan hangi kahraman saldırıya gönderildiyse o kahraman tecrübe alıyor
+test12345: Sayın admin
+Mobiwar ile ilgili verilere , bilgilere ve belgelere ulaşmak istiyorsan
+Webarşiv kullanabilirsin.
+Zamanında çokca alınmış veriler var.
+Şuan hatırlayamadıklarımız bir çok şey var
+mobiwar: Orda bişey yok hocam baktım
+mobiwar: @pegasus Barakdaki bug gerçekten vardı o sorunu düzelttim
+efeler48: Oyunun mobil sürümü yık mu
+efeler48: Wepten mi oynucaz
+mobiwar: ilerde gelecek hocam web tarafı daha tam oturmamış otrurunca mobil sürümler yayınlanacak
+Relaxes: @Trceza ne 100 er bini kardeşim 1 miyardan fazla kaynak var. arabaların aldığı kadar göndereyim. Benim ittifaka geçiçi üye ol nakliye yapamam aynı ittifakta olmazsak
+mobiwar: herkese 1m ganimet ve 1000 er asker verildi şu savaşı test edelim arkadaşlar gördüğünüz hataları bana söylerseniz daha iyi geliştiririz.
+konyali: Şehirde bulunan 100 er m param gitmis admin :) yerine 1m gelmiş
+mobiwar: 900m parası olan vardı onu da sıfırladık :)
+mobiwar: Şuan test amaçlı olduğu için bu şeyleri sorun yapmayın savaşı bir test edin bakalım varmı bir sıkıntı belki gözünüze takılan bişey olur düzeltiriz
+dabbe: @mobiwar gitti 918 milyon ganimetim😀
+mobiwar: @dabbe :)
+WAMPIR55: savaş a casus kuşlarda gidiyor onu düzelt bence
+gezgin1143: Kendi şehirlerim aynı kıtada olmasına rağmen destek 30 dk da gidiyor normalmi
+loveman: Böyle daha kötü oldu sanki savaş similatorunden hesapliyorum. Savaşı kazanıyorum gösteriyor. Fakat kazandığım ganimet kaynettigim orduyunun çeyreğini karşılamiyor
+Relaxes: Raporda eskisi gibi şu kadar ganimet oluştu şu kadarı taşındı diye göstermiyor. Yük araban yetersizse az ganimet oluştu sanıyor olabilirsin
+test12345: Şartları sağlamıyorum fakat sistem üretim yapıyor. Bunların düzeltilmesi lazım
+Örnek : ÖN ŞARTLAR
+Teleport
+Kale : 12
+Mimar Okulu : 12
+Büyücülük : 12
+Teleport üretimi için bu şartlar gerekşi ama ben bu şartları sağlamıyorum fakat üretim yapıyor.
+Buna benzer bazı üretim hataları var.
+Admin bunlarla da ilgilenirmisin
+mobiwar: @WAMPIR55 Casus kuşu savaştan kaldırdım
+mobiwar: @gezgin1143 Oyuncuların ortak kararı o şekildeydi
+test12345: Casusluk yaparken karşı tarafa bildirim gitmese daha mantıklı olmaz mı
+test12345: Direk ismi aratıp niye saldıramıyorum saldırıcam kişinin ismini yazıyorum çıkıyor üzerine tıklayıp direkt saldır veya casuslu seçemiyorum dünya üzerinde hangi konumda olduğunu da bilemiyorum tek tek buna bakmak oldukça zor
+mobiwar: @test12345 Arama sayfasında direk konumuna gidebiliyorsun, arama yaptıktan sonra kişinin yanındaki konumun üstüne tıkla dünya üzerindeki yerini gösterir sana
+karacocuk0307: Tatil moduna girince hesaba saldırma olmamış ama casusluk atabilmisler bilginize.
+haqan: @test12345 saldır seçeneği olmaz çünkü 2 3 şehri varsa hangisi olacak bence ana şehrinin koordinatları yazabilir
+Relaxes: Konyalı kahramanın savaştan kaç puan aldı
+Relaxes: Totalde 6 milyar falan ganimetim olmuş lakin sıfırlanacağımız için şu anda emek vermeye gerek duymuyorum
+loveman: Benim ganimette sıfırlanmış hicbirsey üretemiyorum gelistiremiyorum boş boş bekliyor
+VASCO: Biz oynuyoruz da sıfırlanacak mı hersey
+VASCO: Üzülürüm eğer öyleyse
+Turhan799: Evet öyle
+CEDAY: eskisigibi değil oyun
+Exxe: Arkadaşlar ilk açıldığından bu güne oyunda bir çok iyileşme yapıldı sizin sayenizde test olduğu daha ilk gün söylenmişti aslında üzülmeyin son eklemeler yapılıyor sonuna yaklaşıyor metin hoca ahaha
+CEDAY: eskiden ben bu oyunun efsanesiydim
+CEDAY: Beni bilen bilir
+Nukiel: @CEDAY evet oyundaki güçlüler den biriydin hatırlıyorum oyun şuan test aşamasında eksik gördüklerlmizi duzelterek yada onerilerle oyun çok iyiye gidiyor
+karacocuk0307: Güçlü musun bilmem ama agzi bozuk biri olduğun kesin casusluk yedin diye ağza alınmayacak kufur etmek te neyin nesi.
+test12345: Yapılan savaşlarda hatalar var sayı olarak az ordu fazla orduyu yeniyor ?
+dabbe: @Nukiel kanka yapabiliyozmu olacakmi
+test12345: Bence oyunu hemen başlatmak yerine hataları sorunları eksiklikleri giderelim acele etmeyelim geç başlasın ama güzel olsun hem bu süre zarfında daha çok kişiye duyurulur
+Bambam2841: Düzeltilmesi gereken bir hata bilmiyorum yazan oldu mu kendi ittifak üyemize saldırabiliyoruz bunun olmaması gerekli
+pegasus: Kahraman kısmı biraz sıkıntı olabilir 5 kahramanın toplam seviyesi 79 ve düşmandan daha güçsüz olduğum savaşta 161x güçlendirme alıyorum ve kayıpsız yeniyorum
+pegasus: Bunun gibi çok savaş yaptım kahramanı çıkartan ilk kişi oyunu domine eder
+pegasus: Kahramanın seviye arttırması zorlaşmalı ya da hiç kahraman olmamalı bilemedim
+Nukiel: @karacocuk0307 ekran görüntüsü alıp admine atabilirsin
+Nukiel: @dabbe daha önce bu oyunu geliştirmeye çalışan çok oldu ama hiç biri şu ankine göre ilerleme kaydedemedi oyun şu an bile gayet iyi eksik yerleri var mı vardır bunlarıda bizler şu an test aşamasında oynadıkça görüyoruz hataları yazan arkadaşta düzeltiyor
+Nukiel: @test12345 aynen öyle oyunu başlatmak kolay iş önemli olan hatasız başlatmak ayrıca watsap grubuna gelerek bulduğunuz hataları ve önerileri direkt paylaşabilirsiniz
+pegasus: Whatsapp a epey yazdım
+pegasus: Hata olarak söylemiyorum zaten kahraman çıkartma şartları ekstra zor olmazsa ya da etkisi daha az olmazsa sıkıntı olacağını düşünüyorum
+loveman: Çiftlik ve maden yükseltme seviyeleri dengesiz değil mi . Üretimlerde ve yükseltmeler de daha çok altın ihtiyacı oluyor.
+test12345: Tarayıcıyı kapatıp açınca tekrar kullanıcı adı ve şifre istiyor beni hatırla seçeneği işe yaramıyor sanırım sürekli her girişimizde kullanıcı adı şifre yazıyoruz buna bir çözüm bulunursa iyi olur
+Bu soyledigim iPhone Safari tarayıcısı için geçerli başka tarayıcı varsa önerebilirseniz onu da deneriz
+patrone: Evet bende de devam ediyor. Düzelttim demişti ama düzelmemiş.
+Exxe: Arkadaşlar elinizde 50-60k ordu var savaşa giriyorsunuz kahraman tabi deli gibi tecrübe alır hepiniz şu an oyun sonu gücündesiniz yapmayın allah aşkına şu an ki ordu gücüne gelmeniz zaten 8-9 ay sürecek 😄😄
+Exxe: Burada oynayanların çoğu inanın hesabında kaos görmedi belki ama açın bakın barakayı en düşüğünüzde 500-600 kaos vardır. Kaosun girdiği bir savaşta kahramanın çılgınca seviye atlamasını garip buluyorsanız tekrar düşünmenizi rica ediyorum
+karacocuk0307: Ben senelerce oynadım kaos görmedim dediğin gibi elf şaman kahramanezip geçerdi
+karacocuk0307: Oyunun betasında görelim bari kaos
+HAKAN: Mi tarayıcı var şifre ve kullanıcı adı istemiyor giriş yap diyince giriyorsun
+HAKAN: Gönderilen resim
+test12345: iphone için varmı acaba
+Relaxes: Casusluk raporundan simülatöre direk veri aktarımı harika fikir
+BABA06: Bazen işe yaramıyor dikkat et sen yinede
+loveman: Gönderilen resim
+Kaleyi yükselt diyor en son seviyede. Diğerlerini yükseltemiyorum ondan dolayi
+loveman: Savunmadaki yapilarida yukseltemiyorum
+Relaxes: Şehirlerde toplam 5 6 milyar falan ganimet var. İhtiyacı olan saldırıp alabilir

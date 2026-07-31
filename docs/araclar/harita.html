@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sefer Cetveli — Harita Ulaşım Simülatörü</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0B2426; --ink-2:#103032; --panel:#14393B; --panel-2:#1A4749; --line:#265355;
+  --parch:#EDE3CE; --parch-dim:#A9B8B0; --brass:#D4A03C; --verd:#4FB6A0; --alarm:#E2725B;
+  --r:10px; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:
+    radial-gradient(1200px 600px at 100% -10%, #1B4A4C 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, #17403F 0%, transparent 55%),
+    var(--ink);
+  color:var(--parch); font-family:Inter,system-ui,sans-serif;
+  font-size:15px; line-height:1.45; padding:10px 10px 40px; min-height:100vh;
+}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:10px}
+header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:2px 2px 0}
+h1{font-family:Fraunces,serif;font-weight:700;font-size:clamp(20px,5.2vw,30px);letter-spacing:-.02em;line-height:1}
+h1 em{font-style:normal;color:var(--brass)}
+.sub{color:var(--parch-dim);font-size:12.5px}
+.panel{background:linear-gradient(180deg,var(--panel) 0%,var(--ink-2) 100%);border:1px solid var(--line);border-radius:var(--r);padding:11px}
+.panel > h2{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--brass);margin-bottom:9px;display:flex;align-items:center;gap:8px}
+.panel > h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.cols{display:grid;gap:10px}
+@media(min-width:900px){ .cols{grid-template-columns:1fr 330px;align-items:start} }
+.route{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+label.fld{display:grid;gap:4px}
+label.fld > span{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--parch-dim);font-family:var(--mono)}
+input[type=text]{width:100%;background:#0A1F21;border:1px solid var(--line);color:var(--parch);font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:.05em;padding:9px 10px;border-radius:8px;text-align:center}
+input[type=text].bad{border-color:var(--alarm);color:var(--alarm)}
+input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.swap{background:var(--panel-2);border:1px solid var(--line);color:var(--brass);width:38px;height:38px;border-radius:8px;font-size:16px;cursor:pointer}
+.swap:hover{background:var(--line)}
+.hint{font-size:11px;color:var(--parch-dim);font-family:var(--mono);text-align:center;margin-top:5px}
+.hint b{color:var(--verd);font-weight:700}
+.miniact{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.tiny{background:transparent;border:1px solid var(--line);color:var(--parch-dim);font-size:11px;padding:4px 9px;border-radius:99px;cursor:pointer;font-family:Inter,sans-serif}
+.tiny:hover{border-color:var(--brass);color:var(--brass)}
+.carto{display:flex;align-items:center;gap:11px}
+.carto-val{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--brass);min-width:46px;text-align:center;line-height:1}
+.carto-val small{display:block;font-size:9px;letter-spacing:.12em;color:var(--parch-dim)}
+input[type=range]{flex:1;accent-color:var(--brass);height:26px}
+.carto-gain{font-family:var(--mono);font-size:12px;color:var(--verd);white-space:nowrap;text-align:right}
+.units{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+.u{background:#0A1F21;border:1px solid var(--line);border-radius:8px;padding:7px 8px;cursor:pointer;text-align:left;color:var(--parch);display:grid;gap:1px;transition:.12s;font-family:Inter,sans-serif}
+.u:hover:not(:disabled){border-color:var(--parch-dim)}
+.u b{font-size:13px;font-weight:600}
+.u i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--parch-dim)}
+.u.on{background:#1E5A4C;border-color:var(--verd);box-shadow:inset 0 0 0 1px var(--verd)}
+.u.on i{color:#BDEBDD}
+.u.spy.on{background:#5A4418;border-color:var(--brass);box-shadow:inset 0 0 0 1px var(--brass)}
+.u:disabled{opacity:.32;cursor:not-allowed}
+.u .tag{font-size:9px;font-family:var(--mono);letter-spacing:.08em;color:var(--brass);text-transform:uppercase}
+.result{background:linear-gradient(180deg,#1A4749,#0E2C2E);border:1px solid var(--brass);border-radius:var(--r);padding:13px}
+.big{font-family:Fraunces,serif;font-weight:700;font-size:clamp(30px,9vw,44px);line-height:1;color:var(--brass);letter-spacing:-.02em}
+.big.err{color:var(--alarm);font-size:20px}
+.reslabel{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--parch-dim);margin-bottom:4px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:11px;border-top:1px solid var(--line);padding-top:10px}
+.st span{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--parch-dim)}
+.st b{font-family:var(--mono);font-size:14.5px;font-weight:700;color:var(--parch)}
+.badge{display:inline-block;margin-top:9px;margin-right:5px;background:#5A4418;border:1px solid var(--brass);color:var(--brass);font-size:11.5px;padding:4px 10px;border-radius:99px}
+.badge.warn{background:#4A2320;border-color:var(--alarm);color:var(--alarm)}
+svg.map{width:100%;max-height:290px;height:auto;display:block;border-radius:8px;background:#081A1C}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--parch-dim);margin-top:7px}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--mono)}
+th,td{padding:5px 7px;text-align:right;border-bottom:1px solid #1D4547;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;font-family:Inter,sans-serif}
+th{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--parch-dim);font-family:var(--mono);font-weight:400}
+tr.hi td{background:#1C4A3F;color:#CFF3E6}
+tr.dim td{opacity:.45}
+td.t{color:var(--brass);font-weight:700}
+details{border:1px solid var(--line);border-radius:var(--r);background:var(--ink-2)}
+summary{padding:10px 11px;cursor:pointer;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--brass);list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";display:inline-block;transition:.15s}
+details[open] summary::before{transform:rotate(90deg) translateY(-3px)}
+.dbody{padding:0 11px 12px;display:grid;gap:9px}
+.consts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.consts label{display:grid;gap:3px}
+.consts label > span{font-size:10px;font-family:var(--mono);letter-spacing:.06em;color:var(--parch-dim)}
+.consts input,.consts select{background:#0A1F21;border:1px solid var(--line);color:var(--parch);font-family:var(--mono);font-size:13px;padding:6px 8px;border-radius:6px;width:100%}
+.consts label.off{opacity:.35}
+.note{font-size:12px;color:var(--parch-dim);line-height:1.55;display:grid;gap:8px}
+.note b{color:var(--parch);font-weight:600}
+.note code{font-family:var(--mono);font-size:11.5px;background:#0A1F21;padding:1px 5px;border-radius:4px;color:var(--verd)}
+.note ul{padding-left:16px;display:grid;gap:4px}
+.formula{font-family:var(--mono);font-size:12px;background:#081A1C;border:1px dashed var(--line);padding:9px 10px;border-radius:8px;color:var(--verd);overflow-x:auto;white-space:nowrap}
+footer{text-align:center;font-size:11px;color:#4E6C6A;font-family:var(--mono);padding-top:4px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Sefer <em>Cetveli</em></h1>
+  <div class="sub">Kıta · Diyar · Üs — ulaşım süresi simülatörü</div>
+</header>
+
+<div class="cols">
+<div style="display:grid;gap:10px">
+
+  <section class="panel">
+    <h2>Rota</h2>
+    <div class="route">
+      <label class="fld"><span>Başlangıç</span><input type="text" id="src" value="1:1:5" inputmode="numeric" autocomplete="off"></label>
+      <button class="swap" id="swap" title="Yönü ters çevir" aria-label="Yönü ters çevir">⇄</button>
+      <label class="fld"><span>Hedef</span><input type="text" id="dst" value="1:1:6" inputmode="numeric" autocomplete="off"></label>
+    </div>
+    <div class="hint" id="parsed">—</div>
+    <div class="miniact">
+      <button class="tiny" data-preset="1:1:5|1:1:6">Komşu üs</button>
+      <button class="tiny" data-preset="1:1:5|1:2:5">Komşu diyar</button>
+      <button class="tiny" data-preset="1:250:5|1:255:5">Diyar içi uzak</button>
+      <button class="tiny" data-preset="5:55:8|6:55:8">Komşu kıta</button>
+      <button class="tiny" data-preset="1:250:5|4:250:5">3 kıta ötesi</button>
+      <button class="tiny" data-preset="1:1:1|10:500:10">Zıt köşe</button>
+      <button class="tiny" id="rnd">Rastgele</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Haritacılık</h2>
+    <div class="carto">
+      <div class="carto-val" id="cartoVal">0<small>SEVİYE</small></div>
+      <input type="range" id="carto" min="0" max="20" step="1" value="0" aria-label="Haritacılık seviyesi">
+      <div class="carto-gain" id="cartoGain">—</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Ordu birimleri</h2>
+    <div class="units" id="units"></div>
+  </section>
+
+</div>
+
+<div style="display:grid;gap:10px">
+
+  <section class="result">
+    <div class="reslabel">Varış süresi</div>
+    <div class="big" id="time">—</div>
+    <div id="badges"></div>
+    <div class="stats">
+      <div class="st"><span>Mesafe</span><b id="dist">—</b></div>
+      <div class="st"><span>Ordu hızı</span><b id="spd">—</b></div>
+      <div class="st"><span>Yavaş birim</span><b id="slow">—</b></div>
+      <div class="st"><span>Varış saati</span><b id="eta">—</b></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Dünya</h2>
+    <svg class="map" id="map" role="img" aria-label="Dünya haritası üzerinde rota"></svg>
+    <div class="legend">
+      <span><i style="background:#4FB6A0"></i>Başlangıç</span>
+      <span><i style="background:#D4A03C"></i>Hedef</span>
+      <span id="worldDim"></span>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<section class="panel">
+  <h2>Bu rotada tüm birimler</h2>
+  <div class="tscroll">
+    <table id="unitTable">
+      <thead><tr><th>Birim</th><th>Temel hız</th><th>Etkin hız</th><th>Süre</th><th>Sv. 0'a göre</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Seçili ordu · haritacılık seviyeleri</h2>
+  <div class="tscroll">
+    <table id="lvlTable">
+      <thead><tr><th>Sv.</th><th>Çarpan</th><th>Etkin hız</th><th>Süre</th><th>Kazanç</th><th>Öncekine göre</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<details>
+  <summary>Model sabitleri</summary>
+  <div class="dbody">
+    <div class="consts">
+      <label><span>U · diyar aralığı</span><input type="number" id="cU" value="20" min="2" step="1"></label>
+      <label><span>W · kıta aralığı</span><input type="number" id="cW" value="4000" min="100" step="100"></label>
+      <label><span>K · ölçek sabiti</span><input type="number" id="cK" value="600" min="10" step="10"></label>
+      <label><span>p · sıkıştırma üssü</span><input type="number" id="cP" value="0.46" min="0.2" max="1" step="0.01"></label>
+      <label><span>Ordu tabanı (dk)</span><input type="number" id="cFA" value="10" min="0" step="1"></label>
+      <label><span>Casus tabanı (dk)</span><input type="number" id="cFS" value="2" min="0" step="1"></label>
+      <label><span>Tavan süre (saat)</span><input type="number" id="cCap" value="18" min="1" step="1"></label>
+      <label><span>Haritacılık katsayısı k</span><input type="number" id="cStep" value="0.05" min="0.005" max="0.2" step="0.005"></label>
+    </div>
+    <div class="formula">D = Δüs + U·Δdiyar + W·Δkıta &nbsp;·&nbsp; T = Taban + K · D<sup>p</sup> · (100 ÷ v) ÷ (1 + 0,05·L)</div>
+    <div class="note">
+      <p><b>Taban süre haritacılıktan ETKİLENMEZ.</b> "Orduyu toplayıp yola çıkarmak" sabit bedelidir ve
+      kısa mesafelerde süreyi o belirler. Böylece yüksek haritacılık, komşu şehre yapılan baskını
+      engellenemez hâle getiremez: Cüce ile komşu şehir sv0'da 20 dk, sv15'te 15,7 dk — %21 kazanç.
+      Aynı teknik uzun mesafede 7sa 44dk → 4sa 30dk yapar. Yani <b>haritacılık bir sefer tekniğidir,
+      baskın tekniği değil.</b></p>
+      <p><b>U ve W hiyerarşiyi kurar.</b> U=20 → bir diyar farkı 20 üs farkına bedel. W=4000 → bir kıta
+      atlaması 200 diyara bedel; aynı kıtadaki rastgele iki şehrin ortalama farkı ~167 diyar olduğundan
+      kıta geçişi <b>tipik olarak en uzun sefer</b> olur. W'yi küçültürsen kıta kavramı anlamını yitirir.</p>
+      <p><b>p sıkıştırmadır.</b> Mesafe 100 kat artınca süre 100 kat artmaz, ~8 kat artar. Bu olmadan
+      uzak seferler günlerce sürerdi.</p>
+    </div>
+  </div>
+</details>
+
+<details>
+  <summary>Sistem nasıl çalışıyor?</summary>
+  <div class="dbody note">
+    <p><b>Adres sırası, hissedilen uzaklıkla örtüşmelidir.</b> Bu modelin tek kuralı budur: 1. kıtadan 2. kıtaya gitmek, 4. kıtaya gitmekten daima kısa sürer; 6. diyardan 7. diyara geçmek 9. diyara geçmekten daima kısa sürer. Oyuncu koordinata bakınca mesafeyi tahmin edebilmelidir, haritayı açmak zorunda kalmamalıdır.</p>
+    <p><b>Kademeli mesafe.</b> Her koordinat basamağının sabit bir bedeli vardır ve bunlar toplanır:
+    <code>D = Δüs + U·Δdiyar + W·Δkıta</code>. Düz çizgi (Öklid) yerine toplama kullanılır; böylece her
+    basamaktaki fark süreye <em>mutlaka</em> yansır ve "1 kıta + 200 diyar" ile "1 kıta" aynı şeye inmez.
+    Harita üzerinde rota bu yüzden L biçiminde çizilir — model gerçekten öyle çalışır.</p>
+    <p><b>Hiyerarşi sabitlerle kurulur.</b> U=20 (diyar), W=4000 (kıta). Bir kıta atlaması 200 diyara
+    bedeldir; aynı kıtadaki rastgele iki şehir ortalama 167 diyar uzakta olduğundan <b>kıtalar arası sefer
+    tipik olarak en uzun, aynı diyar içi en kısadır</b> — dokümandaki sıralama sağlanır.</p>
+    <p><b>Denenip vazgeçilen alternatif.</b> Travian tarzı sürekli kare ızgara — kıtaların 2×5 blok halinde yerleştiği düzen — daha dengeli bir coğrafya veriyordu ama numaralandırma uzaklıkla örtüşmüyordu: 1. kıtadan 4. kıtaya gitmek 2. kıtaya gitmekten kısa sürüyordu. Oyuncunun kafasında karşılığı olmayan bir harita, dengeli bir haritadan kötüdür. Bu yüzden şeritli düzene dönüldü.</p>
+    <p><b>Süre görevden bağımsızdır.</b> Ordu saldırıya da gitse destek götürse de aynı yolu kat eder, süre aynıdır. Dönüş de aynı süreyi alır.</p>
+    <ul>
+      <li><b>Taban süre (ordu 10 dk / casus 2 dk)</b> yola çıkma hazırlığıdır; mesafeden de <b>haritacılıktan da</b> bağımsızdır. Kısa mesafede süreyi asıl o belirler → komşuya anında baskın imkânsızdır, ama sürpriz ölmez.</li>
+      <li><b>Ordu hızı</b> daima en yavaş birime göre hesaplanır. Kahraman orduya katıldığında hızı yükseltmez, yalnız yola çıktığında hızlıdır.</li>
+      <li><b>Casus Kuş</b> yalnız uçar; başka birimle birlikte seçilemez, savaş ordusuna da katılamaz. Seçiliyken üzerine yeniden basarsan kalkar ve diğer birimler açılır.</li>
+      <li><b>Tavan süre</b> hiçbir seferin oyuncuyu vazgeçirecek kadar uzamamasını sağlar. Süre tavana dayanırsa sonuçta belirtilir.</li>
+    </ul>
+    <p><b>Sunucuya taşırken</b> süreyi istemcide hesaplama. Emir alındığında sunucu <code>arrival_at</code> zaman damgasını yazsın, istemci yalnızca geri sayım göstersin. İstemcideki bu hesap yalnız <em>önizleme</em> içindir; aynı fonksiyon paylaşılan pakette durur.</p>
+  </div>
+</details>
+
+<footer>Sabitleri değiştirdikçe tüm tablolar anında güncellenir.</footer>
+</div>
+
+<script>
+const UNITS=[
+ {n:"Cüce",v:100},{n:"Elf",v:120},{n:"Süvari",v:140},{n:"Pegasus",v:160},
+ {n:"Ejderha",v:160},{n:"Mancınık",v:100},{n:"Ogre",v:100},{n:"Şaman",v:120},
+ {n:"Yük Arabası",v:140},{n:"Gnom",v:120},{n:"Kaos",v:80},
+ {n:"Kahraman",v:200,tag:"özel"},
+ {n:"Casus Kuş",v:6000,spy:true,tag:"casus"}
+];
+const $=id=>document.getElementById(id);
+const sel=new Set(["Cüce"]);
+
+function C(){return{
+ U:+$("cU").value||20, W:+$("cW").value||4000, K:+$("cK").value||600, p:+$("cP").value||.46,
+ fArmy:(+$("cFA").value||10)*60, fSpy:(+$("cFS").value||2)*60,
+ cap:(+$("cCap").value||18)*3600, step:+$("cStep").value||.05
+};}
+
+function parse(s){
+ const m=String(s).trim().split(/[:.\-\s]+/).map(Number);
+ if(m.length!==3||m.some(x=>!Number.isInteger(x)))return null;
+ const[k,d,u]=m;
+ if(k<1||k>10||d<1||d>500||u<1||u>10)return null;
+ return{k,d,u};
+}
+
+function world(K){return{w:9*K.W+1,h:499*K.U+9};}
+
+function xy(c,K){return[(c.k-1)*K.W,(c.d-1)*K.U+(c.u-1)];}
+
+// D = Δüs + U·Δdiyar + W·Δkıta  (kademeli/toplamalı — her basamak süreye yansır)
+function dist(a,b,K){return Math.abs(a.u-b.u)+K.U*Math.abs(a.d-b.d)+K.W*Math.abs(a.k-b.k);}
+
+// Haritacılık = HIZ çarpanı (doküman: "tüm ünitelerin hızını %5 arttırır"); yalnız YOL terimine uygulanır
+function mult(L,K){return 1+K.step*L;}
+function calc(D,v,L,K,spy){
+ const floor=spy?K.fSpy:K.fArmy;
+ return Math.min(floor+K.K*Math.pow(Math.max(0,D),K.p)*(100/v)/mult(L,K),K.cap);
+}
+
+function fmt(s){
+ s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+ if(h)return h+" sa "+String(m).padStart(2,"0")+" dk";
+ if(m)return m+" dk "+String(x).padStart(2,"0")+" sn";
+ return x+" sn";
+}
+function fmtS(s){
+ s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);
+ return h?h+"sa "+m+"dk":(m?m+"dk "+(s%60)+"sn":s+"sn");
+}
+
+function drawUnits(){
+ const spy=[...sel].some(n=>UNITS.find(u=>u.n===n).spy);
+ $("units").innerHTML="";
+ UNITS.forEach(u=>{
+  const b=document.createElement("button");
+  b.className="u"+(sel.has(u.n)?" on":"")+(u.spy?" spy":"");
+  b.disabled = u.spy ? (!spy && sel.size>0) : spy;
+  b.innerHTML="<b>"+u.n+"</b><i>hız "+u.v+"</i>"+(u.tag?'<span class="tag">'+u.tag+"</span>":"");
+  b.onclick=()=>{
+   if(u.spy&&!sel.has(u.n))sel.clear();
+   sel.has(u.n)?sel.delete(u.n):sel.add(u.n);
+   render();
+  };
+  $("units").appendChild(b);
+ });
+}
+
+function drawMap(a,b,K){
+ const W=world(K), pad=Math.max(W.w,W.h)*0.04;
+ const m=$("map");
+ m.setAttribute("viewBox","0 0 "+(W.w+pad*2)+" "+(W.h+pad*2));
+ m.setAttribute("preserveAspectRatio","xMidYMid meet");
+ const unit=Math.max(W.w,W.h)/110;
+ let s="";
+ const cw=Math.max(K.W*0.6,4);
+ for(let k=0;k<10;k++){
+  const x=pad+k*K.W-cw/2;
+  s+='<rect x="'+x+'" y="'+pad+'" width="'+cw+'" height="5000" fill="#0E2A2C" stroke="#1D4547" stroke-width="'+unit*0.25+'"/>';
+  s+='<text x="'+(x+cw/2)+'" y="'+(pad+W.h*0.5)+'" fill="#31534F" font-size="'+unit*3.4+'" font-family="monospace" text-anchor="middle">'+(k+1)+"</text>";
+ }
+ if(a&&b){
+  const[ax,ay]=xy(a,K),[bx,by]=xy(b,K);
+  // rota L biçiminde: mesafe toplamalı (Manhattan) — önce yatay (kıta), sonra dikey (diyar/üs)
+  s+='<path d="M '+(pad+ax)+' '+(pad+ay)+' L '+(pad+bx)+' '+(pad+ay)+' L '+(pad+bx)+' '+(pad+by)+
+     '" fill="none" stroke="#D4A03C" stroke-width="'+unit*0.45+'" stroke-dasharray="'+unit*1.6+" "+unit*1.2+'"/>';
+  s+='<circle cx="'+(pad+ax)+'" cy="'+(pad+ay)+'" r="'+unit*1.5+'" fill="#4FB6A0"/>';
+  s+='<circle cx="'+(pad+bx)+'" cy="'+(pad+by)+'" r="'+unit*1.5+'" fill="#D4A03C"/>';
+ }
+ m.innerHTML=s;
+ $("worldDim").textContent="dünya "+W.w+" × "+W.h;
+}
+
+function render(){
+ const K=C(),a=parse($("src").value),b=parse($("dst").value);
+ $("src").classList.toggle("bad",!a);
+ $("dst").classList.toggle("bad",!b);
+ drawUnits();
+
+ const L=+$("carto").value, M=mult(L,K);
+ $("cartoVal").innerHTML=L+"<small>SEVİYE</small>";
+ $("cartoGain").innerHTML=L?"×"+M.toFixed(2)+"<br>−%"+((1-1/M)*100).toFixed(1)+" süre":"etkisiz";
+ drawMap(a,b,K);
+
+ if(!a||!b){
+  $("time").className="big err";$("time").textContent="Koordinat geçersiz";
+  $("parsed").textContent="Biçim: kıta:diyar:üs · 1–10 : 1–500 : 1–10";
+  ["dist","spd","slow","eta"].forEach(i=>$(i).textContent="—");
+  $("badges").innerHTML="";
+  $("unitTable").querySelector("tbody").innerHTML="";
+  $("lvlTable").querySelector("tbody").innerHTML="";
+  return;
+ }
+
+ const D=dist(a,b,K);
+ $("parsed").innerHTML="Δkıta <b>"+Math.abs(b.k-a.k)+"</b> · Δdiyar <b>"+Math.abs(b.d-a.d)+"</b> · Δüs <b>"+Math.abs(b.u-a.u)+"</b> — mesafe <b>"+D.toLocaleString("tr-TR")+"</b>";
+ $("dist").textContent=D.toLocaleString("tr-TR")+" br";
+
+ const arr=[...sel].map(n=>UNITS.find(u=>u.n===n));
+ if(!arr.length){
+  $("time").className="big err";$("time").textContent="Birim seçilmedi";
+  ["spd","slow","eta"].forEach(i=>$(i).textContent="—");
+  $("badges").innerHTML="";
+ }else{
+  const slow=arr.reduce((x,y)=>y.v<x.v?y:x);
+  const T=calc(D,slow.v,L,K,slow.spy);
+  $("time").className="big";$("time").textContent=fmt(T);
+  $("spd").textContent=Math.round(slow.v*M);
+  $("slow").textContent=slow.n;
+  $("eta").textContent=new Date(Date.now()+T*1000).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+  let bd="";
+  if(slow.spy)bd+='<span class="badge">🕊 Casusluk faaliyeti — kuş yalnız uçar</span>';
+  else{
+   if(arr.length>1)bd+='<span class="badge">'+arr.length+" birim türü</span>";
+   if(arr.some(u=>u.n==="Kahraman")&&arr.length>1)bd+='<span class="badge warn">Kahraman orduyu hızlandırmaz</span>';
+  }
+  if(T>=K.cap-.5)bd+='<span class="badge warn">Tavan süreye dayandı</span>';
+  $("badges").innerHTML=bd;
+ }
+
+ const slowV=arr.length?Math.min(...arr.map(u=>u.v)):null;
+ $("unitTable").querySelector("tbody").innerHTML=UNITS.map(u=>{
+  const t=calc(D,u.v,L,K,u.spy),t0=calc(D,u.v,0,K,u.spy);
+  const on=sel.has(u.n),isSlow=on&&u.v===slowV;
+  return '<tr class="'+(isSlow?"hi":(on?"":"dim"))+'"><td>'+u.n+"</td><td>"+u.v+"</td><td>"+Math.round(u.v*M)+
+   '</td><td class="t">'+fmtS(t)+"</td><td>"+(t0>t?"−%"+((1-t/t0)*100).toFixed(1):"—")+"</td></tr>";
+ }).join("");
+
+ if(arr.length){
+  const slowU=arr.reduce((x,y)=>y.v<x.v?y:x), v=slowU.v, base=calc(D,v,0,K,slowU.spy);
+  let prev=base;
+  $("lvlTable").querySelector("tbody").innerHTML=Array.from({length:21},(_,l)=>{
+   const m=mult(l,K),t=calc(D,v,l,K,slowU.spy);
+   const row='<tr class="'+(l==L?"hi":"")+'"><td>'+l+"</td><td>"+m.toFixed(3)+"</td><td>"+Math.round(v*m)+
+    '</td><td class="t">'+fmtS(t)+"</td><td>"+(l?"−%"+((1-t/base)*100).toFixed(1):"—")+
+    "</td><td>"+(l?"−"+fmtS(Math.max(0,prev-t)):"—")+"</td></tr>";
+   prev=t;return row;
+  }).join("");
+ }else $("lvlTable").querySelector("tbody").innerHTML="";
+}
+
+["src","dst","carto","cU","cW","cK","cP","cFA","cFS","cCap","cStep"].forEach(i=>{
+ $(i).addEventListener("input",render);
+ $(i).addEventListener("change",render);
+});
+$("swap").onclick=()=>{const a=$("src").value;$("src").value=$("dst").value;$("dst").value=a;render();};
+document.querySelectorAll("[data-preset]").forEach(b=>b.onclick=()=>{
+ const[s,d]=b.dataset.preset.split("|");
+ $("src").value=s;$("dst").value=d;render();
+});
+$("rnd").onclick=()=>{
+ const r=()=>(1+Math.floor(Math.random()*10))+":"+(1+Math.floor(Math.random()*500))+":"+(1+Math.floor(Math.random()*10));
+ $("src").value=r();$("dst").value=r();render();
+};
+render();
+</script>
+</body>
+</html>

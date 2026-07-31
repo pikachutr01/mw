@@ -1,0 +1,556 @@
+# Decompilation Progress
+
+## Previously Translated
+- AdvspinTAdvSpinEditGetValueqqrv.c
+- AdvutilEncodeWideStrqqr17SystemWideString.c
+- BasegridTBaseGridGetCellExqqrii.c
+- BasegridTBaseGridGetCellPropertiesqqrii.c
+- BasegridTBaseGridHasCellPropertiesqqrii.c
+- BasegridTCellPropertiesGetBaseCellqqrii.c
+- BasegridTCellPropertiesbctrqqrp18BasegridTBaseGridii.c
+- CharNextA.c
+- CloseHandle.c
+- CreateFileA.c
+- EnterCriticalSection.c
+- EnumThreadWindows.c
+- ExitProcess.c
+- FindClose.c
+- FindFirstFileA.c
+- FreeLibrary.c
+- GetClientRect.c
+- GetCurrentThreadId.c
+- GetLastError.c
+- GetLocalTime.c
+- GetLocaleInfoA.c
+- GetModuleFileNameA.c
+- GetModuleHandleA.c
+- GetProcAddress.c
+- GetStdHandle.c
+- GetThreadLocale.c
+- GetVersion.c
+- GetWindowOrgEx.c
+- HtmlbtnsTCustomHTMLCheckBoxGetCheckedqqrv.c
+- InvalidateRect.c
+- IsRectEmpty.c
+- IsWindowVisible.c
+- LeaveCriticalSection.c
+- LoadLibraryExA.c
+- LoadStringA.c
+- MapWindowPoints.c
+- MessageBoxA.c
+- MultiByteToWideChar.c
+- RaiseException.c
+- RegCloseKey.c
+- RegOpenKeyExA.c
+- RegQueryValueExA.c
+- SendMessageA.c
+- SetFocus.c
+- SetLastError.c
+- SetWindowPos.c
+- SysAllocStringLen.c
+- SysFreeString.c
+- ValidateRect.c
+- WideCharToMultiByte.c
+- WriteFile.c
+- lstrcpynA.c
+- lstrlenA.c
+- thunk_FUN_00524798.c
+- thunk_FUN_00525dfc.c
+- thunk_FUN_00596c5c.c
+- wsprintfA.c
+- FUN_004016c8.c
+- FUN_0040221c.c
+- FUN_004075d4.c
+- FUN_0040d5bc.c
+- FUN_00410390.c
+- FUN_00410e60.c
+- FUN_00410ec8.c
+- FUN_00410ed4.c
+- FUN_00410f88.c
+- FUN_00410f90.c
+- FUN_00410fdc_SaldiranTech1Uygulayici.c
+- FUN_00411024_SaldiranTech0Uygulayici.c
+- FUN_0041106c_SaldiranTech3Uygulayici.c
+- FUN_004110b4_SaldiranTech4Uygulayici.c
+- FUN_004110fc_SaldiranTech2Uygulayici.c
+- FUN_00411144_SaldiranTech7Uygulayici.c
+- FUN_0041118c_SaldiranTech8Uygulayici.c
+- FUN_004111d4_SaldiranGeceCarpanUygulayici.c
+- FUN_00411298.c
+- FUN_00411350_SaldiranEnkazHesabi.c
+- FUN_00411400_SaldiranYemekEnkaz.c
+- FUN_004114b0.c
+- FUN_00411570.c
+- FUN_004115c4.c
+- FUN_004115d0.c
+- FUN_004115e0.c
+- FUN_004115f4.c
+- FUN_00411600.c
+- FUN_00411608.c
+- FUN_00411660.c
+- FUN_004116ac.c
+- FUN_004116b8_SavunanTech1Uygulayici.c
+- FUN_00411744_SavunanTech0Uygulayici.c
+- FUN_004117d0_SavunanTech3Uygulayici.c
+- FUN_0041185c_SavunanTech4Uygulayici.c
+- FUN_004118e8_SavunanTech2Uygulayici.c
+- FUN_00411938_SavunanTech7Uygulayici.c
+- FUN_00411988_SavunanTech8Uygulayici.c
+- FUN_00411a28_SavunanTech5Uygulayici.c
+- FUN_00411a80_SavunanGeceCarpanUygulayici.c
+- FUN_00411b8c.c
+- FUN_00411c4c_SavunanEnkazHesabi.c
+- FUN_00411d00_SavunanYemekEnkaz.c
+- FUN_00411db4.c
+- FUN_00411ed0.c
+- FUN_00411ee0.c
+- FUN_00411eec.c
+- FUN_00411f48.c
+- FUN_00411f5c.c
+- FUN_00411f74.c
+- FUN_00411fc4.c
+- FUN_00411fd4.c
+- FUN_00411fe8.c
+- FUN_00411ff8.c
+- FUN_00412004.c
+- FUN_00412014.c
+- FUN_00412024.c
+- FUN_00412030.c
+- FUN_00412040.c
+- FUN_00412054.c
+- FUN_004120a8.c
+- FUN_004120bc.c
+- FUN_004120ec.c
+- FUN_0041211c.c
+- FUN_00412128.c
+- FUN_00412148.c
+- FUN_004121b4.c
+- FUN_004121c0.c
+- FUN_004121d4.c
+- FUN_00412294.c
+- FUN_0041232c_LinearModifier_idx1.c
+- FUN_00412394_LinearModifier_idx0.c
+- FUN_004123fc_LinearModifier_idx4.c
+- FUN_00412464_LinearModifier_idx7.c
+- FUN_004124cc_LinearModifier_idx2.c
+- FUN_00412528_LinearModifier_idx3.c
+- FUN_004125c8_LinearModifier_idx8.c
+- FUN_00412624_SavasciGeceModifier.c
+- FUN_00412674.c
+- FUN_0041279c.c
+- FUN_004127f8.c
+- FUN_00412804.c
+- FUN_00412820.c
+- FUN_0041282c.c
+- FUN_00412848.c
+- FUN_00412858.c
+- FUN_0041286c.c
+- FUN_004128cc_GetTech4.c
+- FUN_004128dc_SetTech4.c
+- FUN_004128f0_GetWizardryTech.c
+- FUN_00412900_SetWizardryTech.c
+- FUN_00412914_GetInstinctTech.c
+- FUN_00412924_SetInstinctTech.c
+- FUN_00412938_GetArmorTech.c
+- FUN_00412948_SetArmorTech.c
+- FUN_0041295c_GetHeroLevel.c
+- FUN_0041296c_SetHeroLevel.c
+- FUN_00412980.c
+- FUN_00412a78.c
+- FUN_00412a88.c
+- FUN_00412ad8.c
+- FUN_00412ae8.c
+- FUN_00412afc_GetBasePhysDef.c
+- FUN_00412b08_SetPhysDef.c
+- FUN_00412b1c_GetBaseMagicAtk.c
+- FUN_00412b28_SetMagicAtk.c
+- FUN_00412b3c_GetBaseMagicDef.c
+- FUN_00412b48_SetMagicDef.c
+- FUN_00412b5c_GetBaseHP.c
+- FUN_00412b68_SetHP.c
+- FUN_00412b7c_GetBasePhysAtk.c
+- FUN_00412b88_SetPhysAtk.c
+- FUN_00412b9c_GetBaseMagicHP.c
+- FUN_00412ba8_SetMagicHP.c
+- FUN_00412bbc.c
+- FUN_00412bfc.c
+- FUN_00412c0c.c
+- FUN_00412c20.c
+- FUN_00412c2c.c
+- FUN_00412c4c.c
+- FUN_00412d0c.c
+- FUN_00412da4.c
+- FUN_00412db8.c
+- FUN_00412e24.c
+- FUN_00412e8c.c
+- FUN_00412ef4.c
+- FUN_00412fa8.c
+- FUN_00413010_LinearModifier_idx5.c
+- FUN_004130c4.c
+- FUN_00413120_YapiGeceModifier.c
+- FUN_00413170.c
+- FUN_0041317c.c
+- FUN_00413190.c
+- FUN_004131d8.c
+- FUN_0041321c.c
+- FUN_00413238.c
+- FUN_00413254.c
+- FUN_00413264.c
+- FUN_00413278.c
+- FUN_004132b0.c
+- FUN_004132d8.c
+- FUN_004132e4.c
+- FUN_004132f4.c
+- FUN_0041338c.c
+- FUN_00413534.c
+- FUN_00413610_KahramanGucPuani.c
+- FUN_0041366c.c
+
+- FUN_00413688.c
+- FUN_004136a4.c
+- FUN_00413744.c
+- FUN_004137a0.c
+- FUN_004137b0.c
+- FUN_004137c0.c
+- FUN_004137d0.c
+- FUN_004137dc.c
+- FUN_004137ec.c
+- FUN_00413824.c
+- FUN_00413890.c
+- FUN_00413910.c
+- FUN_00413924.c
+- FUN_0041393c.c
+- FUN_0041394c.c
+- FUN_00413960.c
+- FUN_00413970.c
+- FUN_004139ac.c
+- FUN_00413a2c.c
+- FUN_00413ed8.c
+- FUN_00413f14.c
+- FUN_00414008.c
+- FUN_00414018.c
+- FUN_0041410c.c
+- FUN_0041411c.c
+- FUN_0041420c.c
+- FUN_0041421c.c
+- FUN_004142f8.c
+- FUN_00414308.c
+- FUN_004143fc.c
+
+- FUN_00414fc4.c
+- FUN_004fbba4.c
+- FUN_004fbcf8.c
+- FUN_004fbd74.c
+- FUN_004fbd94.c
+- FUN_004fdf60.c
+- FUN_004ff468.c
+- FUN_004ff4b4.c
+- FUN_004ff514.c
+- FUN_004ff518.c
+- FUN_004ff550.c
+- FUN_004ff5c4.c
+- FUN_004ff620.c
+- FUN_004ff764.c
+- FUN_0050f444.c
+- FUN_005103d8.c
+- FUN_00510b44.c
+- FUN_00510c24.c
+- FUN_005110c0.c
+- FUN_00511340.c
+- FUN_005113ac.c
+- FUN_005113b8.c
+- FUN_0051149a.c
+- FUN_005114e2.c
+- FUN_005115a5.c
+- FUN_005117ac.c
+- FUN_005117bc.c
+- FUN_0051184c.c
+- FUN_00511860.c
+- FUN_00514b5c.c
+
+## Translated in this Session (30 files)
+- FUN_00514c18.c
+- FUN_00515394.c
+- FUN_0051540c.c
+- FUN_00515430.c
+- FUN_00521fc4.c
+- FUN_00521fe4.c
+- FUN_00522004.c
+- FUN_00522130.c
+- FUN_0052213c.c
+- FUN_00522188.c
+- FUN_00522228.c
+- FUN_00522494.c
+- FUN_00522a28.c
+- FUN_00522c94.c
+- FUN_00523540.c
+- FUN_0052373c.c
+- FUN_0052376c.c
+- FUN_005238d4.c
+- FUN_0052392c.c
+- FUN_00523d3c.c
+- FUN_00523f40.c
+- FUN_00523f68.c
+- FUN_00524030.c
+- FUN_0052408c.c
+- FUN_005240bc.c
+- FUN_00524148.c
+- FUN_00524220.c
+- FUN_0052422c.c
+- FUN_005242dc.c
+- FUN_00524300.c
+
+## Translated in this Session (30 files)
+- FUN_00524330.c
+- FUN_00524374.c
+- FUN_005243a0.c
+- FUN_005243cc.c
+- FUN_00524418.c
+- FUN_005244bc.c
+- FUN_005244cc.c
+- FUN_00524594.c
+- FUN_0052459c.c
+- FUN_005245e0.c
+- FUN_00524654.c
+- FUN_005246d8.c
+- FUN_0052478c.c
+- FUN_005247ec.c
+- FUN_00524918.c
+- FUN_005249d8.c
+- FUN_005249f0.c
+- FUN_00524a00.c
+- FUN_00524a68.c
+- FUN_00524af4.c
+- FUN_00524b94.c
+- FUN_00524bb4.c
+- FUN_00524e18.c
+- FUN_00524e5c.c
+- FUN_005255bc.c
+- FUN_00525684.c
+- FUN_00525d84.c
+- FUN_00525dcc.c
+- FUN_00525e08.c
+- FUN_00525fc0.c
+
+## Translated in this Session (30 files)
+- FUN_0052632c.c
+- FUN_005268b8.c
+- FUN_005315d8.c
+- FUN_0053f380.c
+- FUN_0053f3e4.c
+- FUN_0053f698.c
+- FUN_0053f838.c
+- FUN_00540460.c
+- FUN_005404a8.c
+- FUN_00544558.c
+- FUN_00544bc0.c
+- FUN_00544c44.c
+- FUN_00544cac.c
+- FUN_00544dbc.c
+- FUN_005452a8.c
+- FUN_005452f8.c
+- FUN_00545460.c
+- FUN_00546554.c
+- FUN_00546578.c
+- FUN_005465d8.c
+- FUN_00546694.c
+- FUN_00547244.c
+- FUN_005472a0.c
+- FUN_0054737c.c
+- FUN_005474cc.c
+- FUN_00547534.c
+- FUN_00549c00.c
+- FUN_00549c6c.c
+- FUN_00549cdc.c
+- FUN_00549dbc.c
+
+## Translated in this Session (30 files)
+- FUN_0054aa1c.c
+- FUN_0054aa58.c
+- FUN_0054aa80.c
+- FUN_0054ab40.c
+- FUN_0054ab8c.c
+- FUN_0054abf8.c
+- FUN_0054ac2c.c
+- FUN_0054acb8.c
+- FUN_0054ace0.c
+- FUN_0054ad0c.c
+- FUN_0054ae20.c
+- FUN_0054af64.c
+- FUN_0054af84.c
+- FUN_0054affc.c
+- FUN_0054b34c.c
+- FUN_0054bb6c.c
+- FUN_0054bbb8.c
+- FUN_0054bc1c.c
+- FUN_0054bc70.c
+- FUN_0054bcbc.c
+- FUN_0054bd60.c
+- FUN_0054eda0.c
+- FUN_0054f100.c
+- FUN_0054f1d4.c
+- FUN_0056cdf4.c
+- FUN_0056ce38.c
+- FUN_0056d364.c
+- FUN_0056d374.c
+- FUN_0056d3cc.c
+- FUN_0056d3f0.c
+
+## Translated in this Session (30 files)
+- FUN_0056e5c4.c
+- FUN_00573a7c.c
+- FUN_00573aa0.c
+- FUN_00573da4.c
+- FUN_00591948.c
+- FUN_00591958.c
+- FUN_0059197c.c
+- FUN_00591b20.c
+- FUN_00591c04.c
+- FUN_00591c28.c
+- FUN_00591d64.c
+- FUN_00592160.c
+- FUN_00592170.c
+- FUN_0059272c.c
+- FUN_0059279c.c
+- FUN_0059287c.c
+- FUN_005928d8.c
+- FUN_00592af0.c
+- FUN_00593060.c
+- FUN_005948f8.c
+- FUN_0059516c.c
+- FUN_00595404.c
+- FUN_00595498.c
+- FUN_005954e0.c
+- FUN_00595514.c
+- FUN_005963b4.c
+- FUN_005967cf.c
+- FUN_00596892.c
+- FUN_00596934.c
+- FUN_00596be4.c
+
+## Translated in this Session (30 files)
+- FUN_00596c99.c
+- FUN_00596d64.c
+- FUN_00596dbc.c
+- FUN_00596e50.c
+- FUN_0059701c.c
+- FUN_00597090.c
+- FUN_00597198.c
+- FUN_005973f8.c
+- FUN_00597aa4.c
+- FUN_00598d24.c
+- FUN_00598d7c.c
+- FUN_00598dc4.c
+- FUN_00598e24.c
+- FUN_00598e74.c
+- FUN_00598edc.c
+- FUN_00598efc.c
+- FUN_00598f10.c
+- FUN_00598f54.c
+- FUN_00599080.c
+- FUN_00599098.c
+- FUN_005990ac.c
+- FUN_005990c0.c
+- FUN_00599144.c
+- FUN_005999e4.c
+- FUN_00599cd8.c
+- FUN_00599d6c.c
+- FUN_00599d80.c
+- FUN_00599d84.c
+- FUN_00599e58.c
+- FUN_00599ec4.c
+
+## Translated in this Session (34 files)
+- FUN_0059a190.c
+- FUN_0059a1b8.c
+- FUN_0059a3bc.c
+- FUN_0059a3cc.c
+- FUN_0059adb9.c
+- FUN_0059ae03.c
+- FUN_0059af3f.c
+- FUN_0059b04d.c
+- FUN_0059b065.c
+- FUN_0059b1d0.c
+- FUN_0059b4a1.c
+- FUN_0059e5b0.c
+- FUN_0059e5e8.c
+- FUN_0059e624.c
+- FUN_0059e668.c
+- FUN_0059e698.c
+- FUN_0059e6ac.c
+- FUN_0059e6c0.c
+- FUN_0059e764.c
+- FUN_0059e7a0.c
+- FUN_0059e7bc.c
+- FUN_0059e7dc.c
+- FUN_0059e96c.c
+- FUN_0059e979.c
+- FindClose.c
+- FindFirstFileA.c
+- FreeLibrary.c
+- GetClientRect.c
+- GetCurrentThreadId.c
+- GetLastError.c
+- FUN_004103e8_KahramanOlasilikHesabi.c
+- FUN_00410df0.c
+- FUN_0056d420.c
+- FUN_00599ed4.c
+
+## Manually Translated by Claude (asm + live Ghidra decompile)
+- FUN_0040dcb4.c  (SavasKoordinatoru, 320 satır) — savaş orkestratörü
+- FUN_0040d608.c  (GeceVeLineerTekDagitici, 211 satır) — tek/gece/lineer dağıtıcı
+- FUN_0040d884.c  (UstelTekGuncelleyici, 294 satır) — üstel büyüme formülü; UNRESOLVED sabit: 0x0040dca8
+- FUN_0040e0c4.c  (HasarKayipCekirdegi, 571 satır) — HASAR/KAYIP ÇEKİRDEĞİ; ham asm'den elle FPU takibiyle
+  çevrildi (Ghidra decompile'ı x87 stack'i bozuyordu); UNRESOLVED sabit: 0x0040e790 (float eşik, ~0.0)
+- FUN_0040e794.c  (Tur1HasarFazi, 410 satır) — round 1; 4 HasarKayipCekirdegi çağrısı + RNG destek ateşi;
+  UNRESOLVED sabit: 0x0040ec40 (extended)
+- FUN_0040ec4c.c  (Tur2HasarFazi, 449 satır) — round 2; eşzamanlı değişim (savunan kopyaları), faz 1&3
+- FUN_0040f35c.c  (Tur35HasarFazi, 498 satır) — round 3-5; Tur2 ile aynı ama faz 1,2,3
+- FUN_0040facc.c  (SavasSonrasiAnaIslemci, 695 satır) — savaş sonrası: hayatta kalan/kayıp, kazanan,
+  enkaz/yemek ganimeti; UNRESOLVED: 0x410370(f), 0x410374(ld), 0x410380(f,~0), 0x410384(ld)
+- FUN_004104e8.c  (SavasSonucYazici, 590 satır) — sonuç ekranı metni (Türkçe string birleştirme);
+  UNRESOLVED: 0x410de8(f), 0x410dec(f)
+- FUN_00412980.c  GÜNCELLENDİ — kayıp uygulayıcı; TÜM sabitler gömüldü (0x412a64=100.0, 0x412a68=0.0,
+  0x412a6c=0.01)
+- FUN_0040e0c4.c GÜNCELLENDİ — 0x0040e790=0.0 onaylandı ve gömüldü
+- FUN_0040d884.c GÜNCELLENDİ — 0x0040dca8=0.005 gömüldü
+
+  >>> SAVAŞ ANA AKIŞI TAMAMEN ÇEVRİLDİ: Koordinatör → Dağıtıcılar → HasarÇekirdeği →
+      Tur1/2/3-5 → SavasSonrasi → SavasSonucYazici <<<
+- FUN_0041440c.c  (881 satır) — BİRİM BAZ-STAT TABLOSU! 21 birim tipinin 6 statı (HP/MagicHP/
+  PhysAtk/PhysDef/MagicAtk/MagicDef) IEEE-754 double olarak çözülüp doğrulandı. Sabit yok.
+- FUN_00595548.c  (690 satır) — Delphi RTL FormatBuf (printf %-ayrıştırıcı); savaş dışı, RTL.
+  Ghidra decompile'ına sadık, tanımlanmış sürüm. Sabit yok.
+- FUN_0040e794.c GÜNCELLENDİ — 0x0040ec40=0.001 gömüldü
+
+  >>> 11 UZUN DOSYANIN HEPSİ ÇEVRİLDİ (4600 satırlık FUN_00402800 hariç). <<<
+
+## Çözülemeyen Sabitler Durumu (bkz. decompiled_2/UNRESOLVED_CONSTANTS.md)
+- Çözülüp gömüldü (6): 0x0040dca8=0.005, 0x00412a64=100, 0x00412a68=0, 0x00412a6c=0.01,
+  0x0040e790=0, 0x0040ec40=0.001
+- Bekleyen (6): 0x00410370(f), 0x00410374(ld), 0x00410380(f~0), 0x00410384(ld),
+  0x00410de8(f~0), 0x00410dec(f) — hepsi SavasSonrasi/SavasSonucYazici ganimet/olasılık
+
+## SavasTusHandler (4600 satır) — ÇEVRİLDİ (yapısal)
+- FUN_00402800.c — "Savaştır" butonu handler'ı = savaşın GİRİŞ NOKTASI.
+  Akış: tanım tabloları (birim stat tablosu dahil) → saldıran orduyu kur (12 birim
+  sayısı UI'dan + kahraman teknikleri) → savunan ordu (ayna) → sub_43680c geçit →
+  sub_40dcb4 (KOORDINATÖR = savaş) → hayatta kalanları form etiketlerine yaz (Self+0x4b8+i*4).
+  Kesin UI kontrol offset'leri belgelendi (Self+0x2f8..0x388 sayılar, +0x480 teknik grid).
+  NOT: Fonksiyonun %90'ı tekrarlı UI glue kodu; binary'nin unroll ettiği bloklar
+  anlamca-birebir DÖNGÜ olarak yazıldı. Orta bölümler (build_defender, sonuç okuma)
+  CALL haritasından yapısal çıkarıldı; istenirse satır-satır tam açılabilir.
+
+## Skipped (>300 lines) — ARTIK YOK, hepsi çevrildi
+- (FUN_00402800_SavasTusHandler.asm tamamlandı — yukarı bakınız)
+- FUN_0040d608_GeceVeLineerTekDagitici.asm
+- FUN_0040d884_UstelTekGuncelleyici.asm
+- FUN_0040dcb4_SavasKoordinatoru.asm
+- FUN_0040e0c4_HasarKayipCekirdegi.asm
+- FUN_0040e794_Tur1HasarFazi.asm
+- FUN_0040ec4c_Tur2HasarFazi.asm
+- FUN_0040f35c_Tur35HasarFazi.asm
+- FUN_0040facc_SavasSonrasiAnaIslemci.asm
+- FUN_004104e8_SavasSonucYazici.asm
+- FUN_0041440c.asm
+- FUN_00595548.asm

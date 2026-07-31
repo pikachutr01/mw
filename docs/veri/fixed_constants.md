@@ -1,0 +1,42 @@
+# Düzeltilen Sabitler (Fixed Constants)
+
+Bu dosya, Ghidra'dan çekilen gerçek değerlerle içindeki belirsiz bellek (pointer) sabitleri düzeltilmiş olan C dosyalarının kaydını tutar.
+
+- FUN_00412674.c
+- FUN_00412d0c.c
+- FUN_00410e60.c
+- FUN_004111d4_SaldiranGeceCarpanUygulayici.c
+- FUN_00411350_SaldiranEnkazHesabi.c
+- FUN_00411400_SaldiranYemekEnkaz.c
+- FUN_004114b0.c
+- FUN_00411a80_SavunanGeceCarpanUygulayici.c
+- FUN_00411c4c_SavunanEnkazHesabi.c
+- FUN_00411d00_SavunanYemekEnkaz.c
+- FUN_00411db4.c
+- FUN_004120bc.c
+- FUN_004120ec.c
+- FUN_00412148.c
+- FUN_004121d4.c
+- FUN_00412294.c
+- FUN_0041232c_LinearModifier_idx1.c
+- FUN_00412394_LinearModifier_idx0.c
+- FUN_004123fc_LinearModifier_idx4.c
+- FUN_00412464_LinearModifier_idx7.c
+- FUN_004124cc_LinearModifier_idx2.c
+- FUN_00412528_LinearModifier_idx3.c
+- FUN_004125c8_LinearModifier_idx8.c
+- FUN_00412c4c.c
+- FUN_00412db8.c
+- FUN_00412e24.c
+- FUN_00412e8c.c
+- FUN_00412ef4.c
+- FUN_00412fa8.c
+- FUN_00413010_LinearModifier_idx5.c
+- FUN_004130c4.c
+- FUN_004132b0.c
+- FUN_004132f4.c
+- FUN_0041338c.c
+- FUN_00413534.c
+- FUN_00413610_KahramanGucPuani.c
+- FUN_004136a4.c
+- FUN_00413744.c

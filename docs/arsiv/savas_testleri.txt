@@ -1,0 +1,12 @@
+Saldıran: 2540 cüce, 1258 elf, 368 süvari, 400 pegasus, 100 ejderha, 95 mancınık, 55 ogre, 518 şaman, 2500 yük arabası.  Tüm teknikler 0, kahraman yok.
+Savunan: 3641 cüce, 677, elf, 600 süvari, 250 pegasus, 68 ejderha, 51 mancınık, 60 ogre, 600 şaman, 3000 yük arabası, 129 okçu kulesi, 300 tuzak, 111 kazancı, 60 mangonel, 33 muhafız, sur 3 seviye
+
+binary simülatör sonuççları:
+Saldıran kazanır, saldıran 1595-1646 arası kaybeder, savunan 4050-4114 arası kaybeder, 5 tur, 2483188 altın, 2320123 yemek, deneyim puanı 2179-2251 arası, kahraman çıkma ihtimali %0.0
+saldıranın kalan ordusu: cüce:1735-1757, elf:846-855, süvari:248-253, pegasus:276-282, ejderha:69-70, mancınık:65-66, ogre:38-39, şaman:414-416, yük:2500
+savunanın kalan ordusu:2137-2151, elf:414-417, süvari:362-365, pegasus:146-148, ejderha:41, mancınık:32, ogre:35-36, şaman:448-450, yük:1219-1257, okçu kulesi:112-15, tuzak:2-28, kazancı:97-100, mangonel:53-54, muhafız:30, sur:%0.0
+
+bizim motor:
+saldıran kazanır, saldıran 1805-1809 arası kaybeder, savunan 3520-3527 arası kaybeder, 5 tur, 2404480 altın, 2234987 yemek, deneyim puanı 2816-2830 arası, kahraman çıkma ihtimali %0.0
+saldıran kalan ordusu: cüce:1649-1652, elf:812-813, süvari:234, pegasus:263, ejderha:65, mancınık:61, ogre:36, şaman:405, yük:2500
+savunan kalan ordusu: cüce:2357-2359, elf:457-458, süvari:408-409, pegasus:165, ejderha:45, mancınık:35, ogre:39, şaman:469, yük:1443-1447, okçu kulesi:115, tuzak:262, kazancı:99, mangonel:54, muhafız:30, sur: 2 yazıyor, yüzdelik olması lazım
