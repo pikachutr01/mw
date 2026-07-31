@@ -1,16 +1,27 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Post, Req, UnauthorizedException,
-  UseGuards,
+  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, HttpException,
+  HttpStatus, Inject, Post, Req, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { loginRequest, registerRequest } from '@mobiwar/contracts';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { extractDeviceContext } from '../abuse/device-context.ts';
+import type { Db } from '../db/client.ts';
+import { DB } from '../db/tokens.ts';
+import { EmailError, EmailTokenService } from '../mail/email-token.service.ts';
 import { AuthError, AuthService, type AuthResult } from './auth.service.ts';
 import { AuthGuard, type AuthedRequest } from './auth.guard.ts';
 
 const registerBody = registerRequest.extend({ worldId: z.number().int().positive().default(1) });
 const loginBody = loginRequest.extend({ worldId: z.number().int().positive().default(1) });
 const refreshBody = z.object({ refreshToken: z.string().min(10) });
+const tokenBody = z.object({ token: z.string().min(10).max(200) });
+const resetBody = tokenBody.extend({ password: z.string().min(8).max(200) });
+const forgotBody = z.object({ email: z.string().email().max(320) });
+const changeBody = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(8).max(200),
+});
 
 /** İstemciye dönen gövde — refresh token dâhil (web'de httpOnly çereze de yazılır). */
 interface AuthResponse {
@@ -24,7 +35,11 @@ interface AuthResponse {
 
 @Controller('api/v1/auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  private readonly emails: EmailTokenService;
+
+  constructor(private readonly auth: AuthService, @Inject(DB) private readonly db: Db) {
+    this.emails = new EmailTokenService(db);
+  }
 
   @Post('register')
   async register(@Body() body: unknown, @Req() req: AuthedRequest): Promise<AuthResponse> {
@@ -52,6 +67,94 @@ export class AuthController {
   async logout(@Req() req: AuthedRequest): Promise<{ ok: true }> {
     await this.auth.logout(req.player!.sessionId);
     return { ok: true };
+  }
+
+  /* ── E-posta doğrulama ve şifre (§9.2) ─────────────────────────────────────── */
+
+  /** Hesap durumu — doğrulama şeridi ve Seçenekler paneli bunu okur. */
+  @Get('me')
+  @UseGuards(AuthGuard)
+  async me(@Req() req: AuthedRequest): Promise<Record<string, unknown>> {
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT email, email_verified_at FROM accounts WHERE id = ${req.player!.accountId}
+    `);
+    return {
+      email: row?.['email'] == null ? null : String(row['email']),
+      emailVerified: row?.['email_verified_at'] != null,
+    };
+  }
+
+  /** Doğrulama e-postasını tekrar gönder (60 sn cooldown + günlük tavan). */
+  @Post('verify-email/resend')
+  @UseGuards(AuthGuard)
+  @HttpCode(204)
+  async resendVerification(@Req() req: AuthedRequest): Promise<void> {
+    await this.mail(() => this.emails.resendVerification(
+      req.player!.accountId, extractDeviceContext(req).ip,
+    ));
+  }
+
+  /** Bağlantıdaki jetonu tüketir. Oturum GEREKMEZ: mail başka cihazda açılmış olabilir. */
+  @Post('verify-email')
+  async verifyEmail(@Body() body: unknown): Promise<{ email: string }> {
+    const parsed = tokenBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'invalid_token' });
+    return this.mail(() => this.emails.verify(parsed.data.token));
+  }
+
+  /**
+   * ⚠️ **DAİMA 204** — adres kayıtlı olsa da olmasa da, kota dolsa da. Bu uç aksi hâlde
+   * "bu e-posta bu oyunda kayıtlı mı" sorusunu cevaplayan bir sorgulama aracına dönerdi
+   * (`auth.service.ts`teki sahte-hash zaman eşitlemesiyle aynı gerekçe).
+   */
+  @Post('forgot-password')
+  @HttpCode(204)
+  async forgotPassword(@Body() body: unknown, @Req() req: AuthedRequest): Promise<void> {
+    const parsed = forgotBody.safeParse(body);
+    if (!parsed.success) return;          // biçim hatası bile sızdırılmaz
+    await this.emails.requestReset(parsed.data.email, extractDeviceContext(req).ip);
+  }
+
+  @Post('reset-password')
+  @HttpCode(204)
+  async resetPassword(@Body() body: unknown): Promise<void> {
+    const parsed = resetBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'invalid_token' });
+    await this.mail(() => this.emails.resetPassword({
+      token: parsed.data.token,
+      password: parsed.data.password,
+      revokeAll: (id) => this.auth.revokeAll(id),
+    }));
+  }
+
+  @Post('change-password')
+  @UseGuards(AuthGuard)
+  @HttpCode(204)
+  async changePassword(@Body() body: unknown, @Req() req: AuthedRequest): Promise<void> {
+    const parsed = changeBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'weak_password' });
+    await this.mail(() => this.emails.changePassword({
+      accountId: req.player!.accountId,
+      current: parsed.data.currentPassword,
+      next: parsed.data.newPassword,
+      revokeAll: (id) => this.auth.revokeAll(id),
+    }));
+  }
+
+  /** `EmailError` → HTTP. `cooldown`/`quota` 429, gerisi 400 (kod gövdede). */
+  private async mail<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!(err instanceof EmailError)) throw err;
+      const payload = {
+        code: err.code, message: err.message, retryAfterSeconds: err.retryAfterSeconds,
+      };
+      if (err.code === 'cooldown' || err.code === 'quota') {
+        throw new HttpException(payload, HttpStatus.TOO_MANY_REQUESTS);
+      }
+      throw new BadRequestException(payload);
+    }
   }
 
   /** Hata kodlarını HTTP durumlarına çevirir; iç mesajlar dışarı sızmaz. */

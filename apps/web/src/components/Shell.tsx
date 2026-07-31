@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { fmt, useTick } from '../lib/hooks.ts';
+import { VerifyBanner } from './VerifyBanner.tsx';
 import {
   armiesBadge, useAlliance, useChatConversations, useCity, useMessages, useMovements,
   type CityDetail,
@@ -119,6 +120,8 @@ export function Shell({ children }: { children: ReactNode }) {
 
           <main className="w-full min-w-0 max-w-3xl pb-24 lg:pb-3">
             <InfoBar />
+            {/* Doğrulama uyarısı şehir şeridinin ÜSTÜNDE: bilgi çubuğundan sonraki ilk şey. */}
+            <VerifyBanner />
             <CityStrip />
             {children}
           </main>

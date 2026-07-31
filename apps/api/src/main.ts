@@ -5,6 +5,8 @@ import type { Server as HttpServer } from 'node:http';
 import { AppModule } from './app.module.ts';
 import { TokenService } from './auth/token.service.ts';
 import { createDb } from './db/client.ts';
+import { mailEnabled } from './mail/mail.limits.ts';
+import { defaultMailSender } from './mail/mail.service.ts';
 import { pushEnabled } from './notify/notify.limits.ts';
 import { NotifyService, defaultPushSender } from './notify/notify.service.ts';
 import { RealtimeBus } from './realtime/realtime.bus.ts';
@@ -62,12 +64,15 @@ async function bootstrap(): Promise<void> {
       pollIntervalMs: Number(process.env['POLL_INTERVAL_MS'] ?? 1000),
       bus,
       notifier,
+      // Anahtar yoksa `LogSender`: mail gövdesi konsola basılır, akış yine uçtan uca denenir.
+      mail: defaultMailSender(),
     });
     worker.start();
     // eslint-disable-next-line no-console
     console.log(
       `[mobiwar] worker çalışıyor (dünya ${process.env['WORLD_ID'] ?? 1}) · `
-      + `push ${pushEnabled() ? 'AÇIK' : 'kapalı (VAPID anahtarı yok)'}`,
+      + `push ${pushEnabled() ? 'AÇIK' : 'kapalı (VAPID anahtarı yok)'} · `
+      + `posta ${mailEnabled() ? 'Resend' : 'konsol (RESEND_API_KEY yok)'}`,
     );
   }
 

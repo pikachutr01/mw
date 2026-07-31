@@ -13,11 +13,15 @@ import { Armies } from './screens/Armies.tsx';
 import { Auth } from './screens/Auth.tsx';
 import { AcademyScreen, BarracksScreen, BuildingsScreen, DefenseScreen } from './screens/City.tsx';
 import { CityHub } from './screens/CityHub.tsx';
+import { ResetPasswordScreen, VerifyEmailScreen } from './screens/EmailActions.tsx';
 import { Messages } from './screens/Messages.tsx';
 import { CommandScreen } from './screens/Command.tsx';
 import { HelpScreen, OptionsScreen } from './screens/Placeholders.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
 import { World } from './screens/World.tsx';
+
+/** Oturum kapısının ÖNÜNDEN geçen rotalar (e-posta bağlantıları, §9.2). */
+const EMAIL_PATHS = new Set(['/verify-email', '/reset-password']);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +45,26 @@ export function App() {
     if (!session) return;
     return connectRealtime(queryClient);
   }, [session]);
+
+  /**
+   * ⭐ E-POSTA BAĞLANTILARI OTURUMSUZ AÇILIR (§9.2). Bağlantı çoğu zaman telefonun posta
+   * uygulamasından, oturumu olmayan bir tarayıcıda açılıyor. Aşağıdaki oturum kapısından
+   * ÖNCE ele alınmaları şart: sonra ele alınsalardı doğrulama "önce giriş yap" duvarına
+   * çarpardı — oysa şifre sıfırlamanın amacı zaten giriş yapamayan kullanıcıya yardım etmek.
+   */
+  if (EMAIL_PATHS.has(window.location.pathname)) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <OfflineBanner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/verify-email" element={<VerifyEmailScreen />} />
+            <Route path="/reset-password" element={<ResetPasswordScreen />} />
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
+    );
+  }
 
   if (!session) {
     return (

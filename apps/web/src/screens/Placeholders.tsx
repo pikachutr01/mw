@@ -5,10 +5,10 @@
  * oyuncu (ve biz) neyin eksik olduğunu ekrandan görüyoruz. `duzenleme_onerileri.txt`'teki
  * kalemler burada tek tek adlandırıldı.
  */
-import { getSession, logout } from '../lib/api.ts';
+import { logout } from '../lib/api.ts';
 import { useTheme } from '../lib/hooks.ts';
-import { useCities } from '../lib/queries.ts';
 import { Badge, Button, Panel } from '../components/ui.tsx';
+import { AccountPanel } from '../components/AccountPanel.tsx';
 import { NotifySettings } from '../components/NotifySettings.tsx';
 
 function Soon({ title, lines }: { title: string; lines: string[] }) {
@@ -33,20 +33,11 @@ export const HelpScreen = (): React.ReactElement => (
 
 /** Seçenekler — hesap ve tema; mobilde "Daha Fazla" sekmesi de buraya düşer. */
 export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): React.ReactElement {
-  const session = getSession();
-  const cities = useCities();
   const [theme, setTheme] = useTheme();
 
   return (
     <div className="space-y-3">
-      <Panel title="Hesap">
-        <div className="space-y-1 p-3 text-sm">
-          <div className="text-ink">{session?.username}</div>
-          <div className="text-xs text-muted">
-            Dünya {session?.worldId} · {cities.data?.cities.length ?? 0} şehir
-          </div>
-        </div>
-      </Panel>
+      <AccountPanel />
 
       <NotifySettings />
 
@@ -72,7 +63,6 @@ export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): Rea
         'Üyelik / premium',
         'Şehir adı değiştirme · şehir terk etme',
         'Tatil moduna al',
-        'Şifre değiştirme',
       ]} />
 
       <Button variant="danger" className="w-full"

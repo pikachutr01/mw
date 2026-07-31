@@ -10,6 +10,7 @@ import type { Db } from '../db/client.ts';
 import { battleHandlers } from '../missions/battle.handlers.ts';
 import { missionHandlers } from '../missions/mission.handlers.ts';
 import { echoHandler } from '../missions/echo.handler.ts';
+import type { MailSender } from '../mail/mail.service.ts';
 import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
 import { notificationForOutbox } from '../notify/notify.catalog.ts';
@@ -28,6 +29,8 @@ export interface WorkerOptions {
   bus?: RealtimeBus;
   /** Bildirim katmanı (toast + push). Verilmezse bildirim üretilmez — testlerde böyle. */
   notifier?: NotifyService | null;
+  /** E-posta göndericisi. Verilmezse `mail:send` satırları bekler (teslim edilmez). */
+  mail?: MailSender | null;
 }
 
 export interface Worker {
@@ -102,6 +105,32 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
       if (notes.length > 0) await opts.notifier.deliver(notes);
     }
   });
+
+  /**
+   * ⭐ E-POSTA (§9.2) — konuya ÖZEL sink. Bu GÜVENLİ: `sinkFor` önce tam eşleşmeye bakar,
+   * `'*'` yalnız fallback'tir. Yani `mail:send` satırları yukarıdaki sink'e HİÇ uğramaz
+   * (uğramamalı da: bir mailin WS olayı ya da toast'ı olmaz).
+   *
+   * ⭐ Hata ATILIR — bilerek. Bildirim yolu "en iyi çaba"dır, e-posta değil: şifre sıfırlama
+   * maili gitmezse oyuncu hesabına giremez. Hata atılınca dispatcher satırı `attempts++` ile
+   * yeniden dener ve 10 denemede dead-letter'a düşer (görünür kalır).
+   *
+   * ⭐ `Idempotency-Key` = outbox satır id'si → ağ zaman aşımından sonraki yeniden deneme
+   * kullanıcının kutusunda İKİNCİ bir mail oluşturmaz. Outbox'ın "en az bir kez" garantisi
+   * ile Resend'in tekilleştirmesi tam olarak burada birleşiyor.
+   */
+  if (opts.mail) {
+    dispatcher.on('mail:send', async (row) => {
+      const p = row.payload as Record<string, unknown>;
+      await opts.mail!.send({
+        to: String(p['to'] ?? ''),
+        subject: String(p['subject'] ?? ''),
+        html: String(p['html'] ?? ''),
+        text: String(p['text'] ?? ''),
+        idempotencyKey: `outbox-${row.id}`,
+      });
+    });
+  }
 
   return {
     scheduler,

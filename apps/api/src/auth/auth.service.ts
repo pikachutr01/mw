@@ -9,6 +9,7 @@ import { sql } from 'drizzle-orm';
 import { DeviceSignalService, type DeviceContext } from '../abuse/device-signal.service.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
+import { EmailTokenService } from '../mail/email-token.service.ts';
 import type { GameClockService } from '../world/game-clock.service.ts';
 import { PasswordService } from './password.service.ts';
 import { hashRefreshToken, type TokenPair, type TokenService } from './token.service.ts';
@@ -56,6 +57,7 @@ export class AuthService {
   private readonly passwords = new PasswordService();
   private readonly devices: DeviceSignalService;
   private readonly cities: CityService;
+  private readonly emailTokens: EmailTokenService;
 
   constructor(
     private readonly db: Db,
@@ -64,6 +66,7 @@ export class AuthService {
   ) {
     this.devices = new DeviceSignalService(db);
     this.cities = new CityService(db);
+    this.emailTokens = new EmailTokenService(db);
   }
 
   async register(input: {
@@ -114,6 +117,15 @@ export class AuthService {
       }, tx as never);
 
       return { accountId, playerId };
+    });
+
+    /**
+     * ⭐ Doğrulama e-postası (§9.2) — kayıt transaction'ının DIŞINDA ve **hata fırlatmadan**.
+     * Kullanıcı kararı doğrulamanın YUMUŞAK olması: posta gitmese bile oyuncu oyununa girer,
+     * üstteki şerit uyarır, "tekrar gönder" düğmesi var. Mail yüzünden kayıt geri alınmaz.
+     */
+    await this.emailTokens.sendVerificationOnRegister({
+      accountId: result.accountId, email, username: input.username, ip: ctx.ip,
     });
 
     return this.issueSession(result.accountId, result.playerId, input.worldId, input.username, ctx);

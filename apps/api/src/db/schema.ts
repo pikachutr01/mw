@@ -775,6 +775,36 @@ export const chatReports = pgTable('chat_reports', {
 ]);
 
 /**
+ * ⭐ E-POSTA JETONLARI (§9.2) — doğrulama ve şifre sıfırlama.
+ *
+ * `sessions.refresh_hash` deseninin aynısı: jeton `randomBytes(32).base64url`, DB'ye **yalnız
+ * sha256** yazılır. Veritabanı sızsa bile jetonlar kullanılamaz.
+ *
+ * ⚠️ `email` kolonu KASITLI denormalize: jeton üretildiği andaki adresi saklar. Kullanıcı
+ * adresini değiştirirse eski sıfırlama bağlantısı **kendiliğinden ölür** — aksi hâlde ele
+ * geçirilmiş eski bir posta kutusu, adres değiştirildikten sonra bile hesabı geri alabilirdi.
+ *
+ * `used_at` tek kullanımlığı sağlar; süresi dolan satırlar sorguda elenir (temizlik işi ayrı).
+ */
+export const emailTokens = pgTable('email_tokens', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  accountId: bigint('account_id', { mode: 'number' }).notNull()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  /** verify | reset */
+  purpose: text('purpose').notNull(),
+  tokenHash: text('token_hash').notNull(),
+  email: text('email').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Hız sınırı IP başına da sayılabilsin (§9.2) — otomatik cezaya BAĞLANMAZ. */
+  createdIp: text('created_ip'),
+}, (t) => [
+  uniqueIndex('email_tokens_hash').on(t.tokenHash),
+  index('email_tokens_account_purpose').on(t.accountId, t.purpose, t.createdAt),
+]);
+
+/**
  * ⭐ WEB PUSH ABONELİĞİ (§7.2) — bir satır = bir TARAYICI (ya da kurulu PWA).
  *
  * **Neden `account_id`, `player_id` değil:** abonelik tarayıcıya aittir, tarayıcı da hesaba.

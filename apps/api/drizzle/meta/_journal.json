@@ -155,6 +155,13 @@
       "when": 1785490235789,
       "tag": "0021_push_notify",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785492510855,
+      "tag": "0022_email_tokens",
+      "breakpoints": true
     }
   ]
 }
