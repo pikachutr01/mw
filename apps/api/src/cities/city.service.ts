@@ -12,12 +12,15 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  COLONY_STARTING_RESOURCES, STARTING_BUILDINGS, STARTING_RESOURCES,
+  COLONY_STARTING_RESOURCES, LEVEL_BASED, STARTING_BUILDINGS, STARTING_RESOURCES,
   farmOutput, mineOutput,
 } from '@mobiwar/catalog';
 import type { Tx } from '../missions/handler-registry.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { materializeUnitQueues } from '../queues/unit-queue.ts';
+import {
+  addScoreBase, cumulativeBuildingValue, cumulativeDefenseStructureValue, unitsValue,
+} from '../scoring/score.service.ts';
 
 export interface CityResources {
   gold: number;
@@ -206,4 +209,147 @@ export class CityService {
     }
     return cityId;
   }
+
+  /* ── Şehir terk etme (Seçenekler → "Şehir Terk Et") ───────────────────────── */
+
+  /**
+   * ⭐ TERK ENGELLERİ — dokümanın şartları, tek yerde ve **liste** hâlinde.
+   *
+   * Kaynak (`teknik_ve_yapi_dokumantasyonu.md:648`): *"Terketmek istediğiniz şehrin
+   * başkentiniz olmadığından emin olun. Başkent terkedilemez. … o şehrin barakasında hiç
+   * savaşçının olmaması gerekmektedir. Ayrıca o şehre gelen ya da o şehirden giden bir
+   * hareket (Saldırı, Nakliye, vb.) bulunmamalı ve o şehirde herhangi bir üretim veya
+   * ilerletme olmamalıdır."*
+   *
+   * Dönüş **dizi**, tek `boolean` değil: oyuncu "neden olmuyor" diye tahmin yürütmesin.
+   * Tek engel dönseydi baraka boşaltıp tekrar denerdi, sonra kuyruk, sonra hareket —
+   * her seferinde yeni bir sürpriz.
+   *
+   * ⚠️ **Mağara ve kahraman dokümanda YOK** (ikisi de sonradan gelen mekanikler) ama
+   * kullanıcı 2026-07-31'de ikisinin de engel olmasını istedi. Sebebi teknik: `cave_units`
+   * şehre `ON DELETE CASCADE` bağlı → mağaradaki ordu **sessizce silinir**; `heroes.city_id`
+   * ise `SET NULL` → kahraman sahipsiz kalır. İkisi de geri alınamaz ve oyuncu ne olduğunu
+   * hiç görmez.
+   */
+  async abandonBlockers(cityId: number, runner: Runner = this.db): Promise<string[]> {
+    const [r] = await runner.execute<Record<string, unknown>>(sql`
+      SELECT
+        c.is_capital,
+        COALESCE((SELECT SUM(count)::int FROM units      WHERE city_id = c.id), 0) AS barracks,
+        COALESCE((SELECT SUM(count)::int FROM cave_units WHERE city_id = c.id), 0) AS cave,
+        (SELECT COUNT(*)::int FROM heroes
+          WHERE city_id = c.id AND status <> 'destroyed')                          AS heroes,
+        (SELECT COUNT(*)::int FROM queues
+          WHERE city_id = c.id AND completed_at IS NULL AND canceled_at IS NULL)   AS queues,
+        (SELECT COUNT(*)::int FROM missions
+          WHERE status IN ('scheduled', 'running')
+            AND (origin_city_id = c.id OR target_city_id = c.id))                  AS movements
+      FROM cities c WHERE c.id = ${cityId}
+    `);
+    if (!r) return ['Şehir bulunamadı.'];
+
+    const n = (key: string): number => Number(r[key] ?? 0);
+    const out: string[] = [];
+    if (r['is_capital'] === true) out.push('Başkent terk edilemez.');
+    if (n('barracks') > 0) out.push(`Barakada ${n('barracks')} savaşçı var.`);
+    if (n('cave') > 0) out.push(`Mağarada ${n('cave')} savaşçı var.`);
+    if (n('heroes') > 0) out.push('Bu şehirde kahraman var.');
+    if (n('queues') > 0) out.push('Şehirde süren üretim veya ilerletme var.');
+    if (n('movements') > 0) out.push('Şehre gelen ya da şehirden giden ordu var.');
+    return out;
+  }
+
+  /**
+   * ⭐ ŞEHRİ TERK ET — tek transaction.
+   *
+   * Doküman: *"Terk edilen şehirdeki binalar silinir ve kaynaklar (altın ve yemek) yok olur.
+   * Terk edilen şehrin yapı ve savunma üniteleri sayesinde kazanılmış puanlarınız varsa
+   * bunları da kaybedersiniz."* (`:939`)
+   *
+   * ⚠️ Engeller **kilit ALTINDA yeniden** kontrol edilir. Ön kontrol ile silme arasında
+   * saniyeler geçiyor ve o aralıkta şehre saldırı yola çıkabilir; kontrolü bir kez yapıp
+   * geçseydik oyuncu, üstüne ordu gelen şehri terk ederek saldırıyı hedefsiz bırakabilirdi.
+   *
+   * ⚠️ Puan **silmeden ÖNCE** hesaplanır — satırlar `ON DELETE CASCADE` ile gittikten sonra
+   * neyin kaybedildiğini soracak yer kalmaz.
+   *
+   * @returns silinen şehrin künyesi + düşen puan tabanı
+   */
+  async abandon(o: { cityId: number; playerId: number; worldId: number }): Promise<{
+    name: string; coordinates: { k: number; d: number; s: number }; scoreBaseLost: number;
+  }> {
+    return this.db.transaction(async (tx) => {
+      const runner = tx as unknown as Runner;
+      const [city] = await runner.execute<Record<string, unknown>>(sql`
+        SELECT id, name, k, d, s FROM cities
+         WHERE id = ${o.cityId} AND player_id = ${o.playerId} AND world_id = ${o.worldId}
+         FOR UPDATE
+      `);
+      if (!city) throw new AbandonError(['Şehir bulunamadı.']);
+
+      const blockers = await this.abandonBlockers(o.cityId, runner);
+      if (blockers.length > 0) throw new AbandonError(blockers);
+
+      const scoreBaseLost = await cityScoreBase(runner, o.cityId);
+      await addScoreBase(runner, o.playerId, -scoreBaseLost);
+
+      /**
+       * Tek DELETE yetiyor: `buildings` · `units` · `cave_units` · `defenses` · `queues`
+       * hepsi `cities.id`'ye `ON DELETE CASCADE` bağlı (`db/schema.ts`). Koordinat da böylece
+       * serbest kalır — `cities_world_coords` benzersiz indeksi satır gidince boşalır.
+       */
+      await runner.execute(sql`DELETE FROM cities WHERE id = ${o.cityId}`);
+
+      const coordinates = { k: Number(city['k']), d: Number(city['d']), s: Number(city['s']) };
+      await runner.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${o.worldId}, 'city:abandoned',
+                ${JSON.stringify({ cityId: o.cityId, playerId: o.playerId, coordinates })}::jsonb)
+      `);
+      // Geri alınamaz işlem → denetim kaydı şart (destek talebinde tek dayanağımız).
+      await runner.execute(sql`
+        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before)
+        VALUES (${o.worldId}, ${o.playerId}, 'city.abandoned', 'city', ${o.cityId},
+                ${JSON.stringify({ name: String(city['name']), coordinates, scoreBaseLost })}::jsonb)
+      `);
+
+      return { name: String(city['name']), coordinates, scoreBaseLost };
+    });
+  }
+}
+
+/** Terk engellendi. `details` engellerin Türkçe listesi — istemci onu AYNEN gösterir. */
+export class AbandonError extends Error {
+  constructor(readonly blockers: string[]) {
+    super('Şehir terk edilemez.');
+    this.name = 'AbandonError';
+  }
+}
+
+/**
+ * Şehrin puan tabanına katkısı: **yapılar + savunma**.
+ *
+ * ⚠️ Teknikler oyuncu-GENEL (§13.11.5), şehirle gitmez. Barakadaki savaşçılar da sayılmaz —
+ * zaten sıfır olmadan terk edilemiyor. Kaynak (altın/yemek) hiç harcanmamıştı, dolayısıyla
+ * hiç puan da vermemişti; yok olması puanı etkilemez (`score.service.ts` başlığındaki kural 3).
+ */
+async function cityScoreBase(runner: Runner, cityId: number): Promise<number> {
+  const [buildings, defenses] = await Promise.all([
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT type, level FROM buildings WHERE city_id = ${cityId}
+    `),
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT type, count FROM defenses WHERE city_id = ${cityId}
+    `),
+  ]);
+
+  let base = 0;
+  for (const b of buildings) base += cumulativeBuildingValue(String(b['type']), Number(b['level']));
+  for (const d of defenses) {
+    const type = String(d['type']);
+    const n = Number(d['count']);
+    // Sur / Büyü Kalkanı `count` sütununda SEVİYE taşır (§13.11.1b).
+    base += LEVEL_BASED.has(type) ? cumulativeDefenseStructureValue(type, n) : unitsValue({ [type]: n });
+  }
+  return base;
 }

@@ -13,7 +13,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
-import { useCities } from '../lib/queries.ts';
+import { useCities, type CitySummary } from '../lib/queries.ts';
+import { useConfirm } from './Modal.tsx';
 import { Button, ErrorBox, Field, Input, Panel } from './ui.tsx';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -51,6 +52,10 @@ export function CityAdminPanel(): React.ReactElement | null {
       {open ? (
         <RenameCity cityId={active.id} current={active.name} onDone={() => setOpen(false)} />
       ) : null}
+
+      {/* ⭐ Başkent hiç gösterilmez: orijinalde de terk edilemiyor, düğmeyi sunup
+          reddetmek boş bir umut olurdu (`teknik_ve_yapi_dokumantasyonu.md:648`). */}
+      {active.isCapital ? null : <AbandonCity city={active} />}
     </Panel>
   );
 }
@@ -115,5 +120,85 @@ function RenameCity({
         <Button type="button" variant="ghost" onClick={onDone}>Vazgeç</Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * ⭐ ŞEHİR TERK ET — geri alınamaz, bu yüzden **iki kapı** var:
+ *  1. Engel listesi ekranda **peşinen** görünür (sunucudan `GET :id/abandon`).
+ *  2. Engel yoksa onay diyaloğu, bedeli AÇIKÇA yazarak (orijinalin kalıbı:
+ *     *"Şehri terk ediyorsunuz. Emin misiniz!"* — `g.java:613`).
+ *
+ * ⚠️ Ön kontrol yetki kapısı değil: sunucu `abandon()` içinde kilit altında **yeniden**
+ * bakıyor. Buradaki liste yalnız "şu an neden olmuyor" sorusunu cevaplıyor.
+ */
+function AbandonCity({ city }: { city: CitySummary }): React.ReactElement {
+  const confirm = useConfirm();
+  const qc = useQueryClient();
+  const { setCityId } = useActiveCity();
+  const cities = useCities();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [blockers, setBlockers] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setBlockers(null);
+    void api<{ blockers: string[] }>(`/api/v1/cities/${city.id}/abandon`)
+      .then((r) => { if (alive) setBlockers(r.blockers); })
+      .catch(() => { if (alive) setBlockers(null); });
+    return () => { alive = false; };
+  }, [city.id]);
+
+  const run = async (): Promise<void> => {
+    const ok = await confirm({
+      title: `${city.name} terk edilsin mi?`,
+      danger: true,
+      confirmLabel: 'Şehri terk et',
+      body: (
+        <div className="space-y-2">
+          <p>Bu işlem <b>geri alınamaz</b>. Şehri terk ediyorsun, emin misin?</p>
+          <ul className="ml-4 list-disc space-y-0.5 text-muted">
+            <li>Binalar ve savunma yapıları silinir.</li>
+            <li>Şehirdeki altın ve yemek yok olur.</li>
+            <li>Bu şehrin yapı ve savunmasından kazandığın puanı kaybedersin.</li>
+            <li>Koordinat boşalır; başka bir oyuncu oraya şehir kurabilir.</li>
+          </ul>
+        </div>
+      ),
+    });
+    if (!ok) return;
+
+    setError(null);
+    setBusy(true);
+    try {
+      await api(`/api/v1/cities/${city.id}/abandon`, { method: 'POST' });
+      /* Orijinal istemci de terkten sonra başkente geçiyor (`g.java:616` → `this.a.c(0)`). */
+      const capital = cities.data?.cities.find((c) => c.isCapital && c.id !== city.id);
+      if (capital) setCityId(capital.id);
+      await qc.invalidateQueries();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t border-border px-3 py-2">
+      {blockers && blockers.length > 0 ? (
+        <>
+          <div className="text-xs text-muted">Bu şehir şu an terk edilemez:</div>
+          <ul className="ml-4 list-disc space-y-0.5 text-xs text-danger">
+            {blockers.map((b) => <li key={b}>{b}</li>)}
+          </ul>
+        </>
+      ) : (
+        <Button variant="danger" disabled={busy || blockers == null} onClick={() => void run()}>
+          {busy ? 'Terk ediliyor…' : 'Şehri Terk Et'}
+        </Button>
+      )}
+      <ErrorBox error={error} />
+    </div>
   );
 }

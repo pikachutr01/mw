@@ -27,7 +27,7 @@ import { QueueError, QueueService } from '../queues/queue.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { CapacityService } from './capacity.service.ts';
 import { NAME_RULE_MESSAGE, renameRequest } from './city-name.ts';
-import { CityService } from './city.service.ts';
+import { AbandonError, CityService } from './city.service.ts';
 
 /** Mağara emri: `{ units: { dwarf: 100, elf: 20 } }`. Tür süzgeci servistedir. */
 const caveJobRequest = z.object({
@@ -230,6 +230,55 @@ export class CityController {
       `);
     });
     return { id: cityId, name };
+  }
+
+  /**
+   * Terk **ön kontrolü** — ekran düğmeyi körlemesine sunmasın.
+   *
+   * ⚠️ Bu uç bir yetki kapısı DEĞİL: asıl kontrol `abandon()` içinde, kilit altında yeniden
+   * yapılıyor. Buradaki liste yalnız oyuncuya "şu an neden olmuyor" demek için.
+   */
+  @Get(':id/abandon')
+  async abandonCheck(
+    @Param('id') id: string, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const cityId = Number(id);
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM cities
+       WHERE id = ${cityId} AND player_id = ${player.playerId} AND world_id = ${player.worldId}
+    `);
+    if (!row) throw new NotFoundException('Şehir bulunamadı.');
+    const blockers = await this.cities.abandonBlockers(cityId);
+    return { canAbandon: blockers.length === 0, blockers };
+  }
+
+  /**
+   * ⭐ **ŞEHİR TERK ET** — orijinalde Seçenekler menüsünde (`g.java` case 63 → `a[4]`,
+   * ekran 61) ve onay diyaloğundan geçiyor: *"Şehri terk ediyorsunuz. Emin misiniz!"*
+   * (`g.java:613`). Onay ARAYÜZDE; sunucu onay bilmez, yalnız şartlara bakar.
+   *
+   * ⚠️ Geri alınamaz: binalar, savunma ve kaynak yok olur, puan düşer. Bedeli oyuncuya
+   * onay diyaloğunda açıkça yazıyoruz (`CityAdminPanel`).
+   */
+  @Post(':id/abandon')
+  @HttpCode(200)
+  async abandon(
+    @Param('id') id: string, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    try {
+      const res = await this.cities.abandon({
+        cityId: Number(id), playerId: player.playerId, worldId: player.worldId,
+      });
+      return { ok: true, ...res };
+    } catch (err) {
+      if (err instanceof AbandonError) {
+        // 409: istek geçerli ama şu an yapılamaz. Engeller AYNEN istemciye gider (§13.14).
+        throw new ConflictException({ code: 'abandon_blocked', blockers: err.blockers });
+      }
+      throw err;
+    }
   }
 
   /* ── Mağara (§13.20) ──────────────────────────────────────────────────────── */

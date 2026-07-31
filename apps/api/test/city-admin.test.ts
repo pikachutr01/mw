@@ -22,6 +22,7 @@ import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/
 
 let h: DbHandle;
 let ctl: CityController;
+let svc: CityService;
 let worldId: number;
 let me: number;
 let myCity: number;
@@ -47,9 +48,9 @@ const nameOfCity = async (id: number): Promise<string> => {
 
 beforeAll(async () => {
   h = await setupTestDb();
-  const cities = new CityService(h.db);
+  svc = new CityService(h.db);
   ctl = new CityController(
-    cities, new QueueService(h.db, cities), new CaveService(h.db),
+    svc, new QueueService(h.db, svc), new CaveService(h.db),
     new GameClockService(h.db), h.db,
   );
 }, 60_000);
@@ -116,6 +117,195 @@ describe('şehir adı değiştirme', () => {
     expect(rows).toHaveLength(1);
     expect((rows[0]!['payload'] as Record<string, unknown>)['name']).toBe('Yeni Ad');
     expect(Number((rows[0]!['payload'] as Record<string, unknown>)['cityId'])).toBe(myCity);
+  });
+});
+
+/**
+ * ⭐ ŞEHİR TERK ETME (`g.java` case 63 → `a[4]`, ekran 61).
+ *
+ * Şartlar `teknik_ve_yapi_dokumantasyonu.md:648` ve `:939`'dan; mağara ve kahraman
+ * engelleri kullanıcı kararı (dokümanda yok, ikisi de sonradan gelen mekanik).
+ */
+describe('şehir terk etme — engeller', () => {
+  let colony: number;
+
+  beforeEach(async () => {
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO cities (world_id, player_id, name, k, d, s, is_capital)
+      VALUES (${worldId}, ${me}, 'Koloni 2', 1, 1, 5, false) RETURNING id
+    `);
+    colony = Number(row!['id']);
+  });
+
+  const blockers = (): Promise<string[]> => svc.abandonBlockers(colony);
+
+  it('temiz koloni terk edilebilir', async () => {
+    expect(await blockers()).toEqual([]);
+  });
+
+  it('başkent terk edilemez', async () => {
+    expect(await svc.abandonBlockers(myCity)).toContain('Başkent terk edilemez.');
+  });
+
+  it('barakada savaşçı varsa engellenir', async () => {
+    await h.db.execute(sql`INSERT INTO units (city_id, type, count) VALUES (${colony}, 'dwarf', 120)`);
+    expect(await blockers()).toContain('Barakada 120 savaşçı var.');
+  });
+
+  /** ⚠️ Dokümanda YOK: `cave_units` cascade ile sessizce silinirdi (kullanıcı kararı). */
+  it('⭐ mağarada savaşçı varsa engellenir', async () => {
+    await h.db.execute(sql`INSERT INTO cave_units (city_id, type, count) VALUES (${colony}, 'elf', 300)`);
+    expect(await blockers()).toContain('Mağarada 300 savaşçı var.');
+  });
+
+  /** ⚠️ Dokümanda YOK: `heroes.city_id` SET NULL → kahraman sahipsiz kalırdı. */
+  it('⭐ şehirde kahraman varsa engellenir', async () => {
+    await h.db.execute(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, status)
+      VALUES (${worldId}, ${me}, ${colony}, 'Bamsı', 'idle')
+    `);
+    expect(await blockers()).toContain('Bu şehirde kahraman var.');
+  });
+
+  it('açık kuyruk varsa engellenir', async () => {
+    await h.db.execute(sql`
+      INSERT INTO queues (world_id, city_id, player_id, category, item_type, target_level,
+                          started_at, finish_at)
+      VALUES (${worldId}, ${colony}, ${me}, 'building', 'mine', 3, now(), now() + interval '1 hour')
+    `);
+    expect(await blockers()).toContain('Şehirde süren üretim veya ilerletme var.');
+  });
+
+  it('şehre gelen ordu varsa engellenir', async () => {
+    await h.db.execute(sql`
+      INSERT INTO missions (world_id, type, status, owner_player_id, target_city_id, execute_at)
+      VALUES (${worldId}, 'attack', 'scheduled', ${me}, ${colony}, now() + interval '1 hour')
+    `);
+    expect(await blockers()).toContain('Şehre gelen ya da şehirden giden ordu var.');
+  });
+
+  it('şehirden giden ordu varsa engellenir', async () => {
+    await h.db.execute(sql`
+      INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id, execute_at)
+      VALUES (${worldId}, 'transport', 'scheduled', ${me}, ${colony}, now() + interval '1 hour')
+    `);
+    expect(await blockers()).toContain('Şehre gelen ya da şehirden giden ordu var.');
+  });
+
+  /** Bitmiş görev engel DEĞİL — yoksa şehir bir kez saldırı aldıktan sonra hiç terk edilemezdi. */
+  it('bitmiş görev engel değildir', async () => {
+    await h.db.execute(sql`
+      INSERT INTO missions (world_id, type, status, owner_player_id, target_city_id, execute_at)
+      VALUES (${worldId}, 'attack', 'done', ${me}, ${colony}, now() - interval '1 hour')
+    `);
+    expect(await blockers()).toEqual([]);
+  });
+
+  it('engeller BİRİKİR (oyuncu tek tek sürprizle karşılaşmasın)', async () => {
+    await h.db.execute(sql`INSERT INTO units (city_id, type, count) VALUES (${colony}, 'dwarf', 5)`);
+    await h.db.execute(sql`INSERT INTO cave_units (city_id, type, count) VALUES (${colony}, 'elf', 7)`);
+    expect(await blockers()).toHaveLength(2);
+  });
+
+  it('engel varken terk REDDEDİLİR ve şehir yerinde kalır', async () => {
+    await h.db.execute(sql`INSERT INTO units (city_id, type, count) VALUES (${colony}, 'dwarf', 5)`);
+    await expect(ctl.abandon(String(colony), asReq(me))).rejects.toThrow();
+    const rows = await h.db.execute(sql`SELECT 1 FROM cities WHERE id = ${colony}`);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('başkasının şehri terk edilemez', async () => {
+    const [him] = await withCity('komsu', 9);
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO cities (world_id, player_id, name, k, d, s, is_capital)
+      VALUES (${worldId}, ${him}, 'Onun', 1, 1, 8, false) RETURNING id
+    `);
+    await expect(ctl.abandon(String(row!['id']), asReq(me))).rejects.toThrow();
+  });
+});
+
+describe('şehir terk etme — silme', () => {
+  let colony: number;
+
+  beforeEach(async () => {
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO cities (world_id, player_id, name, k, d, s, is_capital, gold, food)
+      VALUES (${worldId}, ${me}, 'Koloni 2', 1, 1, 5, false, 9000, 9000) RETURNING id
+    `);
+    colony = Number(row!['id']);
+    await h.db.execute(sql`
+      INSERT INTO buildings (city_id, type, level) VALUES (${colony}, 'mine', 5), (${colony}, 'farm', 3)
+    `);
+    await h.db.execute(sql`
+      INSERT INTO defenses (city_id, type, count) VALUES (${colony}, 'ballista', 40)
+    `);
+  });
+
+  it('⭐ şehir ve bağlı satırlar (cascade) gider, koordinat boşalır', async () => {
+    await ctl.abandon(String(colony), asReq(me));
+
+    for (const table of ['cities', 'buildings', 'defenses'] as const) {
+      const key = table === 'cities' ? 'id' : 'city_id';
+      const rows = await h.db.execute(sql`
+        SELECT 1 FROM ${sql.raw(table)} WHERE ${sql.raw(key)} = ${colony}
+      `);
+      expect(rows, table).toHaveLength(0);
+    }
+    // Koordinat serbest: aynı yere yeni şehir kurulabiliyor (cities_world_coords boşaldı).
+    await h.db.execute(sql`
+      INSERT INTO cities (world_id, player_id, name, k, d, s, is_capital)
+      VALUES (${worldId}, ${me}, 'Yeni', 1, 1, 5, false)
+    `);
+  });
+
+  /**
+   * Doküman: *"yapı ve savunma üniteleri sayesinde kazanılmış puanlarınız varsa bunları da
+   * kaybedersiniz"*. ⚠️ Puan SİLMEDEN ÖNCE hesaplanmalı — cascade sonrası soracak yer kalmaz.
+   */
+  it('⭐ yapı + savunma puanı düşer, gösterilen puan tabandan türetilir', async () => {
+    const start = 5_000_000;
+    await h.db.execute(sql`
+      UPDATE players SET score_base = ${start}, score = ${start / 1000} WHERE id = ${me}
+    `);
+    const res = await ctl.abandon(String(colony), asReq(me));
+
+    const lost = Number(res['scoreBaseLost']);
+    expect(lost).toBeGreaterThan(0);
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT score_base, score FROM players WHERE id = ${me}
+    `);
+    expect(Number(p!['score_base'])).toBe(start - lost);
+    expect(Number(p!['score'])).toBe(Math.floor((start - lost) / 1000));
+  });
+
+  /**
+   * ⚠️ Taban sıfırın ALTINA inmez (`addScoreBase` → `GREATEST(0, …)`). Bu testin ilk hâli
+   * 500.000'lik bir tabanla kurulmuştu ve düşen değer 1,4 milyon çıkınca kırıldı — yani
+   * kırılma kuralı doğruladı: şehrin katkısı oyuncunun tabanından büyük olabiliyor
+   * (savunma birimleri pahalı). Oyuncu eksi puanla görünmemeli.
+   */
+  it('taban sıfırın altına inmez', async () => {
+    await h.db.execute(sql`UPDATE players SET score_base = 1000, score = 1 WHERE id = ${me}`);
+    await ctl.abandon(String(colony), asReq(me));
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT score_base, score FROM players WHERE id = ${me}
+    `);
+    expect(Number(p!['score_base'])).toBe(0);
+    expect(Number(p!['score'])).toBe(0);
+  });
+
+  it('outbox `city:abandoned` + audit satırı yazılır', async () => {
+    await ctl.abandon(String(colony), asReq(me));
+    const ob = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM outbox WHERE world_id = ${worldId} AND topic = 'city:abandoned'
+    `);
+    expect(ob).toHaveLength(1);
+    expect(Number((ob[0]!['payload'] as Record<string, unknown>)['cityId'])).toBe(colony);
+
+    const audit = await h.db.execute(sql`
+      SELECT 1 FROM audit_log WHERE action = 'city.abandoned' AND entity_id = ${colony}
+    `);
+    expect(audit).toHaveLength(1);
   });
 });
 

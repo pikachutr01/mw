@@ -179,6 +179,13 @@ export function eventForOutbox(
      * deseydik yalnız o şehrin sorgusu tazelenir, şerit eski adı göstermeye devam ederdi.
      */
     case 'city:renamed':
+    /**
+     * ⚠️ `city:abandoned` de burada olmak ZORUNDA: şehir listeden düşünce şerit, dünya
+     * haritası ve Genel Durum tablosu üçü birden değişiyor. `ActiveCityProvider` "kayıtlı
+     * şehir artık bize ait değilse başkente düş" kuralını `cities` sorgusundan okuyor —
+     * yani bu olay gelmezse oyuncu var olmayan bir şehri seçili görmeye devam eder.
+     */
+    case 'city:abandoned':
     case 'city:founded':
       return {
         topic: 'cities:changed', worldId,
