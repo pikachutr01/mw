@@ -105,6 +105,18 @@ export const players = pgTable('players', {
   index('players_world_score').on(t.worldId, t.score),
   // "Bu ittifakın üyeleri" sorgusu (üye listesi, puan toplamı, sıralama) tam bu indeksle çalışır.
   index('players_alliance').on(t.worldId, t.allianceId),
+  /**
+   * ⭐ OYUNCU ARAMASI (§13.18). Yukarıdaki `players_world_username` büyük/küçük harfe
+   * DUYARLI, bu yüzden `lower(username) LIKE 'ay%'` sorgusunda **hiç kullanılamıyor** —
+   * arama index'siz tam tablo taraması olurdu.
+   *
+   * `text_pattern_ops` şart: varsayılan collation'da `LIKE 'önek%'` btree indeksini
+   * kullanamaz (sıralama kuralları eşleşmez). Bu operatör sınıfı bayt sırası kullanır ve
+   * önek aramasını indeksli hâle getirir. İnfix (`%q%`) hâlâ tarama ister — onun için
+   * `pg_trgm` + GIN gerekir, beta için gereksiz.
+   */
+  index('players_world_username_lower')
+    .on(t.worldId, sql`lower(${t.username}) text_pattern_ops`),
 ]);
 
 /* ═══ İTTİFAK (§13.15b) ══════════════════════════════════════════════════════ */

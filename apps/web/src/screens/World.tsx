@@ -13,6 +13,7 @@
  * ⚠️ **Gizlilik (§13.16.5):** liste asker ve kaynak GÖSTERMEZ — bunu öğrenmenin yolu casusluktur.
  */
 import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
 import { AmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
@@ -61,10 +62,23 @@ export function World() {
   const [sel, setSel] = useState<{ k: number; d: number } | null>(null);
   const [target, setTarget] = useState<{ slot: WorldSlot; type?: string } | null>(null);
 
+  /**
+   * ⭐ DERİN BAĞLANTI `/world/:k/:d` (§13.16) — "Dünyada Bul" (orijinal `grDny.do?o=`) ve
+   * paylaşılabilir adres için. Adresteki koordinat **seçimden ÖNCE** gelir; oyuncu seçiciyi
+   * elle oynatınca `sel` devreye girer ve adres artık takip edilmez (geri tuşu yine çalışır,
+   * çünkü rota değişmedi).
+   */
+  const params = useParams();
+  const urlK = Number(params['k']);
+  const urlD = Number(params['d']);
+  const fromUrl = Number.isInteger(urlK) && Number.isInteger(urlD) && urlK > 0 && urlD > 0
+    ? { k: Math.min(10, urlK), d: Math.min(500, urlD) }
+    : null;
+
   const home = city.data?.coordinates;
-  const k = sel?.k ?? home?.k ?? 1;
-  const d = sel?.d ?? home?.d ?? 1;
-  const world = useWorld(k, d, sel != null || home != null);
+  const k = sel?.k ?? fromUrl?.k ?? home?.k ?? 1;
+  const d = sel?.d ?? fromUrl?.d ?? home?.d ?? 1;
+  const world = useWorld(k, d, sel != null || fromUrl != null || home != null);
   const setK = (n: number): void => setSel({ k: n, d });
   const setD = (n: number): void => setSel({ k, d: n });
 

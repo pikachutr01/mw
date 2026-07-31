@@ -1,0 +1,1 @@
+CREATE INDEX "players_world_username_lower" ON "players" USING btree ("world_id",lower("username") text_pattern_ops);

@@ -797,6 +797,57 @@ export const useAllianceSearch = (query: string): UseQueryResult<{ alliances: Al
     staleTime: 30_000,
   });
 
+/* ═══ Arama (§13.18) ═══════════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ Satır **Dünya ekranının `city` nesnesiyle aynı şekilde** — sonuç doğrudan `TargetModal`'a
+ * veriliyor, ikinci bir dönüşüm yok (orijinalde de arama sonucunun menüsü dünya satırının
+ * menüsüydü, `i.java:542`).
+ */
+export interface SearchPlayerRow {
+  k: number; d: number; s: number;
+  id: number; name: string; playerId: number; username: string; score: number;
+  isCapital: boolean; isOwn: boolean; rank: number | null;
+  alliance: string | null; hasAlliance: boolean;
+  protection: 'beginner' | 'vacation' | null;
+}
+
+export interface SearchAllianceRow {
+  id: number; name: string; rank: number | null; memberCount: number; score: number;
+}
+
+type PlayerQuery = { name: string } | { k: string; d: string; s: string };
+
+export const usePlayerSearch = (
+  input: PlayerQuery, enabled: boolean,
+): UseQueryResult<{ items: SearchPlayerRow[]; truncated: boolean }> => {
+  const params = new URLSearchParams({ kind: 'player' });
+  if ('name' in input) params.set('name', input.name.trim());
+  else {
+    params.set('k', input.k); params.set('d', input.d);
+    if (input.s !== '') params.set('s', input.s);
+  }
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['search', qs],
+    queryFn: () => get<{ items: SearchPlayerRow[]; truncated: boolean }>(
+      `/api/v1/command/search?${qs}`),
+    enabled,
+    staleTime: 30_000,
+  });
+};
+
+export const useAllianceSearchTab = (
+  name: string, enabled: boolean,
+): UseQueryResult<{ items: SearchAllianceRow[]; truncated: boolean }> =>
+  useQuery({
+    queryKey: ['search', 'alliance', name],
+    queryFn: () => get<{ items: SearchAllianceRow[]; truncated: boolean }>(
+      `/api/v1/command/search?kind=alliance&name=${encodeURIComponent(name.trim())}`),
+    enabled,
+    staleTime: 30_000,
+  });
+
 /** İttifak aksiyonları — ittifak görünümü + ilgili sütunları taşıyan ekranlar tazelenir. */
 function useAllianceAction<TBody>(path: (body: TBody) => string, toBody?: (b: TBody) => unknown) {
   const invalidate = useInvalidate();

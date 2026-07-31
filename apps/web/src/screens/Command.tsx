@@ -24,6 +24,7 @@
  */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
+import { api } from '../lib/api.ts';
 import { LEVEL_BASED } from '@mobiwar/catalog';
 import {
   useOverview, useRankings, type NamedType, type Overview, type RankingKind,
@@ -33,24 +34,33 @@ import { useOpenChat } from '../lib/chat-context.tsx';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { AllianceScreen } from './Alliance.tsx';
+import { SearchScreen } from './Search.tsx';
 
 export function CommandScreen(): React.ReactElement {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const tab = pathname.startsWith('/command/rankings') ? 'rankings'
-    : pathname.startsWith('/command/alliance') ? 'alliance' : 'overview';
+    : pathname.startsWith('/command/alliance') ? 'alliance'
+      : pathname.startsWith('/command/search') ? 'search' : 'overview';
 
   return (
     <div className="space-y-2">
       {/* Sekme = ROTA: geri tuşu çalışsın ve "sıralamada gör" gibi kısayollar bağlanabilsin.
-          ⭐ İttifak orijinaldeki gibi Komuta Merkezi'nin ALTINDA (g.java:1415, ekran 17). */}
+          ⭐ İttifak ve Arama orijinaldeki gibi Komuta Merkezi'nin ALTINDA
+          (g.java:1414-1416 — ekran 17 ve ekran 107). */}
       <Tabs
         value={tab}
         onChange={(v) => navigate(v === 'rankings' ? '/command/rankings'
-          : v === 'alliance' ? '/command/alliance' : '/command')}
-        items={[['overview', 'Genel Durum'], ['alliance', 'İttifak'], ['rankings', 'Sıralamalar']]}
+          : v === 'alliance' ? '/command/alliance'
+            : v === 'search' ? '/command/search' : '/command')}
+        items={[
+          ['overview', 'Genel Durum'], ['alliance', 'İttifak'],
+          ['search', 'Arama'], ['rankings', 'Sıralamalar'],
+        ]}
       />
-      {tab === 'rankings' ? <Rankings /> : tab === 'alliance' ? <AllianceScreen /> : <Overview />}
+      {tab === 'rankings' ? <Rankings />
+        : tab === 'alliance' ? <AllianceScreen />
+          : tab === 'search' ? <SearchScreen /> : <Overview />}
     </div>
   );
 }
@@ -346,8 +356,14 @@ function Rankings(): React.ReactElement {
                       )}
                       <Td className="text-center">
                         {kind === 'alliance' ? null : (
-                          <MessageButton name={kind === 'hero' ? r.owner ?? r.name : r.name}
-                            playerId={r.playerId ?? null} disabled={r.isMine} />
+                          <span className="flex items-center justify-center gap-1">
+                            <MessageButton name={kind === 'hero' ? r.owner ?? r.name : r.name}
+                              playerId={r.playerId ?? null} disabled={r.isMine} />
+                            {/* ⭐ "Dünyada Bul" orijinalde YALNIZ sıralama satırında vardı
+                                (g.java:2040, ekran 106) — arama sonucunda yoktu, çünkü arama
+                                koordinatı zaten getiriyor. Aynı yere kondu. */}
+                            <FindInWorldButton playerId={r.playerId ?? null} />
+                          </span>
                         )}
                       </Td>
                     </tr>
@@ -387,6 +403,46 @@ function MessageButton({ name, playerId, disabled }: {
         onClick={() => openChat(playerId, name)}
         className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
         <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={20} height={20}
+          className="icon-shadow h-5 w-5 object-contain" />
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * ⭐ DÜNYADA BUL (`grDny.do?o=`, orijinal ekran 141 — `g.java:725-730`).
+ *
+ * Oyuncunun **başkentinin** koordinatını arama ucundan alıp `/world/:k/:d`'ye gider.
+ * Ayrı bir uç yazılmadı: `command/search` zaten oyuncu adından başkent koordinatı veriyor
+ * ve gizlilik kuralı (§13.16.5 "yalnız başkent") orada tek yerde duruyor.
+ *
+ * ⚠️ Sunucu ADLA değil kimlikle çalışsın diye arama ucuna ad gönderiliyor ve dönen satırlar
+ * arasından `playerId` eşleşeni seçiliyor — aynı önekli iki oyuncu varsa yanlış kişiye
+ * gidilmesin.
+ */
+function FindInWorldButton({ playerId }: { playerId: number | null }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  if (playerId == null) return null;
+
+  const go = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const res = await api<{ items: { playerId: number; k: number; d: number }[] }>(
+        `/api/v1/command/search?kind=player&byId=${playerId}`);
+      const hit = res.items.find((x) => x.playerId === playerId);
+      if (hit) navigate(`/world/${hit.k}/${hit.d}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Tooltip label="Dünyada Bul">
+      <button type="button" aria-label="Dünyada Bul" disabled={busy}
+        onClick={() => void go()}
+        className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
+        <img src="/assets/menu/dunya.png" alt="" aria-hidden width={20} height={20}
           className="icon-shadow h-5 w-5 object-contain" />
       </button>
     </Tooltip>

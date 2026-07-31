@@ -66,8 +66,11 @@ const TABS = [
  * `/command/rankings`'i yutar ve alt sayfada yanlış başlık yazardı.
  */
 const PAGE_TITLE: [string, string][] = [
+  /* ⚠️ Sıra ÖNEMLİ: `find` ilk eşleşeni alır, `startsWith` kullanıldığı için alt yollar
+     `/command`ten ÖNCE gelmeli — yoksa hepsi "Genel Durum" görünür. */
   ['/command/rankings', 'Sıralamalar'],
   ['/command/alliance', 'İttifak'],
+  ['/command/search', 'Arama'],
   ['/command', 'Genel Durum'],
   ['/armies', 'Ordular'], ['/barracks', 'Baraka'], ['/buildings', 'Yapılar'],
   ['/defense', 'Savunma'], ['/academy', 'Akademi'], ['/temple', 'Tapınak'],

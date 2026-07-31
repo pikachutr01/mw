@@ -104,11 +104,15 @@ export function App() {
                 <Route path="/academy" element={<AcademyScreen />} />
                 <Route path="/temple" element={<TempleScreen />} />
                 <Route path="/world" element={<World />} />
+                {/* ⭐ Derin bağlantı (§13.16): paylaşılabilir adres + geri tuşu. "Dünyada Bul"
+                    (orijinal `grDny.do?o=`) buraya gidiyor. */}
+                <Route path="/world/:k/:d" element={<World />} />
                 <Route path="/messages" element={<Messages />} />
                 {/* Sekme = rota: geri tuşu çalışsın, sıralamaya derin bağlantı verilebilsin. */}
                 <Route path="/command" element={<CommandScreen />} />
                 <Route path="/command/rankings" element={<CommandScreen />} />
                 <Route path="/command/alliance" element={<CommandScreen />} />
+                <Route path="/command/search" element={<CommandScreen />} />
                 <Route path="/options" element={<OptionsScreen onLoggedOut={logout} />} />
                 <Route path="/help" element={<HelpScreen />} />
                 {/* Mobil "Şehir" ve "Daha" sekmeleri */}

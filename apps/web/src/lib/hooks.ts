@@ -79,6 +79,22 @@ export function remainingClock(iso: string | null | undefined, now = serverNow()
   return formatClock(ms / 1000);
 }
 
+/**
+ * Değeri `ms` boyunca sakinleşene kadar geciktirir — arama kutuları için.
+ *
+ * ⚠️ Bu olmadan hızlı yazan oyuncu her tuşta bir HTTP isteği atıyor (ittifak aramasında uzun
+ * süre tam olarak bu vardı). TanStack Query her farklı anahtarı ayrı sorgu saydığı için
+ * `staleTime` bunu ÇÖZMEZ; gecikme girdi tarafında olmak zorunda.
+ */
+export function useDebounced<T>(value: T, ms = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return debounced;
+}
+
 export const nf = new Intl.NumberFormat('tr-TR');
 export const fmt = (n: number): string => nf.format(Math.round(n));
 
