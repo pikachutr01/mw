@@ -94,6 +94,7 @@ Hepsi bu projede **gerçekten başımıza geldi**. Yeni oturum bunları okumadan
 | `ROLE=worker` + push açık | Çevrimiçilik sayacı **yalnız API sürecinde** dolu (`gateway-registry`) → worker herkesi çevrimdışı sanar ve **WS bağlıyken de push atar** (kullanıcının 1 numaralı şartı sessizce delinir) | `ROLE=all` (varsayılan). Ayırmak şartsa push kararı API sürecine taşınmalı; açılışta uyarı basılıyor |
 | Dispatcher'a **ikinci `'*'` sink** | `sinkFor` tek sink döndürür → ikincisi birincisini **sessizce susturur** (WS ya da bildirim komple ölür) | Yeni iş mevcut `'*'` sink'in İÇİNE; konuya ÖZEL sink (`dispatcher.on('mail:send', …)`) güvenli |
 | Tek kullanımlık jetonu `useEffect`te tüketmek | **StrictMode etkiyi İKİ KEZ koşturur**: birinci istek jetonu harcar, ikincisi "geçersiz" der ve SONRA geldiği için ekrana hata yazar → iş OLMUŞken kullanıcı olmadı sanır (`/verify-email`'de yaşandı) | `useRef` ile jeton başına tek istek. ⚠️ `alive` bayrağı YETMEZ — o yalnız sonucu yok sayar, ikinci isteği engellemez |
+| `LIKE` desenini SQL'de birleştirmek (`lower($1) \|\| '%'`) | Desen plan zamanında sabit olmadığı için Postgres öneki **indeksten okuyamıyor**, `lower(username)`'ı filtreye düşürüyor → indeks var ama boşuna (EXPLAIN testi yakaladı) | Deseni JS'te kur (`prefixPattern()`), tek parametre olarak geçir. Aynı yerde `%`/`_` jokerlerini de kaçır |
 | Hız sınırını "hesap başına" saymak | Kayıt maili, 60 sn içindeki **şifre sıfırlama** isteğini de bloklamıştı; sayım-sızdırmama kuralı hatayı da yuttuğu için mail **sessizce** hiç gitmiyordu | Cooldown **amaç başına** (`purpose`); günlük tavan hesap geneli kalır |
 
 ---
@@ -261,21 +262,25 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 
 ## 7. Hangi belge ne zaman açılır
 
+> ⭐ **Belgelerin hepsi 2026-07-31'de `mw/docs/` altına, yani GİT'E alındı.** Öncesinde kökte
+> ve versiyonsuz duruyorlardı. Yollar aşağıda `docs/`'a görelidir.
+
 | Belge | Ne zaman |
 |---|---|
-| **`MOBIWAR_SISTEM_PLANI.md`** | **Projenin beyni.** Her tasarım kararı, formül ve gerekçe burada (§13.5 harita · §13.9 ekonomi · §13.11 şehir/üretim · §13.12 sohbet · §13.13 tema · §13.16 dünya) |
-| `ARAYUZ_YOL_HARITASI.md` | Arayüzde **kalan işler** listesi |
-| `MOBIWAR_TEKNIK_KURULUM.md` | DB şeması (§1.2) · küçük sunucu profili (§4.0) |
-| `KURULUM_REHBERI.md` | Lokal/VPS kurulumu **uygularken** |
-| `TEKNIK_MANTIK_RAPORU.md` | **Savaş motoruna dokunmadan önce** — özellikle §0 "stat adları yanılsaması" |
-| `teknik_ve_yapi_dokumantasyonu.md` | Oyunun kendi kuralları — tartışmalarda **resmî kaynak** |
-| `MOBIWAR_OYUN_VERISI.md` · `MOBIWAR_MIMARI_RAPOR.md` | Birim statı / eski istemci ekran yapısı gerekince |
+| **`MOBIWAR_SISTEM_PLANI.md`** | **Projenin beyni.** Kural, formül ve gerekçe (§13.5 harita · §13.9 ekonomi · §13.11 şehir/üretim · §13.12 sohbet · §13.13 tema · §13.16 dünya). ⚠️ Yalnız **kural değişince** güncellenir, özellik bitince değil |
+| **`EKSIK_OZELLIKLER.md`** | **Tek backlog.** Yeni iş seçerken açılır (arayüz listesi de buraya katlandı) |
 | `VPS_DURUM_RAPORU.md` | Canlıya çıkmadan önce (⚠️ yedekler hâlâ aynı sunucuda) |
-| `harita.html` | Sefer süresini elle denemek için — tarayıcıda aç, oyna |
+| `referans/teknik_ve_yapi_dokumantasyonu.md` | Oyunun kendi kuralları — tartışmalarda **resmî kaynak** |
+| `referans/TEKNIK_MANTIK_RAPORU.md` | **Savaş motoruna dokunmadan önce** — özellikle §0 "stat adları yanılsaması" |
+| `referans/MOBIWAR_TEKNIK_KURULUM.md` · `referans/KURULUM_REHBERI.md` | DB şeması · sunucu profili · kurulumu **uygularken** |
+| `referans/MOBIWAR_OYUN_VERISI.md` · `referans/MOBIWAR_MIMARI_RAPOR.md` | Birim statı / eski istemci ekran yapısı gerekince |
+| `referans/*.txt` | Kullanıcının kendi kaynak metinleri (`duzenleme_onerileri` · `mesajlar` · `prod_notlar`) |
+| `veri/` | Kalibrasyon çıkarımları (birim statları, üretim tabloları, mağara kapasitesi) |
+| `DecompiledSrc/src/` | Orijinal J2ME java kaynağı — `g.java` menüler, `k.java` protokol |
+| `araclar/harita.html` | Sefer süresini elle denemek için — tarayıcıda aç, oyna |
 
-**⚫ Arşiv, açma:** `DOGRULAMA_DURUMU.md` · `STRES_TESTLERI.md` · `KAHRAMAN_TESTLERI.md` ·
-`mobiwar_simulator_analysis.md` · `savas_farki_analizi.md` · `teknik_etkileri.md` · `progress.md` ·
-`call_chain_notes.md` — hepsi tarihsel kayıt.
+**⚫ `arsiv/` — açma.** Tarihsel ölçüm kayıtları ve eski oturumların dökümü. İçerik korunuyor
+ama hiçbiri güncel değil; bir şeyi doğrulamak için değil, **ne yaptığımızı hatırlamak** için var.
 
-> **Faz 0/1/2'nin tur tur geçmişi bu dosyadan kaldırıldı** — `git log` (60+ commit, gerekçeli
-> mesajlar) tek ve doğru kaynak. Burada tutmak aynı bilgiyi ikinci kez takip etmek demekti.
+> **Tur tur geçmiş bu dosyada TUTULMAZ** — `git log` (70+ commit, gerekçeli mesajlar) tek ve
+> doğru kaynak. Burada tutmak aynı bilgiyi ikinci kez takip etmek demekti.

@@ -3,11 +3,15 @@
 > **Tarama tarihi:** 2026-07-31 · **Kaynaklar:** `DecompiledSrc/src/g.java` (92 menü etiketi,
 > satır 32) · `k.java` (299 girişlik katalog, 67 benzersiz `.do` ucu, satır 91) ·
 > `teknik_ve_yapi_dokumantasyonu.md` (oyunun kendi el kitabı, 46 bölüm) ·
-> `MOBIWAR_MIMARI_RAPOR.md` §2b · `MOBIWAR_SISTEM_PLANI.md` · `ARAYUZ_YOL_HARITASI.md` ·
+> `MOBIWAR_MIMARI_RAPOR.md` §2b · `MOBIWAR_SISTEM_PLANI.md` ·
 > **`mw/` kodunda grep ile doğrulandı** (yanlış pozitif ayıklandı).
 >
-> **Sonuç:** 92 etiketten **~62'si karşılanmış, ~22'si karşılıksız, 8'i kısmi**.
-> 67 `.do` ucundan **51'i karşılanmış, 16'sı karşılıksız**.
+> **Sonuç (2026-07-31 taramasında):** 92 etiketten ~62'si karşılanmış, ~22'si karşılıksızdı.
+> Aynı gün mesajlaşma · push · e-posta · arama girdi; sayılar aşağıdaki maddelerde güncel.
+>
+> ⭐ **`ARAYUZ_YOL_HARITASI.md` bu dosyaya katlandı** (2026-07-31): iki ayrı "kalan işler"
+> listesi tutmak ikisini de bayatlatıyordu (arayüz listesinde §C/§D maddeleri yapılmışken
+> hâlâ işaretsizdi). **Tek backlog burasıdır.** Bitmiş işlerin dökümü `git log`'ta.
 
 ---
 
@@ -38,14 +42,13 @@ Orijinalde bir mesaj satırının aksiyonları (`g.java:1813-1852`):
 | hepsi | **Hepsini Seç** + 3'lü filtre (Sadece Mesajlar / Sadece Raporlar / **Hepsini Göster**) ⚠️ bizde 2 sekme |
 
 Yeni mesaj yazma orijinalde oyuncu satırı menüsünden (`g.java:2037`, case 106): *Mesaj ·
-Dünyada Bul · İttifağa Davet*. Uç: `gnMsj.do?m=<metin>&o=<oyuncu>&t=6`, onay *"Mesaj
-gönderilecek. Emin misiniz!"*. Bizde `Command.tsx:377-388` `MessageButton` **devre dışı** bir
-ikon çiziyor ("özel mesaj henüz açılmadı").
+Dünyada Bul · İttifağa Davet* — ✅ **üçü de artık var** (sıralama satırında Mesaj + Dünyada Bul,
+davet ittifak yetkisi varsa). Orijinalin *"Mesaj gönderilecek. Emin misiniz!"* onayı
+**bilerek kaldırıldı** (kullanıcı kararı: sohbette onay sorulmaz).
 
-⚠️ **Kullanıcı kararı:** DM **java'daki ilkel posta kutusu gibi değil, sohbet mantığında**
-geliştirilecek. `chat_channels/chat_participants/chat_messages/chat_bans` şeması
-(`schema.ts:661-714`) ve `contracts/src/chat.ts` (93 satır) HAZIR; eksik olan ChatModule +
-gateway handler'ları + ekran.
+⚠️ Yukarıdaki tablo **orijinalin** aksiyon listesidir, bizim durumumuz değil: 6/7 satırındaki
+Cevapla/Blokla/Şikayet ✅ sohbet penceresinde var; **eksik kalan yalnız rapor satırında Sil**
+ve toplu seçim.
 
 ### 1.2 Web Push / FCM — ✅ **YAPILDI (2026-07-31)** · Faz 2 KAPANDI
 
@@ -112,11 +115,12 @@ barakada savaşçı olmamalı. Bizde hiç yok (`Placeholders.tsx:70` "yakında" 
 - `players.is_premium` kolonu var, **hiçbir kod okumuyor**. Ürün kararı + ödeme akışı gerekiyor.
 
 ### 1.8 Admin paneli / moderasyon
-`app.module.ts`'te 10 controller var, admin yok. Eksikler: dünya sabitleri yönetimi (hız
-çarpanları elle SQL ile değişiyor — `schema.ts:34` "ileride admin panelinden") · **Şikayet Et**
-(`skMsj.do?m=`, `chat_reports` tablosu bile yok) · **Blokla** (`msBlk.do`, `player_blocks`
-tablosu var ama okuyan kod yok) · ban/susturma (`chat_bans` aynı durumda) · `audit_log`
-görüntüleme · çoklu hesap **analizi** (toplama ✅ çalışıyor, skorlama/rapor ❌).
+Admin controller'ı yok. ✅ **Oyuncu tarafı 2026-07-31'de girdi**: Şikayet Et (`skMsj.do?m=`)
+kayıt üretiyor (`chat_reports`), Blokla (`msBlk.do`) çalışıyor (`player_blocks`).
+**Eksik olan YÖNETİCİ tarafı:** şikayet inceleme ekranı · ban/susturma (`chat_bans` tablosu
+var, okuyan kod yok) · dünya sabitleri yönetimi (hız çarpanları elle SQL ile değişiyor —
+`schema.ts:34` "ileride admin panelinden") · `audit_log` görüntüleme · çoklu hesap **analizi**
+(toplama ✅ çalışıyor, skorlama/rapor ❌).
 
 ---
 
@@ -127,17 +131,19 @@ görüntüleme · çoklu hesap **analizi** (toplama ✅ çalışıyor, skorlama/
 | **Askerî unvanlar** | `k.java:1214-1245`: Asker/**Subay/Komutan/Başkomutan/Mareşal** (1-5) — ittifak rolünden (Konsey/Lider) AYRI alan. Verilme şartı istemcide YOK, sunucudaydı | Bizde yalnız 3 rol. Kullanıcı: *"savaşlardaki başarılarına göre veriliyordu, muhtemelen süreli"* → şart bilinmiyor; gösterim rozeti ucuz |
 | **Yardım sayfası** | `grYrd.do`; içerik zaten `teknik_ve_yapi_dokumantasyonu.md`'de duruyor | `Placeholders.tsx:26-31` iki satır "yakında" |
 | **Şehir adı değiştirme** | `dgSad.do?a=`, 10 karakter (`g.java:1892`) | Hiç yok |
-| **Şifre değiştir / hatırlat** | `dgSif.do?e=` · `gnSfr.do?d=` (e-posta gerektirir → 1.3) | Hiç yok |
+| ~~**Şifre değiştir / hatırlat**~~ | `dgSif.do?e=` · `gnSfr.do?d=` | ✅ **2026-07-31'de yapıldı** (§1.3) |
 | **Mağara Raporu** | `g.java:32` a[37] "Maðara Rapor", ayrı ekran (`g.java:1666,1750`) | Mağara mekaniği ✅ tam, ayrı rapor mesajı ❌ |
 | **Gelen Ordu ayrı paneli** | `g.java:1915` case 66 — ayrı ekran | Bizde tek listede (`Armies.tsx`) gelen/giden birlikte; ayrı panel yok |
 | **Mesaj filtresi "Hepsini Göster"** | `g.java:1845-1848` 3'lü filtre | Bizde 2 sekme (Raporlar/Mesajlar) |
-| **Birim/yapı detay modalı** | `grBil.do?t=` "Bilgi"; `ARAYUZ_YOL_HARITASI.md:60-62` | Tooltip var, detay modalı yok. `City.tsx:50` `Budget` bileşeni hiç çizilmiyor |
+| **Birim/yapı detay modalı** | `grBil.do?t=` "Bilgi" | Tooltip var, detay modalı yok. `City.tsx:50` `Budget` bileşeni hiç çizilmiyor. Kale'nin bütçe çubuğu buraya girecek |
 | **Dahili simülatör ekranı** | `POST /api/v1/simulate` ✅ çalışıyor | Web ekranı yok (`screens/` altında Simulate.tsx yok) |
 | **i18n dosyaları** | `MOBIWAR_SISTEM_PLANI.md:1990` kuralı: *"metin asla koda gömülmez → i18n/tr.json"* | **Kural ihlal ediliyor** — tüm Türkçe metin JSX içinde |
 | **Kuşatma bonusu** (Mancınık/Ogre → sur) | §13.5 Faz 3 | Kodlanmadı |
 | **Gece savaşı ~%15 over-kill artığı** | Faz 3 | Kodlanmadı (gece savaşı temeli ✅) |
-| **Bildirim ayarları sayfası** | `ARAYUZ_YOL_HARITASI.md:83` | Yok |
+| ~~**Bildirim ayarları sayfası**~~ | — | ✅ **2026-07-31'de yapıldı**: Seçenekler → Bildirimler (izin düğmesi + 4 kategori anahtarı) |
 | **Denge senaryoları** | Kullanıcı isteği | Yok |
+| **Tek aktif sekme kuralı** | Kullanıcı isteği (WhatsApp gibi): başka sekmeden açınca uyarı | Yok. İki sekme aynı oyunu açık tutabiliyor |
+| **Yardım sayfası içeriği** | `grYrd.do`; metin `referans/teknik_ve_yapi_dokumantasyonu.md`'de hazır | Modallardan çıkarılan açıklamalar (casusluk kademeleri, iade kuralları, sefer formülü) buraya toplanacak |
 
 ---
 
@@ -177,8 +183,8 @@ presence, sıralama) · savaş raporu detayı · kahraman yaşam döngüsü · s
 
 1. `MOBIWAR_MIMARI_RAPOR.md:168` — *"Oyuncuyu Blokla ✅ eklendi (`player_blocks`), DM'yi etkiler"*
    **YANLIŞ**: yalnız tablo var; uç, servis, ekran yok — DM'nin kendisi de yok.
-2. `ARAYUZ_YOL_HARITASI.md` §C (İttifak) ve §D (Tapınak) maddeleri **yapılmış** (`Alliance.tsx`,
-   `Temple.tsx`) ama hâlâ `[ ]` işaretli. §C'de gerçekten açık kalan tek şey **askerî unvanlar**.
+2. ~~`ARAYUZ_YOL_HARITASI.md` §C/§D maddeleri yapılmışken işaretsizdi~~ — dosya 2026-07-31'de
+   bu belgeye katlandı; **iki ayrı backlog tutmak tam da bu bayatlamayı üretiyordu.**
 
 ---
 

@@ -1,6 +1,45 @@
 # VPS DURUM RAPORU — 31.210.36.185
 
 > **Tarih:** 2026-07-26 · İnceleme + temizlik yapıldı, **hiçbir servis durdurulmadı**, siteler kesintisiz.
+> **Güncelleme:** 2026-07-31 — alan adı ve kapasite yeniden ölçüldü (§0).
+
+---
+
+## 0. ⭐ 2026-07-31 ÖLÇÜMÜ — alan adı, sertifika, DNS, kapasite
+
+SSH ile bağlanıp ölçüldü, **hiçbir şey değiştirilmedi**. (Anahtar tabanlı giriş kurulu:
+`ssh root@31.210.36.185` parolasız çalışıyor.)
+
+**Alan adı kararı (kullanıcı):** oyun **`scrabblecozucu.site` (apex)** üzerinden yayınlanacak,
+mail **`send.scrabblecozucu.site`** alt alanından **Resend** ile gidecek.
+
+### Üç şaşırtıcı bulgu
+
+1. ⚠️ **`.site` "boşta" DEĞİL.** `sites-available/scrabblecozucu.site` dosyası var ama
+   **etkin değil**; domaini fiilen `scrabblecozucu.com` yapılandırması yönetiyor ve
+   **70. ile 79. satırlar tüm `.site` trafiğini 301 ile `.com`'a atıyor.** Oyunu yayına
+   alırken kaldırılacak iki blok bunlar.
+2. ✅ **Sertifika HAZIR.** `scrabblecozucu.site` + `www` için Let's Encrypt sertifikası var,
+   otomatik yenileniyor → **certbot çalıştırmaya gerek yok, kesinti olmayacak.**
+3. ⚠️ **DNS sunucuda DEĞİL.** Nameserver'lar `dns1/dns2.hostingdunyam.net`. Resend kayıtları
+   **hosting paneline** eklenecek, VPS'e değil.
+
+### Mail için alt alan seçilmesinin sebebi
+Apex SPF kaydı `v=spf1 +a +mx +a:domaincontrol.hostingdunyam.net **-all**` — **sert kapalı**
+ve hosting paneline ait. Alt alan kendi SPF/DKIM/MX'ini alır, **apex'e hiç dokunulmaz** →
+hosting mailini bozma riski sıfır. `.site`'ta MX kaydı yok, çakışma da olmaz.
+✅ `_dmarc.scrabblecozucu.site` üzerinde `v=DMARC1; p=none;` **zaten var**, eklemeye gerek yok.
+
+### Kapasite — yükseltme kararı DEĞİŞMEDİ
+RAM 1.9 GB · **851 MB kullanımda, 1.1 GB boşta** · 2 vCPU, yük 0.03 · disk %34.
+Postgres (~768 MB) + Node (~400 MB) tam boşluğa oturuyor, **tampon kalmıyor** →
+**4 GB + 3 çekirdek yükseltmesi canlıya çıkmadan şart** (§5'teki hesap geçerli). 6 GB'a gerek yok.
+
+### 🔵 Kullanıcıdan bekleyen
+`RESEND_API_KEY` üretilip **`mw/.env`'e kendisi yazacak** (sohbete yapıştırılmayacak) +
+`send.scrabblecozucu.site` için 3 DNS kaydı (MX + SPF TXT + DKIM TXT) hosting paneline.
+
+---
 
 ## 1. Sistem künyesi
 
