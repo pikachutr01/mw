@@ -22,7 +22,9 @@ import type postgres from 'postgres';
 import {
   applySettings, validatePatch, type EffectiveSettings, type SettingValue,
 } from '@mobiwar/settings';
+import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
 import type { Db } from '../db/client.ts';
+import { combatOverrides, lootOverrides } from './combat.ts';
 import { setLiveSettings } from './live.ts';
 
 /** Ayar değişikliğinin duyurulduğu Postgres kanalı. */
@@ -49,6 +51,8 @@ export class SettingsService {
   private snapshots = new Map<number, Snapshot>();
   /** Ham satırlar: worldId → { key: value }. Yeniden hesaplama bundan yapılır. */
   private rows = new Map<number, Record<string, SettingValue>>();
+  /** worldId → o dünyanın en son `settings_revisions.id`si (yoksa satır yok). */
+  private revisions = new Map<number, number>();
   private unlisten: (() => Promise<void>) | null = null;
   private loaded = false;
 
@@ -72,6 +76,15 @@ export class SettingsService {
     }
     this.rows = next;
     this.snapshots.clear();
+
+    /**
+     * Revizyon kimlikleri de burada yükleniyor: `battles.settings_revision_id` sıcak yolda
+     * (savaş çözümünde) okunuyor ve orada ekstra bir sorgu istemiyoruz.
+     */
+    const revs = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT world_id, MAX(id) AS id FROM settings_revisions GROUP BY world_id
+    `);
+    this.revisions = new Map(revs.map((r) => [Number(r['world_id']), Number(r['id'])]));
     this.loaded = true;
     /**
      * ⭐ Modül seviyesindeki limit okuyucularını (`chatLimits()`, `notifyLimits()`,
@@ -136,6 +149,48 @@ export class SettingsService {
 
   hash(worldId: number): string {
     return this.snapshot(worldId).hash;
+  }
+
+  /**
+   * ⭐ MOTOR OVERRIDE'I (Faz 4) — **değiştirilmiş ayar yoksa `undefined`**.
+   *
+   * `simulate(input, undefined)` motorun kendi `DEFAULT_COMBAT_CONFIG`ini aynen kullanır →
+   * sonuç bit-bit eskisiyle aynı. Gerekçesi `combat.ts`te; ölçümü
+   * `combat-settings.test.ts` → *"hiçbir ayar değişmemişken override üretilmez"*.
+   */
+  combat(worldId: number): DeepPartial<CombatConfig> | undefined {
+    const s = this.snapshot(worldId);
+    return combatOverrides(s.effective, s.overridden);
+  }
+
+  loot(worldId: number): Partial<LootConfig> | undefined {
+    const s = this.snapshot(worldId);
+    return lootOverrides(s.effective, s.overridden);
+  }
+
+  /**
+   * Bu dünyayı etkileyen EN SON ayar revizyonu — `battles.settings_revision_id`ye yazılır.
+   *
+   * ⚠️ **İki katman da sayılır**: dünyanın kendi revizyonu ve genel (dünya 0) revizyonu.
+   * Etkin config ikisinin birleşimi olduğu için "en son hangi kayıt bu savaşı etkiledi"
+   * sorusunun cevabı ikisinin **büyüğü**. İlk yazımda yalnız `??` zinciri vardı ve dünyanın
+   * ESKİ kendi revizyonu, genel katmandaki YENİ bir değişikliği gölgeliyordu; testte yakalandı.
+   *
+   * ⚠️ Bilinen sınır: dünya 0 revizyonunun `snapshot`u o dünyanın kendi geçersiz kılmalarını
+   * İÇERMEZ. Yani işaret edilen satır "en son değişiklik"i doğru gösterir ama tek başına
+   * etkin config'in tamamı değildir. Kesin cevap için savaşın `world_id`si ile iki katmana
+   * da bakılır. Bunu şimdi çözmek her dünya için ayrı revizyon üretmeyi gerektirirdi;
+   * pratikte dünya sayısı 1 ve bedeli buna değmiyor.
+   *
+   * ⚠️ `null` geçerli ve yaygın: hiç ayar kaydedilmemişse revizyon satırı yoktur ve bu
+   * "motorun varsayılanlarıyla oynandı" demektir. Sahte bir sıfırıncı revizyon üretmek,
+   * olmayan bir kaydı varmış gibi göstermek olurdu.
+   */
+  revisionId(worldId: number): number | null {
+    const own = this.revisions.get(worldId);
+    const shared = worldId === DEFAULT_WORLD ? undefined : this.revisions.get(DEFAULT_WORLD);
+    if (own == null) return shared ?? null;
+    return shared == null ? own : Math.max(own, shared);
   }
 
   /** Panel için: değiştirilmiş anahtarlar (varsayılandan sapanlar). */

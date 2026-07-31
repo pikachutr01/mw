@@ -34,6 +34,13 @@ export interface SchedulerOptions {
   maxAttempts?: number;
   retryBackoffMs?: number;
   onError?: (err: unknown, mission: MissionRow | null) => void;
+  /**
+   * ⭐ DÜNYA BAZLI MOTOR AYARLARI (§admin Faz 4). Verilmezse handler `ctx.engine` göremez ve
+   * motor kendi varsayılanlarını kullanır — testlerde ve ayar servisi olmayan profillerde
+   * davranış **değişmez**. Fonksiyon olarak geçiliyor ki ayar panelden değiştiğinde bir
+   * sonraki görev güncel değeri görsün (nesne geçseydik süreç ömrü boyunca donardı).
+   */
+  engineFor?: (worldId: number) => HandlerContext['engine'];
 }
 
 export interface TickResult {
@@ -48,7 +55,8 @@ export interface TickResult {
 
 export class SchedulerService {
   private readonly repo: MissionRepository;
-  private readonly opts: Required<Omit<SchedulerOptions, 'onError'>> & Pick<SchedulerOptions, 'onError'>;
+  private readonly opts: Required<Omit<SchedulerOptions, 'onError' | 'engineFor'>>
+    & Pick<SchedulerOptions, 'onError' | 'engineFor'>;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopped = false;
@@ -69,6 +77,7 @@ export class SchedulerService {
       maxAttempts: options.maxAttempts ?? 5,
       retryBackoffMs: options.retryBackoffMs ?? 5_000,
       onError: options.onError,
+      engineFor: options.engineFor,
     };
   }
 
@@ -144,6 +153,9 @@ export class SchedulerService {
             traceId: `mission:${mission.id}`,
           });
         },
+        // ⚠️ Her görevde YENİDEN okunuyor: panelden kaydedilen bir sabit, kuyruktaki bir
+        // sonraki savaşta etkili olmalı; süreç yeniden başlatmayı beklememeli.
+        engine: this.opts.engineFor?.(mission.worldId),
         lockCity: async (cityId) => {
           // Aynı şehre aynı anda düşen görevler seri hâle gelir (§1 sıra kuralı).
           await tx.execute(sql`SELECT pg_advisory_xact_lock(${cityId}::bigint)`);

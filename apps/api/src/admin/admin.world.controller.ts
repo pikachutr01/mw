@@ -14,7 +14,9 @@ import {
   Post, Put, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { SETTINGS, SETTING_GROUPS } from '@mobiwar/settings';
+import { SETTINGS, SETTING_GROUPS, applySettings, validatePatch } from '@mobiwar/settings';
+import { simulate } from '@mobiwar/engine';
+import { simulateRequest } from '@mobiwar/contracts';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { AuthService } from '../auth/auth.service.ts';
@@ -22,7 +24,9 @@ import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { scheduleSnapshot } from '../ranking/ranking.service.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
+import { combatOverrides } from '../settings/combat.ts';
 import { SettingsError, SettingsService } from '../settings/settings.service.ts';
+import { toSimulateInput } from '../simulate/simulate.controller.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { WorldStateService } from '../world/world-state.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
@@ -40,6 +44,25 @@ const multipliers = z.object({
 
 const settingsPatch = z.object({ values: z.record(z.string(), z.unknown()) });
 const resetPatch = z.object({ keys: z.array(z.string()).min(1).max(200) });
+
+/** Önizleme: bir savaş kurgusu + denenecek yama. Yama KAYDEDİLMEZ. */
+const previewBody = z.object({
+  values: z.record(z.string(), z.unknown()),
+  battle: simulateRequest,
+  seed: z.string().min(1).max(120).optional(),
+});
+
+/**
+ * Donmuş iç içe ayar nesnesini düz `grup.alan` kaydına çevirir — `applySettings` katmanları
+ * bu biçimde bekliyor.
+ */
+function toRecord(eff: Record<string, Record<string, number | boolean> | undefined>) {
+  const out: Record<string, number | boolean> = {};
+  for (const [group, fields] of Object.entries(eff)) {
+    for (const [leaf, v] of Object.entries(fields ?? {})) out[`${group}.${leaf}`] = v;
+  }
+  return out;
+}
 
 /** Admin listesinde "bu cihaz" satırı yoktur — hiçbir oturumla eşleşmeyen bir kimlik. */
 const EMPTY_UUID = '00000000-0000-0000-0000-000000000000';
@@ -462,6 +485,53 @@ export class AdminWorldController {
               ${JSON.stringify({ keys: parsed.data.keys })}::jsonb)
     `);
     return { ok: true, hash: this.settings.hash(id) };
+  }
+
+  /**
+   * ⭐ ÖNİZLEME (Faz 4) — kaydetmeden önce "bu sabit ne yapar?" sorusunun cevabı.
+   *
+   * Aynı savaşı **aynı seed'le** iki kez çözer: mevcut ayarlarla ve önerilen yamayla. Seed
+   * aynı olduğu için aradaki tüm fark sabitlerden gelir; rastgelelik iki tarafta da birebir
+   * aynı diziyi üretir. Bu olmadan bir denge değişikliğini ölçmenin tek yolu kaydedip canlı
+   * savaşları izlemekti — yani geri alınması zor bir deneme.
+   *
+   * ⚠️ Yama BURADA KAYDEDİLMEZ. `AdminStepUpGuard` de yok: bu uç hiçbir şey değiştirmiyor,
+   * yalnız hesap yapıyor. Yıkıcı kapı kaydetmede (`PUT settings/:worldId`).
+   */
+  @Post('settings/:worldId/preview')
+  @HttpCode(200)
+  preview(
+    @Param('worldId') worldId: string, @Body() body: unknown,
+  ): Record<string, unknown> {
+    const parsed = previewBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    const id = Number(worldId);
+
+    // Yamanın kendisi de doğrulanır: geçersiz bir değerle önizleme yapmak yanılgı üretirdi.
+    const { values, issues } = validatePatch(parsed.data.values);
+    if (issues.length > 0) throw new BadRequestException({ issues });
+
+    const snap = this.settings.snapshot(id);
+    const current = combatOverrides(snap.effective, snap.overridden);
+
+    /**
+     * Önerilen durum = mevcut satırların üstüne yama. `applySettings` yeniden çalıştırılıyor
+     * ki `overridden` listesi de yamayı içersin — yoksa yeni dokunulan alan override
+     * sayılmaz ve önizleme değişikliği görmezdi.
+     */
+    const merged = { ...toRecord(snap.effective), ...values };
+    const next = applySettings([merged], process.env);
+    const proposed = combatOverrides(next.effective, next.overridden);
+
+    const seed = parsed.data.seed ?? 'preview';
+    const input = toSimulateInput(parsed.data.battle, seed);
+    return {
+      seed,
+      current: simulate(input, current),
+      proposed: simulate(input, proposed),
+      changed: next.overridden.filter((k) => !snap.overridden.includes(k)),
+      hash: { current: snap.hash, proposed: next.hash },
+    };
   }
 
   /** Değişiklik geçmişi — "bu değeri kim ne zaman değiştirdi". */

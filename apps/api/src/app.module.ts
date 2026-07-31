@@ -7,6 +7,7 @@ import { SettingsService } from './settings/settings.service.ts';
 import { AllianceController } from './alliance/alliance.controller.ts';
 import { AuthController } from './auth/auth.controller.ts';
 import { AuthGuard } from './auth/auth.guard.ts';
+import { OptionalAuthGuard } from './auth/optional-auth.guard.ts';
 import { AuthService } from './auth/auth.service.ts';
 import { TokenService } from './auth/token.service.ts';
 import { BattleController } from './battles/battle.controller.ts';
@@ -105,6 +106,7 @@ export { DB } from './db/tokens.ts';
      */
     { provide: APP_INTERCEPTOR, useClass: MaintenanceInterceptor },
     AuthGuard,
+    OptionalAuthGuard,
     AdminGuard,
     AdminStepUpGuard,
   ],

@@ -106,6 +106,15 @@ export function SettingsScreen({ worldId, onNeedStepUp }: {
       {note ? <p className="text-xs text-success">{note}</p> : null}
       <ErrorBox error={error} />
 
+      {/* ⭐ Önizleme yalnız MOTOR ayarları değiştiğinde anlamlı: sohbet limitini savaşta
+          denemenin bir karşılığı yok. */}
+      {changed.some((k) => /^(combat|hero|capture|loot)\./.test(k)) ? (
+        <CombatPreview
+          worldId={worldId}
+          values={Object.fromEntries(changed.map((k) => [k, draft[k]]))}
+        />
+      ) : null}
+
       {data.groups.map((group) => {
         const defs = data.defs.filter((d) => d.key.startsWith(`${group.id}.`));
         if (defs.length === 0) return null;
@@ -140,6 +149,147 @@ export function SettingsScreen({ worldId, onNeedStepUp }: {
         );
       })}
     </div>
+  );
+}
+
+/* ═══ Motor önizlemesi (Faz 4) ══════════════════════════════════════════════ */
+
+/**
+ * ⭐ ÖNİZLEME — kaydetmeden önce "bu sabit ne yapar?".
+ *
+ * Aynı savaş, **aynı seed'le** iki kez çözülür: mevcut ayarlarla ve taslakla. Seed aynı
+ * olduğu için aradaki her fark sabitlerden gelir. Bu olmadan bir denge değişikliğini ölçmenin
+ * tek yolu kaydedip canlı savaşları izlemekti — yani geri alması zor bir deneme.
+ *
+ * ⚠️ Savaş kurgusu SABİT ve mütevazı. Amaç "gerçekçi bir savaş" değil, **iki config arasındaki
+ * farkı görünür kılmak**; kurguyu düzenlenebilir yapmak ekranı bir simülatör ekranına çevirirdi
+ * ve oyunun kendi simülatörü (§0.0) zaten var.
+ */
+const PREVIEW_BATTLE = {
+  attacker: { counts: { dwarf: 4000, elf: 1200, ogre: 300 }, tech: { blacksmith: 5 } },
+  defender: {
+    counts: { dwarf: 3000, archer_tower: 40, wall: 6, magic_shield: 4 },
+    tech: { masonry: 4 },
+  },
+} as const;
+
+/**
+ * ⚠️ Alan adları motorun `SideResult`ından BİREBİR: `lost` / `alive` (`losses`/`survivors`
+ * DEĞİL) ve `turns` bir SAYI (dizi değil). İlk yazımda uydurma adlar kullanılmıştı; ekran
+ * hata vermeden her satıra 0 yazıyordu — yanlış alan adının en sinsi hâli.
+ */
+interface SideResultLike {
+  alive: number;
+  lost: number;
+}
+interface PreviewResult {
+  winner: string;
+  turns: number;
+  xp: number;
+  captureChance: number;
+  attacker: SideResultLike;
+  defender: SideResultLike;
+}
+interface PreviewPayload {
+  seed: string;
+  current: PreviewResult;
+  proposed: PreviewResult;
+  changed: string[];
+  hash: { current: string; proposed: string };
+}
+
+function CombatPreview({ worldId, values }: {
+  worldId: number; values: Record<string, number | boolean | undefined>;
+}) {
+  const [data, setData] = useState<PreviewPayload | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [night, setNight] = useState(false);
+
+  const run = async (): Promise<void> => {
+    setBusy(true); setError(null);
+    try {
+      setData(await api<PreviewPayload>(`/api/v1/admin/settings/${worldId}/preview`, {
+        method: 'POST',
+        body: { values, battle: { ...PREVIEW_BATTLE, night }, seed: 'panel-onizleme' },
+      }));
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel title="Önizleme" right={<Badge tone="warning">kaydedilmez</Badge>}>
+      <div className="space-y-2 p-3">
+        <p className="text-xs text-muted">
+          Taslak değerleri <b>aynı savaşta, aynı seed ile</b> dener ve mevcut ayarlarla yan yana
+          gösterir. Hiçbir şey kaydedilmez.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-ink">
+            <input type="checkbox" checked={night} onChange={(e) => setNight(e.target.checked)}
+              className="h-4 w-4 accent-[var(--mw-color-accent)]" />
+            Gece savaşı
+          </label>
+          <Button disabled={busy} onClick={() => void run()}>
+            {busy ? 'Çözülüyor…' : 'Savaşı çöz'}
+          </Button>
+        </div>
+        <ErrorBox error={error} />
+
+        {data ? (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted">
+                <th className="py-1 text-left font-normal">&nbsp;</th>
+                <th className="py-1 text-right font-normal">Mevcut</th>
+                <th className="py-1 text-right font-normal">Taslak</th>
+                <th className="py-1 text-right font-normal">Fark</th>
+              </tr>
+            </thead>
+            <tbody className="text-ink">
+              <Row label="Kazanan" a={data.current.winner} b={data.proposed.winner} />
+              <Row label="Tur sayısı" a={data.current.turns} b={data.proposed.turns} />
+              <Row label="Saldıran kaybı"
+                a={data.current.attacker.lost} b={data.proposed.attacker.lost} />
+              <Row label="Savunan kaybı"
+                a={data.current.defender.lost} b={data.proposed.defender.lost} />
+              <Row label="Saldıran kalan"
+                a={data.current.attacker.alive} b={data.proposed.attacker.alive} />
+              <Row label="Savunan kalan"
+                a={data.current.defender.alive} b={data.proposed.defender.alive} />
+              <Row label="Tecrübe" a={data.current.xp} b={data.proposed.xp} />
+              <Row label="Kahraman çıkma"
+                a={data.current.captureChance} b={data.proposed.captureChance} />
+            </tbody>
+          </table>
+        ) : null}
+        {data ? (
+          <p className="font-mono text-[10px] text-muted">
+            özet {data.hash.current} → {data.hash.proposed} · seed {data.seed}
+          </p>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function Row({ label, a, b }: { label: string; a: string | number; b: string | number }) {
+  const same = a === b;
+  const delta = typeof a === 'number' && typeof b === 'number' ? b - a : null;
+  return (
+    <tr className={same ? '' : 'bg-accent/10'}>
+      <td className="py-1">{label}</td>
+      <td className="tnum py-1 text-right">{a}</td>
+      <td className="tnum py-1 text-right">{b}</td>
+      <td className={`tnum py-1 text-right ${same ? 'text-muted' : 'text-warning'}`}>
+        {/* ⚠️ "aynı" ile "0 fark" AYRI gösteriliyor: kazanan gibi metin alanlarda fark
+            sayısal değil ve 0 yazmak yanıltırdı. */}
+        {same ? '—' : delta === null ? 'değişti' : `${delta > 0 ? '+' : ''}${delta}`}
+      </td>
+    </tr>
   );
 }
 

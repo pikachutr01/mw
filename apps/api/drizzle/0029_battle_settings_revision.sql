@@ -1,0 +1,14 @@
+-- ⭐ SAVAŞIN YENİDEN OYNATILABİLİRLİĞİ (admin Faz 4).
+--
+-- `battles` zaten `engine_version` + `catalog_hash` + `input` + `result` saklıyor: "bu savaş
+-- hangi motorla, hangi katalogla çözüldü" sorusu cevaplanabiliyordu. Sabitler artık ÇALIŞMA
+-- ZAMANINDA değişebildiği için bu yetmiyor — aynı motor sürümüyle, aynı katalogla, ama farklı
+-- `night.base` ile çözülmüş iki savaş künyesinde birbirinin aynısı görünürdü.
+--
+-- `settings_revisions` ekleme-yalnız ve her revizyon o anki ETKİN ayarların tamamını taşıyor;
+-- burada ona bir işaret bırakıyoruz.
+--
+-- ⚠️ NULL geçerli ve yaygın: hiç ayar değiştirilmemiş dünyada revizyon satırı yoktur ve NULL
+-- "motorun varsayılanlarıyla çözüldü" demektir. Sahte bir sıfırıncı revizyon üretmek, olmayan
+-- bir kaydı varmış gibi göstermek olurdu.
+ALTER TABLE battles ADD COLUMN IF NOT EXISTS settings_revision_id bigint;

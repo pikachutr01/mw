@@ -16,7 +16,7 @@ import {
   LEVEL_BASED, TECHS_BY_ID, TECH_BY_UNIT, UNITS, UNITS_BY_ID, catalogHash,
   type TechLevels, type UnitDef,
 } from '@mobiwar/catalog';
-import { type CombatConfig, DEFAULT_COMBAT_CONFIG } from './config.ts';
+import { type CombatConfig, type DeepPartial, DEFAULT_COMBAT_CONFIG, mergeCombatConfig } from './config.ts';
 import { createRng, type Rng } from './rng.ts';
 import type {
   Army, ArmyUnit, HeroCombatStats, HeroState, ScaledStats, SideInput, SideResult, SimulateInput, SimulateResult,
@@ -618,8 +618,17 @@ function finalize(army: Army, rng: Rng, cfg: CombatConfig): void {
 
 /* ── Ana simülasyon ────────────────────────────────────────────────────────── */
 
-export function simulate(input: SimulateInput, configOverride?: CombatConfig): SimulateResult {
-  const cfg = configOverride ?? DEFAULT_COMBAT_CONFIG;
+/**
+ * ⭐ `configOverride` **KISMİ** olabilir (§admin Faz 4): panelden yalnız birkaç sabit
+ * değiştirilir ve geri kalanı varsayılanda kalır. Eskiden tam `CombatConfig` isteniyordu;
+ * o imza ile eksik bir nesne geçen çağıran, `undefined` alanlarla sessizce yanlış savaş
+ * çözerdi. `mergeCombatConfig(undefined)` varsayılan nesnenin KENDİSİNİ döndürüyor, yani
+ * override verilmediğinde davranış bit-bit aynı.
+ */
+export function simulate(
+  input: SimulateInput, configOverride?: DeepPartial<CombatConfig>,
+): SimulateResult {
+  const cfg = mergeCombatConfig(configOverride);
   const rng = createRng(input.seed);
 
   const atk = buildArmy(input.attacker, false, cfg);

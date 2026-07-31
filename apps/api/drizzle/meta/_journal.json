@@ -204,6 +204,13 @@
       "when": 1785603000000,
       "tag": "0028_session_chains",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785604000000,
+      "tag": "0029_battle_settings_revision",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@
  * Küçük sunucu profilinde (§4.0) `ROLE=all` iken API süreciyle AYNI süreçte çalışır;
  * `ROLE=worker` ise yalnız bu döngüler koşar. Kod aynı, fark yalnız neyin başlatıldığı.
  */
+import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
 import { CAVE_HANDLERS } from '../cave/cave.handlers.ts';
 import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';
@@ -31,6 +32,16 @@ export interface WorkerOptions {
   notifier?: NotifyService | null;
   /** E-posta göndericisi. Verilmezse `mail:send` satırları bekler (teslim edilmez). */
   mail?: MailSender | null;
+  /**
+   * ⭐ AYAR SERVİSİ (§admin Faz 4) — savaş motorunun dünya bazlı sabitleri buradan geliyor.
+   * Verilmezse motor varsayılanları kullanılır ve davranış **değişmez**; testler bu yüzden
+   * onu geçmeden çalışmaya devam ediyor.
+   */
+  settings?: {
+    combat(worldId: number): DeepPartial<CombatConfig> | undefined;
+    loot(worldId: number): Partial<LootConfig> | undefined;
+    revisionId(worldId: number): number | null;
+  } | null;
 }
 
 export interface Worker {
@@ -70,6 +81,14 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
       // eslint-disable-next-line no-console
       console.error(`[scheduler] görev ${mission?.id ?? '-'} (${mission?.type ?? '-'}) hata:`, err);
     },
+    // ⚠️ `undefined` bırakılıyorsa handler `ctx.engine` görmez ve motor varsayılanını kullanır.
+    engineFor: opts.settings
+      ? (worldId) => ({
+        combat: opts.settings!.combat(worldId),
+        loot: opts.settings!.loot(worldId),
+        settingsRevisionId: opts.settings!.revisionId(worldId),
+      })
+      : undefined,
   });
 
   const dispatcher = new OutboxDispatcher(db, {

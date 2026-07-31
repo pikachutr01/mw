@@ -8,7 +8,7 @@ export { simulate, applyTech, nightMultiplier, captureChance } from './combat.ts
 export { calculateLoot, plunderRate, type LootInput, type LootResult, type Resources } from './loot.ts';
 export {
   DEFAULT_COMBAT_CONFIG, DEFAULT_LOOT_CONFIG, ENGINE_VERSION, mergeCombatConfig,
-  type CombatConfig, type LootConfig,
+  type CombatConfig, type DeepPartial, type LootConfig,
 } from './config.ts';
 export { createRng, hashSeed, type Rng } from './rng.ts';
 export {

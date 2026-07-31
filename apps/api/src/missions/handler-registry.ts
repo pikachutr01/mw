@@ -9,6 +9,7 @@
  *     transaction'da yazılır → "savaş oldu ama rapor gitmedi" imkânsız.
  */
 import type { PgTransaction } from 'drizzle-orm/pg-core';
+import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
 import type { MissionRow } from './mission.repository.ts';
 
 /** Handler'ın kullanacağı transaction tipi (drizzle'ın tx nesnesi). */
@@ -34,6 +35,20 @@ export interface HandlerContext {
   }): Promise<void>;
   /** Hedef şehri seri hâle getirir: aynı şehre düşen görevler çakışmaz. */
   lockCity(cityId: number): Promise<void>;
+  /**
+   * ⭐ DÜNYA BAZLI MOTOR AYARLARI (§admin Faz 4). **Yoksa motor varsayılanı kullanılır** ve
+   * sonuç bit-bit eskisiyle aynı olur — bu yüzden isteğe bağlı.
+   *
+   * ⚠️ Handler'a modül seviyesinden bir "canlı config" okutmak daha az kod olurdu ama
+   * gizli bir küresel durum yaratırdı: savaş handler'ı saf bir fonksiyon ve test edilirken
+   * ne verildiyse onu görmeli.
+   */
+  engine?: {
+    combat?: DeepPartial<CombatConfig>;
+    loot?: Partial<LootConfig>;
+    /** `battles.settings_revision_id` — hangi ayar sürümüyle çözüldüğünün künyesi. */
+    settingsRevisionId?: number | null;
+  };
 }
 
 export type MissionHandler = (ctx: HandlerContext) => Promise<void>;

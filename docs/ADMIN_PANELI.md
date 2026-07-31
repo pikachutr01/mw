@@ -13,7 +13,7 @@
 | 1 | Ayarlar altyapısı · dünya ekranı · manuel sıralama | ✅ **bitti** (2026-07-31) |
 | 2 | Bakım modu uçtan uca | ✅ **bitti** (2026-07-31) |
 | 3 | Oturum ve cihaz yönetimi | ✅ **bitti** (2026-07-31) |
-| 4 | Savaş motoru sabitleri | ⏳ |
+| 4 | Savaş motoru sabitleri | ✅ **bitti** (2026-07-31) |
 | 5 | Katalog sabitleri | ⏳ |
 | 6 | Oyuncu ve moderasyon (+ `chat_bans` canlandırma) | ⏳ |
 | 7 | Veri tabanı tarayıcı + aksiyonlar | ⏳ |
@@ -339,6 +339,104 @@ bedava ve yeterince taze.
 **Tek aktif oturum zorlaması** yok — kullanıcının kararı: *"ileride"*. Şema hazır (`chain_id`
 + `platform`), kural uygulanmıyor. Uygulanacağı gün tek yer değişecek: `issueSession` yeni
 zincir açmadan önce diğerlerini iptal eder.
+
+---
+
+## Savaş motoru sabitleri (Faz 4)
+
+**38 sabit**, dört grup: `combat` · `hero` · `capture` · `loot`. Panel formu şemadan üretiliyor
+(Faz 1 altyapısı), yani yeni bir sabit eklemek tek satır.
+
+### ⚠️ Kısıt 1 hâlâ geçerli: ölçülmüş değer ≠ denge düğmesi
+
+Sabitlerin çoğu **binary'den ölçülmüş gerçekler** (`wall.base 1.8` · `night.base 0.7` ·
+`repair 0.76-0.81` · `hero.skillK 4.8` · `capture.*`). Panelde her biri **«ölçüldü» rozeti**
+taşıyor ve değiştirilmeye başlandığında satırın altında uyarı çıkıyor. Etiketin varlığı testle
+sabitlendi — rozet kaybolursa uyarı da kaybolur.
+
+### ⭐ Regresyon kanıtı: varsayılanda BİT-BİT aynı
+
+```
+combat(worldId) → hiç ayar değişmemişse  undefined
+simulate(input, undefined)               → DEFAULT_COMBAT_CONFIG'in KENDİSİ
+```
+
+Bunu her seferinde varsayılanlardan yeniden kurulmuş dolu bir nesne üretecek şekilde yazsaydık,
+bir gün "yeniden kurulmuş varsayılan" ile "varsayılanın kendisi" arasında sessiz bir kayma
+doğardı: bir alan eklenir, eşlemeye eklenmesi unutulur, motor onu `undefined` görür.
+`overridden` listesinden gitmek bu riski tamamen kaldırıyor — dokunulmamış alan dönüştürülmüyor
+bile. Ölçüldü: **176 motor testi + 48 katalog testi yeşil**, `simulate` çıktısı JSON düzeyinde
+birebir.
+
+Köprünün eksiksizliği de testte: her `combat.*`/`hero.*`/`capture.*`/`loot.*` anahtarının
+`settings/combat.ts`te karşılığı olmalı (ve ters yönde, eşlemede şemasız anahtar olmamalı).
+Bu olmadan yeni bir ayar panelde görünür ama motora hiç ulaşmazdı.
+
+### Motora nasıl ulaşıyor
+
+```
+worker  → SchedulerService.engineFor(worldId) → ctx.engine → battle.handlers → simulate(…, cfg)
+API     → SimulateController → settings.combat(worldId)    → simulate(…, cfg)
+```
+
+⚠️ `engineFor` bir **fonksiyon**, nesne değil: panelden kaydedilen sabit kuyruktaki bir sonraki
+savaşta etkili olmalı, süreç yeniden başlatmayı beklememeli.
+
+⚠️ Handler'a modül seviyesinden "canlı config" okutmak daha az kod olurdu ama gizli bir küresel
+durum yaratırdı; savaş handler'ı saf bir fonksiyon ve testte ne verildiyse onu görmeli.
+
+### Faz 4'te bulunan iki sessiz hata
+
+⚠️ **`simulate` tam `CombatConfig` istiyordu.** Kısmi bir nesne geçen çağıran, `undefined`
+alanlarla sessizce yanlış savaş çözerdi. İmza `DeepPartial` alacak ve içeride
+`mergeCombatConfig` çağıracak şekilde değişti.
+
+⚠️ **`/simulate` ucunda `req.player` HİÇ dolmuyordu.** `AuthGuard` controller bazlı ve o uçta
+yok; `req.player?.worldId ?? 0` derleniyor, çalışıyor ve daima 0 dönüyordu — yani dünya bazlı
+denge ayarı simülatöre hiç ulaşmıyordu. **Canlı ölçümde yakalandı** (kaydedilen sabit sonucu
+değiştirmedi). Çözüm `OptionalAuthGuard`: token varsa bağlam dolar, yoksa (veya geçersizse)
+anonim devam — uç kimliksiz kalmaya devam ediyor (§0.0).
+
+### ⭐ Önizleme
+
+`POST /admin/settings/:worldId/preview` — aynı savaşı **aynı seed'le** iki kez çözer: mevcut
+ayarlarla ve önerilen yamayla. Seed aynı olduğu için aradaki her fark sabitlerden gelir.
+
+⚠️ Yama **kaydedilmez** ve `AdminStepUpGuard` yoktur: uç hiçbir şey değiştirmiyor. Ölçüldü —
+önizlemeden sonra simülatör çıktısı birebir aynı kaldı.
+
+Canlı örnek (`night.base` 0,7 → 0,4, aynı savaş, aynı seed):
+
+| | Mevcut | Taslak |
+| :-- | --: | --: |
+| Saldıran kaybı | 8 | **0** |
+| Saldıran kalan | 5.492 | **5.500** |
+| Tecrübe | 2 | **0** |
+
+Kaydet → simülatör anında yeni sonucu verdi · Varsayılana dön → **eski sonuca birebir döndü**.
+
+### Savaşın künyesi
+
+`battles.settings_revision_id` (migration 0029). ⚠️ `NULL` geçerli ve yaygın: hiç ayar
+değiştirilmemiş dünyada revizyon satırı yoktur ve NULL "motorun varsayılanlarıyla çözüldü"
+demektir.
+
+⚠️ İşaret **iki katmanın büyüğü** (dünyanın kendi revizyonu + genel dünya 0 revizyonu). İlk
+yazımda yalnız `??` zinciri vardı ve dünyanın ESKİ kendi revizyonu, genel katmandaki YENİ bir
+değişikliği gölgeliyordu — **testte yakalandı**. Bilinen sınır: dünya 0 revizyonunun
+`snapshot`u o dünyanın kendi geçersiz kılmalarını içermez; kesin cevap için iki katmana da
+bakılır. Her dünya için ayrı revizyon üretmek bunu çözerdi ama dünya sayısı 1 iken bedeli
+buna değmiyor.
+
+### ⛔ Panele AÇILMAYANLAR (bilinçli)
+
+| Alan | Neden |
+| :-- | :-- |
+| `turnSchedule` | Sayı değil, tur→faz tablosu. Doğrulanabilir bir form üretilemez; yanlış düzenleme savaşı sessizce bozar (kullanıcı kararı: KİLİTLİ) |
+| `defenseFloor.protectedTypes` | Birim kimliği listesi; katalogla senkron olmalı (Faz 5) |
+| `loot.condition` | Sayı değil kip seçimi (üç değerden biri); ayrı editör ister |
+| `engineVersion` | Türev — savaş künyesinin kimliği, elle değiştirilecek bir şey değil |
+| `chat.bodyMax` | `contracts`taki `max(500)` ile aynı sayı olmak zorunda; panelden değişseydi istemci geçerli saydığı mesajı sunucuya reddettirirdi |
 
 ---
 

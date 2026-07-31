@@ -20,7 +20,7 @@ import {
   pickHeroName,
 } from '@mobiwar/catalog';
 import {
-  calculateLoot, createRng, DEFAULT_COMBAT_CONFIG, simulate,
+  calculateLoot, createRng, DEFAULT_COMBAT_CONFIG, DEFAULT_LOOT_CONFIG, simulate,
   type LootResult, type SimulateInput, type SimulateResult,
 } from '@mobiwar/engine';
 import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
@@ -112,7 +112,12 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       seed: `mission:${ctx.mission.id}`,
     };
 
-    const result = simulate(input);
+    /**
+     * ⭐ DÜNYA BAZLI MOTOR AYARLARI (§admin Faz 4). `ctx.engine?.combat` verilmezse
+     * `simulate` motorun `DEFAULT_COMBAT_CONFIG`ini AYNEN kullanır → hiçbir ayar
+     * değiştirilmemiş dünyada sonuç bit-bit eskisiyle aynı kalır.
+     */
+    const result = simulate(input, ctx.engine?.combat);
 
     // Savaş öncesi savunmasız mıydı? (`loot.condition = "undefendedBefore"` seçeneği için.)
     const defendedBefore = Object.entries(defender.units)
@@ -126,7 +131,9 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       carryCapacity: result.attackerCarryCapacity,
       defendedBefore,
       seed: `mission:${ctx.mission.id}`,
-    });
+    }, ctx.engine?.loot
+      ? { ...DEFAULT_LOOT_CONFIG, ...ctx.engine.loot }
+      : DEFAULT_LOOT_CONFIG);
 
     const battleId = await writeBattle(ctx, {
       missionId: ctx.mission.id,
@@ -949,11 +956,13 @@ async function writeBattle(ctx: HandlerContext, o: {
   const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
     INSERT INTO battles (world_id, mission_id, attacker_player_id, defender_player_id,
                          attacker_city_id, defender_city_id, at, winner, night,
-                         rng_seed, engine_version, catalog_hash, input, result)
+                         rng_seed, engine_version, catalog_hash, settings_revision_id,
+                         input, result)
     VALUES (${ctx.worldId}, ${o.missionId}, ${o.attackerPlayerId}, ${o.defenderPlayerId},
             ${o.attackerCityId}, ${o.defenderCityId}, ${ctx.at.toISOString()}::timestamptz,
             ${o.result.winner}, ${o.night},
             ${o.result.seed}, ${o.result.engineVersion}, ${o.result.catalogHash},
+            ${ctx.engine?.settingsRevisionId ?? null},
             ${JSON.stringify(o.input)}::jsonb,
             ${JSON.stringify({ ...o.result, loot: o.loot })}::jsonb)
     RETURNING id

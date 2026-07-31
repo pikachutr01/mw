@@ -100,6 +100,8 @@ async function bootstrap(): Promise<void> {
       notifier,
       // Anahtar yoksa `LogSender`: mail gövdesi konsola basılır, akış yine uçtan uca denenir.
       mail: defaultMailSender(),
+      // ⭐ Motor sabitleri panelden yönetiliyor (§admin Faz 4); worker her görevde güncelini okur.
+      settings,
     });
     worker.start();
     // eslint-disable-next-line no-console
