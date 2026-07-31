@@ -16,7 +16,7 @@
 | 4 | Savaş motoru sabitleri | ✅ **bitti** (2026-07-31) |
 | 5 | Katalog sabitleri | ✅ **bitti** (2026-07-31) |
 | 6 | Oyuncu ve moderasyon (+ `chat_bans` canlandırma) | ✅ **bitti** (2026-07-31) |
-| 7 | Veri tabanı tarayıcı + aksiyonlar | ⏳ |
+| 7 | Veri tabanı tarayıcı + aksiyonlar | ✅ **bitti** (2026-08-01) |
 | 8 | Bakım/performans | ⏳ |
 
 ---
@@ -624,6 +624,75 @@ ceza kaldır         → giriş 201
 ⚠️ Canlı ölçüm bir eşleme eksiği yakaladı: `target_banned` HTTP eşlemesine eklenmemişti ve
 varsayılan dala düşüp **400** dönüyordu. `target_protected`/`target_vacation` ile aynı aile
 ("bu hedefe bu görevi yapamazsın") → **403**; testle sabitlendi.
+
+---
+
+## Veri tabanı tarayıcı + küratörlü aksiyonlar (Faz 7)
+
+Kullanıcının somut ihtiyacı: *"Test yapmak için kendi şehirlerime ordu koymak istesem şu an
+nasıl yapacağımı bilmediğim için sana sormak zorundayım."*
+
+### ⭐ Neden ham SQL değil de adı konmuş aksiyon
+
+Çünkü bu tablolarda ham yazmak **sessizce yanlış** ve en tehlikelisi en masum görüneni:
+
+| Alan | Tuzak |
+| :-- | :-- |
+| `cities.gold` / `food` | ⛔ Kaynak **tembel birikimle**: gerçek değer = `gold` + (şimdi − `resources_at`) × üretim. Elle yazarsan bir sonraki okumada üstüne birikim eklenir |
+| `players.score` | TÜREV (`floor(score_base/1000)`) — ilk puan hareketinde geri hesaplanıp silinir |
+| `queues` ↔ `missions` | ÇİFT — yalnız kuyruğu kapatırsan bitiş görevi olmayan bir kuyruğu tamamlamaya çalışır |
+| `heroes.level` ↔ `xp` | Bağlı — yalnız seviyeyi değiştirirsen sonraki XP kazanımında geri hesaplanır |
+
+**Canlı kanıt** (`Çığlıktepe`, gerçek dev verisi):
+
+```
+ham  UPDATE cities SET gold = 1000  →  oyuncunun gördüğü 4.704   ✗ TUTMADI
+aksiyon grant-resources +50.000     →  4.704 → 54.705 (+50.001)  ✓ TUTTU
+aşırı çekim (-1 milyar)             →  0, eksiye düşmedi         ✓
+```
+
+Aksiyon doğru sırayı uyguluyor: **`materialize()` → oku → kırp → `add()`**.
+
+### 9 küratörlü aksiyon
+
+`Şehre ordu koy` · `Kaynak ver/al` · `Yapı seviyesi ata` · `Teknik seviyesi ata` ·
+`Kahraman ver` · `Kuyruğu iptal et` · `Görevi iptal et` · `Puanı yeniden hesapla` ·
+`Şehri başka oyuncuya taşı`
+
+⚠️ **Ordu vermek puanı değiştirmiyor** — bilinçli: test aracı oyuncuyu sıralamada yukarı
+taşımamalı. Düzeltmek isteyen «Puanı yeniden hesapla»yı ayrıca çağırır.
+
+⚠️ Birim/teknik kimliği **katalogdan doğrulanıyor**: uydurma bir tip yazılırsa savaş motoru
+onu tanımaz ve o şehrin her savaşı sessizce eksik orduyla çözülür.
+
+⚠️ İptallerde **iade yok**: bu bir yönetim aracı, oyuncunun iptali değil. Sessizce para
+vermek aracı öngörülemez yapardı.
+
+### Tarayıcı: liste değil BEYAZ LİSTE
+
+**24 tablo** kayıtlı (`db-registry.ts`), politika dağılımı: 13 salt-okunur · 8 yalnız-aksiyon ·
+3 ham-düzenlenebilir.
+
+⚠️ **Genel amaçlı SQL kutusu YOK** (kısıt 5). Tablo adı, kolon adı, sıralama ve filtre alanı
+**yalnız kayıttan** geliyor; istemciden gelen hiçbir ad SQL'e girmiyor. Tanımlayıcılar
+parametreleştirilemediği için `sql.raw` şart — enjeksiyona kapalı olmasının sebebi kaçış değil,
+beyaz liste. Kayıtta olmayan tablo **404**, varlığı bile sızmıyor.
+
+⛔ `audit_log` · `battles` · `outbox` ham kipte de **salt-okunur** (üçü de ekleme-yalnız).
+
+### Ham kip
+
+Varsayılan **kapalı**; açılınca kırmızı şerit. Üç kapı: adım yükseltmesi → tablo politikası
+`edit` → kolon `editable` listesinde. `where` de anahtar/filtre alanlarıyla sınırlı (boş
+`where` reddedilir, >20 satır eşleşirse durur) ve **eski hâl `audit_log`a satır olarak** yazılır.
+
+### ⚠️ Kayıt testinin yakaladığı 4 hata
+
+`db-registry.ts`teki kolon adlarını `information_schema` ile karşılaştıran test, elle yazdığım
+kayıtta **dört yanlış kolon** buldu: `heroes.revive_at` (doğrusu `revive_until`),
+`alliances.tag`/`description` (şemada yok, metin tek kolonda: `text`),
+`abuse_signals.severity` (doğrusu `score`), `audit_log.created_at` (doğrusu `at`).
+Test olmasaydı bu tablolar panelde **boş** görünecekti.
 
 ---
 

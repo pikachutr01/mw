@@ -14,13 +14,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
+import { DatabaseScreen } from './screens/Database.tsx';
 import { ModerationScreen } from './screens/Moderation.tsx';
 import { SessionsScreen } from './screens/Sessions.tsx';
 import { SettingsScreen } from './screens/Settings.tsx';
 import { WorldsScreen } from './screens/Worlds.tsx';
 
-/** Faz 6 sonunda dört ekran; kalanlar sırayla açılacak. */
-type Tab = 'worlds' | 'settings' | 'sessions' | 'moderation' | 'soon';
+/** Faz 7 sonunda beş ekran; kalan tek faz bakım/performans. */
+type Tab = 'worlds' | 'settings' | 'sessions' | 'moderation' | 'database' | 'soon';
 
 export function App() {
   const [session, setSessionState] = useState<AdminSession | null>(getSession);
@@ -80,7 +81,9 @@ export function App() {
                   ? <SessionsScreen onNeedStepUp={() => setStepUpOpen(true)} />
                   : tab === 'moderation'
                     ? <ModerationScreen onNeedStepUp={() => setStepUpOpen(true)} />
-                    : <Placeholder />}
+                    : tab === 'database'
+                      ? <DatabaseScreen onNeedStepUp={() => setStepUpOpen(true)} />
+                      : <Placeholder />}
           </>
         ) : null}
       </main>
@@ -91,7 +94,7 @@ export function App() {
 function Tabs({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
   const items: [Tab, string][] = [
     ['worlds', 'Dünya'], ['settings', 'Ayarlar'], ['sessions', 'Oturumlar'],
-    ['moderation', 'Moderasyon'], ['soon', 'Sıradakiler'],
+    ['moderation', 'Moderasyon'], ['database', 'Veri tabanı'], ['soon', 'Sıradakiler'],
   ];
   return (
     <div className="flex gap-1">
@@ -267,11 +270,11 @@ function Placeholder() {
     ['Motor sabitleri', 'savaş config\'i · önizleme (Ayarlar sekmesinde)', true],
     ['Katalog', 'ekonomi eğrileri · fiyat çarpanları · mağara/sur (Ayarlar sekmesinde)', true],
     ['Oyuncular ve moderasyon', 'künye · şikayet kuyruğu · sohbet yasağı', true],
-    ['Veri tabanı', 'tablo tarayıcı · küratörlü aksiyonlar · ham kip', false],
+    ['Veri tabanı', 'tablo tarayıcı · küratörlü aksiyonlar · ham kip', true],
     ['Bakım/performans', 'tablo boyutları · temizlik görevleri', false],
   ];
   return (
-    <Panel title="Fazlar" right="Faz 6 bitti">
+    <Panel title="Fazlar" right="Faz 7 bitti">
       <ul className="divide-y divide-border">
         {rows.map(([name, desc, done]) => (
           <li key={name} className="flex items-baseline justify-between gap-3 px-3 py-2">

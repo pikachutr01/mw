@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminController } from './admin/admin.controller.ts';
 import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
+import { AdminActionsController } from './admin/admin.actions.controller.ts';
+import { AdminDbController } from './admin/admin.db.controller.ts';
 import { AdminModerationController } from './admin/admin.moderation.controller.ts';
 import { AdminWorldController } from './admin/admin.world.controller.ts';
 import { SettingsService } from './settings/settings.service.ts';
@@ -49,6 +51,7 @@ export { DB } from './db/tokens.ts';
     NotifyController,
     // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
     AdminController, AdminWorldController, AdminModerationController,
+    AdminActionsController, AdminDbController,
   ],
   providers: [
     {
