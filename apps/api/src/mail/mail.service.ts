@@ -15,7 +15,7 @@
  * anahtarı görüp maili İKİNCİ kez göndermez. Bu olmasa "en az bir kez teslim" garantisi
  * kullanıcının kutusunda mükerrer mail demek olurdu.
  */
-import { MAIL, MAIL_LIMITS, mailEnabled } from './mail.limits.ts';
+import { MAIL, mailLimits, mailEnabled } from './mail.limits.ts';
 
 export interface MailMessage {
   to: string;
@@ -40,7 +40,7 @@ export class MailError extends Error {
 export class ResendSender implements MailSender {
   async send(msg: MailMessage): Promise<{ id: string }> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), MAIL_LIMITS.sendTimeoutMs);
+    const timer = setTimeout(() => controller.abort(), mailLimits().sendTimeoutMs);
     try {
       const res = await fetch(MAIL.endpoint, {
         method: 'POST',

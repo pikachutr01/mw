@@ -6,6 +6,8 @@
  * (`pushEnabled === false`) ve oyun her şeyiyle çalışmaya devam eder. Anahtarsız bir geliştirme
  * ortamında API'nin açılmaması, bildirimi "opsiyonel katman" olmaktan çıkarırdı.
  */
+import { liveNumber } from '../settings/live.ts';
+
 const num = (name: string, fallback: number): number => {
   const raw = process.env[name];
   const n = raw == null ? NaN : Number(raw);
@@ -29,22 +31,39 @@ export const NOTIFY_DEFAULTS: Readonly<Record<NotifyCategory, boolean>> = {
   production: true,
 };
 
-export const NOTIFY_LIMITS = {
-  /** Push başlığı/gövdesi — uzunsa işletim sistemi zaten kırpar, biz kaynakta kesiyoruz. */
-  titleMax: 60,
-  bodyMax: 120,
-  /**
-   * ⭐ ÜRETİM BİRLEŞTİRME — kullanıcı `production` kategorisini de açık istedi, ama 5 emirlik
-   * bir baraka kuyruğu 5 ayrı olay demek. Bu pencere içinde oyuncu başına **tek** üretim
-   * push'u gider (toast birleştirilmez: uygulama zaten açıkken ekranda görmek istenir).
-   * 0 yazılırsa birleştirme kapanır.
-   */
-  productionCoalesceSeconds: num('NOTIFY_PRODUCTION_COALESCE_SECONDS', 600),
-  /** Tek push denemesinin zaman aşımı — push servisi yavaşsa outbox tıkanmasın. */
-  sendTimeoutMs: num('NOTIFY_SEND_TIMEOUT_MS', 8000),
-  /** Bu kadar arka arkaya başarısız olan abonelik silinir (410/404 zaten anında siler). */
-  maxFailures: num('NOTIFY_MAX_FAILURES', 5),
-} as const;
+/**
+ * ⚠️ **Artık AYARLARDAN okunuyor** (admin Faz 1); `.env` geriye uyum için hâlâ geçerli ama
+ * DB'nin altında. `NOTIFY_LIMITS` sabiti `notifyLimits()` fonksiyonuna dönüştü — değer çalışma
+ * zamanında değişebiliyor ve `const` görünen bir nesnenin altından değişmesi sürpriz olurdu.
+ * Fonksiyon bellekten okur, sorgu yapmaz.
+ */
+export interface NotifyLimits {
+  titleMax: number;
+  bodyMax: number;
+  productionCoalesceSeconds: number;
+  sendTimeoutMs: number;
+  maxFailures: number;
+}
+
+export function notifyLimits(): NotifyLimits {
+  return {
+    /** Push başlığı/gövdesi — uzunsa işletim sistemi zaten kırpar, biz kaynakta kesiyoruz. */
+    titleMax: liveNumber('notify', 'titleMax', 60),
+    bodyMax: liveNumber('notify', 'bodyMax', 120),
+    /**
+     * ⭐ ÜRETİM BİRLEŞTİRME — kullanıcı `production` kategorisini de açık istedi, ama 5 emirlik
+     * bir baraka kuyruğu 5 ayrı olay demek. Bu pencere içinde oyuncu başına **tek** üretim
+     * push'u gider (toast birleştirilmez: uygulama zaten açıkken ekranda görmek istenir).
+     * 0 yazılırsa birleştirme kapanır.
+     */
+    productionCoalesceSeconds: liveNumber('notify', 'productionCoalesceSeconds',
+      num('NOTIFY_PRODUCTION_COALESCE_SECONDS', 600)),
+    /** Tek push denemesinin zaman aşımı — push servisi yavaşsa outbox tıkanmasın. */
+    sendTimeoutMs: liveNumber('notify', 'sendTimeoutMs', num('NOTIFY_SEND_TIMEOUT_MS', 8000)),
+    /** Bu kadar arka arkaya başarısız olan abonelik silinir (410/404 zaten anında siler). */
+    maxFailures: liveNumber('notify', 'maxFailures', num('NOTIFY_MAX_FAILURES', 5)),
+  };
+}
 
 export const VAPID = {
   publicKey: process.env['VAPID_PUBLIC_KEY'] ?? '',

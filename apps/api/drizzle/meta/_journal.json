@@ -183,6 +183,13 @@
       "when": 1785600000000,
       "tag": "0025_admin_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785601000000,
+      "tag": "0026_settings",
+      "breakpoints": true
     }
   ]
 }

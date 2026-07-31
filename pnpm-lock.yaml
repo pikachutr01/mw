@@ -32,6 +32,9 @@ importers:
       '@mobiwar/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@mobiwar/settings':
+        specifier: workspace:*
+        version: link:../../packages/settings
       '@tanstack/react-query':
         specifier: ^5.62.0
         version: 5.101.4(react@19.2.8)
@@ -84,6 +87,9 @@ importers:
       '@mobiwar/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@mobiwar/settings':
+        specifier: workspace:*
+        version: link:../../packages/settings
       '@nestjs/common':
         specifier: ^10.4.15
         version: 10.4.22(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -228,6 +234,15 @@ importers:
       '@mobiwar/catalog':
         specifier: workspace:*
         version: link:../catalog
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
+
+  packages/settings:
     devDependencies:
       typescript:
         specifier: ^5.7.2

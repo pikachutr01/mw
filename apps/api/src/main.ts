@@ -10,6 +10,7 @@ import { defaultMailSender } from './mail/mail.service.ts';
 import { pushEnabled } from './notify/notify.limits.ts';
 import { NotifyService, defaultPushSender } from './notify/notify.service.ts';
 import { RealtimeBus } from './realtime/realtime.bus.ts';
+import { SettingsService } from './settings/settings.service.ts';
 import { RealtimeGateway } from './realtime/realtime.gateway.ts';
 import { getGateway, setGateway } from './realtime/gateway-registry.ts';
 import { createWorker, type Worker } from './worker/worker.ts';
@@ -34,6 +35,17 @@ async function bootstrap(): Promise<void> {
   let gateway: RealtimeGateway | null = null;
   const handle = createDb(url);
   const bus = new RealtimeBus(handle.sql);
+
+  /**
+   * ⭐ AYARLAR — açılışta bir kez yüklenir, sonra **bellekten** okunur (§admin Faz 1).
+   * Ham bağlantı `LISTEN mw_settings` için veriliyor: panelden bir değer kaydedilince tüm
+   * süreçler milisaniyeler içinde tazeleniyor, yeniden başlatma gerekmiyor.
+   *
+   * ⚠️ Hem `ROLE=api` hem `ROLE=worker` profilinde çalışır ve **her ikisinde de gerekli**:
+   * limitleri worker da okuyor (bildirim birleştirme, posta kotaları).
+   */
+  const settings = new SettingsService(handle.db, handle.sql);
+  await settings.start();
 
   if (runWorker) {
     /**
@@ -96,6 +108,7 @@ async function bootstrap(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     // eslint-disable-next-line no-console
     console.log(`[mobiwar] ${signal} alındı, kapatılıyor…`);
+    await settings.stop();
     await gateway?.close();
     await worker?.stop();
     await handle.close();

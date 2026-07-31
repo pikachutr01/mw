@@ -18,7 +18,7 @@
  */
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
-import { CHAT_LIMITS } from './chat.limits.ts';
+import { chatLimits } from './chat.limits.ts';
 
 type Tx = Pick<Db, 'execute'>;
 
@@ -110,8 +110,8 @@ export class ChatService {
   }): Promise<MessageRow> {
     const body = o.body.trim();
     if (body.length === 0) throw new ChatError('too_long', 'Mesaj boş olamaz.');
-    if (body.length > CHAT_LIMITS.bodyMax) {
-      throw new ChatError('too_long', `Mesaj en fazla ${CHAT_LIMITS.bodyMax} karakter.`);
+    if (body.length > chatLimits().bodyMax) {
+      throw new ChatError('too_long', `Mesaj en fazla ${chatLimits().bodyMax} karakter.`);
     }
 
     return this.db.transaction(async (txn) => {
@@ -154,23 +154,23 @@ export class ChatService {
       }
 
       /* 2) ACEMİ KISITI — yalnız YENİ konuşma başlatırken; karşı taraf yazmışsa cevap serbest. */
-      if (CHAT_LIMITS.newPlayerHours > 0) await this.assertNotTooNew(tx, o.playerId, o.channelId);
+      if (chatLimits().newPlayerHours > 0) await this.assertNotTooNew(tx, o.playerId, o.channelId);
 
       /* 3) KOVA + MÜKERRER — ikisi de aynı sorgudan çıkar (tek tur). */
       const [limits] = await tx.execute<Record<string, unknown>>(sql`
         SELECT
           (SELECT COUNT(*)::int FROM chat_messages
             WHERE sender_id = ${o.playerId}
-              AND created_at > now() - (${CHAT_LIMITS.perSeconds} || ' seconds')::interval) AS recent,
+              AND created_at > now() - (${chatLimits().perSeconds} || ' seconds')::interval) AS recent,
           (SELECT COUNT(*)::int FROM chat_messages
             WHERE sender_id = ${o.playerId} AND channel_id = ${o.channelId} AND body = ${body}
-              AND created_at > now() - (${CHAT_LIMITS.duplicateSeconds} || ' seconds')::interval) AS dup
+              AND created_at > now() - (${chatLimits().duplicateSeconds} || ' seconds')::interval) AS dup
       `);
-      if (Number(limits?.['recent'] ?? 0) >= CHAT_LIMITS.burst) {
-        throw new ChatError('rate_limited', 'Çok hızlı yazıyorsun, biraz bekle.', CHAT_LIMITS.perSeconds);
+      if (Number(limits?.['recent'] ?? 0) >= chatLimits().burst) {
+        throw new ChatError('rate_limited', 'Çok hızlı yazıyorsun, biraz bekle.', chatLimits().perSeconds);
       }
       if (Number(limits?.['dup'] ?? 0) > 0) {
-        throw new ChatError('duplicate_message', 'Aynı mesajı az önce gönderdin.', CHAT_LIMITS.duplicateSeconds);
+        throw new ChatError('duplicate_message', 'Aynı mesajı az önce gönderdin.', chatLimits().duplicateSeconds);
       }
 
       /* 4) YAZ — `client_msg_id` idempotency: yeniden denemede çift satır oluşmaz. */
@@ -272,7 +272,7 @@ export class ChatService {
     worldId: number; playerId: number; channelId: number; before?: number | null; limit?: number;
   }): Promise<{ items: MessageRow[]; hasMore: boolean }> {
     const me = await this.participant(this.db, o.channelId, o.playerId, o.worldId);
-    const limit = Math.min(100, Math.max(1, o.limit ?? CHAT_LIMITS.pageSize));
+    const limit = Math.min(100, Math.max(1, o.limit ?? chatLimits().pageSize));
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT id, channel_id, sender_id, body, created_at
         FROM chat_messages
@@ -430,8 +430,8 @@ export class ChatService {
     `);
     if (Boolean(r?.['peer_wrote'])) return;
     const ageHours = Number(r?.['age_hours'] ?? 0);
-    if (ageHours >= CHAT_LIMITS.newPlayerHours) return;
-    const left = Math.ceil(CHAT_LIMITS.newPlayerHours - ageHours);
+    if (ageHours >= chatLimits().newPlayerHours) return;
+    const left = Math.ceil(chatLimits().newPlayerHours - ageHours);
     throw new ChatError(
       'dm_new_player_restricted',
       `Yeni konuşma başlatabilmen için ${left} saat daha beklemelisin.`,

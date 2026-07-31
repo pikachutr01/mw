@@ -8,7 +8,7 @@
  * flexbox'ı ve harici fontu güvenilmez şekilde işliyor. Burada oyunun tema token'ları
  * KULLANILAMAZ — mail, tarayıcının CSS değişkenlerine erişemez.
  */
-import { MAIL_LIMITS } from './mail.limits.ts';
+import { mailLimits } from './mail.limits.ts';
 
 export interface Template { subject: string; html: string; text: string }
 
@@ -44,7 +44,7 @@ export function verifyEmail(o: { username: string; url: string }): Template {
     'E-posta adresini doğrulamak için aşağıdaki adresi aç:',
     o.url,
     '',
-    `Bağlantı ${MAIL_LIMITS.verifyTtlHours} saat geçerli.`,
+    `Bağlantı ${mailLimits().verifyTtlHours} saat geçerli.`,
     '',
     'Doğrulama, şifreni unuttuğunda hesabını geri alabilmen için gerekli.',
     'Bu e-postayı sen istemediysen dikkate alma.',
@@ -57,7 +57,7 @@ export function verifyEmail(o: { username: string; url: string }): Template {
       `Hoş geldin, ${o.username}`,
       `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">Hesabın hazır. E-posta adresini
        doğrularsan şifreni unuttuğunda hesabını geri alabilirsin.</p>
-       <p style="margin:0;font-size:13px;color:#6b6153">Bağlantı ${MAIL_LIMITS.verifyTtlHours} saat geçerli.</p>`,
+       <p style="margin:0;font-size:13px;color:#6b6153">Bağlantı ${mailLimits().verifyTtlHours} saat geçerli.</p>`,
       o.url, 'E-postamı Doğrula',
     ),
   };
@@ -70,7 +70,7 @@ export function resetPassword(o: { username: string; url: string }): Template {
     'Mobiwar hesabın için şifre sıfırlama isteği aldık. Yeni şifreni belirlemek için:',
     o.url,
     '',
-    `Bağlantı ${MAIL_LIMITS.resetTtlMinutes} dakika geçerli ve yalnız BİR kez kullanılabilir.`,
+    `Bağlantı ${mailLimits().resetTtlMinutes} dakika geçerli ve yalnız BİR kez kullanılabilir.`,
     '',
     'Şifreni değiştirdiğinde açık olan tüm oturumların kapanır.',
     'Bu isteği sen yapmadıysan dikkate alma; şifren değişmez.',
@@ -84,7 +84,7 @@ export function resetPassword(o: { username: string; url: string }): Template {
       `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">Merhaba <strong>${esc(o.username)}</strong>,
        hesabın için şifre sıfırlama isteği aldık.</p>
        <p style="margin:0 0 10px;font-size:13px;color:#6b6153">Bağlantı
-       ${MAIL_LIMITS.resetTtlMinutes} dakika geçerli ve yalnız <strong>bir kez</strong> kullanılabilir.</p>
+       ${mailLimits().resetTtlMinutes} dakika geçerli ve yalnız <strong>bir kez</strong> kullanılabilir.</p>
        <p style="margin:0;font-size:13px;color:#6b6153">Şifreni değiştirdiğinde açık olan tüm oturumların kapanır.</p>`,
       o.url, 'Yeni Şifre Belirle',
     ),

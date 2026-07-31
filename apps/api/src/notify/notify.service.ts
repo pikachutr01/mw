@@ -23,7 +23,7 @@ import type { Db } from '../db/client.ts';
 import type { RealtimeBus } from '../realtime/realtime.bus.ts';
 import type { Notification } from './notify.catalog.ts';
 import {
-  NOTIFY_DEFAULTS, NOTIFY_LIMITS, VAPID, pushEnabled, type NotifyCategory,
+  NOTIFY_DEFAULTS, notifyLimits, VAPID, pushEnabled, type NotifyCategory,
 } from './notify.limits.ts';
 
 /** Tarayıcının `PushSubscription.toJSON()` çıktısının bize gereken kısmı. */
@@ -139,7 +139,7 @@ export class NotifyService {
    */
   private shouldPush(note: Notification): boolean {
     if (note.category !== 'production') return true;
-    const windowMs = NOTIFY_LIMITS.productionCoalesceSeconds * 1000;
+    const windowMs = notifyLimits().productionCoalesceSeconds * 1000;
     if (windowMs <= 0) return true;
     const now = this.deps.now?.() ?? Date.now();
     const last = this.lastProduction.get(note.playerId) ?? 0;
@@ -203,7 +203,7 @@ export class NotifyService {
        WHERE id = ${id}
       RETURNING fail_count
     `);
-    if (Number(row?.['fail_count'] ?? 0) >= NOTIFY_LIMITS.maxFailures) {
+    if (Number(row?.['fail_count'] ?? 0) >= notifyLimits().maxFailures) {
       await this.db.execute(sql`DELETE FROM push_subscriptions WHERE id = ${id}`);
     }
   }

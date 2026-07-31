@@ -7,6 +7,8 @@
  * denenebilir: bağlantı loglarda görünür, elle açılır. "Mail gitmiyor" diye akışın yarısını
  * test edilemez bırakmak en pahalı seçenekti.
  */
+import { liveNumber } from '../settings/live.ts';
+
 const num = (name: string, fallback: number): number => {
   const raw = process.env[name];
   const n = raw == null ? NaN : Number(raw);
@@ -28,23 +30,43 @@ export const MAIL = {
   endpoint: str('RESEND_ENDPOINT', 'https://api.resend.com/emails'),
 } as const;
 
-export const MAIL_LIMITS = {
-  /** Doğrulama bağlantısı — acele ettirmeyecek kadar uzun. */
-  verifyTtlHours: num('MAIL_VERIFY_TTL_HOURS', 24),
-  /**
-   * Sıfırlama bağlantısı KISA: bu bağlantı hesabı ele geçirmeye yeter. Posta kutusuna erişen
-   * biri için pencere ne kadar dar olursa o kadar iyi.
-   */
-  resetTtlMinutes: num('MAIL_RESET_TTL_MINUTES', 60),
-  /** Aynı hesaba arka arkaya mail yağdırmayı engeller (kullanıcı "tekrar gönder"e basar durur). */
-  resendCooldownSeconds: num('MAIL_RESEND_COOLDOWN_SECONDS', 60),
-  /** Günlük tavan — hem maliyet hem "posta kutusu bombalama" saldırısı için. */
-  dailyPerAccount: num('MAIL_DAILY_PER_ACCOUNT', 10),
-  /** Aynı IP'den günde en fazla kaç jeton (farklı hesaplara dağıtılan bombardıman). */
-  dailyPerIp: num('MAIL_DAILY_PER_IP', 30),
-  /** Gönderim zaman aşımı — Resend yavaşsa outbox tıkanmasın. */
-  sendTimeoutMs: num('MAIL_SEND_TIMEOUT_MS', 10_000),
-} as const;
+/**
+ * ⚠️ **Artık AYARLARDAN okunuyor** (admin Faz 1); `.env` geriye uyum için hâlâ geçerli ama
+ * DB'nin altında. `MAIL_LIMITS` sabiti `mailLimits()` fonksiyonuna dönüştü.
+ *
+ * ⚠️ `MAIL` bloğu (API anahtarı, gönderen adresi, uç nokta) ayarlara TAŞINMADI ve taşınmayacak:
+ * bunlar **sır ve dağıtım bilgisi**, denge düğmesi değil. Bir API anahtarını veri tabanına
+ * yazıp panelde göstermek onu yedeklere ve tarayıcı geçmişine sızdırmak olurdu.
+ */
+export interface MailLimits {
+  verifyTtlHours: number;
+  resetTtlMinutes: number;
+  resendCooldownSeconds: number;
+  dailyPerAccount: number;
+  dailyPerIp: number;
+  sendTimeoutMs: number;
+}
+
+export function mailLimits(): MailLimits {
+  return {
+    /** Doğrulama bağlantısı — acele ettirmeyecek kadar uzun. */
+    verifyTtlHours: liveNumber('mail', 'verifyTtlHours', num('MAIL_VERIFY_TTL_HOURS', 24)),
+    /**
+     * Sıfırlama bağlantısı KISA: bu bağlantı hesabı ele geçirmeye yeter. Posta kutusuna erişen
+     * biri için pencere ne kadar dar olursa o kadar iyi.
+     */
+    resetTtlMinutes: liveNumber('mail', 'resetTtlMinutes', num('MAIL_RESET_TTL_MINUTES', 60)),
+    /** Aynı hesaba arka arkaya mail yağdırmayı engeller. ⚠️ Bekleme AMACA göre ayrı sayılır. */
+    resendCooldownSeconds: liveNumber('mail', 'resendCooldownSeconds',
+      num('MAIL_RESEND_COOLDOWN_SECONDS', 60)),
+    /** Günlük tavan — hem maliyet hem "posta kutusu bombalama" saldırısı için. */
+    dailyPerAccount: liveNumber('mail', 'dailyPerAccount', num('MAIL_DAILY_PER_ACCOUNT', 10)),
+    /** Aynı IP'den günde en fazla kaç jeton (farklı hesaplara dağıtılan bombardıman). */
+    dailyPerIp: liveNumber('mail', 'dailyPerIp', num('MAIL_DAILY_PER_IP', 30)),
+    /** Gönderim zaman aşımı — Resend yavaşsa outbox tıkanmasın. */
+    sendTimeoutMs: liveNumber('mail', 'sendTimeoutMs', num('MAIL_SEND_TIMEOUT_MS', 10_000)),
+  };
+}
 
 /** Anahtar varsa gerçek gönderim, yoksa konsola yazan geliştirme göndericisi. */
 export const mailEnabled = (): boolean => MAIL.apiKey !== '';

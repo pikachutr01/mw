@@ -16,7 +16,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DbHandle } from '../src/db/client.ts';
 import { notificationForOutbox } from '../src/notify/notify.catalog.ts';
-import { NOTIFY_LIMITS } from '../src/notify/notify.limits.ts';
+import { notifyLimits } from '../src/notify/notify.limits.ts';
 import {
   NotifyService, PushGoneError, type PushSender, type PushSubscriptionInput,
 } from '../src/notify/notify.service.ts';
@@ -194,8 +194,8 @@ describe('notify.catalog', () => {
     const [note] = notificationForOutbox('chat:dm', {
       recipientId: 2, senderId: 1, senderName: 'A'.repeat(200), preview: 'b'.repeat(400),
     }, 1);
-    expect(note!.title.length).toBeLessThanOrEqual(NOTIFY_LIMITS.titleMax);
-    expect(note!.body.length).toBeLessThanOrEqual(NOTIFY_LIMITS.bodyMax);
+    expect(note!.title.length).toBeLessThanOrEqual(notifyLimits().titleMax);
+    expect(note!.body.length).toBeLessThanOrEqual(notifyLimits().bodyMax);
   });
 });
 
@@ -283,7 +283,7 @@ describe('NotifyService.deliver', () => {
     sender.fail = () => new Error('503 push servisi meşgul');
     const { service } = build({ sender });
 
-    for (let i = 0; i < NOTIFY_LIMITS.maxFailures - 1; i += 1) await service.deliver(note(ali));
+    for (let i = 0; i < notifyLimits().maxFailures - 1; i += 1) await service.deliver(note(ali));
     expect(await subCount(ali)).toBe(1);           // henüz eşiğe gelmedi
 
     await service.deliver(note(ali));

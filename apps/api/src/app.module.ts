@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin/admin.controller.ts';
 import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
+import { AdminWorldController } from './admin/admin.world.controller.ts';
+import { SettingsService } from './settings/settings.service.ts';
 import { AllianceController } from './alliance/alliance.controller.ts';
 import { AuthController } from './auth/auth.controller.ts';
 import { AuthGuard } from './auth/auth.guard.ts';
@@ -41,7 +43,7 @@ export { DB } from './db/tokens.ts';
     MissionController, BattleController, WorldController, CommandController,
     NotifyController,
     // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
-    AdminController,
+    AdminController, AdminWorldController,
   ],
   providers: [
     {
@@ -79,6 +81,15 @@ export { DB } from './db/tokens.ts';
         new AuthService(db, tokens, clock),
       inject: [DB, TokenService, GameClockService],
     },
+    /**
+     * ⭐ AYAR SERVİSİ — bellek-içi anlık görüntü. `main.ts` açılışta `start()` çağırıp ham
+     * bağlantıyı veriyor (LISTEN için); burada yalnız DI kaydı var.
+     *
+     * ⚠️ Nest'in kendi örneği ile `main.ts`teki örnek AYRI olabilir (`ROLE=worker` profilinde
+     * Nest hiç kalkmaz). İkisi de aynı DB'den okuyup aynı kanalı dinlediği için sorun değil:
+     * anlık görüntü paylaşılan durum değil, **türetilmiş** durum.
+     */
+    { provide: SettingsService, useFactory: (db: Db) => new SettingsService(db), inject: [DB] },
     AuthGuard,
     AdminGuard,
     AdminStepUpGuard,

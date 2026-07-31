@@ -15,7 +15,7 @@
  */
 import { UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID } from '@mobiwar/catalog';
 
-import { NOTIFY_LIMITS, type NotifyCategory } from './notify.limits.ts';
+import { notifyLimits, type NotifyCategory } from './notify.limits.ts';
 
 export interface Notification {
   /** Alıcı OYUNCU (hesap değil) — tercih ve çevrimiçilik bunun üzerinden çözülür. */
@@ -88,8 +88,8 @@ const clip = (s: string, max: number): string =>
 
 const note = (o: Notification): Notification => ({
   ...o,
-  title: clip(o.title.trim(), NOTIFY_LIMITS.titleMax),
-  body: clip(o.body.trim(), NOTIFY_LIMITS.bodyMax),
+  title: clip(o.title.trim(), notifyLimits().titleMax),
+  body: clip(o.body.trim(), notifyLimits().bodyMax),
 });
 
 /**

@@ -15,7 +15,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DbHandle } from '../src/db/client.ts';
 import { EmailError, EmailTokenService } from '../src/mail/email-token.service.ts';
-import { MAIL_LIMITS } from '../src/mail/mail.limits.ts';
+import { mailLimits } from '../src/mail/mail.limits.ts';
 import type { MailMessage, MailSender } from '../src/mail/mail.service.ts';
 import { OutboxDispatcher } from '../src/outbox/outbox.dispatcher.ts';
 import { clearOutbox, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
@@ -169,7 +169,7 @@ describe('e-posta doğrulama', () => {
   it('günlük kota dolunca reddedilir', async () => {
     const a = await makeAccount();
     // Kotayı doldur; cooldown'a takılmamak için satırlar geçmişe alınır.
-    for (let i = 0; i < MAIL_LIMITS.dailyPerAccount; i += 1) {
+    for (let i = 0; i < mailLimits().dailyPerAccount; i += 1) {
       await h.db.execute(sql`
         INSERT INTO email_tokens (account_id, purpose, token_hash, email, expires_at, created_at)
         VALUES (${a.accountId}, 'verify', ${randomUUID()}, ${a.email},

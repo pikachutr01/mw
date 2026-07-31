@@ -14,12 +14,24 @@ import { useCallback, useEffect, useState } from 'react';
 import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
+import { SettingsScreen } from './screens/Settings.tsx';
+import { WorldsScreen } from './screens/Worlds.tsx';
+
+/** Faz 1'de iki ekran var; kalanlar sırayla açılacak. */
+type Tab = 'worlds' | 'settings' | 'soon';
 
 export function App() {
   const [session, setSessionState] = useState<AdminSession | null>(getSession);
   const [me, setMe] = useState<AdminMe | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<Tab>('worlds');
+  /**
+   * ⭐ Yükseltme diyaloğu TEK YERDE (üst şerit). Ekranlar 403 alınca `onNeedStepUp` çağırır;
+   * her ekran kendi diyalog kopyasını taşısaydı 15 dakika dolduğunda hangisinin açılacağı
+   * ekrana göre değişirdi.
+   */
+  const [stepUpOpen, setStepUpOpen] = useState(false);
 
   const refreshMe = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -49,12 +61,43 @@ export function App() {
         me={me}
         onSignOut={() => { setSession(null); setSessionState(null); }}
         onElevated={() => void refreshMe()}
+        stepUpOpen={stepUpOpen}
+        setStepUpOpen={setStepUpOpen}
       />
       <main className="mx-auto max-w-5xl space-y-3 p-3">
         {loading && !me ? <p className="text-sm text-muted">Yükleniyor…</p> : null}
         <ErrorBox error={error} />
-        {me ? <Placeholder /> : null}
+        {me ? (
+          <>
+            <Tabs value={tab} onChange={setTab} />
+            {tab === 'worlds'
+              ? <WorldsScreen onNeedStepUp={() => setStepUpOpen(true)} />
+              : tab === 'settings'
+                ? <SettingsScreen worldId={session.worldId} onNeedStepUp={() => setStepUpOpen(true)} />
+                : <Placeholder />}
+          </>
+        ) : null}
       </main>
+    </div>
+  );
+}
+
+function Tabs({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
+  const items: [Tab, string][] = [
+    ['worlds', 'Dünya'], ['settings', 'Ayarlar'], ['soon', 'Sıradakiler'],
+  ];
+  return (
+    <div className="flex gap-1">
+      {items.map(([id, label]) => (
+        <button key={id} type="button" onClick={() => onChange(id)}
+          className={`flex-1 rounded-[var(--radius-sm)] border px-2 py-1.5 text-xs ${
+            value === id
+              ? 'border-strong bg-accent text-on-accent'
+              : 'border-border bg-surface text-muted hover:bg-raised'
+          }`}>
+          {label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -112,10 +155,14 @@ function LoginScreen({ onDone }: { onDone: (s: AdminSession) => void }) {
 
 /* ═══ Üst şerit ═════════════════════════════════════════════════════════════ */
 
-function TopBar({ me, onSignOut, onElevated }: {
-  me: AdminMe | null; onSignOut: () => void; onElevated: () => void;
+function TopBar({ me, onSignOut, onElevated, stepUpOpen, setStepUpOpen }: {
+  me: AdminMe | null;
+  onSignOut: () => void;
+  onElevated: () => void;
+  stepUpOpen: boolean;
+  setStepUpOpen: (v: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = [stepUpOpen, setStepUpOpen];
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-panel-header px-3 py-2">
@@ -205,27 +252,29 @@ function StepUpDialog({ minutes, onClose, onDone }: {
  * oyun tarafındaki `Placeholders.tsx` ile aynı gerekçe: neyin eksik olduğu ekrandan görünsün.
  */
 function Placeholder() {
-  const rows: [string, string][] = [
-    ['Dünya', 'hız çarpanları · bakım modu · manuel sıralama'],
-    ['Ayarlar', 'motor sabitleri · katalog · işletim limitleri'],
-    ['Oyuncular', 'arama · künye · oturumlar · ban'],
-    ['Moderasyon', 'şikayet kuyruğu · çoklu hesap sinyalleri'],
-    ['Veri tabanı', 'tablo tarayıcı · küratörlü aksiyonlar · ham kip'],
-    ['Bakım', 'tablo boyutları · temizlik görevleri · sağlık'],
+  const rows: [string, string, boolean][] = [
+    ['Dünya', 'hız çarpanları · manuel sıralama', true],
+    ['Ayarlar', 'işletim limitleri (sohbet · bildirim · posta)', true],
+    ['Bakım modu', 'donma · istemci perdesi · mutasyon kilidi', false],
+    ['Oturumlar', 'cihaz listesi · uzaktan çıkış', false],
+    ['Motor sabitleri', 'savaş config\'i · önizleme', false],
+    ['Katalog', 'birim/yapı/teknik fiyat ve süreleri', false],
+    ['Oyuncular ve moderasyon', 'arama · şikayet kuyruğu · ban', false],
+    ['Veri tabanı', 'tablo tarayıcı · küratörlü aksiyonlar · ham kip', false],
+    ['Bakım/performans', 'tablo boyutları · temizlik görevleri', false],
   ];
   return (
-    <Panel title="Ekranlar" right="Faz 0 — iskelet">
+    <Panel title="Fazlar" right="Faz 1 bitti">
       <ul className="divide-y divide-border">
-        {rows.map(([name, desc]) => (
+        {rows.map(([name, desc, done]) => (
           <li key={name} className="flex items-baseline justify-between gap-3 px-3 py-2">
-            <span className="text-sm text-ink">{name}</span>
+            <span className="text-sm text-ink">
+              {done ? '✅ ' : '⏳ '}{name}
+            </span>
             <span className="text-xs text-muted">{desc}</span>
           </li>
         ))}
       </ul>
-      <div className="border-t border-border px-3 py-2 text-[11px] text-muted">
-        Yetki ve yükseltme zinciri çalışıyor. Ekranlar sırayla eklenecek.
-      </div>
     </Panel>
   );
 }

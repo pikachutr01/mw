@@ -18,7 +18,7 @@ import { sql } from 'drizzle-orm';
 
 import type { Db } from '../db/client.ts';
 import { PasswordService } from '../auth/password.service.ts';
-import { MAIL, MAIL_LIMITS } from './mail.limits.ts';
+import { MAIL, mailLimits } from './mail.limits.ts';
 import { resetPassword, verifyEmail } from './templates.ts';
 
 export type MailErrorCode =
@@ -62,8 +62,8 @@ export class EmailTokenService {
   }): Promise<{ token: string }> {
     const token = randomBytes(32).toString('base64url');
     const ttlSeconds = o.purpose === 'verify'
-      ? MAIL_LIMITS.verifyTtlHours * 3600
-      : MAIL_LIMITS.resetTtlMinutes * 60;
+      ? mailLimits().verifyTtlHours * 3600
+      : mailLimits().resetTtlMinutes * 60;
 
     const path = o.purpose === 'verify' ? 'verify-email' : 'reset-password';
     const url = `${MAIL.appOrigin}/${path}?token=${token}`;
@@ -108,7 +108,7 @@ export class EmailTokenService {
       SELECT
         (SELECT COUNT(*)::int FROM email_tokens
           WHERE account_id = ${accountId} AND purpose = ${purpose}
-            AND created_at > now() - (${MAIL_LIMITS.resendCooldownSeconds} || ' seconds')::interval) AS recent,
+            AND created_at > now() - (${mailLimits().resendCooldownSeconds} || ' seconds')::interval) AS recent,
         (SELECT COUNT(*)::int FROM email_tokens
           WHERE account_id = ${accountId} AND created_at > now() - interval '1 day') AS daily,
         (SELECT COUNT(*)::int FROM email_tokens
@@ -117,13 +117,13 @@ export class EmailTokenService {
     `);
     if (Number(r?.['recent'] ?? 0) > 0) {
       throw new EmailError(
-        'cooldown', 'Az önce gönderdik. Gelen kutunu kontrol et.', MAIL_LIMITS.resendCooldownSeconds,
+        'cooldown', 'Az önce gönderdik. Gelen kutunu kontrol et.', mailLimits().resendCooldownSeconds,
       );
     }
-    if (Number(r?.['daily'] ?? 0) >= MAIL_LIMITS.dailyPerAccount) {
+    if (Number(r?.['daily'] ?? 0) >= mailLimits().dailyPerAccount) {
       throw new EmailError('quota', 'Bugünlük e-posta sınırına ulaşıldı, yarın tekrar dene.');
     }
-    if (ip && Number(r?.['ip_daily'] ?? 0) >= MAIL_LIMITS.dailyPerIp) {
+    if (ip && Number(r?.['ip_daily'] ?? 0) >= mailLimits().dailyPerIp) {
       throw new EmailError('quota', 'Bugünlük e-posta sınırına ulaşıldı, yarın tekrar dene.');
     }
   }
