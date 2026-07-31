@@ -142,7 +142,7 @@ var, okuyan kod yok) · dünya sabitleri yönetimi (hız çarpanları elle SQL i
 | **Dahili simülatör ekranı** | `POST /api/v1/simulate` ✅ çalışıyor | Web ekranı yok (`screens/` altında Simulate.tsx yok) |
 | **i18n dosyaları** | `MOBIWAR_SISTEM_PLANI.md:1990` kuralı: *"metin asla koda gömülmez → i18n/tr.json"* | **Kural ihlal ediliyor** — tüm Türkçe metin JSX içinde |
 | **Kuşatma bonusu** (Mancınık/Ogre → sur) | §13.5 Faz 3 | Kodlanmadı |
-| **Gece savaşı ~%15 over-kill artığı** | Faz 3 | Kodlanmadı (gece savaşı temeli ✅) |
+| **Gece savaşı over-kill artığı** | Faz 3 | ⚠️ **İddia BAYAT.** "%15" 2026-07-22 öncesinden; o gün gece'nin Büyü Canı'nı da azaltması eklenince S9/S10 orijinale ~%1'e oturmuştu. 2026-07-31'de mekanizma Ghidra ile **yapısal olarak** doğrulandı (`FUN_00412624` = Can + BüyüCan, başka hiçbir şey) ve bir sapma bulunup düzeltildi: **taşıma kapasitesi boşuna çarpılıyordu**. Kalan büyüklük sorusu kullanıcının ölçümünü bekliyor → `veri/gece-savasi-olcumleri.md` |
 | ~~**Bildirim ayarları sayfası**~~ | — | ✅ **2026-07-31'de yapıldı**: Seçenekler → Bildirimler (izin düğmesi + 4 kategori anahtarı) |
 | **Denge senaryoları** | Kullanıcı isteği | Yok |
 | **Tek aktif sekme kuralı** | Kullanıcı isteği (WhatsApp gibi): başka sekmeden açınca uyarı | Yok. İki sekme aynı oyunu açık tutabiliyor |

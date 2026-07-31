@@ -63,7 +63,7 @@ export function applyTech(base: UnitDef, tech: TechLevels | undefined): ScaledSt
   };
 }
 
-/** §7 Gece görüşü çarpanı — yalnız Can, BüyüCan ve Taşıma'yı etkiler. */
+/** §7 Gece görüşü çarpanı — yalnız Can ve Büyü Canı'nı etkiler (bkz. `applyNight`). */
 export function nightMultiplier(nightVision: number, cfg: CombatConfig = DEFAULT_COMBAT_CONFIG): number {
   const L = Math.max(0, Math.trunc(nightVision));
   return (1 - 3 / (L + 3)) * (1 - cfg.night.base) + cfg.night.base;
@@ -147,15 +147,38 @@ function buildArmy(side: SideInput, isDefender: boolean, cfg: CombatConfig): Arm
   return { units, heroes, heroLevel, tech, wall, shield, lossMag: 0 };
 }
 
+/**
+ * ⭐ GECE — **TAM OLARAK İKİ STAT**: Can (HP) ve Büyü Canı (MagicHP). Başka hiçbir şey.
+ *
+ * ── Binary kanıtı (2026-07-31, Ghidra ile satır satır okundu) ──────────────────────────────
+ * Gece uygulayıcısı `FUN_004111d4` (saldıran, 2 döngü) ve `FUN_00411a80` (savunan, 3 döngü —
+ * üçüncüsü savunma YAPILARI). Her ikisi de birim başına `FUN_00412624`i çağırıyor; yapılar için
+ * `FUN_00413120` var ve o **bayt bayt aynı**. Modifier'ın disassembly'si (0x00412624) yalnız
+ * iki oku-çarp-yaz çifti içeriyor:
+ *
+ *     CALL 0x412b5c  →  FLD [stat+0x00]   FMUL çarpan   CALL 0x412b68  (yaz)
+ *     CALL 0x412b9c  →  FLD [stat+0x08]   FMUL çarpan   CALL 0x412ba8  (yaz)
+ *
+ * Stat bloğu 6 double, 8 bayt adımlı: +0x00 Can · +0x08 BüyüCan · +0x10 FizSald ·
+ * +0x18 FizSav · +0x20 BüyüSald · +0x28 BüyüSav (sonuncusu `FUN_00412b3c` ile doğrulandı,
+ * dağıtıcı indeksi 6 = Büyü Savunması). Yani gece **+0x00 ve +0x08**'i çarpıyor.
+ *
+ * ⚠️ **TAŞIMA KAPASİTESİ ÇARPILMIYOR.** Motor 2026-07-31'e kadar `carry`yi de azaltıyordu;
+ * kaynağı `mobiwar_simulator_analysis.md` §7'nin *"HP ve Taşıma Kapasitesi"* ifadesiydi ve o
+ * ifade YANLIŞ: ikinci alan Taşıma değil **Büyü Canı**. Taşıma o stat bloğunda bile değil.
+ * Etkisi: gece saldırısında ganimet kapasitesi gereksiz yere ~%30 (NV0) kısılıyordu.
+ *
+ * ⚠️ Sur ve Büyü Kalkanı gece'den ETKİLENMEZ: binary'de ayrı alanlar (`ordu+0x10` / `ordu+0x98`),
+ * üçüncü döngünün taradığı yapı listesinde değiller. Bizde de ayrı (`army.wall` / `army.shield`),
+ * `army.units` dışında — bu yüzden kendiliğinden doğru.
+ */
 function applyNight(army: Army, nightVision: number, cfg: CombatConfig): void {
   const m = nightMultiplier(nightVision, cfg);
-  // Gece hem CAN hem BÜYÜCAN havuzunu azaltır (ikisi de "can") + taşıma kapasitesini.
   for (const e of army.units) {
     e.stats.hp *= m;
     e.stats.poolHp *= m;
     e.stats.magicHp *= m;
     e.stats.poolMagicHp *= m;
-    e.stats.carry *= m;
   }
 }
 
