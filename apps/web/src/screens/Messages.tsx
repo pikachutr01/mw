@@ -15,12 +15,13 @@ import { useSearchParams } from 'react-router-dom';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
-  useAllianceDecide, useBattle, useChatConversations, useMarkRead, useMessages,
+  useAllianceDecide, useBattle, useChatConversations, useClearConversation, useDeleteMessages,
+  useMarkRead, useMessages,
   type ChatConversation, type MessageRow, type ReportHeroLine,
 } from '../lib/queries.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
 import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
-import { Modal } from '../components/Modal.tsx';
+import { Modal, useConfirm } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
 
 /**
@@ -66,17 +67,25 @@ type InboxRow =
   | { kind: 'message'; at: string; unread: boolean; message: MessageRow }
   | { kind: 'chat'; at: string; unread: boolean; chat: ChatConversation };
 
+/** Seçim anahtarı — mesaj ve sohbet satırları aynı kümede yaşadığı için ön ek şart. */
+const rowKey = (r: InboxRow): string =>
+  (r.kind === 'chat' ? `c${r.chat.channelId}` : `m${r.message.id}`);
+
 export function Messages() {
   const messages = useMessages();
   const chats = useChatConversations();
   const markRead = useMarkRead();
+  const deleteMessages = useDeleteMessages();
+  const clearConversation = useClearConversation();
   const openChat = useOpenChat();
+  const confirm = useConfirm();
   // ⭐ Açılışta RAPORLAR seçili (kullanıcı kararı): oyuncunun ilk merak ettiği savaş sonucudur.
   const [tab, setTab] = useState<Tab>('reports');
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<MessageRow | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const all = messages.data?.items ?? [];
   const reports = all.filter(isReport);
@@ -105,6 +114,58 @@ export function Messages() {
   const openMessage = (m: MessageRow): void => {
     if (!m.readAt) markRead.mutate(m.id);
     setOpen(m);
+  };
+
+  /* ── Seçim ve silme (§1.1 "Sil" + "Hepsini Seç", `slMsj.do`) ─────────────────
+   *
+   * ⭐ Satırda ayrı bir çöp kutusu düğmesi YOK, kutucuk + tek "Sil" var. Sebep: satırın
+   * kendisi tıklanabilir (rapor açılıyor) ve yanına yıkıcı bir düğme koymak yanlış tıklamayı
+   * davet ederdi — üstelik silme geri alınamaz. Orijinalin modeli de bu ("Hepsini Seç" + Sil).
+   *
+   * ⚠️ "Hepsini Seç" görünen SAYFAYI değil **sekmenin tamamını** seçer; posta kutusunu
+   * temizlemek isteyen oyuncu sayfa sayfa dolaşmasın. Sunucu ucu 200 satırla sınırlı, liste
+   * ucu zaten en fazla 100 döndürüyor → sınır aşılamaz. */
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(rowKey(r)));
+
+  const toggle = (key: string): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAll = (): void => {
+    setSelected(allSelected ? new Set() : new Set(rows.map(rowKey)));
+  };
+
+  const removeSelected = async (): Promise<void> => {
+    const picked = rows.filter((r) => selected.has(rowKey(r)));
+    if (picked.length === 0) return;
+    const messageIds = picked.filter((r) => r.kind === 'message').map((r) => r.message.id);
+    const channelIds = picked.filter((r) => r.kind === 'chat').map((r) => r.chat.channelId);
+
+    const ok = await confirm({
+      title: `${picked.length} kayıt silinsin mi?`,
+      danger: true,
+      confirmLabel: 'Sil',
+      body: (
+        <div className="space-y-2">
+          <p>Seçtiğin kayıtlar posta kutundan <b>kalıcı olarak</b> silinir.</p>
+          {channelIds.length > 0 ? (
+            <p className="text-muted">
+              Sohbetler yalnız <b>senden</b> silinir; karşı tarafta aynen durur.
+            </p>
+          ) : null}
+        </div>
+      ),
+    });
+    if (!ok) return;
+
+    if (messageIds.length > 0) await deleteMessages.mutateAsync(messageIds);
+    for (const id of channelIds) await clearConversation.mutateAsync(id);
+    setSelected(new Set());
+    setPage(0);
   };
 
   /**
@@ -139,7 +200,7 @@ export function Messages() {
             ([id, label, list]) => {
               const n = unreadIn(list as InboxRow[]);
               return (
-                <button key={id} onClick={() => { setTab(id); setPage(0); }}
+                <button key={id} onClick={() => { setTab(id); setPage(0); setSelected(new Set()); }}
                   className={`relative flex-1 rounded-[var(--radius-sm)] border-2 px-2 py-1.5 text-xs ${
                     tab === id
                       ? 'border-strong bg-accent text-on-accent'
@@ -160,22 +221,46 @@ export function Messages() {
 
       <Panel title={tab === 'reports' ? 'Raporlar' : 'Mesajlar'}
         right={rows.length > 0 ? `${rows.length} kayıt` : undefined}>
+        {rows.length > 0 ? (
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll}
+                className="h-4 w-4 accent-[var(--mw-color-accent)]" />
+              Hepsini Seç
+            </label>
+            <Button size="sm" variant="danger"
+              disabled={selected.size === 0 || deleteMessages.isPending}
+              onClick={() => void removeSelected()}>
+              {deleteMessages.isPending ? 'Siliniyor…' : `Sil${selected.size > 0 ? ` (${selected.size})` : ''}`}
+            </Button>
+          </div>
+        ) : null}
+
         {visible.length === 0 ? (
           <Empty>{tab === 'reports' ? 'Hiç raporun yok.' : 'Hiç mesajın yok.'}</Empty>
         ) : (
           <ul className="divide-y divide-border">
             {visible.map((row, i) => {
               const alt = i % 2 === 1 ? 'bg-row-alt' : '';
+              const key = rowKey(row);
               const shell = `w-full px-3 py-2 text-left hover:bg-raised ${
                 row.unread ? 'border-l-2 border-danger bg-danger/5' : 'border-l-2 border-transparent'
               }`;
+              /* Kutucuk satırın DIŞINDA: satırın kendisi bir <button> ve iç içe düğme
+                 geçersiz HTML — ayrıca kutucuğa basınca rapor açılmamalı. */
+              const check = (
+                <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)}
+                  aria-label="Seç"
+                  className="ml-3 h-4 w-4 shrink-0 cursor-pointer accent-[var(--mw-color-accent)]" />
+              );
 
               /* ⭐ SOHBET SATIRI: tıklayınca pencere açılır (modal DEĞİL). Önizleme karşı
                  tarafın son mesajının satıra sığdığı kadarı (kullanıcı 2026-07-31). */
               if (row.kind === 'chat') {
                 const c = row.chat;
                 return (
-                  <li key={`c${c.channelId}`} className={alt}>
+                  <li key={key} className={`flex items-center ${alt}`}>
+                    {check}
                     <button className={shell} onClick={() => openChat(c.playerId, c.username)}>
                       <div className="flex items-center gap-2.5">
                         <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={26} height={26}
@@ -207,7 +292,8 @@ export function Messages() {
               const m = row.message;
               const t = reportType(m);
               return (
-                <li key={m.id} className={alt}>
+                <li key={key} className={`flex items-center ${alt}`}>
+                  {check}
                   {/* ⭐ Tür ikonlu satır (kullanıcı, 2026-07-30). Okunmamış: sol accent şerit
                       + hafif zemin + kalın başlık — eski "kalın + nokta" düzeninden daha net. */}
                   <button className={shell} onClick={() => openMessage(m)}>

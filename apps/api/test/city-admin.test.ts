@@ -12,6 +12,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { HERO_NAMES, NAME_MAX, NAME_MIN, clampName, pickHeroName } from '@mobiwar/catalog';
 import type { AuthedRequest } from '../src/auth/auth.guard.ts';
+import { BattleController } from '../src/battles/battle.controller.ts';
 import { CaveService } from '../src/cave/cave.service.ts';
 import { CityController } from '../src/cities/city.controller.ts';
 import { CityService } from '../src/cities/city.service.ts';
@@ -306,6 +307,99 @@ describe('şehir terk etme — silme', () => {
       SELECT 1 FROM audit_log WHERE action = 'city.abandoned' AND entity_id = ${colony}
     `);
     expect(audit).toHaveLength(1);
+  });
+});
+
+/**
+ * ⭐ MESAJ / RAPOR SİLME (`slMsj.do` + "Hepsini Seç").
+ *
+ * Tek uç hem tek satırı hem toplu seçimi karşılıyor; kritik nokta **sahiplik**: silme
+ * geri alınamaz, bu yüzden başkasının satırına dokunmadığı ve dokunmadığını da SIZDIRMADIĞI
+ * (yanıt yalnız sayı) ölçülüyor.
+ */
+describe('mesaj / rapor silme', () => {
+  let mails: BattleController;
+
+  const write = async (playerId: number, kind: string, subject: string): Promise<number> => {
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO messages (world_id, player_id, kind, subject, at)
+      VALUES (${worldId}, ${playerId}, ${kind}, ${subject}, now()) RETURNING id
+    `);
+    return Number(row!['id']);
+  };
+
+  const countFor = async (playerId: number): Promise<number> => {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM messages WHERE player_id = ${playerId}
+    `);
+    return Number(r!['n']);
+  };
+
+  beforeEach(() => { mails = new BattleController(h.db); });
+
+  it('tek satır silinir', async () => {
+    const id = await write(me, 'battle_report', 'Savaş');
+    const res = await mails.deleteMessages({ ids: [id] }, asReq(me));
+    expect(res['deleted']).toBe(1);
+    expect(await countFor(me)).toBe(0);
+  });
+
+  it('toplu silme — birden çok satır tek istekte', async () => {
+    const ids = [
+      await write(me, 'battle_report', 'A'),
+      await write(me, 'spy_report', 'B'),
+      await write(me, 'system', 'C'),
+    ];
+    const res = await mails.deleteMessages({ ids }, asReq(me));
+    expect(res['deleted']).toBe(3);
+    expect(await countFor(me)).toBe(0);
+  });
+
+  /** ⚠️ Sahiplik WHERE'de: başkasının satırı silinmez ve "vardı" bilgisi de sızmaz. */
+  it('⭐ başkasının satırı silinmez, sayı da sızdırmaz', async () => {
+    const [other] = await withCity('komsu', 4);
+    const mine = await write(me, 'battle_report', 'Benim');
+    const his = await write(other, 'battle_report', 'Onun');
+
+    const res = await mails.deleteMessages({ ids: [mine, his] }, asReq(me));
+    expect(res['deleted']).toBe(1);            // yalnız kendi satırı sayıldı
+    expect(await countFor(other)).toBe(1);     // onunki yerinde
+  });
+
+  it('başka DÜNYANIN satırı silinmez', async () => {
+    const id = await write(me, 'battle_report', 'Benim');
+    await expect(mails.deleteMessages({ ids: [id] }, asReq(me, worldId + 500)))
+      .resolves.toMatchObject({ deleted: 0 });
+    expect(await countFor(me)).toBe(1);
+  });
+
+  it('boş dizi ve 200 üstü istek reddedilir', async () => {
+    await expect(mails.deleteMessages({ ids: [] }, asReq(me))).rejects.toThrow();
+    const many = Array.from({ length: 201 }, (_, i) => i + 1);
+    await expect(mails.deleteMessages({ ids: many }, asReq(me))).rejects.toThrow();
+  });
+
+  /**
+   * ⭐ Posta kutusu satırı silinir ama SAVAŞ durur — karşı taraf kendi raporunu görmeye
+   * devam etmeli, üstelik `battles` bir denetim kaydı.
+   */
+  it('⭐ rapor silinince savaş kaydı DURUR', async () => {
+    const [b] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO battles (world_id, attacker_player_id, defender_player_id, at, winner,
+                           night, rng_seed, engine_version, catalog_hash, input, result)
+      VALUES (${worldId}, ${me}, ${me}, now(), 'attacker', false, 1, 'test', 'test',
+              '{}'::jsonb, '{}'::jsonb)
+      RETURNING id
+    `);
+    const battleId = Number(b!['id']);
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO messages (world_id, player_id, kind, subject, battle_id, at)
+      VALUES (${worldId}, ${me}, 'battle_report', 'Savaş', ${battleId}, now()) RETURNING id
+    `);
+
+    await mails.deleteMessages({ ids: [Number(row!['id'])] }, asReq(me));
+    const left = await h.db.execute(sql`SELECT 1 FROM battles WHERE id = ${battleId}`);
+    expect(left).toHaveLength(1);
   });
 });
 

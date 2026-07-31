@@ -6,14 +6,24 @@
  * her biri kendi yüzünü görür (§13.10.1).
  */
 import {
-  Controller, ForbiddenException, Get, HttpCode, Inject, NotFoundException, Param, Post, Query,
-  Req, UseGuards,
+  BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Inject,
+  NotFoundException, Param, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { buildBattleReport, type BattleRow, type ReportSide } from './battle-report.ts';
+
+/**
+ * Toplu silme isteği. **200 üst sınırı** keyfî değil: "Hepsini Seç" ekrandaki SAYFAYI seçer
+ * (en fazla 100 satır), yani sınır normal kullanımın iki katı. Sınırsız bıraksaydık tek
+ * istekle on binlerce satır silinebilirdi ve `id = ANY(...)` planı çöker.
+ */
+const deleteMessagesRequest = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(200),
+});
 
 @Controller('api/v1')
 @UseGuards(AuthGuard)
@@ -71,6 +81,53 @@ export class BattleController {
        WHERE id = ${Number(id)} AND player_id = ${player.playerId}
          AND world_id = ${player.worldId} AND read_at IS NULL
     `);
+  }
+
+  /**
+   * ⭐ **MESAJ / RAPOR SİLME** — orijinalin `slMsj.do`'su + "Hepsini Seç" (`g.java:32` a[14]).
+   *
+   * Tek uç hem tek satırı hem toplu seçimi karşılar: istemci her hâlde bir `ids` dizisi
+   * gönderir. Ayrı bir `DELETE /messages/:id` yazmak aynı sahiplik koşulunu ikinci kez
+   * kopyalamak olurdu — ve iki yoldan biri unutulduğunda sızıntı tam oradan çıkar.
+   *
+   * ⚠️ **Yalnız posta kutusu satırı silinir, SAVAŞ silinmez.** `messages.battle_id` →
+   * `battles` bağı `ON DELETE CASCADE` ama yön TERS (savaş silinirse mesaj gider, tersi
+   * değil). Bu şart: aynı savaşın karşı tarafı kendi raporunu görmeye devam etmeli, üstelik
+   * `battles` denetim kaydıdır.
+   *
+   * ⚠️ Sahiplik koşulu WHERE'de (`markRead` ile aynı desen): başkasının satırı hiç
+   * eşleşmez, dolayısıyla "var mı yok mu" bilgisi de sızmaz. Yanıt yalnız **kaç satır
+   * silindiğini** söyler.
+   *
+   * ⚠️ Sohbetler (`chat_*`) buradan GEÇMEZ — onların kendi "yalnız bende sil" ucu var
+   * (`DELETE /chat/conversations/:id`), çünkü sohbet iki taraflı ve satır sunucuda kalır.
+   */
+  @Post('messages/delete')
+  @HttpCode(200)
+  async deleteMessages(
+    @Body() body: unknown, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const parsed = deleteMessagesRequest.safeParse(body);
+    if (!parsed.success) throw new BadRequestException('Geçersiz istek.');
+
+    /**
+     * ⚠️ Kimlik listesi **jsonb** olarak geçiyor, `bigint[]` olarak DEĞİL. Denendi ve iki ayrı
+     * duvara çarpıldı: ham `number[]` verilince postgres.js *"the 'string' argument must be of
+     * type string"* diye patlıyor (int8 dizisini metin protokolüyle yazıyor), `String`'e
+     * çevirince de drizzle diziyi tek parametreye düzleştirip *"malformed array literal"*
+     * ürettiriyor. Tek metin parametresi bu katmanların ikisini de atlıyor ve planlayıcı
+     * yine `messages_player` indeksini kullanıyor.
+     */
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      DELETE FROM messages
+       WHERE player_id = ${player.playerId} AND world_id = ${player.worldId}
+         AND id IN (
+           SELECT value::bigint FROM jsonb_array_elements_text(${JSON.stringify(parsed.data.ids)}::jsonb)
+         )
+      RETURNING id
+    `);
+    return { deleted: rows.length };
   }
 
   /** Savaş raporu — okuyanın tarafına göre şekillenir. */

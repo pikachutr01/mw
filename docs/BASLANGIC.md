@@ -204,7 +204,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | **Baraka / Savunma** | ✅ üretim bandı (sıralama + iptal) · Savunma'da Sur/Kalkan **paralel şerit** |
 | **Yapılar / Akademi** | ✅ kuyruk + iptal · Yapılar'da **Mağara modalı** (adına tıkla) |
 | **Dünya** | ✅ diyar listesi → modal (altı görev tipi) · **açılış aktif şehrin diyarından** · ittifak sütunu dolu · görev modalında sabit alt bölüm · **`/world/:k/:d` derin bağlantısı** |
-| **Mesajlar** | ✅ Raporlar/Mesajlar sekmeleri · tek tip liste satırı · **zengin savaş raporu modalı** (§7.1b) |
+| **Mesajlar** | ✅ Raporlar/Mesajlar sekmeleri · tek tip liste satırı · **zengin savaş raporu modalı** (§7.1b) · **silme**: satır kutucuğu + "Hepsini Seç" + tek "Sil", onay diyaloğuyla (`POST /messages/delete`) |
 | **Komuta Merkezi** | ✅ Genel Durum + İttifak (§13.15b) + **Arama** (§13.18.0) + Sıralamalar (Oyuncu ✅ · Kahraman ✅ · İttifak ✅) |
 | **Seçenekler** | ✅ hesap (e-posta + doğrulama rozeti + **Şifre Değiştir**) + **Şehir paneli** (Şehir Adı Değiştir · Şehri Terk Et; orijinalde de bu menüde — `g.java` case 63) + tema (tema **yalnız burada**) + **Bildirimler paneli** (izin düğmesi + 4 kategori anahtarı, §7.2b) |
 | **Tapınak** | ✅ kahraman kartları · yetenek/diriltme/yeniden adlandırma |

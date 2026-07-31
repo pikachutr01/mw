@@ -673,6 +673,22 @@ export function useMarkRead() {
   });
 }
 
+/**
+ * ⭐ MESAJ / RAPOR SİLME — tek satır da toplu seçim de AYNI uçtan (`ids` dizisi).
+ *
+ * ⚠️ Silme **iyimser değil**: `useMarkRead` gibi listeyi önceden düzeltmiyoruz. Okundu
+ * işareti yanlışsa bedeli bir rozet, silme yanlışsa bedeli kalıcı veri — bu yüzden liste
+ * yalnız sunucu onayından sonra tazeleniyor. Sayfa 10 satır gösteriyor, gecikme fark edilmez.
+ */
+export function useDeleteMessages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) =>
+      api<{ deleted: number }>('/api/v1/messages/delete', { method: 'POST', body: { ids } }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['messages'] }); },
+  });
+}
+
 /** Yoldaki orduyu geri çağırır. Dönüş süresi GİDİLEN yol kadardır. */
 export function useCancelMission() {
   const invalidate = useInvalidate();

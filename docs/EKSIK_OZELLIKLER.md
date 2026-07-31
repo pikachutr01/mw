@@ -27,7 +27,10 @@
 > 15 sn) · acemi kısıtı 12 saat (cevap hakkı saklı) · push zemini. Ayrıntı §13.12.
 >
 > **Kalan boşluklar (bu turda KAPSAM DIŞI, dürüstçe açık bırakılıyor):**
-> - Rapor satırlarında **Sil** ve **Hepsini Seç** (toplu silme) — orijinalde vardı
+> - ~~Rapor satırlarında **Sil** ve **Hepsini Seç**~~ ✅ **2026-07-31'de yapıldı**: her satırda
+>   kutucuk + üstte "Hepsini Seç" ve tek "Sil" düğmesi, onay diyaloğuyla. Tek uç
+>   (`POST /messages/delete`) hem tek satırı hem toplu seçimi karşılıyor; sohbet satırları
+>   kendi "yalnız bende sil" ucundan geçiyor
 > - 3'lü filtre "Hepsini Göster" (bizde 2 sekme — bu kullanıcının bilinçli tercihi)
 > - **Şikayet moderasyon paneli** — kayıt üretiliyor, inceleme ekranı sonraki tur
 > - İttifak sohbeti ve Genel Sohbet (aynı `chat_*` altyapısı, ayrı tur)
