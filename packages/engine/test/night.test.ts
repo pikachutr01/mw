@@ -142,6 +142,42 @@ describe('§7 gece hangi statları etkiler', () => {
     expect(nightBattle.defender.wallIntegrity).toBe(day.defender.wallIntegrity);
   });
 
+  /**
+   * ⭐ ONARIM ORANI — ölçüm dokümanı çürüttü (2026-07-31, kullanıcının binary koşumu).
+   *
+   * Oyunun metni *"%50-70 arası"* diyor; 12 gözlem (2 yapı türü × gündüz/gece × 3 koşu)
+   * **0,75-0,81** ima ediyor. Kesin dışlama: eski aralık en yüksek değerinde (0,70) 200
+   * kuleden yalnız 140 kalan üretebiliyor, orijinalin EN DÜŞÜK ölçümü 152.
+   *
+   * Bu test aralığı kilitler: bir daha "dokümana dönelim" diye geri alınırsa kırılır.
+   */
+  it('⭐ yapı onarımı orijinalin ölçülen aralığını üretebilmeli', () => {
+    const attacker = side({ elf: 2000 }, {
+      archery: 10, blacksmithing: 10, chemistry: 10, instinct: 10,
+      sorcery: 10, armor: 10, masonry: 10, talisman: 10,
+    });
+    const defender = side({ dwarf: 500, archer_tower: 200, mangonel_tower: 100 }, {
+      archery: 10, blacksmithing: 10, chemistry: 10, instinct: 10,
+      sorcery: 10, armor: 10, masonry: 10, talisman: 10,
+    });
+
+    /* Aynı savaşı farklı seed'lerle koş → onarım rulosu bütün aralığı tarasın. */
+    const towers: number[] = [];
+    for (let i = 0; i < 40; i++) {
+      const r = simulate({
+        attacker, defender, night: false,
+        nightVisionAttacker: 0, nightVisionDefender: 0, seed: `onarim-${i}`,
+      });
+      towers.push(r.defender.counts['archer_tower'] ?? 0);
+    }
+
+    // Orijinalin gündüz okçu kulesi ölçümü: 152-161.
+    expect(Math.min(...towers), 'en düşük').toBeGreaterThanOrEqual(150);
+    expect(Math.max(...towers), 'en yüksek').toBeLessThanOrEqual(165);
+    // Rulo gerçekten rastgele: hep aynı sayı çıkmamalı.
+    expect(new Set(towers).size).toBeGreaterThan(1);
+  });
+
   it('gece kapalıyken gece görüşü hiçbir şey değiştirmez', () => {
     const attacker = side({ dwarf: 2500 });
     const defender = side({ dwarf: 3500 });

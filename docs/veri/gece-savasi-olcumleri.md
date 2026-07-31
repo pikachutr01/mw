@@ -3,9 +3,39 @@
 > **Amaç:** gece savaşındaki artık over-kill'i sayısallaştırmak. Mekanizma 2026-07-31'de
 > Ghidra ile **yapısal olarak** çözüldü (aşağıda); geriye kalan soru "büyüklük doğru mu".
 >
-> **Nasıl doldurulur:** her satırı binary simülatörde AYNI girdilerle koş, `ORİJİNAL` sütunlarını
-> yaz. Motor sütunları bu dosya yazılırken üretildi (`mw/packages/engine`, sürüm 1.1.0).
-> ⚠️ Motor sütunlarını yeniden üretmek için: `node scratchpad/gece_olcum.mjs`
+> **Motor sütunlarını yeniden üretmek için:** `node scratchpad/gece_olcum.mjs`
+
+---
+
+## ⭐ SONUÇ (2026-07-31, kullanıcı ölçümü tamamlandı)
+
+| grup | ne ölçüldü | sonuç |
+| :-- | :-- | :-- |
+| **A** | gece görüşü taraması, 6 hücre | ✅ **Motorun 6 değeri de orijinalin aralığının İÇİNDE.** Gece over-kill'i **YOK** — "%15 artık" iddiası kesin olarak çürüdü. |
+| **B** | kaos ile Büyü Canı izolasyonu | ✅ Motor 7785/2783, orijinal 7760-7793 / 2771-2789. Oran 0,357 doğrulandı → gece **Büyü Canı'nı da azaltıyor**. Ghidra okuması (stat+0x08) ölçümle teyitli. |
+| **C** | yapılı savunma, 3. döngü | ⚠️ **Kayıplar birebir** (atkK 830 vs 829-831 · defK 500 vs 500 · gece 659 vs 658-661, 391 vs 390-391) ama **kalan yapı sayıları %30 düşüktü** → sebep savaşta değil **ONARIM ORANINDA** çıktı (aşağıya bak). |
+| **D** | taşıma kapasitesi | ⛔ Simülatör kapasite bilgisi vermiyor; **gece ve gündüz ganimet aynı** gözlendi. Kullanıcı kararı: **gece taşımayı değiştirmez** — disassembly'de de üçüncü bir çarpım yok. Kapandı. |
+
+### ⭐⭐ C grubundan çıkan asıl bulgu: ONARIM ORANI %50-70 DEĞİL, ~%76-81
+
+Oyunun kendi metni *"zarar gören savunma üniteleri %50-70 arası oranda yenilenir"* diyor.
+Ölçüm bunu **çürütüyor**. Dört bağımsız seriden geri çözülen oran:
+
+| seri | orijinal (3 koşu) | ima edilen onarım oranı |
+| :-- | :-- | :-- |
+| gündüz okçu kulesi (200) | 152-161 | 0,755 – 0,801 |
+| gündüz mangonel kulesi (100) | 76-81 | 0,750 – 0,802 |
+| gece okçu kulesi (200) | 156-163 | 0,763 – 0,801 |
+| gece mangonel kulesi (100) | 79-83 | 0,761 – 0,807 |
+
+⚠️ Bu bir "yakın değil" durumu değil, **kesin dışlama**: motorun eski aralığı en yüksek
+değerinde (0,70) 200 kuleden **140** kalan üretebiliyor; orijinalin en düşük ölçümü **152**.
+Yani eski aralık orijinali ÜRETEMEZ.
+
+⭐ Motorun v0.6 öncesi kalibrasyonu **sabit %78**'di ve ölçümün tam ortasına düşüyor — o gün
+"doküman oranına dönelim" diye yapılan değişiklik bir **regresyondu**. Yeni aralık
+**0,76 – 0,81** (`CombatConfig.repair`, iki motorda da). Kullanıcı kuralı gereği ölçüm esas
+alındı, sayı ayarlanabilir sabitte duruyor ve çelişki burada bildiriliyor.
 
 ---
 
@@ -69,21 +99,23 @@ En temiz izolasyon: tek tip birim, yapı yok, kahraman yok, teknik 0. Yalnız GG
 
 | # | GG (sal/sav) | Motor kazanan | Motor atkK | Motor defK | Motor tur | ORİJİNAL kazanan | ORİJİNAL atkK | ORİJİNAL defK | ORİJİNAL tur |
 | :-- | :-- | :-- | --: | --: | --: | :-- | --: | --: | --: |
-| A0 | GÜNDÜZ | defender | 2500 | 1070 | 5 | | | | |
-| A1 | 0 / 0 | defender | 1903 | 805 | 5 | | | | |
-| A2 | 5 / 0 | defender | 1802 | 1177 | 5 | | | | |
-| A3 | 0 / 5 | defender | 2500 | 656 | 5 | | | | |
-| A4 | 10 / 10 | defender | 2500 | 1025 | 5 | | | | |
-| A5 | 20 / 20 | defender | 2500 | 1046 | 5 | | | | |
+| A0 | GÜNDÜZ | defender | 2500 | 1070 | 5 |defender |2500 |1068-1072 |5 |
+| A1 | 0 / 0 | defender | 1903 | 805 | 5 |defender |1901-1903 |802-806 |5 |
+| A2 | 5 / 0 | defender | 1802 | 1177 | 5 |defender |1799-1704 |1175-1178 |5 |
+| A3 | 0 / 5 | defender | 2500 | 656 | 5 |defender |2500 |654-657 |5 |
+| A4 | 10 / 10 | defender | 2500 | 1025 | 5 |defender |2500 |1021-1025 |5 |
+| A5 | 20 / 20 | defender | 2500 | 1046 | 5 |defender |2500 |1042-1047 |5 |
 
 ⚠️ A2 dikkat çekici: saldıranın gece görüşü 5 olunca **savunanın kaybı 805 → 1177'ye ÇIKIYOR**
 (gündüzkü 1070'in de üstünde). Çünkü GG yalnız o tarafın Can'ını korur, o da saldırı havuzunu
 (Σ Can×adet) büyütür. Orijinal bu davranışı doğruluyorsa mekanizma tamam; doğrulamıyorsa
 çarpan **havuza değil yalnız dayanıklılığa** uygulanıyor demektir — o da bambaşka bir model.
 
-**Ne arıyoruz:** A0 ile A1 arasındaki oran. Motor gündüz→gece savunan kaybını 1070→805
-(**%25 azalma**) diyor. Orijinal daha az azaltıyorsa motor gece "fazla koruyor"; daha çok
-azaltıyorsa **over-kill** hâlâ var demektir.
+✅ **SONUÇ: altı hücrenin altısı da orijinalin aralığının içinde.** A2'nin ters yönlü davranışı
+(GG 5 → savunan kaybı 805'ten 1177'ye ÇIKIYOR) orijinalde de aynen var (1175-1178) — yani
+çarpan gerçekten **saldırı havuzuna** uygulanıyor, yalnız dayanıklılığa değil. Gece over-kill'i
+yok. (A2'nin atkK sütununda "1799-1704" yazılmış; 1704 açık bir yazım hatası, 1804 olmalı —
+motorun 1802'si aralığın içinde.)
 
 ---
 
@@ -96,12 +128,13 @@ gece kaos'u etkilemiyorsa, ikinci çarpım Büyü Canı DEĞİLDİR ve okuma yan
 
 | # | | Motor defK | Motor tur | ORİJİNAL defK | ORİJİNAL tur |
 | :-- | :-- | --: | --: | --: | --: |
-| B1 | GÜNDÜZ | 7785 | 3 | | |
-| B2 | GECE | 2783 | 3 | | |
+| B1 | GÜNDÜZ | 7785 | 3 |7760-7793 |3 |
+| B2 | GECE | 2783 | 3 |2771-2789 |3 |
 
-**Ne arıyoruz:** B2/B1 oranı. Motor 0,357 diyor. Orijinalde oran **1,0'a yakınsa** gece Büyü
-Canı'na dokunmuyor demektir → `applyNight`ten `magicHp` çıkar. 0,49 (=0,7²) civarıysa büyü
-hasarı çarpanın KARESİNİ yiyor demektir (hem havuz hem mitigasyon).
+✅ **SONUÇ: ikisi de aralığın içinde.** Oran 0,357 doğrulandı — 1,0 olsaydı gece Büyü Canı'na
+dokunmuyor olurdu, 0,49 olsaydı çarpanın karesi devredeydi. Ghidra'nın "ikinci çarpım
+stat+0x08 = Büyü Canı" okuması **ölçümle bağımsızca teyitli**. 2026-07-22'de eğri uydurmasıyla
+eklenen `magicHp` çarpımı doğruymuş.
 
 ---
 
@@ -113,11 +146,14 @@ Binary savunanın yapılarını da gece çarpanıyla azaltıyor (`FUN_00413120`)
 
 | # | | Motor atkK | Motor defK | Motor kalan okçu | Motor kalan mangonel | ORİJİNAL atkK | ORİJİNAL defK | ORİJİNAL okçu | ORİJİNAL mangonel |
 | :-- | :-- | --: | --: | --: | --: | --: | --: | --: | --: |
-| C1 | GÜNDÜZ | 830 | 500 | 120 | 60 | | | | |
-| C2 | GECE | 659 | 391 | 126 | 65 | | | | |
+| C1 | GÜNDÜZ | 830 | 500 | 120 | 60 | 829-831|500 |152-161 arası |76-81 arası |
+| C2 | GECE | 659 | 391 | 126 | 65 |658-661 |390-391 |156-163 arası |79-83 arası |
 
-⚠️ Onarım kurası rastgele (%50-70) → kalan yapı sayıları savaştan savaşa oynar. Orijinali
-**üç kez** koş, üçünü de yaz; karşılaştırmayı kayıp sütunlarından yap.
+✅ **Kayıplar birebir** — yani gece'nin savunma yapılarına etkisi (3. döngü) doğru modellenmiş.
+⚠️ **Kalan yapı sayıları %30 düşüktü** ve sebep savaşta değil onarımda çıktı: motor yapıların
+hepsini kaybediyor (onarım 0'a sabitlenince kalan 4 = savunma tabanı), sonra onarım geri
+getiriyor. Yani fark tamamen onarım oranından geliyordu → yukarıdaki **%76-81** bulgusu.
+Motor sütunları o düzeltmeden ÖNCEki değerlerdir (onarım 0,60'a sabitlenmiş koşum).
 
 ---
 
@@ -135,9 +171,12 @@ gece ve gündüz aynı olmalı. Sonra **taşınan ganimeti** karşılaştır.
 
 (505.000 = 100 yük × 5.000 + 500 cüce × 10. Düzeltme öncesi gece 353.500 çıkıyordu.)
 
-**Ne arıyoruz:** D2'de orijinalin taşıdığı ganimet D1'in **%70'i mi, aynısı mı**. Aynıysa bu
-turun düzeltmesi doğru. %70'iyse taşıma da çarpılıyor demektir ve düzeltme geri alınır —
-ama o zaman modifier'da ÜÇÜNCÜ bir oku-çarp-yaz çifti olması gerekirdi, disassembly'de yok.
+⛔ **ÖLÇÜLEMEDİ — kapandı.** Simülatör taşıma kapasitesini hiç göstermiyor. Kullanıcının
+gözlemi: gece ve gündüz **oluşan ganimet aynı** (500 Cüce + 100 Yük vs 1 Cüce → 59 Altın,
+134 Yemek enkaz, iki durumda da). Karar: **gece taşıma kapasitesini değiştirmez.** Bu, tek
+başına kesin kanıt değil (enkaz kapasiteden bağımsız hesaplanıyor) ama disassembly ile aynı
+yönü gösteriyor: modifier'da ÜÇÜNCÜ bir oku-çarp-yaz çifti yok. İki bağımsız işaret aynı
+yerde buluşuyor → madde kapandı.
 
 ---
 

@@ -49,7 +49,17 @@ export interface CombatConfig {
   /** [G] Gnom sabotajı: savunma yapılarının vuruş gücünü düşürür. */
   gnomeSabotage: { perStruct: number; max: number };
 
-  /** [O] Savaş sonrası yapı onarımı: kaybın %50-70'i geri gelir (her tür için bağımsız rulo). */
+  /**
+   * [O] Savaş sonrası yapı onarımı: kaybın bu oranı geri gelir (her tür için bağımsız rulo).
+   *
+   * ⚠️ **ÖLÇÜM DOKÜMANLA ÇELİŞİYOR — ölçüm esas alındı** (kullanıcı kuralı: *"tablo ile metin
+   * çelişirse tabloyu esas al, ama sayıyı tunable bir sabite koy ve çelişkiyi bildir"*).
+   * Oyunun kendi metni *"%50-70 arası oranda yenilenir"* diyor; binary simülatörde alınan
+   * **12 ölçüm** (2 yapı türü × gündüz/gece × 3 koşu) hepsi **0,75-0,81** aralığını ima ediyor.
+   * Eski %50-70 aralığı ölçümün EN DÜŞÜĞÜNE bile ulaşamıyordu (200 kuleyle en çok 140 kalan
+   * üretebiliyor, orijinalin en düşüğü 152) → aralık kesin olarak çürüdü.
+   * Ayrıntı ve ham sayılar: `docs/veri/gece-savasi-olcumleri.md` C grubu.
+   */
   repair: { min: number; max: number };
 
   /**
@@ -177,7 +187,8 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   magicShield: { base: 1.8, durumMax: 100 },   // ⭐ binary: FUN_00413610/41338c (1.8^Sv, durum 0..100)
   trap: { triggerMin: 0.75, triggerMax: 0.99, perGroundUnit: 0.2, gnomeDisarm: 1.5, power: 1.0 },
   gnomeSabotage: { perStruct: 4, max: 0.35 },
-  repair: { min: 0.5, max: 0.7 },
+  // ⚠️ 0,50-0,70 DEĞİL — bkz. yukarıdaki not (ölçüm 2026-07-31, 12 gözlem).
+  repair: { min: 0.76, max: 0.81 },
   defenseFloor: {
     enabled: true,
     minPerType: 4,

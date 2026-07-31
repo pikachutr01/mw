@@ -641,11 +641,20 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
     await runDue(m.missionId);
 
     const d = await defensesOf(defendCity);
-    // ⭐ Garanti bu: ordu ne kadar ezici olursa olsun hiçbir tip 4'ün altına inmez.
-    //    (Tabanın o seed'de mekanik olarak *gerekip gerekmediği* onarım ruloya bağlıdır;
-    //     kuralın kendisi motorun `defense-floor` testlerinde deterministik ölçülüyor.)
+    /**
+     * ⭐ Garanti bu: ordu ne kadar ezici olursa olsun hiçbir tip 4'ün altına inmez — ve
+     * savaş öncesi adedini de aşmaz.
+     *
+     * ⚠️ Eskiden `toBe(4)` yazıyordu ve 2026-07-31'de onarım oranı ölçüme göre 0,50-0,70'ten
+     * 0,76-0,81'e çıkınca kırıldı: balista 5'te kaldı, çünkü onarım artık tabanın üstünü
+     * döndürüyor. Testin KENDİ yorumu zaten "tabanın o seed'de gerekip gerekmediği onarım
+     * ruloya bağlı" diyordu — yani iddia kuralı değil, o ruloya düşen tesadüfi sayıyı
+     * sabitliyormuş. Kural olarak yeniden yazıldı; deterministik ölçüm motorun
+     * `defense-floor` testlerinde duruyor.
+     */
     for (const id of ['ballista', 'archer_tower', 'guard']) {
-      expect(d[id], `${id} tabanın altına düşmemeli`).toBe(4);
+      expect(d[id], `${id} tabanın altına düşmemeli`).toBeGreaterThanOrEqual(4);
+      expect(d[id], `${id} savaş öncesi adedini aşmamalı`).toBeLessThanOrEqual(6);
     }
 
     // Rapor, tabanın döndürdüğü adetleri taşıyan alanı DAİMA içerir (§13.11.10 raporlama kuralı).
