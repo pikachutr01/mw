@@ -155,7 +155,7 @@ export class AuthService {
     const username = input.username.trim();
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT a.id AS account_id, a.password_hash, a.locked_until, a.failed_logins,
-             p.id AS player_id, p.username, p.banned_at
+             p.id AS player_id, p.username, p.banned_at, p.ban_until, p.ban_reason
         FROM players p
         JOIN accounts a ON a.id = p.account_id
        WHERE p.world_id = ${input.worldId} AND lower(p.username) = ${username.toLowerCase()}
@@ -172,7 +172,24 @@ export class AuthService {
     if (lockedUntil && lockedUntil > new Date()) {
       throw new AuthError('account_locked', 'Çok fazla hatalı deneme — hesap geçici olarak kilitli.');
     }
-    if (row['banned_at']) throw new AuthError('banned', 'Bu hesap yasaklı.');
+    /**
+     * ⭐ CEZA SÜRELİ OLABİLİR (§oyuncu cezası). Eskiden `banned_at` dolu olduğu sürece giriş
+     * sonsuza kadar kapalıydı ve "3 gün ceza" verilemiyordu; süre dolunca kendiliğinden
+     * açılması gerekiyor.
+     *
+     * ⚠️ Süre GERÇEK zamanla kıyaslanıyor, oyun saatiyle değil: ceza bir moderasyon kararı,
+     * oyun mekaniği değil. Bakımda oyun saati donuyor; ceza da donsaydı "3 gün" bakım
+     * süresince uzardı.
+     *
+     * ⚠️ Süresi geçmiş satır TEMİZLENMİYOR — moderasyon geçmişi kalıcı olmalı; `chat_bans`
+     * ile aynı sözleşme. Yalnız etkisiz sayılıyor.
+     */
+    const banUntil = row['ban_until'] ? toDate(row['ban_until']) : null;
+    if (row['banned_at'] && (banUntil == null || banUntil > new Date())) {
+      const until = banUntil ? ` (${banUntil.toLocaleString('tr-TR')} tarihine kadar)` : '';
+      const why = row['ban_reason'] ? ` Sebep: ${String(row['ban_reason'])}` : '';
+      throw new AuthError('banned', `Bu hesap cezalı${until}.${why}`);
+    }
 
     const accountId = Number(row['account_id']);
     const ok = await this.passwords.verify(String(row['password_hash']), input.password);

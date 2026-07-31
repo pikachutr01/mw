@@ -18,6 +18,9 @@ import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import type { Tx } from './handler-registry.ts';
 
+/** Hedefi olan sefer tipleri — hedef kuralları (koruma/tatil/ceza) bunlara uygulanır. */
+export type MissionKind = 'attack' | 'transport' | 'support' | 'spy' | 'found_city';
+
 /** İptal edilebilen görev tipleri. `return` bilerek YOK — ordu zaten eve geliyor. */
 export const CANCELABLE_TYPES: readonly string[] = [
   'attack', 'transport', 'support', 'spy', 'found_city',
@@ -37,6 +40,8 @@ export type MissionErrorCode =
   | 'attack_limit'
   | 'target_protected'
   | 'target_vacation'
+  /** ⭐ Hedef oyuncu cezalı ve cezası «saldırıya kapalı» (§oyuncu cezası). */
+  | 'target_banned'
   | 'march_limit'
   | 'hero_unavailable'
   | 'world_mismatch'
@@ -172,7 +177,7 @@ export class MissionService {
         throw new MissionError('self_attack', 'Kendi şehrinize saldıramazsınız.');
       }
 
-      await this.assertTargetAttackable(t, target.playerId, opts.at);
+      await this.assertTargetAllowed(t, target.playerId, 'attack', opts.at);
       await this.assertAttackLimit(t, opts.playerId, target.id, opts.at);
       await this.assertMarchLimit(t, opts.originCityId, opts.playerId);
 
@@ -682,8 +687,17 @@ export class MissionService {
         if (o.forbidOwnTarget && target.playerId === o.playerId) {
           throw new MissionError('self_attack', 'Kendi şehrinize bu görevi gönderemezsiniz.');
         }
-        // Koruma/tatil YALNIZ düşmanca görevlerde geçerli — nakliye bir saldırı değil.
-        if (o.type === 'spy') await this.assertTargetAttackable(t, target.playerId, o.at);
+        /**
+         * ⚠️ Artık TÜM tiplerde çağrılıyor (eskiden yalnız `spy`): ceza kuralları nakliye ve
+         * desteği de bağlıyor. Koruma/tatil ayrımı fonksiyonun İÇİNDE — çağıran tarafta
+         * kalsaydı yeni bir görev tipi eklendiğinde kuralı taşımayı unutmak kolay olurdu.
+         *
+         * ⚠️ Kendi şehrine gönderimde atlanıyor: cezalı oyuncu zaten giriş yapamaz, yani
+         * kendi seferini başlatamaz; gereksiz bir sorgu olurdu.
+         */
+        if (target.playerId !== o.playerId) {
+          await this.assertTargetAllowed(t, target.playerId, o.type, o.at);
+        }
       }
 
       await this.assertMarchLimit(t, o.originCityId, o.playerId);
@@ -814,13 +828,64 @@ export class MissionService {
     };
   }
 
-  /** Acemi koruması ve tatil modu — ikisi de OYUN saatiyle kıyaslanır. */
-  private async assertTargetAttackable(tx: Tx, defenderPlayerId: number, at: Date): Promise<void> {
+  /**
+   * ⭐ HEDEF KURALLARI — acemi koruması, tatil modu ve **oyuncu cezası** tek yerde.
+   *
+   * Üçü de aynı satırdan okunuyor çünkü aralarında öncelik var ve o önceliği iki ayrı
+   * fonksiyona bölseydik sıralamayı çağıran tarafa bırakmış olurduk.
+   *
+   * ── CEZA ────────────────────────────────────────────────────────────────────────
+   * Cezalı oyuncu oyuna giremez, yani şehirlerini savunamaz. Şehirlerine ne olacağı
+   * cezanın kipine bağlı:
+   *
+   *   `open`   — şehirler **saldırıya açık**. Kalıcı cezada doğru olan bu: hesap geri
+   *              gelmeyecek, şehirleri dünyanın kaynağı olur.
+   *              ⚠️ Açık ceza **korumayı ve tatil modunu EZER**: yönetici "saldırıya açık"
+   *              dedikten sonra saldırıların acemi korumasına çarpması, verilen kararın
+   *              sessizce uygulanmaması olurdu.
+   *
+   *   `closed` — şehirler **korunur**; oyuncu döndüğünde imparatorluğunu bulur.
+   *              Yalnız **casusluk** serbest (dünya kör kalmasın). Saldırı ve nakliye
+   *              kapalı: nakliye açık olsaydı cezalının dokunulmaz şehri güvenli bir kasa
+   *              olurdu. ⚠️ Destek bugün zaten yalnız KENDİ şehirlerine gidiyor
+   *              (`requireOwnTarget`), yani orada kural no-op; guard tip-bağımsız yazıldı ki
+   *              müttefik desteği geldiğinde ayrıca eklemek gerekmesin.
+   */
+  private async assertTargetAllowed(
+    tx: Tx, defenderPlayerId: number, type: MissionKind, at: Date,
+  ): Promise<void> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
-      SELECT protected_until, vacation_until FROM players WHERE id = ${defenderPlayerId}
+      SELECT protected_until, vacation_until, banned_at, ban_until, ban_mode
+        FROM players WHERE id = ${defenderPlayerId}
     `);
     const p = rows[0];
     if (!p) throw new MissionError('target_not_found', 'Hedef oyuncu bulunamadı.');
+
+    /**
+     * ⚠️ Ceza GERÇEK zamanla kıyaslanır (`new Date()`), oyun saatiyle değil: ceza bir
+     * moderasyon kararı, oyun mekaniği değil. Bakımda oyun saati donuyor ve cezalar da
+     * donsaydı "3 gün ceza" bakım süresince uzardı.
+     */
+    const banUntil = p['ban_until'] == null ? null : toDate(p['ban_until']);
+    const banActive = p['banned_at'] != null && (banUntil == null || banUntil > new Date());
+
+    if (banActive) {
+      /**
+       * Süresiz ceza daima açıktır (şema CHECK'i de bunu zorluyor) → `banUntil == null`
+       * dalı burada zaten `open` olarak dönüyor ve aşağıda `banUntil` dolu olmak zorunda.
+       */
+      const mode = banUntil == null ? 'open' : String(p['ban_mode'] ?? 'open');
+      if (mode === 'open') return;                       // koruma/tatil EZİLİR
+      if (type === 'spy') return;                        // kapalıda yalnız casusluk
+      throw new MissionError(
+        'target_banned',
+        'Hedef oyuncu cezalı ve şehirleri korumada — yalnız casus gönderilebilir.',
+        { until: banUntil?.toISOString() ?? null },
+      );
+    }
+
+    /** Koruma ve tatil YALNIZ düşmanca görevlerde geçerli — nakliye bir saldırı değil. */
+    if (type !== 'attack' && type !== 'spy') return;
 
     const protectedUntil = p['protected_until'] == null ? null : toDate(p['protected_until']);
     if (protectedUntil && protectedUntil > at) {

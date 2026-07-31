@@ -15,8 +15,10 @@ import {
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
+import { AuthService } from '../auth/auth.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
+import { getGateway } from '../realtime/gateway-registry.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 
 /**
@@ -36,6 +38,18 @@ const banBody = z.object({
  * dismissed`. Kendi kelimelerimi uydursaydım (`acknowledge` gibi) tabloya şemanın tanımadığı
  * bir durum yazılırdı ve `chat_reports_open` indeksi ile filtreler sessizce kayardı.
  */
+/**
+ * ⭐ OYUNCU CEZASI. ⚠️ `days` yoksa ceza **SÜRESİZ** ve kip zorunlu olarak `open` olur —
+ * kalıcı yasakta hesap geri gelmeyecek, şehirlerini korumanın bir anlamı yok (şema CHECK'i
+ * de bunu zorluyor, yalnız burada değil).
+ */
+const playerBanBody = z.object({
+  days: z.number().int().min(1).max(3650).optional(),
+  mode: z.enum(['open', 'closed']).default('open'),
+  reason: z.string().trim().min(3).max(500),
+}).refine((o) => o.mode === 'open' || o.days != null,
+  { message: 'Süresiz ceza saldırıya kapalı olamaz.', path: ['mode'] });
+
 const resolveBody = z.object({
   action: z.enum(['reviewed', 'actioned', 'dismissed']),
   note: z.string().trim().max(500).optional(),
@@ -44,7 +58,10 @@ const resolveBody = z.object({
 @Controller('api/v1/admin')
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminModerationController {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    private readonly auth: AuthService,
+  ) {}
 
   /* ── Oyuncu künyesi ───────────────────────────────────────────────────────── */
 
@@ -59,7 +76,8 @@ export class AdminModerationController {
     const id = Number(playerId);
     const [p] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT p.id, p.username, p.world_id, p.score, p.created_at, p.last_seen_at,
-             p.banned_at, p.protected_until, p.vacation_until, p.alliance_id,
+             p.banned_at, p.ban_until, p.ban_mode, p.ban_reason,
+             p.protected_until, p.vacation_until, p.alliance_id,
              a.id AS account_id, a.email, a.role, a.email_verified_at, a.locked_until,
              a.failed_logins, a.created_at AS account_created_at,
              al.name AS alliance_name
@@ -105,6 +123,16 @@ export class AdminModerationController {
         lastSeenAt: p['last_seen_at'] == null ? null : toDate(p['last_seen_at']).toISOString(),
         bannedAt: p['banned_at'] == null ? null : toDate(p['banned_at']).toISOString(),
         alliance: p['alliance_name'] == null ? null : String(p['alliance_name']),
+      },
+      /**
+       * ⚠️ `active` SUNUCUDA hesaplanıyor: süresi geçmiş bir ceza satırı duruyor olabilir ve
+       * "cezalı mı" kararı tek yerden verilmeli, istemci tarih karşılaştırmasın.
+       */
+      ban: p['banned_at'] == null ? null : {
+        until: p['ban_until'] == null ? null : toDate(p['ban_until']).toISOString(),
+        mode: p['ban_mode'] == null ? 'open' : String(p['ban_mode']),
+        reason: p['ban_reason'] == null ? null : String(p['ban_reason']),
+        active: p['ban_until'] == null || toDate(p['ban_until']) > new Date(),
       },
       account: {
         id: Number(p['account_id']), email: String(p['email']), role: String(p['role']),
@@ -232,6 +260,93 @@ export class AdminModerationController {
         by: r['by_username'] == null ? null : String(r['by_username']),
       })),
     };
+  }
+
+  /* ── Oyuncu cezası (saldırıya açık/kapalı) ────────────────────────────────── */
+
+  /**
+   * ⭐ OYUNCU CEZASI — oyuncu oyuna giremez; şehirlerine ne olacağı **kipe** bağlı.
+   *
+   *   `open`   — şehirleri **saldırıya açık** kalır. Kalıcı cezada tek doğru seçenek: hesap
+   *              geri gelmeyecek, şehirleri dünyanın kaynağı olur. Bu kip acemi korumasını
+   *              ve tatil modunu da **ezer** — "saldırıya açık" dedikten sonra saldırıların
+   *              korumaya çarpması, verilen kararın sessizce uygulanmaması olurdu.
+   *   `closed` — şehirleri **korunur**; oyuncu döndüğünde imparatorluğunu bulur. Yalnız
+   *              casusluk serbest, nakliye kapalı: açık olsaydı cezalının dokunulmaz şehri
+   *              güvenli bir kasa olurdu. (Destek zaten yalnız kendi şehirlerine gidiyor.)
+   *
+   * ⚠️ Ceza verilince **tüm oturumlar düşürülür ve soketler kapanır**: oyuncu "girişim hâlâ
+   * açık" diye oynamaya devam edememeli. Aksi hâlde ceza ancak token süresi (15 dk) dolunca
+   * işlerdi.
+   */
+  @Post('players/:playerId/ban')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async banPlayer(
+    @Param('playerId') playerId: string, @Body() body: unknown, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const parsed = playerBanBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    const id = Number(playerId);
+
+    const [p] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT world_id, account_id, username FROM players WHERE id = ${id}
+    `);
+    if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
+    // ⛔ Kendini cezalandırma: paneli kilitleyip kendini dışarıda bırakmanın en kolay yolu.
+    if (id === req.player!.playerId) {
+      throw new BadRequestException('Kendine ceza veremezsin.');
+    }
+
+    const until = parsed.data.days == null
+      ? null : new Date(Date.now() + parsed.data.days * 86_400_000);
+    const mode = until == null ? 'open' : parsed.data.mode;
+
+    await this.db.execute(sql`
+      UPDATE players
+         SET banned_at = now(), ban_until = ${until?.toISOString() ?? null}::timestamptz,
+             ban_mode = ${mode}, ban_reason = ${parsed.data.reason},
+             banned_by = ${req.player!.playerId}
+       WHERE id = ${id}
+    `);
+
+    const sessions = await this.auth.revokeAllIds(Number(p['account_id']));
+    const sockets = getGateway()?.revokeSessions(sessions) ?? 0;
+
+    await this.audit(Number(p['world_id']), req.player!.playerId, 'admin.player.ban', id, {
+      until: until?.toISOString() ?? null, mode, reason: parsed.data.reason,
+      sessions: sessions.length, sockets,
+    });
+    return {
+      ok: true, until: until?.toISOString() ?? null, mode,
+      revokedSessions: sessions.length, closedSockets: sockets,
+    };
+  }
+
+  /**
+   * Cezayı kaldır.
+   *
+   * ⚠️ `ban_reason` ve `banned_by` **silinmez**, yalnız `banned_at`/`ban_until` temizlenir:
+   * "bu oyuncu daha önce ceza almış mıydı" sorusu cevaplanabilir kalsın (`chat_bans` ile
+   * aynı sözleşme). Cezanın kendisi `audit_log`ta zaten kim verdiğiyle duruyor.
+   */
+  @Post('players/:playerId/unban')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async unbanPlayer(
+    @Param('playerId') playerId: string, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const id = Number(playerId);
+    const [p] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT world_id FROM players WHERE id = ${id}
+    `);
+    if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
+
+    await this.db.execute(sql`
+      UPDATE players SET banned_at = NULL, ban_until = NULL, ban_mode = NULL WHERE id = ${id}
+    `);
+    await this.audit(Number(p['world_id']), req.player!.playerId, 'admin.player.unban', id, {});
+    return { ok: true };
   }
 
   /* ── Şikayet kuyruğu ──────────────────────────────────────────────────────── */

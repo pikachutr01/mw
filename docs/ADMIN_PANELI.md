@@ -577,6 +577,56 @@ uyarı renginde çıkıyor ve hiçbir anlam taşımıyor.
 
 ---
 
+## Oyuncu cezası — saldırıya AÇIK / KAPALI
+
+Kullanıcı isteği (2026-07-31). `players.banned_at` zaten vardı ve girişi engelliyordu ama iki
+eksiği vardı: **süresi yoktu** ("3 gün ceza" verilemiyordu) ve **cezalının şehirlerine ne
+olacağı tanımsızdı**.
+
+İkincisi asıl soru. Cezalı oyuncu giremiyor, yani şehirlerini savunamıyor:
+
+| Kip | Diğer oyuncular | Ne zaman |
+| :-- | :-- | :-- |
+| **`open`** — saldırıya açık | saldırı ✅ · casus ✅ · nakliye ✅ | Kalıcı cezanın tek doğru kipi: hesap geri gelmeyecek, şehirleri dünyanın kaynağı olur |
+| **`closed`** — saldırıya kapalı | saldırı ❌ · **casus ✅** · nakliye ❌ | Süreli ceza: oyuncu döndüğünde imparatorluğunu bulur |
+
+⚠️ **Süresiz ceza DAİMA açıktır.** Kural iki yerde birden: zod şeması ve veri tabanı
+`CHECK` kısıtı. Elle SQL ile bile delinemesin — bu bir ürün kararı.
+
+⚠️ **Açık ceza acemi korumasını ve tatil modunu EZER.** Ezmeseydi yönetici "saldırıya açık"
+dedikten sonra saldırılar korumaya çarpar ve verilen karar sessizce uygulanmazdı (testte).
+
+⚠️ **Kapalıda nakliye de kapalı**: açık olsaydı cezalının dokunulmaz şehri güvenli bir kasa
+olurdu. Destek zaten yalnız kendi şehirlerine gidiyor (`requireOwnTarget`) — orada kural
+bugün no-op; guard tip-bağımsız yazıldı ki müttefik desteği geldiğinde ayrıca eklemek
+gerekmesin.
+
+⚠️ **Ceza gerçek zamanla ölçülür**, oyun saatiyle değil. Ceza bir moderasyon kararı, oyun
+mekaniği değil: bakımda oyun saati donuyor ve ceza da donsaydı "3 gün" bakım süresince uzardı.
+
+⚠️ Ceza verilince **tüm oturumlar düşer ve soketler kapanır** — oyuncu "girişim hâlâ açık"
+diye devam edememeli.
+
+⚠️ Süresi geçmiş ceza kaydı **temizlenmez** (`ban_reason`, `banned_by` durur): "bu oyuncu daha
+önce ceza almış mıydı" cevaplanabilir kalsın. `chat_bans` ile aynı sözleşme.
+
+### Ölçüm (canlı, gerçek HTTP)
+
+```
+ceza yok            → saldırı 201 · casus 201 · nakliye 201
+3 gün, AÇIK         → saldırı 201 · casus 201 · nakliye 201 · cezalının girişi 401 banned
+3 gün, KAPALI       → saldırı 403 target_banned · casus 201 · nakliye 403 target_banned
+süresiz + kapalı    → 400 "Süresiz ceza saldırıya kapalı olamaz."
+süresiz (açık)      → saldırı 201
+ceza kaldır         → giriş 201
+```
+
+⚠️ Canlı ölçüm bir eşleme eksiği yakaladı: `target_banned` HTTP eşlemesine eklenmemişti ve
+varsayılan dala düşüp **400** dönüyordu. `target_protected`/`target_vacation` ile aynı aile
+("bu hedefe bu görevi yapamazsın") → **403**; testle sabitlendi.
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

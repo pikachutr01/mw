@@ -64,7 +64,7 @@ export class MissionController {
         serverNow: new Date().toISOString(),
       };
     } catch (err) {
-      throw toHttp(err);
+      throw missionErrorToHttp(err);
     }
   }
 
@@ -131,7 +131,7 @@ export class MissionController {
         serverNow: new Date().toISOString(),
       };
     } catch (err) {
-      throw toHttp(err);
+      throw missionErrorToHttp(err);
     }
   }
 
@@ -269,7 +269,7 @@ export class MissionController {
         serverNow: new Date().toISOString(),
       };
     } catch (err) {
-      throw toHttp(err);
+      throw missionErrorToHttp(err);
     }
   }
 
@@ -497,7 +497,7 @@ function describeTarget(t: {
 }
 
 /** Alan hatalarını HTTP'ye çevirir; kodlar istemcide i18n anahtarı olarak kullanılır. */
-function toHttp(err: unknown): Error {
+export function missionErrorToHttp(err: unknown): Error {
   if (!(err instanceof MissionError)) return err as Error;
   const payload = { code: err.code, message: err.message, details: err.details };
   switch (err.code) {
@@ -511,6 +511,12 @@ function toHttp(err: unknown): Error {
     case 'world_mismatch':
     case 'target_protected':
     case 'target_vacation':
+    /**
+     * ⭐ Cezalı hedef de AYNI aileden: "bu hedefe bu görevi yapamazsın". İlk yazımda
+     * eklenmemişti ve varsayılan dala düşüp **400** dönüyordu — canlı ölçümde yakalandı.
+     * 400 "isteğin bozuk" demek; oysa istek kusursuz, hedef korumalı.
+     */
+    case 'target_banned':
       return new ForbiddenException(payload);
     case 'attack_limit':
     case 'march_limit':

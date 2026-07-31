@@ -38,6 +38,8 @@ interface Dossier {
   };
   cities: { id: number; name: string; coordinates: string; isCapital: boolean }[];
   chatBan: { id: number; until: string | null; reason: string | null; createdAt: string } | null;
+  /** ⚠️ `active` sunucudan geliyor: süresi geçmiş kayıt duruyor olabilir, karar tek yerde. */
+  ban: { until: string | null; mode: string; reason: string | null; active: boolean } | null;
   reports: { against: number; filed: number };
   devices: { deviceId: string; platform: string | null; lastSeen: string; sharedWith: number }[];
   ips: { ip: string; lastSeen: string; sharedWith: number }[];
@@ -198,7 +200,16 @@ function PlayerDossier({ data, onChanged, onNeedStepUp }: {
   return (
     <Panel
       title={`${data.player.username} · künye`}
-      right={ban ? <Badge tone="danger">sohbet yasaklı</Badge> : null}
+      right={
+        <span className="flex gap-1">
+          {data.ban?.active ? (
+            <Badge tone="danger">
+              cezalı · {data.ban.mode === 'open' ? 'saldırıya açık' : 'saldırıya kapalı'}
+            </Badge>
+          ) : null}
+          {ban ? <Badge tone="danger">sohbet yasaklı</Badge> : null}
+        </span>
+      }
     >
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 py-3 text-xs sm:grid-cols-4">
         <Stat label="Puan" value={data.player.score.toLocaleString('tr-TR')} />
@@ -238,6 +249,8 @@ function PlayerDossier({ data, onChanged, onNeedStepUp }: {
           </ul>
         </div>
       ) : null}
+
+      <PlayerBanBox data={data} onChanged={onChanged} onNeedStepUp={onNeedStepUp} />
 
       <div className="border-t border-border px-3 py-3">
         <p className="mb-2 text-xs text-muted">
@@ -298,6 +311,154 @@ function PlayerDossier({ data, onChanged, onNeedStepUp }: {
         )}
       </div>
     </Panel>
+  );
+}
+
+/* ═══ Oyuncu cezası ════════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ OYUNCU CEZASI — oyuncu oyuna giremez; şehirlerine ne olacağı **kipe** bağlı.
+ *
+ * ⚠️ İki kip arasındaki fark ekranda AÇIKÇA yazıyor. Yalnız "ban" deyip geçseydik yönetici
+ * hangi kipin ne yaptığını hatırlamak zorunda kalırdı ve yanlış seçim geri alınması zor bir
+ * sonuç doğururdu: açık cezada şehirler yağmalanır, o kaynaklar geri gelmez.
+ */
+function PlayerBanBox({ data, onChanged, onNeedStepUp }: {
+  data: Dossier; onChanged: () => void; onNeedStepUp: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [days, setDays] = useState('');
+  const [mode, setMode] = useState<'open' | 'closed'>('open');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const d = Number(days);
+  const hasDays = Number.isFinite(d) && d > 0;
+  /**
+   * ⚠️ Süresiz ceza **daima saldırıya açık** (kullanıcı kuralı; şema CHECK'i de zorluyor).
+   * Ekran da böyle davranıyor: gün girilmediği an «kapalı» seçeneği kilitleniyor ve gerekçesi
+   * yazıyor — sunucudan 400 yiyip "neden" diye düşünmek gerekmesin.
+   */
+  const effectiveMode = hasDays ? mode : 'open';
+  const active = data.ban?.active === true;
+
+  const call = async (path: string, body?: unknown): Promise<void> => {
+    setBusy(true); setError(null); setNote(null);
+    try {
+      const r = await api<{ revokedSessions?: number; closedSockets?: number }>(
+        `/api/v1/admin/players/${data.player.id}/${path}`, { method: 'POST', body: body ?? {} });
+      setNote(path === 'ban'
+        ? `Ceza verildi · ${r.revokedSessions ?? 0} oturum düşürüldü, `
+          + `${r.closedSockets ?? 0} bağlantı kapatıldı.`
+        : 'Ceza kaldırıldı.');
+      setReason(''); setDays('');
+      onChanged();
+    } catch (err) {
+      if (needsStepUp(err)) onNeedStepUp(); else setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const MODES = [
+    ['open', 'Saldırıya AÇIK',
+      'Şehirleri savunmasız kalır ve herkes saldırabilir. ⚠️ Acemi korumasını ve tatil '
+      + 'modunu da EZER. Kalıcı cezanın doğru kipi: hesap geri gelmeyecek.'],
+    ['closed', 'Saldırıya KAPALI',
+      'Şehirleri korunur; oyuncu döndüğünde imparatorluğunu bulur. Diğer oyuncular '
+      + 'saldıramaz ve nakliye gönderemez, ama casus kuş atabilir.'],
+  ] as const;
+
+  return (
+    <div className={`border-t border-border px-3 py-3 ${active ? 'bg-danger/10' : ''}`}>
+      <p className="mb-2 text-xs text-muted">
+        <b className="text-ink">Oyuncu cezası.</b>{' '}
+        {active ? (
+          <>
+            Oyuncu <b>oyuna giremiyor</b>
+            {data.ban?.until ? ` (${when(data.ban.until)} tarihine kadar)` : ' (süresiz)'}.
+            {' '}Şehirleri{' '}
+            {data.ban?.mode === 'open'
+              ? <b className="text-warning">saldırıya AÇIK</b>
+              : <b>korumada</b>}.
+            {data.ban?.reason ? ` Sebep: ${data.ban.reason}` : ''}
+          </>
+        ) : (
+          <>
+            Cezalı oyuncu oyuna giremez, yani şehirlerini savunamaz. Kip, o şehirlere ne
+            olacağını belirler.
+          </>
+        )}
+      </p>
+
+      {active ? (
+        <>
+          <ErrorBox error={error} />
+          {note ? <p className="mb-2 text-xs text-success">{note}</p> : null}
+          <Button disabled={busy} onClick={() => void call('unban')}>
+            {busy ? 'Kaldırılıyor…' : 'Cezayı kaldır'}
+          </Button>
+        </>
+      ) : (
+        <>
+          <div className="mb-2 grid gap-1.5">
+            {MODES.map(([id, label, desc]) => (
+              <label key={id}
+                className={`flex cursor-pointer gap-2 rounded-[var(--radius-sm)] border p-2 ${
+                  effectiveMode === id ? 'border-strong bg-raised' : 'border-border'
+                } ${!hasDays && id === 'closed' ? 'opacity-50' : ''}`}>
+                <input type="radio" name="ban-mode" className="mt-0.5 accent-[var(--mw-color-accent)]"
+                  checked={effectiveMode === id}
+                  disabled={!hasDays && id === 'closed'}
+                  onChange={() => setMode(id)} />
+                <span className="min-w-0">
+                  <span className="text-sm text-ink">{label}</span>
+                  <span className="block text-[11px] leading-snug text-muted">{desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {!hasDays ? (
+            <p className="mb-2 text-[11px] text-warning">
+              ⚠️ Gün girilmedi → ceza <b>süresiz</b> ve zorunlu olarak <b>saldırıya açık</b>.
+            </p>
+          ) : null}
+
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <Field label="Sebep" hint="Giriş denemesinde oyuncuya gösterilir.">
+              <Input type="text" maxLength={500} value={reason}
+                placeholder="ör. çoklu hesap kullanımı"
+                onChange={(e) => setReason(e.target.value)} />
+            </Field>
+            <Field label="Süre (gün)" hint="Boş = süresiz.">
+              <Input type="number" min={1} max={3650} value={days} className="w-28 tnum text-right"
+                onChange={(e) => setDays(e.target.value)} />
+            </Field>
+          </div>
+
+          <ErrorBox error={error} />
+          {note ? <p className="mt-2 text-xs text-success">{note}</p> : null}
+          <Button
+            variant="danger"
+            disabled={busy || reason.trim().length < 3}
+            className="mt-2"
+            onClick={() => void call('ban', {
+              reason: reason.trim(), mode: effectiveMode,
+              ...(hasDays ? { days: Math.trunc(d) } : {}),
+            })}
+          >
+            {busy ? 'Veriliyor…'
+              : `${hasDays ? `${Math.trunc(d)} gün` : 'Süresiz'} ceza · `
+                + `${effectiveMode === 'open' ? 'saldırıya açık' : 'saldırıya kapalı'}`}
+          </Button>
+          {/* ⚠️ Ceza oturumları da düşürür — oyuncu "girişim hâlâ açık" diye devam edememeli. */}
+          <p className="mt-1 text-[11px] text-muted">
+            Ceza verilince oyuncunun tüm oturumları düşer ve açık bağlantıları anında kapanır.
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 
