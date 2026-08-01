@@ -11,31 +11,46 @@
  * olmazdı — gerçek sınır `AdminGuard`.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
 import { ModerationScreen } from './screens/Moderation.tsx';
-import { SessionsScreen } from './screens/Sessions.tsx';
+import { PlayersScreen } from './screens/Players.tsx';
 import { SettingsScreen } from './screens/Settings.tsx';
 import { WorldsScreen } from './screens/Worlds.tsx';
 
-/** Faz 8 ile plan tamamlandı: altı ekran, bekleyen faz yok. */
-type Tab = 'worlds' | 'settings' | 'sessions' | 'moderation' | 'database' | 'health' | 'plan';
+/**
+ * ⭐ Sekmeler artık **rota** (panel 2. nesil). `useState<Tab>` üç şeyi imkânsız kılıyordu:
+ * derin bağlantı, tarayıcı geri tuşu, yenilemede yerinde kalma.
+ *
+ * ⚠️ «Oturumlar» sekmesi kalktı — içeriği `/oyuncular/:id/oturumlar` altına taşındı. Oyuncu
+ * verisi üç sekmeye dağılmış olduğu için (arama Oturumlar'da, künye Moderasyon'da, ordular
+ * Veri tabanı'nda) "bu oyuncuda ne oluyor" sorusu üç ekran geziyordu.
+ */
+const NAV: [string, string][] = [
+  ['/oyuncular', 'Oyuncular'],
+  ['/dunya', 'Dünya'],
+  ['/ayarlar', 'Ayarlar'],
+  ['/moderasyon', 'Moderasyon'],
+  ['/veri', 'Veri tabanı'],
+  ['/bakim', 'Bakım'],
+];
 
 export function App() {
   const [session, setSessionState] = useState<AdminSession | null>(getSession);
   const [me, setMe] = useState<AdminMe | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<Tab>('worlds');
   /**
    * ⭐ Yükseltme diyaloğu TEK YERDE (üst şerit). Ekranlar 403 alınca `onNeedStepUp` çağırır;
    * her ekran kendi diyalog kopyasını taşısaydı 15 dakika dolduğunda hangisinin açılacağı
    * ekrana göre değişirdi.
    */
   const [stepUpOpen, setStepUpOpen] = useState(false);
+  const openStepUp = useCallback(() => setStepUpOpen(true), []);
 
   const refreshMe = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -73,20 +88,24 @@ export function App() {
         <ErrorBox error={error} />
         {me ? (
           <>
-            <Tabs value={tab} onChange={setTab} />
-            {tab === 'worlds'
-              ? <WorldsScreen onNeedStepUp={() => setStepUpOpen(true)} />
-              : tab === 'settings'
-                ? <SettingsScreen worldId={session.worldId} onNeedStepUp={() => setStepUpOpen(true)} />
-                : tab === 'sessions'
-                  ? <SessionsScreen onNeedStepUp={() => setStepUpOpen(true)} />
-                  : tab === 'moderation'
-                    ? <ModerationScreen onNeedStepUp={() => setStepUpOpen(true)} />
-                    : tab === 'database'
-                      ? <DatabaseScreen onNeedStepUp={() => setStepUpOpen(true)} />
-                      : tab === 'health'
-                        ? <HealthScreen onNeedStepUp={() => setStepUpOpen(true)} />
-                        : <Placeholder />}
+            <Tabs />
+            <Routes>
+              {/* ⭐ Açılış artık Oyuncular: panelin en sık sorulan sorusu "bu oyuncuda ne oluyor". */}
+              <Route path="/" element={<Navigate to="/oyuncular" replace />} />
+              <Route path="/oyuncular" element={<PlayersScreen onNeedStepUp={openStepUp} />} />
+              {/* Aynı bileşen üç yol için: liste hep açık kalsın, altında künye değişsin. */}
+              <Route path="/oyuncular/:playerId" element={<PlayersScreen onNeedStepUp={openStepUp} />} />
+              <Route path="/oyuncular/:playerId/:tab" element={<PlayersScreen onNeedStepUp={openStepUp} />} />
+              <Route path="/dunya" element={<WorldsScreen onNeedStepUp={openStepUp} />} />
+              <Route
+                path="/ayarlar"
+                element={<SettingsScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
+              />
+              <Route path="/moderasyon" element={<ModerationScreen onNeedStepUp={openStepUp} />} />
+              <Route path="/veri" element={<DatabaseScreen onNeedStepUp={openStepUp} />} />
+              <Route path="/bakim" element={<HealthScreen onNeedStepUp={openStepUp} />} />
+              <Route path="*" element={<Navigate to="/oyuncular" replace />} />
+            </Routes>
           </>
         ) : null}
       </main>
@@ -94,23 +113,21 @@ export function App() {
   );
 }
 
-function Tabs({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
-  const items: [Tab, string][] = [
-    ['worlds', 'Dünya'], ['settings', 'Ayarlar'], ['sessions', 'Oturumlar'],
-    ['moderation', 'Moderasyon'], ['database', 'Veri tabanı'], ['health', 'Bakım'],
-    ['plan', 'Plan'],
-  ];
+function Tabs() {
   return (
     <div className="flex gap-1">
-      {items.map(([id, label]) => (
-        <button key={id} type="button" onClick={() => onChange(id)}
-          className={`flex-1 rounded-[var(--radius-sm)] border px-2 py-1.5 text-xs ${
-            value === id
-              ? 'border-strong bg-accent text-on-accent'
-              : 'border-border bg-surface text-muted hover:bg-raised'
-          }`}>
+      {NAV.map(([to, label]) => (
+        <NavLink
+          key={to} to={to}
+          className={({ isActive }) => `flex-1 rounded-[var(--radius-sm)] border px-2 py-1.5
+            text-center text-xs ${
+    isActive
+      ? 'border-strong bg-accent text-on-accent'
+      : 'border-border bg-surface text-muted hover:bg-raised'
+    }`}
+        >
           {label}
-        </button>
+        </NavLink>
       ))}
     </div>
   );
@@ -258,37 +275,5 @@ function StepUpDialog({ minutes, onClose, onDone }: {
         </Panel>
       </form>
     </div>
-  );
-}
-
-/**
- * Plan haritası. Faz 0'da "neyin eksik olduğu ekrandan görünsün" diye açılmıştı; Faz 8 ile
- * hepsi bitti ve şimdi **hangi işin hangi sekmede olduğunu** söyleyen bir dizin işlevi görüyor.
- */
-function Placeholder() {
-  const rows: [string, string, boolean][] = [
-    ['Dünya', 'hız çarpanları · manuel sıralama', true],
-    ['Ayarlar', 'işletim limitleri (sohbet · bildirim · posta)', true],
-    ['Bakım modu', 'donma · istemci perdesi · mutasyon kilidi (Dünya sekmesinde)', true],
-    ['Oturumlar', 'cihaz listesi · uzaktan çıkış', true],
-    ['Motor sabitleri', 'savaş config\'i · önizleme (Ayarlar sekmesinde)', true],
-    ['Katalog', 'ekonomi eğrileri · fiyat çarpanları · mağara/sur (Ayarlar sekmesinde)', true],
-    ['Oyuncular ve moderasyon', 'künye · şikayet kuyruğu · sohbet yasağı', true],
-    ['Veri tabanı', 'tablo tarayıcı · küratörlü aksiyonlar · ham kip', true],
-    ['Bakım/performans', 'canlılık · kuyruklar · boyutlar · temizlik (Bakım sekmesinde)', true],
-  ];
-  return (
-    <Panel title="Fazlar" right="9 fazın 9'u bitti">
-      <ul className="divide-y divide-border">
-        {rows.map(([name, desc, done]) => (
-          <li key={name} className="flex items-baseline justify-between gap-3 px-3 py-2">
-            <span className="text-sm text-ink">
-              {done ? '✅ ' : '⏳ '}{name}
-            </span>
-            <span className="text-xs text-muted">{desc}</span>
-          </li>
-        ))}
-      </ul>
-    </Panel>
   );
 }

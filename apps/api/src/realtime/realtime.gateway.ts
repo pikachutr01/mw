@@ -210,6 +210,22 @@ export class RealtimeGateway {
   }
 
   /**
+   * ⭐ ŞU AN BAĞLI OLAN HERKES (§panel 2. nesil) — yönetim panelinin "çevrimiçi oyuncular"
+   * listesi bunu okuyor.
+   *
+   * ⚠️ `isOnline`'ı liste için oyuncu oyuncu çağırmak da mümkündü; tek çağrıda dönmesinin
+   * sebebi performans değil **tutarlılık**: 50 ayrı çağrı arasında biri bağlanıp kopabilir ve
+   * liste kendi içinde çelişkili çıkardı.
+   *
+   * ⚠️ Bilgi SÜREÇ-YEREL: yalnız bu sürecin soketlerini bilir. `ROLE=worker` profilinde
+   * `getGateway()` daima `null` → çağıran taraf "boş liste" ile "bilinmiyor"u ayırmak zorunda
+   * (panel bunu `onlineKnown` bayrağıyla yapıyor).
+   */
+  onlinePlayerIds(): number[] {
+    return [...this.online.keys()];
+  }
+
+  /**
    * ⭐ ÜYELİK DEĞİŞTİ → soket odaları senkronu (§13.12 kuralı: *"ittifaktan atılan oyuncunun
    * açık soketi anında düşer"*). El sıkışmada okunan `allianceId` soket ömrü boyunca donuktu;
    * bu metot kick/ayrıl/katıl/dağıt anında ittifak controller'ından çağrılır:

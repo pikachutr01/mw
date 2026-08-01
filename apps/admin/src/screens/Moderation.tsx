@@ -27,7 +27,7 @@ interface Report {
   createdAt: string;
 }
 
-interface Dossier {
+export interface Dossier {
   player: {
     id: number; username: string; worldId: number; score: number;
     createdAt: string; lastSeenAt: string | null; bannedAt: string | null; alliance: string | null;
@@ -171,7 +171,12 @@ export function ModerationScreen({ onNeedStepUp }: { onNeedStepUp: () => void })
 
 /* ═══ Oyuncu künyesi ════════════════════════════════════════════════════════ */
 
-function PlayerDossier({ data, onChanged, onNeedStepUp }: {
+/**
+ * ⚠️ **Dışa aktarıldı** (panel 2. nesil): «Oyuncular» sekmesindeki künye alt sekmesi bunu
+ * yeniden kullanıyor. İkinci bir kopya yazsaydık ceza formu iki yerde yaşar ve biri güncellenip
+ * diğeri unutulurdu. ⚠️ Bileşen hâlâ ceza kutusunu İÇERİYOR; künye/ceza ayrımı Tur 3'ün işi.
+ */
+export function PlayerDossier({ data, onChanged, onNeedStepUp }: {
   data: Dossier; onChanged: () => void; onNeedStepUp: () => void;
 }) {
   const [reason, setReason] = useState('');

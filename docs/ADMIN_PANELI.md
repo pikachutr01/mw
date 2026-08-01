@@ -869,6 +869,107 @@ test veritabanında ölçülüyor (27 test): korumalar, tavan, audit satırı ve
 
 ---
 
+## 2. NESİL — Tur 1: «Oyuncular» sekmesi ve imparatorluk künyesi
+
+Dokuz faz bitince kullanıcı paneli açtı ve şunu söyledi:
+
+> *"Bu kalabalığın içinde bu paneli ben etkili şekilde kullanabilir miyim emin değilim.
+> Bir kullanıcıya asker eklemek için onun şehir kimliğini bulup sonra askerleri de json
+> formatında bir de İngilizce adları ile yazarak yapmam gerekiyor."*
+
+Sorun eksik özellik değil, **eksik bağlam**. Panel satır gösteriyordu, imparatorluk göstermiyordu.
+
+### Oyuncu verisi üç sekmeye dağılmıştı
+
+| Soru | Nerede aranıyordu |
+| :-- | :-- |
+| "bu oyuncu kim" | Oturumlar → arama |
+| "cezalı mı, cihazları ne" | Moderasyon → künye |
+| "ordusu ne, teknikleri ne" | Veri tabanı → şehir şehir, 20+ istek |
+
+Üçü tek **«Oyuncular»** sekmesinde toplandı: liste → oyuncu → *Künye · İmparatorluk · Oturumlar*.
+«Oturumlar» sekmesi kalktı, içeriği `/oyuncular/:id/oturumlar` altına taşındı.
+
+### ⭐ Künyenin gösterdiği kaynak, tarayıcınınkinden FARKLI
+
+Veri tabanı tarayıcısı `cities.gold`u ham okuyor ve o sayı **oyuncunun gördüğü sayı değil**:
+kaynak tembel birikimle tutuluyor, gerçek değer `gold + (şimdi − resources_at) × üretim`.
+İmparatorluk ucu `CityService.snapshot()` çağırıyor → çıpayı ilerletiyor → **oyuncunun kendi
+ekranındaki sayının aynısını** veriyor. Test bunu kilitliyor: çıpa 3 saat geriye itilip ham
+değerin 1.000'de kaldığı, künyenin ondan büyük ve `snapshot()` ile **birebir eşit** olduğu
+ölçülüyor.
+
+⚠️ Canlıda bu farkı *sonradan* göstermek mümkün değil — künyeyi okumak çıpayı ilerletiyor,
+yani ham satır da güncelleniyor. Farkın kanıtı testte.
+
+### ⭐ «Bu oyuncuya kim saldırıyor» sorusu ilk kez sorulabiliyor
+
+`missions.owner_player_id` **saldıranı** taşıyor; hedefin sahibi tabloda yok, ancak
+`cities` üzerinden JOIN ile bulunuyor. Veri tabanı tarayıcısında bu filtre kurulamıyordu, yani
+gelen saldırılar panelde **hiç görünmüyordu**. Ayrıca `mission_units` kayıtta olmadığı için
+**yoldaki ordunun bileşimi hiçbir uçtan alınamıyordu** — ikisi de artık künyede.
+
+### Sur ve Büyü Kalkanı savunma birimlerinden ayrı kutuda
+
+İkisi de `defenses` tablosunda ve ikisinin de kolonu `count` — ama Sur'da o sayı **adet değil
+SEVİYE** (katalogdaki `LEVEL_BASED`). Aynı listede "300 Okçu Kulesi" ile "6 Sur" yan yana
+dursaydı 6 adet sur diye okunurdu.
+
+### Katalog id'leri Türkçeye çevriliyor — ama bilinmeyen id gizlenmiyor
+
+`dwarf` → **Cüce**, `architect_school` → **Mimar Okulu**. ⚠️ Katalogda olmayan bir tip
+**elenmiyor**, ham hâliyle geçiyor: veri orada ve panel görmezden gelirse tanı imkânsız olur.
+
+### Çevrimiçilik: «bilinmiyor» ≠ «çevrimdışı»
+
+`RealtimeGateway.onlinePlayerIds()` eklendi (öncesinde yalnız `isOnline(id)` vardı ve admin'de
+hiç kullanılmıyordu). ⚠️ Bilgi **süreç-yerel**: `ROLE=worker` profilinde `getGateway()` daima
+`null`. Bu yüzden yanıt `onlineKnown` bayrağı taşıyor ve panel o `false` iken **noktayı hiç
+çizmiyor** — "herkes çevrimdışı" göstermek, bilgisizlikten kötü bir yalan olurdu.
+
+⚠️ İki farklı "aktif" var ve panel ikisini de ayrı gösteriyor: **soket** (kesin ama süreç-yerel,
+yalnız "şu an") ve **`players.last_seen_at`** (yalnız giriş ve token yenilemede yazılıyor —
+her istekte değil; yenileme ~15 dk'da bir olduğu için kabaca doğru ama "3 dakika önce
+oynuyordu"yu göstermez).
+
+### Tek cihazı düşürme
+
+`AuthService.revokeChain` Faz 3'ten beri hazırdı ama admin tarafında yalnız "hepsini düşür"
+vardı: *"şu bilinmeyen telefonu at"* demenin yolu, oyuncunun tüm oturumlarını kapatmaktan
+geçiyordu. Artık zincir başına düşürme var ve her ikisi de onay adımı istiyor.
+
+### Router ve React Query açıldı
+
+İkisi de Faz 0'dan beri `package.json`'da duruyordu ama **hiç import edilmemişti**.
+
+- **Router** — sekme durumu `useState` idi; bunun üç somut bedeli vardı: derin bağlantı yok,
+  tarayıcı geri tuşu çalışmıyor, yenilemede ilk sekmeye dönülüyor. Artık
+  `/oyuncular/19/imparatorluk` paylaşılabilir bir adres. (nginx taslağındaki
+  `try_files $uri $uri/ /index.html` bunu zaten karşılıyor.)
+- **React Query** — `useState + useEffect + fetch` üçlüsü ve mutasyondan sonra elle `load()`
+  çağrısı **yirmi yerde** tekrar ediyordu. ⚠️ `retry: false` bilinçli: 403 "yükseltme gerekli"
+  demektir ve sessizce tekrarlanınca kullanıcı diyaloğu geç görür.
+
+`apps/admin/src/lib/format.ts` açıldı: `when`/`dur`/`num`/`bytes`/`cell` üç ekranda üç kopyaydı
+ve ayrışmaya başlamıştı (biri "az önce" derken diğeri "0 dk önce" diyordu).
+
+### Ölçüm (canlı dev dünyası, gerçek veri)
+
+```
+liste     50 oyuncu · 1 çevrimiçi · sayfalama 1–25 / 50 (sunucu taraflı)
+künye     wstest · 5 şehir · 20.692.160 altın · 21.063.401 yemek
+teknikler Sömürgecilik sv 12 · Haritacılık sv 9 · Casusluk sv 8 · Okçuluk sv 6 …
+şehir     Karakol 1:3:1 — Maden sv 21 · Çiftlik sv 20 · Baraka sv 15 · Kale sv 15 …
+          Sur sv 1 (ayrı kutuda) · Cüce 1.002 · Elf 300 · Süvari 200 … · mağarada Elf 300
+```
+
+Derin bağlantı doğrulandı: `/oyuncular/19/imparatorluk` doğrudan açılıyor.
+
+⚠️ **Görülen bir tutarsızlık** (Tur 2'ye kaldı): bir kahramanın `status` alanı `idle` — şemanın
+sözlüğü `alive | dead | reviving | destroyed`. `give-hero` aksiyonu `'idle'` yazıyor.
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

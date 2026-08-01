@@ -123,6 +123,15 @@ export class AdminModerationController {
         lastSeenAt: p['last_seen_at'] == null ? null : toDate(p['last_seen_at']).toISOString(),
         bannedAt: p['banned_at'] == null ? null : toDate(p['banned_at']).toISOString(),
         alliance: p['alliance_name'] == null ? null : String(p['alliance_name']),
+        /**
+         * ⚠️ Bu ikisi SQL'de baştan beri çekiliyordu ama JSON'a hiç konmamıştı — yani acemi
+         * koruması ve tatil modu, veri elde olduğu hâlde panelde görünmüyordu. Destek
+         * sorusunun ("neden bu oyuncuya saldıramıyorum") cevabı tam olarak bu iki alan.
+         */
+        protectedUntil: p['protected_until'] == null
+          ? null : toDate(p['protected_until']).toISOString(),
+        vacationUntil: p['vacation_until'] == null
+          ? null : toDate(p['vacation_until']).toISOString(),
       },
       /**
        * ⚠️ `active` SUNUCUDA hesaplanıyor: süresi geçmiş bir ceza satırı duruyor olabilir ve
