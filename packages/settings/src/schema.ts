@@ -64,6 +64,14 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'ikisi de kurgu (§13.21.2).',
   },
   {
+    id: 'ops',
+    label: 'Bakım ve saklama',
+    description: '⭐ Temizlik görevlerinin **saklama süreleri** ve sağlık eşikleri (§admin Faz 8). '
+      + 'Buradaki sayılar oyunun dengesini değil veri tabanının büyümesini yönetir. '
+      + '⚠️ Süreyi kısaltmak GEÇMİŞİ SİLER: temizlik çalıştığı anda eşik altındaki satırlar '
+      + 'gider ve geri gelmez. Önce kuru koşuyla kaç satır etkileneceğine bak.',
+  },
+  {
     id: 'loot',
     label: 'Ganimet',
     description: 'Havuz + kaynak-bazlı yağma oranı (§13.10.4). Ölçüm değil TASARIM: '
@@ -634,6 +642,88 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'number', default: 0.92, min: 0.1, max: 1, tag: 'design',
     description: 'Seviye 20 sur 2 sa 28 dkda toparlanır. Dokümanda böyle bir bilgi yok, '
       + 'bilerek eklendi: Suru yükseltmek toparlanma hızı da kazandırmalı.',
+  },
+
+  /* ── Bakım ve saklama (§admin Faz 8) ─────────────────────────────────────── */
+  {
+    key: 'ops.messagesReadDays',
+    label: 'Okunmuş rapor saklama',
+    type: 'int', default: 60, min: 1, max: 3650, tag: 'design', unit: 'gün',
+    description: '⚠️ **Okunmuş** posta bu süreden eskiyse silinebilir. Okunmamış olanlar bu '
+      + 'kuraldan MUAF — oyuncunun hiç görmediği bir savaş raporunu silmek, veriyi değil '
+      + 'oyuncunun oyunu anlama hakkını siler.',
+  },
+  {
+    key: 'ops.messagesAnyDays',
+    label: 'Okunmamış rapor tavanı',
+    type: 'int', default: 365, min: 1, max: 3650, tag: 'design', unit: 'gün',
+    description: 'Okunmamış posta için sert tavan. Bu olmasaydı bir yıl önce oyunu bırakmış '
+      + 'hesabın kutusu sonsuza kadar tabloda kalırdı.',
+  },
+  {
+    key: 'ops.chatDays',
+    label: 'Sohbet saklama',
+    type: 'int', default: 30, min: 1, max: 3650, tag: 'design', unit: 'gün',
+    description: 'Sohbet akıştır, arşiv değil. ⚠️ **Sabitlenmiş** mesajlar muaf: ittifak '
+      + 'kuralları genelde sabitlenmiş bir mesajda durur.',
+  },
+  {
+    key: 'ops.outboxDays',
+    label: 'Teslim edilmiş outbox saklama',
+    type: 'int', default: 7, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: '⚠️ Yalnız `dispatched_at` DOLU satırlar. Teslim edilmemiş satır ne kadar '
+      + 'eski olursa olsun silinmez — bekleyen bir bildirim kaybı, temizlikle üretilebilecek '
+      + 'en kötü sonuçtur.',
+  },
+  {
+    key: 'ops.emailTokenDays',
+    label: 'E-posta jetonu saklama',
+    type: 'int', default: 7, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Süresi geçmiş ya da kullanılmış doğrulama/sıfırlama jetonları. Jeton zaten '
+      + 'işlevsiz; satır yalnız yer kaplıyor.',
+  },
+  {
+    key: 'ops.pushDeadDays',
+    label: 'Ölü push aboneliği saklama',
+    type: 'int', default: 30, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Üst üste başarısız olmuş (`fail_count` eşiği aşmış) abonelikler. Tarayıcı '
+      + 'aboneliği iptal etmiş demektir; her bildirimde boşuna denenir.',
+  },
+  {
+    key: 'ops.pushFailThreshold',
+    label: 'Ölü sayılma eşiği',
+    type: 'int', default: 5, min: 1, max: 100, tag: 'design', unit: 'hata',
+    description: 'Bu kadar arka arkaya hata alan abonelik ölü sayılır.',
+  },
+  {
+    key: 'ops.rankingRunDays',
+    label: 'Sıralama koşusu saklama',
+    type: 'int', default: 90, min: 1, max: 3650, tag: 'design', unit: 'gün',
+    description: '⚠️ Temizlenen tablo `ranking_runs` (koşu GEÇMİŞİ), `rankings` DEĞİL. '
+      + '`rankings` her anlık görüntüde üzerine yazılıyor (unique world+kind+subject) → '
+      + 'boyutu oyuncu sayısıyla sınırlı, büyümüyor ve temizlenecek bir şeyi yok.',
+  },
+  {
+    key: 'ops.sessionDays',
+    label: 'Ölü oturum saklama',
+    type: 'int', default: 90, min: 1, max: 3650, tag: 'design', unit: 'gün',
+    description: '⚠️ Yalnız İPTAL EDİLMİŞ ya da SÜRESİ GEÇMİŞ satırlar. Dönmeli refresh her '
+      + 'yenilemede yeni satır açtığı için bu tablo en hızlı büyüyendir; canlı zincirler '
+      + 'etkilenmez (aktif satırın `expires_at`i gelecekte).',
+  },
+  {
+    key: 'ops.cleanupBatch',
+    label: 'Tek koşuda en fazla satır',
+    type: 'int', default: 20000, min: 100, max: 1000000, tag: 'design', unit: 'satır',
+    description: '⚠️ Güvenlik freni. Milyonluk bir DELETE tabloyu kilitler ve oyunu durdurur; '
+      + 'tavan aşılırsa görev kalanı bir sonraki koşuya bırakır ve panelde "kalan" yazar.',
+  },
+  {
+    key: 'ops.staleHeartbeatS',
+    label: 'Nabız bayatlama eşiği',
+    type: 'int', default: 30, min: 5, max: 3600, tag: 'design', unit: 'sn',
+    description: 'Bir döngünün nabzı bu süredir güncellenmediyse panel «ÖLÜ» der. '
+      + 'Nabız 5 sn\'de bir yazıldığı için 30 sn altı yanlış alarm üretir.',
   },
 ] as const;
 

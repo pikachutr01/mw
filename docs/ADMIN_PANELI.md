@@ -696,6 +696,179 @@ Test olmasaydı bu tablolar panelde **boş** görünecekti.
 
 ---
 
+## Bakım ve performans (Faz 8)
+
+Planın son fazı. Ekran dört soruya **kanıtla** cevap veriyor: döngüler yaşıyor mu · kuyruklar
+tıkalı mı · veri tabanı nerede büyüyor · ne temizlenebilir.
+
+### ⭐ Canlılık TÜRETİLEMEZ
+
+İlk tasarım canlılığı gözlemlenebilir durumdan çıkarmaktı: "vadesi geçmiş görev var mı", "en
+eski teslim edilmemiş outbox satırı kaç saniyelik". Bu ölçüler **arızayı** görür ama **sağlığı**
+göremez — kuyruklar boşken ikisi de sıfırdır ve sıfır iki farklı şeyi anlatır:
+
+| gözlem | anlam A | anlam B |
+| :-- | :-- | :-- |
+| gecikme 0, kuyruk boş | döngü çalışıyor, yapacak iş yok | döngü üç saat önce öldü, yeni iş de gelmedi |
+
+Ayrımın tek yolu döngünün **kendi imzası**: `worker_heartbeats` (migration 0031). Bir bakım
+panelinin en kötü hâli "her şey yolunda" derken sessizce durmuş olmaktır.
+
+Üç kural nabzın kendisinin arıza kaynağı olmasını engelliyor:
+
+1. **Kısıtlanmış** — 5 sn'den sık yazılmaz. 1 sn'lik poll saniyede bir UPDATE demekti; bir
+   izleme kaydı izlediği sistemden fazla yazma üretmemeli.
+2. **Yutan** — yazım hatası sessizce yutulur (ör. migration koşmamış DB). Nabız yazamadı diye
+   görev döngüsünün durması, çözmeye çalıştığı sorunu yaratmak olurdu.
+3. **Transaction dışında** — görevle aynı transaction'da olsaydı görev geri alındığında nabız
+   da geri alınırdı; tam arıza anında iz kaybolurdu.
+
+⚠️ **Scheduler ve dispatcher AYRI satır.** Tek satır tutsaydık dispatcher bir e-posta sink'inde
+bloke olurken scheduler'ın nabzı "worker sağlıklı" demeye devam ederdi.
+
+⚠️ **Satır yokluğu «sağlıklı» değil «bilinmiyor»dur** (`loopsKnown: false`) — worker hiç
+çalışmamış ya da migration uygulanmamış olabilir.
+
+### Eski pid'lerin artığı
+
+`worker_id` = `worker-<pid>` olduğu için her yeniden başlatma yeni bir satır açıyor; eskisi
+kalıyor ve panel birkaç gün sonra onlarca "ÖLÜ" satırla dolup gerçek bir arızayı gürültünün
+içinde kaybettirirdi. Çözüm: her süreç **5 dakikada bir**, **aynı tür + aynı dünya** için
+1 saatten eski satırları süpürüyor.
+
+⚠️ Süpürme yalnız **canlı bir halef varken** çalışır. Worker gerçekten ölüp yerine kimse
+gelmediyse kimse süpürmez ve satır kalır — asıl görmek istediğimiz durum tam olarak budur.
+
+⚠️ **Canlı ölçüm bu tasarımda bir açık buldu.** İlk hâli süpürmeyi yalnız *açılışta bir kez*
+yapıyordu. Gerçek yeniden başlatmada selefin satırı o anda henüz **27 saniyelikti** — 1 saatlik
+eşiğin çok altında, yani süpürülmedi; ve süpürme bir kereye özel olduğu için bir daha da
+denenmedi. Panelde kalıcı iki "ÖLÜ" satır kaldı. Testler geçiyordu (hepsi zaten bayat satırla
+başlıyordu); açığı yalnız gerçek bir süreç ölümü gösterdi. Düzeltme: süpürme periyodik.
+
+### Ölçüm (canlı, gerçek HTTP + gerçekten öldürülmüş süreç)
+
+```
+ilk okuma  CANLI dispatcher worker-16572  nabız 3 sn önce  ayakta 137 sn  tur 272
+           CANLI scheduler  worker-16572  nabız 3 sn önce  ayakta 137 sn  tur 137
+```
+
+Tur sayıları poll aralıklarını doğruluyor: 137 sn'de dispatcher 272 tur (500 ms), scheduler
+137 tur (1000 ms).
+
+Süreç **gerçekten öldürüldü**, yenisi kalktı:
+
+```
++0 sn    CANLI dispatcher worker-14872  nabız   0 sn  ayakta   0 sn  tur   1   ← yeni pid
+         CANLI dispatcher worker-16572  nabız  27 sn  ayakta 147 sn  tur 292   ← ölü, henüz eşik altında
++2 dk    CANLI dispatcher worker-14872  nabız   3 sn  ayakta 102 sn  tur 202
+         ÖLÜ   dispatcher worker-16572  nabız 131 sn  ayakta 147 sn  tur 292
+         ÖLÜ   scheduler  worker-16572  nabız 131 sn  ayakta 147 sn  tur 147
+```
+
+⭐ Ölü sürecin son turu (292) donmuş duruyor, canlı olanınki artıyor. `ayakta` alanı
+crash-loop'u ayırt eder: nabız taze ama süreç sürekli yeniden doğuyorsa `at` güncel kalır ve
+yalnız bu alan düşer.
+
+`ANALYZE` ucu: **20 tablo** "satır sayısı bilinmiyor" durumundaydı, `POST /ops/analyze`
+**678 ms** sürdü ve hepsi sayıya dönüştü (`battles` bilinmiyor → 15, `techs` → 8, `worlds` → 1).
+
+### ⚠️ Satır sayısı TAHMİN
+
+Boyut ekranı `pg_class.reltuples` okuyor, `COUNT(*)` değil: 38 tabloya tam sayım atmak bu
+ekranı açan her yöneticiye tam tablo taraması yaptırırdı. Hiç `ANALYZE` görmemiş tabloda
+`reltuples = −1` gelir ve panel **«bilinmiyor»** yazar — 0 gösterseydik "tablo boş" diye
+okunurdu, ki yanlış olurdu.
+
+⛔ **`VACUUM FULL` düğmesi bilerek YOK.** Tabloyu tamamen kilitler ve tablo boyutu kadar geçici
+disk ister; küçük sunucu profilinde (§4.0) bir bakım aracının sunabileceği en tehlikeli düğme
+olurdu. Şişme sorununun çözümü autovacuum ayarı, panelden tek tık değil.
+
+`pg_stat_statements` kurulu değilse uç **500 atmıyor**: `available: false` + kurulum komutu
+dönüyor, panelin geri kalanı çalışmaya devam ediyor.
+
+### Temizlik: görev NE SİLMEDİĞİYLE tanımlanır
+
+7 görev var ve her birinin ekranda ayrı bir **🛡 koruma** satırı duruyor:
+
+| görev | siler | ⭐ korur |
+| :-- | :-- | :-- |
+| `messages` | okunmuş posta > 60 gün | **okunmamış** posta 365 güne kadar |
+| `chat` | sohbet > 30 gün | **sabitlenmiş** mesajlar |
+| `outbox` | teslim edilmiş > 7 gün | teslim EDİLMEMİŞ satır, yaşı ne olursa olsun |
+| `email_tokens` | süresi geçmiş/kullanılmış > 7 gün | hâlâ geçerli jetonlar |
+| `push` | ≥5 hata almış > 30 gün | eşik altındaki abonelikler |
+| `ranking_runs` | koşu geçmişi > 90 gün | `rankings` tablosuna hiç dokunmaz |
+| `sessions` | iptal/süresi geçmiş > 90 gün | **canlı zincirler** |
+
+Üç karar açıklama istiyor:
+
+**Okunmamış rapor korunuyor.** Oyuncunun hiç görmediği bir savaş raporunu silmek veriyi değil,
+oyuncunun ne olduğunu öğrenme hakkını siler. Sert tavan (365 gün) yalnız bırakılmış hesapların
+kutusu sonsuza kadar büyümesin diye var.
+
+**Teslim edilmemiş outbox satırı hiç silinmiyor.** Ölü mektup kuyruğundaki satır bir arıza
+kanıtıdır; silmek arızayı görünmez yapar — temizliğin üretebileceği en kötü sonuç.
+
+**⚠️ Plan yanlıştı: `rankings` temizlenemez.** Plan "eski `rankings`" diyordu; ölçünce tablonun
+her anlık görüntüde **üzerine yazıldığı** görüldü (unique `world+kind+subject`) → boyutu oyuncu
+sayısıyla sınırlı, büyümüyor ve temizlenecek bir şeyi yok. Biriken tablo koşu geçmişi olan
+`ranking_runs` (günde 3 satır/dünya). Sıralama ekranı `rankings`i okuyor; silseydik sıralama
+boşalırdı.
+
+### ⚠️ Zaman kolonu tuzağı
+
+Projede iki saat var: `messages.at`, `battles.at`, `ranking_runs.taken_at` **OYUN** saatinde —
+bakımda donar, `worlds.clock_offset_ms` ile gerçek saatten kayar. Saklama süresi ise bir
+**depolama** kuralıdır ve gerçek zamanla ölçülür. Bu yüzden her görev `created_at` benzeri
+gerçek zaman kolonuna bakıyor; `at` kullansaydık uzun bir bakımdan sonra "60 günlük" eşiği
+aslında 62 gün öncesini keserdi. Bir test her görevin zaman kolonunu `information_schema` ile
+doğruluyor.
+
+Aynı ayrım kuyruk gecikmesinde de var ama **ters yönde**: gecikme oyun saatiyle ölçülüyor,
+çünkü worker da ona bakıyor. Ölçüldü: görev 3 saat geride + dünya saati 2 saat geride →
+panel **1 saat** diyor, 3 saat değil. Gerçek saatle ölçseydik var olmayan bir arıza gösterirdi.
+
+### Kuru koşu VARSAYILAN
+
+Faz 7'de öğrenilen dersin kuralı. Silme üç kapıdan geçiyor: **adım yükseltmesi** ·
+**`confirm: true`** · **satır tavanı**. `confirm` yoksa uç hata atmıyor, **kuru koşu**
+döndürüyor — panelin "önce göster" akışı ile aynı ucu kullanıyor, yani yanlış tıklama veri
+kaybına dönüşemiyor. Her koşu saklama süreleriyle birlikte `audit_log`a yazılıyor
+(«hangi eşikle silindi» sonradan sorulabilsin).
+
+Satır tavanı (varsayılan 20.000) bir güvenlik freni: `LIMIT`siz bir DELETE milyon satırda
+tabloyu kilitler ve oyunu durdurur. Silme `ctid` ile parça parça yapılıyor (bileşik anahtarlı
+tablolarda tek kolonluk anahtar yok); tavan aşılırsa kalan bir sonraki koşuya bırakılıyor ve
+panelde yazıyor. Ölçüldü: 250 satır, tavan 100 → `100 sildi / 150 kaldı` → `100/50` → `50/0`.
+
+### Ölçüm (canlı, kuru koşu — hiçbir satır silinmedi)
+
+```
+veri tabanı 11,90 MB · 38 tablo
+  sessions   0,48 MB (indeks 0,16 · 5 indeks)  ≈437 satır   ← en büyük tablo
+  outbox     0,21 MB                            ≈348 satır
+  missions   0,20 MB (indeks 0,11 · 7 indeks)  ≈212 satır
+
+outbox: toplam 373 · bekleyen 0 · ölü mektup 0
+dünya 1: bekleyen 1 · çalışan 0 · başarısız 0 · gecikme 0 sn
+havuz:  12/100 · etkin 1 · boşta 11 · transaction'da boşta 0
+
+temizlik kuru koşusu — 7 görevin HEPSİ 0 satır eşleştirdi
+```
+
+⭐ Proje yeterince genç: hiçbir satır saklama eşiğinin ötesinde değil, yani canlıda silinecek
+bir şey yok. Yine de `sessions` şimdiden en büyük tablo (447 satır) — dönmeli refresh her
+yenilemede yeni satır açtığı için uzun vadede ilk dolacak olan o.
+
+Kapılar canlıda doğrulandı: bilinmeyen görev **400** · token'sız **401** · yükseltmesiz +
+`confirm` **403** · `confirm`siz çalıştır → `ran=false, deleted=0`.
+
+⚠️ **Silme yolu canlıda ÇALIŞTIRILMADI** — bilerek. Canlıda eşleşen satır yoktu ve olsaydı da
+kullanıcının verisini onaysız silmek Faz 7'nin hatasını tekrarlamak olurdu. Silme davranışı
+test veritabanında ölçülüyor (27 test): korumalar, tavan, audit satırı ve `confirm` kapısı.
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

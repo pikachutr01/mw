@@ -8,8 +8,8 @@
  */
 import { relations, sql } from 'drizzle-orm';
 import {
-  bigint, bigserial, boolean, index, integer, jsonb, numeric, pgTable, smallint, text, timestamp,
-  uniqueIndex, uuid, type AnyPgColumn,
+  bigint, bigserial, boolean, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text,
+  timestamp, uniqueIndex, uuid, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 export const worlds = pgTable('worlds', {
@@ -696,6 +696,29 @@ export const outbox = pgTable('outbox', {
 }, (t) => [
   index('outbox_pending').on(t.id).where(sql`${t.dispatchedAt} IS NULL`),
 ]);
+
+/**
+ * ⭐ DÖNGÜ NABZI (§admin Faz 8) — scheduler ve outbox dispatcher'ın "yaşıyorum" imzası.
+ *
+ * ⚠️ Canlılık gözlemlenebilir durumdan TÜRETİLEMİYOR: kuyruklar boşken "gecikme yok" ile
+ * "döngü öldü, iş de gelmedi" aynı görünür. Ayrımı yalnız döngünün kendi yazdığı satır verir.
+ * Yazım görev transaction'ının dışında ve kısıtlanmış (5 sn) — izleme, izlediği sistemden
+ * daha fazla yazma üretmemeli.
+ */
+export const workerHeartbeats = pgTable('worker_heartbeats', {
+  /** scheduler | dispatcher — aynı süreçte koşsalar da AYRI satır: biri takılıp diğeri koşabilir. */
+  kind: text('kind').notNull(),
+  workerId: text('worker_id').notNull(),
+  worldId: smallint('world_id'),
+  pid: integer('pid'),
+  role: text('role'),
+  /** `at − started_at` = kesintisiz çalışma süresi. Crash-loop yalnız BU alanla görülür. */
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  ticks: bigint('ticks', { mode: 'number' }).notNull().default(0),
+  /** Son turun özeti (claimed/done/lagMs · dispatched/failed/skipped) — panelde "ne yapıyor". */
+  detail: jsonb('detail').notNull().default({}),
+}, (t) => [primaryKey({ columns: [t.kind, t.workerId] })]);
 
 /** Kaynak/asker değiştiren HER işlem before/after ile buraya yazılır (§8). */
 export const auditLog = pgTable('audit_log', {

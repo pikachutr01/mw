@@ -10,8 +10,18 @@
  */
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
+import type { Heartbeat } from '../worker/heartbeat.ts';
 
 export type OutboxSink = (row: OutboxRow) => Promise<void>;
+
+/**
+ * Deneme hakkı. Bu sayıya ulaşan satır **ölü mektup**tur: dispatcher bir daha almaz, satır
+ * görünür kalır (§8 alarm konusu).
+ *
+ * ⚠️ Bakım paneli de bu sabiti okuyor (`admin.ops.controller`). Orada 10 yazsaydık ve burada
+ * değişseydi panel "3 ölü mektup" derken dispatcher hâlâ deniyor olurdu — tek kaynak burası.
+ */
+export const OUTBOX_MAX_ATTEMPTS = 10;
 
 export interface OutboxRow {
   id: number;
@@ -34,6 +44,12 @@ export interface DispatcherOptions {
   maxAttempts?: number;
   pollIntervalMs?: number;
   onError?: (err: unknown, row: OutboxRow | null) => void;
+  /**
+   * ⭐ CANLILIK NABZI (§admin Faz 8). Scheduler'ınkinden AYRI satır yazar: bu döngü bir
+   * e-posta sink'inde bloke olurken scheduler koşmaya devam edebilir ve tek bir "worker
+   * yaşıyor" satırı bu ayrımı gizlerdi.
+   */
+  heartbeat?: Heartbeat | null;
 }
 
 export class OutboxDispatcher {
@@ -41,15 +57,22 @@ export class OutboxDispatcher {
   private timer: NodeJS.Timeout | null = null;
   private busy = false;
   private stopped = false;
-  private readonly opts: Required<Omit<DispatcherOptions, 'onError'>> & Pick<DispatcherOptions, 'onError'>;
+  private readonly opts: Required<Omit<DispatcherOptions, 'onError' | 'heartbeat'>>
+    & Pick<DispatcherOptions, 'onError' | 'heartbeat'>;
 
   constructor(private readonly db: Db, options: DispatcherOptions = {}) {
     this.opts = {
       batchSize: options.batchSize ?? 100,
-      maxAttempts: options.maxAttempts ?? 10,
+      maxAttempts: options.maxAttempts ?? OUTBOX_MAX_ATTEMPTS,
       pollIntervalMs: options.pollIntervalMs ?? 500,
       onError: options.onError,
+      heartbeat: options.heartbeat,
     };
+  }
+
+  /** Bakım paneli bu eşiğe göre "ölü mektup" sayar; tek doğruluk kaynağı dispatcher'ın kendisi. */
+  get maxAttempts(): number {
+    return this.opts.maxAttempts;
   }
 
   /** Konu başına teslim kanalı. `*` tüm konuları yakalar (log/metrik için kullanışlı). */
@@ -104,6 +127,12 @@ export class OutboxDispatcher {
         `);
       }
     }
+    await this.opts.heartbeat?.beat({
+      dispatched, failed, skipped, batch: rows.length,
+      pollIntervalMs: this.opts.pollIntervalMs,
+      /** Kayıtlı konular: "sink yok → satır bekliyor" tanısı panelde bununla kurulur. */
+      topics: [...this.sinks.keys()],
+    });
     return { dispatched, failed, skipped };
   }
 

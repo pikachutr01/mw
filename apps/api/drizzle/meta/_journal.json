@@ -218,6 +218,13 @@
       "when": 1785605000000,
       "tag": "0030_player_ban",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785606000000,
+      "tag": "0031_worker_heartbeats",
+      "breakpoints": true
     }
   ]
 }

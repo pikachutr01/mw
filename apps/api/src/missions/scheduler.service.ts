@@ -10,6 +10,7 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { auditLog, outbox } from '../db/schema.ts';
+import type { Heartbeat } from '../worker/heartbeat.ts';
 import type { GameClockService } from '../world/game-clock.service.ts';
 import type { HandlerContext, HandlerRegistry, Tx } from './handler-registry.ts';
 import { MissionRepository, type MissionRow } from './mission.repository.ts';
@@ -41,6 +42,11 @@ export interface SchedulerOptions {
    * sonraki görev güncel değeri görsün (nesne geçseydik süreç ömrü boyunca donardı).
    */
   engineFor?: (worldId: number) => HandlerContext['engine'];
+  /**
+   * ⭐ CANLILIK NABZI (§admin Faz 8). Verilmezse hiç yazılmaz — testler ve nabız tablosu
+   * olmayan profiller etkilenmez.
+   */
+  heartbeat?: Heartbeat | null;
 }
 
 export interface TickResult {
@@ -55,8 +61,8 @@ export interface TickResult {
 
 export class SchedulerService {
   private readonly repo: MissionRepository;
-  private readonly opts: Required<Omit<SchedulerOptions, 'onError' | 'engineFor'>>
-    & Pick<SchedulerOptions, 'onError' | 'engineFor'>;
+  private readonly opts: Required<Omit<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat'>>
+    & Pick<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat'>;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopped = false;
@@ -78,6 +84,7 @@ export class SchedulerService {
       retryBackoffMs: options.retryBackoffMs ?? 5_000,
       onError: options.onError,
       engineFor: options.engineFor,
+      heartbeat: options.heartbeat,
     };
   }
 
@@ -91,6 +98,12 @@ export class SchedulerService {
     if (world.paused) {
       // Bakım: yeni görev ALINMAZ. Oyun saati de donduğu için vade zaten ilerlemiyor.
       result.skippedPaused = true;
+      /**
+       * ⚠️ Nabız bakımda da atıyor — bilerek. Bakımdaki bir dünya ile ÖLMÜŞ bir worker
+       * bakım panelinde aynı görünseydi (kuyruk ilerlemiyor) yanlış alarm ya da daha
+       * kötüsü kaçırılmış alarm üretirdi.
+       */
+      await this.beat(result);
       return result;
     }
 
@@ -121,7 +134,18 @@ export class SchedulerService {
         else result.retried++;
       }
     }
+    await this.beat(result);
     return result;
+  }
+
+  /** Nabız (§admin Faz 8). Kısıtlama ve hata yutma `Heartbeat`in içinde. */
+  private async beat(result: TickResult): Promise<void> {
+    await this.opts.heartbeat?.beat({
+      claimed: result.claimed, done: result.done, retried: result.retried,
+      dead: result.dead, reaped: result.reaped,
+      lagMs: result.lagMs, paused: result.skippedPaused,
+      pollIntervalMs: this.opts.pollIntervalMs,
+    });
   }
 
   /**

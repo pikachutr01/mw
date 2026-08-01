@@ -15,13 +15,14 @@ import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
+import { HealthScreen } from './screens/Health.tsx';
 import { ModerationScreen } from './screens/Moderation.tsx';
 import { SessionsScreen } from './screens/Sessions.tsx';
 import { SettingsScreen } from './screens/Settings.tsx';
 import { WorldsScreen } from './screens/Worlds.tsx';
 
-/** Faz 7 sonunda beş ekran; kalan tek faz bakım/performans. */
-type Tab = 'worlds' | 'settings' | 'sessions' | 'moderation' | 'database' | 'soon';
+/** Faz 8 ile plan tamamlandı: altı ekran, bekleyen faz yok. */
+type Tab = 'worlds' | 'settings' | 'sessions' | 'moderation' | 'database' | 'health' | 'plan';
 
 export function App() {
   const [session, setSessionState] = useState<AdminSession | null>(getSession);
@@ -83,7 +84,9 @@ export function App() {
                     ? <ModerationScreen onNeedStepUp={() => setStepUpOpen(true)} />
                     : tab === 'database'
                       ? <DatabaseScreen onNeedStepUp={() => setStepUpOpen(true)} />
-                      : <Placeholder />}
+                      : tab === 'health'
+                        ? <HealthScreen onNeedStepUp={() => setStepUpOpen(true)} />
+                        : <Placeholder />}
           </>
         ) : null}
       </main>
@@ -94,7 +97,8 @@ export function App() {
 function Tabs({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
   const items: [Tab, string][] = [
     ['worlds', 'Dünya'], ['settings', 'Ayarlar'], ['sessions', 'Oturumlar'],
-    ['moderation', 'Moderasyon'], ['database', 'Veri tabanı'], ['soon', 'Sıradakiler'],
+    ['moderation', 'Moderasyon'], ['database', 'Veri tabanı'], ['health', 'Bakım'],
+    ['plan', 'Plan'],
   ];
   return (
     <div className="flex gap-1">
@@ -258,8 +262,8 @@ function StepUpDialog({ minutes, onClose, onDone }: {
 }
 
 /**
- * Faz 0 kabuğu boş; ekranlar sonraki fazlarda geliyor. Boş bırakmak yerine sırayı yazıyoruz —
- * oyun tarafındaki `Placeholders.tsx` ile aynı gerekçe: neyin eksik olduğu ekrandan görünsün.
+ * Plan haritası. Faz 0'da "neyin eksik olduğu ekrandan görünsün" diye açılmıştı; Faz 8 ile
+ * hepsi bitti ve şimdi **hangi işin hangi sekmede olduğunu** söyleyen bir dizin işlevi görüyor.
  */
 function Placeholder() {
   const rows: [string, string, boolean][] = [
@@ -271,10 +275,10 @@ function Placeholder() {
     ['Katalog', 'ekonomi eğrileri · fiyat çarpanları · mağara/sur (Ayarlar sekmesinde)', true],
     ['Oyuncular ve moderasyon', 'künye · şikayet kuyruğu · sohbet yasağı', true],
     ['Veri tabanı', 'tablo tarayıcı · küratörlü aksiyonlar · ham kip', true],
-    ['Bakım/performans', 'tablo boyutları · temizlik görevleri', false],
+    ['Bakım/performans', 'canlılık · kuyruklar · boyutlar · temizlik (Bakım sekmesinde)', true],
   ];
   return (
-    <Panel title="Fazlar" right="Faz 7 bitti">
+    <Panel title="Fazlar" right="9 fazın 9'u bitti">
       <ul className="divide-y divide-border">
         {rows.map(([name, desc, done]) => (
           <li key={name} className="flex items-baseline justify-between gap-3 px-3 py-2">

@@ -21,6 +21,7 @@ import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
 import { createRankingSnapshotHandler, ensureRankingSchedule } from '../ranking/ranking.handler.ts';
 import { eventForOutbox, type RealtimeBus } from '../realtime/realtime.bus.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
+import { Heartbeat } from './heartbeat.ts';
 
 export interface WorkerOptions {
   worldId: number;
@@ -54,6 +55,7 @@ export interface Worker {
 
 export function createWorker(db: Db, opts: WorkerOptions): Worker {
   const clock = new GameClockService(db);
+  const workerId = opts.workerId ?? `worker-${process.pid}`;
 
   /**
    * Görev tipleri (§1: "hepsi aynı çatı").
@@ -75,8 +77,13 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
 
   const scheduler = new SchedulerService(db, clock, registry, {
     worldId: opts.worldId,
-    workerId: opts.workerId,
+    workerId,
     pollIntervalMs: opts.pollIntervalMs,
+    /**
+     * ⭐ CANLILIK (§admin Faz 8) — iki döngü, İKİ ayrı nabız. Tek satır tutsaydık dispatcher
+     * bir sink'te bloke olurken scheduler'ın nabzı "worker sağlıklı" demeye devam ederdi.
+     */
+    heartbeat: new Heartbeat(db, 'scheduler', { workerId, worldId: opts.worldId }),
     onError: (err, mission) => {
       // eslint-disable-next-line no-console
       console.error(`[scheduler] görev ${mission?.id ?? '-'} (${mission?.type ?? '-'}) hata:`, err);
@@ -92,6 +99,7 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
   });
 
   const dispatcher = new OutboxDispatcher(db, {
+    heartbeat: new Heartbeat(db, 'dispatcher', { workerId, worldId: opts.worldId }),
     onError: (err, row) => {
       // eslint-disable-next-line no-console
       console.error(`[outbox] satır ${row?.id ?? '-'} (${row?.topic ?? '-'}) teslim edilemedi:`, err);
