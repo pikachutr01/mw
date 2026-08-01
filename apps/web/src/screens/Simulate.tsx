@@ -39,7 +39,8 @@ interface SimSide {
 interface SimResult {
   winner: Side | 'draw';
   turns: number;
-  seed: string;
+  /** Motorun kullandığı 32-bit seed (`hashSeed` çıktısı). Ekranda gösterilmiyor. */
+  seed: number;
   attacker: SimSide;
   defender: SimSide;
   debris: { gold: number; food: number };
@@ -87,9 +88,68 @@ function NumCell(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <AmountInput {...props} style={{ width: '100%', minWidth: '2.5rem' }} />;
 }
 
-/** Yetenek toplamı `3 × seviye`yi aşamaz (`contracts/simulate.ts`). Sunucu da reddediyor. */
+/**
+ * Yetenek sayacı. Oyunda dağıtılabilecek puan `3 × seviye` ile sınırlı
+ * (`hero.controller.ts:161`), ama **simülatörde aşım serbest** (kullanıcı, 2026-08-02):
+ * burası "ya şöyle olsaydı" sorularının yeri. Aşım kırmızı gösterilir, engellenmez.
+ */
 const heroSpent = (h: HeroRow): number => num(h.fAtk) + num(h.fDef) + num(h.mAtk) + num(h.mDef);
 const heroBudget = (h: HeroRow): number => num(h.level) * HERO_POINTS_PER_LEVEL;
+
+/* ── Son savaşın cihazda saklanması ──────────────────────────────────────────── */
+
+const LAST_KEY = 'mw-sim-last';
+
+/**
+ * ⭐ SON SAVAŞ (kullanıcı, 2026-08-02): seed ekranda **gösterilmez**, cihaza kaydedilir.
+ * «Son savaşı yükle» girdileri kutulara geri doldurur ve **aynı seed'le** koşturur → birebir
+ * aynı sonuç. Ardından «Savaştır»a basılırsa yeniden rastgele seed üretilir.
+ *
+ * ⚠️ **Seed'i istemci üretir.** Sunucu kendi ürettiğinde `repeat > 1` için `${seed}:${i}`
+ * türetiyor (`simulate.controller.ts:40-43`); dönen tek sayı bir SETİ tekrar oynatmaya
+ * yetmezdi. Taban seed'i biz gönderirsek sunucu aynı türetmeyi yapar ve set birebir tekrarlanır.
+ */
+interface LastRun {
+  v: 1;
+  seed: string;
+  repeat: string;
+  night: boolean;
+  counts: Record<Side, Counts>;
+  tech: Record<Side, Counts>;
+  heroes: Record<Side, HeroRow[]>;
+  temple: Record<Side, string>;
+  heroCount: Record<Side, string>;
+  vision: Record<Side, string>;
+}
+
+const isCounts = (v: unknown): v is Counts =>
+  typeof v === 'object' && v !== null && Object.values(v).every((x) => typeof x === 'string');
+const isSided = (v: unknown, inner: (x: unknown) => boolean): boolean =>
+  typeof v === 'object' && v !== null
+  && inner((v as Record<string, unknown>)['attacker'])
+  && inner((v as Record<string, unknown>)['defender']);
+
+/**
+ * ⚠️ `localStorage` **elle düzenlenebilir**; şemaya güvenilmez. Bozuk kayıt sessizce yok
+ * sayılır — kullanıcıyı ilgilendirmeyen bir hata için ekranı çökertmenin anlamı yok.
+ */
+function readLast(): LastRun | null {
+  try {
+    const raw = localStorage.getItem(LAST_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as Record<string, unknown>;
+    if (d['v'] !== 1 || typeof d['seed'] !== 'string' || typeof d['repeat'] !== 'string') return null;
+    if (typeof d['night'] !== 'boolean') return null;
+    if (!isSided(d['counts'], isCounts) || !isSided(d['tech'], isCounts)) return null;
+    if (!isSided(d['temple'], (x) => typeof x === 'string')) return null;
+    if (!isSided(d['heroCount'], (x) => typeof x === 'string')) return null;
+    if (!isSided(d['vision'], (x) => typeof x === 'string')) return null;
+    if (!isSided(d['heroes'], (x) => Array.isArray(x))) return null;
+    return d as unknown as LastRun;
+  } catch {
+    return null;
+  }
+}
 
 export function Simulate(): React.ReactElement {
   const [counts, setCounts] = useState<Record<Side, Counts>>({ attacker: {}, defender: {} });
@@ -106,49 +166,84 @@ export function Simulate(): React.ReactElement {
   /** Hangi koşunun ayrıntısı «Kalan» sütunlarında gösteriliyor — çoklu koşuda gerekli. */
   const [shown, setShown] = useState(0);
 
+  /** Kayıt yalnız ilk çizimde okunur; sonrasında `run()` kendi güncelliyor. */
+  const [hasLast, setHasLast] = useState(() => readLast() != null);
+
   const atkCounts = toCounts(counts.attacker);
   const defCounts = toCounts(counts.defender);
   const ready = Object.keys(atkCounts).length > 0 && Object.keys(defCounts).length > 0;
-  const overspent = [...heroes.attacker, ...heroes.defender].some((h) => heroSpent(h) > heroBudget(h));
 
   const view = results?.[Math.min(shown, results.length - 1)] ?? null;
 
-  const sidePayload = (s: Side): Record<string, unknown> => ({
-    counts: toCounts(counts[s]),
+  /** Formun o andaki tam fotoğrafı — `run()` durumdan değil bundan besleniyor (aşağıya bak). */
+  const snapshot = (): Omit<LastRun, 'v' | 'seed'> =>
+    ({ repeat, night, counts, tech, heroes, temple, heroCount, vision });
+
+  const sidePayload = (snap: Omit<LastRun, 'v' | 'seed'>, s: Side): Record<string, unknown> => ({
+    counts: toCounts(snap.counts[s]),
     tech: Object.fromEntries(
       COMBAT_TECHS.filter((t) => !(s === 'attacker' && DEFENDER_ONLY_TECH.has(t.id)))
-        .map((t) => [t.id, num(tech[s][t.id])]),
+        .map((t) => [t.id, num(snap.tech[s][t.id])]),
     ),
-    heroes: heroes[s].map((h) => ({
+    heroes: snap.heroes[s].map((h) => ({
       level: num(h.level), fAtk: num(h.fAtk), fDef: num(h.fDef), mAtk: num(h.mAtk), mDef: num(h.mDef),
     })),
-    temple: num(temple[s]),
-    heroCount: num(heroCount[s]),
+    temple: num(snap.temple[s]),
+    heroCount: num(snap.heroCount[s]),
   });
 
-  const run = async (): Promise<void> => {
+  /**
+   * ⚠️ `run()` React durumunu OKUMAZ, kendisine verilen fotoğrafı kullanır. Sebep «Son savaşı
+   * yükle»: `setCounts(...)` ve arkadaşları asenkron; hemen ardından durumdan okuyan bir
+   * `run()` **eski** değerlerle koşardı. Fotoğrafı parametre yapmak bu yarışı tamamen kaldırıyor.
+   */
+  const run = async (snap: Omit<LastRun, 'v' | 'seed'>, seed: string): Promise<void> => {
     setError(null);
     setBusy(true);
     try {
       const r = await api<{ results: SimResult[] }>('/api/v1/simulate', {
         method: 'POST',
         body: {
-          attacker: sidePayload('attacker'),
-          defender: sidePayload('defender'),
-          night,
-          nightVisionAttacker: num(vision.attacker),
-          nightVisionDefender: num(vision.defender),
-          repeat: Math.min(50, Math.max(1, num(repeat) || 1)),
+          attacker: sidePayload(snap, 'attacker'),
+          defender: sidePayload(snap, 'defender'),
+          night: snap.night,
+          nightVisionAttacker: num(snap.vision.attacker),
+          nightVisionDefender: num(snap.vision.defender),
+          repeat: Math.min(50, Math.max(1, num(snap.repeat) || 1)),
+          seed,
         },
       });
       setResults(r.results);
       setShown(0);
+      // Seed ekranda yok ama cihazda duruyor — aynı savaşı tekrar oynatmanın tek yolu.
+      localStorage.setItem(LAST_KEY, JSON.stringify({ v: 1, seed, ...snap } satisfies LastRun));
+      setHasLast(true);
     } catch (err) {
       setError(err);
       setResults(null);
     } finally {
       setBusy(false);
     }
+  };
+
+  /** Her «Savaştır» yeni bir zar demek; taban seed'i istemci üretiyor (bkz. `LastRun`). */
+  const fight = (): void =>
+    void run(snapshot(), `sim-${Date.now()}-${Math.trunc(Math.random() * 1e9)}`);
+
+  /** Kayıtlı girdileri kutulara geri doldurur ve AYNI seed'le koşturur → birebir aynı sonuç. */
+  const replayLast = (): void => {
+    const last = readLast();
+    if (!last) { setHasLast(false); return; }
+    setRepeat(last.repeat);
+    setNight(last.night);
+    setCounts(last.counts);
+    setTech(last.tech);
+    setHeroes(last.heroes);
+    setTemple(last.temple);
+    setHeroCount(last.heroCount);
+    setVision(last.vision);
+    const { v: _v, seed, ...snap } = last;
+    void run(snap, seed);
   };
 
   const clearAll = (): void => {
@@ -189,7 +284,13 @@ export function Simulate(): React.ReactElement {
               <tbody>
                 {COMBAT_TECHS.map((t, i) => (
                   <tr key={t.id} className={i % 2 === 1 ? 'bg-row-alt' : ''}>
-                    <td className="px-3 py-1 text-ink">{t.name.tr}</td>
+                    <td className="px-3 py-1 text-ink">
+                      {/* Sanat zaten var (`assets/techs/`), Akademi de aynısını çiziyor. */}
+                      <span className="flex items-center gap-2">
+                        <CatalogIcon kind="techs" id={t.id} alt="" size={22} />
+                        <span className="truncate">{t.name.tr}</span>
+                      </span>
+                    </td>
                     <td className="py-1 text-center">
                       {DEFENDER_ONLY_TECH.has(t.id) ? (
                         /* Yalnız savunma yapılarını etkiliyor → saldırandaki kutu yanıltıcı olurdu. */
@@ -211,23 +312,39 @@ export function Simulate(): React.ReactElement {
 
           {/* ── GECE SAVAŞI ────────────────────────────────────────────────────── */}
           <Panel title="Gece savaşı">
-            <div className="flex flex-wrap items-center gap-4 px-3 py-2 text-sm">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" checked={night} onChange={(e) => setNight(e.target.checked)}
-                  className="h-4 w-4 accent-[var(--mw-color-accent)]" />
-                Gece savaşı
-              </label>
-              <label className="flex items-center gap-2 text-muted">
-                Gece Görüş · saldıran
-                <AmountInput min={0} placeholder="0" value={vision.attacker} disabled={!night}
-                  onChange={(e) => setVision((p) => ({ ...p, attacker: e.target.value }))} />
-              </label>
-              <label className="flex items-center gap-2 text-muted">
-                savunan
-                <AmountInput min={0} placeholder="0" value={vision.defender} disabled={!night}
-                  onChange={(e) => setVision((p) => ({ ...p, defender: e.target.value }))} />
-              </label>
-            </div>
+            <label className="flex cursor-pointer items-center gap-2 border-b border-border px-3 py-2 text-sm">
+              <input type="checkbox" checked={night} onChange={(e) => setNight(e.target.checked)}
+                className="h-4 w-4 accent-[var(--mw-color-accent)]" />
+              Gece savaşı
+            </label>
+            {/* ⚠️ Teknikler tablosuyla AYNI sütun düzeni: etiket solda, Saldıran/Savunan aynı
+                hizada. Eskiden üçü tek satırda akıyordu ve «Gece Görüş» yazısı saldıran
+                kutusunun yanına yapışıyordu. */}
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-[11px] text-muted">
+                  <th className="px-3 py-1 text-left font-medium">Teknik</th>
+                  <th className="w-20 py-1 text-center font-medium">Saldıran</th>
+                  <th className="w-20 py-1 pr-3 text-center font-medium">Savunan</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-3 py-1 text-ink">
+                    <span className="flex items-center gap-2">
+                      <CatalogIcon kind="techs" id="night_vision" alt="" size={22} />
+                      <span className="truncate">Gece Görüş</span>
+                    </span>
+                  </td>
+                  {(['attacker', 'defender'] as const).map((s) => (
+                    <td key={s} className={`py-1 text-center ${s === 'defender' ? 'pr-3' : ''}`}>
+                      <NumCell min={0} placeholder="0" value={vision[s]} disabled={!night}
+                        onChange={(e) => setVision((p) => ({ ...p, [s]: e.target.value }))} />
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </Panel>
         </div>
       </div>
@@ -252,20 +369,23 @@ export function Simulate(): React.ReactElement {
       {/* ── ÇALIŞTIR ───────────────────────────────────────────────────────────── */}
       <Panel title="Savaştır">
         <div className="flex flex-wrap items-center gap-3 p-3">
-          <Button disabled={!ready || overspent || busy} onClick={() => void run()}>
+          {/* ⚠️ Kahraman puan aşımı burayı KİLİTLEMEZ (kullanıcı, 2026-08-02): aşım kahraman
+              satırında kırmızı `40/30` olarak görünür, ama savaş yine çevrilir. */}
+          <Button disabled={!ready || busy} onClick={fight}>
             {busy ? 'Hesaplanıyor…' : 'Savaştır'}
           </Button>
           <label className="flex items-center gap-2 text-sm text-muted">
             Tekrar
             <AmountInput min={1} value={repeat} onChange={(e) => setRepeat(e.target.value)} />
           </label>
+          {/* Kayıt yoksa düğme hiç çizilmiyor — pasif bir düğme "burada bir şey eksik" der. */}
+          {hasLast ? (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={replayLast}>
+              Son savaşı yükle
+            </Button>
+          ) : null}
           <Button variant="ghost" size="sm" onClick={clearAll}>Temizle</Button>
           {!ready ? <span className="text-xs text-muted">İki tarafa da en az bir birim yaz.</span> : null}
-          {overspent ? (
-            <span className="text-xs text-danger">
-              Bir kahramanın yetenek toplamı seviyesinin izin verdiğini aşıyor.
-            </span>
-          ) : null}
         </div>
         <div className="px-3 pb-3"><ErrorBox error={error} /></div>
       </Panel>
@@ -406,7 +526,7 @@ function HeroPanel({
         <tbody>
           {rows.length === 0 ? (
             <tr><td colSpan={7} className="px-3 py-3 text-center text-muted">
-              Kahraman eklenmedi. Savaş kahramansız çevrilir.
+              Kahraman eklenmedi.
             </td></tr>
           ) : rows.map((h, i) => {
             const spent = heroSpent(h);
@@ -509,21 +629,21 @@ function ResultPanel({ results, shown, onShow }: {
         <Stat k="Savunan kaybı" v={fmt(r.defender.lost)} tone="danger" />
         <Stat k="Saldırandan kalan" v={fmt(r.attacker.alive)} />
         <Stat k="Savunandan kalan" v={fmt(r.defender.alive)} />
-        <Stat k="Enkaz altını" v={fmt(r.debris.gold)} />
-        <Stat k="Enkaz yemeği" v={fmt(r.debris.food)} />
-        <Stat k="Deneyim" v={fmt(r.xp)} />
+        <Stat k="Savaş ganimeti · altın" v={fmt(r.debris.gold)} />
+        <Stat k="Savaş ganimeti · yemek" v={fmt(r.debris.food)} />
+        <Stat k="Kahraman için deneyim" v={fmt(r.xp)} />
         <Stat k="Kahraman çıkma" v={`%${r.captureChance.toFixed(2)}`} />
         <Stat k="Taşıma kapasitesi" v={fmt(r.attackerCarryCapacity)} />
-        {r.defender.wallIntegrity != null
-          ? <Stat k="Sur bütünlüğü" v={`%${(r.defender.wallIntegrity * 100).toFixed(1)}`} /> : null}
-        {r.defender.shieldIntegrity != null
-          ? <Stat k="Kalkan bütünlüğü" v={`%${(r.defender.shieldIntegrity * 100).toFixed(1)}`} /> : null}
+        {/* ⚠️ Sur ve Kalkan bütünlüğü BURADA GÖSTERİLMEZ: ikisi de kendi satırlarının «Kalan»
+            sütununda yüzde olarak zaten yazıyor, burada tekrar etmek yer israfıydı. */}
       </div>
 
+      {/* ⚠️ Ganimet ayrımı: motor YALNIZ ölen birimlerden çıkan ganimeti hesaplar. Gerçek bir
+          savaşta bu değer savunanın şehrindeki kaynakla havuzlanır ve taşınabilen kısmı ayrıca
+          hesaplanır (`battle.handlers.ts` → `calculateLoot`) — orası motorun işi değil. */}
       <p className="border-t border-border px-3 py-2 text-[11px] text-muted">
-        Birim birim kalanlar yukarıdaki tabloların <b>Kalan</b> sütunlarında.
-        {/* Seed olmadan aynı savaşı bir daha oynatmanın yolu yok. */}
-        <span className="tnum ml-2">seed {r.seed}</span>
+        Savaş ganimeti, <b>ölen birimlerden</b> çıkan değerdir. Gerçek bir savaşta buna
+        savunanın şehrindeki kaynak da eklenir ve taşıma kapasitesi kadarı götürülür.
       </p>
     </Panel>
   );

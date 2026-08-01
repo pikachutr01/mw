@@ -11,8 +11,19 @@ export const techLevels = z.record(z.string(), z.number().int().min(0));
 export const HERO_POINTS_PER_LEVEL = 3;
 
 /**
- * Kahraman girdisi. Dört yeteneğin TOPLAMI `3 × seviye`yi aşamaz — bu kural hem gerçek savaşta
- * hem simülatörde işler, yoksa oyuncu var olamayacak bir kahramanı deneyebilirdi.
+ * Kahraman girdisi — **yalnız hesap makinesi uçları için** (`/simulate` ve admin denge
+ * önizlemesi). Gerçek savaş bu şemadan geçmiyor: `battle.handlers.ts` `SimulateInput`ı
+ * DB satırlarından elle kuruyor.
+ *
+ * ⚠️ **Yetenek toplamı burada SINIRLANMAZ** (kullanıcı, 2026-08-02). Eskiden `3 × seviye`
+ * kuralını uygulayan bir `.refine()` vardı ve simülatörde "ya seviye 10 kahramana 40 puan
+ * verseydim" sorusunu sormayı imkânsız kılıyordu — oysa bu uç tam olarak böyle *ne olurdu*
+ * sorularını cevaplamak için var; kaynak harcamıyor, durumu değiştirmiyor.
+ *
+ * ⚠️ **Gerçek kuralın yeri burası DEĞİL, orası duruyor:** `hero.controller.ts:161-163`
+ * yetenek dağıtımını `hero.level × pointsPerLevel` ile sınırlıyor ve dağıtılmış puanın geri
+ * alınmasını engelliyor. Oyuncu var olamayacak bir kahramanı simülatörde deneyebilir ama
+ * oyunda kuramaz. Arayüz yine de aşımı kırmızı gösteriyor (`Simulate.tsx`).
  */
 export const heroInput = z.object({
   level: z.number().int().min(0).max(100),
@@ -24,14 +35,7 @@ export const heroInput = z.object({
   mAtk: z.number().int().min(0).default(0),
   /** büyüSav → fiziksel savaşta etkisiz */
   mDef: z.number().int().min(0).default(0),
-}).refine(
-  (h) => h.fAtk + h.fDef + h.mAtk + h.mDef <= h.level * HERO_POINTS_PER_LEVEL,
-  (h) => ({
-    message: `Seviye ${h.level} kahraman en fazla ${h.level * HERO_POINTS_PER_LEVEL} yetenek puanı `
-      + `dağıtabilir (${h.fAtk + h.fDef + h.mAtk + h.mDef} verilmiş).`,
-    path: ['level'],
-  }),
-);
+});
 export type HeroInput = z.infer<typeof heroInput>;
 
 export const simulateSide = z.object({

@@ -789,22 +789,66 @@ tıklama şehri değiştirir. `aria-label` kalıyor (ekran okuyucunun tek erişi
 | Birim adetleri + **birim birim KALAN** | Savaşçılar / Savunma yapıları tabloları | Motor `SideResult.counts` ile bunu hep döndürüyordu, ekran basmıyordu. Savunma tabanının geri getirdiği birimler `+N` olarak yeşil |
 | 8 savaş tekniği × 2 taraf | Teknikler | `stat: null` olanlar (Casusluk, Haritacılık, Sömürgecilik, Gece Görüş) listede YOK — savaş statına dokunmuyorlar |
 | Taş Ustalığı | yalnız SAVUNAN | `techs.ts:52` yalnız Okçu Kulesi/Mangonel/Balista/Sur'u ölçekliyor; saldırandaki kutu etkisiz olurdu, binary araç da çizgiyle geçiyor |
-| 0-5 kahraman × (seviye + 4 yetenek) | Kahraman panelleri | Puan sayacı `toplam/3×seviye`; aşarsa düğme kapanır (sunucu da reddediyor) |
+| 0-5 kahraman × (seviye + 4 yetenek) | Kahraman panelleri | Puan sayacı `toplam/3×seviye`; **aşım ENGELLENMEZ**, yalnız kırmızı gösterilir (aşağıya bak) |
 | Tapınak toplamı + mevcut kahraman | Kahraman panelinin altı | Savaşa girmez, **yalnız kazanan tarafta** kahraman çıkma ihtimalini belirler (`combat.ts:709`) |
-| Gece savaşı + gece görüşü × 2 | Gece savaşı paneli | Gece kapalıyken görüş kutuları pasif |
+| Gece savaşı + gece görüşü × 2 | Gece savaşı paneli | Teknikler tablosuyla aynı sütun düzeninde; gece kapalıyken kutular pasif |
 
-**Sonuçta:** kazanan · süre · iki tarafın kaybı ve kalanı · enkaz altın/yemek · deneyim ·
-kahraman çıkma ihtimali · taşıma kapasitesi · sur/kalkan bütünlüğü · kahraman durumu (%veya
-«Yok Edildi») · `seed`.
+**Sonuçta:** kazanan · süre · iki tarafın kaybı ve kalanı · **savaş ganimeti** altın/yemek ·
+kahraman için deneyim · kahraman çıkma ihtimali · taşıma kapasitesi · kahraman durumu
+(% veya «Yok Edildi»).
 
 ⚠️ Sur ve Büyü Kalkanı «Kalan» sütununda **adet değil bütünlük %** gösterir — seviyeleri
-düşmez, savaş sonrası onarılırlar.
+düşmez, savaş sonrası onarılırlar. Bu yüzden sonuç kutularında **ayrıca gösterilmiyor**.
 
 Ölçüldü (dünya 1, canlıya dokunmadan): T=40 · K=0 · XP=1891 → **%18,91**; formül
 `(40×10 − 0) × min(1, 1891×0,000025)` ile birebir.
 
 ⚠️ Ekranın tepesindeki açıklama metni kullanıcı isteğiyle **kaldırıldı** — *"ekstradan öyle
 kalabalık yaratacak bilgiler yazmana gerek yok"*. Menü simgesi `assets/menu/simulator.png`.
+
+### 9.2e.1 Kahraman puan aşımı serbest (2026-08-02)
+
+`contracts/simulate.ts`teki `.refine()` **silindi**. Simülatör "ya seviye 5 kahramana 40 puan
+verseydim" sorusunu sorabilmeli; kaynak harcamıyor, durumu değiştirmiyor.
+
+⚠️ **Gerçek kural yerinde duruyor ve zaten başka bir yerdeydi:** `hero.controller.ts:161-163`
+yetenek dağıtımını `seviye × pointsPerLevel` ile sınırlıyor. Refine yalnız iki **önizleme**
+ucunu bağlıyordu (`/simulate` ve admin denge önizlemesi); **gerçek savaş bu şemadan hiç
+geçmiyor** — `battle.handlers.ts:92-113` `SimulateInput`ı DB satırlarından elle kuruyor.
+Yani gevşetmenin oyuna hiçbir etkisi yok.
+
+### 9.2e.2 Ganimet ayrımı — motor zaten izole (kullanıcının sorusu)
+
+Kullanıcı motorun rakibin şehir ganimetini hesaba katıp katmadığını sordu. **Katmıyor:**
+
+- `SideInput` (`engine/src/types.ts:18-30`) yalnız `counts · tech · heroes · temple ·
+  heroCount · wallIntegrity` taşıyor; altın/yemek/şehir alanı **yok**.
+- `debris()` (`combat.ts:545-563`) yalnız ölen birim × katalog maliyeti. `combat.ts`,
+  `loot.ts`'i **import bile etmiyor**.
+- Şehir kaynağı tek yerden giriyor: `battle.handlers.ts:126-134` `readCityResources` →
+  `calculateLoot({ debris, cityResources, … })`; havuz `loot.ts:108`te toplanıyor.
+
+Yani görev dağılımı (motor = yalnız savaş ganimeti, çağıran kod = havuz + taşıma oranı) kodda
+zaten kurulu. Değişen tek şey **etiket**: «Enkaz altını» → «Savaş ganimeti · altın», altına
+gerçek savaşta havuzlandığını söyleyen bir satır.
+
+### 9.2e.3 Seed ekranda yok, cihazda (kullanıcı kararı)
+
+Seed gösterilmiyor; her koşudan sonra **girdilerle birlikte** `localStorage['mw-sim-last']`e
+yazılıyor. «Son savaşı yükle» düğmesi formu geri doldurup **aynı seed'le** koşturuyor →
+birebir aynı sonuç. Ardından «Savaştır» yeni rastgele seed üretiyor.
+
+⚠️ **Seed'i istemci üretiyor.** Sunucu kendi ürettiğinde `repeat > 1` için `${seed}:${i}`
+türetiyor (`simulate.controller.ts:40-43`) — dönen tek sayı bir SETİ tekrar oynatmaya
+yetmezdi. Taban seed'i istemci gönderince sunucu aynı türetmeyi yapıyor ve set tekrarlanıyor.
+
+⚠️ `localStorage` elle düzenlenebilir; okurken `v` alanı + tip kontrolü yapılıyor, bozuk kayıt
+sessizce yok sayılıyor.
+
+⭐ **Ölçüm sırasında öğrenilen:** motorda zar yalnız **tuzak tetiklenmesi ve onarım ruloları**
+gibi dallarda dönüyor. Saf savaşçı-savaşçı savaşı **deterministik** — 6 koşu birebir aynı
+çıkıyor. Tuzak eklenince aynı ordu 191/192/194/185/184/197 veriyor. "Aynı sonuç geldi, seed
+çalışmıyor" diye rapor edilmeden önce bu bilinmeli.
 
 ---
 
