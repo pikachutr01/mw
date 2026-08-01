@@ -1,0 +1,13 @@
+-- ⚠️ VERİ ONARIMI — panelden verilen kahramanların geçersiz `status` değeri.
+--
+-- `admin.actions.controller.ts` (Faz 7) `give-hero` aksiyonunda `status = 'idle'` yazıyordu.
+-- Bu değer şemanın sözlüğünde (`alive | dead | reviving | destroyed`) **YOK** ve iki okuyucu
+-- onu farklı yorumluyordu:
+--   • `hero.controller.ts` → dallanmanın son dalına düşüyor, "şehirde" sayıyor      (doğru görünüm)
+--   • `command.controller.ts` → `dead: status <> 'alive'` diyor                     (ÖLÜ görünüyor)
+-- Yani panelden verilen kahraman, oyuncunun dünya listesinde ölü görünüyordu.
+--
+-- Kod düzeltildi (`'alive'` yazıyor); bu migration **geçmişte yazılmış** satırları onarıyor.
+-- ⚠️ Yalnız `'idle'` hedefleniyor: gerçek `dead`/`reviving`/`destroyed` durumları oyunun
+-- meşru halleri ve dokunulmamalı.
+UPDATE heroes SET status = 'alive' WHERE status = 'idle';

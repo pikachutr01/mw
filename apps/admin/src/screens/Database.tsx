@@ -14,16 +14,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from '../components/ui.tsx';
+import { ActionForm, type ActionSpec } from '../components/ActionForm.tsx';
 
 interface TableInfo {
   name: string; label: string; policy: 'readonly' | 'edit' | 'action';
   columns: string[]; editable: string[]; filters: string[]; warning: string | null;
-}
-interface ActionField {
-  key: string; label: string; type: string; options?: readonly string[]; placeholder?: string;
-}
-interface ActionSpec {
-  id: string; label: string; description: string; fields: readonly ActionField[];
 }
 interface RowsPayload {
   table: string; label: string; policy: TableInfo['policy'];
@@ -288,72 +283,5 @@ function ActionsPanel({ actions, onDone, onNeedStepUp }: {
       </div>
       {spec ? <ActionForm spec={spec} onDone={onDone} onNeedStepUp={onNeedStepUp} /> : null}
     </Panel>
-  );
-}
-
-function ActionForm({ spec, onDone, onNeedStepUp }: {
-  spec: ActionSpec; onDone: () => void; onNeedStepUp: () => void;
-}) {
-  const [form, setForm] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [note, setNote] = useState<string | null>(null);
-
-  useEffect(() => { setForm({}); setNote(null); setError(null); }, [spec.id]);
-
-  const run = async (): Promise<void> => {
-    setBusy(true); setError(null); setNote(null);
-    try {
-      const body: Record<string, unknown> = {};
-      for (const f of spec.fields) {
-        const raw = form[f.key];
-        if (raw == null || raw.trim() === '') continue;
-        body[f.key] = f.type === 'number' ? Number(raw)
-          : f.type === 'json' ? JSON.parse(raw)
-            : raw.trim();
-      }
-      const r = await api<Record<string, unknown>>(`/api/v1/admin/actions/${spec.id}`, {
-        method: 'POST', body,
-      });
-      setNote(`Tamam. ${JSON.stringify(r)}`);
-      onDone();
-    } catch (err) {
-      if (needsStepUp(err)) onNeedStepUp(); else setError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="border-t border-border p-3">
-      <p className="mb-2 text-[11px] leading-snug text-muted">{spec.description}</p>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {spec.fields.map((f) => (
-          <Field key={f.key} label={f.label}>
-            {f.type === 'select' ? (
-              <select value={form[f.key] ?? f.options?.[0] ?? ''}
-                onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-                className="w-full rounded-[var(--radius-sm)] border border-border bg-surface
-                  px-2 py-1 text-sm text-ink">
-                {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-            ) : (
-              <Input
-                type={f.type === 'number' ? 'number' : 'text'}
-                value={form[f.key] ?? ''}
-                placeholder={f.placeholder}
-                className={f.type === 'json' ? 'font-mono' : undefined}
-                onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-              />
-            )}
-          </Field>
-        ))}
-      </div>
-      <ErrorBox error={error} />
-      {note ? <p className="mt-2 break-all text-xs text-success">{note}</p> : null}
-      <Button className="mt-2" disabled={busy} onClick={() => void run()}>
-        {busy ? 'Çalışıyor…' : spec.label}
-      </Button>
-    </div>
   );
 }

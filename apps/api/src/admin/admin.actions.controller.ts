@@ -22,7 +22,7 @@ import {
   BadRequestException, Body, Controller, HttpCode, Inject, NotFoundException, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { UNITS_BY_ID, TECHS_BY_ID, pickHeroName } from '@mobiwar/catalog';
+import { LEVEL_BASED, UNITS_BY_ID, TECHS_BY_ID, pickHeroName } from '@mobiwar/catalog';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { CityService } from '../cities/city.service.ts';
@@ -65,6 +65,13 @@ const heroBody = z.object({
   cityId,
   level: z.number().int().min(0).max(80).default(1),
   name: z.string().trim().min(3).max(10).optional(),
+});
+
+/** ⚠️ `level` alanı `defenses.count` kolonuna yazılır — orada sayı ADET değil SEVİYE. */
+const structureBody = z.object({
+  cityId,
+  type: z.string().min(1).max(40),
+  level: z.number().int().min(0).max(40),
 });
 
 const cancelBody = z.object({ id: z.number().int().positive() });
@@ -219,6 +226,93 @@ export class AdminActionsController {
     return { ok: true };
   }
 
+  /* ── Savunma ──────────────────────────────────────────────────────────────── */
+
+  /**
+   * ⭐ SAVUNMA BİRİMİ ATA (2. nesil Tur 2) — Okçu Kulesi, Tuzak, Balista…
+   *
+   * ⚠️ `give-units`ten **ayrı bir aksiyon**, çünkü ayrı bir tablo (`defenses`) ve ayrı bir
+   * doğrulama kümesi: barakaya kule, sura cüce yazılamamalı. Tek aksiyonda birleştirseydik
+   * `target` seçeneği üçe çıkar ve yanlış tabloya yazma ihtimali sessizce açılırdı.
+   *
+   * ⛔ Sur ve Büyü Kalkanı burada **reddedilir**: aynı tabloda dururlar ama `count` alanları
+   * adet değil SEVİYE taşır. Onlar için `set-defense-structure` var.
+   */
+  @Post('set-defense')
+  @HttpCode(200)
+  async setDefense(@Body() body: unknown, @Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const d = parse(giveUnitsBody.omit({ target: true }), body);
+    const city = await this.city(d.cityId);
+
+    for (const id of Object.keys(d.units)) {
+      const def = UNITS_BY_ID[id];
+      if (!def || def.kind !== 'defense') {
+        throw new BadRequestException(`«${id}» bir savunma birimi değil.`);
+      }
+      if (LEVEL_BASED.has(id)) {
+        throw new BadRequestException(
+          `«${def.name.tr}» adet değil SEVİYE taşır — «Sur / Büyü Kalkanı seviyesi» aksiyonunu kullan.`,
+        );
+      }
+    }
+
+    await this.db.transaction(async (tx) => {
+      for (const [type, count] of Object.entries(d.units)) {
+        if (count <= 0) {
+          await tx.execute(sql`
+            DELETE FROM defenses WHERE city_id = ${d.cityId} AND type = ${type}
+          `);
+          continue;
+        }
+        await tx.execute(sql`
+          INSERT INTO defenses (city_id, type, count) VALUES (${d.cityId}, ${type}, ${count})
+          ON CONFLICT (city_id, type) DO UPDATE SET count = ${count}
+        `);
+      }
+    });
+    await this.audit(city.worldId, req, 'admin.action.set_defense', 'city', d.cityId, {
+      units: d.units,
+    });
+    return { ok: true, cityId: d.cityId };
+  }
+
+  /**
+   * ⭐ SUR / BÜYÜ KALKANI SEVİYESİ.
+   *
+   * ⚠️ `defenses.count` burada **seviye**dir. `0` satırı siler (yapı hiç yokmuş gibi).
+   *
+   * ⚠️ Sur seviyesini değiştirmek `wall_integrity`ye DOKUNMAZ — o ayrı bir eksen (bütünlük,
+   * savaşta düşen ve onarımla geri gelen oran). Seviyeyi 10 yapıp bütünlüğü %20'de bırakmak
+   * geçerli bir durumdur; ikisini birbirine bağlamak "seviye verdim ama sur hâlâ yıkık"
+   * sürprizini çözmez, sadece gizlerdi.
+   */
+  @Post('set-defense-structure')
+  @HttpCode(200)
+  async setDefenseStructure(
+    @Body() body: unknown, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const d = parse(structureBody, body);
+    const city = await this.city(d.cityId);
+    if (!LEVEL_BASED.has(d.type)) {
+      throw new BadRequestException(`«${d.type}» seviye taşıyan bir savunma yapısı değil.`);
+    }
+
+    if (d.level === 0) {
+      await this.db.execute(sql`
+        DELETE FROM defenses WHERE city_id = ${d.cityId} AND type = ${d.type}
+      `);
+    } else {
+      await this.db.execute(sql`
+        INSERT INTO defenses (city_id, type, count) VALUES (${d.cityId}, ${d.type}, ${d.level})
+        ON CONFLICT (city_id, type) DO UPDATE SET count = ${d.level}
+      `);
+    }
+    await this.audit(city.worldId, req, 'admin.action.set_defense_structure', 'city', d.cityId, {
+      type: d.type, level: d.level,
+    });
+    return { ok: true, type: d.type, level: d.level };
+  }
+
   /* ── Kahraman ─────────────────────────────────────────────────────────────── */
 
   /** Şehre kahraman ver (test için). Ad verilmezse katalogdan seçilir. */
@@ -229,9 +323,16 @@ export class AdminActionsController {
     const city = await this.city(d.cityId);
     const name = d.name ?? pickHeroName(Math.random, []);
 
+    /**
+     * ⚠️ **DÜZELTİLDİ (2. nesil Tur 2): eskiden `'idle'` yazılıyordu.** O değer şemanın
+     * sözlüğünde (`alive | dead | reviving | destroyed`) YOK ve iki yerde farklı okunuyordu:
+     * kahraman ekranı onu `in_city` sayıyor (`hero.controller.ts:245` dallanmasının son
+     * dalı), ama dünya listesi `dead: status !== 'alive'` diyor
+     * (`command.controller.ts:405`) → panelden verilen kahraman oyuncuya **ölü** görünüyordu.
+     */
     const [row] = await this.db.execute<Record<string, unknown>>(sql`
       INSERT INTO heroes (world_id, player_id, city_id, name, level, status)
-      VALUES (${city.worldId}, ${city.playerId}, ${d.cityId}, ${name}, ${d.level}, 'idle')
+      VALUES (${city.worldId}, ${city.playerId}, ${d.cityId}, ${name}, ${d.level}, 'alive')
       RETURNING id
     `);
     await this.audit(city.worldId, req, 'admin.action.give_hero', 'city', d.cityId, {
@@ -411,16 +512,49 @@ function parse<S extends z.ZodTypeAny>(schema: S, body: unknown): z.output<S> {
   return r.data as z.output<S>;
 }
 
-/** Panelin form üreteceği aksiyon künyesi — tek kaynak. */
+/**
+ * Panelin form üreteceği aksiyon künyesi — **tek kaynak**.
+ *
+ * ⚠️ 2. nesilde iki eksik kapatıldı:
+ *   1. **Zod'daki sınırlar buraya taşındı** (`min`/`max`/`required`). Öncesinde doğrulama tek
+ *      yönlüydü: panel her değeri gönderiyor, sunucu 400 dönüyordu. Yönetici "seviye en fazla
+ *      kaç" sorusunun cevabını ancak hata alarak öğreniyordu.
+ *   2. **Seçici alan tipleri** (`unitPicker` · `buildingPicker` · `techPicker` ·
+ *      `structurePicker`). Kullanıcının şikâyeti buydu: *"askerleri json formatında bir de
+ *      İngilizce adları ile yazarak yapmam gerekiyor."* Seçenekler `GET /admin/catalog`ten
+ *      geliyor; burada sabit bir liste tutsaydık katalog büyüdüğünde ikisi ayrışırdı.
+ */
 export const ADMIN_ACTIONS = [
   {
     id: 'give-units', label: 'Şehre ordu koy',
     description: 'Barakaya veya mağaraya birim yazar. 0 adet satırı siler. '
       + '⚠️ Puanı DEĞİŞTİRMEZ — gerekiyorsa «Puanı yeniden hesapla».',
     fields: [
-      { key: 'cityId', label: 'Şehir kimliği', type: 'number' },
-      { key: 'units', label: 'Birimler', type: 'json', placeholder: '{ "dwarf": 500, "elf": 200 }' },
-      { key: 'target', label: 'Nereye', type: 'select', options: ['barracks', 'cave'] },
+      { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
+      { key: 'units', label: 'Birimler', type: 'unitPicker', source: 'warriors', required: true },
+      {
+        key: 'target', label: 'Nereye', type: 'select', options: ['barracks', 'cave'],
+        optionLabels: ['Baraka', 'Mağara'], default: 'barracks',
+      },
+    ],
+  },
+  {
+    id: 'set-defense', label: 'Savunma birimi ata',
+    description: 'Okçu Kulesi, Tuzak, Balista… ⛔ Sur ve Büyü Kalkanı burada YOK: onlar adet '
+      + 'değil seviye taşır, ayrı aksiyonu var.',
+    fields: [
+      { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
+      { key: 'units', label: 'Savunma birimleri', type: 'unitPicker', source: 'defenses', required: true },
+    ],
+  },
+  {
+    id: 'set-defense-structure', label: 'Sur / Büyü Kalkanı seviyesi',
+    description: '⚠️ Bu ikisi `defenses` tablosunda durur ama sayıları ADET değil SEVİYE. '
+      + 'Sur bütünlüğüne (`wall_integrity`) dokunmaz — o ayrı bir eksen.',
+    fields: [
+      { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
+      { key: 'type', label: 'Yapı', type: 'structurePicker', required: true },
+      { key: 'level', label: 'Seviye', type: 'number', min: 0, max: 40, required: true },
     ],
   },
   {
@@ -428,60 +562,60 @@ export const ADMIN_ACTIONS = [
     description: '⚠️ Kaynak tembel birikimle tutuluyor; bu aksiyon önce çıpayı şimdiye çeker '
       + '(materialize), sonra ekler. Negatif değer alır, kasa eksiye düşmez.',
     fields: [
-      { key: 'cityId', label: 'Şehir kimliği', type: 'number' },
-      { key: 'gold', label: 'Altın (± )', type: 'number' },
-      { key: 'food', label: 'Yemek (±)', type: 'number' },
+      { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
+      { key: 'gold', label: 'Altın (±)', type: 'number', min: -1_000_000_000, max: 1_000_000_000, default: 0 },
+      { key: 'food', label: 'Yemek (±)', type: 'number', min: -1_000_000_000, max: 1_000_000_000, default: 0 },
     ],
   },
   {
     id: 'set-building', label: 'Yapı seviyesi ata',
     description: '0 = yapıyı sil. ⚠️ Kale bütçesi kontrol EDİLMEZ (test aracı).',
     fields: [
-      { key: 'cityId', label: 'Şehir kimliği', type: 'number' },
-      { key: 'type', label: 'Yapı', type: 'text', placeholder: 'farm · mine · barracks …' },
-      { key: 'level', label: 'Seviye', type: 'number' },
+      { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
+      { key: 'type', label: 'Yapı', type: 'buildingPicker', required: true },
+      { key: 'level', label: 'Seviye', type: 'number', min: 0, max: 40, required: true },
     ],
   },
   {
     id: 'set-tech', label: 'Teknik seviyesi ata',
-    description: '⚠️ Teknikler OYUNCUYA ait, şehre değil.',
+    description: '⚠️ Teknikler OYUNCUYA ait, şehre değil — seviye tüm şehirlerde geçerli.',
     fields: [
-      { key: 'playerId', label: 'Oyuncu kimliği', type: 'number' },
-      { key: 'type', label: 'Teknik', type: 'text', placeholder: 'blacksmithing · archery …' },
-      { key: 'level', label: 'Seviye', type: 'number' },
+      { key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true },
+      { key: 'type', label: 'Teknik', type: 'techPicker', required: true },
+      { key: 'level', label: 'Seviye', type: 'number', min: 0, max: 40, required: true },
     ],
   },
   {
     id: 'give-hero', label: 'Kahraman ver',
-    description: 'Şehre boşta bir kahraman ekler. Ad verilmezse katalogdan seçilir.',
+    description: 'Şehre canlı bir kahraman ekler. Ad verilmezse katalogdan seçilir.',
     fields: [
-      { key: 'cityId', label: 'Şehir kimliği', type: 'number' },
-      { key: 'level', label: 'Seviye', type: 'number' },
-      { key: 'name', label: 'Ad (isteğe bağlı)', type: 'text' },
+      { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
+      { key: 'level', label: 'Seviye', type: 'number', min: 0, max: 80, default: 1 },
+      { key: 'name', label: 'Ad (isteğe bağlı)', type: 'text', minLength: 3, maxLength: 10 },
     ],
   },
   {
     id: 'cancel-queue', label: 'Kuyruğu iptal et',
     description: '⚠️ Kuyruk ve bitiş GÖREVİ çifttir; ikisi birlikte kapatılır. İade YOK.',
-    fields: [{ key: 'id', label: 'Kuyruk kimliği', type: 'number' }],
+    fields: [{ key: 'id', label: 'Kuyruk kimliği', type: 'number', min: 1, required: true }],
   },
   {
     id: 'cancel-mission', label: 'Görevi iptal et',
     description: '⚠️ Yoldaki ordu GERİ GELMEZ (dönüş bacağı üretilmez).',
-    fields: [{ key: 'id', label: 'Görev kimliği', type: 'number' }],
+    fields: [{ key: 'id', label: 'Görev kimliği', type: 'number', min: 1, required: true }],
   },
   {
     id: 'recompute-score', label: 'Puanı yeniden hesapla',
     description: '`players.score` türevdir; sahip olunan yapı/teknik/ordudan yeniden kurulur.',
-    fields: [{ key: 'playerId', label: 'Oyuncu kimliği', type: 'number' }],
+    fields: [{ key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true }],
   },
   {
     id: 'move-city', label: 'Şehri başka oyuncuya taşı',
     description: '⚠️ Kahraman varsa engellenir. İki tarafın puanı da yeniden hesaplanır. '
       + 'Taşınan şehir başkent olmaz.',
     fields: [
-      { key: 'cityId', label: 'Şehir kimliği', type: 'number' },
-      { key: 'toPlayerId', label: 'Yeni sahip (oyuncu kimliği)', type: 'number' },
+      { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
+      { key: 'toPlayerId', label: 'Yeni sahip', type: 'playerPicker', required: true },
     ],
   },
 ] as const;

@@ -9,8 +9,11 @@
  * öğesi. Bilerek: klavye ve ekran okuyucu desteği bedava geliyor ve `Ctrl+F` kapalı bölümleri
  * de bulabiliyor (kendi yazdığımız bir collapse'ta ikisi de kaybolurdu).
  */
-import type { ReactNode } from 'react';
-import { Badge, Panel } from '../../components/ui.tsx';
+import { useState, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '../../lib/api.ts';
+import { Badge, Button, Panel } from '../../components/ui.tsx';
+import { ActionForm, type ActionSpec } from '../../components/ActionForm.tsx';
 import { num, stamp, when } from '../../lib/format.ts';
 
 interface Counted { type: string; name: string; count: number }
@@ -127,8 +130,64 @@ function MissionList({ title, items, showOwner }: {
   );
 }
 
-export function EmpireView({ data }: { data: Empire }) {
+/**
+ * ⭐ ŞEHRİN İÇİNDEN DÜZENLEME — kullanıcının şikâyetinin ikinci yarısı.
+ *
+ * Şehir kartının altındaki düğmeler o şehir için **önceden doldurulmuş** aksiyon formunu
+ * açıyor: şehir kimliğini bulup elle yazmak gerekmiyor. Form `ActionForm`ın aynısı
+ * (`lockedCityId` ile), yani Veri tabanı sekmesindekiyle **aynı kod** — ikinci bir kopya
+ * yazsaydık doğrulama ve alan tipleri iki yerde ayrışırdı.
+ */
+function CityEditor({ cityId, actions, onDone, onNeedStepUp }: {
+  cityId: number; actions: ActionSpec[]; onDone: () => void; onNeedStepUp: () => void;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  /** Şehir bağlamında anlamlı olanlar; oyuncu/kuyruk aksiyonları burada gösterilmiyor. */
+  const usable = actions.filter((a) => a.fields.some((f) => f.key === 'cityId'));
+  const spec = usable.find((a) => a.id === open);
+
+  return (
+    <div className="space-y-2 rounded-[var(--radius-sm)] border border-border bg-surface p-2">
+      <div className="flex flex-wrap gap-1">
+        {usable.map((a) => (
+          <button
+            key={a.id} type="button"
+            onClick={() => setOpen(open === a.id ? null : a.id)}
+            className={`rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] ${
+              open === a.id
+                ? 'border-strong bg-accent text-on-accent'
+                : 'border-border bg-bg text-muted hover:bg-raised'
+            }`}
+          >
+            {a.label}
+          </button>
+        ))}
+      </div>
+      {spec ? (
+        <ActionForm
+          spec={spec} lockedCityId={cityId} compact
+          onDone={onDone} onNeedStepUp={onNeedStepUp}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export function EmpireView({ data, onNeedStepUp }: {
+  data: Empire; onNeedStepUp: () => void;
+}) {
   const p = data.player;
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<number | null>(null);
+  /** Aksiyon künyesi Veri tabanı ucundan geliyor — panelde ikinci bir liste tutulmuyor. */
+  const meta = useQuery({
+    queryKey: ['db-tables'],
+    queryFn: () => api<{ actions: ActionSpec[] }>('/api/v1/admin/db/tables'),
+    staleTime: Infinity,
+  });
+  const refresh = (): void => {
+    void qc.invalidateQueries({ queryKey: ['empire', p.id] });
+  };
   const totalGold = data.cities.reduce((s, c) => s + c.gold, 0);
   const totalFood = data.cities.reduce((s, c) => s + c.food, 0);
 
@@ -244,6 +303,18 @@ export function EmpireView({ data }: { data: Empire }) {
                     </ul>
                   </div>
                 ) : null}
+
+                {/* ⭐ Şehir kimliğini elle aramaya son: form bu şehir için hazır açılıyor. */}
+                {editing === c.id ? (
+                  <CityEditor
+                    cityId={c.id} actions={meta.data?.actions ?? []}
+                    onDone={refresh} onNeedStepUp={onNeedStepUp}
+                  />
+                ) : (
+                  <Button variant="ghost" onClick={() => setEditing(c.id)}>
+                    Bu şehri düzenle…
+                  </Button>
+                )}
               </div>
             </details>
           ))}

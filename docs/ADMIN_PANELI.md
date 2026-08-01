@@ -970,6 +970,125 @@ sözlüğü `alive | dead | reviving | destroyed`. `give-hero` aksiyonu `'idle'`
 
 ---
 
+## 2. NESİL — Tur 2: kolay düzenleme ve toplu işlemler
+
+Kullanıcının en somut cümlesi buydu:
+
+> *"Bir kullanıcıya asker eklemek için onun şehir kimliğini bulup sonra askerleri de json
+> formatında bir de İngilizce adları ile yazarak yapmam gerekiyor."*
+
+Üç ayrı sürtünme vardı ve üçü de kalktı.
+
+### 1 · Ham JSON yerine katalogdan seçici
+
+`GET /admin/catalog` açıldı: savaşçılar · savunma birimleri · Sur/Kalkan · yapılar · teknikler,
+**Türkçe adlarıyla** ve oyunun kendi ekran sırasıyla (`display-order.ts`). Panel `{"dwarf": 500}`
+yazdırmıyor; **Cüce** yazan bir satıra sayı giriliyor, üstünde Türkçe arama var.
+
+⚠️ Liste **sunucudan** geliyor. Panelde sabit tutsaydık katalog büyüdüğünde iki yer güncellenmek
+zorunda kalır, biri unutulunca seçici sessizce eksik kalırdı. Bir test her seçici alanın
+`source` değerinin katalogda gerçekten var olduğunu doğruluyor.
+
+⚠️ **Yalnız sıfırdan farklı satırlar gönderiliyor.** Hepsi gitseydi `{dwarf: 0, elf: 0, …}`
+olurdu ve «yaz» kipinde bu **21 satırı birden silmek** demektir — yönetici yalnız cüce yazmak
+isterken tüm orduyu uçururdu.
+
+### 2 · Şehir kimliği elle aranmıyor
+
+İmparatorluk ekranındaki her şehir kartının altında **«Bu şehri düzenle…»** var; açılan form
+o şehir için önceden doldurulmuş. Form `ActionForm`ın **aynısı** (`lockedCityId` ile), yani
+Veri tabanı sekmesindekiyle aynı kod — ikinci bir kopya yazsaydık doğrulama ve alan tipleri
+iki yerde ayrışırdı.
+
+Ayrıca aksiyon künyesine `required` · `min` · `max` · `default` eklendi. Öncesinde sınırlar
+yalnız Zod'daydı ve doğrulama tek yönlüydü: yönetici "seviye en fazla kaç" sorusunun cevabını
+ancak **400 alarak** öğreniyordu.
+
+### 3 · İki yeni aksiyon: savunma ve Sur/Kalkan
+
+| aksiyon | tablo | sayının anlamı |
+| :-- | :-- | :-- |
+| `set-defense` | `defenses` | **adet** (Okçu Kulesi, Tuzak, Balista…) |
+| `set-defense-structure` | `defenses` | **seviye** (Sur, Büyü Kalkanı) |
+
+⚠️ İkisi **aynı tabloda** ve ikisinin de kolonu `count` — ama Sur'da o sayı seviye. Tek
+aksiyonda birleştirseydik "6 adet sur" yazmak mümkün olurdu. `set-defense` Sur'u açıkça
+reddediyor ve doğru aksiyonu söylüyor.
+
+⚠️ Sur seviyesi `wall_integrity`ye **dokunmuyor** — o ayrı bir eksen (savaşta düşen, onarımla
+geri gelen bütünlük oranı). İkisini bağlamak "seviye verdim ama sur hâlâ yıkık" sürprizini
+çözmez, sadece gizlerdi.
+
+### ⭐ Toplu işlemler — üç adımlı ve kuru koşu atlanamaz
+
+`POST /admin/bulk/:op` — 5 işlem: ordu · savunma · Sur/Kalkan · teknik · kaynak.
+
+**Hedef seçimi iki aşamalı:** önce filtre (dünya · ittifak · puan aralığı · aktiflik), sonra
+listeden tek tek **çıkarma**. Yalnız filtre olsaydı *"herkese ver ama şu üç kişiye verme"*
+istenemezdi; yalnız elle seçim olsaydı 50 kişilik bir dünyada 50 kutu işaretlemek gerekirdi.
+
+⚠️ **`confirm: true` yoksa hiçbir satır değişmez** — uç kaç oyuncu, kaç şehir ve ilk 20 ismi
+döndürür. Panelde "Uygula" düğmesi ancak önizleme alındıktan sonra beliriyor; filtre ya da
+işlem değişince önizleme geçersiz oluyor (eski sayıyla onaylanmasın).
+
+⚠️ **Katalog reddi kuru koşuda da veriliyor.** "Çalıştırınca patlayacak" bir önizleme işe
+yaramaz: yönetici 12 oyuncu görür, onaylar, sonra 400 alır.
+
+⚠️ **Tavan 500 oyuncu** ve aşılırsa uç **çalışmayı reddediyor**, sessizce kırpmıyor — kırpsaydı
+yönetici hangi yarısının etkilendiğini bilemezdi.
+
+⚠️ **Toplu kaynak şehir şehir `materialize` ediyor.** Tek bir `UPDATE cities SET gold = gold + n`
+çok daha hızlı olurdu ve sessizce yanlış: çıpa geçmişte kaldığı için eklenen miktarın üstüne
+birikim de gelirdi. Hız değil doğruluk seçildi.
+
+⚠️ «ekle» kipinde `GREATEST(0, …)`: negatif bir ekleme mevcudun altına inmez. Eksi ordu diye
+bir şey yok ve savaş motoru onu okuyamaz.
+
+### ⚠️ İki ölçülmüş hata düzeltildi
+
+**1. `player_id = 5` filtresi 15, 25, 51'i de getiriyordu.** Tarayıcıdaki her filtre
+`::text ILIKE '%değer%'` idi. İki bedeli vardı: yanlış satırlar ve `::text` cast'i yüzünden
+indeksin kullanılamaması. Artık ayrım kolon adından **tahmin edilmiyor**,
+`information_schema`dan okunuyor (süreç ömrü boyunca önbellekli): sayısal kolonda tam eşleşme,
+metin kolonunda `ILIKE`.
+
+```
+öncesi   player_id=1  → 19 numaralı oyuncunun satırları da geliyordu
+sonrası  player_id=1  → 0 satır      ·   player_id=19 → 6 satır, hepsi 19
+```
+
+**2. Panelden verilen kahraman oyuncuya ÖLÜ görünüyordu.** `give-hero` aksiyonu
+`status = 'idle'` yazıyordu; bu değer şemanın sözlüğünde (`alive | dead | reviving |
+destroyed`) **yok** ve iki okuyucu onu farklı yorumluyordu:
+
+| okuyucu | `'idle'` nasıl okunuyordu |
+| :-- | :-- |
+| `hero.controller.ts:245` | dallanmanın son dalı → **şehirde** (doğru görünüm) |
+| `command.controller.ts:405` | `dead: status <> 'alive'` → **ÖLÜ** |
+
+Kod `'alive'` yazacak şekilde düzeltildi; migration `0032` geçmişte yazılmış satırları onardı.
+⚠️ Yalnız `'idle'` hedeflendi — gerçek `dead`/`reviving`/`destroyed` oyunun meşru halleri.
+Canlıda ölçüldü: `Süleyman` `idle → alive`, gerçekten ölü olan `Baturalp` **dokunulmadı**.
+
+### Ölçüm (canlı dev dünyası)
+
+```
+seçici     "casus" yazınca liste «Casus Kuş»a indi → 7 girildi → özet «1 satır: Casus Kuş 7»
+yazma      units.spy_bird = 7  ·  audit: {"units":{"spy_bird":7},"target":"barracks"}
+           ⭐ Mancınık 20 DOKUNULMADI (sıfırlar gönderilmiyor)
+geri alma  spy_bird 0 → satır silindi, şehir yine yalnız mangonel=20
+
+filtre     player_id=1 → 0 satır   ·   player_id=19 → 6 satır, hepsi 19
+toplu      puan ≥ 100 → 12 oyuncu / 17 şehir  ·  tüm dünya → 50 oyuncu / 55 şehir  · ran=false
+           Sur toplu savunmada → 400 «adet değil SEVİYE taşır»
+```
+
+⚠️ Toplu işlemin **yazma yolu canlıda çalıştırılmadı** — bilerek. Kuru koşu ölçüldü, silme/yazma
+davranışı test veritabanında (29 test): kip ayrımı, negatif taban, muafiyet, katalog reddi,
+audit satırı.
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

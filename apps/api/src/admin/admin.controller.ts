@@ -13,11 +13,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
+import {
+  BUILDINGS, BUILDING_ORDER, LEVEL_BASED, TECHS, TECH_ORDER, UNITS,
+  DEFENSE_ORDER, WARRIOR_ORDER, orderBy,
+} from '@mobiwar/catalog';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { PasswordService } from '../auth/password.service.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
+import { BULK_OPS } from './admin.bulk.controller.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 
 const stepUpBody = z.object({ password: z.string().min(1).max(200) });
@@ -49,6 +54,54 @@ export class AdminController {
       elevated: req.staff!.elevated,
       stepUpMinutes: STEP_UP_MINUTES,
     };
+  }
+
+  /**
+   * ⭐ KATALOG KÜNYESİ (panel 2. nesil) — birim/yapı/teknik seçicilerinin kaynağı.
+   *
+   * Kullanıcının şikâyeti buydu: *"askerleri json formatında bir de İngilizce adları ile
+   * yazarak yapmam gerekiyor."* Panel artık `{"dwarf": 500}` yazdırmıyor, **Cüce** yazan bir
+   * satır gösteriyor.
+   *
+   * ⚠️ Liste **sunucudan** geliyor, panelde sabit yazılmıyor: katalogda bir birim eklendiğinde
+   * iki yer güncellenmek zorunda kalır ve biri unutulunca seçici eksik kalırdı. Sıra da oyunun
+   * kendi ekranlarındaki sıra (`display-order.ts`) — yönetici ile oyuncu aynı düzeni görsün.
+   *
+   * ⚠️ Yükseltme İSTEMİYOR (`AdminStepUpGuard` yok): bu salt-okunur sabit veri ve panel açılışta
+   * çekiyor. Yükseltmenin arkasına koysaydık form alanları parola girilene kadar boş kalırdı.
+   */
+  @Get('catalog')
+  catalog(): Record<string, unknown> {
+    return {
+      /** Barakada üretilenler — `give-units` seçicisi. */
+      warriors: orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER)
+        .map((u) => ({ id: u.id, name: u.name.tr, gold: u.gold, food: u.food, area: u.area })),
+      /**
+       * ⚠️ Savunma listesi Sur/Kalkan'ı DIŞLIYOR: onlar `defenses` tablosunda adet değil
+       * **seviye** taşır (`LEVEL_BASED`) ve ayrı bir aksiyonla düzenlenir. Aynı seçicide
+       * dursalardı "6 adet sur" yazılabilirdi.
+       */
+      defenses: orderBy(UNITS.filter((u) => u.kind === 'defense' && !LEVEL_BASED.has(u.id)),
+        DEFENSE_ORDER)
+        .map((u) => ({ id: u.id, name: u.name.tr, gold: u.gold, food: u.food, area: u.area })),
+      structures: UNITS.filter((u) => LEVEL_BASED.has(u.id) && u.id !== 'temple')
+        .map((u) => ({ id: u.id, name: u.name.tr })),
+      buildings: orderBy(BUILDINGS, BUILDING_ORDER)
+        .map((b) => ({ id: b.id, name: b.name.tr, maxLevel: b.maxLevel })),
+      techs: orderBy(TECHS, TECH_ORDER).map((t) => ({ id: t.id, name: t.name.tr })),
+    };
+  }
+
+  /**
+   * Toplu işlem künyesi — panel formu bundan üretiyor.
+   *
+   * ⚠️ `AdminBulkController` sınıf seviyesinde `AdminStepUpGuard` taşıyor (yıkıcı uçlar orada).
+   * Künyeyi de oraya koysaydık form alanları **parola girilene kadar boş** kalırdı; okuma
+   * yükseltme istemez, yazma ister.
+   */
+  @Get('bulk-ops')
+  bulkOps(): Record<string, unknown> {
+    return { ops: BULK_OPS };
   }
 
   /**

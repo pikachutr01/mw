@@ -79,7 +79,7 @@ export function PlayerDetail({ playerId, onNeedStepUp }: {
 
       {tab === 'imparatorluk' ? (
         empire.data
-          ? <EmpireView data={empire.data} />
+          ? <EmpireView data={empire.data} onNeedStepUp={onNeedStepUp} />
           : <Panel title="İmparatorluk"><p className="p-3 text-xs text-muted">Yükleniyor…</p></Panel>
       ) : null}
 

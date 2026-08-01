@@ -225,6 +225,13 @@
       "when": 1785606000000,
       "tag": "0031_worker_heartbeats",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785607000000,
+      "tag": "0032_hero_status_repair",
+      "breakpoints": true
     }
   ]
 }

@@ -34,7 +34,31 @@ const patchBody = z.object({
 @Controller('api/v1/admin/db')
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminDbController {
+  /**
+   * tablo → sayısal kolon adları. `information_schema`dan bir kez okunup önbelleğe alınır.
+   *
+   * ⚠️ Kayda elle `numeric: [...]` yazmak da mümkündü; yazmadık çünkü Faz 7'de elle yazılmış
+   * kolon adlarının **dördü yanlış** çıkmıştı. Şemanın kendisi tek doğruluk kaynağı.
+   * Şema süreç ömrü boyunca değişmediği için önbellek güvenli.
+   */
+  private readonly numericCache = new Map<string, Set<string>>();
+
   constructor(@Inject(DB) private readonly db: Db) {}
+
+  private async numericColumns(table: string): Promise<Set<string>> {
+    const hit = this.numericCache.get(table);
+    if (hit) return hit;
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT column_name, data_type FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = ${table}
+    `);
+    const set = new Set(rows
+      .filter((r) => /^(smallint|integer|bigint|numeric|real|double precision)$/
+        .test(String(r['data_type'])))
+      .map((r) => String(r['column_name'])));
+    this.numericCache.set(table, set);
+    return set;
+  }
 
   /** Tarayıcının sol listesi + politikalar + uyarılar. Panel formunu bundan üretiyor. */
   @Get('tables')
@@ -66,6 +90,8 @@ export class AdminDbController {
     const q = (req as unknown as { query?: Record<string, unknown> }).query ?? {};
     const page = Math.max(0, Math.trunc(Number(q['page'] ?? 0)) || 0);
 
+    const numeric = await this.numericColumns(spec.name);
+
     /** Filtreler: **yalnız kayıttaki alanlar**; değer parametre olarak gidiyor. */
     const conditions = [];
     const applied: Record<string, string> = {};
@@ -75,11 +101,23 @@ export class AdminDbController {
       const value = String(raw).trim();
       applied[field] = value;
       /**
-       * ⚠️ Metin alanlarda `ILIKE`, sayısal alanlarda tam eşleşme. Ayrımı kolon adından
-       * TAHMİN ETMİYORUZ: `::text` cast'i ile her iki durumda da çalışan tek bir ifade
-       * kullanıyoruz — `player_id=5` ile `username=abc` aynı yoldan geçiyor.
+       * ⚠️ **DÜZELTİLDİ (2. nesil Tur 2).** Eskiden her alanda `::text ILIKE '%değer%'` vardı
+       * ve bunun iki bedeli ölçüldü:
+       *   • `player_id = 5` filtresi **15, 25, 51'i de** getiriyordu — "bir oyuncunun verisi"
+       *     senaryosunda sessizce yanlış sonuç.
+       *   • `::text` cast'i indeksi kullanılamaz hâle getiriyordu (her sorgu tam tarama).
+       * Artık ayrım kolon adından TAHMİN edilmiyor, `information_schema`dan **okunuyor**:
+       * sayısal kolonda tam eşleşme, metin kolonunda `ILIKE`.
        */
-      conditions.push(sql`${sql.raw(`"${field}"`)}::text ILIKE ${`%${value}%`}`);
+      if (numeric.has(field)) {
+        const n = Number(value);
+        // Sayısal kolona metin yazıldıysa hiçbir satır eşleşmemeli — SQL hatası vermemeli.
+        conditions.push(Number.isFinite(n)
+          ? sql`${sql.raw(`"${field}"`)} = ${n}`
+          : sql`FALSE`);
+      } else {
+        conditions.push(sql`${sql.raw(`"${field}"`)}::text ILIKE ${`%${value}%`}`);
+      }
     }
     const where = conditions.length > 0
       ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``;

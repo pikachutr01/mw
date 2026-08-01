@@ -17,6 +17,7 @@ import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
+import { BulkScreen } from './screens/Bulk.tsx';
 import { ModerationScreen } from './screens/Moderation.tsx';
 import { PlayersScreen } from './screens/Players.tsx';
 import { SettingsScreen } from './screens/Settings.tsx';
@@ -34,6 +35,7 @@ const NAV: [string, string][] = [
   ['/oyuncular', 'Oyuncular'],
   ['/dunya', 'Dünya'],
   ['/ayarlar', 'Ayarlar'],
+  ['/toplu', 'Toplu işlem'],
   ['/moderasyon', 'Moderasyon'],
   ['/veri', 'Veri tabanı'],
   ['/bakim', 'Bakım'],
@@ -101,6 +103,7 @@ export function App() {
                 path="/ayarlar"
                 element={<SettingsScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
               />
+              <Route path="/toplu" element={<BulkScreen onNeedStepUp={openStepUp} />} />
               <Route path="/moderasyon" element={<ModerationScreen onNeedStepUp={openStepUp} />} />
               <Route path="/veri" element={<DatabaseScreen onNeedStepUp={openStepUp} />} />
               <Route path="/bakim" element={<HealthScreen onNeedStepUp={openStepUp} />} />
