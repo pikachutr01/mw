@@ -13,8 +13,6 @@ export * from './formulas.ts';
 export * from './prerequisites.ts';
 export * from './display-order.ts';
 export { catalogHash, CATALOG_VERSION } from './hash.ts';
-/** ⚠️ Açıklamalar `BUILDINGS`ten AYRI — katalog özetinin yüküne girmemeleri şart (bkz. dosya başı). */
-export { BUILDING_INFO, type BuildingInfo } from './building-info.ts';
 export { HERO_NAMES, pickHeroName } from './hero-names.ts';
 export {
   NAME_MAX, NAME_MIN, NAME_PATTERN, NAME_RULE_MESSAGE, clampName, normalizeName,

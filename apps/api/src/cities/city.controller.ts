@@ -12,7 +12,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { enqueueRequest } from '@mobiwar/contracts';
 import {
-  defenseStructureCost, BUILDINGS, BUILDINGS_BY_ID, BUILDING_INFO, BUILDING_ORDER, BUILDING_REQUIREMENTS,
+  defenseStructureCost, BUILDINGS, BUILDINGS_BY_ID, BUILDING_ORDER, BUILDING_REQUIREMENTS,
   DEFENSE_ORDER, TECHS, TECHS_BY_ID, TECH_ORDER, TECH_REQUIREMENTS,
   UNITS, UNITS_BY_ID, UNIT_REQUIREMENTS, WARRIOR_ORDER,
   buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, timeFromCost,
@@ -423,11 +423,8 @@ export class CityController {
         const level = snap.buildings[b.id] ?? 0;
         const next = level + 1;
         const available = next <= b.maxLevel;
-        const info = BUILDING_INFO[b.id];
         return {
           id: b.id, name: b.name.tr, level, maxLevel: b.maxLevel,
-          /** ⭐ Yapı açıklaması (kullanıcı, 2026-08-01) — adın üstüne gelince tooltip'te. */
-          info: { text: info.text, extra: info.extra ?? [] },
           nextCost: available ? buildingCost(b.id, next, cfg) : null,
           // ⭐ Bir sonraki seviyenin SÜRESİ (saniye) — oyuncu maliyetle birlikte bunu da görmeli.
           nextSeconds: available

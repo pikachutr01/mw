@@ -18,7 +18,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { coords } from '../lib/format.ts';
-import { Tooltip } from './Tooltip.tsx';
 import { useTick } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, useMovements, type Movement } from '../lib/queries.ts';
@@ -86,15 +85,15 @@ export function CityStrip() {
           return (
             <div key={c.id}
               className="flex min-w-0 flex-1 basis-0 flex-col items-center sm:w-28 sm:flex-none sm:shrink-0">
-              <Tooltip label={`${c.name} · ${coords(c.coordinates)}`} className="w-full">
               <button
                 ref={active ? activeRef : undefined}
                 onClick={() => setCityId(c.id)}
                 /**
-                 * ⚠️ Ham `title` KALDIRILDI (kullanıcı, 2026-08-01): tarayıcının ~1 saniyelik
-                 * gecikmeli, işletim sistemi görünümlü balonu `Karakol(1:3:1)` yazıyordu.
-                 * Bilgi kaybolmadı — aşağıdaki `Tooltip` aynı içeriği projenin kendi diliyle
-                 * ve anında gösteriyor (portal olduğu için şeridin taşmasına da takılmıyor).
+                 * ⚠️ **Fareyle üzerine gelince HİÇBİR ŞEY olmaz** (kullanıcı, 2026-08-02).
+                 * Önce tarayıcının ham `title`'ı vardı (`Karakol(1:3:1)`), sonra onun yerine
+                 * proje ipucu kondu — ikisi de istenmiyor: ad ve koordinat zaten simgenin
+                 * ALTINDA yazılı, ipucu aynı bilgiyi tekrar ediyordu. Tıklama şehri değiştirir,
+                 * hepsi bu. `aria-label` kalıyor: ekran okuyucu için tek erişim yolu o.
                  */
                 aria-label={`${c.name} ${coords(c.coordinates)}`}
                 aria-current={active ? 'true' : undefined}
@@ -134,7 +133,6 @@ export function CityStrip() {
                   {coords(c.coordinates)}
                 </span>
               </button>
-              </Tooltip>
 
               {/* Hareketler şehrin ALTINA, görev BAŞLAMA sırasına göre asılır (kullanıcı kuralı). */}
               <div className="mt-1 flex flex-col items-center gap-1">

@@ -739,15 +739,12 @@ paneline ait, ona dokunulmuyor). DNS kayıtları **VPS'te değil, hostingdunyam 
 
 ## 9.2d ⭐ YAPI AÇIKLAMALARI ve AÇIKLAMA–KOD DENETİMİ (kullanıcı, 2026-08-01) ✅ YAPILDI
 
-Dokuz yapının açıklaması `packages/catalog/src/building-info.ts`te. Metinler kullanıcının
-verdiği hâliyle **birebir**; bizim eklediklerimiz ayrı bir `extra: string[]` alanında ve
-arayüzde ⭐ ile başlayan ayrı satırlar olarak çiziliyor — oyunun anlatımı ile bizim notumuz
-karışmasın.
-
-⚠️ **Metinler `BuildingDef`e EKLENEMEZ.** `catalogHash()` (`hash.ts:53`) `BUILDINGS` dizisini
-doğrudan `JSON.stringify` ediyor; oraya bir alan eklemek **geçmiş her savaşın
-`battles.catalog_hash`'ini kaydırır** ve sahte "denge değişti" sinyali üretir.
-`hash.test.ts`teki `2ec624e6` literali bu kuralın bekçisi.
+> ⛔ **TOOLTIP'LER İPTAL EDİLDİ (kullanıcı, 2026-08-02).** *"Yapılar sayfasındaki yapıların
+> üzerine gelince çıkan açıklama tooltiplerini de komple iptal edelim, önceki mantığa dönelim."*
+> `building-info.ts` silindi, katalog yükündeki `info` alanı kaldırıldı, `ItemName` açıklamasız
+> hâline döndü. Yapılar sayfasında tıklanabilir tek ad yine **Mağara** (doldur/boşalt modalı).
+> **Aşağıdaki denetim tablosu KALIYOR** — kullanıcının asıl sorusunun cevabı o, tooltip yalnız
+> onu gösterme biçimiydi. Dokuz metnin kendisi commit `c1c2b48`te duruyor.
 
 ### Açıklama–kod denetimi (kullanıcının sorusu: *"örtüşmeyen bir mantık varsa bildir"*)
 
@@ -763,11 +760,51 @@ Dokuz metnin dokuzu da koda karşı okundu. **Tek gerçek çelişki Mimar Okulu'
 | **Çiftlik · Maden** | ✅ birebir. Eksik: ikisi **40. seviyeye** çıkıyor (diğerleri 20'de duruyor). |
 | **Akademi · Teleport** | ✅ birebir, ekleyecek bir şey yok. |
 
-**Arayüz kuralı:** ipucu **yalnız yapının ADINA** gelince açılır (kullanıcı şartı). `ItemName`
-(`City.tsx:86`) tek kaynak; Mağara satırı eskiden bu bileşeni kopyaladığı için ona eklenen her
-şeyi atlıyordu — kopya kaldırıldı, tıklanabilirlik ile ipucu artık aynı bileşende yaşıyor.
-`Tooltip` dokunmatikte de açılıyor (`onPointerDown` + `pointerType !== 'mouse'`; dışarı
-dokunuşla kapanır) — telefonda `hover` olmadığı için açıklamalar aksi hâlde hiç görünmezdi.
+### ⛔ `Tooltip`e dokunma desteği eklenmesi de geri alındı
+
+Açıklamaları telefonda göstermek için `Tooltip`e dokunmatik açma eklenmişti ve **oyundaki bütün
+ipuçlarını bozdu**: ipucu bir kez açılınca kapanmıyor, fare çekilse bile ekranda kalıyordu.
+
+⚠️ **Sebep — ders niteliğinde:** dokunmada gelen sahte `mouseleave`'i elemek için
+`e.nativeEvent.detail === 0` koşulu yazılmıştı. `MouseEvent.detail` **tıklama sayacıdır** ve
+`mouseleave`/`mouseenter` olaylarında **her zaman 0**'dır — yani koşul sahte olayları değil
+**gerçek fare çıkışlarının hepsini** yutuyordu. Bileşen tur öncesi hâline döndürüldü:
+yalnız `mouseenter`/`mouseleave` + `focus`/`blur`.
+
+⚠️ Bir olay alanını "sahte olayı ayıklamak" için kullanmadan önce o alanın o olay türündeki
+**gerçek** değeri okunmalı; `detail` burada hiçbir zaman ayırt edici değildi.
+
+⛔ **Kale simgelerindeki ipucu da iptal** (kullanıcı, aynı gün): şeritte ad ve koordinat zaten
+simgenin ALTINDA yazılı, ipucu aynı bilgiyi tekrarlıyordu. Artık hover'da hiçbir şey olmuyor;
+tıklama şehri değiştirir. `aria-label` kalıyor (ekran okuyucunun tek erişim yolu).
+
+## 9.2e ⭐ SAVAŞ SİMÜLATÖRÜ — sözleşmenin tamamı (kullanıcı, 2026-08-02)
+
+İlk sürüm yalnız birim adetlerini soruyordu; **teknikler, kahramanlar, tapınak ve gece görüşü
+`contracts/simulate.ts`te ZATEN VARDI ama forma konmamıştı**. Kullanıcının ölçütü binary araç
+(`Mobiwar Simulator v0.5.5`) ve `docs/arsiv/index.html`; ikisi de bu alanları soruyor.
+
+| Girdi | Yer | Not |
+| :-- | :-- | :-- |
+| Birim adetleri + **birim birim KALAN** | Savaşçılar / Savunma yapıları tabloları | Motor `SideResult.counts` ile bunu hep döndürüyordu, ekran basmıyordu. Savunma tabanının geri getirdiği birimler `+N` olarak yeşil |
+| 8 savaş tekniği × 2 taraf | Teknikler | `stat: null` olanlar (Casusluk, Haritacılık, Sömürgecilik, Gece Görüş) listede YOK — savaş statına dokunmuyorlar |
+| Taş Ustalığı | yalnız SAVUNAN | `techs.ts:52` yalnız Okçu Kulesi/Mangonel/Balista/Sur'u ölçekliyor; saldırandaki kutu etkisiz olurdu, binary araç da çizgiyle geçiyor |
+| 0-5 kahraman × (seviye + 4 yetenek) | Kahraman panelleri | Puan sayacı `toplam/3×seviye`; aşarsa düğme kapanır (sunucu da reddediyor) |
+| Tapınak toplamı + mevcut kahraman | Kahraman panelinin altı | Savaşa girmez, **yalnız kazanan tarafta** kahraman çıkma ihtimalini belirler (`combat.ts:709`) |
+| Gece savaşı + gece görüşü × 2 | Gece savaşı paneli | Gece kapalıyken görüş kutuları pasif |
+
+**Sonuçta:** kazanan · süre · iki tarafın kaybı ve kalanı · enkaz altın/yemek · deneyim ·
+kahraman çıkma ihtimali · taşıma kapasitesi · sur/kalkan bütünlüğü · kahraman durumu (%veya
+«Yok Edildi») · `seed`.
+
+⚠️ Sur ve Büyü Kalkanı «Kalan» sütununda **adet değil bütünlük %** gösterir — seviyeleri
+düşmez, savaş sonrası onarılırlar.
+
+Ölçüldü (dünya 1, canlıya dokunmadan): T=40 · K=0 · XP=1891 → **%18,91**; formül
+`(40×10 − 0) × min(1, 1891×0,000025)` ile birebir.
+
+⚠️ Ekranın tepesindeki açıklama metni kullanıcı isteğiyle **kaldırıldı** — *"ekstradan öyle
+kalabalık yaratacak bilgiler yazmana gerek yok"*. Menü simgesi `assets/menu/simulator.png`.
 
 ---
 

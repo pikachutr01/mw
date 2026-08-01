@@ -49,7 +49,7 @@ const MENU = [
   { to: '/messages', label: 'Mesajlar', icon: 'mesaj' },
   { to: '/command', label: 'Komuta Merkezi', icon: 'komutamerkezi' },
   /* ⭐ Simülatör (kullanıcı, 2026-08-01): uç aylardır çalışıyordu, ekranı yoktu. */
-  { to: '/simulate', label: 'Simülatör', icon: 'savunma' },
+  { to: '/simulate', label: 'Simülatör', icon: 'simulator' },
   { to: '/options', label: 'Seçenekler', icon: 'secenekler' },
   { to: '/help', label: 'Yardım', icon: 'yardim' },
 ] as const;
@@ -79,7 +79,7 @@ const TABS = [
  * sekmesine sığmıyor — listeye konmasaydı mobilde ekrana giden hiçbir yol kalmazdı.
  */
 const MORE_ITEMS = [
-  { to: '/simulate', label: 'Simülatör', icon: 'savunma' },
+  { to: '/simulate', label: 'Simülatör', icon: 'simulator' },
   { to: '/options', label: 'Seçenekler', icon: 'secenekler' },
   { to: '/help', label: 'Yardım', icon: 'yardim' },
 ] as const;
@@ -200,25 +200,24 @@ function InfoBar() {
    * şehirden 500 altını olan şehre geçince sayının genişliği değişiyor, ortalama yeniden
    * hesaplanıyor ve **tüm içerik sağa sola zıplıyordu**.
    *
-   * ⚠️ **Çözüm neden `1fr auto 1fr`:** kenar bölgeler EŞİT ağırlıkta olduğu için ortadaki hücre
-   * kenarların içeriğinden bağımsız olarak tam ortada kalır. `auto 1fr auto` ile yapsaydık
-   * sol bölge büyüdükçe orta kayardı — yani sorunu çözmüş olmazdık.
+   * ⚠️ **Kolonlar `auto 1fr auto` — HER genişlikte.** Bir ara `minmax(0,1fr) auto minmax(0,1fr)`
+   * denendi (kenarları eşitleyip ortayı sayfanın tam ortasına oturtmak için) ve **iki kez
+   * çakışmaya yol açtı**: `minmax(0,…)` kenar sütunun içeriğinin ALTINA inmesine izin veriyor,
+   * dolayısıyla dar ekranda sol bölge 9 haneli iki sayı için gereken yeri alamıyor ve rakamlar
+   * şehir adının üstüne biniyordu (ölçüldü: 375px'te 138/192 px, 779px'te 213/234 px).
    *
-   * ⚠️ **Ama `1fr auto 1fr` YALNIZ `sm` ve üstünde.** 375px'te sol bölge 9 haneli iki sayı için
-   * ~192px istiyor, eşit paylaşım ona 138px veriyor ve rakamlar şehir adının ÜSTÜNE biniyordu
-   * (ölçüldü: `scrollWidth` 92 / genişlik 65). Mobilde bu yüzden `auto 1fr auto`: kenarlar
-   * içeriği kadar yer alır, orta kalanı ortalar. Kenarların genişliği sabit olduğu için
-   * (aşağıdaki `min-w-[9ch]`) orta yine zıplamaz — dar ekranda dead-center'dan vazgeçilir,
-   * çakışmadan vazgeçilmez.
+   * ⚠️ Dead-center **istenen bir şey değildi**; istenen "kaynak alanı sabit olsun, şehir
+   * değişince içerik zıplamasın" idi. Onu sağlayan şey aşağıdaki `min-w-[9ch]`: sol bölgenin
+   * genişliği sayının uzunluğundan bağımsız olarak SABİT, dolayısıyla orta bölge de zıplamıyor.
+   * Kenarları eşitlemek bu şart için gereksiz, üstelik kırılgan.
    *
-   * ⚠️ Sayılara `min-w-[9ch]` — ve bu sınıf `Res`in `numClass`ıyla **sayının kendi kutusuna**
-   * gider, dış kutuya değil (dıştaki sınır ikonu da sayıp sayıyı taşırıyordu). `tnum` sınıfı
-   * `tabular-nums` verdiği için `ch` burada GERÇEKTEN sabit genişlik: 9 karakter `6.000.000`ı
-   * alıyor, daha uzun sayı yalnız kendi kutusunu büyütür.
+   * ⚠️ `min-w-[9ch]` `Res`in `numClass`ıyla **sayının kendi kutusuna** gider, dış kutuya değil
+   * (dıştaki sınır ikonu da sayıp sayıyı taşırıyordu). `tnum` sınıfı `tabular-nums` verdiği için
+   * `ch` burada GERÇEKTEN sabit genişlik: 9 karakter `6.000.000`ı alıyor, daha uzun sayı yalnız
+   * kendi kutusunu büyütür.
    */
   return (
     <div className="tex tex-header bevel mb-3 grid grid-cols-[auto_1fr_auto]
-      sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]
       items-center gap-2 rounded-[var(--radius-md)] border-2 border-strong bg-panel-header
       px-2.5 py-1.5 text-on-panel-header sm:gap-4 sm:px-3">
 

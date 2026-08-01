@@ -26,7 +26,6 @@ import {
   AmountInput, Button, CatalogIcon, Empty, ErrorBox, Panel, Requirements, Res,
 } from '../components/ui.tsx';
 import { useConfirm } from '../components/Modal.tsx';
-import { Tooltip } from '../components/Tooltip.tsx';
 import { CaveModal } from './cave-modal.tsx';
 
 function CityFrame({ children }: { children: (city: CityDetail) => React.ReactNode }) {
@@ -84,37 +83,24 @@ export function Budget({ label, used, total, hint }: { label: string; used: numb
  * atlıyordu — kopya kaldırıldı.
  */
 function ItemName({
-  name, value, info, onClick, right,
+  name, value, onClick, right,
 }: {
   name: string;
   value: number | string;
-  info?: { text: string; extra: string[] };
   onClick?: () => void;
   right?: React.ReactNode;
 }) {
-  const label = info ? (
-    <span className="block">
-      <span className="block">{info.text}</span>
-      {info.extra.map((x) => (
-        <span key={x} className="mt-1.5 block text-muted">⭐ {x}</span>
-      ))}
-    </span>
-  ) : null;
-
-  const nameNode = (
-    <span className={`font-semibold text-ink ${info ? 'underline decoration-dotted underline-offset-2' : ''}`}>
-      {name}
-    </span>
-  );
+  const nameNode = <span className="font-semibold text-ink">{name}</span>;
 
   return (
     <div className="text-[15px] leading-tight">
       {onClick ? (
-        <button type="button" onClick={onClick} className="text-left hover:text-accent">
-          {info ? <Tooltip label={label} className="max-w-full">{nameNode}</Tooltip> : nameNode}
+        /* Noktalı altçizgi = "burada tıklanacak bir şey var" işareti; bu ekranda tek
+           tıklanabilir ad Mağara ve işaret olmadan tıklanabilirliği görünmüyor. */
+        <button type="button" onClick={onClick}
+          className="text-left underline decoration-dotted underline-offset-2 hover:text-accent">
+          {nameNode}
         </button>
-      ) : info ? (
-        <Tooltip label={label} className="max-w-full cursor-help">{nameNode}</Tooltip>
       ) : nameNode}
       <span className="tnum ml-1.5 text-accent">({value})</span>
       {right}
@@ -333,10 +319,10 @@ function Buildings({ city }: { city: CityDetail }) {
                 <CatalogIcon kind="buildings" id={b.id} alt={b.name} />
                 <div className="min-w-0 flex-1">
                   {/* ⭐ Mağara adı TIKLANABİLİR: doldurma/boşaltma modalının girişi burasıdır
-                      (doküman: "Yapılar menüsünde … mağaraya asker doldurma"). Artık `ItemName`
-                      kopyalanmıyor — ipucu ve tıklama aynı bileşende yaşıyor. */}
+                      (doküman: "Yapılar menüsünde … mağaraya asker doldurma"). Bu ekranda
+                      tıklanabilir tek ad odur; `ItemName` kopyalanmıyor, tek bileşen. */}
                   <ItemName
-                    name={b.name} value={b.level} info={b.info}
+                    name={b.name} value={b.level}
                     onClick={b.id === 'cave' && b.level > 0 ? () => setCaveOpen(true) : undefined}
                     right={b.id === 'cave' && b.level > 0 ? (
                       <span className="tnum ml-2 text-[11px] text-muted">
