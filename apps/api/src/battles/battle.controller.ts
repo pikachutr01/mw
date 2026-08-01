@@ -30,32 +30,80 @@ const deleteMessagesRequest = z.object({
 export class BattleController {
   constructor(@Inject(DB) private readonly db: Db) {}
 
-  /** Posta kutusu — savaş ve dönüş raporları, en yeni üstte. */
+  /**
+   * Posta kutusu — savaş ve dönüş raporları, en yeni üstte.
+   *
+   * ⭐ **SUNUCU TARAFLI SAYFALAMA** (kullanıcı, 2026-08-01). Öncesinde uç en fazla 100 satır
+   * döndürüyor, istemci hepsini alıp `slice` ile sayfalıyordu — yani "sayfalama" görsel bir
+   * yanılsamaydı ve posta kutusu büyüdükçe her açılışta yüzlerce satır taşınacaktı.
+   *
+   * ⚠️ **`kind` süzgeci de sunucuya taşındı.** İstemci raporları mesajlardan `isReport()` ile
+   * ayırıyordu; sayfalama sunucuya inince bu ayrımın da inmesi ŞART oldu — yoksa sunucu 10
+   * satır döndürür, istemci onların 3'ünü süzer ve sayfa 3 satır görünürdü.
+   *
+   * ⚠️ Sayaçlar (`unread`, `total`) **süzgeçten bağımsız** hesaplanıyor: sekme rozetleri iki
+   * kümenin de sayısını aynı anda gösteriyor.
+   */
   @Get('messages')
   async messages(
     @Req() req: AuthedRequest,
-    @Query('before') before?: string,
+    @Query('kind') kind?: string,
+    @Query('page') page?: string,
     @Query('limit') limit?: string,
   ): Promise<Record<string, unknown>> {
     const player = req.player!;
-    const take = Math.min(100, Math.max(1, Number(limit ?? 50) || 50));
-    const cursor = before ? Number(before) : null;
+    const take = Math.min(100, Math.max(1, Number(limit ?? 20) || 20));
+    const pageNo = Math.max(0, Number(page ?? 0) || 0);
+
+    /**
+     * ⭐ Rapor tanımı: **`kind` `_report` ile biter** (`battle_report`, `spy_report`,
+     * `transport_report`, `support_report`, `found_city_report`).
+     *
+     * ⚠️ Kuralı LİSTE olarak değil DESEN olarak yazmak bilinçli: yeni bir rapor türü
+     * eklendiğinde (ör. `cave_report`, §EKSIK "Mağara Raporu") burayı güncellemek gerekmesin.
+     * İstemcideki `isReport()` zaten `endsWith('_report')` diyordu; artık ikisi aynı kural.
+     */
+    const isReport = sql`kind LIKE '%\\_report' ESCAPE '\\'`;
+    const filter = kind === 'reports' ? sql`AND ${isReport}`
+      : kind === 'messages' ? sql`AND NOT (${isReport})`
+        : sql``;
 
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT id, kind, side, battle_id, mission_id, subject, body, at, read_at
-        FROM messages
+        FROM messages m
        WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
-         AND (${cursor}::bigint IS NULL OR id < ${cursor}::bigint)
+         ${filter}
        ORDER BY id DESC
-       LIMIT ${take}
-    `);
-    const unread = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT COUNT(*)::int AS n FROM messages
-       WHERE world_id = ${player.worldId} AND player_id = ${player.playerId} AND read_at IS NULL
+       LIMIT ${take} OFFSET ${pageNo * take}
     `);
 
+    /** Toplam ve okunmamış — hem genel hem süzgece göre; sekme rozetleri ikisini de istiyor. */
+    const [counts] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT
+        COUNT(*)::int AS total_all,
+        COUNT(*) FILTER (WHERE read_at IS NULL)::int AS unread_all,
+        COUNT(*) FILTER (WHERE ${isReport})::int AS total_reports,
+        COUNT(*) FILTER (WHERE NOT (${isReport}))::int AS total_messages,
+        COUNT(*) FILTER (WHERE ${isReport} AND read_at IS NULL)::int AS unread_reports,
+        COUNT(*) FILTER (WHERE NOT (${isReport}) AND read_at IS NULL)::int AS unread_messages
+      FROM messages
+     WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
+    `);
+
+    const n = (k: string): number => Number(counts?.[k] ?? 0);
     return {
-      unread: Number(unread[0]?.['n'] ?? 0),
+      unread: n('unread_all'),
+      page: pageNo,
+      pageSize: take,
+      /** Süzgeçli toplam — istemci sayfa sayısını bundan hesaplar. */
+      total: kind === 'reports' ? n('total_reports')
+        : kind === 'messages' ? n('total_messages') : n('total_all'),
+      counts: {
+        reports: n('total_reports'),
+        messages: n('total_messages'),
+        unreadReports: n('unread_reports'),
+        unreadMessages: n('unread_messages'),
+      },
       items: rows.map((r) => ({
         id: Number(r['id']),
         kind: String(r['kind']),

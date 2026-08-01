@@ -139,6 +139,8 @@ export interface CatalogEntry {
 export interface CatalogBuilding extends CatalogEntry {
   level: number;
   maxLevel: number;
+  /** ⭐ Yapı açıklaması — adın üstüne gelince/dokununca tooltip'te (kullanıcı, 2026-08-01). */
+  info?: { text: string; extra: string[] };
   nextCost: { gold: number; food: number } | null;
   /** Bir sonraki seviyenin süresi (saniye). Tavandaysa null. */
   nextSeconds: number | null;
@@ -355,10 +357,38 @@ export function armiesBadge(
  * anında güncelleniyor. Yoklama yalnız "WS kopuk kaldığı pencerede ekran tamamen donmasın" diye
  * duruyor; mesajlar zaten kalıcı kayıtta, kaçan olay bir sonraki tazelemede görünür (§1 outbox).
  */
-export const useMessages = (): UseQueryResult<{ unread: number; items: MessageRow[] }> => useQuery({
-  queryKey: ['messages'],
-  queryFn: () => get<{ unread: number; items: MessageRow[] }>('/api/v1/messages'),
+export interface MessagePage {
+  unread: number;
+  page: number;
+  pageSize: number;
+  /** Süzgeçli toplam — sayfa sayısı bundan hesaplanır. */
+  total: number;
+  counts: {
+    reports: number; messages: number; unreadReports: number; unreadMessages: number;
+  };
+  items: MessageRow[];
+}
+
+/**
+ * ⭐ SUNUCU TARAFLI SAYFALAMA (kullanıcı, 2026-08-01).
+ *
+ * ⚠️ Öncesinde tek bir `['messages']` anahtarı vardı, uç en fazla 100 satır döndürüyordu ve
+ * istemci `slice` ile "sayfalıyordu" — yani sayfalama görsel bir yanılsamaydı. Anahtar artık
+ * `kind` ve `page` taşıyor; sekme ya da sayfa değişince gerçekten yeni bir istek gidiyor.
+ *
+ * ⚠️ Rozetler için kullanılan yer (`Shell`) parametresiz çağırıyor ve `unread`i okuyor —
+ * o yol bozulmadı, süzgeçsiz çağrı hâlâ genel sayacı veriyor.
+ */
+export const useMessages = (
+  opts: { kind?: 'reports' | 'messages'; page?: number; pageSize?: number } = {},
+): UseQueryResult<MessagePage> => useQuery({
+  queryKey: ['messages', opts.kind ?? 'all', opts.page ?? 0, opts.pageSize ?? 20],
+  queryFn: () => get<MessagePage>(
+    `/api/v1/messages?kind=${opts.kind ?? 'all'}&page=${opts.page ?? 0}&limit=${opts.pageSize ?? 20}`,
+  ),
   refetchInterval: SAFETY_NET_MS,
+  /** ⚠️ Sayfa değişince liste boşalıp zıplamasın — önceki sayfa yerinde kalır. */
+  placeholderData: (prev) => prev,
 });
 
 /**

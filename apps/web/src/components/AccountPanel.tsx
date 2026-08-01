@@ -50,6 +50,8 @@ export function AccountPanel(): React.ReactElement {
 
         {info && !info.emailVerified ? (
           <div className="border-t border-border px-3 py-2">
+            {/* ⭐ Kısıtların TAM listesi yalnız BURADA (kullanıcı, 2026-08-01): şerit ve satır
+                altları kısa kalıyor, ayrıntıyı merak eden hesabına bakıyor. */}
             <p className="mb-2 text-xs text-muted">
               Doğrulayana kadar <strong>saldırı, nakliye, yeni şehir, savunma ünitesi, ittifak
               ve mesaj yazma kapalı</strong>; yapı ve tekniklerin en fazla 3. seviyeye çıkar ve

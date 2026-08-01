@@ -86,13 +86,38 @@ export function Tooltip({
     };
   }, [open, place]);
 
+  /**
+   * ⭐ DOKUNMATİK DESTEĞİ (2026-08-01). Bileşen yalnız hover/focus ile açılıyordu; telefonda
+   * `hover` diye bir şey olmadığı için yapı açıklamaları **hiç görünmezdi**.
+   *
+   * ⚠️ Çözüm `onClick` değil **`onPointerDown` + `pointerType` ayrımı**: `onClick` fare
+   * kullanıcısında da tetiklenir ve hover ile birleşince ipucu tıklayınca KAPANIRDI
+   * (aç → tıkla → kapat). Dokunmada `mouseenter` de sentetik olarak geliyor, o yüzden
+   * dokunuşta durumu ters çevirmek yerine AÇIK bırakıp dışarı dokunuşla kapatıyoruz.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent): void => {
+      if (e.pointerType === 'mouse') return;
+      if (anchorRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [open]);
+
   return (
     <>
       <span
         ref={anchorRef}
         aria-describedby={open ? id : undefined}
         onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onMouseLeave={(e) => {
+          // Dokunmada tarayıcı sahte bir `mouseleave` de yolluyor; ipucu anında kapanmasın.
+          if (e.nativeEvent instanceof MouseEvent && e.nativeEvent.detail === 0) return;
+          setOpen(false);
+        }}
+        onPointerDown={(e) => { if (e.pointerType !== 'mouse') setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         className={`inline-flex ${className}`}

@@ -422,6 +422,29 @@ YOK. Ek uç gerekmedi — sidebar `useCity` cache'inden okur.
   → §9.1** (aksiyon değil, sinyal).
 - Yedek: PITR (WAL arşivi) + günlük dump + **geri yükleme tatbikatı** (yılda 2, yazılı prosedür).
 
+### 9.0b Jeton ömürleri — ölçülmüş durum (kullanıcı sorusu, 2026-08-01)
+
+| Soru | Cevap | Kaynak |
+| :-- | :-- | :-- |
+| Access token süresi | **15 dk**, HS256, içinde `sub`/`pid`/`wid`/`sid` | `token.service.ts:56` |
+| 15 dk uzun mu | **Hayır, kısa uçtur.** Uzun sayılan değerler saatler/günlerdir. | — |
+| Çalınan access ne kadar yaşar | **≤ 15 dk** ve kendini yenileyemez (yenileme refresh ister) | `token.service.ts:60-69` |
+| Refresh token | 30 gün, JWT **değil** (32 bayt rastgele), DB'de yalnız SHA-256 özeti | `token.service.ts:57, 84-92` |
+| Refresh **ekstra satır açmadan** yeniliyor mu | **HAYIR — her yenileme YENİ bir `sessions` satırı yazar**, eskisini iptal eder. Cihaz başına ~96 satır/gün. | `auth.service.ts:253-266` |
+
+⚠️ **Asıl önemli ayrıntı:** access token durumsuz olmasına rağmen `AuthGuard` **her istekte**
+`sessions` satırına bakıp iptal kontrolü yapıyor (`auth.guard.ts:52-56`). Sonuçları:
+
+- **İptal anında işler** — çıkış, parola değişimi ve hesap silme 15 dk beklemez.
+- Bu yüzden TTL'i kısaltmanın güvenlik kazancı **yok**; TTL yalnız yenileme sıklığını belirler.
+  Uzatmanın da riski sınırlı, ama gereksiz: 15 dk zaten sorun çıkarmıyor.
+- Satır büyümesi tasarımın kabul ettiği bedel: cihaz listesi `chain_id` ile tekilleştiriyor
+  (§admin Faz 3), tablo da yönetim panelindeki `sessions` temizlik göreviyle budanıyor
+  (`ops-jobs.ts:129-143`).
+
+⚠️ `device-signal.service.ts:105` `pruneOldSessions` **hiç çağrılmıyor** — Faz 8'deki temizlik
+görevi aynı işi yaptığı için ölü kalmış ikizi. Silinmeli ya da göreve bağlanmalı.
+
 ---
 
 ## 9.1 ⭐ ÇOKLU HESAP (MULTI-BOX) TESPİTİ (kullanıcı isteği, 2026-07-26)
@@ -714,6 +737,40 @@ paneline ait, ona dokunulmuyor). DNS kayıtları **VPS'te değil, hostingdunyam 
 
 ---
 
+## 9.2d ⭐ YAPI AÇIKLAMALARI ve AÇIKLAMA–KOD DENETİMİ (kullanıcı, 2026-08-01) ✅ YAPILDI
+
+Dokuz yapının açıklaması `packages/catalog/src/building-info.ts`te. Metinler kullanıcının
+verdiği hâliyle **birebir**; bizim eklediklerimiz ayrı bir `extra: string[]` alanında ve
+arayüzde ⭐ ile başlayan ayrı satırlar olarak çiziliyor — oyunun anlatımı ile bizim notumuz
+karışmasın.
+
+⚠️ **Metinler `BuildingDef`e EKLENEMEZ.** `catalogHash()` (`hash.ts:53`) `BUILDINGS` dizisini
+doğrudan `JSON.stringify` ediyor; oraya bir alan eklemek **geçmiş her savaşın
+`battles.catalog_hash`'ini kaydırır** ve sahte "denge değişti" sinyali üretir.
+`hash.test.ts`teki `2ec624e6` literali bu kuralın bekçisi.
+
+### Açıklama–kod denetimi (kullanıcının sorusu: *"örtüşmeyen bir mantık varsa bildir"*)
+
+Dokuz metnin dokuzu da koda karşı okundu. **Tek gerçek çelişki Mimar Okulu'ndaydı:**
+
+| Yapı | Bulgu |
+| :-- | :-- |
+| **Mimar Okulu** | ⚠️ Metin *"**diğer** şehir yapıları"* diyordu; kodumuz Mimar Okulu'nun **kendi inşasını da** hızlandırıyor (`formulas.ts:318-320` — orijinaldeki özel dal, bölen 1,4'ten 1,2'ye inince bilerek kaldırılmıştı). **Metin düzeltildi, kod değil**: özel dalı geri koymak sessiz bir tutarsızlık kaynağı olurdu. |
+| **Tapınak** | Çelişki değil **eksik**: kahraman çıkma olasılığı o şehrin değil, oyuncunun **TÜM şehirlerindeki tapınakların toplamı** (`battle.handlers.ts:498-505`, 28/28 ölçülmüş binary sabiti). Dirilme süresi tarafı ✅ o şehrin tapınağı. `extra`'ya yazıldı. |
+| **Baraka** | ✅ eğitim hızı. Eksik: seviye aynı zamanda **eşzamanlı sefer ve sipariş sayısını** da sınırlıyor (`queue.service.ts:178`). |
+| **Kale** | ✅ ×10 bütçe. Eksik: Kale'nin kendisi ile Sur/Büyü Kalkanı bütçeyi **tüketmiyor**. |
+| **Mağara** | ✅ alan bazlı süre, kaynak depolanmaz, savunmaya katılmaz. Eksik: yıkılan mağaranın onarım süresi **bizde seviyeyle kısalıyor** (oyunun kendi dokümanı sabit 24 saat diyordu; bilerek değiştirildi). |
+| **Çiftlik · Maden** | ✅ birebir. Eksik: ikisi **40. seviyeye** çıkıyor (diğerleri 20'de duruyor). |
+| **Akademi · Teleport** | ✅ birebir, ekleyecek bir şey yok. |
+
+**Arayüz kuralı:** ipucu **yalnız yapının ADINA** gelince açılır (kullanıcı şartı). `ItemName`
+(`City.tsx:86`) tek kaynak; Mağara satırı eskiden bu bileşeni kopyaladığı için ona eklenen her
+şeyi atlıyordu — kopya kaldırıldı, tıklanabilirlik ile ipucu artık aynı bileşende yaşıyor.
+`Tooltip` dokunmatikte de açılıyor (`onPointerDown` + `pointerType !== 'mouse'`; dışarı
+dokunuşla kapanır) — telefonda `hover` olmadığı için açıklamalar aksi hâlde hiç görünmezdi.
+
+---
+
 ## 10. Web istemci
 
 **Stack:** React 19 + Vite + TypeScript · **Tailwind v4** (onay) + Radix primitives (erişilebilir,
@@ -739,8 +796,31 @@ Tasarım sistemi **`packages/design-tokens`** tek kaynağından gelir (gece/gün
 | **Mesajlar** | Raporlar + mesajlar (filtre: Sadece Mesajlar / Sadece Raporlar / Hepsini Göster), rozet sayacı |
 | **Daha Fazla** | **Kahramanlar** (Dirilt · Seviye Arttır · Özellikler) · İttifak · **Sıralamalar** (Oyuncuya/İttifağa/**Kahramana** göre) · Genel Durum · **Simülatör** · Arama · Üyelik · Ayarlar · Yardım |
 
+⭐ **Uygulanan alt bar (2026-08-01):** `Ordular · Şehir · Dünya · Mesaj · Komuta` **+ «Daha»**.
+«Komuta» eklendi çünkü mobilde Komuta Merkezi'ne **doğrudan hiçbir bağlantı yoktu** — oysa
+sıralamalar, ittifak ve arama orada oturuyor. «Daha» artık bir rota değil **yukarı açılan
+liste**: `Simülatör · Seçenekler · Yardım · Çıkış Yap` (çıkış onaydan geçer). Eskiden doğrudan
+Seçenekler'i açıyordu ve **Yardım mobilde hiç erişilemiyordu**; Simülatör de listeye konmasaydı
+telefonda ekrana giden hiçbir yol kalmazdı.
+
 - Üstte **kalıcı kaynak çubuğu**: aktif şehir seçici, altın/yemek + saatlik hız, alan kullanımı,
   bekleyen görev/mesaj rozetleri, **tema düğmesi** (gündüz/gece/sistem — §13.13).
+
+  ⭐ **Çubuk 3 bölgeli grid** (kullanıcı, 2026-08-01 — *"altın yemek bilgilerinin olduğu yeri
+  sabit yapalım"*). Eski `flex + justify-center` düzeninde 6.000.000 kaynaklı şehirden 500
+  kaynaklı şehre geçince sayının genişliği değişiyor, ortalama yeniden hesaplanıyor ve **tüm
+  içerik zıplıyordu**. Yeni düzen:
+
+  | Kırılım | Sütunlar | Neden |
+  | :-- | :-- | :-- |
+  | `sm` ve üstü | `minmax(0,1fr) auto minmax(0,1fr)` | Kenarlar EŞİT ağırlıkta → orta hücre kenar içeriğinden bağımsız **tam ortada** (ölçüldü: 1280px'te sapma 0 px) |
+  | Mobil (< 640px) | `auto 1fr auto` | 375px'te sol bölge 9 haneli iki sayı için ~192px istiyor, eşit paylaşım 138px veriyordu ve **rakamlar şehir adının üstüne biniyordu**. Dar ekranda dead-center'dan vazgeçilir, çakışmadan vazgeçilmez |
+
+  ⚠️ Sabit genişlik sınırı **sayının kendi kutusuna** yazılır (`Res`in `numClass` alanı), dış
+  kutuya değil: dıştaki `min-w` ikonu da kapsadığı için sayı yine taşıyordu. `tnum`
+  (`tabular-nums`) sayesinde `ch` birimi burada gerçekten sabit genişlik demek.
+  **Ölçülen sonuç:** 9.000.000 ↔ 500 geçişinde orta bölgenin kayması hem 375px'te hem
+  1280px'te **0 piksel**.
 - "Daha Fazla" sekmesi = az kullanılan sayfaların evi; mobilde tam ekran liste, geniş ekranda sol panel.
 - Geri sayımlar tek bir `useServerCountdown` hook'undan (sunucu saati offset'i ile) beslenir.
 - **Sohbet rotası YOK**: her ekranın üstünde duran yüzen sohbet düğmesi (okunmamış rozetiyle)

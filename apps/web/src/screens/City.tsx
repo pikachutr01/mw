@@ -26,6 +26,7 @@ import {
   AmountInput, Button, CatalogIcon, Empty, ErrorBox, Panel, Requirements, Res,
 } from '../components/ui.tsx';
 import { useConfirm } from '../components/Modal.tsx';
+import { Tooltip } from '../components/Tooltip.tsx';
 import { CaveModal } from './cave-modal.tsx';
 
 function CityFrame({ children }: { children: (city: CityDetail) => React.ReactNode }) {
@@ -71,12 +72,52 @@ export function Budget({ label, used, total, hint }: { label: string; used: numb
 
 /* ── Ortak parçalar ─────────────────────────────────────────────────────────── */
 
-/** Ad + parantez içinde seviye/adet (kullanıcı kararı): "Çiftlik (20)" · "Cüce (302)". */
-function ItemName({ name, value }: { name: string; value: number | string }) {
+/**
+ * Ad + parantez içinde seviye/adet (kullanıcı kararı): "Çiftlik (20)" · "Cüce (302)".
+ *
+ * ⭐ `info` verilirse **yalnız AD** ipucu tetikler (kullanıcı şartı: *"Sadece yapının adına
+ * hover olunca tetiklensin"*). Noktalı altçizgi, "burada daha fazlası var" için bu ekranda
+ * zaten kullanılan işaret.
+ *
+ * ⚠️ `onClick` ile ipucu **birlikte** yaşayabiliyor: Mağara satırı hem tıklanabilir hem
+ * açıklamalı. Eskiden Mağara bu bileşeni KOPYALAMIŞTI ve ona eklenen her şey Mağara'yı
+ * atlıyordu — kopya kaldırıldı.
+ */
+function ItemName({
+  name, value, info, onClick, right,
+}: {
+  name: string;
+  value: number | string;
+  info?: { text: string; extra: string[] };
+  onClick?: () => void;
+  right?: React.ReactNode;
+}) {
+  const label = info ? (
+    <span className="block">
+      <span className="block">{info.text}</span>
+      {info.extra.map((x) => (
+        <span key={x} className="mt-1.5 block text-muted">⭐ {x}</span>
+      ))}
+    </span>
+  ) : null;
+
+  const nameNode = (
+    <span className={`font-semibold text-ink ${info ? 'underline decoration-dotted underline-offset-2' : ''}`}>
+      {name}
+    </span>
+  );
+
   return (
     <div className="text-[15px] leading-tight">
-      <span className="font-semibold text-ink">{name}</span>
+      {onClick ? (
+        <button type="button" onClick={onClick} className="text-left hover:text-accent">
+          {info ? <Tooltip label={label} className="max-w-full">{nameNode}</Tooltip> : nameNode}
+        </button>
+      ) : info ? (
+        <Tooltip label={label} className="max-w-full cursor-help">{nameNode}</Tooltip>
+      ) : nameNode}
       <span className="tnum ml-1.5 text-accent">({value})</span>
+      {right}
     </div>
   );
 }
@@ -90,7 +131,7 @@ function ItemName({ name, value }: { name: string; value: number | string }) {
 function VerifyCap({ max, what = 'Yükseltme' }: { max: number; what?: string }) {
   return (
     <div className="mt-0.5 text-[11px] text-warning">
-      {what} için e-posta doğrulaması gerekli (doğrulanmamış hesapta en fazla {max}. seviye).
+      {what} için e-posta doğrulaması gerekli (en fazla sv {max}).
     </div>
   );
 }
@@ -292,20 +333,17 @@ function Buildings({ city }: { city: CityDetail }) {
                 <CatalogIcon kind="buildings" id={b.id} alt={b.name} />
                 <div className="min-w-0 flex-1">
                   {/* ⭐ Mağara adı TIKLANABİLİR: doldurma/boşaltma modalının girişi burasıdır
-                      (doküman: "Yapılar menüsünde … mağaraya asker doldurma"). */}
-                  {b.id === 'cave' && b.level > 0 ? (
-                    <button type="button" onClick={() => setCaveOpen(true)}
-                      className="text-left text-[15px] leading-tight underline decoration-dotted
-                        underline-offset-2 hover:text-accent">
-                      <span className="font-semibold text-ink">{b.name}</span>
-                      <span className="tnum ml-1.5 text-accent">({b.level})</span>
+                      (doküman: "Yapılar menüsünde … mağaraya asker doldurma"). Artık `ItemName`
+                      kopyalanmıyor — ipucu ve tıklama aynı bileşende yaşıyor. */}
+                  <ItemName
+                    name={b.name} value={b.level} info={b.info}
+                    onClick={b.id === 'cave' && b.level > 0 ? () => setCaveOpen(true) : undefined}
+                    right={b.id === 'cave' && b.level > 0 ? (
                       <span className="tnum ml-2 text-[11px] text-muted">
                         {fmt(cave.usedArea)} / {fmt(cave.capacity)} alan
                       </span>
-                    </button>
-                  ) : (
-                    <ItemName name={b.name} value={b.level} />
-                  )}
+                    ) : undefined}
+                  />
                   {cost ? <CostLine gold={cost.gold} food={cost.food} seconds={b.nextSeconds} /> : null}
                   <Requirements requirementNames={b.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
@@ -720,7 +758,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                       ? <VerifyCap max={caps!.maxDefenseLevel} />
                       : (
                         <div className="mt-0.5 text-[11px] text-warning">
-                          Savunma ünitesi üretmek için e-posta doğrulaması gerekli.
+                          E-posta doğrulaması gerekli.
                         </div>
                       )
                   ) : null}

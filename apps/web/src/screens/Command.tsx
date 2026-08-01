@@ -29,6 +29,7 @@ import { LEVEL_BASED } from '@mobiwar/catalog';
 import {
   useOverview, useRankings, type NamedType, type Overview, type RankingKind,
 } from '../lib/queries.ts';
+import { coords } from '../lib/format.ts';
 import { fmt } from '../lib/hooks.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
@@ -156,7 +157,7 @@ function CityTable({ d }: { d: Overview }): React.ReactElement {
                 */}
               {d.cities.map((c) => (
                 <Th key={c.id} className="min-w-[5.5rem] text-center">
-                  <Tooltip label={`${c.name} · ${c.coordinates.k}:${c.coordinates.d}:${c.coordinates.s}`}>
+                  <Tooltip label={`${c.name} · ${coords(c.coordinates)}`}>
                     <span className="cursor-help truncate normal-case">
                       {c.name}{c.isCapital ? ' ★' : ''}
                     </span>
@@ -402,8 +403,10 @@ function MessageButton({ name, playerId, disabled }: {
       <button type="button" aria-label={`${name} oyuncusuna mesaj`}
         onClick={() => openChat(playerId, name)}
         className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
-        <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={20} height={20}
-          className="icon-shadow h-5 w-5 object-contain" />
+        {/* ⭐ 26 → 32px (kullanıcı): sıralama tablosunun son sütunundaki iki simge çok küçük
+            kalıyordu; dokunmatikte de 26px hedef alanı sınırın altındaydı. */}
+        <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={32} height={32}
+          className="icon-shadow h-8 w-8 object-contain" />
       </button>
     </Tooltip>
   );
@@ -442,8 +445,9 @@ function FindInWorldButton({ playerId }: { playerId: number | null }) {
       <button type="button" aria-label="Dünyada Bul" disabled={busy}
         onClick={() => void go()}
         className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
-        <img src="/assets/menu/dunya.png" alt="" aria-hidden width={20} height={20}
-          className="icon-shadow h-5 w-5 object-contain" />
+        {/* Mesaj düğmesiyle aynı boy — ikisi yan yana duruyor, ayrı boy göze batıyordu. */}
+        <img src="/assets/menu/dunya.png" alt="" aria-hidden width={32} height={32}
+          className="icon-shadow h-8 w-8 object-contain" />
       </button>
     </Tooltip>
   );

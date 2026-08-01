@@ -19,6 +19,7 @@ import { ResetPasswordScreen, VerifyEmailScreen } from './screens/EmailActions.t
 import { Messages } from './screens/Messages.tsx';
 import { CommandScreen } from './screens/Command.tsx';
 import { HelpScreen, OptionsScreen } from './screens/Placeholders.tsx';
+import { SimulateScreen } from './screens/Simulate.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
 import { World } from './screens/World.tsx';
 
@@ -128,6 +129,7 @@ export function App() {
                 <Route path="/command/search" element={<CommandScreen />} />
                 <Route path="/options" element={<OptionsScreen onLoggedOut={logout} />} />
                 <Route path="/help" element={<HelpScreen />} />
+                <Route path="/simulate" element={<SimulateScreen />} />
                 {/* Mobil "Şehir" ve "Daha" sekmeleri */}
                 <Route path="/city" element={<CityHub />} />
                 <Route path="/more" element={<OptionsScreen onLoggedOut={logout} />} />

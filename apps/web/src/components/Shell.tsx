@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
+import { coords } from '../lib/format.ts';
 import { fmt, useTick } from '../lib/hooks.ts';
 import { VerifyBanner } from './VerifyBanner.tsx';
 import {
@@ -25,6 +26,7 @@ import {
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
+import { useConfirm } from './Modal.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
 import { Panel, Res, Skeleton } from './ui.tsx';
 
@@ -46,17 +48,40 @@ const MENU = [
   { to: '/world', label: 'Dünya', icon: 'dunya' },
   { to: '/messages', label: 'Mesajlar', icon: 'mesaj' },
   { to: '/command', label: 'Komuta Merkezi', icon: 'komutamerkezi' },
+  /* ⭐ Simülatör (kullanıcı, 2026-08-01): uç aylardır çalışıyordu, ekranı yoktu. */
+  { to: '/simulate', label: 'Simülatör', icon: 'savunma' },
   { to: '/options', label: 'Seçenekler', icon: 'secenekler' },
   { to: '/help', label: 'Yardım', icon: 'yardim' },
 ] as const;
 
-/** Mobil alt bar 11 madde taşıyamaz → beş sekme; "Şehir" şehir ekranlarının hub'ıdır. */
+/**
+ * Mobil alt bar 11 madde taşıyamaz → beş sekme; "Şehir" şehir ekranlarının hub'ıdır.
+ *
+ * ⭐ **Komuta Merkezi eklendi** (kullanıcı, 2026-08-01): mobilde ona doğrudan bir bağlantı
+ * YOKTU, oysa sıralamalar/ittifak/arama hep orada. Yeri Mesajlar'ın hemen ardı — masaüstü
+ * menüsündeki sırayla aynı.
+ *
+ * ⚠️ «Daha» artık bir **rota değil, açılır menü** (aşağıdaki `MoreSheet`). Eskiden doğrudan
+ * Seçenekler'i açıyordu ve **Yardım mobilde hiç erişilemiyordu**.
+ */
 const TABS = [
   { to: '/armies', label: 'Ordular', icon: 'ordular' },
   { to: '/city', label: 'Şehir', icon: 'sehir' },
   { to: '/world', label: 'Dünya', icon: 'dunya' },
   { to: '/messages', label: 'Mesaj', icon: 'mesaj' },
-  { to: '/more', label: 'Daha', icon: 'secenekler' },
+  { to: '/command', label: 'Komuta', icon: 'komutamerkezi' },
+] as const;
+
+/**
+ * «Daha» düğmesinin yukarı doğru açtığı liste (kullanıcı tarifi).
+ *
+ * ⚠️ Simülatör burada da olmak ZORUNDA: masaüstünde sol menüde duruyor ama alt barın altı
+ * sekmesine sığmıyor — listeye konmasaydı mobilde ekrana giden hiçbir yol kalmazdı.
+ */
+const MORE_ITEMS = [
+  { to: '/simulate', label: 'Simülatör', icon: 'savunma' },
+  { to: '/options', label: 'Seçenekler', icon: 'secenekler' },
+  { to: '/help', label: 'Yardım', icon: 'yardim' },
 ] as const;
 
 /**
@@ -75,7 +100,7 @@ const PAGE_TITLE: [string, string][] = [
   ['/armies', 'Ordular'], ['/barracks', 'Baraka'], ['/buildings', 'Yapılar'],
   ['/defense', 'Savunma'], ['/academy', 'Akademi'], ['/temple', 'Tapınak'],
   ['/world', 'Dünya'], ['/messages', 'Mesajlar'], ['/options', 'Seçenekler'],
-  ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'],
+  ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'], ['/simulate', 'Simülatör'],
 ];
 
 /**
@@ -168,45 +193,72 @@ function InfoBar() {
 
   const onCityScreen = CITY_SCREENS.some((r) => pathname.startsWith(r));
 
+  /**
+   * ⭐ ÜÇ BÖLGELİ GRID (kullanıcı, 2026-08-01) — `flex + justify-center` YERİNE.
+   *
+   * ⚠️ **Sorun:** eski düzende her şey tek bir ortalanmış satırdaydı. 6.000.000 altını olan
+   * şehirden 500 altını olan şehre geçince sayının genişliği değişiyor, ortalama yeniden
+   * hesaplanıyor ve **tüm içerik sağa sola zıplıyordu**.
+   *
+   * ⚠️ **Çözüm neden `1fr auto 1fr`:** kenar bölgeler EŞİT ağırlıkta olduğu için ortadaki hücre
+   * kenarların içeriğinden bağımsız olarak tam ortada kalır. `auto 1fr auto` ile yapsaydık
+   * sol bölge büyüdükçe orta kayardı — yani sorunu çözmüş olmazdık.
+   *
+   * ⚠️ **Ama `1fr auto 1fr` YALNIZ `sm` ve üstünde.** 375px'te sol bölge 9 haneli iki sayı için
+   * ~192px istiyor, eşit paylaşım ona 138px veriyor ve rakamlar şehir adının ÜSTÜNE biniyordu
+   * (ölçüldü: `scrollWidth` 92 / genişlik 65). Mobilde bu yüzden `auto 1fr auto`: kenarlar
+   * içeriği kadar yer alır, orta kalanı ortalar. Kenarların genişliği sabit olduğu için
+   * (aşağıdaki `min-w-[9ch]`) orta yine zıplamaz — dar ekranda dead-center'dan vazgeçilir,
+   * çakışmadan vazgeçilmez.
+   *
+   * ⚠️ Sayılara `min-w-[9ch]` — ve bu sınıf `Res`in `numClass`ıyla **sayının kendi kutusuna**
+   * gider, dış kutuya değil (dıştaki sınır ikonu da sayıp sayıyı taşırıyordu). `tnum` sınıfı
+   * `tabular-nums` verdiği için `ch` burada GERÇEKTEN sabit genişlik: 9 karakter `6.000.000`ı
+   * alıyor, daha uzun sayı yalnız kendi kutusunu büyütür.
+   */
   return (
-    <div className="tex tex-header bevel mb-3 flex items-center gap-2 rounded-[var(--radius-md)]
-      border-2 border-strong bg-panel-header px-2.5 py-1.5 text-on-panel-header
-      sm:justify-center sm:gap-5 sm:px-3">
-      {/* ⭐ Mobil geri butonu (kullanıcı, 2026-07-30): şehir alt ekranlarından Şehir'e dönüş. */}
-      {onCityScreen ? (
-        <NavLink to="/city" aria-label="Şehir sayfasına dön"
-          className="-ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)]
-            border border-transparent text-lg leading-none hover:border-border hover:bg-raised lg:hidden">
-          ‹
-        </NavLink>
-      ) : null}
+    <div className="tex tex-header bevel mb-3 grid grid-cols-[auto_1fr_auto]
+      sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]
+      items-center gap-2 rounded-[var(--radius-md)] border-2 border-strong bg-panel-header
+      px-2.5 py-1.5 text-on-panel-header sm:gap-4 sm:px-3">
 
-      <Res kind="gold" value={fmt(gold)} size={22} className="text-[12px] font-semibold sm:text-[15px]" />
-      <Res kind="food" value={fmt(food)} size={22} className="text-[12px] font-semibold sm:text-[15px]" />
+      {/* ── SOL: kaynak (sola yaslı, kullanıcı isteği) ────────────────────────── */}
+      <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+        {/* ⭐ Mobil geri butonu (kullanıcı, 2026-07-30): şehir alt ekranlarından Şehir'e dönüş. */}
+        {onCityScreen ? (
+          <NavLink to="/city" aria-label="Şehir sayfasına dön"
+            className="-ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)]
+              border border-transparent text-lg leading-none hover:border-border hover:bg-raised lg:hidden">
+            ‹
+          </NavLink>
+        ) : null}
+        <Res kind="gold" value={fmt(gold)} size={22} numClass="min-w-[9ch]"
+          className="text-[12px] font-semibold sm:text-[15px]" />
+        <Res kind="food" value={fmt(food)} size={22} numClass="min-w-[9ch]"
+          className="text-[12px] font-semibold sm:text-[15px]" />
+      </div>
 
-      {/* ⭐ Divider mobilde de görünür (kullanıcı 2026-07-30): yemek ile koordinat ayrışsın. */}
-      <span className="h-5 w-px shrink-0 bg-on-panel-header/25" />
+      {/* ── ORTA: şehir · koordinat · sayfa (daima ortada) ────────────────────── */}
+      <div className="flex min-w-0 items-center justify-center gap-2 sm:gap-4">
+        <span className="display hidden truncate text-sm font-semibold tracking-wide sm:block">
+          {d?.name ?? '—'}
+        </span>
+        {/* Koordinat mobilde sayfa başlığının yerini alır ve VURGULU (kullanıcı, 2026-07-30). */}
+        <span className="tnum shrink-0 text-[12px] font-semibold sm:text-xs sm:font-normal sm:opacity-80">
+          {d ? coords(d.coordinates) : ''}
+        </span>
+        <span className="hidden h-5 w-px bg-on-panel-header/25 sm:block" />
+        {/* Sayfa başlığı yalnız masaüstünde; mobilde yer koordinata bırakıldı. */}
+        <span className="display hidden truncate text-sm font-semibold tracking-wider uppercase sm:block">
+          {page}
+        </span>
+      </div>
 
-      <span className="display hidden truncate text-sm font-semibold tracking-wide sm:block">
-        {d?.name ?? '—'}
-      </span>
-      {/* Koordinat mobilde sayfa başlığının yerini alır ve VURGULU (kullanıcı, 2026-07-30). */}
-      <span className="tnum text-[12px] font-semibold sm:text-xs sm:font-normal sm:opacity-80">
-        {d ? `${d.coordinates.k}:${d.coordinates.d}:${d.coordinates.s}` : ''}
-      </span>
-
-      <span className="hidden h-5 w-px bg-on-panel-header/25 sm:block" />
-
-      {/* Sayfa başlığı yalnız masaüstünde; mobilde yer koordinata bırakıldı. */}
-      <span className="display hidden truncate text-sm font-semibold tracking-wider uppercase sm:block">
-        {page}
-      </span>
-
-      {/* ⭐ Mobilde göstergeler EN SAĞA yaslı (ml-auto); masaüstünde ortalı düzen sürer. */}
-      <span className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0 sm:gap-3">
+      {/* ── SAĞ: göstergeler (sağa yaslı, kullanıcı isteği) ───────────────────── */}
+      <div className="flex items-center justify-end gap-2 sm:gap-3">
         <ConnectionDot />
         <SpeedBadge speed={d?.speed} />
-      </span>
+      </div>
     </div>
   );
 }
@@ -473,7 +525,84 @@ function BottomBar() {
             </NavLink>
           );
         })}
+        <MoreSheet />
       </div>
     </nav>
+  );
+}
+
+/**
+ * ⭐ «DAHA» — yukarı açılan liste (kullanıcı, 2026-08-01).
+ *
+ * ⚠️ Eskiden bu bir `NavLink`ti ve doğrudan Seçenekler'i açıyordu; sonuç olarak **Yardım
+ * mobilde hiç erişilemiyordu** ve "Oyunu Kapat" ancak Seçenekler'in en altında bulunuyordu.
+ *
+ * ⚠️ `z-30` gövdede: alt barın kendisi `z-20`; liste onun ÜSTÜNDE çizilmeli ama sohbet
+ * penceresinin (`z-30`) ve modalın (`z-40`) altında kalmalı — merdiven `Toaster.tsx:124`te
+ * yazılı ve bozulmamalı.
+ */
+function MoreSheet() {
+  const [open, setOpen] = useState(false);
+  const confirm = useConfirm();
+  const { pathname } = useLocation();
+
+  // Rota değişince liste kapanmalı; aksi hâlde yeni sayfanın üstünde asılı kalıyor.
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  const active = MORE_ITEMS.some((m) => pathname.startsWith(m.to)) || pathname.startsWith('/more');
+
+  const quit = async (): Promise<void> => {
+    setOpen(false);
+    const ok = await confirm({
+      title: 'Oyundan çıkılsın mı?',
+      body: <p className="text-sm">Oturumun kapanacak ve yeniden giriş yapman gerekecek.</p>,
+      confirmLabel: 'Çıkış yap',
+      danger: true,
+    });
+    if (!ok) return;
+    await logout();
+    window.location.href = '/';
+  };
+
+  return (
+    <>
+      {/* Dışarı dokunuşla kapansın — liste açıkken ekranın kalanı tıklama kalkanı olur. */}
+      {open ? (
+        <button type="button" aria-label="Kapat" onClick={() => setOpen(false)}
+          className="fixed inset-0 z-20 cursor-default bg-black/30" />
+      ) : null}
+
+      <div className="relative flex flex-1 flex-col">
+        {open ? (
+          <div className="absolute bottom-full right-0 z-30 mb-1 w-40 overflow-hidden
+            rounded-[var(--radius-md)] border-2 border-strong bg-panel-header shadow-[var(--mw-shadow-md)]">
+            {MORE_ITEMS.map((m) => (
+              <NavLink key={m.to} to={m.to}
+                className="flex items-center gap-2 border-b border-on-panel-header/15 px-3 py-2.5
+                  text-[13px] text-on-panel-header hover:bg-raised/40">
+                <MenuIcon id={m.icon} size={20} />
+                {m.label}
+              </NavLink>
+            ))}
+            <button type="button" onClick={() => void quit()}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px]
+                text-danger hover:bg-raised/40">
+              {/* Masaüstündeki «Oyunu Kapat» ile aynı simge — ikisi aynı işi yapıyor. */}
+              <MenuIcon id="cikis" size={20} />
+              Çıkış Yap
+            </button>
+          </div>
+        ) : null}
+
+        <button type="button" onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className={`relative flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] ${
+            active || open ? 'font-semibold text-on-panel-header' : 'text-on-panel-header/70'
+          }`}>
+          <MenuIcon id="secenekler" size={26} />
+          Daha
+        </button>
+      </div>
+    </>
   );
 }

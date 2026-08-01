@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
  * Aynı hatanın canlı örneği `Temple.tsx`teydi: 24 yazıyordu, sunucu 10 istiyordu.
  */
 import { NAME_MAX, NAME_MIN } from '@mobiwar/catalog';
+import { coords } from '../lib/format.ts';
 import { api } from '../lib/api.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, type CitySummary } from '../lib/queries.ts';
@@ -35,7 +36,7 @@ export function CityAdminPanel(): React.ReactElement | null {
   if (!active) return null;
 
   return (
-    <Panel title="Şehir" right={`${active.coordinates.k}:${active.coordinates.d}:${active.coordinates.s}`}>
+    <Panel title="Şehir" right={coords(active.coordinates)}>
       <div className="space-y-1 p-3 text-sm">
         <div className="text-ink">
           {active.name}

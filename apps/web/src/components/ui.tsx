@@ -92,17 +92,25 @@ export function ResIcon({ kind, size = 18 }: { kind: 'gold' | 'food'; size?: num
   );
 }
 
-/** Sayı + ikon; `tnum` ile sütunlar kaymaz. */
+/**
+ * Sayı + ikon; `tnum` ile sütunlar kaymaz.
+ *
+ * ⚠️ `numClass` **sayının kendi kutusuna** gider, dış kutuya değil. Genişlik sınırını dışa
+ * yazmak işe yaramıyor: dıştaki `min-w` ikonu da kapsıyor, sayı yine kutudan taşıyordu
+ * (bilgi çubuğunda 375px'te rakamlar şehir adının üstüne biniyordu). Sabit genişlik
+ * isteyen çağıran `numClass="min-w-[9ch]"` yazar — `tnum` sayesinde `ch` gerçekten sabit.
+ */
 export function Res({
-  kind, value, size = 18, className = '',
+  kind, value, size = 18, className = '', numClass = '',
 }: {
-  kind: 'gold' | 'food'; value: string | number; size?: number; className?: string;
+  kind: 'gold' | 'food'; value: string | number; size?: number;
+  className?: string; numClass?: string;
 }) {
   return (
     <span className={`tnum inline-flex items-center gap-1.5 whitespace-nowrap ${className}`}
       title={kind === 'gold' ? 'Altın' : 'Yemek'}>
       <ResIcon kind={kind} size={size} />
-      {value}
+      <span className={numClass}>{value}</span>
     </span>
   );
 }

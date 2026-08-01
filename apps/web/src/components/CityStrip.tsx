@@ -17,6 +17,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { coords } from '../lib/format.ts';
+import { Tooltip } from './Tooltip.tsx';
 import { useTick } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, useMovements, type Movement } from '../lib/queries.ts';
@@ -61,9 +63,19 @@ export function CityStrip() {
   if (list.length === 0) return null;
 
   return (
-    <div className={`mb-3 overflow-x-auto ${onArmies ? '' : 'hidden lg:block'}`}>
-      {/* `justify-center` + `min-w-max`: az şehirde ortalanır, çoğalınca merkezden dışa açılır. */}
-      <div className="mx-auto flex min-w-max justify-center gap-2 px-1 sm:gap-4">
+    /**
+     * ⭐ MOBİLDE YATAY KAYDIRMA YOK (kullanıcı, 2026-08-01).
+     *
+     * ⚠️ Eski hâl `overflow-x-auto` + `min-w-max` + `justify-center` idi: mobilde 5 şehir
+     * ekrana sığmıyor, şerit yatay kaydırma çubuğu üretiyor ve **ortalanmaya çalışırken**
+     * ilk şehir soldan taşıyordu. Kullanıcının isteği: sola yaslı, küçültülmüş, taşmasız.
+     *
+     * ⚠️ Çözüm mobilde `flex-1 basis-0` + `min-w-0`: beş hücre kalan genişliği eşit
+     * paylaşıyor, hiçbiri sabit genişlik dayatmıyor → toplam asla ekranı aşmıyor.
+     * `sm:` ve üstünde eski sabit genişlikli, ortalanmış düzen aynen sürüyor.
+     */
+    <div className={`mb-3 sm:overflow-x-auto ${onArmies ? '' : 'hidden lg:block'}`}>
+      <div className="flex gap-1 px-1 sm:mx-auto sm:min-w-max sm:justify-center sm:gap-4">
         {list.map((c) => {
           const active = c.id === cityId;
           const mine = all.filter((m) => m.cityId === c.id);
@@ -72,11 +84,19 @@ export function CityStrip() {
           const incoming = mine.some((m) => m.direction === 'in'
             && (m.type === 'attack' || m.type === 'spy'));
           return (
-            <div key={c.id} className="flex w-24 shrink-0 flex-col items-center sm:w-28">
+            <div key={c.id}
+              className="flex min-w-0 flex-1 basis-0 flex-col items-center sm:w-28 sm:flex-none sm:shrink-0">
+              <Tooltip label={`${c.name} · ${coords(c.coordinates)}`} className="w-full">
               <button
                 ref={active ? activeRef : undefined}
                 onClick={() => setCityId(c.id)}
-                title={`${c.name} (${c.coordinates.k}:${c.coordinates.d}:${c.coordinates.s})`}
+                /**
+                 * ⚠️ Ham `title` KALDIRILDI (kullanıcı, 2026-08-01): tarayıcının ~1 saniyelik
+                 * gecikmeli, işletim sistemi görünümlü balonu `Karakol(1:3:1)` yazıyordu.
+                 * Bilgi kaybolmadı — aşağıdaki `Tooltip` aynı içeriği projenin kendi diliyle
+                 * ve anında gösteriyor (portal olduğu için şeridin taşmasına da takılmıyor).
+                 */
+                aria-label={`${c.name} ${coords(c.coordinates)}`}
                 aria-current={active ? 'true' : undefined}
                 className={`group w-full rounded-[var(--radius-md)] border-2 px-1 pt-1 pb-1.5 transition-all ${
                   active
@@ -85,12 +105,15 @@ export function CityStrip() {
                 }`}
               >
                 <span className="relative block">
+                  {/* ⚠️ Mobilde 56px → 40px (kullanıcı: "bu şehir simgeleri küçültülebilir"):
+                      5 şehir 375px'lik ekranda taşmadan sığsın. `max-w-full` ikinci emniyet. */}
                   <img
                     src="/assets/buildings/city.png"
                     alt=""
                     width={96}
                     height={77}
-                    className={`icon-shadow mx-auto h-14 w-auto object-contain transition-transform sm:h-20 ${
+                    className={`icon-shadow mx-auto h-10 w-auto max-w-full object-contain
+                      transition-transform sm:h-20 ${
                       active ? 'scale-105' : 'group-hover:scale-105'
                     }`}
                   />
@@ -102,15 +125,16 @@ export function CityStrip() {
                   ) : null}
                 </span>
 
-                <span className={`display mt-0.5 block truncate text-[12px] leading-tight sm:text-sm ${
+                <span className={`display mt-0.5 block truncate text-[10px] leading-tight sm:text-sm ${
                   active ? 'font-semibold text-accent' : 'text-ink'
                 }`}>
                   {c.name}
                 </span>
-                <span className="tnum block text-[10px] leading-tight text-muted sm:text-[11px]">
-                  {c.coordinates.k}:{c.coordinates.d}:{c.coordinates.s}
+                <span className="tnum block truncate text-[9px] leading-tight text-muted sm:text-[11px]">
+                  {coords(c.coordinates)}
                 </span>
               </button>
+              </Tooltip>
 
               {/* Hareketler şehrin ALTINA, görev BAŞLAMA sırasına göre asılır (kullanıcı kuralı). */}
               <div className="mt-1 flex flex-col items-center gap-1">

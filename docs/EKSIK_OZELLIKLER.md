@@ -156,7 +156,7 @@ gösteriliyor ama §9.1.1 gereği otomatik karar üretmiyor).
 | **Gelen Ordu ayrı paneli** | `g.java:1915` case 66 — ayrı ekran | Bizde tek listede (`Armies.tsx`) gelen/giden birlikte; ayrı panel yok |
 | **Mesaj filtresi "Hepsini Göster"** | `g.java:1845-1848` 3'lü filtre | Bizde 2 sekme (Raporlar/Mesajlar) |
 | **Birim/yapı detay modalı** | `grBil.do?t=` "Bilgi" | Tooltip var, detay modalı yok. `City.tsx:50` `Budget` bileşeni hiç çizilmiyor. Kale'nin bütçe çubuğu buraya girecek |
-| **Dahili simülatör ekranı** | `POST /api/v1/simulate` ✅ çalışıyor | Web ekranı yok (`screens/` altında Simulate.tsx yok) |
+| ~~**Dahili simülatör ekranı**~~ | `POST /api/v1/simulate` ✅ çalışıyor | ✅ **2026-08-01'de yapıldı**: `screens/Simulate.tsx` — ordu seçiciler, gece bayrağı, 1-50 tekrar, kazanma dağılımı, koşu başına `seed`. Sol menüde ve mobilde «Daha» listesinde. ⚠️ Teknik seviyeleri ve kahramanlar forma KONMADI (sözleşmede var): 12 teknik × 2 taraf + 5 kahraman × 4 yetenek ekranı kullanılamaz hâle getirirdi |
 | **i18n dosyaları** | `MOBIWAR_SISTEM_PLANI.md:1990` kuralı: *"metin asla koda gömülmez → i18n/tr.json"* | **Kural ihlal ediliyor** — tüm Türkçe metin JSX içinde |
 | **Kuşatma bonusu** (Mancınık/Ogre → sur) | §13.5 Faz 3 | Kodlanmadı |
 | **Gece savaşı over-kill artığı** | Faz 3 | ⚠️ **İddia BAYAT.** "%15" 2026-07-22 öncesinden; o gün gece'nin Büyü Canı'nı da azaltması eklenince S9/S10 orijinale ~%1'e oturmuştu. 2026-07-31'de mekanizma Ghidra ile **yapısal olarak** doğrulandı (`FUN_00412624` = Can + BüyüCan, başka hiçbir şey) ve bir sapma bulunup düzeltildi: **taşıma kapasitesi boşuna çarpılıyordu**. Kalan büyüklük sorusu kullanıcının ölçümünü bekliyor → `veri/gece-savasi-olcumleri.md` |

@@ -55,7 +55,6 @@ function reportType(m: MessageRow): { icon: string | null; title: string } {
 
 type Tab = 'reports' | 'messages';
 
-const isReport = (m: MessageRow): boolean => m.kind.endsWith('_report');
 
 /**
  * ⭐ MESAJLAR SEKMESİ İKİ KAYNAKLI (kullanıcı kararı 2026-07-31): oyun mesajları (`messages`
@@ -72,44 +71,61 @@ const rowKey = (r: InboxRow): string =>
   (r.kind === 'chat' ? `c${r.chat.channelId}` : `m${r.message.id}`);
 
 export function Messages() {
-  const messages = useMessages();
+  // ⭐ Açılışta RAPORLAR seçili (kullanıcı kararı): oyuncunun ilk merak ettiği savaş sonucudur.
+  const [tab, setTab] = useState<Tab>('reports');
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  // ⚠️ Sorgu sekmeye ve sayfaya BAĞLI: değişince gerçekten yeni bir istek gider (§sunucu sayfalama).
+  const messages = useMessages({ kind: tab, page, pageSize });
   const chats = useChatConversations();
   const markRead = useMarkRead();
   const deleteMessages = useDeleteMessages();
   const clearConversation = useClearConversation();
   const openChat = useOpenChat();
   const confirm = useConfirm();
-  // ⭐ Açılışta RAPORLAR seçili (kullanıcı kararı): oyuncunun ilk merak ettiği savaş sonucudur.
-  const [tab, setTab] = useState<Tab>('reports');
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<MessageRow | null>(null);
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const all = messages.data?.items ?? [];
-  const reports = all.filter(isReport);
-  const plain = all.filter((m) => !isReport(m));
-
-  const reportRows: InboxRow[] = reports.map((m) => ({
-    kind: 'message', at: m.at, unread: !m.readAt, message: m,
+  /**
+   * ⭐ SATIRLAR ARTIK SUNUCUDAN SAYFALI GELİYOR (kullanıcı, 2026-08-01).
+   *
+   * ⚠️ Sohbetler (`chat_*`) ayrı bir tablodan geliyor ve sayfalanmıyor — **bilerek**: DM
+   * listesi doğası gereği kısa (aktif konuşmalar) ve iki kaynağı sunucuda birleştirmek
+   * `messages ∪ chat_channels` gibi bir birleşim sorgusu ister; kazanç yok, karmaşa çok.
+   * Sohbetler mesaj sekmesinde **ilk sayfada** listenin başına ekleniyor.
+   */
+  const serverRows: InboxRow[] = (messages.data?.items ?? []).map((m) => ({
+    kind: 'message' as const, at: m.at, unread: !m.readAt, message: m,
   }));
-  const messageRows: InboxRow[] = [
-    ...plain.map((m) => ({ kind: 'message' as const, at: m.at, unread: !m.readAt, message: m })),
-    ...(chats.data?.items ?? []).map((c) => ({
+  const chatRows: InboxRow[] = tab === 'messages' && page === 0
+    ? (chats.data?.items ?? []).map((c) => ({
       kind: 'chat' as const,
       at: c.lastMessageAt ?? new Date(0).toISOString(),
       unread: c.unreadCount > 0,
       chat: c,
-    })),
-  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    }))
+    : [];
 
-  const rows = tab === 'reports' ? reportRows : messageRows;
+  const visible = [...chatRows, ...serverRows]
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
-  const unreadIn = (list: InboxRow[]): number => list.filter((r) => r.unread).length;
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const counts = messages.data?.counts;
+  const total = messages.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(page, pageCount - 1);
-  const visible = rows.slice(current * pageSize, current * pageSize + pageSize);
+
+  /**
+   * ⚠️ Sayfa numarası aralık DIŞINA düşebiliyor: sunucudan gelen toplam küçülünce (arka planda
+   * gelen bir tazeleme, başka sekmede silinen kayıtlar) son sayfada duran oyuncu boş listeye
+   * bakıyor — sayfalayıcı `current` ile kelepçelenmiş bir sayı gösterirken sorgu hâlâ ham
+   * `page`'i istiyordu. Durumu da geri çekiyoruz ki gösterilen sayfa ile getirilen sayfa
+   * daima aynı olsun. (Silme sonrası zaten 0'a dönülüyor; bu, o yolun dışındaki hâller için.)
+   */
+  useEffect(() => {
+    if (page > pageCount - 1) setPage(pageCount - 1);
+  }, [page, pageCount]);
 
   const openMessage = (m: MessageRow): void => {
     if (!m.readAt) markRead.mutate(m.id);
@@ -122,10 +138,12 @@ export function Messages() {
    * kendisi tıklanabilir (rapor açılıyor) ve yanına yıkıcı bir düğme koymak yanlış tıklamayı
    * davet ederdi — üstelik silme geri alınamaz. Orijinalin modeli de bu ("Hepsini Seç" + Sil).
    *
-   * ⚠️ "Hepsini Seç" görünen SAYFAYI değil **sekmenin tamamını** seçer; posta kutusunu
-   * temizlemek isteyen oyuncu sayfa sayfa dolaşmasın. Sunucu ucu 200 satırla sınırlı, liste
-   * ucu zaten en fazla 100 döndürüyor → sınır aşılamaz. */
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(rowKey(r)));
+   * ⚠️ **"Hepsini Seç" artık YALNIZ GÖRÜNEN SAYFAYI seçer** (kullanıcı, 2026-08-01). Eskiden
+   * sekmenin tamamını seçiyordu ve bu, istemci bütün listeyi elinde tuttuğu için mümkündü.
+   * Sayfalama sunucuya inince o kolaylık kayboldu — elimizde yalnız bu sayfa var. Kullanıcının
+   * isteği de bu yönde: *"sadece ekranda görünen kayıtlar üzerinde seçsin"*. Silince eski
+   * kayıtlar kendiliğinden bu sayfaya yükseliyor (sorgu tazeleniyor). */
+  const allSelected = visible.length > 0 && visible.every((r) => selected.has(rowKey(r)));
 
   const toggle = (key: string): void => {
     setSelected((prev) => {
@@ -136,11 +154,11 @@ export function Messages() {
   };
 
   const toggleAll = (): void => {
-    setSelected(allSelected ? new Set() : new Set(rows.map(rowKey)));
+    setSelected(allSelected ? new Set() : new Set(visible.map(rowKey)));
   };
 
   const removeSelected = async (): Promise<void> => {
-    const picked = rows.filter((r) => selected.has(rowKey(r)));
+    const picked = visible.filter((r) => selected.has(rowKey(r)));
     if (picked.length === 0) return;
     const messageIds = picked.filter((r) => r.kind === 'message').map((r) => r.message.id);
     const channelIds = picked.filter((r) => r.kind === 'chat').map((r) => r.chat.channelId);
@@ -196,9 +214,14 @@ export function Messages() {
       <Panel title="Posta kutusu"
         right={`${(messages.data?.unread ?? 0) + (chats.data?.unread ?? 0)} okunmamış`}>
         <div className="flex gap-1 p-3">
-          {([['reports', 'Raporlar', reportRows], ['messages', 'Mesajlar', messageRows]] as const).map(
-            ([id, label, list]) => {
-              const n = unreadIn(list as InboxRow[]);
+          {/* ⚠️ Rozet sayıları SUNUCUDAN (`counts`): sayfalama sunucuya inince istemcinin
+              elinde artık tüm liste yok, "okunmamışları say" istemcide yapılamaz. Sohbetlerin
+              okunmamışı ayrıca ekleniyor — o kaynak `messages` tablosunda değil. */}
+          {([
+            ['reports', 'Raporlar', counts?.unreadReports ?? 0],
+            ['messages', 'Mesajlar', (counts?.unreadMessages ?? 0) + (chats.data?.unread ?? 0)],
+          ] as const).map(
+            ([id, label, n]) => {
               return (
                 <button key={id} onClick={() => { setTab(id); setPage(0); setSelected(new Set()); }}
                   className={`relative flex-1 rounded-[var(--radius-sm)] border-2 px-2 py-1.5 text-xs ${
@@ -220,8 +243,8 @@ export function Messages() {
       </Panel>
 
       <Panel title={tab === 'reports' ? 'Raporlar' : 'Mesajlar'}
-        right={rows.length > 0 ? `${rows.length} kayıt` : undefined}>
-        {rows.length > 0 ? (
+        right={total > 0 ? `${total} kayıt` : undefined}>
+        {visible.length > 0 ? (
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
               <input type="checkbox" checked={allSelected} onChange={toggleAll}
@@ -241,17 +264,25 @@ export function Messages() {
         ) : (
           <ul className="divide-y divide-border">
             {visible.map((row, i) => {
-              const alt = i % 2 === 1 ? 'bg-row-alt' : '';
               const key = rowKey(row);
-              const shell = `w-full px-3 py-2 text-left hover:bg-raised ${
+              /**
+               * ⭐ KUTUCUK SATIRIN İÇİNDE, KENARLIK EN SOLDA (kullanıcı, 2026-08-01).
+               *
+               * ⚠️ Eskiden okunmamış kenarlığı `<button>`ün üzerindeydi ve kutucuk onun
+               * SOLUNDA kalıyordu; sonuç: renkli çizgi satırın ortasından geçiyor, kutucuk
+               * "dışarıda" duruyordu. Artık kenarlık ve zemin `<li>`de, kutucuk da onun içinde.
+               *
+               * ⚠️ Kutucuk hâlâ `<button>`ün DIŞINDA: iç içe düğme geçersiz HTML ve kutucuğa
+               * basınca raporun açılmaması gerekiyor.
+               */
+              const alt = `flex items-center ${i % 2 === 1 ? 'bg-row-alt' : ''} ${
                 row.unread ? 'border-l-2 border-danger bg-danger/5' : 'border-l-2 border-transparent'
               }`;
-              /* Kutucuk satırın DIŞINDA: satırın kendisi bir <button> ve iç içe düğme
-                 geçersiz HTML — ayrıca kutucuğa basınca rapor açılmamalı. */
+              const shell = 'w-full px-3 py-2 text-left hover:bg-raised';
               const check = (
                 <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)}
                   aria-label="Seç"
-                  className="ml-3 h-4 w-4 shrink-0 cursor-pointer accent-[var(--mw-color-accent)]" />
+                  className="ml-2.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--mw-color-accent)]" />
               );
 
               /* ⭐ SOHBET SATIRI: tıklayınca pencere açılır (modal DEĞİL). Önizleme karşı
@@ -259,7 +290,7 @@ export function Messages() {
               if (row.kind === 'chat') {
                 const c = row.chat;
                 return (
-                  <li key={key} className={`flex items-center ${alt}`}>
+                  <li key={key} className={alt}>
                     {check}
                     <button className={shell} onClick={() => openChat(c.playerId, c.username)}>
                       <div className="flex items-center gap-2.5">
@@ -292,7 +323,7 @@ export function Messages() {
               const m = row.message;
               const t = reportType(m);
               return (
-                <li key={key} className={`flex items-center ${alt}`}>
+                <li key={key} className={alt}>
                   {check}
                   {/* ⭐ Tür ikonlu satır (kullanıcı, 2026-07-30). Okunmamış: sol accent şerit
                       + hafif zemin + kalın başlık — eski "kalın + nokta" düzeninden daha net. */}
@@ -333,7 +364,8 @@ export function Messages() {
 
         <Pagination
           page={current} pageCount={pageCount} pageSize={pageSize}
-          onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(0); }}
+          onPage={(p) => { setPage(p); setSelected(new Set()); }}
+          onPageSize={(n) => { setPageSize(n); setPage(0); setSelected(new Set()); }}
         />
       </Panel>
 

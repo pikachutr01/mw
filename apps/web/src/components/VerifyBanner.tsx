@@ -1,9 +1,11 @@
 /**
  * ⭐ E-POSTA DOĞRULAMA ŞERİDİ (§9.2 · §verify).
  *
- * ⚠️ **Bu metin 2026-08-01'de değişti.** Eskiden "doğrulanmamış hesap oyunun HİÇBİR yerinde
- * engellenmez" diyordu ve doğrudur — o gün kısıtlar geldi (§verify) ve cümle yalan oldu.
- * Şerit artık **ne yapılamadığını sayıyor**: oyuncu duvara çarpmadan önce görsün.
+ * ⚠️ **Metin KISA tutuluyor** (kullanıcı, 2026-08-01). İlk yazımda şerit kısıtların tamamını
+ * sayıyordu ve her ekranın satır altlarında da ayrı ayrı yazıyordu; kullanıcının geri bildirimi
+ * net oldu: *"her yerde açık açık yazmayalım. En tepede kısaca belirtelim… Kısıtlamaların ne
+ * olduğunu o kısıta çarpınca görsün."* Yani şerit **var olduğunu** söyler, ayrıntı **duvara
+ * çarpınca** çıkar (Yapılar/Akademi/Savunma satırında kısa bir not, sunucu reddinde tam metin).
  *
  * ⚠️ Giriş hâlâ serbest (sert kapı yok): maili spam'e düşen oyuncu oyunu görebilmeli.
  *
@@ -57,10 +59,8 @@ export function VerifyBanner(): React.ReactElement | null {
           'Doğrulama e-postasını gönderdik. Gelen kutunu (ve spam klasörünü) kontrol et.'
         ) : (
           <>
-            <strong>E-posta adresini doğrulamadın.</strong> Doğrulayana kadar:{' '}
-            saldırı · nakliye · yeni şehir · savunma ünitesi · ittifak · mesaj yazma{' '}
-            <em>kapalı</em>; yapı ve teknikler en fazla <strong>3. seviye</strong>, en çok{' '}
-            <strong>200 savaşçı</strong>. Şifreni de unutursan hesabını geri alamazsın.
+            <strong>E-posta adresini doğrulamadın.</strong> Doğrulanmayan hesaplar bazı
+            kısıtlamalara tabidir.
           </>
         )}
       </span>

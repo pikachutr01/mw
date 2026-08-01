@@ -5,6 +5,7 @@
  * arasında geçerken aynı sırayı bulsun.
  */
 import { Link } from 'react-router-dom';
+import { coords } from '../lib/format.ts';
 import { fmt } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity } from '../lib/queries.ts';
@@ -29,7 +30,7 @@ export function CityHub() {
   return (
     <div className="space-y-3">
       <Panel title={d ? `${d.name}${d.isCapital ? ' · Başkent' : ''}` : 'Şehir'}
-        right={d ? `${d.coordinates.k}:${d.coordinates.d}:${d.coordinates.s}` : undefined}>
+        right={d ? coords(d.coordinates) : undefined}>
         <div className="flex items-center gap-4 px-3 py-2 text-sm">
           <Res kind="gold" value={fmt(d?.resources.gold ?? 0)} />
           <Res kind="food" value={fmt(d?.resources.food ?? 0)} />

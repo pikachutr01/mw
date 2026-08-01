@@ -1,0 +1,11 @@
+(Bu dosya kullanıcının tur arası notları içindi. 2026-08-01 Tur 4'te maddelerin tamamı
+yapıldı ve kullanıcının isteği üzerine buradan silindi — nereye gittikleri aşağıda.)
+
+Mesaj/rapor listesi, sunucu taraflı sayfalama, "Hepsini Seç" yalnız görünen sayfa   → Messages.tsx + battle.controller.ts
+Doğrulanmamış hesap metinlerinin kısaltılması                                        → VerifyBanner.tsx + City.tsx
+Sıralama tablosundaki mesaj / Dünyada Bul simgeleri (26 → 32 px)                     → Command.tsx
+Mobilde şehir şeridi: sola yaslı, yatay kaydırmasız, küçük simge                     → CityStrip.tsx
+Sol menüye simülatör                                                                → screens/Simulate.tsx (+ mobilde «Daha» listesi)
+Alt bar: Komuta sekmesi + «Daha» açılır listesi + onaylı çıkış                       → Shell.tsx
+JWT / refresh token süreleri sorusu                                                 → MOBIWAR_SISTEM_PLANI.md §9.0b
+İlk kayıtta kullanıcı adı ile şehir adının aynı olması                               → zaten öyleydi (auth.service.ts)
