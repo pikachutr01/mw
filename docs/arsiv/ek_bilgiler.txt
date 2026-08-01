@@ -3,3 +3,7 @@ Sıralama tablosundaki mesaj / Dünyada Bul simgeleri büyüyecek
 Casusluk raporunda rakibin mağara seviyesi alınıyor mu araştırılacak.
 
 Sol Menüye herkese açıp Uygulamayı İndir butonu eklenecek. Buna tıklayınca PWA uygulaması kurulacak. Eğer cihaz ios ise ana ekrana ekleme yönergeleri detaylı anlatılacak.
+
+Online kontrolü sadece aktif oturum varsa yapılacak. Tek sayfa kontrolü de aynı şekilde.
+
+Tepedeki e posta doğrulama hatırlatıcı alertinde Doğrulama postası gönder yazısı alta alınsın, küçük ekranlı cihazlarda kötü görünüyor

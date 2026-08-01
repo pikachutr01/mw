@@ -1,23 +1,48 @@
 /**
- * Giriş / kayıt.
+ * ⭐ GİRİŞ / KAYIT MODALI (kullanıcı, 2026-08-02) — eski tam sayfa `screens/Auth.tsx`in yerine.
  *
- * ⚠️ Kullanıcı adı **boşluk ve noktalama YOK** (oyunun kendi dokümanı) ve **değiştirilemez** —
- * bu yüzden kayıt ekranında açıkça uyarılıyor. Uzunluk sınırı katalogdan (`USERNAME_MIN/MAX`);
- * 2026-08-01'de 10'dan 15'e çıktı.
+ * Misafir artık ana sayfayı ve simülatörü geziyor; giriş formu için sayfayı terk etmesi
+ * gereksizdi. Modal her misafir ekranından `useAuthModal()` ile açılıyor.
+ *
+ * ⚠️ **`footer` KULLANILMIYOR, form bütünüyle `children` içinde.** `Modal` (`Modal.tsx:87`)
+ * `footer`ı `children`ın KARDEŞİ olarak çiziyor; oraya konan `type="submit"` düğmesi `<form>`ün
+ * dışında kalır ve Enter ile gönderim çalışmaz.
+ *
+ * ⚠️ **Mod değiştirme düğmeleri `<form>`ün DIŞINDA.** `type` taşımıyorlar; form içine
+ * alınsalardı varsayılan `type="submit"` ile giriş denemesi tetiklerlerdi.
+ *
+ * ⚠️ `onDone` YOK: `login()`/`register()` zaten `setSession()` çağırıyor, `App` de
+ * `onSessionChange`e abone. Ağaç kendiliğinden değişiyor ve modal onunla birlikte kalkıyor.
  */
 import { useState } from 'react';
 import { USERNAME_MAX, USERNAME_MIN, USERNAME_RULE_MESSAGE } from '@mobiwar/catalog';
 import { api, login, register } from '../lib/api.ts';
-import { Button, Card, ErrorBox, Field, Input } from '../components/ui.tsx';
+import { Button, ErrorBox, Field, Input } from './ui.tsx';
+import { Modal } from './Modal.tsx';
 
-export function Auth({ onDone }: { onDone: () => void }) {
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
+export type AuthMode = 'login' | 'register' | 'forgot';
+
+const TITLE: Record<AuthMode, string> = {
+  login: 'Giriş yap',
+  register: 'Kayıt ol',
+  forgot: 'Şifremi unuttum',
+};
+
+export function AuthModal({ mode: initialMode = 'login', onClose }: {
+  mode?: AuthMode;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+
+  const go = (next: AuthMode): void => {
+    setMode(next); setError(null); setSent(false);
+  };
 
   const submit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -31,16 +56,12 @@ export function Auth({ onDone }: { onDone: () => void }) {
       }
       if (mode === 'login') await login(username, password);
       else await register(email, password, username);
-      onDone();
+      // Başarılıysa `setSession` ağacı değiştiriyor; modal zaten sökülüyor.
     } catch (err) {
       setError(err);
     } finally {
       setBusy(false);
     }
-  };
-
-  const go = (next: typeof mode): void => {
-    setMode(next); setError(null); setSent(false);
   };
 
   /**
@@ -50,27 +71,25 @@ export function Auth({ onDone }: { onDone: () => void }) {
    */
   if (mode === 'forgot' && sent) {
     return (
-      <div className="flex min-h-full items-center justify-center bg-bg p-4">
-        <Card className="w-full max-w-sm p-5">
-          <h1 className="display mb-1 text-2xl font-semibold text-ink">Mobiwar</h1>
-          <p className="mb-4 text-sm text-ink">
+      <Modal title={TITLE.forgot} onClose={onClose} width="sm">
+        <div className="space-y-3 p-4">
+          <p className="text-sm text-ink">
             Bu adres kayıtlıysa şifre sıfırlama bağlantısını gönderdik. Gelen kutunu
             (ve gereksiz/spam klasörünü) kontrol et.
           </p>
-          <p className="mb-4 text-xs text-muted">
+          <p className="text-xs text-muted">
             Bağlantı 1 saat geçerli ve yalnız bir kez kullanılabilir.
           </p>
-          <Button className="w-full" onClick={() => go('login')}>Giriş ekranına dön</Button>
-        </Card>
-      </div>
+          <Button className="w-full" onClick={() => go('login')}>Girişe dön</Button>
+        </div>
+      </Modal>
     );
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-bg p-4">
-      <Card className="w-full max-w-sm p-5">
-        <h1 className="display mb-1 text-2xl font-semibold text-ink">Mobiwar</h1>
-        <p className="mb-4 text-sm text-muted">
+    <Modal title={TITLE[mode]} onClose={onClose} width="sm">
+      <div className="p-4">
+        <p className="mb-3 text-sm text-muted">
           {mode === 'login' ? 'Dünyana geri dön.'
             : mode === 'register' ? 'Yeni bir başkent kur.'
               : 'Kayıtlı e-posta adresini yaz, sıfırlama bağlantısı gönderelim.'}
@@ -91,11 +110,10 @@ export function Auth({ onDone }: { onDone: () => void }) {
               ? 'Kullanıcı adı'
               : `Kullanıcı adı (${USERNAME_MIN}-${USERNAME_MAX} karakter, sonradan değiştirilemez)`}>
               {/*
-                ⚠️ `pattern` KALDIRILDI (2026-08-01). Buradaki `[A-Za-z0-9]+` deseni sunucunun
-                `\p{L}\p{N}` kuralıyla çelişiyordu: "Ayşe" tarayıcıda reddediliyor, sunucuda
-                kabul ediliyordu — yani Türkçe adlar hiç kayıt olamıyordu. HTML `pattern`
-                Unicode özellik sınıflarını desteklemediği için desen denetimi tek yerde
-                (sunucuda) bırakıldı; uzunluk sınırı katalogdan geliyor.
+                ⚠️ `pattern` KONULMAZ. Eski `[A-Za-z0-9]+` deseni sunucunun `\p{L}\p{N}`
+                kuralıyla çelişiyordu: "Ayşe" tarayıcıda reddediliyor, sunucuda kabul
+                ediliyordu — yani Türkçe adlar hiç kayıt olamıyordu. HTML `pattern` Unicode
+                özellik sınıflarını desteklemediği için desen denetimi tek yerde (sunucuda).
               */}
               <Input required minLength={USERNAME_MIN} maxLength={USERNAME_MAX}
                 autoComplete="username"
@@ -124,19 +142,19 @@ export function Auth({ onDone }: { onDone: () => void }) {
         </form>
 
         {mode === 'login' ? (
-          <button onClick={() => go('forgot')}
+          <button type="button" onClick={() => go('forgot')}
             className="mt-3 w-full text-center text-xs text-muted underline hover:text-ink">
             Şifremi unuttum
           </button>
         ) : null}
 
-        <button
+        <button type="button"
           onClick={() => go(mode === 'login' ? 'register' : 'login')}
           className="mt-2 w-full text-center text-xs text-muted underline hover:text-ink"
         >
           {mode === 'login' ? 'Hesabın yok mu? Kayıt ol' : 'Zaten hesabın var mı? Giriş yap'}
         </button>
-      </Card>
-    </div>
+      </div>
+    </Modal>
   );
 }

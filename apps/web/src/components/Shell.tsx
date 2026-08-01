@@ -128,8 +128,8 @@ export function ActivityDot() {
   );
 }
 
-/** Sol menü ve mobil alt barın ortak simgesi. */
-function MenuIcon({ id, size }: { id: string; size: number }) {
+/** Sol menü ve mobil alt barın ortak simgesi. `GuestShell` de aynı seti kullanıyor. */
+export function MenuIcon({ id, size }: { id: string; size: number }) {
   return (
     <img src={`/assets/menu/${id}.png`} alt="" aria-hidden width={size} height={size}
       className="icon-shadow shrink-0 object-contain"

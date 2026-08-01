@@ -916,6 +916,44 @@ refresh** de (`setSession(null)`) kapsanıyor — yalnız menüden çıkış de�
 Ölçüldü: iki tam çıkış→giriş döngüsü, sayfa yenilemesi yok, **sıfır konsol hatası**, adres
 korunuyor (`/armies`'te çıkıp giren `/armies`'te kalıyor).
 
+### 9.3.6 Misafir kabuğu ve giriş modalı
+
+**`components/GuestShell.tsx` (YENİ)** — üst bar (logo · Simülatör · Yardım · Giriş yap ·
+Kayıt ol), tek sütun içerik, küçük footer (Yardım · Hesap silme). Misafir başlığını da o
+yönetiyor (`InfoBar` mount olmuyor).
+
+⚠️ **Neden `Shell`i "oturum bilir" yapmadık:**
+1. **Kancalar koşullu olamaz.** `SideMenu` ve `BottomBar` ilk satırlarında `useMessages` /
+   `useChatConversations` / `useMovements` / `useActiveCity` / `useCity` çağırıyor; "oturum
+   varsa çağır" mümkün değil, yine iki ayrı bileşen gerekirdi.
+2. Misafir düzeni alt küme değil **farklı bir düzen**: üst bar var, sol menü/sağ panel/alt bar
+   yok. Ortak kod ~26 satırlık kancasız bir ızgara.
+3. Asıl risk oturumlu deneyimin bozulmasıydı; bu yaklaşımda **`Shell.tsx`in diff'i tek kelime**
+   (`MenuIcon` export edildi).
+
+**`components/AuthModal.tsx` (YENİ)**, `screens/Auth.tsx` **silindi**. `GuestShell` modalı tek
+örnek olarak tutuyor; `useAuthModal()` ile her misafir ekranından açılıyor (üst bardaki düğme
+ile ana sayfadaki düğmeler aynı örneği açar).
+
+| Tuzak | Karar |
+| :-- | :-- |
+| `Modal`ın `footer`ı `children`ın KARDEŞİ (`Modal.tsx:87`) | `footer` **kullanılmıyor**; form bütünüyle `children` içinde, yoksa `type="submit"` form dışında kalır ve Enter çalışmaz |
+| Mod değiştirme düğmeleri | `<form>`ün **dışında** ve `type="button"`; içeride olsalardı varsayılan `submit` ile giriş denerlerdi |
+| `onDone` geri çağrısı | **Yok.** `login()`/`register()` zaten `setSession()` çağırıyor, `App` abone; ağaç kendiliğinden devrediyor |
+| Kullanıcı adı `pattern` | **Konulmuyor** — `[A-Za-z0-9]+` sunucunun `\p{L}\p{N}`siyle çelişip "Ayşe"yi engelliyordu |
+| Şifremi unuttum metni | Hesap sızdırmaz dilde ("bu adres kayıtlıysa…") korunuyor |
+
+**Rota tablosu (misafir):** `/` → `Landing` · `/simulate` · `/help` · üç e-posta rotası (kabuk
+dışında) · `*` → `/`. Oturumlu tablo değişmedi.
+
+Ölçüldü: misafir olarak savaş çevrilebiliyor ve **giden tek istek `/api/v1/simulate`**;
+modal açıkken giriş olunca modal ve misafir barı kalkıp oyun kabuğu geliyor, **adres korunuyor**
+(`/simulate`'te giren `/simulate`'te kalıyor), sıfır konsol hatası; oturumlu `/` → `/armies`,
+misafir `/armies` → `/`; mobil 375px'te yatay kaydırma yok.
+
+⚠️ Misafir `/world/5/5` gibi bir derin bağlantıyla gelirse catch-all onu ana sayfaya alıyor ve
+**adres hatırlanmıyor**. Bilinçli: "giriş sonrası oraya dön" ayrı bir iş.
+
 ---
 
 ## 10. Web istemci

@@ -10,14 +10,15 @@ import { MaintenanceCurtain } from './components/MaintenanceCurtain.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
 import { NotifyProvider } from './components/Toaster.tsx';
 import { Shell } from './components/Shell.tsx';
+import { GuestLayout } from './components/GuestShell.tsx';
 import { Armies } from './screens/Armies.tsx';
-import { Auth } from './screens/Auth.tsx';
 import { AcademyScreen, BarracksScreen, BuildingsScreen, DefenseScreen } from './screens/City.tsx';
 import { CityHub } from './screens/CityHub.tsx';
 import { DeleteAccountScreen } from './screens/DeleteAccount.tsx';
 import { ResetPasswordScreen, VerifyEmailScreen } from './screens/EmailActions.tsx';
 import { Messages } from './screens/Messages.tsx';
 import { CommandScreen } from './screens/Command.tsx';
+import { Landing } from './screens/Landing.tsx';
 import { HelpScreen, OptionsScreen } from './screens/Placeholders.tsx';
 import { SimulateScreen } from './screens/Simulate.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
@@ -97,7 +98,7 @@ export function App() {
         <BrowserRouter>
           {session
             ? <AuthedApp onLoggedOut={() => setSessionState(null)} />
-            : <GuestApp onDone={() => setSessionState(getSession())} />}
+            : <GuestApp />}
         </BrowserRouter>
       </ConfirmProvider>
     </QueryClientProvider>
@@ -164,14 +165,28 @@ function AuthedLayout() {
 }
 
 /**
- * Misafir ağacı — şimdilik yalnız giriş formu; misafir kabuğu ve ana sayfa sonraki turda.
- * E-posta rotaları burada da var: bağlantıya tıklayanın oturumu çoğu zaman yok.
+ * Misafir ağacı — ana sayfa · simülatör · yardım. Giriş/kayıt **modal** (`AuthModal`), ayrı
+ * sayfa değil; `GuestShell` onu tek örnek olarak tutuyor.
+ *
+ * ⚠️ Oyun rotaları burada YOK. Bir misafir `/armies`e derin bağlantıyla gelirse catch-all onu
+ * ana sayfaya alır — oturum açtıktan sonra o adrese gitmesi gerektiğini hatırlamıyoruz;
+ * gerekirse ayrı bir "geri dönülecek adres" işi.
+ *
+ * ⚠️ E-posta rotaları burada da var ve **kabuğun dışında**: bağlantıya tıklayanın oturumu
+ * çoğu zaman yok ve o sayfalarda üst bar/menü işe yaramaz.
  */
-function GuestApp({ onDone }: { onDone: () => void }) {
+function GuestApp() {
   return (
     <Routes>
       {emailRoutes}
-      <Route path="*" element={<Auth onDone={onDone} />} />
+      <Route element={<GuestLayout />}>
+        <Route path="/" element={<Landing />} />
+        {/* ⭐ Simülatör oturumsuz çalışıyor: uç `OptionalAuthGuard` ile korunuyor ve kimlik
+            yoksa dünya-0 denge katmanına düşüyor (`simulate.controller.ts:38`). */}
+        <Route path="/simulate" element={<SimulateScreen />} />
+        <Route path="/help" element={<HelpScreen />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
     </Routes>
   );
 }
