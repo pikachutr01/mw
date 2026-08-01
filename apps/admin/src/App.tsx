@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
-import { Badge, Button, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
+import { Badge, Button, Countdown, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
 import { BulkScreen } from './screens/Bulk.tsx';
@@ -212,7 +212,14 @@ function TopBar({ me, onSignOut, onElevated, stepUpOpen, setStepUpOpen }: {
               {/* ⭐ Yükseltme durumu HER ZAMAN görünür: oyuncu "neden 403 aldım" diye
                   aramasın, üstte yazıyor. */}
               {me.elevated
-                ? <Badge tone="warning">yükseltilmiş</Badge>
+                ? (
+                  <>
+                    <Badge tone="warning">yükseltilmiş</Badge>
+                    {/* ⭐ 15 dakika sessizce doluyordu; yönetici bunu ancak 403 alınca
+                        fark ediyordu. Veri baştan beri vardı, gösterimi yoktu. */}
+                    <Countdown until={me.elevatedUntil} />
+                  </>
+                )
                 : <Badge>salt-okunur</Badge>}
               {me.elevated
                 ? <Button variant="ghost" onClick={() => void stepDown().then(onElevated)}>

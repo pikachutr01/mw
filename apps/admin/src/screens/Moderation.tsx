@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
-import { Badge, Button, ErrorBox, Field, Input, Panel } from '../components/ui.tsx';
+import { Alert, Badge, Button, ErrorBox, Field, Input, Panel } from '../components/ui.tsx';
 
 interface Report {
   id: number;
@@ -94,6 +94,7 @@ export function ModerationScreen({ onNeedStepUp }: { onNeedStepUp: () => void })
   return (
     <div className="space-y-3">
       <Panel
+        collapsible
         title="Şikayet kuyruğu"
         right={
           <label className="flex items-center gap-1.5 text-[11px]">

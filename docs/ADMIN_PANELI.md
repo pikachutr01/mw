@@ -1089,6 +1089,86 @@ audit satırı.
 
 ---
 
+## 2. NESİL — Tur 3: okunabilirlik (detay kısılmadan)
+
+Kullanıcının cümlesi: *"Bu kalabalığın içinde bu paneli ben etkili şekilde kullanabilir miyim
+emin değilim… detaylı bilgiyi kısmadan daha kullanıcı dostu bir arayüz."*
+
+**Kural: metin silinmez, katmanlanır.** Panelin uzun uyarıları (ham SQL tuzakları, «ölçüldü»
+gerekçeleri, «ne silinmiyor» satırları) bu panelin en değerli parçası ve hepsi duruyor —
+sadece istendiğinde açılıyor.
+
+### ⭐ Ölçüldü: Ayarlar ekranı 8 829 px → 810 px
+
+Aynı 92 ayar, aynı 11 grup, tarayıcıda `document.body.scrollHeight`:
+
+| durum | yükseklik |
+| :-- | --: |
+| **öncesi** — hepsi açık, ayar başına 4 satır metin | **8 829 px** |
+| sonrası — hepsi açık, ayar başına 1 satır + ⓘ | 5 458 px |
+| **sonrası — varsayılan (gruplar kapalı)** | **810 px** |
+
+İki ayrı kazanç: satır sadeleşmesi (%38) ve katlanma (%91). Metnin tamamı ⓘ balonunda duruyor.
+
+### Neden native `<details>`
+
+Collapse ve ⓘ için kendi bileşenimizi yazmak yerine tarayıcının kendi öğesi kullanıldı.
+Bedavaya gelen üç şey: klavye erişimi, ekran okuyucu semantiği ve — en önemlisi —
+**`Ctrl+F` kapalı bölümlerin içini de bulup açabiliyor**. Kendi yazdığımız bir collapse'ta
+üçü de kaybolurdu ve tam olarak "detay kısılmasın" kuralı delinirdi.
+
+### Arama üç alanda birden
+
+Ayar araması etikette, **açıklamada** ve anahtarda çalışıyor: yönetici bir ayarı çoğu zaman
+adıyla değil işleviyle arıyor. `ops.chatDays` ayarı "sohbet" yazınca çıkmalı; yalnız etikette
+(«Sohbet saklama») arasaydık `chat.burst` («Kova: pencere başına mesaj») çıkmazdı.
+
+⚠️ **Arama varken gruplar otomatik açılıyor.** Kapalı kalsalardı arama sonucu bulunur ama
+görünmezdi — arama işe yaramazdı. Ölçüldü: "kaynak" → **4 / 92 ayar**, iki grup açık.
+
+### Bakım ekranı: dispatcher ve scheduler artık ekranda anlatılıyor
+
+Kullanıcı doğrudan sordu; cevap belgede kalmamalı, **soru nerede doğuyorsa orada** durmalı.
+Panelin tepesinde:
+
+> **scheduler** — oyunun saatini işletir (seferler, kuyruklar, savaşlar; saniyede bir).
+> Durursa **oyun donar**.
+> **dispatcher** — bildirim postacısı (`outbox` → WebSocket + push; yarım saniyede bir).
+> Durursa **oyun işler ama kimse haber almaz**.
+> ⭐ Normalde iki satır olmalı: bir canlı scheduler + bir canlı dispatcher.
+
+### ⭐ Ölü satır ≠ ölü satır
+
+Bu ekranda **yeni bir tasarım açığı ölçüldü**: geliştirme sırasında sunucu altı kez yeniden
+başlayınca liste **10 «ÖLÜ» satırla** doldu ve gerçek bir arıza bu yığının içinde
+kaybolurdu. Ayrım artık ekranda:
+
+| durum | görünüm |
+| :-- | :-- |
+| canlı | normal |
+| ölü, **ama aynı türden canlı VAR** | yeniden başlatma **artığı** → katlanmış, soluk |
+| ölü, **aynı türden canlı YOK** | **gerçek arıza** → üstte + kırmızı açıklama |
+
+Ölçüldü: 12 satır → ekranda 2 canlı + «10 eski süreç artığı» tek satırlık katlanmış bir kutu.
+
+### Paylaşılan bileşenler
+
+`ui.tsx` 96 satırdan büyüdü ve tekrarları yuttu:
+`Panel collapsible` · `Info` (ⓘ) · `Alert` (9 kopya `<p className="text-success">` yerine) ·
+`DataTable` (**5** el yazımı tablo, 5 farklı `thead` stili yerine; zebra için `row-alt`
+jetonu — tasarım sisteminde **hazırdı ve hiç kullanılmıyordu**) · `SearchInput` (debounce
+Oturumlar'da vardı, Veri tabanı filtrelerinde **yoktu** ve her tuş bir sorgu atıyordu) ·
+`Pagination` (sayfa numarası **girilebiliyor**: 50 sayfalık tabloda 40'a gitmek 39 tık demekti) ·
+`Empty` · `Loading` · `Stat` (iki ayrı kopyası vardı) · `Select` · `Checkbox` (dört farklı
+satır içi stille yazılmıştı, ikisi 16 px ikisi 14 px) · `DangerConfirm` · `Countdown`.
+
+**`Countdown`** — yükseltmenin bitiş anı `sessions.elevated_until`de baştan beri duruyordu ama
+yalnız `step-up` yanıtında dönüyordu; sayfa yenilenince kalan süre bilinmiyordu ve 15 dakika
+**sessizce doluyor**, yönetici bunu ancak bir 403 alınca fark ediyordu. `/admin/me` artık
+`elevatedUntil` döndürüyor, üst şeritte `12:46` yazıyor.
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

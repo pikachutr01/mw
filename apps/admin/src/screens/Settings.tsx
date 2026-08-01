@@ -9,7 +9,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SettingDef, SettingGroup } from '@mobiwar/settings';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
-import { Badge, Button, ErrorBox, Input, Panel } from '../components/ui.tsx';
+import {
+  Alert, Badge, Button, Checkbox, ErrorBox, Info, Input, Panel, SearchInput,
+} from '../components/ui.tsx';
 
 interface Payload {
   worldId: number;
@@ -35,6 +37,8 @@ export function SettingsScreen({ worldId, onNeedStepUp }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [onlyChanged, setOnlyChanged] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     setError(null);
@@ -85,25 +89,57 @@ export function SettingsScreen({ worldId, onNeedStepUp }: {
   if (error && !data) return <ErrorBox error={error} />;
   if (!data) return <p className="text-sm text-muted">Yükleniyor…</p>;
 
+  /**
+   * ⚠️ Arama HEM etikette HEM açıklamada HEM anahtarda: yönetici bir ayarı çoğu zaman adıyla
+   * değil işleviyle arıyor ("kaynak", "süre", "ban"). Yalnız etikette arasaydık `ops.chatDays`
+   * ayarı "sohbet" yazınca çıkmazdı.
+   */
+  const q = search.trim().toLocaleLowerCase('tr');
+  const matches = (d: SettingDef): boolean => {
+    if (onlyChanged && !data.overridden.includes(d.key) && draft[d.key] === data.values[d.key]) {
+      return false;
+    }
+    if (!q) return true;
+    return `${d.label} ${d.description} ${d.key}`.toLocaleLowerCase('tr').includes(q);
+  };
+  const visible = data.defs.filter(matches);
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)]
-        border border-border bg-surface px-3 py-2">
-        <span className="text-xs text-muted">
-          Dünya {worldId} · özet <span className="tnum">{data.hash}</span>
-          {' · '}{data.overridden.length} ayar varsayılandan farklı
-        </span>
-        <div className="flex gap-2">
-          {changed.length > 0 ? (
-            <Button variant="ghost" onClick={() => setDraft(data.values)}>Geri al</Button>
-          ) : null}
-          <Button disabled={busy || changed.length === 0} onClick={() => void save()}>
-            {busy ? 'Kaydediliyor…' : `Kaydet${changed.length > 0 ? ` (${changed.length})` : ''}`}
-          </Button>
+      {/* ⭐ STICKY: 92 ayarın dibindeyken kaydet düğmesi ekran dışında kalıyordu. */}
+      <div className="sticky top-12 z-10 space-y-2 rounded-[var(--radius-sm)] border border-border
+        bg-surface px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-muted">
+            Dünya {worldId} · özet <span className="tnum">{data.hash}</span>
+            {' · '}{data.overridden.length} ayar varsayılandan farklı
+          </span>
+          <div className="flex gap-2">
+            {changed.length > 0 ? (
+              <Button variant="ghost" onClick={() => setDraft(data.values)}>Geri al</Button>
+            ) : null}
+            <Button disabled={busy || changed.length === 0} onClick={() => void save()}>
+              {busy ? 'Kaydediliyor…' : `Kaydet${changed.length > 0 ? ` (${changed.length})` : ''}`}
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="min-w-48 flex-1">
+            <SearchInput
+              value={search} onChange={setSearch}
+              placeholder="Ayar ara — ad, açıklama ya da anahtar…"
+            />
+          </span>
+          <Checkbox
+            label="yalnız değiştirilmişler" checked={onlyChanged} onChange={setOnlyChanged}
+          />
+          <span className="tnum text-[11px] text-muted">
+            {visible.length} / {data.defs.length} ayar
+          </span>
         </div>
       </div>
 
-      {note ? <p className="text-xs text-success">{note}</p> : null}
+      {note ? <Alert tone="success">{note}</Alert> : null}
       <ErrorBox error={error} />
 
       {/* ⭐ Önizleme yalnız MOTOR ayarları değiştiğinde anlamlı: sohbet limitini savaşta
@@ -116,19 +152,32 @@ export function SettingsScreen({ worldId, onNeedStepUp }: {
       ) : null}
 
       {data.groups.map((group) => {
-        const defs = data.defs.filter((d) => d.key.startsWith(`${group.id}.`));
+        const defs = visible.filter((d) => d.key.startsWith(`${group.id}.`));
         if (defs.length === 0) return null;
-        const groupOverridden = defs.filter((d) => data.overridden.includes(d.key)).map((d) => d.key);
+        const groupOverridden = data.defs
+          .filter((d) => d.key.startsWith(`${group.id}.`) && data.overridden.includes(d.key))
+          .map((d) => d.key);
         return (
           <Panel
             key={group.id}
             title={group.label}
-            right={groupOverridden.length > 0 ? (
-              <button type="button" className="underline"
-                onClick={() => void reset(groupOverridden)}>
-                {groupOverridden.length} değişik — varsayılana dön
-              </button>
-            ) : null}
+            /**
+             * ⭐ Varsayılan KAPALI — ama arama varken açık. Aksi hâlde arama sonucu bulunur
+             * ama görünmezdi ve arama işe yaramazdı.
+             */
+            collapsible
+            defaultOpen={q.length > 0 || onlyChanged}
+            right={(
+              <span className="flex items-center gap-2">
+                <span className="tnum">{defs.length}</span>
+                {groupOverridden.length > 0 ? (
+                  <button type="button" className="underline"
+                    onClick={(e) => { e.preventDefault(); void reset(groupOverridden); }}>
+                    {groupOverridden.length} değişik — sıfırla
+                  </button>
+                ) : null}
+              </span>
+            )}
           >
             <p className="border-b border-border px-3 py-2 text-xs text-muted">
               {group.description}
@@ -303,21 +352,33 @@ function SettingRow({ def, value, isOverridden, isDirty, onChange }: {
   const badge = TAG_BADGE[def.tag]!;
   const locked = def.tag === 'locked';
 
+  /**
+   * ⭐ DÖRT SATIR METİN → TEK SATIR + ⓘ.
+   *
+   * Öncesinde her ayar satırı dört satır taşıyordu (etiket+rozet · açıklama · anahtar/aralık ·
+   * uyarı) ve 92 ayar ekranda ~370 satır metin ediyordu. **Metin silinmedi**, balona taşındı:
+   * `Ctrl+F` hâlâ bulabiliyor (native `<details>`), ama ekran taranabilir hâle geldi.
+   */
   return (
-    <li className={`px-3 py-2.5 ${isDirty ? 'bg-accent/10' : ''}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-ink">{def.label}</span>
-            <Badge tone={badge.tone}>{badge.text}</Badge>
-            {isOverridden ? <Badge tone="success">değiştirilmiş</Badge> : null}
-          </div>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted">{def.description}</p>
-          <p className="mt-0.5 font-mono text-[10px] text-muted">
-            {def.key}
-            {def.min != null ? ` · ${def.min}–${def.max ?? '∞'}` : ''}
-            {def.env ? ` · env: ${def.env}` : ''}
-          </p>
+    <li className={`px-3 py-1.5 ${isDirty ? 'bg-accent/10' : ''}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span className="text-sm text-ink">{def.label}</span>
+          <Info label={`${def.label} açıklaması`}>
+            <p className="mb-1">{def.description}</p>
+            <p className="font-mono text-[10px] text-muted">
+              {def.key}
+              {def.min != null ? ` · ${def.min}–${def.max ?? '∞'}` : ''}
+              {def.env ? ` · env: ${def.env}` : ''}
+            </p>
+            {def.tag === 'measured' ? (
+              <p className="mt-1 text-warning">
+                ⚠️ Bu sayı binary'den ölçüldü — tasarım tercihi değil, orijinal oyunun davranışı.
+              </p>
+            ) : null}
+          </Info>
+          <Badge tone={badge.tone}>{badge.text}</Badge>
+          {isOverridden ? <Badge tone="success">değiştirilmiş</Badge> : null}
         </div>
         <div className="flex w-40 shrink-0 items-center gap-1.5">
           {def.type === 'boolean' ? (

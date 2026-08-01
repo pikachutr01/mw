@@ -42,8 +42,10 @@ export class AdminController {
   async me(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
     const player = req.player!;
     const [row] = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT a.email, p.username FROM accounts a
+      SELECT a.email, p.username, s.elevated_until
+        FROM accounts a
         JOIN players p ON p.id = ${player.playerId}
+        LEFT JOIN sessions s ON s.id = ${player.sessionId}::uuid
        WHERE a.id = ${player.accountId}
     `);
     return {
@@ -52,6 +54,15 @@ export class AdminController {
       email: String(row?.['email'] ?? ''),
       role: req.staff!.role,
       elevated: req.staff!.elevated,
+      /**
+       * ⭐ Yükseltmenin BİTİŞ ANI (panel 2. nesil). Veri baştan beri `sessions.elevated_until`
+       * kolonunda duruyordu ama yalnız `step-up` yanıtında dönüyordu; panel sayfa yenilendikten
+       * sonra kalan süreyi bilemiyor, 15 dakika sessizce doluyor ve yönetici bunu ancak bir
+       * 403 alınca fark ediyordu.
+       */
+      elevatedUntil: req.staff!.elevated && row?.['elevated_until'] != null
+        ? new Date(String(row['elevated_until'])).toISOString()
+        : null,
       stepUpMinutes: STEP_UP_MINUTES,
     };
   }

@@ -14,7 +14,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api.ts';
 import { num, stamp, when } from '../lib/format.ts';
-import { Badge, Button, ErrorBox, Input, Panel } from '../components/ui.tsx';
+import {
+  Alert, Badge, Empty, ErrorBox, Pagination, Panel, SearchInput,
+} from '../components/ui.tsx';
 import { PlayerDetail } from './player/PlayerDetail.tsx';
 
 export interface PlayerRow {
@@ -53,7 +55,6 @@ export function PlayersScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
   });
 
   const data = list.data;
-  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
     <div className="space-y-3">
@@ -65,10 +66,12 @@ export function PlayersScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
       >
         <div className="space-y-2 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Input
-              className="max-w-xs" placeholder="Kullanıcı adı veya e-posta…"
-              value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }}
-            />
+            <span className="w-full max-w-xs">
+              <SearchInput
+                placeholder="Kullanıcı adı veya e-posta…"
+                value={q} onChange={(v) => { setQ(v); setPage(0); }}
+              />
+            </span>
             <div className="flex gap-1">
               {STATUS.map(([id, label]) => (
                 <button
@@ -91,19 +94,17 @@ export function PlayersScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
             çizilmiyor — "herkes çevrimdışı" göstermek, bilgisizlikten kötü bir yalan olurdu.
           */}
           {data && !data.onlineKnown ? (
-            <p className="text-[11px] text-warning">
-              ⚠️ Çevrimiçilik bilgisi yok (soket sunucusu bu süreçte kayıtlı değil) — noktalar
+            <Alert tone="warning">
+              Çevrimiçilik bilgisi yok (soket sunucusu bu süreçte kayıtlı değil) — noktalar
               çizilmiyor.
-            </p>
+            </Alert>
           ) : null}
         </div>
 
         <ErrorBox error={list.error} />
 
         <ul className="divide-y divide-border">
-          {data?.items.length === 0 ? (
-            <li className="px-3 py-3 text-sm text-muted">Eşleşme yok.</li>
-          ) : null}
+          {data?.items.length === 0 ? <li><Empty>Eşleşme yok.</Empty></li> : null}
           {data?.items.map((p) => (
             <li key={p.id}>
               <button
@@ -135,24 +136,10 @@ export function PlayersScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
           ))}
         </ul>
 
-        {data && data.total > data.pageSize ? (
-          <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-            <span className="text-xs text-muted">
-              {num(page * data.pageSize + 1)}–{num(Math.min((page + 1) * data.pageSize, data.total))}
-              {' / '}{num(data.total)}
-            </span>
-            <span className="flex gap-2">
-              <Button variant="ghost" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                ‹ önceki
-              </Button>
-              <Button
-                variant="ghost" disabled={page + 1 >= pages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                sonraki ›
-              </Button>
-            </span>
-          </div>
+        {data ? (
+          <Pagination
+            page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage}
+          />
         ) : null}
       </Panel>
 

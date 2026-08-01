@@ -65,6 +65,29 @@ const dur = (s: number | null): string => {
 
 const num = (n: number | null): string => (n == null ? '—' : n.toLocaleString('tr-TR'));
 
+function LoopRow({ l }: { l: Loop }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 px-3 py-2">
+      <Badge tone={l.alive ? 'success' : 'danger'}>{l.alive ? 'canlı' : 'ÖLÜ'}</Badge>
+      <span className="text-sm text-ink">{l.kind}</span>
+      <span className="text-[11px] text-muted">
+        {l.kind === 'scheduler' ? 'oyun saati' : 'bildirim postacısı'}
+      </span>
+      <span className="text-xs text-muted">
+        {l.workerId} · pid {l.pid ?? '—'} · ROLE={l.role ?? '—'}
+      </span>
+      <span className="text-xs text-muted">son nabız {dur(l.ageS)} önce</span>
+      {/* ⭐ Uptime crash-loop'u gösterir: nabız taze ama süreç sürekli yeniden doğuyorsa
+          `at` güncel kalır ve yalnız BU alan düşer. */}
+      <span className="text-xs text-muted">ayakta {dur(l.uptimeS)}</span>
+      <span className="text-xs text-muted">{num(l.ticks)} tur</span>
+      <code className="ml-auto max-w-[40%] truncate text-[11px] text-muted">
+        {JSON.stringify(l.detail)}
+      </code>
+    </div>
+  );
+}
+
 export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
   const [health, setHealth] = useState<Health | null>(null);
   const [sizes, setSizes] = useState<{ databaseBytes: number; tables: SizeRow[] } | null>(null);
@@ -124,6 +147,14 @@ export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
     }
   };
 
+  const loops = health?.loops ?? [];
+  const live = loops.filter((l) => l.alive);
+  const liveKinds = new Set(live.map((l) => l.kind));
+  /** Ölü ama aynı türden canlı bir halefi olan → yalnız artık. */
+  const residue = loops.filter((l) => !l.alive && liveKinds.has(l.kind));
+  /** Ölü ve halefi yok → gerçek arıza. */
+  const orphaned = loops.filter((l) => !l.alive && !liveKinds.has(l.kind));
+
   return (
     <div className="space-y-3">
       <ErrorBox error={error} />
@@ -137,29 +168,78 @@ export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
         title="Döngü canlılığı"
         right={health ? `${health.staleAfterS} sn bayatlama eşiği` : '…'}
       >
+        {/*
+          ⭐ Kullanıcı doğrudan sordu: *"dispatcher scheduler gibi şeylerin ne olduğunu açıklar
+          mısın; birer tane ölü birer tane canlı olmaları ne anlama geliyor."* Cevabın belgede
+          durması yetmez — soru bu ekranda doğuyor, cevap da burada olmalı.
+        */}
+        <div className="space-y-1.5 border-b border-border px-3 py-2 text-[11px] leading-snug">
+          <p className="text-muted">
+            Sunucuda sürekli dönen <b className="text-ink">iki döngü</b> var:
+          </p>
+          <p className="text-muted">
+            <b className="text-ink">scheduler</b> — oyunun saatini işletir: vadesi gelen seferleri,
+            kuyruk bitişlerini ve savaşları çalıştırır (saniyede bir bakar).{' '}
+            <b className="text-warning">Durursa oyun donar</b> — ordular varmaz, binalar bitmez.
+          </p>
+          <p className="text-muted">
+            <b className="text-ink">dispatcher</b> — bildirim postacısıdır: savaş çözülünce yazılan
+            <code className="mx-1">outbox</code> satırlarını WebSocket'e ve push'a teslim eder
+            (yarım saniyede bir bakar).{' '}
+            <b className="text-warning">Durursa oyun işler ama kimse haber almaz</b>.
+          </p>
+          <p className="text-ink">
+            ⭐ Normalde burada <b>iki satır</b> olmalı: bir canlı scheduler + bir canlı dispatcher.
+          </p>
+          <p className="text-muted">
+            Satır adı <code>worker-&lt;pid&gt;</code> olduğu için sunucu yeniden başlayınca eski
+            süreç ayrı bir satır olarak kalır ve nabzı durduğu için «ÖLÜ» görünür — bu bir arıza
+            değil, <b>yeniden başlatmanın artığıdır</b> ve 1 saat sonra kendiliğinden süpürülür.
+            Yanında canlı bir eşi <b>yoksa</b> gerçek arıza demektir.
+          </p>
+        </div>
         {!health ? <p className="p-3 text-xs text-muted">Yükleniyor…</p> : !health.loopsKnown ? (
           <p className="p-3 text-xs text-warning">
             ⚠️ Hiç nabız satırı yok. Bu <strong>«sağlıklı» demek değil, «bilinmiyor» demek</strong>:
             worker hiç çalışmamış ya da migration uygulanmamış olabilir.
           </p>
         ) : (
-          <div className="divide-y divide-border">
-            {health.loops.map((l) => (
-              <div key={`${l.kind}:${l.workerId}`} className="flex flex-wrap items-center gap-3 px-3 py-2">
-                <Badge tone={l.alive ? 'success' : 'danger'}>{l.alive ? 'canlı' : 'ÖLÜ'}</Badge>
-                <span className="text-sm text-ink">{l.kind}</span>
-                <span className="text-xs text-muted">{l.workerId} · pid {l.pid ?? '—'} · ROLE={l.role ?? '—'}</span>
-                <span className="text-xs text-muted">son nabız {dur(l.ageS)} önce</span>
-                {/* ⭐ Uptime crash-loop'u gösterir: nabız taze ama süreç sürekli yeniden doğuyorsa
-                    `at` güncel kalır ve yalnız BU alan düşer. */}
-                <span className="text-xs text-muted">ayakta {dur(l.uptimeS)}</span>
-                <span className="text-xs text-muted">{num(l.ticks)} tur</span>
-                <code className="ml-auto max-w-[40%] truncate text-[11px] text-muted">
-                  {JSON.stringify(l.detail)}
-                </code>
-              </div>
-            ))}
-          </div>
+          <>
+            {/*
+              ⭐ ÜÇ SINIF, İKİ GÖRÜNÜRLÜK. Ölü bir satırın anlamı yanında canlı bir eşi olup
+              olmamasına bağlı ve fark hayati:
+                • canlı                        → normal
+                • ölü, ama aynı türden canlı VAR → yeniden başlatma **artığı**, 1 saat sonra
+                                                   kendiliğinden süpürülür → katlanmış
+                • ölü ve aynı türden canlı YOK  → **gerçek arıza** → üstte, kırmızı
+              Hepsini aynı listede göstermek, geliştirmede altı kez yeniden başlatınca gerçek
+              bir arızayı artık yığınının içinde kaybettiriyordu (bu ekranda ölçüldü).
+            */}
+            <div className="divide-y divide-border">
+              {live.map((l) => <LoopRow key={`${l.kind}:${l.workerId}`} l={l} />)}
+              {orphaned.map((l) => <LoopRow key={`${l.kind}:${l.workerId}`} l={l} />)}
+            </div>
+            {orphaned.length > 0 ? (
+              <p className="border-t border-border bg-danger/10 px-3 py-2 text-[11px] text-danger">
+                ⚠️ Yukarıdaki ölü döngünün canlı bir eşi <b>yok</b> — bu gerçek bir arıza.
+                {orphaned.some((o) => o.kind === 'scheduler')
+                  ? ' Scheduler durduğu için oyun donmuş durumda.'
+                  : ' Bildirimler teslim edilmiyor.'}
+              </p>
+            ) : null}
+            {residue.length > 0 ? (
+              <details className="border-t border-border">
+                <summary className="cursor-pointer list-none px-3 py-2 text-[11px] text-muted
+                  hover:bg-raised">
+                  › {residue.length} eski süreç artığı (yeniden başlatma izi) — canlı eşleri var,
+                  1 saat sonra kendiliğinden silinir
+                </summary>
+                <div className="divide-y divide-border opacity-60">
+                  {residue.map((l) => <LoopRow key={`${l.kind}:${l.workerId}`} l={l} />)}
+                </div>
+              </details>
+            ) : null}
+          </>
         )}
       </Panel>
 

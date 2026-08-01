@@ -13,7 +13,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
-import { Badge, Button, ErrorBox, Field, Input, Panel } from '../components/ui.tsx';
+import {
+  Badge, Button, DataTable, ErrorBox, Field, Info, Input, Pagination, Panel, SearchInput,
+} from '../components/ui.tsx';
 import { ActionForm, type ActionSpec } from '../components/ActionForm.tsx';
 
 interface TableInfo {
@@ -105,25 +107,29 @@ export function DatabaseScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
       {data ? (
         <Panel
           title={`${data.label} · ${data.total} satır`}
-          right={<Badge tone={POLICY[data.policy]!.tone}>{POLICY[data.policy]!.text}</Badge>}
+          right={(
+            <span className="flex items-center gap-2">
+              {/*
+                ⭐ Uyarı sunucudan gelir ve tuzağı ANLATIR — "dokunma" demekle yetinmez.
+                ⚠️ Metin SİLİNMEDİ, balona taşındı: bazıları dört satır ve tablonun üstünde
+                sürekli durmaları ekranı okunmaz yapıyordu. Balon `<details>` olduğu için
+                Ctrl+F hâlâ içeriği bulabiliyor.
+              */}
+              {data.warning ? <Info label="tablo uyarısı">{data.warning}</Info> : null}
+              <Badge tone={POLICY[data.policy]!.tone}>{POLICY[data.policy]!.text}</Badge>
+            </span>
+          )}
         >
-          {/* ⭐ Uyarı sunucudan gelir ve tuzağı ANLATIR — "dokunma" demekle yetinmez. */}
-          {data.warning ? (
-            <p className="border-b border-border bg-warning/10 px-3 py-2 text-[11px]
-              leading-snug text-ink">
-              {data.warning}
-            </p>
-          ) : null}
 
           {data.filters.length > 0 ? (
             <div className="grid gap-2 border-b border-border p-3 sm:grid-cols-4">
               {data.filters.map((f) => (
                 <Field key={f} label={f}>
-                  <Input type="text" value={filters[f] ?? ''}
-                    onChange={(e) => {
-                      setPage(0);
-                      setFilters((s) => ({ ...s, [f]: e.target.value }));
-                    }} />
+                  {/* ⚠️ Debounce: öncesinde HER tuş vuruşu bir sorgu atıyordu. */}
+                  <SearchInput
+                    value={filters[f] ?? ''}
+                    onChange={(v) => { setPage(0); setFilters((st) => ({ ...st, [f]: v })); }}
+                  />
                 </Field>
               ))}
             </div>
@@ -131,53 +137,30 @@ export function DatabaseScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
 
           <ErrorBox error={error} />
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="border-b border-border text-muted">
-                  {data.columns.map((c) => (
-                    <th key={c} className="whitespace-nowrap px-2 py-1.5 text-left font-normal">
-                      {c}
-                      {data.editable.includes(c) && rawMode
-                        ? <span className="ml-1 text-warning">✎</span> : null}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="text-ink">
-                {data.rows.map((row, i) => (
-                  <tr key={i} className="border-b border-border/50 hover:bg-raised">
-                    {data.columns.map((c) => (
-                      <td key={c} className="whitespace-nowrap px-2 py-1 font-mono">
-                        {cell(row[c])}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-                {data.rows.length === 0 ? (
-                  <tr><td colSpan={data.columns.length} className="px-2 py-3 text-muted">
-                    Satır yok.
-                  </td></tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={data.columns.map((c) => ({
+              key: c,
+              label: (
+                <span className="whitespace-nowrap">
+                  {c}
+                  {data.editable.includes(c) && rawMode
+                    ? <span className="ml-1 text-warning">✎</span> : null}
+                </span>
+              ),
+              render: (row: Record<string, unknown>) => (
+                /* Tam değer `title`da: hücre 48 karakterde kesiliyor ama bilgi kaybolmuyor. */
+                <span className="whitespace-nowrap font-mono" title={String(row[c] ?? '')}>
+                  {cell(row[c])}
+                </span>
+              ),
+            }))}
+            rows={data.rows}
+            keyOf={(_r, i) => i}
+          />
 
-          <div className="flex items-center justify-between border-t border-border px-3 py-2">
-            <span className="text-[11px] text-muted">
-              sayfa {data.page + 1} / {Math.max(1, Math.ceil(data.total / data.pageSize))}
-            </span>
-            <span className="flex gap-1">
-              <Button variant="ghost" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                ‹ önceki
-              </Button>
-              <Button variant="ghost"
-                disabled={(data.page + 1) * data.pageSize >= data.total}
-                onClick={() => setPage((p) => p + 1)}>
-                sonraki ›
-              </Button>
-            </span>
-          </div>
+          <Pagination
+            page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage}
+          />
 
           {rawMode && data.policy === 'edit' ? (
             <RawEdit table={data} onDone={load} onNeedStepUp={onNeedStepUp} />

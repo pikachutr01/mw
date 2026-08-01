@@ -13,6 +13,8 @@ export interface AdminMe {
   email: string;
   role: 'moderator' | 'admin';
   elevated: boolean;
+  /** ⭐ Yükseltmenin bitiş anı — geri sayım için. Veri vardı, gösterimi yoktu. */
+  elevatedUntil: string | null;
   stepUpMinutes: number;
 }
 
