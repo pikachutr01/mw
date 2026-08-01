@@ -16,6 +16,9 @@ import {
 import { sql } from 'drizzle-orm';
 import { SETTINGS, SETTING_GROUPS, applySettings, validatePatch } from '@mobiwar/settings';
 import { simulate } from '@mobiwar/engine';
+import {
+  buildingCost, buildingTimeSeconds, mergeCatalogConfig, techCost, techTimeSeconds,
+} from '@mobiwar/catalog';
 import { simulateRequest } from '@mobiwar/contracts';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
@@ -24,6 +27,7 @@ import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { scheduleSnapshot } from '../ranking/ranking.service.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
+import { catalogOverrides } from '../settings/catalog.ts';
 import { combatOverrides } from '../settings/combat.ts';
 import { SettingsError, SettingsService } from '../settings/settings.service.ts';
 import { toSimulateInput } from '../simulate/simulate.controller.ts';
@@ -43,6 +47,15 @@ const multipliers = z.object({
 }).refine((o) => Object.keys(o).length > 0, 'En az bir çarpan gerekli.');
 
 const settingsPatch = z.object({ values: z.record(z.string(), z.unknown()) });
+
+/** Katalog önizlemesi: hangi kalem, hangi seviyeler, hangi yama. */
+const catalogPreviewBody = z.object({
+  values: z.record(z.string(), z.unknown()),
+  kind: z.enum(['building', 'tech']),
+  id: z.string().min(1).max(40),
+  levels: z.array(z.number().int().min(1).max(60)).min(1).max(20)
+    .default([1, 2, 5, 10, 15, 20]),
+});
 const resetPatch = z.object({ keys: z.array(z.string()).min(1).max(200) });
 
 /** Önizleme: bir savaş kurgusu + denenecek yama. Yama KAYDEDİLMEZ. */
@@ -529,6 +542,63 @@ export class AdminWorldController {
       seed,
       current: simulate(input, current),
       proposed: simulate(input, proposed),
+      changed: next.overridden.filter((k) => !snap.overridden.includes(k)),
+      hash: { current: snap.hash, proposed: next.hash },
+    };
+  }
+
+  /**
+   * ⭐ KATALOG ÖNİZLEMESİ (2. nesil Tur 5) — savaş önizlemesinin kardeşi.
+   *
+   * Yapı/teknik fiyatlarını tek tek düzenlerken asıl soru *"seviye 15'te ne kadar tutacak"*.
+   * Bu uç aynı kalemin seviye seviye **mevcut ve taslak** fiyat/süresini yan yana veriyor.
+   *
+   * ⚠️ **İstemcide hesaplamak reddedildi.** Panelin `applySettings` + `catalogOverrides` +
+   * `mergeCatalogConfig` zincirini kendi kurması gerekirdi; `catalogOverrides` API paketinde
+   * (`settings/catalog.ts`) yaşıyor ve panelden import edilemiyor — kopyalanması gerekirdi.
+   * Kopya bir gün ayrışır ve panel oyunun ödetmediği bir fiyat gösterir. Burada, oyunun
+   * fiyat hesabında kullandığı **tam** yol koşuyor.
+   *
+   * ⚠️ Kaydetmiyor, `AdminStepUpGuard` yok — savaş önizlemesiyle aynı gerekçe.
+   */
+  @Post('settings/:worldId/catalog-preview')
+  @HttpCode(200)
+  catalogPreview(
+    @Param('worldId') worldId: string, @Body() body: unknown,
+  ): Record<string, unknown> {
+    const parsed = catalogPreviewBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    const id = Number(worldId);
+
+    const { values, issues } = validatePatch(parsed.data.values);
+    if (issues.length > 0) throw new BadRequestException({ issues });
+
+    const snap = this.settings.snapshot(id);
+    const current = mergeCatalogConfig(catalogOverrides(snap.effective, snap.overridden));
+    const merged = { ...toRecord(snap.effective), ...values };
+    const next = applySettings([merged], process.env);
+    const proposed = mergeCatalogConfig(catalogOverrides(next.effective, next.overridden));
+
+    const isTech = parsed.data.kind === 'tech';
+    const at = (cfg: typeof current, level: number): Record<string, number> => {
+      const cost = isTech
+        ? techCost(parsed.data.id, level, cfg)
+        : buildingCost(parsed.data.id, level, cfg);
+      const seconds = isTech
+        ? techTimeSeconds(parsed.data.id, level, 0, cfg)
+        : buildingTimeSeconds(parsed.data.id, level, 0, cfg);
+      return { gold: cost.gold, food: cost.food, seconds: Math.round(seconds) };
+    };
+
+    /** ⚠️ Süreler hızlandırıcı yapı **0** kabul edilerek: karşılaştırma tabanı sabit olsun. */
+    const levels = parsed.data.levels.map((level) => ({
+      level, current: at(current, level), proposed: at(proposed, level),
+    }));
+
+    return {
+      kind: parsed.data.kind,
+      id: parsed.data.id,
+      levels,
       changed: next.overridden.filter((k) => !snap.overridden.includes(k)),
       hash: { current: snap.hash, proposed: next.hash },
     };

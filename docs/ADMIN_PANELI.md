@@ -1292,6 +1292,91 @@ canlı Sur fiyatı          32.652 / 33.332 — formülle birebir
 
 ---
 
+## 2. NESİL — Tur 5: katalog paneli ve düz Türkçe açıklamalar
+
+Planın son turu. Kullanıcının iki sorusunun cevabı:
+
+> *"Her tekniğin base fiyatı ve base süresi, her yapının base fiyatı… diğer binaların ve
+> tekniklerin büyüme oranlarını nasıl görüp düzenlerim?"*
+> *"Bu ayarların açıklamalarını biraz daha benim anlayacağım şekilde yazar mısın?"*
+
+### 84 yeni ayar — elle yazılmadı, **türetildi**
+
+`packages/settings/src/derived.ts`: 9 yapı ve 12 teknik × (altın · yemek · büyüme oranı ·
+süre çarpanı). Panelde **92 → 176 ayar**.
+
+⚠️ El yazımı bir blok iki şeyi bozardı:
+1. `combat.ts`in uyardığı tabloya dönüşürdü — *"yeni bir ayar eklenince buraya da satır
+   eklenmezse ayar panelde görünür ama motora hiç ulaşmaz"*.
+2. Varsayılanlar **kopya** olurdu: `castle:gold` varsayılanı 200 yazılır, `buildings.ts` bir
+   gün 220 olur ve **panel yalan söylerdi**. Türetmede varsayılan kaynağından geliyor.
+
+⚠️ Bağımlılık `settings → catalog` ve tek yönlü — `packages/catalog`in hiç bağımlılığı yok,
+döngü riski sıfır. Sınırlar da türetiliyor: sabit bir `max` koysaydık Teleport'un 500.000'lik
+tabanı neredeyse kilitli olurdu.
+
+### Matris — 84 ayar düz liste olamazdı
+
+Satır = yapı/teknik (Türkçe ad, oyunun kendi sırasıyla), sütun = eksen, sağda **seviye seviye
+önizleme**.
+
+⚠️ **Dokunulmamış hücre DEĞER göstermiyor, `placeholder` gösteriyor.** Şema varsayılanını
+değer olarak yazsaydık ve yönetici genel oranı 2,2 yapsaydı hücre hâlâ 1,8 derdi — panel
+yalan söylerdi. Boş hücre = **devralınan**; yazdığın anda o kaleme özel olur ve genel düğme
+o kalem için devre dışı kalır.
+
+`POST /admin/settings/:worldId/catalog-preview` — savaş önizlemesinin kardeşi.
+⚠️ İstemcide hesaplamak `catalogOverrides`ın (API paketinde) kopyalanmasını gerektirirdi;
+kopya bir gün ayrışır ve panel oyunun ödetmediği bir fiyat gösterir.
+
+**Ölçüm** (canlı, Kale satırı):
+
+```
+sv 1     111 a /     83 y ·  1 dk
+sv 10  22.040 a / 16.530 y ·  2 sa
+sv 20  7.869.282 a / 5.901.961 y ·  9 gün
+```
+
+Altın fiyat tablosuyla birebir aynı.
+
+### ⭐ Açıklamalar: iki katman
+
+`SettingDef`e `note` eklendi ve **92 açıklamanın hepsi** yeniden yazıldı:
+
+| alan | ne söyler | örnek |
+| :-- | :-- | :-- |
+| `description` | **bu sayı ne yapar · büyütürsen ne olur · küçültürsen ne olur** | *"Çiftlik ve Maden'in maliyet artış oranı. Diğer yapılardan ayrı ve daha düşük, çünkü onlar 40 seviyeye kadar çıkıyor."* |
+| `note` | **neden bu sayı** — ölçüm kaynağı, reddedilen alternatif, tarihçe | *"⚠️ 1,45 DEĞİL 1,33. Oyunun kendi dokümanı 1,45 yazıyor ama o oran orijinalin bilinmeyen tabanlarına aitti…"* |
+
+Panelde ⓘ balonunda üst üste: önce sade cümle, sonra **«Neden bu sayı:»** başlığıyla gerekçe,
+en altta anahtar ve aralık. **Hiçbir teknik detay silinmedi** — binary adresleri, ölçüm
+sayıları, hata payları, reddedilen alternatifler hepsi `note`ta duruyor.
+
+### Bayat yorumlar düzeltildi
+
+`config.ts` ve `schema.ts` hâlâ *"tek tek düzenleme veri tarayıcısının işi (Faz 7)"* diyordu.
+O vaat **gerçekleşmemişti**: tarayıcı yalnız DB tablolarını açıyor, katalog verisi veri
+tabanında değil derlenmiş TypeScript'te. Ayrıca yorum "11 yapı" diyordu — gerçek **9**
+(Sur ve Kalkan `units.ts`te savunma birimi olarak duruyor).
+
+### ⚠️ Bilinen etki: ayar özeti kaydı
+
+`settings_revisions.hash` tüm anahtarları özetliyor ve 84 anahtar eklenince ailesi kaydı
+(`90c6f4a2` → `1cdbd074`). Kaçınılmaz ve zararsız — o hash hiçbir sorguda kullanılmıyor,
+yalnız panelde gösteriliyor.
+
+### Doğrulama
+
+```
+914 test yeşil  (API 616 → 618)
+panel            92 → 176 ayar · 11 → 13 grup
+matris           9 yapı × 4 eksen, devralınan değerler placeholder olarak doğru
+                 (Çiftlik/Maden 1,33 · diğerleri 1,8 — iki farklı eğri)
+önizleme         Kale sv 20 → 7.869.282 a / 9 gün, altın tabloyla birebir
+```
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

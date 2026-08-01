@@ -5,7 +5,7 @@
  * Panelde elle bir form yazsaydık yeni bir ayar eklendiğinde iki yeri güncellemek gerekirdi ve
  * biri unutulduğunda ayar ya görünmez ya da sunucunun reddettiği bir alan olurdu.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { SettingDef, SettingGroup } from '@mobiwar/settings';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
@@ -182,18 +182,30 @@ export function SettingsScreen({ worldId, onNeedStepUp }: {
             <p className="border-b border-border px-3 py-2 text-xs text-muted">
               {group.description}
             </p>
-            <ul className="divide-y divide-border">
-              {defs.map((def) => (
-                <SettingRow
-                  key={def.key}
-                  def={def}
-                  value={draft[def.key] ?? (def.default as number | boolean)}
-                  isOverridden={data.overridden.includes(def.key)}
-                  isDirty={draft[def.key] !== data.values[def.key]}
-                  onChange={(v) => setDraft((d) => ({ ...d, [def.key]: v }))}
-                />
-              ))}
-            </ul>
+            {defs[0]?.entity ? (
+              /* ⭐ 84 ayar düz liste olamazdı: satır = yapı/teknik, sütun = eksen. */
+              <SettingMatrix
+                worldId={worldId}
+                defs={defs}
+                values={data.values}
+                draft={draft}
+                overridden={data.overridden}
+                onChange={(k, v) => setDraft((d) => ({ ...d, [k]: v }))}
+              />
+            ) : (
+              <ul className="divide-y divide-border">
+                {defs.map((def) => (
+                  <SettingRow
+                    key={def.key}
+                    def={def}
+                    value={draft[def.key] ?? (def.default as number | boolean)}
+                    isOverridden={data.overridden.includes(def.key)}
+                    isDirty={draft[def.key] !== data.values[def.key]}
+                    onChange={(v) => setDraft((d) => ({ ...d, [def.key]: v }))}
+                  />
+                ))}
+              </ul>
+            )}
           </Panel>
         );
       })}
@@ -366,6 +378,12 @@ function SettingRow({ def, value, isOverridden, isDirty, onChange }: {
           <span className="text-sm text-ink">{def.label}</span>
           <Info label={`${def.label} açıklaması`}>
             <p className="mb-1">{def.description}</p>
+            {/* ⭐ Gerekçe AYRI katman: "ne yapar" ile "neden bu sayı" farklı sorular. */}
+            {def.note ? (
+              <p className="mb-1 border-t border-border pt-1 text-muted">
+                <b className="text-ink">Neden bu sayı: </b>{def.note}
+              </p>
+            ) : null}
             <p className="font-mono text-[10px] text-muted">
               {def.key}
               {def.min != null ? ` · ${def.min}–${def.max ?? '∞'}` : ''}
@@ -405,5 +423,167 @@ function SettingRow({ def, value, isOverridden, isDirty, onChange }: {
         </p>
       ) : null}
     </li>
+  );
+}
+
+/* ═══ Katalog matrisi (2. nesil Tur 5) ══════════════════════════════════════ */
+
+const AXES = ['gold', 'food', 'rate', 'timeFactor'] as const;
+const AXIS_HEAD: Record<string, string> = {
+  gold: 'Altın', food: 'Yemek', rate: 'Oran', timeFactor: 'Süre ×',
+};
+
+interface PreviewLevel {
+  level: number;
+  current: { gold: number; food: number; seconds: number };
+  proposed: { gold: number; food: number; seconds: number };
+}
+
+const dur = (s: number): string => {
+  if (s < 60) return `${s} sn`;
+  if (s < 3600) return `${Math.floor(s / 60)} dk`;
+  if (s < 86400) return `${Math.floor(s / 3600)} sa`;
+  return `${Math.floor(s / 86400)} gün`;
+};
+
+/**
+ * ⭐ MATRİS — 84 ayar düz liste olarak okunamazdı.
+ *
+ * Satır = yapı/teknik (Türkçe ad, oyunun kendi sırasıyla), sütun = eksen. Sağda "seviye seviye
+ * ne tutar" önizlemesi.
+ *
+ * ⚠️ **Dokunulmamış hücre DEĞER göstermiyor, `placeholder` gösteriyor.** Şema varsayılanını
+ * değer olarak yazsaydık ve yönetici genel oranı 2,2 yapsaydı hücre hâlâ 1,8 derdi — panel
+ * yalan söylerdi. Boş hücre = "devralınan"; yazdığın anda o kaleme özel olur.
+ */
+function SettingMatrix({ worldId, defs, values, draft, overridden, onChange }: {
+  worldId: number;
+  defs: SettingDef[];
+  values: Record<string, number | boolean>;
+  draft: Record<string, number | boolean>;
+  overridden: string[];
+  onChange: (key: string, v: number) => void;
+}) {
+  const [preview, setPreview] = useState<{ id: string; levels: PreviewLevel[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  /** id → eksen → tanım. Panel anahtarı AYRIŞTIRMIYOR; künye sunucudan geliyor. */
+  const rows = new Map<string, { name: string; kind: string; byAxis: Record<string, SettingDef> }>();
+  for (const d of defs) {
+    if (!d.entity) continue;
+    const row = rows.get(d.entity.id)
+      ?? { name: d.entity.name, kind: d.entity.kind, byAxis: {} };
+    row.byAxis[d.entity.axis] = d;
+    rows.set(d.entity.id, row);
+  }
+
+  const runPreview = async (id: string, kind: string): Promise<void> => {
+    setBusy(true);
+    try {
+      const changed = Object.keys(draft).filter((k) => draft[k] !== values[k]);
+      const r = await api<{ levels: PreviewLevel[] }>(
+        `/api/v1/admin/settings/${worldId}/catalog-preview`,
+        {
+          method: 'POST',
+          body: { values: Object.fromEntries(changed.map((k) => [k, draft[k]])), kind, id },
+        },
+      );
+      setPreview({ id, levels: r.levels });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="text-muted">
+          <tr className="text-left">
+            <th className="px-3 py-1.5 font-normal">Kalem</th>
+            {AXES.map((a) => (
+              <th key={a} className="px-2 py-1.5 text-right font-normal">{AXIS_HEAD[a]}</th>
+            ))}
+            <th className="px-2 py-1.5 font-normal">Seviye seviye</th>
+          </tr>
+        </thead>
+        <tbody className="text-ink">
+          {[...rows.entries()].map(([id, row], i) => (
+            <Fragment key={id}>
+              <tr className={i % 2 === 1 ? 'bg-row-alt' : ''}>
+                <td className="px-3 py-1">
+                  {row.name}
+                  {AXES.some((a) => row.byAxis[a] && overridden.includes(row.byAxis[a]!.key))
+                    ? <span className="ml-1 text-success">•</span> : null}
+                </td>
+                {AXES.map((axis) => {
+                  const def = row.byAxis[axis];
+                  if (!def) return <td key={axis} />;
+                  const isOverridden = overridden.includes(def.key);
+                  const dirty = draft[def.key] !== values[def.key];
+                  /* Dokunulmamış hücre boş kalır; placeholder devralınan etkin değeri gösterir. */
+                  const shown = isOverridden || dirty ? String(draft[def.key] ?? '') : '';
+                  return (
+                    <td key={axis} className={`px-1 py-1 ${dirty ? 'bg-accent/10' : ''}`}>
+                      <input
+                        type="number" step={def.type === 'int' ? 1 : 'any'}
+                        min={def.min} max={def.max}
+                        value={shown}
+                        placeholder={String(values[def.key] ?? def.default)}
+                        title={def.description}
+                        onChange={(e) => onChange(def.key, Number(e.target.value))}
+                        className="tnum w-24 rounded-[var(--radius-sm)] border border-border bg-bg
+                          px-1.5 py-0.5 text-right text-ink outline-none focus:border-accent"
+                      />
+                    </td>
+                  );
+                })}
+                <td className="px-2 py-1">
+                  <button
+                    type="button" disabled={busy}
+                    className="underline decoration-dotted"
+                    onClick={() => void runPreview(id, row.kind)}
+                  >
+                    {preview?.id === id ? 'gizle' : 'göster'}
+                  </button>
+                </td>
+              </tr>
+              {preview?.id === id ? (
+                <tr>
+                  <td colSpan={AXES.length + 2} className="px-3 pb-2">
+                    <div className="flex flex-wrap gap-3 rounded-[var(--radius-sm)] border
+                      border-border bg-bg p-2 text-[11px]">
+                      {preview.levels.map((l) => {
+                        const changedRow = l.current.gold !== l.proposed.gold
+                          || l.current.seconds !== l.proposed.seconds;
+                        return (
+                          <span key={l.level} className={changedRow ? 'text-warning' : 'text-muted'}>
+                            <b className="text-ink">sv {l.level}</b>{' '}
+                            <span className="tnum">{l.proposed.gold.toLocaleString('tr-TR')}a</span>
+                            {' / '}
+                            <span className="tnum">{l.proposed.food.toLocaleString('tr-TR')}y</span>
+                            {' · '}{dur(l.proposed.seconds)}
+                            {changedRow ? (
+                              <span className="text-muted">
+                                {' '}(şu an {l.current.gold.toLocaleString('tr-TR')}a ·{' '}
+                                {dur(l.current.seconds)})
+                              </span>
+                            ) : null}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+      <p className="px-3 py-2 text-[11px] text-muted">
+        ⚠️ Boş hücre = <b>devralınan</b>. İçindeki soluk sayı şu anda geçerli olan değer;
+        yazdığın anda o kaleme özel olur. Oranı boş bırakırsan «Ekonomi ve süre» grubundaki
+        genel oran geçerli kalır.
+      </p>
+    </div>
   );
 }

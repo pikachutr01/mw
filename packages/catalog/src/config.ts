@@ -38,11 +38,16 @@ export interface EconomyConfig {
   /**
    * ⭐ FİYAT ÇARPANLARI (Faz 5) — kataloğun taban fiyatlarını topluca ölçekler.
    *
-   * ⚠️ Neden yapı/birim/teknik BAŞINA değil? Katalogda 11 yapı + 12 teknik + 21 birim var ve
-   * her birinin altın/yemek tabanı ayrı: ~90 ayar. Panelde 90 satırlık düz bir liste hem
-   * kullanılamaz olurdu hem de asıl istenen soruyu (*"fiyatlar genel olarak yüksek/düşük"*)
-   * 90 kez düzenlemeye zorlardı. Tek tek düzenleme veri tarayıcısının işi (Faz 7); buradaki
-   * üç çarpan dengeyi kaydırmak için gereken düğme.
+   * Bu üç çarpan **topluca** ölçekler: "fiyatlar genel olarak yüksek mi" sorusunun düğmesi.
+   *
+   * ⚠️ **Yapı/teknik BAŞINA düzenleme de artık var** (`buildingTuning` / `techTuning`,
+   * 2. nesil Tur 5). Bu yorum bir süre "tek tek düzenleme veri tarayıcısının işi (Faz 7)"
+   * diyordu — o vaat gerçekleşmedi, çünkü tarayıcı yalnız DB tablolarını açıyor ve katalog
+   * verisi veri tabanında değil derlenmiş TypeScript'te. Doğru yer buydu.
+   *
+   * ⚠️ İkisi birlikte yaşıyor: varlık başına kayıt YOKSA global çarpan geçerli. Sayı
+   * düzeltmesi: katalogda **9** yapı var (Sur ve Kalkan `units.ts`te savunma birimi olarak
+   * duruyor), 12 teknik, 21 birim.
    */
   buildingCostMultiplier: number;
   unitCostMultiplier: number;

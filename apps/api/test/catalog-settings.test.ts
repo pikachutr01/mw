@@ -14,8 +14,9 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SETTINGS, applySettings } from '@mobiwar/settings';
 import {
-  DEFAULT_CATALOG_CONFIG, buildingCost, buildingTimeSeconds, catalogHash, farmOutput,
-  mergeCatalogConfig, mineOutput, techCost, trainingTimeSeconds, unitCost,
+  BUILDINGS_BY_ID, DEFAULT_CATALOG_CONFIG, TECHS_BY_ID, buildingCost, buildingTimeSeconds,
+  catalogHash, farmOutput, mergeCatalogConfig, mineOutput, techCost, trainingTimeSeconds,
+  unitCost,
 } from '@mobiwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
@@ -91,11 +92,38 @@ describe('varsayılan davranış', () => {
   it('şema varsayılanları katalog varsayılanlarıyla AYNI', () => {
     const eff = applySettings([]).effective;
     for (const group of CATALOG_GROUPS) {
+      /**
+       * ⚠️ **SEYREK GRUPLAR ATLANIYOR** (`buildingTuning` · `techTuning`). Onların katalog
+       * varsayılanı bilerek BOŞ: dolu olsaydı `economy.buildingCostRate` gibi global düğmeler
+       * sessizce işlevsizleşirdi. Şema varsayılanı ise ETKİN değeri (katalogdaki taban)
+       * gösteriyor — ikisi kasıtlı olarak farklı ve aşağıdaki test bunu ayrıca kilitliyor.
+       */
+      if (group === 'buildingTuning' || group === 'techTuning') continue;
       const fromSchema = eff[group] ?? {};
       const fromCatalog = DEFAULT_CATALOG_CONFIG[group] as Record<string, number>;
       for (const [key, value] of Object.entries(fromSchema)) {
         expect(fromCatalog[key], `${group}.${key}`).toBe(value);
       }
+    }
+  });
+
+  it('⭐ seyreklik: tuning gruplarının katalog varsayılanı BOŞ, şema varsayılanı DOLU', () => {
+    expect(DEFAULT_CATALOG_CONFIG.buildingTuning).toEqual({});
+    expect(DEFAULT_CATALOG_CONFIG.techTuning).toEqual({});
+    // Şema tarafı etkin değeri gösteriyor — panelde boş hücre değil gerçek fiyat görünsün.
+    const byKey = new Map(SETTINGS.map((d) => [d.key, d]));
+    expect(byKey.get('buildingTuning.castle:gold')?.default).toBe(200);
+    expect(byKey.get('buildingTuning.farm:rate')?.default).toBe(1.33);
+    expect(byKey.get('buildingTuning.castle:rate')?.default).toBe(1.8);
+    expect(byKey.get('techTuning.archery:rate')?.default).toBe(1.5);
+  });
+
+  it('⭐ türetilmiş her ayarın karşılığı katalogda GERÇEKTEN var', () => {
+    for (const d of SETTINGS) {
+      if (!d.entity) continue;
+      const known = d.entity.kind === 'building'
+        ? BUILDINGS_BY_ID[d.entity.id] : TECHS_BY_ID[d.entity.id];
+      expect(known, `katalogda yok: ${d.key}`).toBeTruthy();
     }
   });
 

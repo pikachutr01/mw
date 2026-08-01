@@ -243,6 +243,10 @@ importers:
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
 
   packages/settings:
+    dependencies:
+      '@mobiwar/catalog':
+        specifier: workspace:*
+        version: link:../catalog
     devDependencies:
       typescript:
         specifier: ^5.7.2

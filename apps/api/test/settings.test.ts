@@ -35,7 +35,9 @@ describe('şema', () => {
   it('her anahtar `grup.alan` biçiminde ve tekil', () => {
     const seen = new Set<string>();
     for (const def of SETTINGS) {
-      expect(def.key, def.key).toMatch(/^[a-z]+\.[a-zA-Z]+$/);
+      // ⚠️ TAM BİR NOKTA — `key.split('.')` iki parça bekleyen iki yer var (bkz. paket testi).
+      expect(def.key.split('.').length, `${def.key}: tam bir nokta olmalı`).toBe(2);
+      expect(def.key, def.key).toMatch(/^[a-zA-Z]+\.[a-zA-Z0-9_:]+$/);
       expect(seen.has(def.key), `tekrar eden anahtar: ${def.key}`).toBe(false);
       seen.add(def.key);
     }

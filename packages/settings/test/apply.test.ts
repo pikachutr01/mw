@@ -13,7 +13,14 @@ describe('şema tutarlılığı', () => {
     const groups = new Set(SETTING_GROUPS.map((g) => g.id));
     const seen = new Set<string>();
     for (const def of SETTINGS) {
-      expect(def.key, def.key).toMatch(/^[a-z]+\.[a-zA-Z]+$/);
+      /**
+       * ⚠️ **TAM BİR NOKTA** — bu kural taşıyıcı. `settings/catalog.ts` ve
+       * `admin.world.controller.ts:439` anahtarı `key.split('.')` ile TAM İKİ parçaya
+       * bölüyor; üç parçalı bir anahtar ikincisinde **sessizce varsayılan gösterirdi**.
+       * Yaprakta `:` ve `_` serbest (`buildingTuning.architect_school:gold`), nokta DEĞİL.
+       */
+      expect(def.key.split('.').length, `${def.key}: tam bir nokta olmalı`).toBe(2);
+      expect(def.key, def.key).toMatch(/^[a-zA-Z]+\.[a-zA-Z0-9_:]+$/);
       expect(seen.has(def.key), `tekrar eden anahtar: ${def.key}`).toBe(false);
       seen.add(def.key);
       expect(groups.has(def.key.split('.')[0]!), `tanımsız grup: ${def.key}`).toBe(true);

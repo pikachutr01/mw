@@ -26,7 +26,19 @@ export interface SettingDef {
   type: 'int' | 'number' | 'boolean';
   default: SettingValue;
   tag: SettingTag;
+  /**
+   * ⭐ **DÜZ TÜRKÇE, KALIP: «bu sayı ne yapar · büyütürsen ne olur · küçültürsen ne olur».**
+   *
+   * ⚠️ Teknik gerekçe (binary adresi, ölçüm sayısı, hata payı) buraya YAZILMAZ — `note`a
+   * gider. Kullanıcının şikâyeti tam buydu: *"bu ayarların açıklamalarını biraz daha benim
+   * anlayacağım şekilde yazar mısın."* Gerekçe silinmiyor, ikinci katmana iniyor.
+   */
   description: string;
+  /**
+   * «Neden bu sayı» — ölçüm kaynağı, reddedilen alternatif, tarihçe. Panelde ⓘ balonunun
+   * altında ayrı bir başlıkla duruyor. Detay kısılmıyor, katmanlanıyor.
+   */
+  note?: string;
   /** Sayısal sınırlar — panel hem `min`/`max` niteliği olarak kullanır hem sunucu doğrular. */
   min?: number;
   max?: number;
@@ -37,6 +49,20 @@ export interface SettingDef {
   env?: string;
   /** Birim etiketi (panelde alanın yanında yazar): `sn`, `dk`, `adet`, `×`. */
   unit?: string;
+  /**
+   * ⭐ VARLIK KÜNYESİ (2. nesil Tur 5) — katalogdan türetilmiş ayarlarda dolu.
+   *
+   * ⚠️ Panel bu alan sayesinde anahtarı **ayrıştırmıyor**. `buildingTuning.castle:gold`
+   * anahtarını istemcide parçalamak, ayırıcı bir gün değişirse sessizce bozulan bir bağ
+   * kurardı; künye sunucudan hazır geliyor ve matris tablosu onunla gruplanıyor.
+   */
+  entity?: {
+    kind: 'building' | 'tech' | 'unit';
+    id: string;
+    /** Türkçe ad — matris satır başlığı. */
+    name: string;
+    axis: 'gold' | 'food' | 'rate' | 'timeFactor';
+  };
 }
 
 export interface SettingGroup {

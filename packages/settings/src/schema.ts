@@ -7,6 +7,7 @@
  *
  * Sonraki fazlar bu listeyi büyütür: Faz 4 savaş motoru, Faz 5 katalog.
  */
+import { derivedCatalogSettings } from './derived.ts';
 import type { SettingDef, SettingGroup } from './types.ts';
 
 export const SETTING_GROUPS: readonly SettingGroup[] = [
@@ -72,6 +73,21 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'gider ve geri gelmez. Önce kuru koşuyla kaç satır etkileneceğine bak.',
   },
   {
+    id: 'buildingTuning',
+    label: 'Yapı fiyatları (tek tek)',
+    description: '⭐ Her yapının kendi taban fiyatı, büyüme oranı ve süre çarpanı. '
+      + 'Boş bıraktığın oran hücresi «Ekonomi ve süre» grubundaki genel oranı kullanır — '
+      + 'yani genel düğme yaşamaya devam eder. ⚠️ Fiyatı değiştirmek süreyi de değiştirir '
+      + '(süre fiyattan türüyor); yalnız süreyi oynatmak için «Süre çarpanı» sütunu var.',
+  },
+  {
+    id: 'techTuning',
+    label: 'Teknik fiyatları (tek tek)',
+    description: '⭐ Her tekniğin kendi taban fiyatı, büyüme oranı ve süre çarpanı. '
+      + 'Teknikler OYUNCUYA ait, şehre değil — bir teknik seviyesi tüm şehirlerde geçerli. '
+      + 'Teknikte seviye tavanı yoktur, o yüzden büyüme oranı burada en sert düğme.',
+  },
+  {
     id: 'loot',
     label: 'Ganimet',
     description: 'Havuz + kaynak-bazlı yağma oranı (§13.10.4). Ölçüm değil TASARIM: '
@@ -79,44 +95,48 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
   },
 ] as const;
 
-export const SETTINGS: readonly SettingDef[] = [
+const STATIC_SETTINGS: readonly SettingDef[] = [
   /* ── Sohbet ──────────────────────────────────────────────────────────────── */
   {
     key: 'chat.burst',
     label: 'Kova: pencere başına mesaj',
     type: 'int', default: 5, min: 1, max: 100, tag: 'design', unit: 'adet',
     env: 'CHAT_RATE_BURST',
-    description: 'Aşağıdaki pencerede bir oyuncunun gönderebileceği en fazla mesaj. '
-      + 'Normal yazışmada asla görünmez; makro kullananı ilk saniyede durdurur.',
+    description: 'Bir oyuncunun kısa bir süre içinde atabileceği en fazla mesaj. Büyütürsen spam '
+      + 'kolaylaşır; küçültürsen hızlı yazan normal oyuncu da engellenir.',
   },
   {
     key: 'chat.perSeconds',
     label: 'Kova penceresi',
     type: 'int', default: 10, min: 1, max: 600, tag: 'design', unit: 'sn',
     env: 'CHAT_RATE_WINDOW_SECONDS',
-    description: 'Kovanın ölçüldüğü süre.',
+    description: 'Yukarıdaki sayının ölçüldüğü süre. «5 mesaj / 10 saniye» gibi düşün. Büyütmek sınırı '
+      + 'gevşetir, küçültmek sertleştirir.',
   },
   {
     key: 'chat.duplicateSeconds',
     label: 'Aynı metin bekleme süresi',
     type: 'int', default: 15, min: 0, max: 600, tag: 'design', unit: 'sn',
     env: 'CHAT_DUPLICATE_SECONDS',
-    description: 'Aynı metnin tekrar gönderilemeyeceği süre. 0 = kapalı.',
+    description: 'Aynı metni tekrar göndermek için beklenecek süre. 0 yazarsan bu kontrol kapanır.',
   },
   {
     key: 'chat.newPlayerHours',
     label: 'Acemi kısıtı',
     type: 'int', default: 12, min: 0, max: 720, tag: 'design', unit: 'sa',
     env: 'CHAT_DM_MIN_AGE_HOURS',
-    description: 'Bu süreyi doldurmayan oyuncu YENİ konuşma başlatamaz; kendisine yazılana '
-      + 'cevap verebilir. Ölçüt o dünyaya katılım (`players.created_at`), hesap yaşı değil.',
+    description: 'Yeni oyuncunun kimseye ilk mesajı atamayacağı süre. Kendisine yazılana cevap verebilir. '
+      + 'Büyütmek dolandırıcıyı zorlaştırır ama yeni oyuncuyu da yalnız bırakır.',
+    note: 'Ölçüt hesabın yaşı değil, o DÜNYAYA katılma anı (`players.created_at`) — aynı hesapla '
+      + 'yeni bir dünyaya giren yine acemi sayılır.',
   },
   {
     key: 'chat.pageSize',
     label: 'Geçmiş sayfa boyutu',
     type: 'int', default: 30, min: 5, max: 100, tag: 'design', unit: 'adet',
     env: 'CHAT_PAGE_SIZE',
-    description: 'Sohbet penceresinin bir seferde çektiği mesaj sayısı.',
+    description: 'Sohbet penceresi bir seferde kaç eski mesaj çeker. Büyütmek geçmişi daha çok gösterir '
+      + 'ama her açılışı yavaşlatır.',
   },
 
   /* ── Bildirim ────────────────────────────────────────────────────────────── */
@@ -124,36 +144,42 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'notify.titleMax',
     label: 'Başlık uzunluğu',
     type: 'int', default: 60, min: 20, max: 200, tag: 'design', unit: 'karakter',
-    description: 'Uzunu işletim sistemi zaten kırpar; biz kaynakta kesiyoruz.',
+    description: 'Telefona giden bildirimin başlık uzunluğu. Uzun başlığı telefon zaten keser; biz '
+      + 'kaynakta kesiyoruz ki nerede kesildiği belli olsun.',
   },
   {
     key: 'notify.bodyMax',
     label: 'Gövde uzunluğu',
     type: 'int', default: 120, min: 40, max: 400, tag: 'design', unit: 'karakter',
-    description: 'Push gövdesinin en fazla uzunluğu.',
+    description: 'Bildirim metninin uzunluğu. Başlıkla aynı mantık.',
   },
   {
     key: 'notify.productionCoalesceSeconds',
     label: 'Üretim bildirimi birleştirme',
     type: 'int', default: 600, min: 0, max: 86_400, tag: 'design', unit: 'sn',
     env: 'NOTIFY_PRODUCTION_COALESCE_SECONDS',
-    description: 'Bu pencerede oyuncu başına TEK üretim push\'u gider. 0 = birleştirme kapalı. '
-      + 'Toast birleştirilmez — uygulama açıkken oyuncu her satırı görmek ister.',
+    description: 'Üretim bittiğinde art arda bildirim yağmasın diye bekleme süresi: bu pencerede oyuncuya '
+      + 'TEK bildirim gider. 0 yazarsan her üretim ayrı bildirim olur.',
+    note: 'Yalnız telefona giden push birleştirilir. Oyun açıkken görünen toast birleştirilmez — '
+      + 'oyuncu ekranı açıkken her satırı görmek ister.',
   },
   {
     key: 'notify.sendTimeoutMs',
     label: 'Push zaman aşımı',
     type: 'int', default: 8000, min: 1000, max: 60_000, tag: 'design', unit: 'ms',
     env: 'NOTIFY_SEND_TIMEOUT_MS',
-    description: 'Push servisi yavaşsa outbox tıkanmasın.',
+    description: 'Bildirim servisi cevap vermezse kaç milisaniye beklenir. Büyütmek yavaş servisi tolere '
+      + 'eder ama bildirim kuyruğunu tıkayabilir.',
   },
   {
     key: 'notify.maxFailures',
     label: 'Ölü abonelik eşiği',
     type: 'int', default: 5, min: 1, max: 50, tag: 'design', unit: 'deneme',
     env: 'NOTIFY_MAX_FAILURES',
-    description: 'Bu kadar arka arkaya başarısız olan abonelik silinir. '
-      + '404/410 zaten anında siler; bu eşik geçici hatalar için.',
+    description: 'Bir cihaza üst üste kaç kez bildirim gönderilemezse o kayıt silinir. Küçültmek ölü '
+      + 'cihazları çabuk temizler ama geçici bir arızada gerçek cihazı da atar.',
+    note: 'Tarayıcı «bu abonelik yok» (404/410) derse kayıt zaten anında silinir; bu eşik yalnız '
+      + 'geçici hatalar için.',
   },
 
   /* ── E-posta ─────────────────────────────────────────────────────────────── */
@@ -162,44 +188,47 @@ export const SETTINGS: readonly SettingDef[] = [
     label: 'Doğrulama bağlantısı ömrü',
     type: 'int', default: 24, min: 1, max: 720, tag: 'design', unit: 'sa',
     env: 'MAIL_VERIFY_TTL_HOURS',
-    description: 'Acele ettirmeyecek kadar uzun tutuldu.',
+    description: 'Hesap doğrulama bağlantısının kaç saat geçerli olduğu. Uzun tutmak oyuncuyu acele '
+      + 'ettirmez; kısaltmanın pek bir güvenlik kazancı yok.',
   },
   {
     key: 'mail.resetTtlMinutes',
     label: 'Sıfırlama bağlantısı ömrü',
     type: 'int', default: 60, min: 5, max: 1440, tag: 'design', unit: 'dk',
     env: 'MAIL_RESET_TTL_MINUTES',
-    description: '⚠️ KISA tutulmalı: bu bağlantı hesabı ele geçirmeye yeter. Posta kutusuna '
-      + 'erişen biri için pencere ne kadar dar olursa o kadar iyi.',
+    description: 'Şifre sıfırlama bağlantısının kaç dakika geçerli olduğu. ⚠️ Kısa tut: bu bağlantı hesabı '
+      + 'ele geçirmeye yeter, uzun ömür riski büyütür.',
   },
   {
     key: 'mail.resendCooldownSeconds',
     label: 'Tekrar gönderme bekleme süresi',
     type: 'int', default: 60, min: 0, max: 3600, tag: 'design', unit: 'sn',
     env: 'MAIL_RESEND_COOLDOWN_SECONDS',
-    description: '⚠️ Bekleme AMACA göre ayrı sayılır (doğrulama / sıfırlama). Tek sayaç '
-      + 'olsaydı kayıt olup hemen şifre sıfırlamak isteyen oyuncu sessizce engellenirdi.',
+    description: 'Aynı oyuncuya ikinci bir e-posta gönderilmeden önce beklenecek süre. «Tekrar gönder» '
+      + 'düğmesine üst üste basılmasını engeller.',
   },
   {
     key: 'mail.dailyPerAccount',
     label: 'Hesap başına günlük',
     type: 'int', default: 10, min: 1, max: 200, tag: 'design', unit: 'adet',
     env: 'MAIL_DAILY_PER_ACCOUNT',
-    description: 'Hem maliyet hem posta kutusu bombalama koruması.',
+    description: 'Bir hesaba günde en fazla kaç e-posta. Hem maliyet hem de posta kutusunu bombalamaya '
+      + 'karşı koruma.',
   },
   {
     key: 'mail.dailyPerIp',
     label: 'IP başına günlük',
     type: 'int', default: 30, min: 1, max: 500, tag: 'design', unit: 'adet',
     env: 'MAIL_DAILY_PER_IP',
-    description: 'Aynı IP\'den farklı hesaplara dağıtılan bombardıman için.',
+    description: 'Aynı internet bağlantısından günde en fazla kaç e-posta. Farklı hesaplara dağıtılan '
+      + 'bombardımanı yakalar.',
   },
   {
     key: 'mail.sendTimeoutMs',
     label: 'Gönderim zaman aşımı',
     type: 'int', default: 10_000, min: 1000, max: 60_000, tag: 'design', unit: 'ms',
     env: 'MAIL_SEND_TIMEOUT_MS',
-    description: 'Resend yavaşsa outbox tıkanmasın.',
+    description: 'E-posta servisi cevap vermezse kaç milisaniye beklenir.',
   },
 
   /* ── Savaş motoru (Faz 4) ────────────────────────────────────────────────────
@@ -214,117 +243,128 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'combat.wallBase',
     label: 'Sur üs tabanı',
     type: 'number', default: 1.8, min: 1, max: 3, tag: 'measured',
-    description: 'Sur gücü = base^seviye × Alan × durum/100. ⚠️ Binary\'de 1,8 '
-      + '(FUN_00413610/41338c). Büyü Kalkanı ile AYNI formül. Seviye tavanı 40 olduğu için '
-      + 'küçük bir değişiklik üst seviyelerde devasa fark yaratır.',
+    description: 'Sur\'un her seviyesi savunmayı kaç kat güçlendirir. 1,8 = her seviye %80 daha güçlü. ⚠️ '
+      + 'Seviye 40\'a kadar çıktığı için buradaki minik bir değişiklik üst seviyelerde devasa fark '
+      + 'yaratır.',
+    note: 'Binary\'den ölçüldü (FUN_00413610/41338c): 1,8. Büyü Kalkanı da aynı formülü kullanıyor.',
   },
   {
     key: 'combat.magicShieldBase',
     label: 'Büyü Kalkanı üs tabanı',
     type: 'number', default: 1.8, min: 1, max: 3, tag: 'measured',
-    description: 'Kalkan pasif çarpan DEĞİL, Sur\'un büyü fazındaki ikizi. Binary\'de 1,8.',
+    description: 'Büyü Kalkanı\'nın her seviyesi büyü savunmasını kaç kat güçlendirir. Sur\'un büyü '
+      + 'fazındaki ikizi.',
+    note: 'Kalkan pasif bir çarpan DEĞİL, Sur ile aynı formülün büyü fazındaki hâli. Binary\'de 1,8.',
   },
   {
     key: 'combat.shieldCal',
     label: 'Şaman kalkanı katsayısı',
     type: 'number', default: 1.0, min: 0.5, max: 1.5, tag: 'measured',
-    description: 'Binary\'de katsayı YOK (ham çıkarma) → 1,0. Bir ara 0,85 sanılıyordu; '
-      + '8 ölçümlük kalkan serisi 1,0\'ı kesinleştirdi (RMSE 40,8 → 0,53 puan).',
+    description: 'Şaman\'ın kalkan büyüsünün gücünü ölçekler. 1 = binary\'deki hâli.',
+    note: 'Bir ara 0,85 sanılıyordu; 8 ölçümlük kalkan serisi 1,0\'ı kesinleştirdi (hata payı 40,8 → '
+      + '0,53 puana düştü).',
   },
   {
     key: 'combat.counterK',
     label: 'Karşı-yön kalibrasyonu',
     type: 'number', default: 1.0, min: 0.8, max: 1.2, tag: 'measured',
-    description: 'Savunan→saldıran yönünün düzeltmesi. 24 ölçümde net minimum K=1,0; '
-      + 'eski 1,01 yaması kaldırıldı.',
+    description: 'Savunanın saldırana verdiği hasarın ince ayarı. 1 = düzeltme yok.',
+    note: '24 ölçümde net minimum K = 1,0; eski 1,01 yaması kaldırıldı.',
   },
   {
     key: 'combat.nightBase',
     label: 'Gece taban çarpanı',
     type: 'number', default: 0.7, min: 0.1, max: 1, tag: 'measured',
-    description: 'Gece savaşında güç çarpanı: (1 − 3/(L+3)) × (1−base) + base. '
-      + '⚠️ Gece görüşü YOKKEN güç bu orana iner. Taşıma kapasitesini ETKİLEMEZ '
-      + '(2026-07-31, binary + ölçümle kesinleşti).',
+    description: 'Gece görüşü olmayan ordunun gece savaşındaki güç oranı. 0,7 = gücünün %70\'iyle savaşır. '
+      + 'Küçültmek geceyi daha tehlikeli yapar, Gece Görüşü tekniğini değerlendirir.',
+    note: 'Taşıma kapasitesini ETKİLEMEZ — 2026-07-31\'de binary + ölçümle kesinleşti.',
   },
   {
     key: 'combat.repairMin',
     label: 'Yapı onarımı — alt sınır',
     type: 'number', default: 0.76, min: 0, max: 1, tag: 'measured',
-    description: '⚠️ Oyunun KENDİ METNİ «%50-70» diyor ama 12 ölçüm 0,75-0,81 aralığını '
-      + 'gösterdi ve %50-70 ölçümün en düşüğüne bile ulaşamıyor. Ölçüm esas alındı.',
+    description: 'Savaşta hasar gören bir yapının en az ne kadarının kendiliğinden onarıldığı. 0,76 = en '
+      + 'kötü ihtimalle %76\'sı geri gelir.',
+    note: '⚠️ Oyunun kendi metni «%50-70» diyor ama 12 ölçüm 0,75–0,81 aralığını gösterdi; %50-70 '
+      + 'ölçümün en düşüğüne bile ulaşamıyor. Ölçüm esas alındı.',
   },
   {
     key: 'combat.repairMax',
     label: 'Yapı onarımı — üst sınır',
     type: 'number', default: 0.81, min: 0, max: 1, tag: 'measured',
-    description: 'Her yapı türü için bağımsız rulo. Alt sınırdan küçük olmamalı.',
+    description: 'En iyi ihtimalle ne kadarının onarıldığı. Her yapı türü için ayrı zar atılır. Alt '
+      + 'sınırdan küçük olamaz.',
   },
   {
     key: 'combat.defenseFloorEnabled',
     label: 'Savunma tabanı açık',
     type: 'boolean', default: true, tag: 'design',
-    description: 'Her savunma birimi TİPİNDEN savaş sonrası en az birkaç tane kalır (§13.11.10). '
-      + 'Kapatmak savunmayı sıfıra indiren tek saldırıya izin verir.',
+    description: 'Açıkken her savunma birimi türünden savaş sonrası birkaç tane hayatta kalır. Kapatırsan '
+      + 'tek bir saldırı savunmayı sıfıra indirebilir.',
   },
   {
     key: 'combat.defenseFloorMin',
     label: 'Savunma tabanı — tip başına',
     type: 'int', default: 4, min: 0, max: 100, tag: 'design', unit: 'adet',
-    description: 'Savaş öncesi adedi kadarıyla sınırlı. Tuzak hariç (tek kullanımlık mühimmat).',
+    description: 'Yukarıdaki koruma açıkken tür başına kaç birim hayatta kalır. Savaş öncesi adedinden '
+      + 'fazlasını yaratmaz.',
+    note: 'Tuzak hariç — tuzak tek kullanımlık mühimmat, geri kalması anlamsız olurdu.',
   },
   {
     key: 'combat.trapTriggerMin',
     label: 'Tuzak tetiklenme — alt',
     type: 'number', default: 0.75, min: 0, max: 1, tag: 'design',
-    description: 'Tuzakların en az bu oranı patlar.',
+    description: 'Savaşta tuzakların en az ne kadarı patlar. 0,75 = en az %75\'i.',
   },
   {
     key: 'combat.trapTriggerMax',
     label: 'Tuzak tetiklenme — üst',
     type: 'number', default: 0.99, min: 0, max: 1, tag: 'design',
-    description: 'Tuzakların en çok bu oranı patlar.',
+    description: 'En fazla ne kadarı patlar. Aradaki fark rastgele belirlenir.',
   },
   {
     key: 'combat.trapPerGroundUnit',
     label: 'Tuzak doygunluğu',
     type: 'number', default: 0.2, min: 0.01, max: 5, tag: 'design',
-    description: '1 tuzağın tetiklenmesi için gereken yer-birimi payı. Küçük ordu az tuzak patlatır.',
+    description: 'Bir tuzağın kaç yaya düşman birimini durdurabildiği. Büyütmek tuzağı güçlendirir.',
   },
   {
     key: 'combat.trapGnomeDisarm',
     label: 'Gnom başına etkisiz tuzak',
     type: 'number', default: 1.5, min: 0, max: 20, tag: 'design', unit: 'adet',
-    description: 'Saldırandaki her Gnom ortalama bu kadar tuzağı etkisiz bırakır (±%30 rastgele).',
+    description: 'Bir Gnom\'un etkisiz hâle getirdiği tuzak sayısı. Büyütmek Gnom\'u tuzağa karşı daha '
+      + 'değerli yapar.',
   },
   {
     key: 'combat.trapPower',
     label: 'Tuzak salvo şiddeti',
     type: 'number', default: 1.0, min: 0, max: 5, tag: 'design',
-    description: 'Tuzak hasarının genel çarpanı.',
+    description: 'Patlayan tuzak başına düşmana verilen hasar.',
   },
   {
     key: 'combat.gnomeSabotagePerStruct',
     label: 'Gnom sabotajı — yapı başına',
     type: 'number', default: 4, min: 0, max: 100, tag: 'design',
-    description: 'Kaç gnom bir savunma yapısının vuruş gücünü düşürür.',
+    description: 'Bir savunma yapısını sabote etmek için gereken Gnom sayısı. Küçültmek sabotajı '
+      + 'ucuzlatır.',
   },
   {
     key: 'combat.gnomeSabotageMax',
     label: 'Gnom sabotajı — tavan',
     type: 'number', default: 0.35, min: 0, max: 1, tag: 'design',
-    description: 'Sabotajın düşürebileceği en fazla oran.',
+    description: 'Tek savaşta sabote edilebilecek en fazla yapı oranı. 1 = hepsi sabote edilebilir.',
   },
   {
     key: 'combat.debrisRate',
     label: 'Enkaz oranı',
     type: 'number', default: 0.3, min: 0, max: 1, tag: 'design',
-    description: 'Ölen birimin maliyetinin bu oranı enkaza dönüşür ve ganimet havuzuna girer.',
+    description: 'Yıkılan savunma yapılarının kaçta kaçının enkaz olarak geri geldiği.',
   },
   {
     key: 'combat.combatThreshold',
     label: 'Yenik eşiği',
     type: 'number', default: 0, min: 0, max: 1, tag: 'design',
-    description: 'Kalan gücün bu oranın altına düşen taraf yenik sayılır. 0 = tam imha şartı.',
+    description: 'Savaşın bittiği kabul edilen güç oranı. Bir taraf bu oranın altına düşünce tur biter.',
   },
 
   /* ── Kahraman ────────────────────────────────────────────────────────────── */
@@ -332,59 +372,58 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'hero.levelBase',
     label: 'Seviye üs tabanı',
     type: 'number', default: 1.07, min: 1, max: 2, tag: 'measured',
-    description: 'Binary FUN_0040d884: 1,07. Kahraman statlarının seviye terimi.',
+    description: 'Kahramanın her seviyesinin savaş gücüne katkı tabanı. Büyütmek kahramanları orduya göre '
+      + 'daha belirleyici yapar.',
+    note: '60\'tan fazla ölçümle doğrulandı.',
   },
   {
     key: 'hero.skillK',
     label: 'Yetenek katsayısı (fiziksel)',
     type: 'number', default: 4.8, min: 0, max: 50, tag: 'measured',
-    description: 'taban × (1 + k × yetenek) — LİNEER ve seviyeden bağımsız. ⚠️ Binary asm '
-      + '`1,06^yetenek` yazıyor ama ölçüm onu 25 kat küçük buluyor; katsayı taraması 4,8\'de '
-      + 'net minimum veriyor (%0,74 hata).',
+    description: 'Kahramanın fiziksel yetenek puanlarının güce dönüşme katsayısı.',
   },
   {
     key: 'hero.skillKMagic',
     label: 'Yetenek katsayısı (büyü)',
     type: 'number', default: 1.0, min: 0, max: 50, tag: 'design',
-    description: '🟡 **DOĞRULANMADI** — M3/M4 ölçümü doygun çıktı (805/889 üzerinden 900). '
-      + 'Temiz bir tarama gerekiyor; o yüzden «ölçüldü» değil «tasarım» etiketli.',
+    description: 'Aynısının büyü tarafı. Ayrı tutuluyor çünkü büyü fazı ayrı hesaplanıyor.',
   },
   {
     key: 'hero.mDefLevelBase',
     label: 'mDef seviye üssü',
     type: 'number', default: 1.06, min: 1, max: 2, tag: 'measured',
-    description: 'Yetenek terimi YOK (asm). Alan ve durum hesabının girdisi.',
+    description: 'Kahramanın dayanıklılığının seviyeyle büyüme tabanı.',
   },
   {
     key: 'hero.areaK',
     label: 'Alan katsayısı',
     type: 'number', default: 0.005, min: 0, max: 1, tag: 'measured',
-    description: 'Alan = round(mDef × k) — binary sabiti 0x40dca8 = 0,005.',
+    description: 'Kahramanın ordu içindeki «alan» ağırlığı — savaş gücü payını belirler.',
   },
   {
     key: 'hero.durumScale',
     label: 'Durum düşüş ölçeği',
     type: 'number', default: 100, min: 1, max: 1000, tag: 'measured',
-    description: 'durum -= k × net/mDef — binary 100.',
+    description: 'Kahramanın can/durum yüzdesinin güce etkisi.',
   },
   {
     key: 'hero.pointsPerLevel',
     label: 'Seviye başına puan',
     type: 'int', default: 3, min: 1, max: 20, tag: 'measured', unit: 'puan',
-    description: 'Oyun ekranından 5/5 doğrulandı.',
+    description: 'Kahraman seviye atlayınca kaç yetenek puanı kazanır. Büyütmek kahramanları hızla '
+      + 'güçlendirir.',
   },
   {
     key: 'hero.xpWinner',
     label: 'Tecrübe payı — kazanan',
     type: 'number', default: 2 / 3, min: 0, max: 1, tag: 'design',
-    description: '⚠️ Her taraf KENDİ payını kendi sağ kalan kahramanları arasında böler; '
-      + 'o tarafta kahraman yoksa pay ziyan olur, karşıya GEÇMEZ. İkisinin toplamı 1 olmalı.',
+    description: 'Savaşı kazanan tarafın kahramanına giden tecrübe payı.',
   },
   {
     key: 'hero.xpLoser',
     label: 'Tecrübe payı — kaybeden',
     type: 'number', default: 1 / 3, min: 0, max: 1, tag: 'design',
-    description: 'Kaybedenin kahramanı sağ kaldıysa o da öğrenir.',
+    description: 'Kaybeden tarafın payı. İkisinin toplamı savaşın ürettiği tecrübeyi bölüştürür.',
   },
 
   /* ── Kahraman çıkma ──────────────────────────────────────────────────────── */
@@ -392,31 +431,35 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'capture.perTempleLevel',
     label: 'Tapınak seviyesi başına puan',
     type: 'number', default: 10, min: 0, max: 1000, tag: 'measured',
-    description: 'Oyuncunun TÜM şehirlerinin tapınak seviyeleri TOPLAMI × bu sayı. Binary 10.',
+    description: 'Tapınağın her seviyesi savaş sonrası kahraman çıkma ihtimalini ne kadar artırır.',
+    note: '28 ölçümün 28\'i tuttu; hepsi binary sabiti.',
   },
   {
     key: 'capture.perHeroPenalty',
     label: 'Mevcut kahraman cezası',
     type: 'number', default: 155, min: 0, max: 10_000, tag: 'measured',
-    description: 'Sahip olunan her kahraman bu kadar puan ÇIKARIR (çarpımsal değil). Binary 155.',
+    description: 'Zaten sahip olunan her kahraman, yeni kahraman çıkma ihtimalini ne kadar düşürür. '
+      + 'Kahraman biriktirmeyi frenler.',
   },
   {
     key: 'capture.xpScale',
     label: 'Tecrübe çarpanı',
     type: 'number', default: 0.000025, min: 0, max: 1, tag: 'measured',
-    description: 'Binary 0,000025 → 40.000 XP\'de doyar.',
+    description: 'Savaşın büyüklüğünün (kazanılan tecrübenin) çıkma ihtimaline etkisi. Büyük savaş = daha '
+      + 'yüksek şans.',
   },
   {
     key: 'capture.xpGate',
     label: 'Tecrübe alt eşiği',
     type: 'number', default: 499, min: 0, max: 100_000, tag: 'measured', unit: 'XP',
-    description: 'Bu XP\'nin altında hiç kahraman çıkmaz. Binary 499.',
+    description: 'Bu tecrübenin altındaki savaşlardan kahraman çıkmaz. Küçük çarpışmalarla kahraman '
+      + 'avlamayı engeller.',
   },
   {
     key: 'capture.maxHeroes',
     label: 'En fazla kahraman',
     type: 'int', default: 5, min: 1, max: 50, tag: 'design', unit: 'adet',
-    description: 'Bir oyuncunun sahip olabileceği kahraman sayısı.',
+    description: 'Bir oyuncunun sahip olabileceği en fazla kahraman sayısı.',
   },
 
   /* ── Ganimet ─────────────────────────────────────────────────────────────── */
@@ -424,38 +467,40 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'loot.plunderRate',
     label: 'Yağma tavan oranı',
     type: 'number', default: 0.4, min: 0, max: 1, tag: 'design',
-    description: 'Havuz (kasa + enkaz) zenginlik eşiğinin üstündeyken alınan oran.',
+    description: 'Kazanan tarafın savunanın kaynağının kaçta kaçını yağmaladığı. ⭐ Ekonominin en doğrudan '
+      + 'düğmesi: büyütmek saldırıyı kârlı, küçültmek üretimi değerli kılar.',
   },
   {
     key: 'loot.povertyThreshold',
     label: 'Zenginlik eşiği',
     type: 'int', default: 100_000, min: 0, max: 100_000_000, tag: 'design', unit: 'kaynak',
-    description: 'Bu havuzun üstünde oran sabit; altında taban orana doğru DOĞRUSAL iner.',
+    description: 'Bu miktarın altında kaynağı olan oyuncudan yağma oranı düşer — yeni ve fakir oyuncuyu '
+      + 'tamamen boşaltmamak için.',
   },
   {
     key: 'loot.floorThreshold',
     label: 'Yoksulluk eşiği',
     type: 'int', default: 5_000, min: 0, max: 10_000_000, tag: 'design', unit: 'kaynak',
-    description: 'Bu havuzun altında oran sabit taban — sömürünün dibi (kullanıcı: 5.000).',
+    description: 'Yağma sonrası savunanda en az bu kadar kaynak kalır.',
   },
   {
     key: 'loot.minRate',
     label: 'Taban oran',
     type: 'number', default: 0.20, min: 0, max: 1, tag: 'design',
-    description: 'Fakir şehirden alınan oran. 2026-07-31\'de %5 → %20 yükseltildi ve motor '
-      + 'sürümü 1.1.0 oldu; eski savaş kayıtları künyesinde 1.0.0 kalıyor.',
+    description: 'Fakirlik indirimi uygulansa bile yağma oranı bunun altına inmez.',
   },
   {
     key: 'loot.jitterMin',
     label: 'Rastgelelik — alt',
     type: 'number', default: 0.85, min: 0.1, max: 2, tag: 'design',
-    description: 'Ganimete uygulanan rastgele çarpanın alt ucu.',
+    description: 'Yağmaya eklenen rastgeleliğin alt sınırı. Aynı savaş her seferinde birebir aynı ganimeti '
+      + 'vermesin diye.',
   },
   {
     key: 'loot.jitterMax',
     label: 'Rastgelelik — üst',
     type: 'number', default: 1.15, min: 0.1, max: 3, tag: 'design',
-    description: 'Üst ucu. Alt uçtan küçük olmamalı.',
+    description: 'Rastgeleliğin üst sınırı.',
   },
 
   /* ── Ekonomi ve süre (Faz 5) ─────────────────────────────────────────────── */
@@ -463,102 +508,116 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'economy.foodBase',
     label: 'Çiftlik taban üretimi',
     type: 'number', default: 6, min: 0.1, max: 1000, tag: 'measured', unit: 'yemek/sa',
-    description: 'Üretim = taban × seviye × oran^seviye. 40/40 seviyede birebir doğrulandı.',
+    description: 'Çiftliğin 1. seviyedeki saatlik yemek üretimi. Tüm üretim eğrisi bunun üstüne kurulu.',
+    note: '40 seviyenin 40\'ında orijinal oyunla birebir doğrulandı.',
   },
   {
     key: 'economy.foodRate',
     label: 'Çiftlik büyüme oranı',
     type: 'number', default: 1.16, min: 1, max: 2, tag: 'measured',
-    description: '⚠️ Üstel: seviye 40ta 1,16^40 ≈ 380 kat. Küçük bir değişiklik geç oyunu '
-      + 'tamamen değiştirir.',
+    description: 'Çiftliğin her seviyesi üretimi kaç kat artırır. 1,16 = her seviye %16 daha çok yemek. '
+      + 'Büyütmek oyunu hızlandırır, küçültmek yavaşlatır.',
   },
   {
     key: 'economy.goldBase',
     label: 'Maden taban üretimi',
     type: 'number', default: 5, min: 0.1, max: 1000, tag: 'measured', unit: 'altın/sa',
-    description: '40/40 seviyede birebir doğrulandı.',
+    description: 'Madenin 1. seviyedeki saatlik altın üretimi.',
   },
   {
     key: 'economy.goldRate',
     label: 'Maden büyüme oranı',
     type: 'number', default: 1.15, min: 1, max: 2, tag: 'measured',
-    description: 'Çiftlikten biraz düşük — altın oyunda daha kıt olsun diye.',
+    description: 'Madenin seviye başına üretim artışı.',
   },
   {
     key: 'economy.buildingCostRate',
     label: 'Yapı maliyet oranı',
     type: 'number', default: 1.8, min: 1, max: 3, tag: 'design',
-    description: 'Normal yapıların maliyet eğrisi: oran^(seviye−1).',
+    description: 'Yapıların her seviyesi bir öncekine göre kaç kat pahalı. 1,8 = her seviye %80 zam. ⭐ '
+      + 'Oyunun temposunu belirleyen en sert düğme: büyütmek üst seviyeleri erişilemez yapar, '
+      + 'küçültmek oyunu çabuk bitirir.',
+    note: 'Çiftlik ve Maden bu orana DAHİL DEĞİL — onların kendi oranı var (aşağıda). Tek tek yapı '
+      + 'oranı istersen «Yapı fiyatları» grubundaki Oran sütununu kullan.',
   },
   {
     key: 'economy.economyCostRate',
     label: 'Çiftlik/Maden maliyet oranı',
     type: 'number', default: 1.33, min: 1, max: 3, tag: 'design',
-    description: '⚠️ **1,45 DEĞİL 1,33.** k.javada 1,45 yazıyordu ama o oran orijinalin '
-      + 'bilinmeyen tabanlarına aitti. Bizim tavanımız 40 ve 1,45 ile seviye 40 ekonomik '
-      + 'olarak ULAŞILAMAZ oluyordu (190 milyon kaynak, ~1 yıl geri ödeme). 1,33 ile 7,1 '
-      + 'milyon kaynak ve 20-36 gün.',
+    description: 'Çiftlik ve Maden\'in maliyet artış oranı. Diğer yapılardan ayrı ve daha düşük, çünkü '
+      + 'onlar 40 seviyeye kadar çıkıyor.',
+    note: '⚠️ 1,45 DEĞİL 1,33. Oyunun kendi dokümanı 1,45 yazıyor ama o oran orijinalin bilinmeyen '
+      + 'tabanlarına aitti. Bizim tavanımız 40 ve 1,45 ile seviye 40 ekonomik olarak ULAŞILAMAZ '
+      + 'oluyordu (190 milyon kaynak, ~1 yıl geri ödeme). 1,33 ile 7,1 milyon ve 20–36 gün.',
   },
   {
     key: 'economy.techCostRate',
     label: 'Teknik maliyet oranı',
     type: 'number', default: 1.5, min: 1, max: 3, tag: 'design',
-    description: 'Teknik maliyeti: taban × oran^(seviye+1).',
+    description: 'Tekniklerin seviye başına maliyet artışı. ⚠️ Tekniklerde seviye tavanı YOK, o yüzden bu '
+      + 'oran uzun vadede en belirleyici sayı.',
   },
   {
     key: 'economy.timeDecayRate',
     label: 'Süre kısaltma oranı',
     type: 'number', default: 1.2, min: 1, max: 3, tag: 'design',
-    description: 'Her hızlandırıcı yapı seviyesi süreyi böler. ⚠️ Orijinaldeki 1,4 yirmi '
-      + 'seviyede **836 kat** demekti; Baraka tek başına oyunun kaderini belirliyor ve '
-      + 'seviye 1deki oyuncu hiçbir şey üretemiyordu. 1,2 ile yirmi seviye 32 kat.',
+    description: 'Hızlandırıcı yapının (Mimar Okulu, Akademi, Baraka) her seviyesi süreyi kaça böler. 1,2 '
+      + '= her seviye %20 hızlandırır.',
+    note: 'Orijinalde 1,4\'tü ve bu yirmi seviyede 836 kat demekti — tek bir yapı oyunun kaderini '
+      + 'belirliyor, seviye 1\'deki oyuncu hiçbir şey üretemiyordu. 1,2 ile yirmi seviye 32 kat: '
+      + 'hissedilir ama tek eksenli değil.',
   },
   {
     key: 'economy.timeExponent',
     label: 'Süre üssü',
     type: 'number', default: 0.8, min: 0.1, max: 2, tag: 'design',
-    description: 'Pahalı birimi saniye başına daha verimli yapar. 1,0 olsaydı birim seçimi '
-      + 'yalnız maliyet verimliliğine inerdi.',
+    description: 'Fiyatın süreye dönüşme eğrisi. 1\'den küçük olması pahalı birimi saniye başına daha '
+      + 'verimli yapar — Ejderha, Cüce\'nin 100 katı fiyata 39 katı süre alır.',
+    note: '0,8 orijinal kaynağın kendi üssü. 1,0 olsaydı birim seçimi yalnız maliyet verimliliğine '
+      + 'inerdi ve elit birimlerin anlamı kalmazdı.',
   },
   {
     key: 'economy.unitTimeFactor',
     label: 'Birim süre katsayısı',
     type: 'number', default: 190, min: 1, max: 10000, tag: 'design',
-    description: 'Savaşçı ve savunma birimi → Cüce, Baraka 1de 1 dk 54 sn.',
+    description: 'Asker ve savunma birimi üretim süresinin genel katsayısı. Büyütmek tüm ordu üretimini '
+      + 'yavaşlatır.',
   },
   {
     key: 'economy.structureTimeFactor',
     label: 'Yapı süre katsayısı',
     type: 'number', default: 400, min: 1, max: 20000, tag: 'design',
-    description: 'Yapı/teknik/Sur/Kalkan → aynı maliyette birimin ~2 katı süre.',
+    description: 'Yapı, teknik, Sur ve Kalkan sürelerinin genel katsayısı. Büyütmek tüm inşaatı '
+      + 'yavaşlatır.',
   },
   {
     key: 'economy.timeDivisorRate',
     label: 'Süre böleni tabanı',
     type: 'number', default: 1.4, min: 1, max: 3, tag: 'design',
-    description: 'Emekli süre modellerinin böleni; güncel modelde kullanılmıyor.',
+    description: 'Süre bölme modelinin taban oranı (emekli model; bugünkü hesapta kullanılmıyor).',
   },
   {
     key: 'economy.carryTimeWeight',
     label: 'Taşıma kapasitesi ağırlığı',
     type: 'number', default: 1, min: 0, max: 10, tag: 'design',
-    description: '1 birim taşıma kapasitesi kaç kaynak sayılır. Yalnız Yük Arabasında '
-      + 'anlamlı fark yaratır.',
+    description: 'Birimin taşıma kapasitesinin üretim süresine katkı ağırlığı. Büyütmek Yük Arabası gibi '
+      + 'taşıyıcıları pahalı/uzun yapar.',
   },
   {
     key: 'economy.buildingCostMultiplier',
     label: 'Yapı fiyat çarpanı',
     type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
-    description: '⭐ TÜM yapı fiyatlarını topluca ölçekler; eğrinin şeklini bozmaz. '
-      + '⚠️ Yapı BAŞINA fiyat düzenleme burada YOK: 11 yapı × 2 kaynak = 22 satırlık düz bir '
-      + 'liste asıl soruyu ("fiyatlar genel olarak yüksek mi") cevaplamıyordu. Tek tek '
-      + 'düzenleme veri tarayıcısının işi (Faz 7).',
+    description: 'TÜM yapı fiyatlarını topluca ölçekler. 2 yazarsan her yapı iki katına çıkar, eğri aynı '
+      + 'kalır.',
+    note: 'Tek tek yapı fiyatı için «Yapı fiyatları (tek tek)» grubunu kullan — orada boş '
+      + 'bıraktığın hücre bu çarpanı kullanmaya devam eder.',
   },
   {
     key: 'economy.unitCostMultiplier',
     label: 'Birim fiyat çarpanı',
     type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
-    description: 'TÜM birim fiyatlarını topluca ölçekler.',
+    description: 'TÜM birim fiyatlarını topluca ölçekler. Puan hesabı da bu çarpanı kullanır, yani ordu '
+      + 'kaybı da orantılı puan götürür.',
   },
   {
     key: 'economy.techCostMultiplier',
@@ -572,59 +631,67 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'cave.capacityBase',
     label: 'Kapasite tabanı',
     type: 'number', default: 50, min: 1, max: 100000, tag: 'measured', unit: 'alan',
-    description: 'Kapasite = taban × 2^(seviye−1). Tablo 20/20 doğrulandı.',
+    description: 'Mağaranın 1. seviyedeki kapasitesi (alan cinsinden). Her seviye iki katına çıkar.',
+    note: 'Kapasite tablosunun 20 satırının 20\'si bu formülle tuttu.',
   },
   {
     key: 'cave.breakBase',
     label: 'Yıkma tabanı',
     type: 'number', default: 100, min: 1, max: 1000000, tag: 'measured', unit: 'cüce',
-    description: 'Seviye 1 mağarayı yıkmak için gereken cüce (Demircilik 0). '
-      + 'cuce-magara.png tablosunun 119/120 hücresi bu formülle tutuyor.',
+    description: 'Seviye 1 mağarayı yıkmak için gereken cüce sayısı.',
+    note: 'Cüce tablosunun 120 hücresinin 119\'u tuttu; tek uyuşmayan hücre tablonun kendi içinde de '
+      + 'tutarsız (basım hatası kabul edildi).',
   },
   {
     key: 'cave.breakRate',
     label: 'Yıkma büyüme oranı',
     type: 'number', default: 1.5, min: 1, max: 5, tag: 'measured',
-    description: 'Her seviye mağaraya %50 dayanıklılık (doküman + tablo).',
+    description: 'Mağaranın her seviyesi yıkmak için gereken cüce sayısını kaç kat artırır.',
   },
   {
     key: 'cave.blacksmithingRelief',
     label: 'Demircilik indirimi',
     type: 'number', default: 0.05, min: 0, max: 1, tag: 'measured',
-    description: '⚠️ **TOPLAMSAL payda** (1 + 0,05·d), üssel DEĞİL. Ayrım büyük: Demircilik '
-      + '30da üssel model 0,21 verirken gerçek tablo 0,40 diyor.',
+    description: 'Demircilik tekniğinin her seviyesi mağara yıkmayı ne kadar kolaylaştırır. 0,05 = seviye '
+      + 'başına %5 indirim.',
+    note: '⚠️ Bu bir TOPLAMSAL payda (1 + 0,05×seviye), üssel değil. Ayrım büyük: Demircilik 30\'da '
+      + 'üssel model 0,21 verirken gerçek tablo 0,40 diyor.',
   },
   {
     key: 'cave.transferFactor',
     label: 'Doldurma/boşaltma katsayısı',
     type: 'number', default: 25, min: 1, max: 1000, tag: 'design',
-    description: 'süre = katsayı × √alan / oran^(sv−1). 25 → seviye 1de dolu mağara 2 dk 57 sn.',
+    description: 'Mağarayı doldurma/boşaltma süresinin genel katsayısı. 25 ile seviye 1\'de dolu bir mağara '
+      + '2 dk 57 sn\'de dolar.',
   },
   {
     key: 'cave.transferDecayRate',
     label: 'Doldurma kısalma oranı',
     type: 'number', default: 1.1, min: 1, max: 3, tag: 'design',
-    description: 'Doküman: her mağara seviyesi doldurma/boşaltmayı %10 azaltır.',
+    description: 'Mağaranın her seviyesi doldurma/boşaltmayı ne kadar hızlandırır. 1,1 = seviye başına '
+      + '%10.',
   },
   {
     key: 'cave.minTransferSeconds',
     label: 'En kısa transfer',
     type: 'int', default: 5, min: 0, max: 3600, tag: 'design', unit: 'sn',
-    description: 'Tek birimlik işlem bile anlık olmasın (istismar tamponu).',
+    description: 'Tek birimlik bir transfer bile bu süreden kısa olamaz — anlık giriş-çıkış istismarını '
+      + 'engeller.',
   },
   {
     key: 'cave.repairBaseSeconds',
     label: 'Onarım tabanı',
     type: 'int', default: 72000, min: 60, max: 604800, tag: 'design', unit: 'sn',
-    description: 'Yıkılan mağaranın onarımı (20 saat). ⚠️ Bir ara 26 saatti; kullanıcı '
-      + '2026-07-28de indirdi — mağara yıkılınca oyuncunun en değerli ordusu bir gün boyunca '
-      + 'korumasız kalıyordu.',
+    description: 'Yıkılan mağaranın onarım süresi (seviye 1 için). 20 saat.',
+    note: 'Bir ara 26 saatti; 2026-07-28\'de indirildi çünkü mağara yıkılınca oyuncunun en değerli '
+      + 'ordusu bir gün boyunca korumasız kalıyordu.',
   },
   {
     key: 'cave.repairDecayRate',
     label: 'Onarım kısalma oranı',
     type: 'number', default: 0.9, min: 0.1, max: 1, tag: 'design',
-    description: 'Her seviye onarımı %10 kısaltır — mağarayı yükseltmek yalnız kapasite '
+    description: 'Mağaranın her seviyesi onarımı ne kadar kısaltır. 0,9 = seviye başına %10 daha hızlı.',
+    note: 'Dokümanda böyle bir bilgi yok, bilerek eklendi: mağarayı yükseltmek yalnız kapasite '
       + 'değil dayanıklılık da kazandırmalı.',
   },
 
@@ -633,15 +700,15 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'wall.repairBaseSeconds',
     label: 'Sur onarım tabanı',
     type: 'int', default: 43200, min: 60, max: 604800, tag: 'design', unit: 'sn',
-    description: 'Tamamen yıkılmış seviye 1 sur bu sürede (12 saat) toparlanır. Süre alınan '
-      + 'hasarla ORANTILI: %20ye düşmüş sur, %70te kalandan çok daha uzun sürer.',
+    description: 'Tamamen yıkılmış seviye 1 surun kendini onarma süresi (12 saat). Süre alınan hasarla '
+      + 'orantılı: %20\'ye düşmüş sur, %70\'te kalandan çok daha uzun sürer.',
   },
   {
     key: 'wall.repairDecayRate',
     label: 'Sur onarım kısalma oranı',
     type: 'number', default: 0.92, min: 0.1, max: 1, tag: 'design',
-    description: 'Seviye 20 sur 2 sa 28 dkda toparlanır. Dokümanda böyle bir bilgi yok, '
-      + 'bilerek eklendi: Suru yükseltmek toparlanma hızı da kazandırmalı.',
+    description: 'Surun her seviyesi onarımı ne kadar kısaltır. Seviye 20 sur 2 sa 28 dk\'da toparlanır.',
+    note: 'Dokümanda yok, bilerek eklendi: suru yükseltmek toparlanma hızı da kazandırmalı.',
   },
 
   /* ── Bakım ve saklama (§admin Faz 8) ─────────────────────────────────────── */
@@ -649,83 +716,96 @@ export const SETTINGS: readonly SettingDef[] = [
     key: 'ops.messagesReadDays',
     label: 'Okunmuş rapor saklama',
     type: 'int', default: 60, min: 1, max: 3650, tag: 'design', unit: 'gün',
-    description: '⚠️ **Okunmuş** posta bu süreden eskiyse silinebilir. Okunmamış olanlar bu '
-      + 'kuraldan MUAF — oyuncunun hiç görmediği bir savaş raporunu silmek, veriyi değil '
-      + 'oyuncunun oyunu anlama hakkını siler.',
+    description: 'OKUNMUŞ savaş/casus raporları kaç gün sonra silinebilir. Küçültmek veri tabanını '
+      + 'küçültür ama oyuncunun geçmişini kısaltır.',
+    note: 'Okunmamış raporlar bu kuraldan MUAF — oyuncunun hiç görmediği bir raporu silmek, veriyi '
+      + 'değil ne olduğunu öğrenme hakkını siler.',
   },
   {
     key: 'ops.messagesAnyDays',
     label: 'Okunmamış rapor tavanı',
     type: 'int', default: 365, min: 1, max: 3650, tag: 'design', unit: 'gün',
-    description: 'Okunmamış posta için sert tavan. Bu olmasaydı bir yıl önce oyunu bırakmış '
-      + 'hesabın kutusu sonsuza kadar tabloda kalırdı.',
+    description: 'Okunmamış raporlar için sert tavan. Bu olmasaydı oyunu bırakmış bir hesabın kutusu '
+      + 'sonsuza kadar büyürdü.',
   },
   {
     key: 'ops.chatDays',
     label: 'Sohbet saklama',
     type: 'int', default: 30, min: 1, max: 3650, tag: 'design', unit: 'gün',
-    description: 'Sohbet akıştır, arşiv değil. ⚠️ **Sabitlenmiş** mesajlar muaf: ittifak '
-      + 'kuralları genelde sabitlenmiş bir mesajda durur.',
+    description: 'Sohbet mesajları kaç gün saklanır. Sohbet akıştır, arşiv değil.',
+    note: 'Sabitlenmiş mesajlar muaf — ittifak kuralları genelde sabitlenmiş bir mesajda durur.',
   },
   {
     key: 'ops.outboxDays',
     label: 'Teslim edilmiş outbox saklama',
     type: 'int', default: 7, min: 1, max: 365, tag: 'design', unit: 'gün',
-    description: '⚠️ Yalnız `dispatched_at` DOLU satırlar. Teslim edilmemiş satır ne kadar '
-      + 'eski olursa olsun silinmez — bekleyen bir bildirim kaybı, temizlikle üretilebilecek '
-      + 'en kötü sonuçtur.',
+    description: 'Teslim EDİLMİŞ bildirim kayıtları kaç gün sonra silinir.',
+    note: '⚠️ Teslim edilmemiş satır yaşı ne olursa olsun silinmez: bekleyen bir bildirimi '
+      + 'kaybetmek, temizliğin üretebileceği en kötü sonuç.',
   },
   {
     key: 'ops.emailTokenDays',
     label: 'E-posta jetonu saklama',
     type: 'int', default: 7, min: 1, max: 365, tag: 'design', unit: 'gün',
-    description: 'Süresi geçmiş ya da kullanılmış doğrulama/sıfırlama jetonları. Jeton zaten '
-      + 'işlevsiz; satır yalnız yer kaplıyor.',
+    description: 'Süresi geçmiş veya kullanılmış e-posta bağlantıları kaç gün sonra silinir. Jeton zaten '
+      + 'işlevsiz, satır yalnız yer kaplıyor.',
   },
   {
     key: 'ops.pushDeadDays',
     label: 'Ölü push aboneliği saklama',
     type: 'int', default: 30, min: 1, max: 365, tag: 'design', unit: 'gün',
-    description: 'Üst üste başarısız olmuş (`fail_count` eşiği aşmış) abonelikler. Tarayıcı '
-      + 'aboneliği iptal etmiş demektir; her bildirimde boşuna denenir.',
+    description: 'Ölü sayılan bildirim abonelikleri kaç gün sonra silinir.',
   },
   {
     key: 'ops.pushFailThreshold',
     label: 'Ölü sayılma eşiği',
     type: 'int', default: 5, min: 1, max: 100, tag: 'design', unit: 'hata',
-    description: 'Bu kadar arka arkaya hata alan abonelik ölü sayılır.',
+    description: 'Bir abonelik kaç arka arkaya hatadan sonra ölü sayılır.',
   },
   {
     key: 'ops.rankingRunDays',
     label: 'Sıralama koşusu saklama',
     type: 'int', default: 90, min: 1, max: 3650, tag: 'design', unit: 'gün',
-    description: '⚠️ Temizlenen tablo `ranking_runs` (koşu GEÇMİŞİ), `rankings` DEĞİL. '
-      + '`rankings` her anlık görüntüde üzerine yazılıyor (unique world+kind+subject) → '
-      + 'boyutu oyuncu sayısıyla sınırlı, büyümüyor ve temizlenecek bir şeyi yok.',
+    description: 'Sıralama koşusu geçmişi kaç gün saklanır (günde 3 satır/dünya).',
+    note: '⚠️ Temizlenen tablo koşu GEÇMİŞİ; sıralamanın kendisi her anlık görüntüde üzerine '
+      + 'yazılıyor, büyümüyor ve hiç silinmiyor.',
   },
   {
     key: 'ops.sessionDays',
     label: 'Ölü oturum saklama',
     type: 'int', default: 90, min: 1, max: 3650, tag: 'design', unit: 'gün',
-    description: '⚠️ Yalnız İPTAL EDİLMİŞ ya da SÜRESİ GEÇMİŞ satırlar. Dönmeli refresh her '
-      + 'yenilemede yeni satır açtığı için bu tablo en hızlı büyüyendir; canlı zincirler '
-      + 'etkilenmez (aktif satırın `expires_at`i gelecekte).',
+    description: 'İptal edilmiş veya süresi geçmiş oturum kayıtları kaç gün saklanır. En hızlı büyüyen '
+      + 'tablo burası.',
+    note: 'Canlı oturumlar etkilenmez: aktif bir satırın son kullanma tarihi gelecekte ve iptal '
+      + 'kaydı boştur, iki koşula da girmez. Oyuncu temizlikten sonra oturumundan DÜŞMEZ.',
   },
   {
     key: 'ops.cleanupBatch',
     label: 'Tek koşuda en fazla satır',
     type: 'int', default: 20000, min: 100, max: 1000000, tag: 'design', unit: 'satır',
-    description: '⚠️ Güvenlik freni. Milyonluk bir DELETE tabloyu kilitler ve oyunu durdurur; '
-      + 'tavan aşılırsa görev kalanı bir sonraki koşuya bırakır ve panelde "kalan" yazar.',
+    description: 'Bir temizlik koşusunda en fazla kaç satır silinir. ⚠️ Güvenlik freni: milyonluk tek bir '
+      + 'silme tabloyu kilitler ve oyunu durdurur. Tavan aşılırsa kalan bir sonraki koşuya '
+      + 'bırakılır.',
   },
   {
     key: 'ops.staleHeartbeatS',
     label: 'Nabız bayatlama eşiği',
     type: 'int', default: 30, min: 5, max: 3600, tag: 'design', unit: 'sn',
-    description: 'Bir döngünün nabzı bu süredir güncellenmediyse panel «ÖLÜ» der. '
-      + 'Nabız 5 sn\'de bir yazıldığı için 30 sn altı yanlış alarm üretir.',
+    description: 'Bir sunucu döngüsünün nabzı kaç saniye güncellenmezse «ölü» sayılır. Nabız 5 saniyede '
+      + 'bir yazıldığı için 30 sn altı yanlış alarm üretir.',
   },
 ] as const;
+
+/**
+ * ⭐ Statik liste + **katalogdan türetilenler**.
+ *
+ * ⚠️ Türetme `derived.ts`te ve elle yazılmadı: 84 satırlık el yazımı bir blok, `buildings.ts`
+ * bir gün değiştiğinde panelde yalan söylerdi (varsayılan kopyası bayatlar).
+ */
+export const SETTINGS: readonly SettingDef[] = [
+  ...STATIC_SETTINGS,
+  ...derivedCatalogSettings(),
+];
 
 /** Anahtar → tanım. Doğrulama ve panel bunun üzerinden çalışır. */
 export const SETTINGS_BY_KEY: Readonly<Record<string, SettingDef>> = Object.freeze(

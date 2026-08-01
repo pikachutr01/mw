@@ -210,7 +210,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | **Komuta Merkezi** | ✅ Genel Durum + İttifak (§13.15b) + **Arama** (§13.18.0) + Sıralamalar (Oyuncu ✅ · Kahraman ✅ · İttifak ✅) |
 | **Seçenekler** | ✅ hesap (e-posta + doğrulama rozeti + **Şifre Değiştir**) + **Şehir paneli** (Şehir Adı Değiştir · Şehri Terk Et; orijinalde de bu menüde — `g.java` case 63) + tema (tema **yalnız burada**) + **Bildirimler paneli** (izin düğmesi + 4 kategori anahtarı, §7.2b) |
 | **Tapınak** | ✅ kahraman kartları · yetenek/diriltme/yeniden adlandırma |
-| **⚙ YÖNETİM PANELİ** | ✅ **9 FAZIN 9'U BİTTİ** — `apps/admin`, dev 5174, oyuncu paketine tek bayt girmez. Altı ekran: Dünya (hız çarpanları · bakım modu · manuel sıralama) · Ayarlar (motor + katalog sabitleri, ~90 ayar) · Oturumlar · Moderasyon (sohbet yasağı · oyuncu cezası · şikayet kuyruğu) · Veri tabanı (24 tablo · 9 küratörlü aksiyon · ham kip) · **Bakım** (döngü canlılığı · kuyruklar · boyutlar · 7 temizlik görevi). Tam künye ve tuzaklar `docs/ADMIN_PANELI.md` |
+| **⚙ YÖNETİM PANELİ** | ✅ **9 faz + 5 kullanılabilirlik turu bitti** — `apps/admin`, dev 5174, oyuncu paketine tek bayt girmez. Yedi ekran: **Oyuncular** (liste · imparatorluk künyesi · oturumlar) · Dünya · **Ayarlar** (176 ayar, 13 grup; yapı/teknik başına fiyat matrisi) · Toplu işlem · Moderasyon · Veri tabanı · Bakım. Tam künye ve tuzaklar `docs/ADMIN_PANELI.md` |
 | **Yardım** | ⛔ yer tutucu |
 | Sohbet | ⛔ en sona alındı |
 
