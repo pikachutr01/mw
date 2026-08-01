@@ -11,7 +11,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
+  defenseStructureCost, UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
   buildingCost, buildingTimeSeconds, cancelRefund, checkRequirement, techCost, techTimeSeconds,
   timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
 } from '@mobiwar/catalog';
@@ -293,9 +293,13 @@ export class QueueService {
         if (targetLevel > max) {
           throw new QueueError('max_level', `${opts.type} en fazla ${max}. seviyeye çıkabilir.`);
         }
-        // Sur/Büyü Kalkanı maliyeti SEVİYE tabanlı: taban × 1,8^seviye (§13.9, motor kararını doğrular)
-        cost = { gold: def.gold * 1.8 ** (targetLevel - 1), food: def.food * 1.8 ** (targetLevel - 1) };
-        cost = { gold: Math.round(cost.gold), food: Math.round(cost.food) };
+        /**
+         * Sur/Büyü Kalkanı maliyeti SEVİYE tabanlı (§13.9).
+         * ⚠️ Formül artık KATALOGDA (`defenseStructureCost`): burada çıplak `1.8` yazdığı
+         * sürece panelden ayarlanan `buildingCostRate`/`buildingCostMultiplier` bu iki yapıya
+         * hiç ulaşmıyordu.
+         */
+        cost = defenseStructureCost(opts.type, targetLevel, this.cat(st.worldId));
         seconds = scaled(
           timeFromCost(cost, st.buildings['architect_school'] ?? 0, this.cat(st.worldId)),
           mult.construction,

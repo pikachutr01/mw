@@ -12,7 +12,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { enqueueRequest } from '@mobiwar/contracts';
 import {
-  BUILDINGS, BUILDINGS_BY_ID, BUILDING_ORDER, BUILDING_REQUIREMENTS,
+  defenseStructureCost, BUILDINGS, BUILDINGS_BY_ID, BUILDING_ORDER, BUILDING_REQUIREMENTS,
   DEFENSE_ORDER, TECHS, TECHS_BY_ID, TECH_ORDER, TECH_REQUIREMENTS,
   UNITS, UNITS_BY_ID, UNIT_REQUIREMENTS, WARRIOR_ORDER,
   buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, timeFromCost,
@@ -417,11 +417,9 @@ export class CityController {
         const levelBased = u.id === 'wall' || u.id === 'magic_shield';
         const current = defenses[u.id] ?? 0;
         const nextLevel = current + 1;
+        // ⚠️ Formül katalogda tek yerde (`defenseStructureCost`) — burada kopyası vardı.
         const cost = levelBased
-          ? {
-            gold: Math.round(u.gold * 1.8 ** (nextLevel - 1)),
-            food: Math.round(u.food * 1.8 ** (nextLevel - 1)),
-          }
+          ? defenseStructureCost(u.id, nextLevel, cfg)
           : unitCost(u.id, 1, cfg);
         return {
           id: u.id, name: u.name.tr, area: u.area, levelBased, current, cost,

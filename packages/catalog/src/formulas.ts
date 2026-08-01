@@ -171,10 +171,30 @@ export function castleBudget(castleLevel: number): number {
 }
 
 /** Maliyet eğrisinin ham değeri (ölçeksiz). */
-function costCurve(buildingId: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
+/**
+ * ⭐ VARLIK BAŞINA ORAN (2. nesil Tur 4) — yoksa global orana düşer.
+ *
+ * ⚠️ **Global düğme ÖLMÜYOR.** Yönetici `economy.buildingCostRate`'i 1,8'den 2,2'ye çıkarır
+ * ve hiçbir yapıya tek tek dokunmazsa, hepsi 2,2 kullanır. Varsayılanları buraya doldursaydık
+ * her yapının kendi kaydı olurdu ve global düğme sessizce işlevsizleşirdi (bkz. `config.ts`
+ * seyreklik sözleşmesi).
+ *
+ * ⚠️ `economyCostCurve` bayrağı eğrinin **ŞEKLİNİ** belirler (`seviye ×` çarpanı var mı),
+ * buradaki oran ise üssün **TABANINI**. İkisi dik eksenler, çakışmıyorlar.
+ */
+function buildingRate(buildingId: string, cfg: CatalogConfig): number {
+  const per = cfg.buildingTuning[`${buildingId}:rate`];
+  if (per != null) return per;
   return BUILDINGS_BY_ID[buildingId]?.economyCostCurve
-    ? level * cfg.economy.economyCostRate ** (level - 1)
-    : cfg.economy.buildingCostRate ** (level - 1);
+    ? cfg.economy.economyCostRate
+    : cfg.economy.buildingCostRate;
+}
+
+function costCurve(buildingId: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
+  const r = buildingRate(buildingId, cfg);
+  return BUILDINGS_BY_ID[buildingId]?.economyCostCurve
+    ? level * r ** (level - 1)
+    : r ** (level - 1);
 }
 
 /**
@@ -196,15 +216,58 @@ export function buildingCost(buildingId: string, level: number, cfg: CatalogConf
   const k = costCurve(buildingId, level, cfg) / costCurve(buildingId, firstPaid, cfg);
   // ⭐ Fiyat çarpanı EN SONDA ve yuvarlamadan ÖNCE: eğri bozulmasın, yalnız ölçek kaysın.
   const m = cfg.economy.buildingCostMultiplier;
-  return { gold: Math.round(def.baseGold * k * m), food: Math.round(def.baseFood * k * m) };
+  // ⭐ Varlık başına taban fiyat; yoksa katalogdaki taban.
+  const gold = cfg.buildingTuning[`${buildingId}:gold`] ?? def.baseGold;
+  const food = cfg.buildingTuning[`${buildingId}:food`] ?? def.baseFood;
+  return { gold: Math.round(gold * k * m), food: Math.round(food * k * m) };
 }
 
 /** Teknik maliyeti: base × 1.5^(seviye+1). */
 export function techCost(techId: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
   const def = TECHS_BY_ID[techId];
   if (!def) throw new Error(`Bilinmeyen teknik: ${techId}`);
-  const k = cfg.economy.techCostRate ** (level + 1) * cfg.economy.techCostMultiplier;
-  return { gold: Math.round(def.baseGold * k), food: Math.round(def.baseFood * k) };
+  const rate = cfg.techTuning[`${techId}:rate`] ?? cfg.economy.techCostRate;
+  const k = rate ** (level + 1) * cfg.economy.techCostMultiplier;
+  const gold = cfg.techTuning[`${techId}:gold`] ?? def.baseGold;
+  const food = cfg.techTuning[`${techId}:food`] ?? def.baseFood;
+  return { gold: Math.round(gold * k), food: Math.round(food * k) };
+}
+
+/**
+ * ⭐ SUR ve BÜYÜ KALKANI — seviye taşıyan savunma yapıları.
+ *
+ * ⚠️ **NEDEN AYRI BİR FONKSİYON (2. nesil Tur 4).** Bu hesap kataloğun dışında, **üç ayrı
+ * dosyada kopya** hâlinde duruyordu ve üçü de çıplak `1.8` literali kullanıyordu:
+ *   • `queue.service.ts`   — oyuncunun ödediği fiyat
+ *   • `city.controller.ts` — arayüzde gösterilen fiyat
+ *   • `score.service.ts`   — puan hesabı
+ * Sonuç: yönetici `economy.buildingCostRate`'i 1,8'den 2,2'ye çıkarsa **Sur ve Kalkan hariç**
+ * her şey değişiyordu; `buildingCostMultiplier`'ı iki katına çıkarsa Sur fiyatı hiç
+ * kıpırdamıyordu. Yani panelde bir düğme vardı ve oyunun bir köşesine hiç ulaşmıyordu.
+ *
+ * ⚠️ Bu ikisi `buildings.ts`te DEĞİL, `units.ts`te duruyor (savunma birimi olarak) — bu yüzden
+ * `buildingCost` onları tanımıyor ve ayrı bir giriş noktası gerekiyor.
+ *
+ * ⚠️ Varsayılan ayarlarla çıktı **bit-bit aynı**: `Math.round(g × 1,8^(l−1) × 1)` ≡ eski
+ * `Math.round(g × 1,8^(l−1))`. `golden-prices.test.ts` bunu her seviyede kilitliyor.
+ */
+export const DEFENSE_STRUCTURES: readonly string[] = ['wall', 'magic_shield'];
+
+export function defenseStructureCost(
+  id: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): Cost {
+  const def = UNITS_BY_ID[id];
+  if (!def) throw new Error(`Bilinmeyen savunma yapısı: ${id}`);
+  if (level <= 0) return { gold: 0, food: 0 };
+  const k = cfg.economy.buildingCostRate ** (level - 1) * cfg.economy.buildingCostMultiplier;
+  return { gold: Math.round(def.gold * k), food: Math.round(def.food * k) };
+}
+
+/** Sur/Kalkan yükseltme süresi. Hızlandıran yapıların hepsinde olduğu gibi **Mimar Okulu**. */
+export function defenseStructureTimeSeconds(
+  id: string, level: number, architectSchool: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): number {
+  return timeFromCost(defenseStructureCost(id, level, cfg), architectSchool, cfg);
 }
 
 /** Birim maliyeti sabittir (adet başına). */
@@ -259,14 +322,28 @@ export function timeFromCost(cost: Cost, divisorLevel: number, cfg: CatalogConfi
 export function buildingTimeSeconds(
   buildingId: string, level: number, architectSchool: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
 ): number {
-  return timeFromCost(buildingCost(buildingId, level, cfg), architectSchool, cfg);
+  /**
+   * ⭐ SÜRE ÇARPANI (2. nesil Tur 4) — 1,0 varsayılan.
+   *
+   * ⚠️ Kullanıcı "her yapının **taban süresi**" istemişti; oyunda öyle bir alan YOK: süre
+   * maliyetten türüyor (`timeFromCost`). Taban süre eklemek "süre maliyetten türer"
+   * değişmezini kırar ve İKİNCİ bir süre kaynağı açardı — "fiyatı üçe katladım ama süre
+   * değişmedi" hatasının doğduğu yer tam olarak orası olurdu. Çarpan aynı ihtiyacı, modeli
+   * bozmadan karşılıyor.
+   *
+   * ⚠️ Çarpan `timeFromCost`ta DEĞİL burada: o fonksiyon yalnız `Cost` görüyor, varlık
+   * kimliğini bilmiyor; imzasına id eklemek en çok paylaşılan fonksiyonu kirletirdi.
+   */
+  const raw = timeFromCost(buildingCost(buildingId, level, cfg), architectSchool, cfg);
+  return raw * (cfg.buildingTuning[`${buildingId}:timeFactor`] ?? 1);
 }
 
 /** Teknik araştırma süresi (saniye). Hızlandıran: **o şehrin Akademi'si**. */
 export function techTimeSeconds(
   techId: string, level: number, academy: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
 ): number {
-  return timeFromCost(techCost(techId, level, cfg), academy, cfg);
+  const raw = timeFromCost(techCost(techId, level, cfg), academy, cfg);
+  return raw * (cfg.techTuning[`${techId}:timeFactor`] ?? 1);
 }
 
 /**

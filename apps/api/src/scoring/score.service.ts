@@ -22,7 +22,7 @@
 import { sql } from 'drizzle-orm';
 import {
   BUILDINGS_BY_ID, LEVEL_BASED, STARTING_BUILDINGS, TECHS_BY_ID, UNITS_BY_ID,
-  buildingCost, techCost,
+  buildingCost, defenseStructureCost, techCost, unitCost, type CatalogConfig,
 } from '@mobiwar/catalog';
 import type { Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
@@ -53,13 +53,18 @@ export function pointsFromBase(base: number): number {
  * Sur ve Büyü Kalkanı `LEVEL_BASED`: savaşta adet kaybetmezler (seviyeleri düşmez), o yüzden
  * puan da götürmezler. Kahramanlar da hariç — onlar kaynakla üretilmiyor, savaştan çıkıyor.
  */
-export function lossValue(lost: Record<string, number>): number {
+export function lossValue(lost: Record<string, number>, cfg?: CatalogConfig): number {
   let total = 0;
   for (const [id, n] of Object.entries(lost)) {
     if (!(n > 0) || LEVEL_BASED.has(id)) continue;
-    const def = UNITS_BY_ID[id];
-    if (!def) continue;
-    total += (def.gold + def.food) * Math.trunc(n);
+    if (!UNITS_BY_ID[id]) continue;
+    /**
+     * ⚠️ **DÜZELTİLDİ (2. nesil Tur 4):** eskiden `def.gold + def.food` ham okunuyordu ve
+     * `economy.unitCostMultiplier` **hiç görülmüyordu**. Çarpanı 2 yapan bir dünyada oyuncu
+     * iki katı ödüyor, birimi ölünce tek katı puan kaybediyordu — yani ordu kaybetmek
+     * kârlıydı. `unitCost` aynı çarpanı zaten uyguluyor.
+     */
+    total += scoreValue(unitCost(id, Math.trunc(n), cfg));
   }
   return total;
 }
@@ -115,37 +120,42 @@ export async function debitLosses(
  */
 
 /** Bir yapının 1. seviyeden `level`'a kadar ödenen TOPLAM bedeli. */
-export function cumulativeBuildingValue(type: string, level: number): number {
+export function cumulativeBuildingValue(
+  type: string, level: number, cfg?: CatalogConfig,
+): number {
   if (!BUILDINGS_BY_ID[type]) return 0;
   // Kale/Baraka/Çiftlik/Maden seviye 1 hediyedir → ilk ÖDENEN seviyeden başla (§13.9).
   let total = 0;
   for (let l = (STARTING_BUILDINGS[type] ?? 0) + 1; l <= level; l++) {
-    total += scoreValue(buildingCost(type, l));
+    total += scoreValue(buildingCost(type, l, cfg));
   }
   return total;
 }
 
-export function cumulativeTechValue(type: string, level: number): number {
+export function cumulativeTechValue(type: string, level: number, cfg?: CatalogConfig): number {
   if (!TECHS_BY_ID[type]) return 0;
   let total = 0;
-  for (let l = 1; l <= level; l++) total += scoreValue(techCost(type, l));
+  for (let l = 1; l <= level; l++) total += scoreValue(techCost(type, l, cfg));
   return total;
 }
 
-/** Sur / Büyü Kalkanı seviye taşır ve maliyeti taban × 1,8^(sv−1)'dir (queue.service ile aynı). */
-export function cumulativeDefenseStructureValue(type: string, level: number): number {
-  const def = UNITS_BY_ID[type];
-  if (!def) return 0;
+/**
+ * Sur / Büyü Kalkanı seviye taşır; maliyeti **katalogdan** gelir.
+ * ⚠️ Burada da çıplak `1.8` kopyası vardı: dünya bazlı bir fiyat override'ında oyuncu farklı
+ * ödüyor, puanı farklı hesaplanıyordu.
+ */
+export function cumulativeDefenseStructureValue(
+  type: string, level: number, cfg?: CatalogConfig,
+): number {
+  if (!UNITS_BY_ID[type]) return 0;
   let total = 0;
-  for (let l = 1; l <= level; l++) {
-    total += Math.round(def.gold * 1.8 ** (l - 1)) + Math.round(def.food * 1.8 ** (l - 1));
-  }
+  for (let l = 1; l <= level; l++) total += scoreValue(defenseStructureCost(type, l, cfg));
   return total;
 }
 
 /** Adetli birimlerin (savaşçı + savunma birimi) bedeli. */
-export function unitsValue(counts: Record<string, number>): number {
-  return lossValue(counts);
+export function unitsValue(counts: Record<string, number>, cfg?: CatalogConfig): number {
+  return lossValue(counts, cfg);
 }
 
 /**
@@ -153,7 +163,7 @@ export function unitsValue(counts: Record<string, number>): number {
  * @returns yazılan taban (kaynak birimi)
  */
 export async function recomputeScoreBaseFromHoldings(
-  runner: Runner, playerId: number,
+  runner: Runner, playerId: number, cfg?: CatalogConfig,
 ): Promise<number> {
   const [buildingRows, techRows, unitRows, defenseRows] = await Promise.all([
     runner.execute<Record<string, unknown>>(sql`
@@ -174,15 +184,17 @@ export async function recomputeScoreBaseFromHoldings(
   ]);
 
   let base = 0;
-  for (const r of buildingRows) base += cumulativeBuildingValue(String(r['type']), Number(r['level']));
-  for (const r of techRows) base += cumulativeTechValue(String(r['type']), Number(r['level']));
-  for (const r of unitRows) base += unitsValue({ [String(r['type'])]: Number(r['count']) });
+  for (const r of buildingRows) {
+    base += cumulativeBuildingValue(String(r['type']), Number(r['level']), cfg);
+  }
+  for (const r of techRows) base += cumulativeTechValue(String(r['type']), Number(r['level']), cfg);
+  for (const r of unitRows) base += unitsValue({ [String(r['type'])]: Number(r['count']) }, cfg);
   for (const r of defenseRows) {
     const type = String(r['type']);
     const n = Number(r['count']);
     base += LEVEL_BASED.has(type)
-      ? cumulativeDefenseStructureValue(type, n)   // burada `count` SEVİYEdir (§13.11.1b)
-      : unitsValue({ [type]: n });
+      ? cumulativeDefenseStructureValue(type, n, cfg)   // burada `count` SEVİYEdir (§13.11.1b)
+      : unitsValue({ [type]: n }, cfg);
   }
 
   await runner.execute(sql`

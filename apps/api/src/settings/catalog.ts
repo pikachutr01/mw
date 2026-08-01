@@ -15,7 +15,12 @@ import type { DeepPartialCatalog } from '@mobiwar/catalog';
 type Values = Readonly<Record<string, Record<string, number | boolean> | undefined>>;
 
 /** Katalog config'ini oluşturan ayar grupları. */
-export const CATALOG_GROUPS = ['economy', 'cave', 'wall'] as const;
+/**
+ * ⚠️ Yeni iki grup eklenirken `catalogOverrides` GÖVDESİ değişmedi — mekanik eşlemenin
+ * sınavı buydu. Anahtarlar `grup.alan` biçiminde kaldığı sürece (bkz. `config.ts`
+ * `TuningConfig`) yeni bir katalog ailesi açmak tek satırlık iş.
+ */
+export const CATALOG_GROUPS = ['economy', 'cave', 'wall', 'buildingTuning', 'techTuning'] as const;
 
 export function catalogOverrides(
   values: Values, overridden: readonly string[],

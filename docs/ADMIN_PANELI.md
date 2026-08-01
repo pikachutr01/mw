@@ -1169,6 +1169,129 @@ yalnız `step-up` yanıtında dönüyordu; sayfa yenilenince kalan süre bilinmi
 
 ---
 
+## 2. NESİL — Tur 4: katalog tesisatı ve iki gerçek hata
+
+Bu tur **hiçbir sayıyı değiştirmemeliydi** — tesisat kuruluyor, denge duruyor. İddia ölçüldü:
+912 test yeşil, 176 motor testi ve 616 API testi **dokunulmadan** geçti.
+
+### Adım 0: önce kanıt, sonra kod
+
+⚠️ **Mevcut hash testi bir totolojiymiş.** `catalog-settings.test.ts:74`:
+
+```ts
+expect(catalogHash(DEFAULT_CATALOG_CONFIG)).toBe(catalogHash());
+```
+
+İki taraf da `cfg === DEFAULT_CATALOG_CONFIG` kısayolunu alıyor → **aynı kod yolu, aynı
+sonuç, her zaman**. `UNITS`/`TECHS`/`BUILDINGS`'e bir alan eklense bu test yine geçerdi.
+Yani kod tabanında varsayılan özeti sabitleyen **hiçbir** test yoktu; katalog tesisatına
+girmeden önce kapatılması gereken ilk delik buydu.
+
+İki yeni dosya, ikisi de **literal** (snapshot değil — `vitest -u` bir snapshot'ı sessizce
+yeniden yazar ve regresyon kanıtı kanıtladığı şeyle birlikte kayar):
+
+- `packages/catalog/test/hash.test.ts` — varsayılan özet `2ec624e6`
+- `packages/catalog/test/golden-prices.test.ts` — 9 yapı × 5 seviye, 12 teknik × 4 seviye,
+  Sur/Kalkan × 5 seviye için `{altın, yemek, saniye}` **elle yazılmış**
+
+### ⚠️ Hata 1: Sur ve Büyü Kalkanı panel ayarlarını hiç okumuyordu
+
+Bu hesap kataloğun **dışında, üç ayrı dosyada kopya** hâlinde duruyordu ve üçü de çıplak
+`1.8` literali kullanıyordu:
+
+| dosya | ne için |
+| :-- | :-- |
+| `queue.service.ts:297` | oyuncunun ödediği fiyat |
+| `city.controller.ts:422` | arayüzde gösterilen fiyat |
+| `score.service.ts:141` | puan hesabı |
+
+Sonuç: yönetici `economy.buildingCostRate`'i 1,8'den 2,2'ye çıkarsa **Sur ve Kalkan hariç**
+her şey değişiyordu; `buildingCostMultiplier`'ı ikiye katlasa Sur fiyatı hiç kıpırdamıyordu.
+Panelde bir düğme vardı ve oyunun bir köşesine hiç ulaşmıyordu.
+
+Hesap katalogda tek yere taşındı (`defenseStructureCost` / `defenseStructureTimeSeconds`).
+⚠️ Bu ikisi `buildings.ts`te değil `units.ts`te duruyor (savunma birimi olarak), o yüzden
+`buildingCost` onları tanımıyor ve ayrı bir giriş noktası gerekiyordu.
+
+**Canlı ölçüm** — Çığlıktepe, Sur seviyesi 6:
+
+```
+API'nin bildirdiği sonraki seviye fiyatı   {gold: 32652, food: 33332}
+beklenen (960·1,8⁶ · 980·1,8⁶)              32652        33332
+```
+
+Birebir aynı. `/healthz` katalog özeti de değişmedi: **`2ec624e6`**.
+
+### ⚠️ Hata 2: puan hesabı dünya ayarlarını görmüyordu
+
+Üç kaçak vardı ve en sinsisi `lossValue`: `def.gold + def.food` **ham** okunuyordu, yani
+`economy.unitCostMultiplier`'ı hiç görmüyordu. Çarpanı 2 yapan bir dünyada oyuncu birimi
+**iki katı** ödüyor, ölünce **tek katı** puan kaybediyordu — ordu kaybetmek kârlıydı.
+
+`cumulativeBuildingValue` · `cumulativeTechValue` · `cumulativeDefenseStructureValue` ·
+`lossValue` · `unitsValue` · `recomputeScoreBaseFromHoldings` artık `cfg` alıyor;
+çağrı yerleri (`city.service.ts` şehir terk etme, admin aksiyonları) mevcut
+`catalogFor?: (worldId) => CatalogConfig` kalıbını kullanıyor.
+
+### Adım 2: varlık başına ince ayar tesisatı
+
+`CatalogConfig`e iki grup eklendi: `buildingTuning` ve `techTuning`. Anahtarlar
+`<id>:<eksen>` — `castle:gold` · `castle:rate` · `castle:timeFactor`.
+
+⚠️ **Anahtar tek parça, ayar anahtarı iki parça kalıyor** (`buildingTuning.castle:gold`).
+Üç parçalı yapmak (`bases.buildings.castle.gold`) iki yerdeki `key.split('.')` varsayımını
+kırardı — `settings/catalog.ts:26` ve `admin.world.controller.ts:439` — ve **ikincisi
+sessizce varsayılan gösterirdi**. Ayırıcı `:` bilinçli: id'ler snake_case
+(`architect_school`), `_gold` soneki ayrıştırmayı belirsizleştirirdi.
+
+⚠️⚠️ **SEYREKLİK SÖZLEŞMESİ — varsayılan BOŞ.** Dokunulmamış bir varlık için kayıt olmaz ve
+formül global orana düşer. Buraya "yardımcı olsun" diye 9 yapının varsayılanını doldurmak
+`economy.buildingCostRate`'i **sessizce işlevsizleştirirdi**: her yapının kendi kaydı olurdu
+ve global düğme hiçbirine ulaşmazdı. Testle kilitlendi.
+
+| durum | kullanılan |
+| :-- | :-- |
+| hiçbir şey değişmemiş | global (varsayılan) |
+| yalnız global değişmiş | **global** ✅ düğme yaşıyor |
+| yalnız varlık değişmiş | varlık |
+| ikisi de | **varlık kazanır** |
+
+### «Taban süre» yerine süre çarpanı
+
+Kullanıcı "her yapının **taban süresi**" istemişti; oyunda öyle bir alan **yok** — süre
+maliyetten türüyor (`timeFromCost`). Taban süre eklemek "süre maliyetten türer" değişmezini
+kırar ve **ikinci bir süre kaynağı** açardı; "fiyatı üçe katladım ama süre değişmedi"
+hatasının doğduğu yer tam olarak orası olurdu. Onun yerine `<id>:timeFactor` (1,0 varsayılan)
+hesaplanan süreyi ölçekliyor. ⚠️ Çarpan `timeFromCost`ta değil sarmalayıcıda: o fonksiyon
+yalnız `Cost` görüyor, varlık kimliğini bilmiyor.
+
+### ⚠️ Ölçülmüş kırılma: hash şema büyümesine bağışık değildi
+
+`CatalogConfig`e `buildingTuning: {}` eklendiği anda test kırıldı: özet yükü `c` alanına
+config'in **tamamını** yazıyordu, dolayısıyla yeni bir alan — değeri varsayılan bile olsa —
+**override'ı olan her dünyanın özetini kaydırıyordu** ve o dünyanın geçmiş savaşları sahte
+bir "denge değişti" sinyali veriyordu.
+
+Yük artık varsayılandan **fark**: `{economy:{foodRate:1.2}}`. Şemaya on alan daha eklense bu
+string değişmez, ve bir test bunu kilitliyor.
+
+⚠️ Geçişin bedeli: override'lı dünyalar için **bir kereye mahsus** kayma
+(`e92dfa15` → `3f7fdea2`). Kabul edildi — `battles.catalog_hash` hiçbir sorguda `WHERE`e
+girmiyor, yalnız savaş künyesinde gösteriliyor. **Canlı dünyada override yok** (panel
+«0 ayar varsayılandan farklı» diyor) → oradaki hiçbir kayıt etkilenmedi.
+
+### Doğrulama
+
+```
+912 test yeşil  (katalog 48 → 74, +26)
+altın fiyat tablosu       değişmedi — 9 yapı, 12 teknik, Sur/Kalkan, her seviye
+varsayılan katalog özeti  2ec624e6  (kod içinde ve canlı /healthz'de)
+176 motor + 616 API testi dokunulmadan geçti
+canlı Sur fiyatı          32.652 / 33.332 — formülle birebir
+```
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

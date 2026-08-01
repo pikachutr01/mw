@@ -54,6 +54,27 @@ export interface EconomyConfig {
   originalDivisorRate: number;
 }
 
+/**
+ * ⭐ VARLIK BAŞINA İNCE AYAR (2. nesil Tur 4) — yapı ve teknik **başına** taban fiyat,
+ * büyüme oranı ve süre çarpanı.
+ *
+ * ⚠️ **Anahtar `<id>:<eksen>` biçiminde ve TEK PARÇA.** Ayar anahtarları (`buildingTuning.
+ * castle:gold`) böylece `grup.alan` şeklinde iki parçalı kalıyor. Üç parçalı yapmak
+ * (`bases.buildings.castle.gold`) iki yerdeki `key.split('.')` varsayımını kırardı —
+ * `settings/catalog.ts` ve `admin.world.controller.ts:439` — ve ikincisi **sessizce**
+ * varsayılan gösterirdi.
+ *
+ * ⚠️ Ayırıcı `:` bilinçli: id'ler snake_case (`architect_school`, `magic_shield`), `_gold`
+ * soneki ayrıştırmayı belirsizleştirirdi.
+ *
+ * ⚠️⚠️ **SEYREKLİK SÖZLEŞMESİ — varsayılan BOŞ.** Dokunulmamış bir varlık için burada kayıt
+ * OLMAZ ve formül global orana düşer. Buraya "yardımcı olsun" diye 9 yapının varsayılanını
+ * doldurmak, `economy.buildingCostRate`'i **sessizce işlevsizleştirirdi**: global düğme
+ * artık hiçbir yapıyı etkilemezdi.
+ */
+export type TuningAxis = 'gold' | 'food' | 'rate' | 'timeFactor';
+export type TuningConfig = Partial<Record<string, number>>;
+
 export interface CaveConfig {
   capacityBase: number;
   breakBase: number;
@@ -75,6 +96,10 @@ export interface CatalogConfig {
   economy: EconomyConfig;
   cave: CaveConfig;
   wall: WallConfig;
+  /** `castle:gold` · `castle:rate` · `castle:timeFactor` … — bkz. `TuningConfig`. */
+  buildingTuning: TuningConfig;
+  /** `blacksmithing:gold` · `blacksmithing:rate` … */
+  techTuning: TuningConfig;
 }
 
 /**
@@ -121,6 +146,12 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     repairBaseSeconds: 12 * 3600,
     repairDecayRate: 0.92,
   },
+  /**
+   * ⚠️⚠️ **BOŞ KALMALI.** Dolu bir varsayılan, global fiyat/oran düğmelerini sessizce
+   * işlevsizleştirir (bkz. `TuningConfig` yorumundaki seyreklik sözleşmesi).
+   */
+  buildingTuning: {},
+  techTuning: {},
 };
 
 export type DeepPartialCatalog = {
@@ -140,5 +171,8 @@ export function mergeCatalogConfig(overrides?: DeepPartialCatalog): CatalogConfi
     economy: { ...DEFAULT_CATALOG_CONFIG.economy, ...overrides.economy },
     cave: { ...DEFAULT_CATALOG_CONFIG.cave, ...overrides.cave },
     wall: { ...DEFAULT_CATALOG_CONFIG.wall, ...overrides.wall },
+    // ⚠️ Seyreklik korunuyor: override yoksa boş nesne kalır (bkz. `TuningConfig` yorumu).
+    buildingTuning: { ...DEFAULT_CATALOG_CONFIG.buildingTuning, ...overrides.buildingTuning },
+    techTuning: { ...DEFAULT_CATALOG_CONFIG.techTuning, ...overrides.techTuning },
   };
 }

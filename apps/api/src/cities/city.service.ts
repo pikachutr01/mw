@@ -318,7 +318,9 @@ export class CityService {
       const blockers = await this.abandonBlockers(o.cityId, runner);
       if (blockers.length > 0) throw new AbandonError(blockers);
 
-      const scoreBaseLost = await cityScoreBase(runner, o.cityId);
+      // ⚠️ `cfg` geçiliyor: dünya bazlı fiyat override'ında terk edilen şehrin puan bedeli
+      // oyuncunun gerçekte ödediğiyle aynı olmalı.
+      const scoreBaseLost = await cityScoreBase(runner, o.cityId, this.cat(o.worldId));
       await addScoreBase(runner, o.playerId, -scoreBaseLost);
 
       /**
@@ -361,7 +363,9 @@ export class AbandonError extends Error {
  * zaten sıfır olmadan terk edilemiyor. Kaynak (altın/yemek) hiç harcanmamıştı, dolayısıyla
  * hiç puan da vermemişti; yok olması puanı etkilemez (`score.service.ts` başlığındaki kural 3).
  */
-async function cityScoreBase(runner: Runner, cityId: number): Promise<number> {
+async function cityScoreBase(
+  runner: Runner, cityId: number, cfg?: CatalogConfig,
+): Promise<number> {
   const [buildings, defenses] = await Promise.all([
     runner.execute<Record<string, unknown>>(sql`
       SELECT type, level FROM buildings WHERE city_id = ${cityId}
@@ -372,12 +376,16 @@ async function cityScoreBase(runner: Runner, cityId: number): Promise<number> {
   ]);
 
   let base = 0;
-  for (const b of buildings) base += cumulativeBuildingValue(String(b['type']), Number(b['level']));
+  for (const b of buildings) {
+    base += cumulativeBuildingValue(String(b['type']), Number(b['level']), cfg);
+  }
   for (const d of defenses) {
     const type = String(d['type']);
     const n = Number(d['count']);
     // Sur / Büyü Kalkanı `count` sütununda SEVİYE taşır (§13.11.1b).
-    base += LEVEL_BASED.has(type) ? cumulativeDefenseStructureValue(type, n) : unitsValue({ [type]: n });
+    base += LEVEL_BASED.has(type)
+      ? cumulativeDefenseStructureValue(type, n, cfg)
+      : unitsValue({ [type]: n }, cfg);
   }
   return base;
 }
