@@ -50,6 +50,12 @@ export const worlds = pgTable('worlds', {
   constructionMultiplier: integer('construction_multiplier').notNull().default(1),
   catalogHash: text('catalog_hash'),
   config: jsonb('config').notNull().default({}),
+  /**
+   * ⭐ Hesabını silen oyunculara verilen anonim adın sayacı (`hükümdar1`, `hükümdar2`…).
+   * DÜNYA BAŞINA: kullanıcı adı tekilliği `(world_id, username)` üzerinde, sayılar küçük kalır.
+   * ⚠️ `SELECT … FOR UPDATE` ile kilitlenip artırılır — iki eşzamanlı silme aynı adı üretemez.
+   */
+  deletedPlayerSeq: integer('deleted_player_seq').notNull().default(0),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -118,6 +124,13 @@ export const players = pgTable('players', {
    */
   allianceRole: smallint('alliance_role'),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
+  /**
+   * ⭐ HESABINI SİLDİ (2026-08-01). Satır **kalıyor**: başkent dünyada duran gerçek bir şehir
+   * ve sahibi olmadan savaş geçmişinde, sıralamada ve komşuların raporlarında delik açardı.
+   * Kişisel veri (`accounts.email`, parola, oturum, push) gerçekten siliniyor; oyuncu adı
+   * `hükümdarN` oluyor. Bu kolon olmadan panel bu kalıntıları normal oyuncu sanardı.
+   */
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

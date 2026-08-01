@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Delete, Get, HttpCode, HttpException,
-  HttpStatus, Inject, Param, Post, Req, UnauthorizedException, UseGuards,
+  ForbiddenException, HttpStatus, Inject, Param, Post, Req, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { loginRequest, registerRequest } from '@mobiwar/contracts';
 import { sql } from 'drizzle-orm';
@@ -10,6 +10,7 @@ import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { EmailError, EmailTokenService } from '../mail/email-token.service.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
+import { AccountDeleteError, AccountDeleteService } from './account-delete.service.ts';
 import { AuthError, AuthService, type AuthResult } from './auth.service.ts';
 import { AuthGuard, type AuthedRequest } from './auth.guard.ts';
 
@@ -36,6 +37,14 @@ const changeBody = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z.string().min(8).max(200),
 });
+/**
+ * ⚠️ Adres değiştirmek de **mevcut parola** ister. Şifre değiştirmekle aynı güvenlik sınıfı:
+ * saldırgan adresi kendine çekip sonra "şifremi unuttum" ile hesabı tamamen alabilirdi.
+ */
+const changeEmailBody = z.object({
+  newEmail: z.string().email().max(320),
+  currentPassword: z.string().min(1).max(200),
+});
 
 /** İstemciye dönen gövde — refresh token dâhil (web'de httpOnly çereze de yazılır). */
 interface AuthResponse {
@@ -50,9 +59,11 @@ interface AuthResponse {
 @Controller('api/v1/auth')
 export class AuthController {
   private readonly emails: EmailTokenService;
+  private readonly deletes: AccountDeleteService;
 
   constructor(private readonly auth: AuthService, @Inject(DB) private readonly db: Db) {
     this.emails = new EmailTokenService(db);
+    this.deletes = new AccountDeleteService(db);
   }
 
   @Post('register')
@@ -206,24 +217,124 @@ export class AuthController {
       current: parsed.data.currentPassword,
       next: parsed.data.newPassword,
       /**
-       * ⭐ Parola değişimi tüm oturumları düşürür — ve artık **açık soketleri de** kapatır
-       * (§admin Faz 3). Eskiden yalnız DB satırları iptal ediliyordu; soket ancak token
-       * yenilenirken (15 dakikaya kadar) fark ediyordu. Parola değiştirmenin amacı tam olarak
-       * "davetsiz misafiri şimdi at" olduğu için o gecikme kabul edilemez.
+       * ⭐ **DİĞER** cihazlar düşer, bu oturum kalır (kullanıcı, 2026-08-01). Eskiden
+       * `revokeAllIds` çağrılıyordu ve oyuncu kendi şifresini değiştirdiği için oyundan
+       * atılıyordu; istemci de bunu bilip sayfayı zorla yeniden yüklüyordu.
+       *
+       * ⚠️ Soketler de kapanır (§admin Faz 3). Yalnız DB satırını iptal etmek yetmiyordu:
+       * açık soket, token yenilenene kadar (15 dakikaya kadar) fark etmiyordu. Şifre
+       * değiştirmenin amacı "davetsiz misafiri ŞİMDİ at" olduğu için o gecikme kabul edilemez.
        */
-      revokeAll: async (id) => {
-        const ids = await this.auth.revokeAllIds(id);
+      revokeOthers: async (id) => {
+        const ids = await this.auth.revokeOtherChains(id, req.player!.sessionId);
         dropSockets(ids);
         return ids.length;
       },
     }));
   }
 
-  /** `EmailError` → HTTP. `cooldown`/`quota` 429, gerisi 400 (kod gövdede). */
+  /* ── E-posta ADRESİ değiştirme (kullanıcı, 2026-08-01) ─────────────────────── */
+
+  /**
+   * ⭐ Adres değişir, hesap **doğrulanmamışa düşer**, yeni adrese doğrulama gider.
+   * Doğrulanmamış hâlin kısıtları (§9.2b) anında yürürlüğe girer — ama hiçbir seviye geri
+   * alınmaz (sınırlar «≥»).
+   */
+  @Post('change-email')
+  @UseGuards(AuthGuard)
+  async changeEmail(@Body() body: unknown, @Req() req: AuthedRequest): Promise<{ email: string }> {
+    const parsed = changeEmailBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'invalid_email' });
+    return this.mail(() => this.emails.changeEmail({
+      accountId: req.player!.accountId,
+      newEmail: parsed.data.newEmail,
+      currentPassword: parsed.data.currentPassword,
+      ip: extractDeviceContext(req).ip,
+    }));
+  }
+
+  /* ── Hesap silme (kullanıcı, 2026-08-01 · §9.2c) ───────────────────────────── */
+
+  /** Silme bağlantısı iste. ⚠️ Doğrulanmış e-posta ŞART. */
+  @Post('delete-account/request')
+  @UseGuards(AuthGuard)
+  @HttpCode(204)
+  async requestDeletion(@Req() req: AuthedRequest): Promise<void> {
+    await this.mail(() => this.emails.requestDeletion(
+      req.player!.accountId, extractDeviceContext(req).ip,
+    ));
+  }
+
+  /**
+   * ⭐ ONAY EKRANININ ÖZETİ — **oturum GEREKTİRMEZ** (Google Play'in istediği herkese açık
+   * sayfa; bağlantı çoğu zaman telefonun posta uygulamasından, oturumsuz bir tarayıcıda açılır).
+   *
+   * ⚠️ Jeton **tüketilmez**: oyuncu sayfayı açıp vazgeçerse bağlantı yanmamalı.
+   */
+  @Post('delete-account/preview')
+  async previewDeletion(@Body() body: unknown): Promise<Record<string, unknown>> {
+    const parsed = tokenBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'invalid_token' });
+    const { accountId } = await this.mail(() => this.emails.peekDeletion(parsed.data.token));
+    const player = await this.playerOf(accountId);
+    return { ...(await this.deletes.preview(player.playerId)) };
+  }
+
+  /**
+   * ⭐ SİLMEYİ UYGULA — jeton burada tüketilir ve engeller **yeniden** bakılır.
+   *
+   * ⚠️ Engelleri önizlemedeki cevaba güvenerek atlamak, bağlantının 12 saatlik ömrü boyunca
+   * oyuncunun ordu yollamış olabileceğini yok saymak olurdu.
+   */
+  @Post('delete-account')
+  async deleteAccount(@Body() body: unknown): Promise<Record<string, unknown>> {
+    const parsed = tokenBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'invalid_token' });
+
+    // ⚠️ Önce KİM olduğunu bul (tüketmeden), sonra engellere bak, en son jetonu tüket.
+    const peek = await this.mail(() => this.emails.peekDeletion(parsed.data.token));
+    const player = await this.playerOf(peek.accountId);
+    const pre = await this.deletes.preview(player.playerId);
+    if (pre.blockers.length > 0) {
+      throw new ConflictException({ code: 'blocked', blockers: pre.blockers });
+    }
+
+    await this.mail(() => this.emails.consumeDeletion(parsed.data.token));
+    const result = await this.deletes.execute({
+      accountId: peek.accountId,
+      playerId: player.playerId,
+      worldId: player.worldId,
+      revokeAll: async (id) => {
+        const ids = await this.auth.revokeAllIds(id);
+        dropSockets(ids);
+        return ids;
+      },
+    });
+    return { ok: true, ...result };
+  }
+
+  /** Hesabın (tek) oyuncusu. ⚠️ Hesap ↔ dünya bugün birebir; kayıt aynı e-postayı reddediyor. */
+  private async playerOf(accountId: number): Promise<{ playerId: number; worldId: number }> {
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT id, world_id FROM players WHERE account_id = ${accountId} ORDER BY id LIMIT 1
+    `);
+    if (!row) throw new BadRequestException({ code: 'invalid_token' });
+    return { playerId: Number(row['id']), worldId: Number(row['world_id']) };
+  }
+
+  /** `EmailError` → HTTP. `cooldown`/`quota` 429, `not_verified` 403, gerisi 400. */
   private async mail<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (err) {
+      /**
+       * ⚠️ `AccountDeleteService` kendi hatasını fırlatıyor ve **yarış koşulunda** buraya
+       * düşebilir: önizleme temiz dönmüşken, `execute()` içindeki ikinci kontrol arada
+       * çıkmış bir ordu hareketini yakalayabilir. 409 = "istek doğru ama şu an mümkün değil".
+       */
+      if (err instanceof AccountDeleteError) {
+        throw new ConflictException({ code: err.code, message: err.message });
+      }
       if (!(err instanceof EmailError)) throw err;
       const payload = {
         code: err.code, message: err.message, retryAfterSeconds: err.retryAfterSeconds,
@@ -231,6 +342,8 @@ export class AuthController {
       if (err.code === 'cooldown' || err.code === 'quota') {
         throw new HttpException(payload, HttpStatus.TOO_MANY_REQUESTS);
       }
+      /* ⚠️ Doğrulanmamış hesabın silme isteği "isteğin bozuk" değil "yetkin yok" → 403. */
+      if (err.code === 'not_verified') throw new ForbiddenException(payload);
       throw new BadRequestException(payload);
     }
   }

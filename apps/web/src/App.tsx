@@ -14,6 +14,7 @@ import { Armies } from './screens/Armies.tsx';
 import { Auth } from './screens/Auth.tsx';
 import { AcademyScreen, BarracksScreen, BuildingsScreen, DefenseScreen } from './screens/City.tsx';
 import { CityHub } from './screens/CityHub.tsx';
+import { DeleteAccountScreen } from './screens/DeleteAccount.tsx';
 import { ResetPasswordScreen, VerifyEmailScreen } from './screens/EmailActions.tsx';
 import { Messages } from './screens/Messages.tsx';
 import { CommandScreen } from './screens/Command.tsx';
@@ -21,8 +22,13 @@ import { HelpScreen, OptionsScreen } from './screens/Placeholders.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
 import { World } from './screens/World.tsx';
 
-/** Oturum kapısının ÖNÜNDEN geçen rotalar (e-posta bağlantıları, §9.2). */
-const EMAIL_PATHS = new Set(['/verify-email', '/reset-password']);
+/**
+ * Oturum kapısının ÖNÜNDEN geçen rotalar (e-posta bağlantıları, §9.2).
+ *
+ * ⚠️ `/hesap-sil` de burada ve **jetonsuz da açılabilir** (§9.2c): Google Play, hesap silme
+ * için mağaza listelemesinden doğrudan ulaşılan, oturum istemeyen bir sayfa şart koşuyor.
+ */
+const EMAIL_PATHS = new Set(['/verify-email', '/reset-password', '/hesap-sil']);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,6 +67,7 @@ export function App() {
           <Routes>
             <Route path="/verify-email" element={<VerifyEmailScreen />} />
             <Route path="/reset-password" element={<ResetPasswordScreen />} />
+            <Route path="/hesap-sil" element={<DeleteAccountScreen />} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

@@ -254,19 +254,27 @@ describe('şifre sıfırlama', () => {
 /* ── Parola değiştirme ────────────────────────────────────────────────────────── */
 
 describe('parola değiştirme', () => {
-  it('yanlış mevcut parola reddedilir, doğru parola oturumları düşürür', async () => {
+  /**
+   * ⚠️ **`revokeAll` → `revokeOthers`** (2026-08-01, kullanıcı kararı). Parola değiştirmek
+   * artık AKTİF oturumu düşürmüyor, yalnız diğer cihazları — oyuncuyu kendi şifresini
+   * değiştirdiği için oyundan atmak gereksiz bir cezaydı. Sıfırlamada (`resetPassword`)
+   * hepsini düşürmek DOĞRU ve orada değişmedi: orada niyet "hesabı geri al".
+   */
+  it('yanlış mevcut parola reddedilir, doğru parola DİĞER oturumları düşürür', async () => {
     const a = await makeAccount({ verified: true });
     await svc.requestReset(a.email);
     await svc.resetPassword({ token: await lastToken(), password: 'ilk-parolam', revokeAll });
     revoked.length = 0;
 
     await expect(svc.changePassword({
-      accountId: a.accountId, current: 'yanlis-parola', next: 'yeni-parolam', revokeAll,
+      accountId: a.accountId, current: 'yanlis-parola', next: 'yeni-parolam',
+      revokeOthers: revokeAll,
     })).rejects.toMatchObject({ code: 'invalid_credentials' });
     expect(revoked).toEqual([]);
 
     await svc.changePassword({
-      accountId: a.accountId, current: 'ilk-parolam', next: 'yeni-parolam', revokeAll,
+      accountId: a.accountId, current: 'ilk-parolam', next: 'yeni-parolam',
+      revokeOthers: revokeAll,
     });
     expect(revoked).toEqual([a.accountId]);
   });

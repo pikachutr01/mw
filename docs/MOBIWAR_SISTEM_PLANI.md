@@ -628,6 +628,87 @@ sabit yazmak, yönetici tavanı değiştirdiğinde ekranın yalan söylemesi dem
 hesabı doğrulanmamış bırakıyor, yani `register` çağıran her test bu kısıtların ortasına
 doğuyordu; kısıtları ÖLÇMEYEN testler normal bir oyuncuya dönüştü.
 
+---
+
+## 9.2c ⭐ HESAP YÖNETİMİ: silme · adres değiştirme · şifre (kullanıcı, 2026-08-01) ✅ YAPILDI
+
+### Hesap silme — mağaza şartı ve oyuncunun hakkı
+
+Google Play, hesap silme için **oturum gerektirmeyen herkese açık bir sayfa** istiyor. Akış:
+Seçenekler → Hesabı Sil → e-postaya **12 saatlik, tek kullanımlık** bağlantı → `/hesap-sil`
+sayfası ne olacağını tek tek gösterir → onay.
+
+**K1 — Silme değil ANONİMLEŞTİRME + STERİLİZASYON.**
+
+| ne olur | neden |
+| :-- | :-- |
+| `players` satırı **KALIR**, adı `hükümdarN` | başkent dünyada duran gerçek bir şehir; satırı yok etmek savaş geçmişinde, sıralamada ve komşuların raporlarında delik açardı |
+| başkent **KALIR**, adı oyuncuyla **AYNI** | kullanıcı şartı |
+| başkent dışı şehirler **YIKILIR** (ordu olsa bile) | kullanıcı şartı |
+| `accounts` sterilize: e-posta `silinmis+<id>@mobiwar.invalid`, parola rastgele | ⭐ gerçek adres **serbest kalır** → aynı e-postayla yeniden kayıt mümkün |
+| oturum · push aboneliği · jeton **SİLİNİR** | kişisel veri gerçekten gider |
+
+⚠️ Parola **boş bırakılmıyor, rastgeleye çevriliyor**: geçersiz bir hash `argon2.verify`i
+patlatır ve giriş "sunucu hatası" verir; rastgele hash sessizce ve doğru şekilde
+"parola yanlış" der.
+
+**K2 — Üç engel.** Başkent DIŞI şehre değen hareket (kullanıcının kuralı) · başkentten
+**çıkmış** ordu (kullanıcı seçimi: yoksa silinmiş hesabın ordusu saatler sonra birine saldırır
+ve dönüşte anonim şehre girer) · **ittifak liderliği** (kullanıcı seçimi: lider silinirse
+ittifak başsız kalır). ⚠️ Başkente **gelen** saldırı engel DEĞİL — kullanıcının açık kuralı.
+
+⚠️ **Engeller onay anında YENİDEN bakılır.** Bağlantı 12 saat geçerli; önizlemedeki "temiz"
+cevaba güvenmek, silmeyi tam da yasakladığımız durumda yapmak olurdu.
+
+**K3 — Kahramanlar ÖNCE başkente taşınır.** `heroes.city_id` şehre `ON DELETE SET NULL` bağlı:
+yıkılan şehirdeki kahraman şehirsiz kalır ve hiçbir tapınakta görünmez. Sıra load-bearing.
+
+**K4 — `hükümdarN` sayacı `worlds.deleted_player_seq`te**, dünya başına ve `FOR UPDATE` ile
+kilitli. Kayıt bu deseni **REZERVE eder** (`DELETED_NAME_RE`): gerçek bir oyuncu "hükümdar1"
+alırsa sonraki silme aynı adı üretmek isteyip tekillik kısıtına çarpar ve **silme başarısız
+olurdu**.
+
+**K5 — Dünya kapsamı kendiliğinden çalışıyor.** Hesap ↔ dünya birebir (kayıt aynı e-postayı
+ikinci kez kabul etmiyor), yani *"bir dünyadaki hesabını sil, başka dünyada devam et"* için
+ek bir şey gerekmiyor: öbür dünya zaten ayrı bir hesap.
+
+### E-posta adresi değiştirme
+
+`POST /auth/change-email` — **mevcut parola şart** (şifre değiştirmekle aynı güvenlik sınıfı:
+saldırgan adresi kendine çekip sonra "şifremi unuttum" ile hesabı tamamen alabilirdi).
+Adres **hemen** değişir, hesap **doğrulanmamışa düşer** (§9.2b kısıtları «≥» ile yürürlüğe
+girer, hiçbir seviye geri alınmaz), yeni adrese doğrulama + **eski adrese bilgi** maili gider.
+
+⭐ Bedava gelen davranış: bekleyen `reset` jetonları kendiliğinden ölür — `consume()` jetondaki
+adresi hesabın güncel adresiyle karşılaştırıyor (`email_tokens.email` kasıtlı denormalize).
+
+⚠️ **`skipCooldown` — testte bulunan yara.** Cooldown "aynı maili tekrar isteme" freni; adres
+değiştirmek başka bir eylem ve yan ürünü olarak doğrulama maili üretiyor. Fren orada da
+işleyince, e-postasını yanlış yazıp hemen düzeltmek isteyen oyuncu kayıt mailinin 60 saniyesine
+takılıyor ve **adres değişimi hiç gerçekleşmiyordu**. Günlük tavanlar yerinde.
+
+### Şifre değiştirme
+
+⭐ **Aktif oturum ayakta kalır**, yalnız diğer cihazlar düşer (`revokeOtherChains` — bugüne
+kadar yazılmış ama hiç çağrılmamıştı). Oyuncuyu kendi şifresini değiştirdiği için oyundan
+atmak gereksiz bir cezaydı; istemci de bunu bilip sayfayı zorla yeniden yüklüyordu.
+⚠️ Sıfırlamada (`resetPassword`) **hepsi** düşmeye devam ediyor: orada niyet "hesabı geri al".
+Değişiklik e-postayla bildiriliyor (şifreyi değiştiren kişi sahibi olmayabilir).
+
+### Ad sınırı 10 → 15
+
+`hükümdar` tek başına 8 karakter; sayı büyüdükçe 10 yetmiyor. Kullanıcı adı ve şehir adı
+birlikte yükseldi. Kural artık **tek yerde** (`name-rules.ts`): `contracts → catalog` kenarı
+açıldı (tek yönlü, `settings → catalog` ile aynı gerekçe) ve `CityAdminPanel`deki el kopyası
+silindi. ⚠️ `Auth.tsx`teki `pattern="[A-Za-z0-9]+"` **kaldırıldı**: sunucunun `\p{L}\p{N}`
+kuralıyla çelişiyordu — "Ayşe" tarayıcıda reddediliyor, sunucuda kabul ediliyordu.
+
+### Panelden başlangıç kesesi
+
+`economy.startingGold` / `economy.startingFood` (varsayılan 4000/4000). ⚠️ Koloni kesesi
+ayarlanabilir DEĞİL ve öyle kalıyor: 0 bir denge düğmesi değil **değişmez** — koloniye kese
+vermek "kur → al → terk et" döngüsünü açardı. `catalogHash` kaymadı (`diffFromDefault`).
+
 **Gönderen:** `send.scrabblecozucu.site` (alt alan; apex SPF `-all` ile sert kapalı ve hosting
 paneline ait, ona dokunulmuyor). DNS kayıtları **VPS'te değil, hostingdunyam panelinde**.
 

@@ -63,9 +63,11 @@ export function VerifyEmailScreen(): React.ReactElement {
         </>
       ) : state === 'fail' ? (
         <>
+          {/* ⚠️ Burası "Seçenekler → Bildirimler" diyordu ve YANLIŞTI: tekrar gönder düğmesi
+              **Hesap** panelinde (`AccountPanel.tsx`). Oyuncuyu bulunmayan bir yere yolluyordu. */}
           <p className="mb-3 text-sm text-ink">
-            Bağlantı geçersiz ya da süresi dolmuş. Oyuna girip Seçenekler → Bildirimler
-            bölümünden yeni bir doğrulama e-postası isteyebilirsin.
+            Bağlantı geçersiz ya da süresi dolmuş. Oyuna girip <strong>Seçenekler → Hesap</strong>
+            {' '}bölümünden yeni bir doğrulama e-postası isteyebilirsin.
           </p>
           <ErrorBox error={error} />
           <Button className="mt-3 w-full" onClick={() => navigate('/armies')}>Oyuna dön</Button>

@@ -48,8 +48,14 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
   await h.db.execute(sql`
     INSERT INTO worlds (id, name, state, clock_offset_ms)
     VALUES (${worldId}, ${'test-' + worldId}, 'running', 0)
-    ON CONFLICT (id) DO UPDATE SET state = 'running', clock_offset_ms = 0, paused_at = NULL
+    ON CONFLICT (id) DO UPDATE SET state = 'running', clock_offset_ms = 0, paused_at = NULL,
+      deleted_player_seq = 0
   `);
+  /* ⚠️ Yukarıdaki SIFIRLAMA şart: dünya kimlikleri her koşuda 100'den başladığı için satır
+   * yeniden kullanılıyor ve sayaç önceki koşudan devrederse hesap silme testi ikinci
+   * koşuda "hükümdar1" yerine "hükümdar2" görür.
+   * ⚠️ Not: bu yorum SQL'in İÇİNDE değil — orada ters tırnak kullanmak şablon dizesini
+   * kapatıyor ve dosya derlenmiyor (tam bu şekilde yaşandı). */
   await h.db.execute(sql`DELETE FROM missions WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM outbox WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM audit_log WHERE world_id = ${worldId}`);

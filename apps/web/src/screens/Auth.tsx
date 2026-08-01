@@ -1,10 +1,12 @@
 /**
  * Giriş / kayıt.
  *
- * ⚠️ Kullanıcı adı **3-10 karakter, boşluk ve noktalama YOK** (oyunun kendi dokümanı) ve
- * **değiştirilemez** — bu yüzden kayıt ekranında açıkça uyarılıyor.
+ * ⚠️ Kullanıcı adı **boşluk ve noktalama YOK** (oyunun kendi dokümanı) ve **değiştirilemez** —
+ * bu yüzden kayıt ekranında açıkça uyarılıyor. Uzunluk sınırı katalogdan (`USERNAME_MIN/MAX`);
+ * 2026-08-01'de 10'dan 15'e çıktı.
  */
 import { useState } from 'react';
+import { USERNAME_MAX, USERNAME_MIN, USERNAME_RULE_MESSAGE } from '@mobiwar/catalog';
 import { api, login, register } from '../lib/api.ts';
 import { Button, Card, ErrorBox, Field, Input } from '../components/ui.tsx';
 
@@ -87,10 +89,17 @@ export function Auth({ onDone }: { onDone: () => void }) {
           {mode !== 'forgot' ? (
             <Field label={mode === 'login'
               ? 'Kullanıcı adı'
-              : 'Kullanıcı adı (3-10 karakter, sonradan değiştirilemez)'}>
-              <Input required minLength={3} maxLength={10} pattern="[A-Za-z0-9]+"
+              : `Kullanıcı adı (${USERNAME_MIN}-${USERNAME_MAX} karakter, sonradan değiştirilemez)`}>
+              {/*
+                ⚠️ `pattern` KALDIRILDI (2026-08-01). Buradaki `[A-Za-z0-9]+` deseni sunucunun
+                `\p{L}\p{N}` kuralıyla çelişiyordu: "Ayşe" tarayıcıda reddediliyor, sunucuda
+                kabul ediliyordu — yani Türkçe adlar hiç kayıt olamıyordu. HTML `pattern`
+                Unicode özellik sınıflarını desteklemediği için desen denetimi tek yerde
+                (sunucuda) bırakıldı; uzunluk sınırı katalogdan geliyor.
+              */}
+              <Input required minLength={USERNAME_MIN} maxLength={USERNAME_MAX}
                 autoComplete="username"
-                title="Yalnız harf ve rakam, 3-10 karakter"
+                title={USERNAME_RULE_MESSAGE}
                 value={username} onChange={(e) => setUsername(e.target.value)} />
             </Field>
           ) : null}

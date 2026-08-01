@@ -84,9 +84,15 @@ ve toplu seçim.
 > şehirleri arasında destek serbest. Sınırlar **«≥»**: doğrulamayı sonradan kaybeden hesap
 > elindekini KAYBETMEZ, yalnız ilerleyemez. Sayılar panelden ayarlanır (`verify` grubu).
 >
+> ⭐ **2026-08-01: hesap yönetimi tamamlandı** (§9.2c) — **hesap silme** (12 saatlik tek
+> kullanımlık bağlantı + oturumsuz `/hesap-sil` sayfası; anonimleştirme, başkent kalır,
+> diğer şehirler yıkılır, e-posta serbest kalır), **e-posta ADRESİ değiştirme** (parola şart,
+> doğrulama düşer, eski adrese bilgi maili), **şifre değiştirme** artık aktif oturumu
+> düşürmüyor + bilgilendirme maili gönderiyor. Ad sınırı 10 → **15**.
+>
 > **Kalan (kullanıcıya bağlı):** `RESEND_API_KEY` üretilip `mw/.env`'e yazılacak ve
 > `send.scrabblecozucu.site` alt alanının DNS kayıtları hosting paneline eklenecek.
-> **Kalan (kod):** e-posta ADRESİ değiştirme akışı yok · gönderim günlüğü/panel yok.
+> **Kalan (kod):** gönderim günlüğü/panel yok.
 
 ### 1.4 Arama (Oyuncu Ara) + Dünyada Bul — ✅ **YAPILDI (2026-07-31)**
 
@@ -144,7 +150,7 @@ gösteriliyor ama §9.1.1 gereği otomatik karar üretmiyor).
 | :-- | :-- | :-- |
 | **Askerî unvanlar** | `k.java:1214-1245`: Asker/**Subay/Komutan/Başkomutan/Mareşal** (1-5) — ittifak rolünden (Konsey/Lider) AYRI alan. Verilme şartı istemcide YOK, sunucudaydı | Bizde yalnız 3 rol. Kullanıcı: *"savaşlardaki başarılarına göre veriliyordu, muhtemelen süreli"* → şart bilinmiyor; gösterim rozeti ucuz |
 | **Yardım sayfası** | `grYrd.do`; içerik zaten `teknik_ve_yapi_dokumantasyonu.md`'de duruyor | `Placeholders.tsx:26-31` iki satır "yakında" |
-| **Şehir adı değiştirme** | `dgSad.do?a=`, 10 karakter (`g.java:1892`) | Hiç yok |
+| ~~**Şehir adı değiştirme**~~ | `dgSad.do?a=` (`g.java:1892`) | ✅ **yapıldı** (Tur B). ⚠️ Sınır 2026-08-01'de **15** karaktere çıktı; orijinalin 10'u hesap silmenin ürettiği `hükümdarN` adlarına yetmiyordu |
 | ~~**Şifre değiştir / hatırlat**~~ | `dgSif.do?e=` · `gnSfr.do?d=` | ✅ **2026-07-31'de yapıldı** (§1.3) |
 | **Mağara Raporu** | `g.java:32` a[37] "Maðara Rapor", ayrı ekran (`g.java:1666,1750`) | Mağara mekaniği ✅ tam, ayrı rapor mesajı ❌ |
 | **Gelen Ordu ayrı paneli** | `g.java:1915` case 66 — ayrı ekran | Bizde tek listede (`Armies.tsx`) gelen/giden birlikte; ayrı panel yok |
@@ -209,8 +215,9 @@ presence, sıralama) · savaş raporu detayı · kahraman yaşam döngüsü · s
 2. ✅ ~~**Web push**~~ + ✅ ~~**E-posta (Resend)**~~ — ikisi de **2026-07-31'de bitti**
    (§1.2, §1.3). Faz 2 kapandı; şifre sıfırlama artık mümkün.
 3. ✅ ~~**Arama + Dünyada Bul**~~ — **2026-07-31'de bitti** (§1.4)
-4. **Hesap/şehir aksiyonları paketi** (tatil · terk · ad) ← **SIRADAKİ**
-   (şifre değiştirme §1.3'te girdi)
+4. **Hesap/şehir aksiyonları paketi** — ✅ ad · terk · şifre · **e-posta değiştirme** ·
+   **hesap silme** girdi (2026-08-01, §9.2c). **Kalan tek madde: TATİL MODU** (§1.5 —
+   kolon ve saldırı reddi hazır, açma/kapama ucu ve 48 saat kuralı yok) ← **SIRADAKİ**
 5. **Moderasyon minimumu** (şikayet + blokla, tablolar hazır) + basit admin görünümü
 6. **Premium** — ürün kararı gerektiriyor
 7. **Yardım + i18n**

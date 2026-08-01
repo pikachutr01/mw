@@ -241,6 +241,29 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     description: 'E-posta servisi cevap vermezse kaç milisaniye beklenir.',
   },
 
+  /* ── Başlangıç kesesi ────────────────────────────────────────────────────────
+   * ⚠️ `economy` grubunda çünkü `CatalogConfig.economy`ye oturuyor (anahtar eşlemesi
+   * `settings/catalog.ts`teki iki seviyeli kuralla birebir).
+   */
+  {
+    key: 'economy.startingGold',
+    label: 'Başlangıç altını',
+    type: 'int', default: 4000, min: 0, max: 100_000_000, tag: 'design', unit: 'altın',
+    description: 'Yeni oyuncunun başkentine konan altın. Büyütürsen oyuncu ilk dakikalarda '
+      + 'daha rahat başlar; küçültürsen ilk saatler beklemeyle geçer.',
+    note: '4000 seçilmişti çünkü sıfır keseyle oyuncunun ilk gününde ~26 saat ölü zaman '
+      + 'doğuyordu (§13.11.1a). ⚠️ Yalnız BAŞKENT alır; kurulan koloni sıfırla doğar ve o '
+      + 'sayı ayarlanabilir DEĞİL — koloniye kese vermek «şehir kur → keseyi al → terk et» '
+      + 'döngüsüyle sınırsız kaynak basmayı açardı.',
+  },
+  {
+    key: 'economy.startingFood',
+    label: 'Başlangıç yemeği',
+    type: 'int', default: 4000, min: 0, max: 100_000_000, tag: 'design', unit: 'yemek',
+    description: 'Yeni oyuncunun başkentine konan yemek. Altınla birlikte düşün: ilk '
+      + 'yükseltmelerin çoğu ikisini birden istiyor.',
+  },
+
   /* ── Doğrulanmamış hesap kısıtları ───────────────────────────────────────────
    *
    * ⚠️ **Sınırlar «≥» kurar** (kullanıcı şartı 2026-08-01): kapı "hedef seviye sınırı aşıyor

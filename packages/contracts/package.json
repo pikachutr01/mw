@@ -12,6 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@mobiwar/catalog": "workspace:*",
     "zod": "^3.24.1"
   },
   "devDependencies": {

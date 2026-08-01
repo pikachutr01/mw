@@ -13,6 +13,7 @@
  * ⚠️ **Arama yalnız BAŞKENT verir** (§13.16.5) — sunucu tarafında zorlanıyor.
  */
 import { useState } from 'react';
+import { USERNAME_MAX } from '@mobiwar/catalog';
 import { useNavigate } from 'react-router-dom';
 import {
   useAllianceSearchTab, usePlayerSearch, type SearchAllianceRow, type SearchPlayerRow,
@@ -84,7 +85,7 @@ function PlayerSearch(): React.ReactElement {
         <div className="p-3">
           {mode === 'name' ? (
             <Field label="Oyuncu adı (en az 2 karakter)">
-              <Input value={name} maxLength={10} placeholder="Adın başlangıcı…"
+              <Input value={name} maxLength={USERNAME_MAX} placeholder="Adın başlangıcı…"
                 onChange={(e) => setName(e.target.value)} />
             </Field>
           ) : (
@@ -167,7 +168,7 @@ function AllianceSearch(): React.ReactElement {
       <Panel title="İttifak Ara">
         <div className="p-3">
           <Field label="İttifak adı (en az 2 karakter)">
-            <Input value={name} maxLength={10} placeholder="Adın başlangıcı…"
+            <Input value={name} maxLength={USERNAME_MAX} placeholder="Adın başlangıcı…"
               onChange={(e) => setName(e.target.value)} />
           </Field>
         </div>

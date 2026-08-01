@@ -17,14 +17,47 @@
  * ayraç karakterleri oraları okunmaz hâle getiriyordu.
  */
 
+/**
+ * ⚠️ **Tavan 10'dan 15'e çıktı** (kullanıcı, 2026-08-01). Gerekçe hesap silme akışından geldi:
+ * silinen oyuncuya `hükümdar1`, `hükümdar2`… deseninde anonim bir ad veriliyor ve sayı
+ * büyüdükçe 10 karakter yetmiyor (`hükümdar` tek başına 8 karakter). Kullanıcı sınırı hem
+ * kullanıcı adı hem şehir adı için birlikte yükseltti — ikisi aynı boyda kalsın diye.
+ */
 export const NAME_MIN = 3;
-export const NAME_MAX = 10;
+export const NAME_MAX = 15;
 
 /** Harf (her alfabe) · rakam · boşluk. Emoji ve noktalama dışarıda. */
 export const NAME_PATTERN = /^[\p{L}\p{N} ]+$/u;
 
 export const NAME_RULE_MESSAGE =
   `Ad ${NAME_MIN}-${NAME_MAX} karakter olmalı; harf, rakam ve boşluk kullanılabilir.`;
+
+/* ── KULLANICI ADI ───────────────────────────────────────────────────────────
+ * ⚠️ Şehir/kahraman adından TEK farkı: **boşluk yok**. Kullanıcı adı giriş ekranında
+ * yazılıyor, sıralamada ve mesaj başlığında geçiyor; baştaki/sondaki boşluk görünmeyen ama
+ * girişte eşleşmeyi bozan bir fark üretirdi.
+ *
+ * ⚠️ **Neden burada, `contracts`ta değil**: uzunluk sınırı üç yerde birden gerekiyor (zod
+ * şeması · tarayıcı `maxLength` · hesap silmenin ürettiği anonim ad) ve üçü ayrı sayı
+ * tutarsa biri kaçınılmaz olarak bayatlar — nitekim `Temple.tsx` tam olarak bunu yaşadı
+ * (24 yazıyordu, sunucu 10 istiyordu). `catalog`un hiç bağımlılığı yok, `contracts → catalog`
+ * kenarı tek yönlü ve güvenli (`settings → catalog` ile aynı gerekçe).
+ */
+export const USERNAME_MIN = NAME_MIN;
+export const USERNAME_MAX = NAME_MAX;
+export const USERNAME_PATTERN = /^[\p{L}\p{N}]+$/u;
+export const USERNAME_RULE_MESSAGE =
+  `Kullanıcı adı ${USERNAME_MIN}-${USERNAME_MAX} karakter olmalı; boşluk ve noktalama kullanılamaz.`;
+
+/**
+ * ⭐ HESAP SİLMEDE ÜRETİLEN ANONİM AD DESENİ — `hükümdar12`.
+ *
+ * ⚠️ Kayıt bu deseni **REZERVE EDER**: gerçek bir oyuncu "hükümdar1" alırsa, sonraki hesap
+ * silme aynı adı üretmek isteyip dünya-içi tekillik kısıtına çarpardı.
+ */
+export const DELETED_NAME_PREFIX = 'hükümdar';
+export const DELETED_NAME_RE = /^hükümdar\d+$/iu;
+export const deletedName = (n: number): string => `${DELETED_NAME_PREFIX}${n}`;
 
 /** Baş/son boşluk kırpılır, içerideki çoklu boşluk teke iner ("A   B" → "A B"). */
 export const normalizeName = (raw: string): string => raw.trim().replace(/\s+/g, ' ');

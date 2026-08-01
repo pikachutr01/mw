@@ -1,3 +1,4 @@
+import { USERNAME_MAX, USERNAME_MIN, USERNAME_PATTERN, USERNAME_RULE_MESSAGE } from '@mobiwar/catalog';
 import { z } from 'zod';
 
 /** Orijinaldeki "3-8 karakter şifre" kuralı KULLANILMIYOR — modern minimum 8+ (§9). */
@@ -8,10 +9,14 @@ export const registerRequest = z.object({
   password,
   /**
    * Oyun içinde yalnız bu görünür ve **DEĞİŞTİRİLEMEZ**.
-   * Kural oyunun kendi dokümanından: *"en az 3, en fazla 10 karakter. Boşluk ve noktalama
-   * işaretleri kullanılamaz."* (Önceki max 20 bizim uydurmamızdı.)
+   *
+   * ⚠️ Sayılar artık `@mobiwar/catalog` → `name-rules.ts`ten geliyor (2026-08-01). Burada
+   * elle yazılıydı ve `Auth.tsx`teki tarayıcı kuralıyla ayrışmıştı: sunucu `\p{L}` ile
+   * `Ayşe`yi kabul ederken tarayıcı `[A-Za-z0-9]` deseniyle reddediyordu.
+   * Sınır 10'dan **15**'e çıktı (kullanıcı; hesap silmenin ürettiği `hükümdarN` adları için).
    */
-  username: z.string().min(3).max(10).regex(/^[\p{L}\p{N}]+$/u, 'Boşluk ve noktalama kullanılamaz.'),
+  username: z.string().min(USERNAME_MIN).max(USERNAME_MAX)
+    .regex(USERNAME_PATTERN, USERNAME_RULE_MESSAGE),
 });
 export type RegisterRequest = z.infer<typeof registerRequest>;
 
@@ -22,7 +27,8 @@ export type RegisterRequest = z.infer<typeof registerRequest>;
  * ⚠️ Kullanıcı adı **dünya başına** tekildir → giriş isteğinde `worldId` şart.
  */
 export const loginRequest = z.object({
-  username: z.string().min(3).max(10),
+  // ⚠️ Girişte desen kontrolü YOK: eski bir ad kurala uymuyor olsa bile sahibi giriş yapabilmeli.
+  username: z.string().min(USERNAME_MIN).max(USERNAME_MAX),
   password,
 });
 export type LoginRequest = z.infer<typeof loginRequest>;

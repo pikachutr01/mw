@@ -10,6 +10,8 @@
  * ⚠️ Paket **saf** kalıyor: burada DB, zaman, IO yok. Ayarları okuyup buraya nesne olarak
  * getirmek API'nin işi.
  */
+/** ⚠️ Tek yönlü: `buildings.ts` yalnız `types.ts` okuyor, döngü yok. */
+import { STARTING_RESOURCES } from './buildings.ts';
 
 /** Ekonomi eğrileri ve süre modeli. */
 export interface EconomyConfig {
@@ -52,6 +54,20 @@ export interface EconomyConfig {
   buildingCostMultiplier: number;
   unitCostMultiplier: number;
   techCostMultiplier: number;
+
+  /**
+   * ⭐ BAŞLANGIÇ KESESİ — yeni oyuncunun BAŞKENTİNE konan altın/yemek (§13.11.1a).
+   *
+   * ⚠️ **Yalnız başkent alır**; kurulan koloni sıfırla doğar ve o sayı burada YOK, çünkü
+   * `0` bir denge düğmesi değil bir **değişmez**: koloniye kese vermek "şehir kur → keseyi al
+   * → terk et" döngüsüyle sınırsız kaynak basmayı açardı (`buildings.ts:51-53`).
+   *
+   * ⚠️ Buraya 2026-08-01'de taşındı (kullanıcı: *"panelden başlangıç altın ve yemek değeri
+   * ayrı ayrı belirlenebilsin"*). Öncesinde `STARTING_RESOURCES` derleme-zamanı sabitti ve
+   * `city.service.create()` dünya config'ine hiç bakmıyordu.
+   */
+  startingGold: number;
+  startingFood: number;
 
   /* ── Emekli süre modelleri (yalnız denge düğmesi) ─────────────────────────── */
   trainTimeAreaDecay: number;
@@ -132,6 +148,9 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     buildingCostMultiplier: 1,
     unitCostMultiplier: 1,
     techCostMultiplier: 1,
+    // ⚠️ `STARTING_RESOURCES` ile AYNI sayılar — o sabit hâlâ tek gerçek kaynak (`buildings.ts`).
+    startingGold: STARTING_RESOURCES.gold,
+    startingFood: STARTING_RESOURCES.food,
     trainTimeAreaDecay: 0.95,
     originalTrainFactor: 65,
     originalDivisorRate: 1.4,

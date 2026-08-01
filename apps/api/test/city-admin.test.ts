@@ -77,10 +77,16 @@ describe('şehir adı değiştirme', () => {
     expect(await nameOfCity(myCity)).toBe('Kara Ova');
   });
 
-  it('⭐ Türkçe karakter serbest — tam sınırda 10 karakter kabul edilir', async () => {
-    await ctl.rename(String(myCity), { name: 'Çığlıktepe' }, asReq(me));
-    expect(await nameOfCity(myCity)).toBe('Çığlıktepe');
-    expect('Çığlıktepe'.length).toBe(NAME_MAX);
+  /**
+   * ⚠️ Ad **tam sınırda** olmalı ki iddia gerçekten sınavı yapsın. Sınır 2026-08-01'de 10'dan
+   * **15**'e çıktı (hesap silmenin ürettiği `hükümdarN` adları için) ve bu test sabit bir
+   * dizeye bağlıydı; artık uzunluk `NAME_MAX`ten TÜRETİLİYOR, bir daha bayatlamaz.
+   */
+  it(`⭐ Türkçe karakter serbest — tam sınırda ${NAME_MAX} karakter kabul edilir`, async () => {
+    const name = 'Çığlıktepeşğüö'.slice(0, NAME_MAX).padEnd(NAME_MAX, 'ı');
+    expect(name.length).toBe(NAME_MAX);
+    await ctl.rename(String(myCity), { name }, asReq(me));
+    expect(await nameOfCity(myCity)).toBe(name);
   });
 
   it(`${NAME_MIN} karakterden kısa ad reddedilir`, async () => {
@@ -89,7 +95,9 @@ describe('şehir adı değiştirme', () => {
   });
 
   it(`${NAME_MAX} karakterden uzun ad reddedilir`, async () => {
-    await expect(ctl.rename(String(myCity), { name: 'Kayseri Ovası' }, asReq(me))).rejects.toThrow();
+    // ⚠️ Sınırın BİR ÜSTÜ — sabit bir dize yazmak sınır değişince testi sessizce anlamsızlaştırırdı.
+    const tooLong = 'A'.repeat(NAME_MAX + 1);
+    await expect(ctl.rename(String(myCity), { name: tooLong }, asReq(me))).rejects.toThrow();
   });
 
   it('noktalama reddedilir (ad tablo başlığında ve rapor metninde geçiyor)', async () => {

@@ -22,7 +22,7 @@ import {
   BadRequestException, Body, Controller, HttpCode, Inject, NotFoundException, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { LEVEL_BASED, UNITS_BY_ID, TECHS_BY_ID, pickHeroName } from '@mobiwar/catalog';
+import { LEVEL_BASED, NAME_MAX, NAME_MIN, UNITS_BY_ID, TECHS_BY_ID, pickHeroName } from '@mobiwar/catalog';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { CityService } from '../cities/city.service.ts';
@@ -64,7 +64,8 @@ const techBody = z.object({
 const heroBody = z.object({
   cityId,
   level: z.number().int().min(0).max(80).default(1),
-  name: z.string().trim().min(3).max(10).optional(),
+  // ⚠️ Sınır katalogdan: panelden verilen kahramanın adı da oyunun kuralına uymalı.
+  name: z.string().trim().min(NAME_MIN).max(NAME_MAX).optional(),
 });
 
 /** ⚠️ `level` alanı `defenses.count` kolonuna yazılır — orada sayı ADET değil SEVİYE. */

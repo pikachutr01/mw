@@ -11,6 +11,12 @@
  * ekranı zaten uzun; her aksiyonu açık forma çevirmek sayfayı kaydırılabilir bir duvara döndürüyordu.
  */
 import { useEffect, useState } from 'react';
+/**
+ * ⚠️ Sayılar KATALOGDAN (2026-08-01). Burada `NAME_MIN`/`NAME_MAX` **elle kopyalanmıştı** ve
+ * yorumu "sunucudakiyle aynı sayılar" diyordu — sınır 15'e çıkınca o cümle yalan olacaktı.
+ * Aynı hatanın canlı örneği `Temple.tsx`teydi: 24 yazıyordu, sunucu 10 istiyordu.
+ */
+import { NAME_MAX, NAME_MIN } from '@mobiwar/catalog';
 import { api } from '../lib/api.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, type CitySummary } from '../lib/queries.ts';
@@ -18,9 +24,6 @@ import { useConfirm } from './Modal.tsx';
 import { Button, ErrorBox, Field, Input, Panel } from './ui.tsx';
 import { useQueryClient } from '@tanstack/react-query';
 
-/** Sunucudaki `name-rules.ts` ile AYNI sayılar — form burada da erken uyarsın diye. */
-const NAME_MIN = 3;
-const NAME_MAX = 10;
 
 export function CityAdminPanel(): React.ReactElement | null {
   const cities = useCities();

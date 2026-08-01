@@ -239,6 +239,13 @@
       "when": 1785608000000,
       "tag": "0033_hero_no_destroy",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785609000000,
+      "tag": "0034_account_deletion",
+      "breakpoints": true
     }
   ]
 }

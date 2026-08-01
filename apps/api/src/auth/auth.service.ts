@@ -6,6 +6,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
+import { DELETED_NAME_RE } from '@mobiwar/catalog';
 import { DeviceSignalService, type DeviceContext } from '../abuse/device-signal.service.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
@@ -100,6 +101,16 @@ export class AuthService {
         SELECT 1 FROM accounts WHERE email = ${email}
       `);
       if (dup.length > 0) throw new AuthError('email_taken', 'Bu e-posta zaten kayıtlı.');
+
+      /**
+       * ⭐ `hükümdarN` REZERVE (2026-08-01). Hesap silme bu deseni üretiyor
+       * (`deletedName`); gerçek bir oyuncu "hükümdar1" alırsa sonraki silme aynı adı üretmek
+       * isteyip `players_world_username` tekilliğine çarpar ve **silme başarısız olur**.
+       * Kapıyı burada tutmak, silme anında ad üretimini karmaşıklaştırmaktan basit.
+       */
+      if (DELETED_NAME_RE.test(input.username)) {
+        throw new AuthError('username_taken', 'Bu kullanıcı adı kullanılamaz.');
+      }
 
       const nameDup = await tx.execute<Record<string, unknown>>(sql`
         SELECT 1 FROM players WHERE world_id = ${input.worldId} AND lower(username) = ${input.username.toLowerCase()}

@@ -12,7 +12,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  COLONY_STARTING_RESOURCES, LEVEL_BASED, STARTING_BUILDINGS, STARTING_RESOURCES,
+  COLONY_STARTING_RESOURCES, LEVEL_BASED, STARTING_BUILDINGS,
   farmOutput, mineOutput,
 } from '@mobiwar/catalog';
 import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
@@ -217,8 +217,20 @@ export class CityService {
     at: Date;
     startingResources?: CityResources;
   }, runner: Runner = this.db): Promise<number> {
+    /**
+     * ⭐ Başkentin kesesi artık **dünyanın etkin ayarından** (`economy.startingGold/Food`,
+     * 2026-08-01). Öncesinde `STARTING_RESOURCES` derleme-zamanı sabitiydi ve bu fonksiyon
+     * `catalogFor`a hiç bakmıyordu — dünya bazlı her şey ayarlanabilirken tam da oyuncunun
+     * gördüğü İLK sayı sabitti.
+     *
+     * ⚠️ Koloni kesesi ayarlanabilir DEĞİL ve öyle kalıyor: 0 bir denge düğmesi değil bir
+     * değişmez — koloniye kese vermek "kur → al → terk et" döngüsünü açardı (§13.11.1a).
+     */
+    const eco = this.cat(opts.worldId).economy;
     const purse = opts.startingResources
-      ?? (opts.isCapital ? STARTING_RESOURCES : COLONY_STARTING_RESOURCES);
+      ?? (opts.isCapital
+        ? { gold: eco.startingGold, food: eco.startingFood }
+        : COLONY_STARTING_RESOURCES);
 
     const rows = await runner.execute<{ id: number } & Record<string, unknown>>(sql`
       INSERT INTO cities (world_id, player_id, name, k, d, s, is_capital, gold, food, resources_at)

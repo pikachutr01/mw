@@ -209,6 +209,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@mobiwar/catalog':
+        specifier: workspace:*
+        version: link:../catalog
       zod:
         specifier: ^3.24.1
         version: 3.25.76

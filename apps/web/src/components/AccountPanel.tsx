@@ -4,6 +4,7 @@
  * "Yakında" listesinden **Şifre değiştirme** maddesini düşürür.
  */
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, getSession } from '../lib/api.ts';
 import { useAccount, useCities } from '../lib/queries.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './ui.tsx';
@@ -15,7 +16,7 @@ export function AccountPanel(): React.ReactElement {
   const info = useAccount().data ?? null;
   const [resendState, setResendState] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle');
   const [resendError, setResendError] = useState<unknown>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<'password' | 'email' | null>(null);
 
   const resend = async (): Promise<void> => {
     setResendState('busy');
@@ -66,15 +67,137 @@ export function AccountPanel(): React.ReactElement {
           </div>
         ) : null}
 
-        <div className="border-t border-border px-3 py-2">
-          <Button variant="ghost" onClick={() => setOpen((v) => !v)}>
-            {open ? 'Vazgeç' : 'Şifre Değiştir'}
+        <div className="flex flex-wrap gap-2 border-t border-border px-3 py-2">
+          <Button variant="ghost" onClick={() => setOpen(open === 'password' ? null : 'password')}>
+            {open === 'password' ? 'Vazgeç' : 'Şifre Değiştir'}
+          </Button>
+          <Button variant="ghost" onClick={() => setOpen(open === 'email' ? null : 'email')}>
+            {open === 'email' ? 'Vazgeç' : 'E-posta Değiştir'}
           </Button>
         </div>
 
-        {open ? <ChangePassword onDone={() => setOpen(false)} /> : null}
+        {open === 'password' ? <ChangePassword onDone={() => setOpen(null)} /> : null}
+        {open === 'email' ? <ChangeEmail onDone={() => setOpen(null)} /> : null}
       </Panel>
+
+      <DeleteAccountPanel verified={info?.emailVerified ?? false} />
     </>
+  );
+}
+
+/**
+ * ⭐ HESAP SİLME (kullanıcı, 2026-08-01) — **ayrı panel**, Hesap panelinin içinde değil.
+ *
+ * ⚠️ Bilinçli olarak ayrı ve en altta: geri alınamaz tek işlem bu ve "şifre değiştir"in
+ * yanında duran bir düğme olarak yanlışlıkla tıklanmaya davetiye çıkarırdı.
+ *
+ * ⚠️ Düğme silmez, **bağlantı ister**. Silme, e-postadaki tek kullanımlık bağlantıdan
+ * açılan `/hesap-sil` sayfasında onaylanır (Google Play'in istediği akış).
+ */
+function DeleteAccountPanel({ verified }: { verified: boolean }): React.ReactElement {
+  const [state, setState] = useState<'idle' | 'busy' | 'sent'>('idle');
+  const [error, setError] = useState<unknown>(null);
+
+  const request = async (): Promise<void> => {
+    setState('busy');
+    setError(null);
+    try {
+      await api('/api/v1/auth/delete-account/request', { method: 'POST' });
+      setState('sent');
+    } catch (err) {
+      setError(err);
+      setState('idle');
+    }
+  };
+
+  return (
+    <Panel title="Hesabı Sil">
+      <div className="space-y-2 p-3 text-xs text-muted">
+        <p>
+          Hesabını kalıcı olarak silebilirsin. E-posta adresine tek kullanımlık bir onay
+          bağlantısı göndeririz; bağlantı <strong>12 saat</strong> geçerlidir.
+        </p>
+        <p>
+          Onayladığında e-postan, şifren ve oturumların silinir; <strong>başkentin dışındaki
+          şehirlerin yıkılır</strong>. Başkentin dünyada kalır ama anonim bir adla.
+        </p>
+        {!verified ? (
+          <p className="text-warning">
+            ⚠️ Hesabını silebilmek için önce e-posta adresini doğrulaman gerekiyor.
+          </p>
+        ) : null}
+      </div>
+      <div className="border-t border-border px-3 py-2">
+        {state === 'sent' ? (
+          <p className="text-xs text-ink">
+            Onay bağlantısını gönderdik. Gelen kutunu (ve gereksiz/spam klasörünü) kontrol et.
+          </p>
+        ) : (
+          <Button variant="danger" disabled={!verified || state === 'busy'}
+            onClick={() => void request()}>
+            {state === 'busy' ? 'Gönderiliyor…' : 'Hesabımı Sil'}
+          </Button>
+        )}
+        <ErrorBox error={error} />
+      </div>
+    </Panel>
+  );
+}
+
+/**
+ * ⭐ E-POSTA ADRESİ DEĞİŞTİRME (kullanıcı, 2026-08-01).
+ *
+ * ⚠️ Ekran, **doğrulamanın düşeceğini önceden söylüyor**. Kullanıcının tarifi bunu içeriyordu
+ * ve sürpriz olarak yaşanması en kötü sonuç olurdu: oyuncu adresini düzeltmek isterken
+ * kendini birden kısıtlı bir hesapta bulur.
+ */
+function ChangeEmail({ onDone }: { onDone: () => void }): React.ReactElement {
+  const qc = useQueryClient();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const submit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await api('/api/v1/auth/change-email', {
+        method: 'POST', body: { newEmail: email.trim(), currentPassword: password },
+      });
+      // Doğrulama durumu değişti → şerit, kısıt rozetleri ve katalog tavanları tazelenmeli.
+      await qc.invalidateQueries({ queryKey: ['account'] });
+      await qc.invalidateQueries({ queryKey: ['catalog'] });
+      onDone();
+    } catch (err) {
+      setError(err);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-2 border-t border-border p-3">
+      <Field label="Yeni e-posta adresi">
+        <Input type="email" required autoComplete="email"
+          value={email} onChange={(e) => setEmail(e.target.value)} />
+      </Field>
+      <Field label="Mevcut parola">
+        <Input type="password" required autoComplete="current-password"
+          value={password} onChange={(e) => setPassword(e.target.value)} />
+      </Field>
+      <p className="text-[11px] text-warning">
+        ⚠️ Adresini değiştirince hesabın <strong>doğrulanmamış</strong> duruma düşer ve yeni
+        adrese doğrulama bağlantısı gider. Doğrulayana kadar saldırı, nakliye ve mesaj yazma
+        kapanır; yapı ve tekniklerin <strong>mevcut seviyeleri korunur</strong> ama daha
+        yükseğe çıkamazsın.
+      </p>
+      <ErrorBox error={error} />
+      <div className="flex gap-2">
+        <Button type="submit" disabled={busy}>{busy ? 'Bekleyin…' : 'Değiştir'}</Button>
+        <Button type="button" variant="ghost" onClick={onDone}>Vazgeç</Button>
+      </div>
+    </form>
   );
 }
 
@@ -83,9 +206,22 @@ function ChangePassword({ onDone }: { onDone: () => void }): React.ReactElement 
   const [next, setNext] = useState('');
   const [again, setAgain] = useState('');
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
   const mismatch = again !== '' && next !== again;
+
+  if (done) {
+    return (
+      <div className="space-y-2 border-t border-border p-3 text-sm">
+        <p className="text-ink">Şifren değiştirildi ve diğer cihazlardaki oturumların kapatıldı.</p>
+        <p className="text-xs text-muted">
+          Bu cihazda açık kalmaya devam ediyorsun. Bilgilendirme e-postası da gönderildi.
+        </p>
+        <Button variant="ghost" onClick={onDone}>Kapat</Button>
+      </div>
+    );
+  }
 
   const submit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -96,12 +232,13 @@ function ChangePassword({ onDone }: { onDone: () => void }): React.ReactElement 
       await api('/api/v1/auth/change-password', {
         method: 'POST', body: { currentPassword: current, newPassword: next },
       });
-      /*
-       * ⚠️ Sunucu TÜM oturumları düşürüyor — bu oturum da dâhil. Sayfayı yeniden yüklemek
-       * en dürüst davranış: istemci elindeki ölü token'la çalışmaya çalışıp "beklenmedik
-       * hata" göstermez, doğrudan giriş ekranına döner.
+      /**
+       * ⚠️ **Artık sayfa yeniden YÜKLENMİYOR.** Sunucu 2026-08-01'den beri yalnız DİĞER
+       * cihazları düşürüyor (`revokeOtherChains`), bu oturum ayakta kalıyor — oyuncuyu kendi
+       * şifresini değiştirdiği için oyundan atmak gereksiz bir cezaydı.
        */
-      window.location.href = '/';
+      setDone(true);
+      setBusy(false);
     } catch (err) {
       setError(err);
       setBusy(false);
@@ -124,7 +261,8 @@ function ChangePassword({ onDone }: { onDone: () => void }): React.ReactElement 
       </Field>
       {mismatch ? <p className="text-xs text-danger">İki parola aynı değil.</p> : null}
       <p className="text-[11px] text-muted">
-        Değiştirdiğinde açık olan tüm oturumların kapanır ve yeniden giriş yaparsın.
+        Değiştirdiğinde <strong>diğer</strong> cihazlardaki oturumların kapanır; bu cihazda açık
+        kalırsın. E-posta adresine bilgilendirme gönderilir.
       </p>
       <ErrorBox error={error} />
       <div className="flex gap-2">
