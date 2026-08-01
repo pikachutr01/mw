@@ -536,10 +536,11 @@ gitmezse oyuncu hesabına giremez, sessizce yutulamaz.
 aşımından sonraki yeniden deneme aynı maili İKİNCİ kez göndermez. Outbox'ın "en az bir kez"
 garantisi ile Resend'in tekilleştirmesi tam burada birleşiyor.
 
-**K3 — Doğrulama YUMUŞAK** (kullanıcı kararı). Doğrulanmamış hesap oyunun hiçbir yerinde
-engellenmez; üstte kapatılabilir bir şerit uyarır. Doğrulama yalnız **şifre sıfırlama** için
-şart — sebebi güvenlik: doğrulanmamış (yanlış yazılmış ya da başkasına ait) bir adrese
-sıfırlama bağlantısı göndermek, doğrulamanın varlık sebebini ortadan kaldırırdı.
+**K3 — Doğrulama YUMUŞAK: ⛔ ARTIK DEĞİL** (kullanıcı, 2026-08-01 → §9.2b). Giriş hâlâ serbest
+ama oyunun içinde gerçek kısıtlar var. Eski hâl — *"doğrulanmamış hesap oyunun hiçbir yerinde
+engellenmez"* — sahte hesap üretmenin bedelini sıfır yapıyordu.
+Doğrulama ayrıca **şifre sıfırlama** için şart: doğrulanmamış (yanlış yazılmış ya da başkasına
+ait) bir adrese sıfırlama bağlantısı göndermek, doğrulamanın varlık sebebini ortadan kaldırırdı.
 
 **K4 — Jetonlar `sessions.refresh_hash` deseninde**: `randomBytes(32).base64url`, DB'ye
 **yalnız sha256**. `email_tokens.email` kolonu kasıtlı denormalize — adres değişirse eski
@@ -571,6 +572,61 @@ Seçenekler → Hesap panelinde e-posta + rozet + **Şifre Değiştir**.
 ⚠️ `/verify-email` etkisi **ref ile korunur**: StrictMode etkiyi iki kez koşturuyor, tek
 kullanımlık jeton birinci istekte tükeniyor, ikincisi "geçersiz" diye ekrana hata yazıyordu —
 doğrulama olmuşken kullanıcı olmadı sanıyordu (canlı denemede bulundu).
+
+---
+
+## 9.2b ⭐ DOĞRULANMAMIŞ HESAP KISITLARI (kullanıcı, 2026-08-01) ✅ YAPILDI
+
+Doğrulama 2026-07-31'de geldi ama **dişsizdi**: kod iki ayrı yerde *"hiçbir yerde
+engellenmez"* diyordu. Yani sahte hesap üretmenin bedeli sıfırdı. Yeni denge:
+**oyunu keşfetmeyi engelleme, ilerlemeye izin verme.**
+
+| serbest | yasak |
+| :-- | :-- |
+| üretim · yapı · teknik (tavana kadar) | saldırı · nakliye · şehir kurma |
+| casusluk | adetli savunma birimi üretimi |
+| KENDİ şehirleri arasında destek | ittifak kurma / katılma |
+| kahraman · mağara · kuyruk · rapor | mesaj YAZMA (gelen okunur) · şehir adı değiştirme |
+
+**Tavanlar** (`verify` ayar grubu, panelden ayarlanabilir): yapı 3 · teknik 3 · Sur ve Büyü
+Kalkanı 3 · toplam savaşçı 200.
+
+**K1 — Sınırlar «≥», geri alma YOK** (kullanıcının açık şartı). Kapı *"hedef seviye tavanı
+aşıyor mu"* diye değil **"mevcut seviye tavana ULAŞTI mı"** diye sorar. Fark yalnız doğrulamayı
+SONRADAN kaybeden hesapta görünür — e-posta adresi değiştirmek tam olarak bunu yapıyor (§9.2c):
+seviye 6 akademisi olan oyuncu akademiyi kaybetmez, sadece 7'ye çıkamaz.
+
+**K2 — Şehir kurma AYRICA yasak.** Kullanıcının *"zaten en fazla 1 şehir kurabilir"* varsayımı
+kendiliğinden doğru DEĞİLDİ: Sömürgecilik de bir teknik ve tavanı 3, `maxCities(3) = 2`.
+
+**K3 — Savaşçı sayımı DÖRT kaynaktan**: baraka + mağara + yoldaki `mission_units` + bekleyen
+üretim kuyruğu. Yalnız baraka sayılsaydı "üret → gönder → yine üret" döngüsüyle sınırsız ordu
+kurulurdu ve limit hiçbir şey ifade etmezdi.
+
+**K4 — Küresel kesici (interceptor) DEĞİL, servis boğazları.** `MaintenanceInterceptor` deseni
+hazırdı ama o HTTP METODUNA göre kilitliyor (tüm POST'lar); buradaki kısıtlar seçici (casusluk
+serbest, saldırı yasak; yapı 3'e kadar serbest). Üç düzenleme yüzeyin %90'ını veriyor:
+`queue.service.loadCity` · `mission.service.sendAttack` · `march`.
+
+**K5 — İttifak kapısı İKİ yerde.** `alliance.service.ts`in başlığı *"üyelik tek yardımcıdan
+geçer"* diyordu ve **bayattı**: `decide()` yarış koruması eklenirken kendi
+`UPDATE players SET alliance_id … WHERE alliance_id IS NULL` sorgusunu yazmış ve
+`applyMembership`ten çıkmıştı. Kontrol **katılana** (`subjectId`) bakar, onaylayana değil.
+
+**K6 — Teleport'a kapı YOK ve gerekmiyor**: ön-şartı Kale 12 + Mimar Okulu 12, yapı tavanı 3 →
+erişilemez. Boş bir kapı koymak, kapının neden var olduğunu unutturur.
+
+**Ekranlar:** doğrulama şeridi artık **ne yapılamadığını sayıyor** · Yapılar/Akademi/Savunma
+satırlarında tavana dayanınca düğme pasif + gerekçe (`Requirements` ile aynı görsel dil) ·
+`GET /missions/options` yasak seçenekleri `enabled:false` + gerekçeyle döndürüyor, modal
+oyuncuyu formu doldurduktan SONRA reddetmiyor · sohbet kutusu kapalı + açıklama.
+⚠️ Tavan sayıları ekrana **sunucudan** iniyor (`/cities/:id/catalog` → `verify`): istemcide
+sabit yazmak, yönetici tavanı değiştirdiğinde ekranın yalan söylemesi demekti.
+
+⚠️ **Test kurulumu değişti:** `createPlayer` artık **doğrulanmış** hesap üretiyor ve
+`auth.register` kullanan testler `verifyEmail(h, playerId)` çağırıyor. Gerçek kayıt akışı
+hesabı doğrulanmamış bırakıyor, yani `register` çağıran her test bu kısıtların ortasına
+doğuyordu; kısıtları ÖLÇMEYEN testler normal bir oyuncuya dönüştü.
 
 **Gönderen:** `send.scrabblecozucu.site` (alt alan; apex SPF `-all` ile sert kapalı ve hosting
 paneline ait, ona dokunulmuyor). DNS kayıtları **VPS'te değil, hostingdunyam panelinde**.

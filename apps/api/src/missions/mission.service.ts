@@ -14,6 +14,7 @@
 import { sql } from 'drizzle-orm';
 import { HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID } from '@mobiwar/catalog';
 import { armySpeed, distance, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG } from '@mobiwar/engine';
+import { isVerified, UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import type { Tx } from './handler-registry.ts';
@@ -56,7 +57,9 @@ export type MissionErrorCode =
   | 'spy_needs_birds'
   | 'city_limit'
   | 'teleport_missing'
-  | 'teleport_cooldown';
+  | 'teleport_cooldown'
+  /** §verify — e-postası doğrulanmamış hesap bu seferi yapamaz (403). */
+  | 'email_unverified';
 
 export class MissionError extends Error {
   constructor(readonly code: MissionErrorCode, message: string, readonly details?: unknown) {
@@ -177,6 +180,7 @@ export class MissionService {
         throw new MissionError('self_attack', 'Kendi şehrinize saldıramazsınız.');
       }
 
+      await this.assertVerified(t, opts.playerId, 'attack');
       await this.assertTargetAllowed(t, target.playerId, 'attack', opts.at);
       await this.assertAttackLimit(t, opts.playerId, target.id, opts.at);
       await this.assertMarchLimit(t, opts.originCityId, opts.playerId);
@@ -701,6 +705,7 @@ export class MissionService {
         }
       }
 
+      await this.assertVerified(t, o.playerId, o.type);
       await this.assertMarchLimit(t, o.originCityId, o.playerId);
       await o.before?.(t, { units });
       await this.reserveUnits(t, o.originCityId, units);
@@ -1014,6 +1019,30 @@ export class MissionService {
         INSERT INTO mission_heroes (mission_id, hero_id) VALUES (${missionId}, ${heroId})
       `);
     }
+  }
+
+  /**
+   * ⭐ §verify — DOĞRULANMAMIŞ hesabın yapamayacağı sefer tipleri.
+   *
+   * | yasak | serbest | neden |
+   * | :-- | :-- | :-- |
+   * | `attack` · `transport` · `found_city` | `spy` · `support` | kullanıcı kararı |
+   *
+   * ⚠️ **Destek serbest ama tehlikesiz**: `sendSupport` zaten `requireOwnTarget` ile yalnız
+   * oyuncunun KENDİ şehirlerine izin veriyor (`mission.service.ts:305-323`), yani sahte hesap
+   * ordusunu ana hesaba aktaramaz. Oyunda başka bir oyuncuya destek diye bir mekanik yok.
+   *
+   * ⚠️ **Teleport'a kapı gerekmiyor**: ön-şartı Kale 12 + Mimar Okulu 12, doğrulanmamış hesapta
+   * yapı tavanı 3 → erişilemez. Boş bir kapı koymak, kapının neden var olduğunu unutturur.
+   */
+  private async assertVerified(tx: Tx, playerId: number, type: MissionKind): Promise<void> {
+    const message = type === 'attack' ? UNVERIFIED_MESSAGE.attack
+      : type === 'transport' ? UNVERIFIED_MESSAGE.transport
+        : type === 'found_city' ? UNVERIFIED_MESSAGE.foundCity : null;
+    if (message == null) return;                          // spy · support serbest
+    if (!unverifiedLimits().enabled) return;              // anahtar kapalı → sorgu bile açma
+    if (await isVerified(tx as never, playerId)) return;
+    throw new MissionError('email_unverified', message);
   }
 
   private async cartographyLevel(tx: Tx, playerId: number): Promise<number> {

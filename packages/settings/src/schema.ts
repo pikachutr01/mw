@@ -27,6 +27,16 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     description: 'Doğrulama ve şifre sıfırlama bağlantılarının ömrü ile kotalar (§9.2).',
   },
   {
+    id: 'verify',
+    label: 'Doğrulanmamış hesap',
+    description: '⭐ E-postasını DOĞRULAMAMIŞ oyuncunun neye kadar gidebileceği. Amaç oyunu '
+      + 'keşfetmesini engellemeden çoklu hesap kurmayı zahmetli kılmak: saldırı, nakliye, '
+      + 'mesaj, ittifak ve şehir kurma kapalı; casusluk ve kendi şehirleri arasında destek '
+      + 'açık. ⚠️ Sınırlar «büyük eşit» çalışır: oyuncu doğrulanmışken seviye 6 akademi '
+      + 'yaptıysa ve sonra doğrulamayı kaybettiyse akademiyi KAYBETMEZ, sadece 7\'ye çıkamaz. '
+      + 'Hiçbir şey geri alınmaz.',
+  },
+  {
     id: 'combat',
     label: 'Savaş motoru',
     description: '⚠️ Buradaki sayıların ÇOĞU binary\'den ÖLÇÜLDÜ — tasarım tercihi değil, '
@@ -229,6 +239,60 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'int', default: 10_000, min: 1000, max: 60_000, tag: 'design', unit: 'ms',
     env: 'MAIL_SEND_TIMEOUT_MS',
     description: 'E-posta servisi cevap vermezse kaç milisaniye beklenir.',
+  },
+
+  /* ── Doğrulanmamış hesap kısıtları ───────────────────────────────────────────
+   *
+   * ⚠️ **Sınırlar «≥» kurar** (kullanıcı şartı 2026-08-01): kapı "hedef seviye sınırı aşıyor
+   * mu" diye DEĞİL, "mevcut seviye sınıra ULAŞTI mı" diye sorar. Fark, oyuncunun doğrulamayı
+   * sonradan kaybettiği durumda ortaya çıkıyor (e-posta adresini değiştirince tam olarak bu
+   * oluyor): elindekini kaybetmez, yalnız ilerleyemez. "Fazlasını geri al" seçeneği hem
+   * kaynak iadesi sorusunu açardı hem de oyuncunun emeğini silerdi.
+   */
+  {
+    key: 'verify.enabled',
+    label: 'Kısıtlar açık',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'Kapatırsan doğrulanmamış hesap her şeyi doğrulanmış gibi yapabilir. Açık '
+      + 'tutmak sahte hesap üretmeyi zahmetli kılar; kapatmak yalnız test ya da acil durum için.',
+    note: 'Tek anahtar bilerek: kısıtları tek tek kapatılabilir yapmak, hangi kombinasyonun '
+      + 'açık kaldığını takip etmeyi imkânsız kılardı. Bir kısıt gereksizse sayısını yükselt.',
+  },
+  {
+    key: 'verify.maxBuildingLevel',
+    label: 'En yüksek yapı seviyesi',
+    type: 'int', default: 3, min: 1, max: 40, tag: 'design', unit: 'sv',
+    description: 'Doğrulanmamış oyuncunun yapılarını çıkarabileceği tavan. Büyütürsen oyunun '
+      + 'daha çoğunu doğrulamadan görür; küçültürsen ilk dakikalarda duvara toslar.',
+    note: '3 seçildi çünkü Kale 2 Akademi\'yi, Kale 3 + Mimar Okulu 3 Tapınak\'ı açıyor — '
+      + 'yani oyuncu üretim, teknik ve kahraman mekaniklerinin üçünü de görebiliyor ama '
+      + 'hiçbirinde ilerleyemiyor.',
+  },
+  {
+    key: 'verify.maxTechLevel',
+    label: 'En yüksek teknik seviyesi',
+    type: 'int', default: 3, min: 1, max: 30, tag: 'design', unit: 'sv',
+    description: 'Akademideki tekniklerin tavanı. Yapı tavanıyla aynı tutulması mantıklı: '
+      + 'ikisi de "oyunu gör ama ilerleme" çizgisini çiziyor.',
+    note: '⚠️ Sömürgecilik de bir teknik ve 3\'e çıkabiliyor → `maxCities` formülü ikinci '
+      + 'şehre izin verirdi. Bu yüzden şehir kurma AYRICA yasak (tavanı yükseltmek o kapıyı '
+      + 'açmaz).',
+  },
+  {
+    key: 'verify.maxDefenseLevel',
+    label: 'En yüksek Sur / Büyü Kalkanı',
+    type: 'int', default: 3, min: 1, max: 20, tag: 'design', unit: 'sv',
+    description: 'Sur ve Büyü Kalkanı seviyesinin tavanı. Adetli savunma birimleri '
+      + '(Okçu Kulesi, Tuzak…) doğrulanmamış hesapta ZATEN tamamen kapalı.',
+  },
+  {
+    key: 'verify.maxWarriors',
+    label: 'En çok savaşçı',
+    type: 'int', default: 200, min: 1, max: 100_000, tag: 'design', unit: 'adet',
+    description: 'Doğrulanmamış oyuncunun sahip olabileceği toplam savaşçı. Sayıma barakadaki, '
+      + 'mağaradaki, yoldaki ve üretim kuyruğundaki savaşçıların hepsi girer.',
+    note: '⚠️ Dördünün de sayılması şart: yalnız baraka sayılsaydı "üret → gönder → yine üret" '
+      + 'döngüsüyle sınırsız ordu kurulabilirdi ve limit hiçbir şey ifade etmezdi.',
   },
 
   /* ── Savaş motoru (Faz 4) ────────────────────────────────────────────────────

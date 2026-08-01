@@ -12,6 +12,7 @@ import { sql } from 'drizzle-orm';
 import { maxCities } from '@mobiwar/catalog';
 import { sendMissionRequest } from '@mobiwar/contracts';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import { UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
@@ -166,7 +167,10 @@ export class MissionController {
           WHERE player_id = ${player.playerId} AND type = 'colonization') AS colonization,
         (SELECT COALESCE(level,0) FROM buildings
           WHERE city_id = ${originCityId} AND type = 'teleport') AS from_teleport,
-        (SELECT teleport_ready_at FROM cities WHERE id = ${originCityId}) AS teleport_ready
+        (SELECT teleport_ready_at FROM cities WHERE id = ${originCityId}) AS teleport_ready,
+        (SELECT (a.email_verified_at IS NOT NULL)
+           FROM players p JOIN accounts a ON a.id = p.account_id
+          WHERE p.id = ${player.playerId}) AS email_verified
     `);
     const r = rows[0] ?? {};
     const target = (r['target'] ?? null) as null | {
@@ -181,8 +185,26 @@ export class MissionController {
 
     let attacksLeft: number | null = null;
     const opts: { type: string; label: string; enabled: boolean; reason: string | null }[] = [];
+
+    /**
+     * ⭐ §verify — doğrulanmamış hesabın yapamayacağı sefer tipleri BURADA da kapanır.
+     *
+     * ⚠️ Bu bir yetki kapısı DEĞİL (asıl kapı `mission.service.assertVerified`), ekranın
+     * körlemesine bir düğme sunmaması için. Kapının burada tekrarlanması, oyuncunun modalı
+     * doldurup "gönder"e bastıktan sonra reddedilmesini önlüyor — reddi ÖNCE söylemek daha
+     * dürüst. Aynı kalıp acemi koruması ve teleport bekleme süresi için de kullanılıyor.
+     */
+    const unverified = unverifiedLimits().enabled && r['email_verified'] !== true;
+    const BLOCKED: Readonly<Record<string, string>> = {
+      attack: UNVERIFIED_MESSAGE.attack,
+      transport: UNVERIFIED_MESSAGE.transport,
+      found_city: UNVERIFIED_MESSAGE.foundCity,
+    };
+
     const add = (type: string, label: string, enabled: boolean, reason: string | null = null): void => {
-      opts.push({ type, label, enabled, reason });
+      const block = unverified ? BLOCKED[type] : undefined;
+      if (block != null) opts.push({ type, label, enabled: false, reason: block });
+      else opts.push({ type, label, enabled, reason });
     };
 
     if (!target) {
@@ -517,6 +539,8 @@ export function missionErrorToHttp(err: unknown): Error {
      * 400 "isteğin bozuk" demek; oysa istek kusursuz, hedef korumalı.
      */
     case 'target_banned':
+    /** ⭐ §verify — aynı aile: istek kusursuz, hesabın yetkisi yetmiyor. */
+    case 'email_unverified':
       return new ForbiddenException(payload);
     case 'attack_limit':
     case 'march_limit':

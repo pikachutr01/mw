@@ -38,3 +38,9 @@ export function liveNumber(group: string, key: string, fallback: number): number
   const v = active[group]?.[key];
   return typeof v === 'number' ? v : fallback;
 }
+
+/** `liveNumber`ın boolean kardeşi — aynı sessiz düşüş sözleşmesi. */
+export function liveBool(group: string, key: string, fallback: boolean): boolean {
+  const v = active[group]?.[key];
+  return typeof v === 'boolean' ? v : fallback;
+}

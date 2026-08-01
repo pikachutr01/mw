@@ -3,28 +3,19 @@
  *
  * "Yakında" listesinden **Şifre değiştirme** maddesini düşürür.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api, getSession } from '../lib/api.ts';
-import { useCities } from '../lib/queries.ts';
+import { useAccount, useCities } from '../lib/queries.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './ui.tsx';
-
-interface AccountInfo { email: string | null; emailVerified: boolean }
 
 export function AccountPanel(): React.ReactElement {
   const session = getSession();
   const cities = useCities();
-  const [info, setInfo] = useState<AccountInfo | null>(null);
+  // ⚠️ Şerit ve sohbet penceresiyle AYNI sorgu (`['account']`) — üç ayrı fetch yerine tek anahtar.
+  const info = useAccount().data ?? null;
   const [resendState, setResendState] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle');
   const [resendError, setResendError] = useState<unknown>(null);
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    void api<AccountInfo>('/api/v1/auth/me')
-      .then((r) => { if (alive) setInfo(r); })
-      .catch(() => { if (alive) setInfo(null); });
-    return () => { alive = false; };
-  }, []);
 
   const resend = async (): Promise<void> => {
     setResendState('busy');
@@ -59,8 +50,10 @@ export function AccountPanel(): React.ReactElement {
         {info && !info.emailVerified ? (
           <div className="border-t border-border px-3 py-2">
             <p className="mb-2 text-xs text-muted">
-              E-postanı doğrulamadan <strong>şifreni sıfırlayamazsın</strong>. Doğrulama
-              bağlantısı gelmediyse gereksiz/spam klasörüne de bak.
+              Doğrulayana kadar <strong>saldırı, nakliye, yeni şehir, savunma ünitesi, ittifak
+              ve mesaj yazma kapalı</strong>; yapı ve tekniklerin en fazla 3. seviyeye çıkar ve
+              en çok 200 savaşçın olabilir. Ayrıca <strong>şifreni sıfırlayamazsın</strong>.
+              Doğrulama bağlantısı gelmediyse gereksiz/spam klasörüne de bak.
             </p>
             {resendState === 'sent' ? (
               <p className="text-xs text-ink">Gönderdik. Gelen kutunu kontrol et.</p>

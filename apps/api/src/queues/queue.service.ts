@@ -16,6 +16,9 @@ import {
   timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
 } from '@mobiwar/catalog';
 import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
+import {
+  restricted, UNVERIFIED_MESSAGE, unverifiedLimits, warriorTotal,
+} from '../auth/unverified.ts';
 import { CapacityService } from '../cities/capacity.service.ts';
 import { openUnitQueueCount, promoteNext, rescheduleUnitChain } from './unit-queue.ts';
 import { CityService } from '../cities/city.service.ts';
@@ -35,6 +38,8 @@ export class QueueError extends Error {
 }
 
 export type QueueErrorCode =
+  /** §verify — e-postası doğrulanmamış hesabın tavanı (403 döner, 400 değil). */
+  | 'email_unverified'
   | 'city_not_found'
   | 'not_owner'
   | 'unknown_item'
@@ -69,6 +74,8 @@ export interface QueueItem {
 interface CityState {
   worldId: number;
   playerId: number;
+  /** §verify — doğrulanmamış hesabın seviye/adet tavanları buna bakar. */
+  emailVerified: boolean;
   buildings: Record<string, number>;
   defenses: Record<string, number>;
   techs: Record<string, number>;
@@ -131,6 +138,10 @@ export class QueueService {
         throw new QueueError('max_level', `${opts.type} en fazla ${max}. seviyeye çıkabilir.`);
       }
 
+      const lim = unverifiedLimits();
+      this.assertUnverifiedLevel(st, current, lim.maxBuildingLevel,
+        UNVERIFIED_MESSAGE.building(lim.maxBuildingLevel));
+
       this.assertRequirements(BUILDING_REQUIREMENTS[opts.type], st, opts.type);
 
       // ⭐ Kale bütçesi: Σ(bina seviyeleri) ≤ Kale × 10 (Kale/Sur/Kalkan hariç, §13.11.1)
@@ -173,6 +184,23 @@ export class QueueService {
     return this.db.transaction(async (tx) => {
       const st = await this.loadCity(tx as never, opts.cityId, opts.playerId);
       this.assertRequirements(UNIT_REQUIREMENTS[opts.type], st, opts.type);
+
+      /**
+       * ⭐ DOĞRULANMAMIŞ HESAP: TOPLAM savaşçı tavanı (§verify).
+       *
+       * ⚠️ İki ayrı ret: (1) zaten tavandaysan hiç üretemezsin, (2) siparişin tavanı aşıyorsa
+       * kaç tane daha alabileceğin söylenir. Yalnız ikincisi olsaydı tavanı aşmış bir oyuncu
+       * (doğrulamayı sonradan kaybetmiş olabilir) hata mesajından ne yapacağını anlayamazdı.
+       * Sayım baraka + mağara + yoldaki + kuyruk (`warriorTotal`).
+       */
+      if (restricted(st.emailVerified)) {
+        const max = unverifiedLimits().maxWarriors;
+        const have = await warriorTotal(tx as never, opts.playerId);
+        if (have + opts.count > max) {
+          throw new QueueError('email_unverified', UNVERIFIED_MESSAGE.warriors(max, have),
+            { max, have, canOrder: Math.max(0, max - have) });
+        }
+      }
 
       /**
        * ⭐ AYNI ANDA **BARAKA SEVİYESİ** KADAR EMİR (kullanıcı kuralı 2026-07-28).
@@ -254,6 +282,11 @@ export class QueueService {
        * savunmada Sur oynuyor.
        */
       if (levelBased) {
+        // §verify — Sur / Büyü Kalkanı doğrulanmamış hesapta kendi tavanına takılır.
+        this.assertUnverifiedLevel(st, st.defenses[opts.type] ?? 0,
+          unverifiedLimits().maxDefenseLevel,
+          UNVERIFIED_MESSAGE.defenseLevel(unverifiedLimits().maxDefenseLevel));
+
         await this.assertNoOpenStructureQueue(tx as never, opts.cityId);
         /**
          * ⭐ ONARIMDAKİ SUR YÜKSELTİLEMEZ (kullanıcı kararı, 2026-07-30): tamirat — kısmi
@@ -262,6 +295,13 @@ export class QueueService {
          */
         if (opts.type === 'wall') await this.assertWallNotRepairing(tx as never, opts.cityId, opts.at);
       } else {
+        /**
+         * ⭐ §verify — ADETLİ savunma birimi doğrulanmamış hesapta TAMAMEN yasak (seviye
+         * tavanı değil, düz yasak: kullanıcı şartı "savunma ünitesi üretemez").
+         */
+        if (restricted(st.emailVerified)) {
+          throw new QueueError('email_unverified', UNVERIFIED_MESSAGE.defenseUnit);
+        }
         /**
          * ⭐ SUR TAM YIKILDIYSA SAVUNMA BİRİMİ ÜRETİLEMEZ (kullanıcı kararı, 2026-07-29).
          * Savunma birimleri surda yaşar; sur çökmüşken üretilecek yer yok. Kilit yalnız
@@ -365,6 +405,11 @@ export class QueueService {
       const target = current + 1;
 
       if (!TECH_REQUIREMENTS[opts.type]) throw new QueueError('unknown_item', 'Bilinmeyen teknik.');
+
+      const lim = unverifiedLimits();
+      this.assertUnverifiedLevel(st, current, lim.maxTechLevel,
+        UNVERIFIED_MESSAGE.tech(lim.maxTechLevel));
+
       this.assertRequirements(TECH_REQUIREMENTS[opts.type], st, opts.type);
 
       // Bir şehrin akademisinde araştırma varken O ŞEHİRDE ikinci araştırma olmaz…
@@ -453,9 +498,29 @@ export class QueueService {
     };
   }
 
+  /**
+   * ⚠️ Sorgu `accounts`a kadar uzanıyor çünkü **doğrulanmamış hesap kısıtları** (§verify)
+   * dört üretim kapısının dördünde de gerekiyor ve hepsi buradan geçiyor. Ayrı bir sorgu
+   * açmak yerine mevcut satıra bir kolon eklemek ek gidiş-dönüş getirmiyor.
+   *
+   * ⚠️ **NEDEN `world_id` SORULMUYOR** (2026-08-01'de soruldu ve bilerek eklenmedi). Kardeş
+   * kapılar dünyayı açıkça doğruluyor (`mission.service.ts` → `world_mismatch`,
+   * `city.controller.ts:112` → 403) ve bu, buranın eksik göründüğü bir yer. Değil:
+   *   • `playerId` **imzalı token'dan** geliyor, gövdeden değil (`auth.guard.ts`);
+   *   • `players_world_account` tekil indeksi bir oyuncuyu tam olarak BİR dünyaya bağlıyor;
+   *   • aşağıdaki `c.player_id = playerId` eşitliği şehri o oyuncuya, dolayısıyla o dünyaya
+   *     zaten çiviliyor.
+   * Yani ek kontrol güvenlik katmıyor; dört genel metodun imzasına ve 68 çağrı noktasına
+   * `worldId` taşımak yalnız gürültü olurdu. **Değişmez burada yazılı** ki bir sonraki okuyan
+   * aynı soruyu sıfırdan sormasın.
+   */
   private async loadCity(tx: Db, cityId: number, playerId: number): Promise<CityState> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
-      SELECT world_id, player_id FROM cities WHERE id = ${cityId}
+      SELECT c.world_id, c.player_id, (a.email_verified_at IS NOT NULL) AS email_verified
+        FROM cities c
+        JOIN players p ON p.id = c.player_id
+        JOIN accounts a ON a.id = p.account_id
+       WHERE c.id = ${cityId}
     `);
     const c = rows[0];
     if (!c) throw new QueueError('city_not_found', 'Şehir bulunamadı.');
@@ -476,7 +541,28 @@ export class QueueService {
     const techs: Record<string, number> = {};
     for (const r of tRows) techs[String(r['type'])] = Number(r['level']);
 
-    return { worldId: Number(c['world_id']), playerId, buildings, defenses, techs };
+    return {
+      worldId: Number(c['world_id']),
+      playerId,
+      emailVerified: c['email_verified'] === true,
+      buildings,
+      defenses,
+      techs,
+    };
+  }
+
+  /**
+   * ⭐ DOĞRULANMAMIŞ HESAP TAVANI — «≥» kuralıyla (§verify, kullanıcı şartı).
+   *
+   * ⚠️ Soru "hedef seviye tavanı aşıyor mu" DEĞİL, **"mevcut seviye tavana ulaştı mı"**.
+   * Doğrulanmışken seviye 6 akademi yapıp sonra doğrulamayı kaybeden oyuncu akademiyi
+   * KAYBETMEZ, yalnız 7'ye çıkamaz. Hiçbir şey geri alınmaz.
+   */
+  private assertUnverifiedLevel(
+    st: CityState, current: number, max: number, message: string,
+  ): void {
+    if (!restricted(st.emailVerified)) return;
+    if (current >= max) throw new QueueError('email_unverified', message);
   }
 
   private assertRequirements(

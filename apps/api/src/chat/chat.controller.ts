@@ -17,6 +17,7 @@ import {
 import { z } from 'zod';
 import { chatReportRequest, openDmRequest, sendChatRequest } from '@mobiwar/contracts';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import { UNVERIFIED_CODE } from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { ChatError, ChatService } from './chat.service.ts';
@@ -33,7 +34,10 @@ export function toHttp(err: unknown): Error {
    * zaten sebebiyle birlikte bildiriliyor, saklanacak bir şey yok. 400 "isteğin bozuk"
    * demek olurdu ve yanlış olurdu.
    */
-  if (err.code === 'chat_banned') return new ForbiddenException(body);
+  // §verify de aynı sınıfta: sebebiyle birlikte açıkça söylenen bir karar → 403.
+  if (err.code === 'chat_banned' || err.code === UNVERIFIED_CODE) {
+    return new ForbiddenException(body);
+  }
   if (err.code === 'wrong_world' || err.code === 'conversation_not_found') {
     return new NotFoundException(body);
   }

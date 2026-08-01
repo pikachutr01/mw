@@ -81,6 +81,20 @@ function ItemName({ name, value }: { name: string; value: number | string }) {
   );
 }
 
+/**
+ * ⭐ §verify — "doğrulanmamış hesap burada duruyor" satırı.
+ *
+ * ⚠️ `Requirements` ile AYNI görsel dilde (küçük, uyarı rengi, satırın altında): oyuncu için
+ * ikisi de "bu düğme neden pasif" sorusunun cevabı, ayrı bir dil öğrenmesi gerekmemeli.
+ */
+function VerifyCap({ max, what = 'Yükseltme' }: { max: number; what?: string }) {
+  return (
+    <div className="mt-0.5 text-[11px] text-warning">
+      {what} için e-posta doğrulaması gerekli (doğrulanmamış hesapta en fazla {max}. seviye).
+    </div>
+  );
+}
+
 function CostLine({ gold, food, seconds }: { gold: number; food: number; seconds: number | null }) {
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
@@ -259,6 +273,12 @@ function Buildings({ city }: { city: CityDetail }) {
       <ul className="divide-y divide-border">
         {(catalog.data?.buildings ?? []).map((b, i) => {
           const maxed = b.level >= b.maxLevel;
+          /**
+           * ⭐ §verify — doğrulanmamış hesabın tavanı. Sunucu da reddediyor; buradaki amaç
+           * oyuncuya düğmeye BASTIKTAN sonra değil, basmadan ÖNCE söylemek.
+           * ⚠️ `>=` (sunucudaki kuralın aynısı): tavana ulaşan ilerleyemez.
+           */
+          const capped = catalog.data?.verify != null && b.level >= catalog.data.verify.maxBuildingLevel;
           const cost = b.nextCost;
           const afford = !!cost && city.resources.gold >= cost.gold && city.resources.food >= cost.food;
           const unmet = (b.requirementNames ?? []).some((r) => {
@@ -289,10 +309,11 @@ function Buildings({ city }: { city: CityDetail }) {
                   {cost ? <CostLine gold={cost.gold} food={cost.food} seconds={b.nextSeconds} /> : null}
                   <Requirements requirementNames={b.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
+                  {capped ? <VerifyCap max={catalog.data!.verify!.maxBuildingLevel} /> : null}
                 </div>
                 {/* ⚠️ Ön-şart eksikse düğme PASİF — hata mesajıyla karşılaşmadan görülmeli. */}
                 <Button size="sm"
-                  disabled={maxed || busy || !afford || unmet || enqueue.isPending
+                  disabled={maxed || capped || busy || !afford || unmet || enqueue.isPending
                     || (b.id === 'cave' && caveLocked)}
                   onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
                   {maxed ? '—' : `sv ${b.level + 1}`}
@@ -664,6 +685,16 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
             const lv = r.kind === 'building' ? (structureLevels[r.id] ?? 0) : (city.techs[r.id] ?? 0);
             return lv < r.level;
           });
+          /**
+           * ⭐ §verify — savunmada İKİ AYRI kural (sunucudakinin aynısı):
+           *   • Sur / Büyü Kalkanı (`levelBased`) → seviye tavanı
+           *   • adetli savunma birimi           → **tamamen** yasak (kullanıcı şartı)
+           * Savaşçı tarafında (`kind === 'unit'`) tavan TOPLAM sayıya bağlı; onu istemcide
+           * hesaplamıyoruz (mağara + yoldaki + kuyruk toplamı sunucuda) → sunucu reddi kalıyor.
+           */
+          const caps = catalog.data?.verify ?? null;
+          const capped = caps != null && kind === 'defense'
+            && (levelBased ? (have[u.id] ?? 0) >= caps.maxDefenseLevel : true);
 
           return (
             <li key={u.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
@@ -684,6 +715,15 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
                   <Requirements requirementNames={u.requirementNames}
                     buildings={structureLevels} techs={city.techs} />
+                  {capped ? (
+                    levelBased
+                      ? <VerifyCap max={caps!.maxDefenseLevel} />
+                      : (
+                        <div className="mt-0.5 text-[11px] text-warning">
+                          Savunma ünitesi üretmek için e-posta doğrulaması gerekli.
+                        </div>
+                      )
+                  ) : null}
                 </div>
                 <div className="flex w-full shrink-0 items-center justify-end gap-1.5 sm:w-auto">
                   {levelBased ? null : (
@@ -692,7 +732,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                       onChange={(e) => setCounts({ ...counts, [u.id]: e.target.value })} />
                   )}
                   <Button size="sm"
-                    disabled={unmet || slotsFull || enqueue.isPending
+                    disabled={unmet || slotsFull || enqueue.isPending || capped
                       || (!levelBased && (n <= 0 || !afford)) || (levelBased && !afford)
                       /* ⭐ Onarımdaki Sur yükseltilemez (kullanıcı, 2026-07-30). */
                       || (u.id === 'wall' && wallRepairing)}
@@ -772,6 +812,8 @@ function Techs({ city }: { city: CityDetail }) {
           const q = byTech.get(t.id);
           // İptal YALNIZ araştırmayı başlatan şehirden (kullanıcı kuralı).
           const mineHere = q?.cityId === city.id;
+          const caps = catalog.data?.verify ?? null;
+          const capped = caps != null && t.level >= caps.maxTechLevel;   // §verify, «≥»
           return (
             <li key={t.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
               <div className="flex items-center justify-between gap-3">
@@ -781,9 +823,10 @@ function Techs({ city }: { city: CityDetail }) {
                   <CostLine gold={t.nextCost.gold} food={t.nextCost.food} seconds={t.nextSeconds} />
                   <Requirements requirementNames={t.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
+                  {capped ? <VerifyCap max={caps.maxTechLevel} what="Araştırma" /> : null}
                 </div>
                 <Button size="sm"
-                  disabled={busyHere || !!q || !afford || unmet || enqueue.isPending}
+                  disabled={busyHere || !!q || !afford || unmet || enqueue.isPending || capped}
                   onClick={() => enqueue.mutate({ category: 'tech', type: t.id })}>
                   sv {t.level + 1}
                 </Button>

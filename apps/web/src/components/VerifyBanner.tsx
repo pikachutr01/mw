@@ -1,38 +1,37 @@
 /**
- * ⭐ E-POSTA DOĞRULAMA ŞERİDİ (§9.2).
+ * ⭐ E-POSTA DOĞRULAMA ŞERİDİ (§9.2 · §verify).
  *
- * Kullanıcı kararı **yumuşak doğrulama**: doğrulanmamış hesap oyunun HİÇBİR yerinde
- * engellenmez, yalnız burada uyarılır. Sert kapı (doğrulamadan giriş yok) beta sürecinde
- * maili spam'e düşen her oyuncuyu kaybettirirdi.
+ * ⚠️ **Bu metin 2026-08-01'de değişti.** Eskiden "doğrulanmamış hesap oyunun HİÇBİR yerinde
+ * engellenmez" diyordu ve doğrudur — o gün kısıtlar geldi (§verify) ve cümle yalan oldu.
+ * Şerit artık **ne yapılamadığını sayıyor**: oyuncu duvara çarpmadan önce görsün.
  *
- * ⚠️ Şerit **kapatılabilir ve kapatma hatırlanır** (`localStorage`). Her sayfa açılışında geri
+ * ⚠️ Giriş hâlâ serbest (sert kapı yok): maili spam'e düşen oyuncu oyunu görebilmeli.
+ *
+ * ⚠️ Şerit **kapatılabilir ve kapatma hatırlanır** (`sessionStorage`). Her sayfa açılışında geri
  * gelen bir uyarı, uyarı olmaktan çıkıp gürültü olur ve oyuncu onu görmemeyi öğrenir.
  * Kapatma kalıcı DEĞİL, oturum düzeyinde: doğrulama gerçekten önemli.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../lib/api.ts';
+import { useAccount } from '../lib/queries.ts';
 
 const DISMISS_KEY = 'mw-verify-dismissed';
 
 export function VerifyBanner(): React.ReactElement | null {
-  const [show, setShow] = useState(false);
+  const account = useAccount();
+  const [dismissed, setDismissed] = useState(
+    () => sessionStorage.getItem(DISMISS_KEY) === '1',
+  );
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
 
-  useEffect(() => {
-    if (sessionStorage.getItem(DISMISS_KEY) === '1') return;
-    let alive = true;
-    void api<{ email: string | null; emailVerified: boolean }>('/api/v1/auth/me')
-      .then((r) => { if (alive && r.email && !r.emailVerified) setShow(true); })
-      .catch(() => undefined);   // hesap bilgisi alınamadıysa sessiz kal, uyarı uydurma
-    return () => { alive = false; };
-  }, []);
-
+  // ⚠️ Hesap bilgisi alınamadıysa sessiz kal, uyarı uydurma.
+  const show = !dismissed && account.data?.email != null && !account.data.emailVerified;
   if (!show) return null;
 
   const dismiss = (): void => {
     sessionStorage.setItem(DISMISS_KEY, '1');
-    setShow(false);
+    setDismissed(true);
   };
 
   const resend = async (): Promise<void> => {
@@ -54,9 +53,16 @@ export function VerifyBanner(): React.ReactElement | null {
     <div className="tex mb-2 flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)]
       border-2 border-strong bg-warning px-3 py-1.5 text-xs text-on-accent">
       <span className="min-w-0 flex-1">
-        {sent
-          ? 'Doğrulama e-postasını gönderdik. Gelen kutunu (ve spam klasörünü) kontrol et.'
-          : 'E-posta adresini doğrulamadın. Doğrulamazsan şifreni unuttuğunda hesabını geri alamazsın.'}
+        {sent ? (
+          'Doğrulama e-postasını gönderdik. Gelen kutunu (ve spam klasörünü) kontrol et.'
+        ) : (
+          <>
+            <strong>E-posta adresini doğrulamadın.</strong> Doğrulayana kadar:{' '}
+            saldırı · nakliye · yeni şehir · savunma ünitesi · ittifak · mesaj yazma{' '}
+            <em>kapalı</em>; yapı ve teknikler en fazla <strong>3. seviye</strong>, en çok{' '}
+            <strong>200 savaşçı</strong>. Şifreni de unutursan hesabını geri alamazsın.
+          </>
+        )}
       </span>
       {sent ? null : (
         <button type="button" disabled={busy} onClick={() => void resend()}

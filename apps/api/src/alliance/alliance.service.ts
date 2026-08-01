@@ -12,11 +12,19 @@
  *   • Ayrıl ................................... herkes; LİDER yalnız tek üyeyse (o zaman
  *     ittifak dağılır), değilse önce Liderlik Devri (kullanıcı kararı)
  *
- * Üyelik tek yardımcıdan geçer (`applyMembership`): players güncellenir, `alliance:changed`
- * outbox'ı yazılır, gateway'in soket odaları senkronlanır (atılan üye ittifak odasından ANINDA
- * düşer — çevrimiçi bilgisi yalnız üyeler arasında görünür kuralının güvencesi).
+ * Üyelik çoğunlukla tek yardımcıdan geçer (`applyMembership`): players güncellenir,
+ * `alliance:changed` outbox'ı yazılır, gateway'in soket odaları senkronlanır (atılan üye ittifak
+ * odasından ANINDA düşer — çevrimiçi bilgisi yalnız üyeler arasında görünür kuralının güvencesi).
+ *
+ * ⚠️ **TEK İSTİSNA `decide()`**: davet/başvuru kabulü, yarış koruması için kendi koşullu
+ * `UPDATE players SET alliance_id … WHERE alliance_id IS NULL` sorgusunu yazıyor ve
+ * `applyMembership`ten GEÇMİYOR. Bu satır uzun süre "üyelik tek yerden geçer" diyordu ve
+ * yanlıştı; katılıma bir kural eklerken (§verify) iki yere birden eklemek gerekiyor.
  */
 import { sql } from 'drizzle-orm';
+import {
+  isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
+} from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';
 
 /** Transaction tutamacı — `db.transaction` callback'inin tipi (handler-registry'deki Tx ikizi). */
@@ -388,6 +396,12 @@ export class AllianceService {
         return;
       }
 
+      /**
+       * ⭐ §verify — kontrol **KATILANA** (`subjectId`) ait, onaylayana değil. Konsey üyesi
+       * doğrulanmış olsa bile başvuran doğrulanmamışsa katılım gerçekleşmez.
+       */
+      await this.assertVerifiedToJoin(tx as never, subjectId);
+
       // ── KABUL ── üyelik yarış koruması: oyuncu hâlâ ittifaksızsa tek UPDATE tutturur.
       const joined = await tx.execute<Record<string, unknown>>(sql`
         UPDATE players SET alliance_id = ${allianceId}, alliance_role = ${ROLE.MEMBER}
@@ -448,10 +462,29 @@ export class AllianceService {
    * üye için ESKİ ittifağın odasına haber vermeye yarar (yeni allianceId null olunca oda
    * bilgisi kaybolurdu). Gateway oda senkronu controller katmanında (aynı süreçteki instance).
    */
+  /** §verify — "bu oyuncu bir ittifağa girebilir mi" tek kural, iki çağrı noktası. */
+  private async assertVerifiedToJoin(tx: Tx, playerId: number): Promise<void> {
+    if (!unverifiedLimits().enabled) return;
+    if (await isVerified(tx as never, playerId)) return;
+    throw new AllianceError(UNVERIFIED_CODE, UNVERIFIED_MESSAGE.alliance);
+  }
+
   private async applyMembership(tx: Tx, o: {
     worldId: number; playerId: number; allianceId: number | null; role: number;
     noticeAllianceId?: number;
   }): Promise<void> {
+    /**
+     * ⭐ §verify — DOĞRULANMAMIŞ hesap ittifağa giremez (kullanıcı şartı).
+     *
+     * ⚠️ Ayrılma/atılma (`allianceId == null`) hiç kontrol edilmez: kısıt bir kapı, hapis değil.
+     *
+     * ⚠️ **Bu tek başına YETMEZ** — dosyanın başlığındaki *"üyelik tek yardımcıdan geçer"*
+     * cümlesi BAYAT: `decide()` yarış koruması eklenirken kendi `UPDATE players SET
+     * alliance_id`ini yazdı ve buradan geçmiyor. Bu yüzden kontrol iki yerde ve ikisi de
+     * `assertVerifiedToJoin`i çağırıyor. (İlk yazımda yalnız burası vardı ve testin
+     * "başvuru onaylanınca da katılamaz" maddesi boşluğu yakaladı.)
+     */
+    if (o.allianceId != null) await this.assertVerifiedToJoin(tx, o.playerId);
     await tx.execute(sql`
       UPDATE players SET alliance_id = ${o.allianceId},
              alliance_role = ${o.allianceId == null ? null : o.role}

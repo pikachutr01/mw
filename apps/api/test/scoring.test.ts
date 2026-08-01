@@ -24,7 +24,7 @@ import {
   nextSnapshotAt, previousSnapshotAt, scheduleSnapshot, takeSnapshot,
 } from '../src/ranking/ranking.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -54,6 +54,8 @@ beforeEach(async () => {
     email: `s-${t}@test.local`, password: 'parola-12345', username: `s_${t}`, worldId,
   }, { deviceId: randomUUID(), ip: '85.104.12.7', userAgent: 'test', platform: 'web' });
   playerId = r.playerId;
+  // Kayıt akışı hesabı doğrulanmamış bırakır; bu dosya §verify kısıtlarını ölçmüyor.
+  await verifyEmail(h, playerId);
   const rows = await h.db.execute<{ id: number } & Record<string, unknown>>(sql`
     SELECT id FROM cities WHERE player_id = ${playerId}
   `);

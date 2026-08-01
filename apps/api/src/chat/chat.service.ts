@@ -17,6 +17,9 @@
  *     biliyor, ona yalan söylemeye gerek yok. Engel dışında hiçbir oyun kısıtı doğurmaz.
  */
 import { sql } from 'drizzle-orm';
+import {
+  isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
+} from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';
 import { chatLimits } from './chat.limits.ts';
 
@@ -192,6 +195,17 @@ export class ChatService {
           body: String(retry['body']),
           createdAt: new Date(String(retry['created_at'])).toISOString(),
         };
+      }
+
+      /**
+       * ⭐ §verify — DOĞRULANMAMIŞ hesap mesaj YAZAMAZ (kullanıcı şartı: "kimseye mesaj
+       * yazamaz, birisi ona yazsa da cevap veremez"). Okumak serbest.
+       *
+       * ⚠️ Sohbet yasağıyla aynı sırada — yeniden deneme kontrolünden SONRA: ağ tekrarı
+       * yüzünden zaten yazılmış bir mesaj "gönderilemedi" görünmemeli.
+       */
+      if (unverifiedLimits().enabled && !(await isVerified(tx as never, o.playerId))) {
+        throw new ChatError(UNVERIFIED_CODE, UNVERIFIED_MESSAGE.chat);
       }
 
       /**

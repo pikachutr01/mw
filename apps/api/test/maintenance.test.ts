@@ -23,7 +23,7 @@ import { eventForOutbox } from '../src/realtime/realtime.bus.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
 import { MaintenanceInterceptor } from '../src/world/maintenance.interceptor.ts';
 import { WorldStateService } from '../src/world/world-state.service.ts';
-import { createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -80,6 +80,8 @@ beforeEach(async () => {
     email: `m-${t}@test.local`, password: 'parola-12345', username: `m_${t}`, worldId,
   }, { deviceId: randomUUID(), ip: '85.104.12.7', userAgent: 'test', platform: 'web' });
   playerId = r.playerId;
+  // Kayıt akışı hesabı doğrulanmamış bırakır; bu dosya §verify kısıtlarını ölçmüyor.
+  await verifyEmail(h, playerId);
   const [acc] = await h.db.execute<Record<string, unknown>>(sql`
     SELECT account_id FROM players WHERE id = ${playerId}
   `);

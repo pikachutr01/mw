@@ -20,6 +20,9 @@ import {
 } from '@mobiwar/catalog';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import {
+  isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
+} from '../auth/unverified.ts';
 import { CaveError, CaveService, type CaveState } from '../cave/cave.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
@@ -218,6 +221,17 @@ export class CityController {
     `);
     if (!row) throw new NotFoundException('Şehir bulunamadı.');
 
+    /**
+     * ⭐ §verify — doğrulanmamış hesap şehir adını değiştiremez (kullanıcı şartı). Sebep
+     * kozmetik değil: ad dünya tablosunda, sıralamada ve savaş raporlarında görünüyor, yani
+     * ücretsiz üretilebilen hesaplar reklam/taciz metni basmanın en ucuz yolu olurdu.
+     */
+    if (unverifiedLimits().enabled && !(await isVerified(this.db as never, player.playerId))) {
+      throw new ForbiddenException({
+        code: UNVERIFIED_CODE, message: UNVERIFIED_MESSAGE.rename,
+      });
+    }
+
     const name = parsed.data.name;
     /**
      * ⚠️ Ad değişimi + olay **tek transaction'da** (§1): iki ayrı yazımda ad değişip olay
@@ -385,7 +399,25 @@ export class CityController {
     const barracks = snap.buildings['barracks'] ?? 0;
     const academy = snap.buildings['academy'] ?? 0;
 
+    /**
+     * ⭐ §verify — doğrulanmamış hesabın tavanları ekrana **sunucudan** iniyor.
+     *
+     * ⚠️ İstemcide sabit yazmak yanlış olurdu: sayılar panelden ayarlanabiliyor (`verify`
+     * grubu) ve yönetici tavanı 5 yaptığında ekran hâlâ 3 der, düğme yanlış yerde kilitlenirdi.
+     * `null` = kısıt yok (hesap doğrulanmış ya da anahtar kapalı) → istemci hiçbir şey çizmez.
+     */
+    const vlim = unverifiedLimits();
+    const verify = vlim.enabled && !(await isVerified(this.db as never, player.playerId))
+      ? {
+        maxBuildingLevel: vlim.maxBuildingLevel,
+        maxTechLevel: vlim.maxTechLevel,
+        maxDefenseLevel: vlim.maxDefenseLevel,
+        maxWarriors: vlim.maxWarriors,
+      }
+      : null;
+
     return {
+      verify,
       // ⚠️ Sıra ARAYÜZ sırasıdır (§ display-order): katalog dizisinin kendi sırası değil.
       buildings: orderBy(BUILDINGS, BUILDING_ORDER).map((b) => {
         const level = snap.buildings[b.id] ?? 0;
@@ -611,6 +643,11 @@ function toHttp(err: unknown): Error {
     case 'city_not_found':
       return new NotFoundException(payload);
     case 'not_owner':
+    /**
+     * ⭐ §verify — doğrulanmamış hesabın tavanı **403**, 400 değil: istek kusursuz, hesabın
+     * yetkisi yetmiyor. `target_protected` ile aynı aile (bkz. `missionErrorToHttp`).
+     */
+    case 'email_unverified':
       return new ForbiddenException(payload);
     case 'slot_busy':
     case 'tech_already_researching':

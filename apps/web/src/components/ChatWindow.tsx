@@ -19,8 +19,8 @@ import {
   closeChatChannel, onSocketEvent, openChatChannel, sendTyping,
 } from '../lib/realtime.ts';
 import {
-  useBlockPlayer, useChatHistory, useClearConversation, useMarkChatRead, useReportChat,
-  useSendChatMessage, type ChatMessage,
+  useAccount, useBlockPlayer, useChatHistory, useClearConversation, useMarkChatRead,
+  useReportChat, useSendChatMessage, type ChatMessage,
 } from '../lib/queries.ts';
 import { Button, ErrorBox, TextArea } from './ui.tsx';
 import { useConfirm } from './Modal.tsx';
@@ -68,6 +68,9 @@ export function ChatWindow({ target, myId, onClose }: {
   const block = useBlockPlayer();
   const report = useReportChat();
   const confirm = useConfirm();
+  /** §verify — doğrulanmamış hesap yazamaz. Bilgi gelmemişse ENGELLEME (sunucu son sözü söyler). */
+  const account = useAccount();
+  const unverified = account.data != null && !account.data.emailVerified;
 
   const [draft, setDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -262,16 +265,25 @@ export function ChatWindow({ target, myId, onClose }: {
             Bu oyuncuyu engelledin. Mesaj göndermek için engeli kaldır.
           </div>
         ) : null}
+        {/* ⭐ §verify — okumak serbest, yazmak değil (kullanıcı şartı). Kutuyu kapatmak,
+            oyuncunun mesajı yazıp gönderdikten SONRA reddedilmesinden dürüst. */}
+        {unverified ? (
+          <div className="rounded-[var(--radius-sm)] border border-warning bg-warning/10 px-2 py-1 text-[11px] text-warning">
+            E-postanı doğrulamadan mesaj yazamazsın. Gelen mesajları okuyabilirsin.
+          </div>
+        ) : null}
         <div className="flex items-end gap-1.5">
           <TextArea
-            value={draft} rows={1} maxLength={500} placeholder="Mesaj yaz…"
+            value={draft} rows={1} maxLength={500}
+            placeholder={unverified ? 'E-posta doğrulaması gerekli' : 'Mesaj yaz…'}
             aria-label="Mesaj"
-            disabled={target.blocked}
+            disabled={target.blocked || unverified}
             onChange={(e) => onDraftChange(e.target.value)}
             onKeyDown={onKeyDown}
             className="max-h-24 min-h-[2.25rem] resize-none"
           />
-          <Button size="sm" disabled={draft.trim().length === 0 || send.isPending || target.blocked}
+          <Button size="sm"
+            disabled={draft.trim().length === 0 || send.isPending || target.blocked || unverified}
             onClick={submit}>Gönder</Button>
         </div>
         {draft.length > 400 ? (

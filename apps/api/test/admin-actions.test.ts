@@ -17,7 +17,7 @@ import { TokenService } from '../src/auth/token.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
 
 let h: DbHandle;
 let actions: AdminActionsController;
@@ -60,6 +60,8 @@ beforeEach(async () => {
     email: `a-${t}@test.local`, password: 'parola-12345', username: `a_${t}`, worldId,
   }, { deviceId: randomUUID(), ip: '85.104.12.7', userAgent: 'test', platform: 'web' });
   playerId = r.playerId;
+  // Kayıt akışı hesabı doğrulanmamış bırakır; bu dosya §verify kısıtlarını ölçmüyor.
+  await verifyEmail(h, playerId);
   const [c] = await h.db.execute<Record<string, unknown>>(sql`
     SELECT id FROM cities WHERE player_id = ${playerId}
   `);

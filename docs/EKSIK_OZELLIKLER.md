@@ -78,6 +78,12 @@ ve toplu seçim.
 > `forgot-password` **daima 204** (sayım sızdırmaz). Sıfırlama tüm oturumları düşürür.
 > Anahtarsız ortamda `LogSender` gövdeyi konsola basar → akış posta kurmadan denenebilir.
 >
+> ⭐ **2026-08-01: doğrulama artık DİŞLİ** (§9.2b). Doğrulanmamış hesap saldıramaz, nakliye
+> yapamaz, şehir kuramaz, savunma ünitesi üretemez, ittifağa giremez, mesaj yazamaz, şehir adı
+> değiştiremez; yapı/teknik/Sur en fazla 3. seviye, en çok 200 savaşçı. Casusluk ve kendi
+> şehirleri arasında destek serbest. Sınırlar **«≥»**: doğrulamayı sonradan kaybeden hesap
+> elindekini KAYBETMEZ, yalnız ilerleyemez. Sayılar panelden ayarlanır (`verify` grubu).
+>
 > **Kalan (kullanıcıya bağlı):** `RESEND_API_KEY` üretilip `mw/.env`'e yazılacak ve
 > `send.scrabblecozucu.site` alt alanının DNS kayıtları hosting paneline eklenecek.
 > **Kalan (kod):** e-posta ADRESİ değiştirme akışı yok · gönderim günlüğü/panel yok.

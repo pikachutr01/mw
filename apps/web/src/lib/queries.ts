@@ -162,7 +162,21 @@ export interface CatalogTech extends CatalogEntry {
   nextSeconds: number;
 }
 
+/**
+ * ⭐ §verify — doğrulanmamış hesabın tavanları. `null` = kısıt yok.
+ *
+ * ⚠️ Sayılar SUNUCUDAN geliyor (panelden ayarlanabilir); istemcide sabit yazmak, yönetici
+ * tavanı değiştirdiğinde ekranın yalan söylemesi demekti.
+ */
+export interface VerifyCaps {
+  maxBuildingLevel: number;
+  maxTechLevel: number;
+  maxDefenseLevel: number;
+  maxWarriors: number;
+}
+
 export interface CityCatalog {
+  verify: VerifyCaps | null;
   buildings: CatalogBuilding[];
   units: CatalogUnit[];
   defenses: CatalogUnit[];
@@ -248,6 +262,25 @@ export interface WorldSlot {
 export const useCities = (): UseQueryResult<{ cities: CitySummary[] }> => useQuery({
   queryKey: ['cities'],
   queryFn: () => get<{ cities: CitySummary[] }>('/api/v1/cities'),
+});
+
+export interface AccountInfo { email: string | null; emailVerified: boolean }
+
+/**
+ * ⭐ HESAP KÜNYESİ — e-posta + doğrulama durumu.
+ *
+ * ⚠️ Ayrı bir sorgu olmasının sebebi §verify: doğrulanmamış hesap artık gerçekten kısıtlı
+ * (saldırı/nakliye/mesaj yok, seviye ve savaşçı tavanı var) ve ekranın bunu **düğmeyi
+ * sunmadan önce** bilmesi gerekiyor. Üç bileşen (`VerifyBanner`, `AccountPanel`,
+ * `ChatWindow`) aynı bilgiyi istiyor; üçü ayrı `fetch` yapıyordu — tek anahtarda toplandı.
+ *
+ * ⚠️ Yoklama YOK: doğrulama tek yönlü ve nadir bir olay. Doğrulama ekranından dönen oyuncu
+ * için `queryClient.invalidateQueries(['account'])` yeterli.
+ */
+export const useAccount = (): UseQueryResult<AccountInfo> => useQuery({
+  queryKey: ['account'],
+  queryFn: () => get<AccountInfo>('/api/v1/auth/me'),
+  staleTime: 5 * 60_000,
 });
 
 /**

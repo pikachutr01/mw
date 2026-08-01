@@ -13,6 +13,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import { UNVERIFIED_CODE } from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
@@ -28,7 +29,10 @@ function toHttp(err: unknown): Error {
   if (!(err instanceof AllianceError)) return err as Error;
   const body = { code: err.code, message: err.message };
   if (err.code === 'not_found') return new NotFoundException(body);
-  if (err.code === 'forbidden' || err.code === 'hierarchy') return new ForbiddenException(body);
+  // §verify de aynı aile: istek kusursuz, hesabın yetkisi yetmiyor → 403.
+  if (err.code === 'forbidden' || err.code === 'hierarchy' || err.code === UNVERIFIED_CODE) {
+    return new ForbiddenException(body);
+  }
   if (err.code === 'already_pending' || err.code === 'name_taken'
     || err.code === 'target_has_alliance' || err.code === 'not_pending') {
     return new ConflictException(body);

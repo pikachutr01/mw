@@ -74,12 +74,21 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
 /**
  * Test oyuncusu yaratır. E-posta/kullanıcı adı **rastgele** — testler aynı DB'de tekrar tekrar
  * koştuğu için sabit değerler tekillik kısıtına çarpardı.
+ *
+ * ⭐ **E-posta VARSAYILAN OLARAK DOĞRULANMIŞ** (2026-08-01). Doğrulanmamış hesap artık gerçek
+ * kısıtlara tabi (§verify: saldırı/nakliye yok, yapı ve teknik en fazla 3, en çok 200 savaşçı)
+ * ve testlerin ezici çoğunluğu o kısıtları değil başka bir şeyi ölçüyor. Varsayılanı
+ * doğrulanmamış bırakmak, ilgisiz onlarca testin sessizce "kısıt duvarına" çarpması demekti.
+ * Kısıtları ölçen test `verified: false` geçer — açıkça ve okunur biçimde.
  */
-export async function createPlayer(h: DbHandle, worldId: number, label: string): Promise<number> {
+export async function createPlayer(
+  h: DbHandle, worldId: number, label: string, opts: { verified?: boolean } = {},
+): Promise<number> {
   const token = randomUUID().slice(0, 8);
   const acc = await h.db.execute<{ id: number } & Record<string, unknown>>(sql`
-    INSERT INTO accounts (email, password_hash)
-    VALUES (${`${label}-${token}@test.local`}, 'test-hash')
+    INSERT INTO accounts (email, password_hash, email_verified_at)
+    VALUES (${`${label}-${token}@test.local`}, 'test-hash',
+            ${opts.verified === false ? null : sql`now()`})
     RETURNING id
   `);
   const p = await h.db.execute<{ id: number } & Record<string, unknown>>(sql`
@@ -88,6 +97,21 @@ export async function createPlayer(h: DbHandle, worldId: number, label: string):
     RETURNING id
   `);
   return Number(p[0]!.id);
+}
+
+/**
+ * ⭐ Bir oyuncunun e-postasını DOĞRULANMIŞ işaretler.
+ *
+ * ⚠️ **`auth.register()` ile kurulan testler için şart.** Gerçek kayıt akışı hesabı bilerek
+ * doğrulanmamış bırakıyor (doğrulama maili outbox'a düşüyor, oyuncu bağlantıya tıklayana kadar
+ * öyle kalıyor) — yani `register` çağıran her test, §verify kısıtlarının tam ortasına doğuyor.
+ * Kısıtları ÖLÇMEYEN testler bu satırı çağırıp normal bir oyuncuya dönüşür; ölçenler çağırmaz.
+ */
+export async function verifyEmail(h: DbHandle, playerId: number): Promise<void> {
+  await h.db.execute(sql`
+    UPDATE accounts SET email_verified_at = now()
+     WHERE id = (SELECT account_id FROM players WHERE id = ${playerId})
+  `);
 }
 
 /**
