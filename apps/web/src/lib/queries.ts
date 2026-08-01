@@ -13,13 +13,28 @@ import {
   type UseInfiniteQueryResult, type UseQueryResult,
 } from '@tanstack/react-query';
 import { api } from './api.ts';
-import { noteServerTime } from './hooks.ts';
+import { noteServerTime, useSession } from './hooks.ts';
 
 async function get<T>(path: string): Promise<T> {
   const r = await api<T>(path);
   noteServerTime((r as { serverNow?: string } | null)?.serverNow);
   return r;
 }
+
+/**
+ * ⭐ OTURUM KAPISI — misafir modunun (§10.x) sessiz taşıyıcısı.
+ *
+ * ⚠️ Buradaki sorguların **hiçbiri oturumsuz çalışmaz**; kapısız kaldıklarında misafir
+ * ekranında dakikada ~10 adet 401 üretiyorlardı (7 anahtar, çoğu 60 sn yoklamalı, hepsi
+ * `retry: 1` ile ikiye katlanıyor). Sağlayıcıları mount etmemek bunu çözüyor gibi görünse de
+ * kırılgan: misafire açık bir ekrana yanlışlıkla konan tek bir kanca sorunu geri getirir.
+ * Kapı sorgunun kendisinde olunca bu bütün bir hata sınıfı kapanıyor.
+ *
+ * ⚠️ Kapı ayrıca **girişte tazelemeyi de üstleniyor**: `useSession()` reaktif olduğu için
+ * `enabled` false → true döndüğünde TanStack her şeyi kendiliğinden çekiyor. Giriş artık
+ * sayfa yenilemediğinden (router oturum dalının üstünde) bu şart.
+ */
+const useAuthed = (): boolean => useSession() != null;
 
 export interface CitySummary {
   id: number;
@@ -139,8 +154,6 @@ export interface CatalogEntry {
 export interface CatalogBuilding extends CatalogEntry {
   level: number;
   maxLevel: number;
-  /** ⭐ Yapı açıklaması — adın üstüne gelince/dokununca tooltip'te (kullanıcı, 2026-08-01). */
-  info?: { text: string; extra: string[] };
   nextCost: { gold: number; food: number } | null;
   /** Bir sonraki seviyenin süresi (saniye). Tavandaysa null. */
   nextSeconds: number | null;
@@ -264,6 +277,7 @@ export interface WorldSlot {
 export const useCities = (): UseQueryResult<{ cities: CitySummary[] }> => useQuery({
   queryKey: ['cities'],
   queryFn: () => get<{ cities: CitySummary[] }>('/api/v1/cities'),
+  enabled: useAuthed(),
 });
 
 export interface AccountInfo { email: string | null; emailVerified: boolean }
@@ -283,6 +297,7 @@ export const useAccount = (): UseQueryResult<AccountInfo> => useQuery({
   queryKey: ['account'],
   queryFn: () => get<AccountInfo>('/api/v1/auth/me'),
   staleTime: 5 * 60_000,
+  enabled: useAuthed(),
 });
 
 /**
@@ -304,18 +319,33 @@ export const useAccount = (): UseQueryResult<AccountInfo> => useQuery({
  */
 const SAFETY_NET_MS = 60_000;
 
-export const useCity = (cityId: number | null): UseQueryResult<CityDetail> => useQuery({
-  queryKey: ['city', cityId],
-  queryFn: () => get<CityDetail>(`/api/v1/cities/${cityId}`),
-  enabled: cityId != null,
-  refetchInterval: SAFETY_NET_MS,
-});
+/**
+ * ⚠️⚠️ **KANCA `&&`'İN SAĞINA YAZILMAZ.** `enabled: cityId != null && useAuthed()` yazmak
+ * kancayı KOŞULLU çağırır: `cityId` null iken `&&` kısa devre yapıp `useAuthed()`i atlar,
+ * dolunca çağırır → kanca sırası değişir → React bileşeni çökertir ve **ekran bembeyaz kalır**
+ * (2026-08-02'de tam olarak bu oldu; `SideMenu` "change in the order of Hooks" attı).
+ * Bu yüzden kanca önce, koşul sonra.
+ */
+export const useCity = (cityId: number | null): UseQueryResult<CityDetail> => {
+  const authed = useAuthed();
+  return useQuery({
+    queryKey: ['city', cityId],
+    queryFn: () => get<CityDetail>(`/api/v1/cities/${cityId}`),
+    /* ⚠️ `cityId` `localStorage['mw-active-city']`ten geliyor ve ÇIKIŞTAN SONRA DA duruyor —
+       tek başına `cityId != null` misafirde 401 üretiyordu. */
+    enabled: cityId != null && authed,
+    refetchInterval: SAFETY_NET_MS,
+  });
+};
 
-export const useCatalog = (cityId: number | null): UseQueryResult<CityCatalog> => useQuery({
-  queryKey: ['catalog', cityId],
-  queryFn: () => get<CityCatalog>(`/api/v1/cities/${cityId}/catalog`),
-  enabled: cityId != null,
-});
+export const useCatalog = (cityId: number | null): UseQueryResult<CityCatalog> => {
+  const authed = useAuthed();
+  return useQuery({
+    queryKey: ['catalog', cityId],
+    queryFn: () => get<CityCatalog>(`/api/v1/cities/${cityId}/catalog`),
+    enabled: cityId != null && authed,
+  });
+};
 
 export const useMovements = (): UseQueryResult<{ movements: Movement[] }> =>
   useQuery({
@@ -328,6 +358,7 @@ export const useMovements = (): UseQueryResult<{ movements: Movement[] }> =>
      * pencerede ekran tamamen donmasın.
      */
     refetchInterval: SAFETY_NET_MS,
+    enabled: useAuthed(),
   });
 
 /**
@@ -389,6 +420,7 @@ export const useMessages = (
   refetchInterval: SAFETY_NET_MS,
   /** ⚠️ Sayfa değişince liste boşalıp zıplamasın — önceki sayfa yerinde kalır. */
   placeholderData: (prev) => prev,
+  enabled: useAuthed(),
 });
 
 /**
@@ -416,6 +448,8 @@ export const useWorldState = (): UseQueryResult<WorldMaintenance> => useQuery({
   refetchInterval: 30_000,
   // Sekmeye dönen oyuncu perdeyi anında doğru görsün.
   refetchOnWindowFocus: true,
+  /* ⚠️ `/world/state` AuthGuard arkasında → misafir bakım perdesini zaten göremez (§10.x). */
+  enabled: useAuthed(),
 });
 
 /* ── Aktif cihazlar (§admin Faz 3) ─────────────────────────────────────────── */
@@ -941,6 +975,7 @@ export const useAlliance = (page = 0): UseQueryResult<AllianceView> => useQuery(
   queryKey: ['alliance', page],
   queryFn: () => get<AllianceView>(`/api/v1/alliance?page=${page}`),
   refetchInterval: SAFETY_NET_MS,
+  enabled: useAuthed(),
 });
 
 export const useAllianceSearch = (query: string): UseQueryResult<{ alliances: AllianceListRow[] }> =>
@@ -1070,6 +1105,7 @@ export const useChatConversations = (): UseQueryResult<{ items: ChatConversation
     queryKey: ['chat'],
     queryFn: () => get<{ items: ChatConversation[]; unread: number }>('/api/v1/chat/conversations'),
     refetchInterval: SAFETY_NET_MS,
+    enabled: useAuthed(),
   });
 
 /**

@@ -5,7 +5,24 @@
  * kaydırılmış) olabilir; her yanıtta gelen `serverNow` ile offset tutulur ve tüm geri sayımlar
  * ondan beslenir. Aksi hâlde saati ileri alan oyuncu "ordum vardı" sanır, sunucu katılmaz.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { getSession, onSessionChange, type Session } from './api.ts';
+
+/**
+ * ⭐ OTURUMU REACT'E BAĞLAR.
+ *
+ * ⚠️ `getSession()` **reaktif değil** — modül düzeyinde bir değişken okuyor. Giriş/çıkış artık
+ * sayfayı yenilemediği için (misafir modu, §10.x) sorguların kendiliğinden açılıp kapanması
+ * buna bağlı: `enabled: useSession() != null` yazan her sorgu giriş anında tazeleniyor.
+ *
+ * ⚠️ Kanca `api.ts`te DEĞİL burada: `api.ts` çerçeveden bağımsız düz bir modül ve öyle kalmalı
+ * (Flutter istemcisi de aynı sözleşmeyi okuyacak).
+ *
+ * `onSessionChange` ve `getSession` modül düzeyinde sabit referanslar; `useSyncExternalStore`
+ * sözleşmesi (kararlı abone + değişmeyen anlık görüntü) böylece sağlanıyor.
+ */
+export const useSession = (): Session | null =>
+  useSyncExternalStore(onSessionChange, getSession, getSession);
 
 /** Sunucu ile istemci saati farkı (ms). Tek yerde tutulur, her yanıtta tazelenir. */
 let clockSkewMs = 0;

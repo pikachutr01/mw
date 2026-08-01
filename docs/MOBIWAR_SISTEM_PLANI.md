@@ -852,6 +852,72 @@ gibi dallarda dönüyor. Saf savaşçı-savaşçı savaşı **deterministik** �
 
 ---
 
+## 9.3 ⭐ MİSAFİR MODU — zemin (kullanıcı, 2026-08-02)
+
+Hesabı olmayan ziyaretçi ana sayfa + simülatör + yardım görebilecek (§10.x'te tamamlanıyor).
+Bu bölüm **zemini** anlatıyor: görünür hiçbir değişiklik içermeyen ama en riskli olan kısım.
+
+### 9.3.1 Sağlayıcı sırası değişti
+
+`QueryClientProvider` · `OfflineBanner` · `ConfirmProvider` · `BrowserRouter` artık **oturum
+dalının ÜSTÜNDE**; oyuna özgü olanlar (`MaintenanceCurtain`, `ActiveCityProvider`,
+`NotifyProvider`, `ChatProvider`, `Shell`) `AuthedLayout` adlı **pathless layout rotasına**
+indi. Üçü de mount olur olmaz oturum isteyen istek attığı için misafir ağacında mount
+olmamaları şart.
+
+⭐ **Yan kazanç — iki gerçek hata kapandı.** `EMAIL_PATHS` eskiden router yerine
+`window.location.pathname` okuyup erken dönüyordu ve o dalın `<Routes>`'unda **catch-all
+yoktu**: `EmailActions.tsx:62,73` «Oyuna dön» (`navigate('/armies')`) ve `:115` jetonsuz şifre
+sıfırlamanın `navigate('/')` çağrısı hiçbir rotayla eşleşmiyor, ekran **bomboş** kalıyordu.
+Üçü artık gerçek rota; ölçüldü, düzeldi.
+
+### 9.3.2 Oturum reaktif oldu
+
+`useSession()` (`lib/hooks.ts`) — `useSyncExternalStore(onSessionChange, getSession, getSession)`.
+`getSession()` modül değişkeni okuduğu için reaktif değildi; giriş/çıkış artık sayfa
+yenilemediğinden sorguların kendiliğinden açılıp kapanması buna bağlı.
+
+⚠️ Kanca `api.ts`te **değil** `hooks.ts`te: `api.ts` çerçeveden bağımsız düz bir modül ve öyle
+kalmalı (Flutter istemcisi de aynı sözleşmeyi okuyacak).
+
+### 9.3.3 Sorgu kapısı — misafirde sıfır istek
+
+`queries.ts`teki `useAuthed()` dokuz kancaya `enabled` olarak bağlandı (`cities`, `account`,
+`city`, `catalog`, `missions`, `messages`, `world-state`, `alliance`, `chat`).
+
+| Ölçüm | Önce | Sonra |
+| :-- | :-- | :-- |
+| Misafir, 45 sn | ~10 istek/dk (hepsi 401) | **0 istek** |
+| Oturumlu, 70 sn | — | 9 istek (`world/state` ×3, diğerleri ×1) — beklenen ritim |
+
+Bayat `mw-active-city` bilerek bırakılarak ölçüldü: `useCity`nin eski `cityId != null` kapısı
+misafirde 401 üretiyordu, artık üretmiyor.
+
+### 9.3.4 ⚠️⚠️ KANCA `&&`'İN SAĞINA YAZILMAZ — bu turda yaşandı
+
+İlk yazımda `enabled: cityId != null && useAuthed()` vardı. JavaScript `&&`'i **kısa devre**
+yapıyor: `cityId` null iken `useAuthed()` hiç çağrılmıyor, dolunca çağrılıyor → **kanca sırası
+değişiyor** → React `SideMenu`'yü çökertiyor ve **ekran bembeyaz kalıyor**. Konsol
+"change in the order of Hooks" diyordu.
+
+Doğrusu: kanca önce koşulsuz çağrılır, sonuç sonra koşula girer.
+```ts
+const authed = useAuthed();
+return useQuery({ …, enabled: cityId != null && authed });
+```
+
+### 9.3.5 Çıkışta önbellek temizliği
+
+`onSessionChange` aboneliği oturum düşünce `queryClient.clear()` + `mw-active-city` siliyor.
+Router artık remount olmadığı için temizlenmezse aynı sekmede başka hesapla girildiğinde
+öncekinin şehirleri bir an görünürdü. Abonelik `api.ts` üzerinden olduğu için **başarısız
+refresh** de (`setSession(null)`) kapsanıyor — yalnız menüden çıkış değil.
+
+Ölçüldü: iki tam çıkış→giriş döngüsü, sayfa yenilemesi yok, **sıfır konsol hatası**, adres
+korunuyor (`/armies`'te çıkıp giren `/armies`'te kalıyor).
+
+---
+
 ## 10. Web istemci
 
 **Stack:** React 19 + Vite + TypeScript · **Tailwind v4** (onay) + Radix primitives (erişilebilir,
