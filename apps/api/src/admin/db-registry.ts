@@ -99,11 +99,13 @@ export const DB_TABLES: readonly TableSpec[] = [
   {
     name: 'heroes', label: 'Kahramanlar', orderBy: 'id', policy: 'edit',
     columns: ['id', 'world_id', 'player_id', 'city_id', 'name', 'level', 'xp', 'status',
-      'revive_until', 'destroyed_at'],
+      'revive_until'],
     editable: ['level', 'xp', 'status', 'city_id'],
     filters: ['world_id', 'player_id', 'city_id', 'status'],
     warning: '⚠️ `level` ile `xp` birbirine bağlı (`heroLevelForXp`): yalnız seviyeyi '
-      + 'değiştirirsen bir sonraki tecrübe kazanımında seviye geri hesaplanabilir.',
+      + 'değiştirirsen bir sonraki tecrübe kazanımında seviye geri hesaplanabilir. '
+      + '⚠️ Geçerli `status` değerleri: `alive` · `dead` · `reviving`. `dead` bir kahraman '
+      + 'ancak `city_id` doluyken diriltilebilir; NULL ise oyuncuya «dönüyor» görünür.',
   },
 
   /* ── Kuyruk ve görevler ──────────────────────────────────────────────────── */

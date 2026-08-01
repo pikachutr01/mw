@@ -556,16 +556,17 @@ export const heroes = pgTable('heroes', {
   /**
    * ⭐ KAHRAMAN DURUMU (istemcinin kendi sözlüğü, `g.java`/`k.java`):
    *   `alive`     — şehirde ya da görevde, savaşa katılabilir
-   *   `dead`      — savaşta öldü, şehre döndü; oyuncu ÜCRET ödeyip diriltmeli
+   *   `dead`      — savaşta öldü. `cityId` doluysa evdedir ve ÜCRET ödenip diriltilebilir;
+   *                  NULL ise hâlâ dönüş yolundadır (ekranda «Yok Edildi · dönüyor»)
    *   `reviving`  — diriltme başladı, `reviveUntil`da canlanır ("Diriltiliyor" · iptal edilebilir)
-   *   `destroyed` — ordunun tamamıyla birlikte yok oldu; geri getirecek kimse kalmadı.
-   *                  `destroyedAt`+1 saat boyunca tapınakta "Yok Edildi" görünür, sonra silinir.
+   *
+   * ⚠️ **`destroyed` EMEKLİ** (kullanıcı, 2026-08-01 · `0033_hero_no_destroy.sql`). Ordunun
+   * tamamı ölse bile kahraman silinmiyor; kendi hızıyla yalnız dönüyor. Eski satırlar
+   * migration'da `dead`e çevrildi, `destroyed_at` kolonu düşürüldü.
    */
   status: text('status').notNull().default('alive'),
   /** `reviving` iken diriltmenin biteceği an (OYUN saati). */
   reviveUntil: timestamp('revive_until', { withTimezone: true }),
-  /** `destroyed` olduğu an — tapınakta 1 saat gösterilip sonra kayıt silinir. */
-  destroyedAt: timestamp('destroyed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('heroes_player').on(t.playerId),

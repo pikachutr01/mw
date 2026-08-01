@@ -411,6 +411,10 @@ async function nextColonyName(tx: Tx, playerId: number): Promise<string> {
 /**
  * Dönüş bacağı. `returnOf` dönüşün ASLINI taşır → arayüz doğru simgeyi seçer (nakliye dönüşü
  * kılıç değil araba gösterir) ve rapor metni doğru olur.
+ *
+ * ⭐ Birlik kalmayıp yalnız kahraman dönüyorsa süre **kahramanın kendi hızıyla** kalkışta
+ * hesaplanan `payload.heroTravelSeconds`tir (`battle.handlers.ts`teki kardeşiyle aynı kural).
+ * Yolda olan eski görevlerde alan yok → `travelSeconds`e düşüyoruz.
  */
 async function scheduleReturn(ctx: HandlerContext, o: {
   homeCityId: number;
@@ -425,7 +429,10 @@ async function scheduleReturn(ctx: HandlerContext, o: {
   // Ne birlik ne kahraman kaldıysa dönecek bir şey yok (§13.11.7).
   if (!anyUnit && heroes.length === 0) return null;
 
-  const travel = Math.max(1, Number(ctx.mission.payload['travelSeconds'] ?? 0));
+  const armyTravel = Number(ctx.mission.payload['travelSeconds'] ?? 0);
+  const travel = Math.max(1, anyUnit
+    ? armyTravel
+    : Number(ctx.mission.payload['heroTravelSeconds'] ?? armyTravel));
   const executeAt = new Date(ctx.at.getTime() + travel * 1000);
 
   const rows = await ctx.tx.execute<Record<string, unknown>>(sql`

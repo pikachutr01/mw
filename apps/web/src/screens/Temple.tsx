@@ -12,6 +12,7 @@
  * oyuncuyu büyüden CAYDIRAN bir uyarı YOK — yalnız hangi yeteneğin ne yaptığı anlatılıyor.
  */
 import { useState } from 'react';
+import { NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE } from '@mobiwar/catalog';
 import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
 import {
   useHeroRename, useHeroRevive, useHeroReviveCancel, useHeroSkills, useTemple,
@@ -28,12 +29,17 @@ const SKILLS: { key: keyof HeroSkills; icon: string; label: string; hint: string
   { key: 'mDef', icon: 'buy_sav', label: 'Büyü Savunma', hint: 'Gelen büyü hasarına karşı kahramanın direncini artırır.' },
 ];
 
+/**
+ * ⭐ TEK ETİKET (kullanıcı, 2026-08-01): savaşta ölen kahraman — ordusu sağ kalsa da kalmasa da
+ * — «Yok Edildi» yazar. Dönüş yolundayken de aynı etiket, yanında geri sayım; şehre varınca
+ * Dirilt açılır. Eskiden `destroyed` ayrı bir durumdu ve o kahraman **siliniyordu**.
+ */
 const STATE_LABEL: Record<HeroRow['state'], { text: string; tone: 'muted' | 'success' | 'warning' | 'danger' }> = {
   in_city: { text: 'Şehirde', tone: 'success' },
   on_mission: { text: 'Görevde', tone: 'muted' },
-  dead: { text: 'Ölü', tone: 'danger' },
+  returning: { text: 'Yok Edildi', tone: 'danger' },
+  dead: { text: 'Yok Edildi', tone: 'danger' },
   reviving: { text: 'Diriltiliyor', tone: 'warning' },
-  destroyed: { text: 'Yok Edildi', tone: 'danger' },
 };
 
 function XpBar({ hero }: { hero: HeroRow }) {
@@ -110,12 +116,17 @@ function RenameBox({ hero, onClose }: { hero: HeroRow; onClose: () => void }) {
   const rename = useHeroRename();
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-black/10 p-3">
-      <Input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} aria-label="Kahraman adı" />
+      {/* ⚠️ 2026-08-01: burası hâlâ **emekli 2-24 kuralını** uyguluyordu; sunucu 2026-07-31'den
+          beri şehir adıyla aynı kuralı (3-10) istiyor. Kutu 11 karakteri kabul edip düğmeyi
+          açıyor, kayıt sunucuda reddediliyordu. Sayılar artık katalogdan geliyor. */}
+      <Input value={name} maxLength={NAME_MAX} onChange={(e) => setName(e.target.value)}
+        aria-label="Kahraman adı" />
       <Button
-        disabled={name.trim().length < 2 || rename.isPending}
+        disabled={name.trim().length < NAME_MIN || rename.isPending}
         onClick={() => rename.mutate({ id: hero.id, body: { name: name.trim() } }, { onSuccess: onClose })}
       >Kaydet</Button>
       <Button variant="ghost" onClick={onClose}>Vazgeç</Button>
+      <p className="w-full text-[11px] text-muted">{NAME_RULE_MESSAGE}</p>
       <ErrorBox error={rename.error} />
     </div>
   );
@@ -127,15 +138,16 @@ function HeroCard({ hero, temple }: { hero: HeroRow; temple: TempleView }) {
   const cancel = useHeroReviveCancel();
   const confirm = useConfirm();
   const state = STATE_LABEL[hero.state];
-  const destroyed = hero.state === 'destroyed';
+  /** Savaşta düştü: ya yolda (`returning`) ya evde bekliyor (`dead`). İkisi de gri portre. */
+  const fallen = hero.state === 'returning' || hero.state === 'dead';
   const left = hero.pointsTotal - hero.pointsSpent;
 
   return (
-    <div className={`rounded-xl border border-line p-3 ${destroyed ? 'opacity-60' : ''}`}>
+    <div className={`rounded-xl border border-line p-3 ${fallen ? 'opacity-80' : ''}`}>
       <div className="flex flex-wrap items-center gap-3">
         <img
           src="/assets/hero/kahraman.png" alt="" width={56} height={56}
-          className={`rounded-lg ${destroyed ? 'grayscale' : ''}`}
+          className={`rounded-lg ${fallen ? 'grayscale' : ''}`}
         />
         <div className="min-w-[8rem] flex-1">
           <div className="flex items-center gap-2">
@@ -151,23 +163,28 @@ function HeroCard({ hero, temple }: { hero: HeroRow; temple: TempleView }) {
             ))}
           </div>
         </div>
-        {!destroyed && <XpBar hero={hero} />}
+        <XpBar hero={hero} />
         <div className="flex flex-col items-end gap-1">
           <Badge tone={state.tone}>{state.text}</Badge>
           {hero.state === 'reviving' && hero.reviveUntil && (
             <span className="text-xs tabular-nums text-muted">{remaining(hero.reviveUntil)}</span>
           )}
-          {destroyed && hero.disappearsAt && (
-            <span className="text-xs text-muted">{remaining(hero.disappearsAt)} sonra düşer</span>
+          {hero.state === 'returning' && hero.returningAt && (
+            <span className="text-xs tabular-nums text-muted">
+              {remaining(hero.returningAt)} sonra şehirde
+            </span>
           )}
         </div>
       </div>
 
-      {destroyed ? (
+      {hero.state === 'returning' ? (
         <p className="mt-2 text-xs text-muted">
-          Ordusunun tamamıyla birlikte yok oldu — geri getirecek kimse kalmadı. Diriltilemez.
+          Savaşta düştü ve şehre dönüyor. Ordusundan kimse kalmadıysa <strong>kendi hızıyla</strong>{' '}
+          yalnız yürür. Vardığında Tapınak'tan diriltebilirsin.
         </p>
-      ) : (
+      ) : null}
+
+      {(
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
             variant={left > 0 ? 'primary' : 'ghost'}
@@ -221,6 +238,7 @@ function HeroCard({ hero, temple }: { hero: HeroRow; temple: TempleView }) {
           <ErrorBox error={revive.error ?? cancel.error} />
         </div>
       )}
+
 
       {panel === 'skills' && <SkillEditor hero={hero} onClose={() => setPanel('none')} />}
       {panel === 'rename' && <RenameBox hero={hero} onClose={() => setPanel('none')} />}

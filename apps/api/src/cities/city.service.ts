@@ -265,8 +265,7 @@ export class CityService {
         c.is_capital,
         COALESCE((SELECT SUM(count)::int FROM units      WHERE city_id = c.id), 0) AS barracks,
         COALESCE((SELECT SUM(count)::int FROM cave_units WHERE city_id = c.id), 0) AS cave,
-        (SELECT COUNT(*)::int FROM heroes
-          WHERE city_id = c.id AND status <> 'destroyed')                          AS heroes,
+        (SELECT COUNT(*)::int FROM heroes WHERE city_id = c.id)                    AS heroes,
         (SELECT COUNT(*)::int FROM queues
           WHERE city_id = c.id AND completed_at IS NULL AND canceled_at IS NULL)   AS queues,
         (SELECT COUNT(*)::int FROM missions

@@ -542,8 +542,8 @@ export interface ReportLine {
 export interface ReportHeroLine {
   name: string;
   level: number;
+  /** `false` → «Yok Edildi !» (tek etiket, 2026-08-01). Kahraman eve döner ve diriltilebilir. */
   alive: boolean;
-  destroyed: boolean;
   /** Yalnız KENDİ kahramanlarında dolu; rakipte 0 (sızdırılmaz). */
   xpGained: number;
 }
@@ -774,8 +774,13 @@ export function useCancelMission() {
 
 export interface HeroSkills { fAtk: number; fDef: number; mAtk: number; mDef: number }
 
-/** İstemcinin kendi durum sözlüğü (`k.java`): Şehirde · Görevde · Diriltiliyor · Yok Edildi. */
-export type HeroState = 'in_city' | 'on_mission' | 'dead' | 'reviving' | 'destroyed';
+/**
+ * İstemcinin kendi durum sözlüğü (`k.java`): Şehirde · Görevde · Diriltiliyor · Yok Edildi.
+ *
+ * ⭐ `returning` = savaşta öldü, henüz eve varmadı. Etiketi de «Yok Edildi» ama Dirilt kapalı.
+ * ⚠️ `destroyed` **KALKTI** (2026-08-01): kahraman artık hiç silinmiyor.
+ */
+export type HeroState = 'in_city' | 'on_mission' | 'dead' | 'returning' | 'reviving';
 
 export interface HeroRow {
   id: number;
@@ -790,7 +795,8 @@ export interface HeroRow {
 
   state: HeroState;
   reviveUntil: string | null;
-  disappearsAt: string | null;
+  /** `returning` iken şehre varış anı — geri sayım bunu gösterir. */
+  returningAt: string | null;
   reviveCost: { gold: number; food: number } | null;
   reviveSeconds: number | null;
 }

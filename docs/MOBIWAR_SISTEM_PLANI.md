@@ -293,15 +293,16 @@ Her rapor `kind:side` ikilisiyle tanımlanır; satır başlığı ve ikonu (Ordu
 ### 7.1b ⭐ SAVAŞ RAPORU DETAYI — zengin sözleşme (kullanıcı, 2026-07-30)
 
 Rapor `battles.result`'tan türetilir (`buildBattleReport`); 2026-07-30 zenginleştirmesiyle
-savaş anında satıra şunlar da işlenir: `heroesDetail` (id/ad/seviye/sağ-öldü-yok edildi/XP),
+savaş anında satıra şunlar da işlenir: `heroesDetail` (id/ad/seviye/sağ-mı/XP),
 `wall {level, destroyed}`, `coords {origin, target}`, ve **savunana özel** `defenderPrivate`
 (mağara `escaped` dökümü + `repairUntil`).
 
 - **Bölümler OKUYANIN perspektifinde**: `myArmy` ("Ordun") · `enemyArmy` ("Rakip ordu") ·
   `defenderStructs` ("Savunma birimleri") — her satır Katılan → Kalan · Ölen (+ taban).
-- **Kahraman kartları**: `assets/hero/kahraman.png` + ad + seviye + rozet ("Sağ" / "Öldü" /
-  "Yok Edildi !" — k.java kalıbı) + "+n tecrübe" (yalnız KENDİ kahramanlarında; rakibin XP'si
-  sızdırılmaz). Yeni çıkan kahraman yeşil kartla kutlanır.
+- **Kahraman kartları**: `assets/hero/kahraman.png` + ad + seviye + rozet (**"Sağ"** ya da
+  **"Yok Edildi !"** — k.java kalıbı; 2026-08-01'den beri ölen kahramanın TEK etiketi) +
+  "+n tecrübe" (yalnız KENDİ kahramanlarında; rakibin XP'si sızdırılmaz). Yeni çıkan kahraman
+  yeşil kartla kutlanır.
 - **Sur kartı**: seviye + bütünlük % / YIKILDI. **Mağara kartı**: YIKILDI/dayandı; saldırana
   yalnız gereken/sağ kalan cüce; savunana ek olarak "şehre yola çıkanlar" birim dökümü.
 - **Ganimet dökümü** (yalnız saldıran, mesajlar.txt'teki oyuncu isteği): "Ortaya çıkan"
@@ -1226,15 +1227,17 @@ eder: ikinci ordu, ilkinin tüm sonuçları (iade + hasarlı sur) uygulandıktan
 ### 13.10.3 Dönüş bacağı
 - Savaş çözülür çözülmez **aynı transaction'da** `type='return'` görevi yazılır:
   `execute_at = savaş anı + gidiş süresi` (aynı süre, doküman kuralı).
-- **Hayatta kalan birlik yoksa dönüş görevi oluşturulmaz** (ordu yok olmuştur).
+- **Hayatta kalan birlik yoksa dönüş görevi oluşturulmaz** (ordu yok olmuştur) — ⭐ **TEK
+  İSTİSNA: kahraman.** Orduda kahraman varsa (ölü ya da sağ) dönüş görevi yine kurulur ve süresi
+  `payload.heroTravelSeconds` olur. Ganimet yine yoktur, rapor yine "ordudan kimse dönmedi" der.
 - Ganimet **§13.10.4'teki havuz modeliyle** hesaplanır (kasa+enkaz tek havuz → kaynak başına oran
   → kapasite kırpması) ve `payload.loot` içine yazılır. Kaynaklar savunandan **savaş anında**
   düşülür, saldırana **dönüş anında** eklenir (yolda giden mal kaybolabilir → savunan geri
   alamaz, saldıran dönüşte alır). ⭐ Dönüş satırını **yalnız sahibi görür**; ganimet
   `cargo` alanında ona açıktır (§13.10.1'deki `OUT_ICON` notu).
-- ⭐ Ölen kahraman **dönmez sanılırdı — yanlış**: sağ kalan birlik varsa onu ölü olarak taşır
-  (dönüş boyunca "Görevde", şehre varınca `status='dead'` ve Dirilt menüsü). Sağ kalan birlik
-  YOKSA taşıyacak kimse kalmaz → **yok edilir** (§13.11.4d).
+- ⭐ Ölen kahraman **daima döner** (2026-08-01): sağ kalan birlik varsa onu ölü olarak taşır,
+  yoksa kahraman kendi hızıyla yalnız yürür. Şehre varınca `status='dead'` + `city_id` dolar ve
+  Dirilt menüsü açılır (§13.11.4d). Eski "yok edilir → 1 saat sonra silinir" dalı kaldırıldı.
 - Nakliye/destek dönüşleri aynı mantık; casusluk dönüşü yalnız casus kuşları getirir.
 
 ---
@@ -1655,14 +1658,36 @@ tutar (tek başına tur çevirir); ölen kahraman ünite kaybı sayılır. Seviy
 **Ölüm koşulu:** kahraman **YALNIZ durumu %0,0'a inince** ölür — olasılık yok. Ölünce silinmez;
 seviyesi ve yetenekleri korunur, ücretli diriltmeyi bekler.
 
-**Ölümden sonra iki yol:**
-| Sağ kalan birlik | Sonuç |
-| :-- | :-- |
-| **var** | Birlikler kahramanı **ölü olarak taşır**: dönüş boyunca "Görevde", şehre varınca `dead` ve Dirilt menüsü açılır |
-| **yok** | **Yok edilir** — taşıyacak kimse kalmamıştır. Tapınakta **1 saat** "Yok Edildi" görünür, sonra kayıt silinir. Savaş raporuna özel not düşer |
+**Ölümden sonra TEK yol — kahraman her hâlükârda eve döner** (kullanıcı kararı, 2026-08-01):
 
-Adı şehirdeyken, görevdeyken ve ölüyken değiştirilebilir; **yok edilmiş kahramanın adı
-değiştirilemez**. Adlar savaş raporlarında geçer.
+| Sağ kalan birlik | Dönüş süresi |
+| :-- | :-- |
+| **var** | Birlikler kahramanı **ölü olarak taşır** → ordunun süresi (`payload.travelSeconds`) |
+| **yok** | Kahraman **yalnız başına** yürür → kendi hızı (`HERO_SPEED = 200`, `payload.heroTravelSeconds`) |
+
+İki durumda da şehre varınca `dead` + `city_id` dolar ve Dirilt menüsü açılır. Savunanın kendi
+şehrinde ölen kahraman zaten evdedir → **anında** diriltilebilir.
+
+> ⛔ **YOK OLMA KALDIRILDI** (`0033_hero_no_destroy.sql`). Eskiden ordunun tamamı ölürse kahraman
+> `destroyed` yazılıyor, tapınakta 1 saat "Yok Edildi" görünüyor ve sonra **kaydı siliniyordu** —
+> oyuncunun kalıcı olarak bir varlığı kaybettiği tek yer burasıydı. `destroyed` durumu ve
+> `destroyed_at` kolonu emekli oldu; migration mevcut satırları `dead`e çevirdi.
+>
+> ⚠️ Bu sadeleşme bir **hatayı da kapattı**: kahraman SAĞ kalıp bütün savaşçılar ölürse eski kod
+> hiç dönüş görevi kurmuyordu ve kahraman `city_id = NULL` + yetim `mission_heroes` satırıyla
+> kalıyordu; `mission_heroes_hero` tekil indeksi yüzünden bir daha HİÇ sefere çıkamıyordu.
+
+⭐ **Süre KALKIŞTA hesaplanır.** `heroTravelSeconds` yola çıkarken `travelSeconds`in yanına
+yazılır; dönüşte yeniden hesaplansaydı mesafe, Haritacılık ve dünya çarpanı o arada değişmiş
+olabilir ve oyuncuya gösterilen süre ile gerçekleşen süre sessizce ayrışırdı. Alan **yalnız
+kahraman taşıyan** görevlerde yazılır; yolda olan eski görevler `travelSeconds`e düşer.
+
+**Etiket TEK: «Yok Edildi»** (kullanıcı kararı). Savaşta ölen her kahraman — ordusu sağ kalsın
+kalmasın — raporda ve tapınakta böyle görünür; yolda olanın yanında varış geri sayımı da vardır.
+İki ayrı etiket ("öldü" / "yok edildi") ancak biri diriltilemezken anlamlıydı.
+
+Adı her durumda değiştirilebilir (şehirde · görevde · ölü · diriltilirken). Eski tek istisna —
+yok edilmiş kahraman — artık yok. Adlar savaş raporlarında geçer.
 
 **Tecrübe paylaşımı — İKİ TARAF DA ALIR.** Savaş tek bir XP havuzu üretir
 (`(atkKayıp+defKayıp) × (kazananKaybı/kaybedenKaybı) × 0,001` — dengeli savaşta yüksek, ezici
@@ -1689,7 +1714,7 @@ YOKTUR** (kullanıcı kararı 2026-07-29) — oyuncuya kalan tek iş, seviye ba�
 `Özellikler`den dağıtmak. Örnek: seviye 3'teki kahraman tek savaşta 5. seviyenin eşiğini
 aşarsa anında **seviye 5** görünür ve **6 puan** dağıtılmayı bekler.
 
-**Ölü, diriltilen ve yok edilmiş kahraman hiçbir sefere katılamaz** — saldırı, destek, nakliye.
+**Ölü ve diriltilmekte olan kahraman hiçbir sefere katılamaz** — saldırı, destek, nakliye.
 Tek kapı `reserveHeroes` (`status = 'alive'` şartı), o yüzden kural her görev tipinde aynı.
 
 **Çıkma ihtimali:** `(ToplamTapınak×10 − Kahraman×155) × min(1, XP×0,000025)`, XP > 499 kapısı,
@@ -1775,8 +1800,9 @@ Gönderenin raporunda `birdsLost`/`birdsBlocked`/`level`/`intel`.
 ### 13.11.7 Tam kayıp = dönüş yok (tüm görev tipleri)
 Veritabanı ve handler bunu destekler: savaş/casusluk sonrası hayatta kalan birim **yoksa**
 `type='return'` görevi **oluşturulmaz**; ganimet de yoktur. Rapor "ordudan kimse dönmedi" der.
-⭐ Sağ kalan birlik olmadığı için kahraman da **yok edilir** — ölü olarak bile dönmez. Tapınakta
-1 saat "Yok Edildi" görünür, sonra kayıt silinir (§13.11.4d).
+⭐ **TEK İSTİSNA KAHRAMAN** (2026-08-01): orduda kahraman varsa dönüş görevi yine kurulur ve
+süresi **kahramanın kendi hızıyla** hesaplanır (`payload.heroTravelSeconds`). Ganimet yine yok,
+rapor yine "ordudan kimse dönmedi" der — dönen yalnız kahramandır (§13.11.4d).
 
 ### 13.11.8 Destek görevi (tek yönlü)
 - Destek **gider ve kalır**: birlikler hedef şehrin garnizonuna, kahramanlar o şehrin Tapınak'ına yazılır.
@@ -2821,7 +2847,7 @@ oyuncu bulunamadı."*
 | Onay kalıbı | *"… Emin misiniz!"* — **soru işareti değil ünlem**; oyunun tüm onaylarında aynı |
 | Görev doğrulaması | `Saldırılarda casus kuş kullanılamaz!` · `Casusluk için sadece casus kuş seçilebilir!` · `Önce üretmek istediğin ünite sayılarını girmelisin !` |
 | Hata | `Sistemde oluşan bir hata nedeniyle işleminiz gerçekleştirilemiyor, lütfen daha sonra tekrar deneyiniz!` |
-| Kahraman durumu | `Görevde` · `Şehirde` · `Mağarada` · `Diriltiliyor` · `Yok Edildi !` |
+| Kahraman durumu | `Görevde` · `Şehirde` · `Mağarada` · `Diriltiliyor` · `Yok Edildi` (ölü — yolda ya da şehirde) |
 | Savaş sonucu | `Kazandınız !` · `Kaybettiniz !` |
 
 Panel başlığı **"Hükümdarlık"** (web ekranı `scr_web05`) — sayfa adı "Genel Durum", panel adı

@@ -12,7 +12,7 @@
  * ⚠️ **Varış anı `execute_at` OYUN saatindedir** → bakımda geri sayım durur, varış otomatik ötelenir.
  */
 import { sql } from 'drizzle-orm';
-import { maxCities, teleportCooldownSeconds, UNITS_BY_ID } from '@mobiwar/catalog';
+import { HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID } from '@mobiwar/catalog';
 import { armySpeed, distance, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG } from '@mobiwar/engine';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
@@ -205,6 +205,7 @@ export class MissionService {
                 ${executeAt.toISOString()}::timestamptz,
                 ${JSON.stringify({
                   distance: D, speed, travelSeconds: seconds, cartography,
+                  ...this.heroTravel(heroIds, D, cartography, speedMultiplier),
                   departedAt: opts.at.toISOString(),
                 })}::jsonb,
                 ${opts.idempotencyKey ?? null})
@@ -724,6 +725,7 @@ export class MissionService {
                 ${JSON.stringify({
                   ...(o.payloadExtra ?? {}),
                   distance: D, speed, travelSeconds: seconds, cartography,
+                  ...this.heroTravel(heroIds, D, cartography, speedMultiplier),
                   departedAt: o.at.toISOString(),
                 })}::jsonb,
                 ${o.idempotencyKey ?? null})
@@ -1026,6 +1028,32 @@ export class MissionService {
       SELECT speed_multiplier FROM worlds WHERE id = ${worldId}
     `);
     return Number(rows[0]?.['speed_multiplier'] ?? 1) || 1;
+  }
+
+  /**
+   * ⭐ KAHRAMANIN TEK BAŞINA DÖNÜŞ SÜRESİ — **kalkışta** hesaplanıp yüke yazılır.
+   *
+   * Ordunun tamamı ölürse kahraman yine de eve döner (§13.11.4d, 2026-08-01) ve o dönüşü
+   * artık ordu değil **kendi hızı** belirler (`HERO_SPEED`; kahraman orduyu hızlandırmaz ama
+   * yalnız kaldığında kendi hızıyla yürür — `units.ts:54-56`).
+   *
+   * ⚠️ **Neden dönüşte değil kalkışta?** Savaş çözülürken hesaplasaydık mesafeyi, Haritacılık'ı
+   * ve dünya çarpanını yeniden sorgulamak gerekirdi; üçü de o arada değişmiş olabilir ve
+   * oyuncuya kalkışta gösterilen süre ile gerçekleşen süre sessizce ayrışırdı. Yükte duran
+   * sayı, `travelSeconds` ile aynı anda, aynı girdilerden üretiliyor.
+   *
+   * ⚠️ Yalnız kahraman taşıyan görevlerde yazılır — yoksa her göreve ölü bir alan eklerdi.
+   * Yolda olan ESKİ görevlerde alan yok; handler'lar `?? travelSeconds`e düşüyor.
+   */
+  private heroTravel(
+    heroIds: number[], distanceValue: number, cartography: number, speedMultiplier: number,
+  ): Record<string, number> {
+    if (heroIds.length === 0) return {};
+    return {
+      heroTravelSeconds: travelSeconds(
+        { distance: distanceValue, speed: HERO_SPEED, cartography, speedMultiplier }, this.map,
+      ),
+    };
   }
 }
 

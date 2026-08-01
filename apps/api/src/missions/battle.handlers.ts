@@ -279,11 +279,10 @@ export function createAttackHandler(cities: CityService): MissionHandler {
     }
 
     /* ── KAHRAMANLAR ────────────────────────────────────────────────────────────
-     * Sağ kalan SAVAŞÇI sayısı, ölen kahramanın kaderini belirler: sıfırsa kahramanı geri
-     * taşıyacak kimse yoktur → YOK EDİLİR. Savunanda "sağ kalan" şehirde kalan ordudur.  */
+     * ⭐ 2026-08-01'den beri sağ kalan savaşçı sayısı kahramanın kaderini ETKİLEMEZ: ölen
+     * kahraman her hâlükârda geri döner (yok olma kaldırıldı). Sayı yalnız **dönüş bacağının
+     * kurulup kurulmayacağını** ve ganimetin taşınıp taşınmayacağını belirliyor.  */
     const attackerSurvivorCount = Object.values(warriorsOnly(result.attacker.counts))
-      .reduce((a, b) => a + b, 0);
-    const defenderSurvivorCount = Object.values(warriorsOnly(result.defender.counts))
       .reduce((a, b) => a + b, 0);
     const attackerWon = result.winner === 'attacker';
 
@@ -296,7 +295,6 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       homeTemple: defender.homeTemple ?? defender.temple,
       homeCityId: targetCityId,
       xpShare: result.xp * (attackerWon ? loseShare : winShare),
-      survivingUnits: defenderSurvivorCount,
     });
     const attackerHeroes = await settleHeroes(ctx, {
       before: attacker.heroes,
@@ -304,7 +302,6 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       homeTemple: attacker.homeTemple ?? 0,
       homeCityId: originCityId,
       xpShare: result.xp * (attackerWon ? winShare : loseShare),
-      survivingUnits: attackerSurvivorCount,
     });
 
     /* ⭐ YENİ KAHRAMAN — yalnız kazanan tarafta, kendi şehrinde. */
@@ -322,16 +319,20 @@ export function createAttackHandler(cities: CityService): MissionHandler {
      * tarafta bu anahtarı komple SİLER (tek filtre noktası; alan alan maskeleme unutulamaz).
      * Kahraman eşleşmesi savaşı çözen AYNI dizilerle yapılır (yeniden SELECT sıra bozar).
      */
+    /**
+     * ⚠️ `destroyed` alanı 2026-08-01'de **yazılmayı bıraktı** (yok olma kalktı). Eski satırlarda
+     * duruyor ve rapor onu okumuyor: ölen kahraman `alive:false` ile zaten belli, iki taraf da
+     * aynı «Yok Edildi» etiketine düşüyor (kullanıcı kararı: tek etiket).
+     */
     const heroLines = (
       before: { id: number; name: string; level: number }[],
       after: { alive: boolean }[],
-      settled: { destroyed: { id: number }[]; gained: { id: number; xp: number }[] },
+      settled: { gained: { id: number; xp: number }[] },
     ): Record<string, unknown>[] => before.map((h, i) => ({
       id: h.id,
       name: h.name,
       level: h.level,                                  // savaşa girdiği seviye
       alive: after[i]?.alive !== false,
-      destroyed: settled.destroyed.some((d) => d.id === h.id),
       xpGained: settled.gained.find((g) => g.id === h.id)?.xp ?? 0,
     }));
     const coordRows = await ctx.tx.execute<Record<string, unknown>>(sql`
@@ -359,13 +360,17 @@ export function createAttackHandler(cities: CityService): MissionHandler {
     `);
 
     // ── Dönüş bacağı (§13.10.3) ───────────────────────────────────────────────
-    // ⭐ Hayatta kalan birlik YOKSA dönüş görevi oluşturulmaz (§13.11.7): ordu yok olmuştur,
-    //    ganimet de yoktur. Rapor "ordudan kimse dönmedi" der.
-    // ⚠️ ÖLÜ kahraman da dönüş görevine biner (birlikler taşır) — `carriedIds` ölüleri içerir.
+    // ⭐ Hayatta kalan birlik YOKSA ganimet de yoktur (§13.11.7) ve rapor "ordudan kimse
+    //    dönmedi" der — ama **kahraman varsa dönüş görevi yine kurulur** (2026-08-01):
+    //    kahraman ölü ya da sağ, yalnız başına kendi hızıyla eve yürür.
+    // ⚠️ `carriedIds` ölüleri DE içerir; ikisi de aynı satırla taşınır.
     const survivors = warriorsOnly(result.attacker.counts);
     const anySurvivor = attackerSurvivorCount > 0;
-    if (anySurvivor) {
-      await scheduleReturn(ctx, { originCityId, battleId, units: survivors, loot });
+    const heroesComingHome = attackerHeroes.carriedIds.length > 0;
+    if (anySurvivor || heroesComingHome) {
+      await scheduleReturn(ctx, {
+        originCityId, battleId, units: survivors, loot, heroOnly: !anySurvivor,
+      });
     }
 
     await writeBattleReports(ctx, {
@@ -374,7 +379,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       defenderPlayerId: defenderCity.playerId,
       targetCityId,
       originCityId,
-      destroyedHeroes: [...attackerHeroes.destroyed, ...defenderHeroes.destroyed],
+      diedHeroes: [...attackerHeroes.died, ...defenderHeroes.died],
       capturedHero,
       heroXp: { attacker: attackerHeroes.gained, defender: defenderHeroes.gained },
       wallDestroyed,
@@ -792,18 +797,22 @@ function warriorsOnly(counts: Record<string, number>): Record<string, number> {
 }
 
 /**
- * ⭐ KAHRAMAN SONUÇLARI — ölüm, yok olma ve tecrübe (kullanıcı kararları, 2026-07-29).
+ * ⭐ KAHRAMAN SONUÇLARI — ölüm ve tecrübe (kullanıcı kararları, 2026-07-29 / 2026-08-01).
  *
  * **Ölüm:** kahraman YALNIZ durumu %0'a inince ölür (olasılık yok). Ölen kahraman silinmez;
  * seviyesi ve yetenekleri korunur, ücretli diriltmeyi bekler (`status = 'dead'`).
  *
- * **İki ölüm senaryosu:**
- *  1. **Ordunun geri kalanı da yok olduysa → YOK EDİLDİ.** Kahramanı şehre taşıyacak kimse
- *     kalmamıştır; kayıt `destroyed` olur ve `destroyedAt`+1 saat sonra tamamen silinir
- *     (o süre boyunca tapınakta "Yok Edildi" görünür ve savaş raporunda özel not çıkar).
- *  2. **Sağ kalan birlik varsa** kahramanı geri getirirler: dönüş boyunca "Görevde" görünür,
- *     şehre varınca `dead` olur ve Dirilt menüsü açılır. Bu yüzden ölü kahraman da
- *     `mission_heroes`te KALIR — dönüş görevine bağlanır (`scheduleReturn` taşır).
+ * ⭐ **YOK OLMA KALKTI (kullanıcı, 2026-08-01).** Eskiden ordunun tamamı ölürse kahraman
+ * `destroyed` yazılıp **1 saat sonra tamamen siliniyordu** — oyuncunun kalıcı olarak bir
+ * varlığı kaybettiği tek yer burasıydı. Artık tek senaryo var: kahraman ölür, `mission_heroes`
+ * satırı KALIR ve dönüş görevine biner. Taşıyacak birlik kalmadıysa **kendi hızıyla** yalnız
+ * döner (`payload.heroTravelSeconds`, çağıran taraf uygular). Şehre varınca Dirilt açılır;
+ * savunanın kendi şehrinde ölen kahraman zaten evdedir, anında diriltilebilir.
+ *
+ * ⚠️ Bu sadeleşme **`survivingUnits` parametresini gereksiz kıldı** ve yanında bir hatayı da
+ * kapattı: kahraman SAĞ kalıp bütün savaşçılar ölürse eski kod dönüş görevi kurmuyordu ve
+ * kahraman `city_id = NULL` + yetim `mission_heroes` satırıyla kalıyordu — `mission_heroes_hero`
+ * tekil indeksi yüzünden bir daha HİÇ sefere çıkamıyordu.
  *
  * **Tecrübe (kullanıcı kararı, 2026-07-29):** savaş tek bir XP havuzu üretir ve **iki taraf da**
  * ondan öğrenir — kazanan **2/3**, kaybeden **1/3**. Her taraf kendi payını yalnız **sağ çıkan**
@@ -812,7 +821,7 @@ function warriorsOnly(counts: Record<string, number>): Record<string, number> {
  * (`1/(seviye+1)`): tek kahraman payın tamamını alır, iki kahramandan düşük seviyeli daha
  * çoğunu alır — yeni kahraman hızlı yetişsin diye.
  *
- * @returns şehre/dönüşe katılacak kahramanların id'leri (yok edilenler hariç)
+ * @returns şehre/dönüşe katılacak kahramanların id'leri (ölüler DAHİL — hepsi dönüyor)
  */
 async function settleHeroes(ctx: HandlerContext, o: {
   before: SideState['heroes'];
@@ -822,15 +831,13 @@ async function settleHeroes(ctx: HandlerContext, o: {
   homeCityId: number | null;
   /** Bu tarafa DÜŞEN tecrübe (havuzun 2/3'ü ya da 1/3'ü) — taraf içinde bölünecek. */
   xpShare: number;
-  /** Bu tarafın savaştan sağ çıkan SAVAŞÇI sayısı — 0 ise ölen kahraman YOK EDİLİR. */
-  survivingUnits: number;
 }): Promise<{
   carriedIds: number[];
-  destroyed: { id: number; name: string; level: number }[];
+  died: { id: number; name: string; level: number }[];
   gained: { id: number; name: string; xp: number }[];
 }> {
   const carriedIds: number[] = [];
-  const destroyed: { id: number; name: string; level: number }[] = [];
+  const died: { id: number; name: string; level: number }[] = [];
   const survivors: SideState['heroes'] = [];
 
   for (let i = 0; i < o.before.length; i++) {
@@ -843,29 +850,14 @@ async function settleHeroes(ctx: HandlerContext, o: {
       continue;
     }
 
-    if (o.survivingUnits <= 0) {
-      // ── 1) YOK EDİLDİ: geri taşıyacak kimse yok ────────────────────────────
-      // ⚠️ `city_id` KORUNUR (NULL'lanmaz): tapınak listesi şehir bazlı sorguluyor, kayıt
-      //    şehirsiz kalırsa "Yok Edildi" satırı hiçbir tapınakta görünmez — oysa 1 saat
-      //    boyunca kendi üssünde görünmesi gerekiyor. `sweepDestroyed` süresi dolunca siler.
-      await ctx.tx.execute(sql`
-        UPDATE heroes
-           SET status = 'destroyed', destroyed_at = ${ctx.at.toISOString()}::timestamptz,
-               city_id = ${o.homeCityId}, revive_until = NULL
-         WHERE id = ${hero.id}
-      `);
-      await ctx.tx.execute(sql`DELETE FROM mission_heroes WHERE hero_id = ${hero.id}`);
-      destroyed.push({ id: hero.id, name: hero.name, level: hero.level });
-      continue;
-    }
-
-    // ── 2) ÖLÜ olarak geri taşınır ───────────────────────────────────────────
+    // ── ÖLÜ olarak geri taşınır ──────────────────────────────────────────────
     // Savunanda dönüş yolu yok → doğrudan şehirde ölü. Saldıranda dönüş görevi taşır;
     // `mission_heroes` kaydı KALIR ki dönüşte doğru şehre yerleşsin.
     await ctx.tx.execute(sql`
       UPDATE heroes SET status = 'dead', revive_until = NULL
        WHERE id = ${hero.id}
     `);
+    died.push({ id: hero.id, name: hero.name, level: hero.level });
     carriedIds.push(hero.id);
   }
 
@@ -901,7 +893,7 @@ async function settleHeroes(ctx: HandlerContext, o: {
     }
   }
 
-  return { carriedIds, destroyed, gained };
+  return { carriedIds, died, gained };
 }
 
 /**
@@ -970,14 +962,25 @@ async function writeBattle(ctx: HandlerContext, o: {
   return Number(rows[0]!['id']);
 }
 
-/** Dönüş görevi + taşınan birlikler + ganimet. Kahramanlar aynı satırla yeni göreve taşınır. */
+/**
+ * Dönüş görevi + taşınan birlikler + ganimet. Kahramanlar aynı satırla yeni göreve taşınır.
+ *
+ * ⭐ `heroOnly` = ordudan kimse kalmadı, yalnız kahraman dönüyor. O zaman süre **kahramanın
+ * kendi hızıyla** kalkışta hesaplanan `payload.heroTravelSeconds` olur — ordu hızıyla değil
+ * (ölen ordu artık yavaşlatmıyor). Yolda olan ESKİ görevlerde bu alan yok; `travelSeconds`e
+ * düşüyoruz, yani en kötü ihtimalde eski davranış.
+ */
 async function scheduleReturn(ctx: HandlerContext, o: {
   originCityId: number;
   battleId: number | null;
   units: Record<string, number>;
   loot: LootResult | null;
+  heroOnly?: boolean;
 }): Promise<number> {
-  const travel = Number(ctx.mission.payload['travelSeconds'] ?? 0);
+  const armyTravel = Number(ctx.mission.payload['travelSeconds'] ?? 0);
+  const travel = o.heroOnly
+    ? Number(ctx.mission.payload['heroTravelSeconds'] ?? armyTravel)
+    : armyTravel;
   const executeAt = new Date(ctx.at.getTime() + Math.max(1, travel) * 1000);
   const taken = o.loot?.taken ?? { gold: 0, food: 0 };
 
@@ -1023,8 +1026,8 @@ async function writeBattleReports(ctx: HandlerContext, o: {
   cave: CaveBreakResult;
   /** Bekleyen mağara emrinin savaştan sonraki hâli (yalnız savunanı ilgilendirir). */
   caveOrder: CaveStoreReconcile | null;
-  /** ⭐ Bu savaşta YOK EDİLEN kahramanlar (ordunun tamamıyla birlikte) — rapora özel not. */
-  destroyedHeroes?: { id: number; name: string; level: number }[];
+  /** ⭐ Bu savaşta ÖLEN kahramanlar — rapora özel not (hepsi eve döner ve diriltilebilir). */
+  diedHeroes?: { id: number; name: string; level: number }[];
   /** ⭐ Savaştan çıkan yeni kahramanın adı (çıkmadıysa null). */
   capturedHero?: string | null;
   /** ⭐ Hangi kahramanın ne kadar tecrübe aldığı — iki taraf için ayrı. */
@@ -1048,13 +1051,13 @@ async function writeBattleReports(ctx: HandlerContext, o: {
     night: o.night,
     at: ctx.at.toISOString(),
     /**
-     * ⭐ KAHRAMAN NOTLARI — iki taraf da görür (kimin kahramanı yok edildiği herkesi ilgilendirir).
-     * `destroyedHeroes`: ordunun tamamıyla birlikte yok olan kahramanlar. Bunlar ölü olarak geri
-     * dönmez, hesaptan silinir (tapınakta 1 saat "Yok Edildi" görünür).
+     * ⭐ KAHRAMAN NOTLARI — iki taraf da görür (kimin kahramanının düştüğü herkesi ilgilendirir).
+     * `died`: bu savaşta ölen kahramanlar. Hepsi eve döner ve Tapınak'ta diriltilebilir
+     * (2026-08-01'den beri yok olma yok); raporda etiketleri «Yok Edildi».
      * `capturedHero`: savaştan çıkan yeni kahramanın adı.
      */
     heroes: {
-      destroyed: o.destroyedHeroes ?? [],
+      died: o.diedHeroes ?? [],
       captured: o.capturedHero ?? null,
       /** Savaşın ürettiği TOPLAM tecrübe havuzu — kazanan 2/3'ünü, kaybeden 1/3'ünü alır. */
       xp: o.result.xp,

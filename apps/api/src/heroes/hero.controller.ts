@@ -9,6 +9,10 @@
  * ⚠️ Liste **şehir bazlıdır** (`o.java`: *"Bu şehirde hiç kahraman yok!"*) ama sefere çıkmış
  * kahraman da kendi üssünde **"Görevde"** olarak görünür — oyunun kendi ekran görüntüsünde beş
  * kahramanın beşi de öyle listeleniyordu. Bu yüzden sorgu `mission_heroes` ile birleşiyor.
+ *
+ * ⭐ **YOK OLMA KALKTI (kullanıcı, 2026-08-01).** `destroyed` durumu ve onu 1 saat sonra silen
+ * tembel süpürme kaldırıldı. Savaşta ölen kahraman «Yok Edildi» etiketiyle **eve dönüş
+ * yolundadır** (`dead` + şehirsiz), varınca aynı etiketle şehirde durur ve Dirilt açılır.
  */
 import {
   BadRequestException, Body, Controller, ForbiddenException, Get, Inject, NotFoundException,
@@ -24,9 +28,6 @@ import { CityService } from '../cities/city.service.ts';
 import { toDateOrNull, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
-
-/** Yok edilen kahraman tapınakta bu kadar süre "Yok Edildi" olarak görünür, sonra silinir. */
-export const DESTROYED_VISIBLE_MS = 60 * 60 * 1000;
 
 const skillsRequest = z.object({
   fAtk: z.number().int().nonnegative(),
@@ -53,8 +54,9 @@ interface HeroRow {
   status: string;
   cityId: number | null;
   reviveUntil: Date | null;
-  destroyedAt: Date | null;
   onMission: boolean;
+  /** Görevdeyse o görevin varış anı — «dönüyor» geri sayımı bunu kullanır. */
+  missionAt: Date | null;
 }
 
 function mapHero(r: Record<string, unknown>): HeroRow {
@@ -69,10 +71,9 @@ function mapHero(r: Record<string, unknown>): HeroRow {
     mDef: Number(r['m_def']),
     status: String(r['status']),
     cityId: r['city_id'] == null ? null : Number(r['city_id']),
-    // İkisi de yalnız ilgili durumda dolu: `reviving` → reviveUntil, `destroyed` → destroyedAt.
     reviveUntil: toDateOrNull(r['revive_until']),
-    destroyedAt: toDateOrNull(r['destroyed_at']),
     onMission: Boolean(r['on_mission']),
+    missionAt: toDateOrNull(r['mission_at']),
   };
 }
 
@@ -95,19 +96,27 @@ export class HeroController {
     const cityId = Number(id);
     const now = await this.clock.gameNow(player.worldId);
     await this.assertOwnCity(cityId, player.playerId, player.worldId);
-    await this.sweepDestroyed(player.playerId, now);
     await this.finishRevives(player.playerId, now);
     await this.syncLevels(player.playerId);
 
+    /**
+     * ⚠️ Dönüş görevinde `origin_city_id` = SALDIRILAN şehir, `target_city_id` = eve dönülen
+     * şehir (`scheduleReturn` ikisini ters yazıyor: görev "oradan buraya" gidiyor). Bu yüzden
+     * eşleşme iki kolona birden bakıyor — yalnız `origin`e bakılsaydı ölü kahraman dönüş
+     * yolundayken kendi tapınağından **kaybolurdu**.
+     */
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT h.id, h.name, h.level, h.xp, h.f_atk, h.f_def, h.m_atk, h.m_def,
-             h.status, h.city_id, h.revive_until, h.destroyed_at,
-             (mh.hero_id IS NOT NULL) AS on_mission
+             h.status, h.city_id, h.revive_until,
+             (mh.hero_id IS NOT NULL) AS on_mission,
+             m.execute_at AS mission_at
         FROM heroes h
         LEFT JOIN mission_heroes mh ON mh.hero_id = h.id
         LEFT JOIN missions m ON m.id = mh.mission_id
        WHERE h.player_id = ${player.playerId}
-         AND (h.city_id = ${cityId} OR m.origin_city_id = ${cityId})
+         AND (h.city_id = ${cityId}
+              OR (m.type = 'return' AND m.target_city_id = ${cityId})
+              OR (m.type <> 'return' AND m.origin_city_id = ${cityId}))
        ORDER BY h.level DESC, h.id
     `);
 
@@ -120,8 +129,7 @@ export class HeroController {
        WHERE c.player_id = ${player.playerId} AND b.type = 'temple'
     `);
     const [countRow] = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT COUNT(*)::int AS n FROM heroes
-       WHERE player_id = ${player.playerId} AND status <> 'destroyed'
+      SELECT COUNT(*)::int AS n FROM heroes WHERE player_id = ${player.playerId}
     `);
 
     const templeLevel = Number(templeRow?.['level'] ?? 0);
@@ -169,8 +177,10 @@ export class HeroController {
   }
 
   /**
-   * **Kahraman Adı Değiştir** — şehirde, görevde ve ÖLÜ iken serbest; yalnız **yok edilmiş**
-   * kahramanın adı değiştirilemez (kullanıcı kararı). Adlar savaş raporlarında görünür.
+   * **Kahraman Adı Değiştir** — her durumda serbest (şehirde · görevde · ölü · diriltilirken).
+   *
+   * ⚠️ Eskiden tek bir istisna vardı: **yok edilmiş** kahramanın adı değiştirilemezdi. Yok olma
+   * 2026-08-01'de kalktığı için istisnanın konusu da kalmadı. Adlar savaş raporlarında görünür.
    */
   @Post('heroes/:id/rename')
   async rename(
@@ -179,9 +189,6 @@ export class HeroController {
     const parsed = renameRequest.safeParse(body);
     if (!parsed.success) throw new BadRequestException(NAME_RULE_MESSAGE);
     const hero = await this.load(Number(id), req.player!.playerId);
-    if (hero.status === 'destroyed') {
-      throw new BadRequestException('Yok edilmiş kahramanın adı değiştirilemez.');
-    }
     await this.db.execute(sql`UPDATE heroes SET name = ${parsed.data.name} WHERE id = ${hero.id}`);
     return { id: hero.id, name: parsed.data.name };
   }
@@ -241,17 +248,22 @@ export class HeroController {
       skills: { fAtk: h.fAtk, fDef: h.fDef, mAtk: h.mAtk, mDef: h.mDef },
       pointsTotal: h.level * DEFAULT_COMBAT_CONFIG.hero.pointsPerLevel,
       pointsSpent: h.fAtk + h.fDef + h.mAtk + h.mDef,
-      /** İstemcinin kendi sözlüğü. */
-      state: h.status === 'destroyed' ? 'destroyed'
-        : h.status === 'reviving' ? 'reviving'
-          : h.status === 'dead' ? 'dead'
-            : h.onMission ? 'on_mission' : 'in_city',
+      /**
+       * İstemcinin kendi sözlüğü. ⭐ `returning` YENİ (2026-08-01): ölmüş ama henüz eve
+       * varmamış kahraman. Etiketi de «Yok Edildi» ama Dirilt kapalı — diriltme kapısı
+       * `city_id != null` şartını zaten arıyor (`revive`), ekran onunla aynı şeyi söylemeli.
+       */
+      state: h.status === 'reviving' ? 'reviving'
+        : h.status === 'dead' ? (h.cityId == null ? 'returning' : 'dead')
+          : h.onMission ? 'on_mission' : 'in_city',
       reviveUntil: h.reviveUntil?.toISOString() ?? null,
-      /** Yok edilen kahramanın listeden düşeceği an. */
-      disappearsAt: h.destroyedAt
-        ? new Date(h.destroyedAt.getTime() + DESTROYED_VISIBLE_MS).toISOString() : null,
-      reviveCost: h.status === 'dead' ? heroReviveCost(h.level) : null,
-      reviveSeconds: h.status === 'dead' ? heroReviveSeconds(h.level, templeLevel) : null,
+      /** Dönüş yolundaki kahramanın şehre varış anı (yalnız `returning` durumunda dolu). */
+      returningAt: h.status === 'dead' && h.cityId == null
+        ? h.missionAt?.toISOString() ?? null : null,
+      /** ⚠️ Maliyet/süre şehre VARMIŞ ölü kahramanda gösterilir — yolda henüz diriltilemez. */
+      reviveCost: h.status === 'dead' && h.cityId != null ? heroReviveCost(h.level) : null,
+      reviveSeconds: h.status === 'dead' && h.cityId != null
+        ? heroReviveSeconds(h.level, templeLevel) : null,
       _now: now.toISOString(),
     };
   }
@@ -259,9 +271,11 @@ export class HeroController {
   private async load(id: number, playerId: number): Promise<HeroRow> {
     const [row] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT h.id, h.name, h.level, h.xp, h.f_atk, h.f_def, h.m_atk, h.m_def,
-             h.status, h.city_id, h.revive_until, h.destroyed_at, h.player_id,
-             (mh.hero_id IS NOT NULL) AS on_mission
-        FROM heroes h LEFT JOIN mission_heroes mh ON mh.hero_id = h.id
+             h.status, h.city_id, h.revive_until, h.player_id,
+             (mh.hero_id IS NOT NULL) AS on_mission, m.execute_at AS mission_at
+        FROM heroes h
+        LEFT JOIN mission_heroes mh ON mh.hero_id = h.id
+        LEFT JOIN missions m ON m.id = mh.mission_id
        WHERE h.id = ${id}
     `);
     if (!row) throw new NotFoundException('Kahraman bulunamadı.');
@@ -286,16 +300,7 @@ export class HeroController {
     }
   }
 
-  /** Süresi dolan "Yok Edildi" kayıtlarını siler (tembel temizlik — ayrı bir tick gerekmez). */
-  private async sweepDestroyed(playerId: number, now: Date): Promise<void> {
-    await this.db.execute(sql`
-      DELETE FROM heroes
-       WHERE player_id = ${playerId} AND status = 'destroyed'
-         AND destroyed_at < ${new Date(now.getTime() - DESTROYED_VISIBLE_MS).toISOString()}::timestamptz
-    `);
-  }
-
-  /** Süresi dolan diriltmeleri tamamlar (aynı tembel yaklaşım). */
+  /** Süresi dolan diriltmeleri tamamlar (tembel temizlik — ayrı bir tick gerekmez). */
   private async finishRevives(playerId: number, now: Date): Promise<void> {
     await this.db.execute(sql`
       UPDATE heroes SET status = 'alive', revive_until = NULL
@@ -314,7 +319,7 @@ export class HeroController {
    */
   private async syncLevels(playerId: number): Promise<void> {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT id, level, xp FROM heroes WHERE player_id = ${playerId} AND status <> 'destroyed'
+      SELECT id, level, xp FROM heroes WHERE player_id = ${playerId}
     `);
     for (const r of rows) {
       const should = heroLevelForXp(Number(r['xp']));

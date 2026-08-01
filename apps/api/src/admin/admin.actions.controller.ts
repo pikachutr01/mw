@@ -325,7 +325,7 @@ export class AdminActionsController {
 
     /**
      * ⚠️ **DÜZELTİLDİ (2. nesil Tur 2): eskiden `'idle'` yazılıyordu.** O değer şemanın
-     * sözlüğünde (`alive | dead | reviving | destroyed`) YOK ve iki yerde farklı okunuyordu:
+     * sözlüğünde (`alive | dead | reviving`) YOK ve iki yerde farklı okunuyordu:
      * kahraman ekranı onu `in_city` sayıyor (`hero.controller.ts:245` dallanmasının son
      * dalı), ama dünya listesi `dead: status !== 'alive'` diyor
      * (`command.controller.ts:405`) → panelden verilen kahraman oyuncuya **ölü** görünüyordu.

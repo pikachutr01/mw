@@ -1224,15 +1224,19 @@ describe('kahraman', () => {
     const [row] = await h.db.execute<Record<string, unknown>>(
       sql`SELECT xp, status FROM heroes WHERE id = ${defHero}`,
     );
-    // Savunan ezildi: kahraman ya öldü ya yok edildi → her hâlükârda XP yok.
+    // Savunan ezildi: kahraman öldü → XP yok (ölen kahraman payını alamaz).
     if (row && row['status'] !== 'alive') expect(Number(row['xp'])).toBe(0);
   });
 
   /**
-   * ⭐ ÖLÜ ve YOK EDİLMİŞ kahraman hiçbir sefere katılamaz (kullanıcı kararı 2026-07-29):
+   * ⭐ ÖLÜ ve DİRİLTİLMEKTE olan kahraman hiçbir sefere katılamaz (kullanıcı kararı 2026-07-29):
    * saldırı, destek, nakliye — hepsi aynı `reserveHeroes` kapısından geçtiği için tek kural.
+   *
+   * ⚠️ `destroyed` listeden çıktı: o durum 2026-08-01'de emekli oldu (`0033_hero_no_destroy`).
+   * Kapı zaten `status = 'alive'` ARIYOR, yani sözlükte olmayan bir değer de reddedilirdi —
+   * ama sözlükte olmayan bir değeri test etmek kuralı değil tesadüfü sınamak olurdu.
    */
-  it.each(['dead', 'reviving', 'destroyed'])('%s kahraman sefere çıkamaz', async (status) => {
+  it.each(['dead', 'reviving'])('%s kahraman sefere çıkamaz', async (status) => {
     await giveUnits(attackCity, 'dwarf', 100);
     const at = await clock.gameNow(worldId);
     const r = await h.db.execute<Record<string, unknown>>(sql`

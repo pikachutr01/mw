@@ -232,6 +232,13 @@
       "when": 1785607000000,
       "tag": "0032_hero_status_repair",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1785608000000,
+      "tag": "0033_hero_no_destroy",
+      "breakpoints": true
     }
   ]
 }

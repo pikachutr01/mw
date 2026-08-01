@@ -766,13 +766,12 @@ function HeroStrip({ title, heroes }: { title: string; heroes: ReportHeroLine[] 
                 {h.name} <span className="text-muted">sv {h.level}</span>
               </div>
               <div className="flex items-center gap-1.5 text-[10px]">
-                {h.destroyed ? (
-                  /* Orijinal kalıp (k.java): "Yok Edildi !" */
+                {!h.alive ? (
+                  /* Orijinal kalıp (k.java): "Yok Edildi !" — 2026-08-01'den beri ölen her
+                     kahramanın tek etiketi (ordusu sağ kalsa da kalmasa da eve dönüyor). */
                   <span className="font-semibold text-danger">Yok Edildi !</span>
-                ) : h.alive ? (
-                  <span className="text-success">Sağ</span>
                 ) : (
-                  <span className="text-warning">Öldü</span>
+                  <span className="text-success">Sağ</span>
                 )}
                 {h.xpGained > 0 ? (
                   <span className="tnum text-muted">+{fmt(h.xpGained)} tecrübe</span>

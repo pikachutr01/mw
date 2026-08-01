@@ -44,9 +44,12 @@ export interface ReportHeroLine {
   name: string;
   /** Savaşa girdiği seviye. */
   level: number;
+  /**
+   * ⭐ Savaştan sağ çıktı mı? `false` ise etiket **«Yok Edildi»** (kullanıcı kararı 2026-08-01:
+   * tek etiket). Kahraman artık her hâlükârda eve dönüyor ve orada diriltilebiliyor; eski
+   * `destroyed` bayrağı (diriltilemez yok olma) tarihe karıştı.
+   */
   alive: boolean;
-  /** Ordunun tamamı yok olduğu için YOK EDİLDİ (diriltilemez). */
-  destroyed: boolean;
   /** Bu savaştan kazandığı tecrübe — yalnız KENDİ kahramanlarında dolu, rakipte 0. */
   xpGained: number;
 }
@@ -108,7 +111,8 @@ interface RawHeroLine {
   name: string;
   level: number;
   alive: boolean;
-  destroyed: boolean;
+  /** ⚠️ EMEKLİ — yalnız 2026-08-01 öncesi satırlarda var; okunmuyor (`alive` yeterli). */
+  destroyed?: boolean;
   xpGained: number;
 }
 
@@ -199,7 +203,6 @@ const toHeroLine = (h: RawHeroLine, mine: boolean): ReportHeroLine => ({
   name: h.name,
   level: h.level,
   alive: h.alive,
-  destroyed: h.destroyed,
   // Rakibin ne kadar XP kazandığı KENDİ bilgisidir — sızdırılmaz.
   xpGained: mine ? h.xpGained : 0,
 });
@@ -401,7 +404,9 @@ function renderText(r: BattleReport): string {
   }
 
   const heroText = (h: ReportHeroLine): string => {
-    const durum = h.destroyed ? 'YOK EDİLDİ' : h.alive ? 'sağ' : 'öldü';
+    // ⭐ Tek etiket (kullanıcı, 2026-08-01): ölen kahraman ordusu sağ kalsa da kalmasa da
+  //    «Yok Edildi» yazar; ikisi de eve dönüp tapınakta diriltiliyor.
+  const durum = h.alive ? 'sağ' : 'YOK EDİLDİ';
     const xp = h.xpGained > 0 ? ` (+${tr(h.xpGained)} tecrübe)` : '';
     return `  ${h.name} (sv ${h.level}): ${durum}${xp}`;
   };
