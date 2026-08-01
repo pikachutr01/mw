@@ -37,6 +37,16 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'Hiçbir şey geri alınmaz.',
   },
   {
+    id: 'ratelimit',
+    label: 'Hız sınırı (kimliksiz uçlar)',
+    description: '⭐ Yalnız GİRİŞ YAPMAMIŞ ziyaretçinin ulaşabildiği uçlara IP başına sınır. '
+      + 'Ana sayfa ve savaş simülatörü herkese açık olduğu için (§9.3.6) bunlar kimlik '
+      + 'doğrulamasının arkasında değil; sınırsız bırakmak sunucuyu bedava CPU\'ya açardı. '
+      + '⚠️ Oyunun İÇİNDEKİ (kimlikli) trafiğe UYGULANMAZ: aynı IP\'yi paylaşan iki oyuncu '
+      + 'birbirini kilitlememeli. ⚠️ Sayaç süreç belleğinde: `ROLE=all` tek süreç profilinde '
+      + 'doğru çalışır, çok süreçli dağıtımda her sürecin kendi sayacı olur.',
+  },
+  {
     id: 'combat',
     label: 'Savaş motoru',
     description: '⚠️ Buradaki sayıların ÇOĞU binary\'den ÖLÇÜLDÜ — tasarım tercihi değil, '
@@ -796,6 +806,39 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'number', default: 0.92, min: 0.1, max: 1, tag: 'design',
     description: 'Surun her seviyesi onarımı ne kadar kısaltır. Seviye 20 sur 2 sa 28 dk\'da toparlanır.',
     note: 'Dokümanda yok, bilerek eklendi: suru yükseltmek toparlanma hızı da kazandırmalı.',
+  },
+
+  /* ── Hız sınırı — yalnız kimliksiz uçlar (§9.3.7) ────────────────────────── */
+  {
+    key: 'ratelimit.enabled',
+    label: 'Hız sınırı açık',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'Kimliksiz uçlarda IP başına istek sınırı uygulansın mı.',
+    note: 'Kapatmak yalnız yerel geliştirme için anlamlı; halka açık sunucuda açık kalmalı.',
+  },
+  {
+    key: 'ratelimit.windowSeconds',
+    label: 'Pencere',
+    type: 'int', default: 60, min: 5, max: 3600, tag: 'design', unit: 'sn',
+    description: 'Sayaçların sıfırlandığı aralık. Aşağıdaki sayılar bu pencere içindir.',
+  },
+  {
+    key: 'ratelimit.simulate',
+    label: 'Simülatör (pencere başına)',
+    type: 'int', default: 30, min: 1, max: 1000, tag: 'design',
+    description: 'Bir IP\'nin pencere içinde kaç savaş simülasyonu isteyebileceği.',
+    note: 'Tek istek `repeat` ile 50 savaş çevirebiliyor; asıl maliyet istek sayısı değil, '
+      + 'istek × tekrar. 30 gerçek bir oyuncunun deneme temposunun çok üstünde.',
+  },
+  {
+    key: 'ratelimit.auth',
+    label: 'Giriş / kayıt / şifre (pencere başına)',
+    type: 'int', default: 10, min: 1, max: 1000, tag: 'design',
+    description: 'Bir IP\'nin pencere içinde kaç kez giriş, kayıt veya şifre sıfırlama '
+      + 'deneyebileceği.',
+    note: 'Parola deneme saldırısına karşı ikinci savunma. Birincisi hesap bazlı kilit '
+      + '(`accounts.failed_logins` / `locked_until`) ve o hesabı korur; bu ise farklı '
+      + 'kullanıcı adlarını sırayla deneyen saldırganı yavaşlatır.',
   },
 
   /* ── Bakım ve saklama (§admin Faz 8) ─────────────────────────────────────── */

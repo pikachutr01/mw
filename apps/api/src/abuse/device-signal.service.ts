@@ -100,14 +100,15 @@ export class DeviceSignalService {
     `);
     return rows.map((r) => Number(r.player_id));
   }
-
-  /** Saklama politikası: oturum kayıtları 90 gün (§9.1.2). Öbek sayaçları kalır. */
-  async pruneOldSessions(retentionDays: number): Promise<number> {
-    const rows = await this.db.execute<{ id: string } & Record<string, unknown>>(sql`
-      DELETE FROM sessions
-       WHERE created_at < now() - (${retentionDays}::int * interval '1 day')
-      RETURNING id
-    `);
-    return rows.length;
-  }
 }
+
+/*
+ * ⚠️ Burada bir `pruneOldSessions(retentionDays)` metodu vardı; 2026-08-02'de **silindi**.
+ * İki sebep:
+ *   1. **Çağıranı yoktu** — tüm repo tarandı, yalnız kendi tanımı eşleşiyordu.
+ *   2. **Mantığı yanlıştı**: `created_at < now() - N gün` diyerek CANLI oturumları da silerdi.
+ *      Dönmeli refresh her yenilemede yeni satır açtığı için uzun süredir bağlı bir cihazın
+ *      zinciri eskidir ama satırı diridir; o satırı silmek oyuncuyu durduk yere düşürürdü.
+ * Doğrusunu yönetim panelinin Faz 8 temizlik görevi zaten yapıyor: `admin/ops-jobs.ts`
+ * `sessions` işi `revoked_at`/`expires_at` üzerinden yalnız GERÇEKTEN ölü satırları siliyor.
+ */

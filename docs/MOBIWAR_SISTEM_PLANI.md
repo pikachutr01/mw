@@ -442,8 +442,8 @@ YOK. Ek uç gerekmedi — sidebar `useCity` cache'inden okur.
   (§admin Faz 3), tablo da yönetim panelindeki `sessions` temizlik göreviyle budanıyor
   (`ops-jobs.ts:129-143`).
 
-⚠️ `device-signal.service.ts:105` `pruneOldSessions` **hiç çağrılmıyor** — Faz 8'deki temizlik
-görevi aynı işi yaptığı için ölü kalmış ikizi. Silinmeli ya da göreve bağlanmalı.
+⚠️ `device-signal.service.ts`teki `pruneOldSessions` **hiç çağrılmıyordu** ve mantığı da
+yanlıştı; 2026-08-02'de silindi (§9.3.8).
 
 ---
 
@@ -953,6 +953,51 @@ misafir `/armies` → `/`; mobil 375px'te yatay kaydırma yok.
 
 ⚠️ Misafir `/world/5/5` gibi bir derin bağlantıyla gelirse catch-all onu ana sayfaya alıyor ve
 **adres hatırlanmıyor**. Bilinçli: "giriş sonrası oraya dön" ayrı bir iş.
+
+### 9.3.7 Hız sınırı — yalnız kimliksiz uçlar
+
+Misafir modu simülatörü kimlik doğrulamasının dışına çıkardı. `POST /api/v1/simulate` gerçek
+savaş motorunu koşturuyor ve tek istekte `repeat` ile 50 savaş çevirebiliyor; API'de o güne
+kadar **hiçbir yerde hız sınırı yoktu** (`Throttle|rate.?limit|helmet` → 0 eşleşme).
+
+`apps/api/src/auth/rate-limit.ts` — IP başına sabit pencere sayacı, `APP_GUARD` olarak global
+kayıtlı ama **dar bir listede** iş yapıyor:
+
+| Yol | Kova | Varsayılan (60 sn) |
+| :-- | :-- | :-- |
+| `POST /api/v1/simulate` | `simulate` | 30 |
+| `POST /api/v1/auth/login` · `/register` · `/forgot-password` | `auth` | 10 |
+
+⚠️⚠️ **Oyunun içindeki (kimlikli) trafiğe UYGULANMAZ.** Sınır IP başına; oyun istemcisi
+dakikada onlarca istek atıyor ve aynı IP'yi paylaşan iki oyuncu (ev, okul, mobil NAT)
+birbirini kilitlerdi. Bu yüzden kural **"yalnız şunları sınırla"**, "her şeyi sınırla gerekeni
+muaf tut" değil.
+
+⚠️ **Neden guard, interceptor değil:** sayaç `AuthGuard`tan **önce** işlemeli ki parola deneme
+saldırısı argon2 doğrulamasını hiç tetiklemesin. (Bakım kilidi tam tersi sebeple interceptor —
+o kimliğin hazır olmasını istiyor.)
+
+⚠️ Sayaç **süreç belleğinde**. `ROLE=all` tek süreç profilinde doğru; çok süreçli dağıtımda
+her sürecin kendi sayacı olur → gerçek sınır süreç sayısıyla çarpılır. O gün paylaşımlı sayaç
+gerekir; bugün ikinci bir altyapı bağımlılığı istemiyoruz (§4.0).
+
+⚠️ Sabit pencere (kayan değil): pencere sınırında kısa süreliğine iki katı isteğe izin verir.
+Kötüye kullanımı yavaşlatmaya yeter, akıl yürütmesi basit.
+
+**Ölçüldü (canlı API'ye karşı):** `/simulate` → 30 × 201, sonra 429; `/auth/login` → 10 × 401,
+sonra 429 (kovalar ayrı); `GET /api/v1/cities` → **25 istek, hiç 429 yok** (oyun trafiği
+dokunulmamış). 429 gövdesi: `{"code":"rate_limited","message":"… 29 saniye sonra tekrar
+dene.","retryAfter":29}`. Ayrıca 10 birim testi (`test/rate-limit.test.ts`).
+
+Limitler panelden: `ratelimit.enabled` · `windowSeconds` · `simulate` · `auth`.
+
+### 9.3.8 Ölü kod: `pruneOldSessions` silindi
+
+`device-signal.service.ts`teki metodun **çağıranı yoktu** ve mantığı da **yanlıştı**:
+`created_at < now() - N gün` diyerek canlı oturumları da silerdi (dönmeli refresh her
+yenilemede yeni satır açtığı için uzun süredir bağlı bir cihazın zinciri eskidir ama satırı
+diridir). Doğrusunu Faz 8 temizlik görevi zaten yapıyor (`ops-jobs.ts`, `revoked_at`/
+`expires_at`). Yerinde neden silindiğini anlatan bir yorum bırakıldı.
 
 ---
 

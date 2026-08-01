@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminController } from './admin/admin.controller.ts';
 import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
 import { AdminActionsController } from './admin/admin.actions.controller.ts';
@@ -13,6 +13,7 @@ import { SettingsService } from './settings/settings.service.ts';
 import { AllianceController } from './alliance/alliance.controller.ts';
 import { AuthController } from './auth/auth.controller.ts';
 import { AuthGuard } from './auth/auth.guard.ts';
+import { PublicRateLimitGuard } from './auth/rate-limit.ts';
 import { OptionalAuthGuard } from './auth/optional-auth.guard.ts';
 import { AuthService } from './auth/auth.service.ts';
 import { TokenService } from './auth/token.service.ts';
@@ -127,6 +128,13 @@ export { DB } from './db/tokens.ts';
      * global guard'lar `AuthGuard`tan ÖNCE koşuyor, interceptor'lar SONRA → kimlik hazır.
      */
     { provide: APP_INTERCEPTOR, useClass: MaintenanceInterceptor },
+    /**
+     * ⭐ HIZ SINIRI — GLOBAL guard, ama **yalnız kimliksiz uçlarda** iş yapıyor
+     * (`rate-limit.ts` içindeki dar liste). Guard olması burada DOĞRU: `AuthGuard`tan önce
+     * koşması gerekiyor — sayaç, kimlik doğrulaması denenmeden önce işlemeli ki parola
+     * deneme saldırısı argon2 doğrulamasını hiç tetiklemesin.
+     */
+    { provide: APP_GUARD, useClass: PublicRateLimitGuard },
     AuthGuard,
     OptionalAuthGuard,
     AdminGuard,
