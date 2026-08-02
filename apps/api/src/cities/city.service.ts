@@ -40,9 +40,11 @@ export interface CitySnapshot {
   /** Tam sayıya indirilmiş (oyuncuya gösterilen) kaynak. */
   gold: number;
   food: number;
-  /** Saatlik üretim (arayüzdeki "+X/saat"). */
+  /** Saatlik üretim (arayüzdeki "+X/saat"). ⚠️ Tatil modunda ikisi de **0**. */
   goldPerHour: number;
   foodPerHour: number;
+  /** Sahibi tatil modunda mı — ekran «Tatilde» rozetini ve donmuş sayaçları buradan çizer. */
+  onVacation: boolean;
   /** Dünya hız çarpanları (1 = klasik). Arayüz "hızlandırılmış dünya" rozetini bundan çizer. */
   speed: { resource: number; travel: number; training: number; construction: number };
   buildings: Record<string, number>;
@@ -98,8 +100,21 @@ export class CityService {
     const foodPerHour = farmOutput(farm, cfg);
     const goldPerHour = mineOutput(mine, cfg);
 
-    // ⭐ Dünya kaynak çarpanı (`worlds.resource_multiplier`) burada uygulanır — TEK yerde,
-    //    çünkü oyuncunun gördüğü her kaynak sayısı bu fonksiyondan geçiyor.
+    /**
+     * ⭐ Dünya kaynak çarpanı (`worlds.resource_multiplier`) burada uygulanır — TEK yerde,
+     * çünkü oyuncunun gördüğü her kaynak sayısı bu fonksiyondan geçiyor.
+     *
+     * ⭐ **TATİL MODU DONDURMASI TAM BURADA** (2026-08-02) — `p.vacation_until IS NULL`.
+     * Tek satır, çünkü "üretimi durdur" bu mimaride "çıpayı dondur" demek: kaynak yok,
+     * `resources_at`ten geçen süreyle hesaplanıyor (§13.11.1, "Tick YOK"). Koşul sağlanmayınca
+     * UPDATE hiçbir satıra dokunmuyor → `resources_at` giriş anında kalıyor ve birikim duruyor.
+     *
+     * ⚠️ Çıpanın ileri çekilmesi **yalnız** `vacation.service.ts` → `endVacation()` içinde.
+     * Burada da çekseydik "dondurma kapalı ama çıpa eski" ara durumu oluşur ve tatil biter
+     * bitmez tüm süre tek okumada kaynağa dönerdi.
+     *
+     * ⚠️ `cities.player_id` NOT NULL olduğu için join satır düşürmez (sahipsiz şehir yok).
+     */
     await runner.execute(sql`
       UPDATE cities c SET
         gold = c.gold + (${goldPerHour}::numeric * w.resource_multiplier
@@ -107,9 +122,11 @@ export class CityService {
         food = c.food + (${foodPerHour}::numeric * w.resource_multiplier
                * (EXTRACT(EPOCH FROM (${at.toISOString()}::timestamptz - c.resources_at)) / 3600.0)::numeric),
         resources_at = ${at.toISOString()}::timestamptz
-      FROM worlds w
+      FROM worlds w, players p
       WHERE c.id = ${cityId}
         AND w.id = c.world_id
+        AND p.id = c.player_id
+        AND p.vacation_until IS NULL
         AND c.resources_at < ${at.toISOString()}::timestamptz
     `);
 
@@ -131,8 +148,11 @@ export class CityService {
     const rows = await runner.execute<Record<string, unknown>>(sql`
       SELECT c.id, c.world_id, c.player_id, c.name, c.k, c.d, c.s, c.is_capital,
              c.gold, c.food, c.resources_at,
+             (p.vacation_until IS NOT NULL) AS on_vacation,
              w.resource_multiplier, w.speed_multiplier, w.training_multiplier, w.construction_multiplier
-        FROM cities c JOIN worlds w ON w.id = c.world_id
+        FROM cities c
+        JOIN worlds w  ON w.id = c.world_id
+        JOIN players p ON p.id = c.player_id
        WHERE c.id = ${cityId}
     `);
     const c = rows[0];
@@ -156,13 +176,20 @@ export class CityService {
       // Oyuncuya TAM SAYI gösterilir; kesir DB'de saklanmaya devam eder.
       gold: Math.floor(Number(c['gold'])),
       food: Math.floor(Number(c['food'])),
-      // ⚠️ Gösterilen üretim de çarpanı içerir; içermezse oyuncu "sayaç yazandan hızlı akıyor" der.
-      goldPerHour:
-        mineOutput(buildings['mine'] ?? 0, this.cat(Number(c['world_id'])))
-        * Number(c['resource_multiplier'] ?? 1),
-      foodPerHour:
-        farmOutput(buildings['farm'] ?? 0, this.cat(Number(c['world_id'])))
-        * Number(c['resource_multiplier'] ?? 1),
+      /**
+       * ⚠️ Gösterilen üretim de çarpanı içerir; içermezse oyuncu "sayaç yazandan hızlı akıyor" der.
+       *
+       * ⭐ **Tatilde ikisi de 0** (2026-08-02). Dondurma `materialize`te; burası yalnız EKRAN.
+       * Ama iki yer ayrışırsa ortaya çıkan tablo şu olurdu: üstte «+120/sa» yazıyor, sayı hiç
+       * kıpırdamıyor. Oyuncu bunu tatilin kuralı değil, oyunun hatası sanar.
+       */
+      goldPerHour: c['on_vacation'] === true ? 0
+        : mineOutput(buildings['mine'] ?? 0, this.cat(Number(c['world_id'])))
+          * Number(c['resource_multiplier'] ?? 1),
+      foodPerHour: c['on_vacation'] === true ? 0
+        : farmOutput(buildings['farm'] ?? 0, this.cat(Number(c['world_id'])))
+          * Number(c['resource_multiplier'] ?? 1),
+      onVacation: c['on_vacation'] === true,
       speed: {
         resource: Number(c['resource_multiplier'] ?? 1),
         travel: Number(c['speed_multiplier'] ?? 1),

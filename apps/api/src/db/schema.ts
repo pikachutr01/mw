@@ -113,7 +113,18 @@ export const players = pgTable('players', {
   scoreBase: numeric('score_base', { precision: 24, scale: 6 }).notNull().default('0'),
   isPremium: boolean('is_premium').notNull().default(false),
   protectedUntil: timestamp('protected_until', { withTimezone: true }),
+  /**
+   * ⭐ TATİL MODU (0035). Üç kolon birlikte okunur:
+   *   `vacationUntil`   → planlanmış **otomatik çıkış** anı. ⚠️ **`NULL` ⇔ tatilde DEĞİL** —
+   *                       kanonik yüklem budur, `> now()` DEĞİL (gerekçe: göç dosyası §2,
+   *                       worker gecikirse 30 günlük kaynağın bankalanmasını engelliyor).
+   *   `vacationSince`   → giriş anı; 48 saatlik alt sınır buradan sayılır.
+   *   `vacationEndedAt` → son çıkış; 3 günlük yeniden giriş beklemesi buradan.
+   * DB CHECK'i `since` ile `until`ı çift olmaya zorluyor (`players_vacation_pair`).
+   */
   vacationUntil: timestamp('vacation_until', { withTimezone: true }),
+  vacationSince: timestamp('vacation_since', { withTimezone: true }),
+  vacationEndedAt: timestamp('vacation_ended_at', { withTimezone: true }),
   /** İttifak üyeliği (§13.15b). FK döngüsel olduğu için tembel referans (alliances aşağıda). */
   allianceId: bigint('alliance_id', { mode: 'number' })
     .references((): AnyPgColumn => alliances.id, { onDelete: 'set null' }),

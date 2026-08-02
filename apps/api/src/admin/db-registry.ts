@@ -40,16 +40,26 @@ export const DB_TABLES: readonly TableSpec[] = [
   {
     name: 'players', label: 'Oyuncular', orderBy: 'id', policy: 'edit',
     columns: ['id', 'world_id', 'account_id', 'username', 'score', 'score_base', 'alliance_id',
-      'protected_until', 'vacation_until', 'banned_at', 'ban_until', 'ban_mode', 'last_seen_at'],
+      'protected_until', 'vacation_until', 'vacation_since', 'vacation_ended_at',
+      'banned_at', 'ban_until', 'ban_mode', 'last_seen_at'],
     /**
      * ⚠️ `score` ve `score_base` **düzenlenebilir DEĞİL**: `score` türev
      * (`floor(score_base/1000)`) ve elle yazılan değer ilk `addScoreBase` çağrısında geri
      * hesaplanıp silinir. Doğrusu «Puanı yeniden hesapla» aksiyonu.
+     *
+     * ⚠️ **`vacation_until` listeden ÇIKARILDI** (§tatil modu, 2026-08-02). İki sebep:
+     *  1. `players_vacation_pair` CHECK'i `vacation_since` ile çift olmasını zorluyor →
+     *     tek başına yazmak isteği patlatırdı;
+     *  2. daha kötüsü, elle NULL yapmak **kaynak çıpasını ortada bırakırdı** —
+     *     `cities.resources_at` giriş anında kalır ve oyuncu ilk okumada tüm tatil süresini
+     *     kaynak olarak alırdı. Doğrusu `endVacation()`ten geçen aksiyon.
      */
-    editable: ['protected_until', 'vacation_until', 'alliance_id'],
+    editable: ['protected_until', 'alliance_id'],
     filters: ['world_id', 'username', 'alliance_id'],
     warning: '⚠️ `score` TÜREVDİR (floor(score_base/1000)) — elle yazılırsa ilk puan '
-      + 'hareketinde silinir. Ceza alanları için Moderasyon ekranını kullan.',
+      + 'hareketinde silinir. Ceza alanları için Moderasyon ekranını kullan. '
+      + '⚠️ Tatil alanları salt-okunur: elle temizlemek kaynak çıpasını ortada bırakır '
+      + '(oyuncu tüm tatil süresini kaynak olarak alır) — «Tatili bitir» aksiyonunu kullan.',
   },
   {
     name: 'accounts', label: 'Hesaplar', orderBy: 'id', policy: 'readonly',

@@ -47,6 +47,15 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'doğru çalışır, çok süreçli dağıtımda her sürecin kendi sayacı olur.',
   },
   {
+    id: 'vacation',
+    label: 'Tatil modu',
+    description: '⭐ Oyuncunun oyunu **donduran** modu: içindeyken saldırılamaz ama üretim, '
+      + 'ilerletme ve kaynak birikimi de tamamen durur. Girmek için hiçbir şehirde iş ve '
+      + 'hareket olmamalı; gelen bir saldırı varken de girilemez (yoksa tatil, üstüne ordu '
+      + 'gelen şehri kurtarmanın yolu olurdu). ⚠️ Süreler **oyun saatiyle** işler — cezanın '
+      + 'aksine, çünkü tatil bir oyun mekaniği, moderasyon kararı değil.',
+  },
+  {
     id: 'combat',
     label: 'Savaş motoru',
     description: '⚠️ Buradaki sayıların ÇOĞU binary\'den ÖLÇÜLDÜ — tasarım tercihi değil, '
@@ -839,6 +848,47 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     note: 'Parola deneme saldırısına karşı ikinci savunma. Birincisi hesap bazlı kilit '
       + '(`accounts.failed_logins` / `locked_until`) ve o hesabı korur; bu ise farklı '
       + 'kullanıcı adlarını sırayla deneyen saldırganı yavaşlatır.',
+  },
+
+  /* ── Tatil modu ──────────────────────────────────────────────────────────── */
+  {
+    key: 'vacation.minHours',
+    label: 'En az kalma süresi',
+    type: 'int', default: 48, min: 0, max: 720, tag: 'design', unit: 'sa',
+    description: 'Tatile giren oyuncunun en erken kaç saat sonra çıkabileceği. Küçültmek '
+      + 'saldırıyı görüp tatile girmeyi, geçince hemen çıkmayı kolaylaştırır.',
+    note: 'Doküman «en az 48 saat» diyor (teknik_ve_yapi_dokumantasyonu.md:646). Alt sınır '
+      + 'tatilin kaçış düğmesine dönüşmesini engelleyen asıl kural: saldırı 12 saat sonra '
+      + 'varacaksa 48 saatlik tatil oyuncuyu kurtarmaz, çünkü çıkışı bekleyen saldırgan '
+      + 'yeniden gönderebilir.',
+  },
+  {
+    key: 'vacation.maxDays',
+    label: 'En çok kalma süresi',
+    type: 'int', default: 30, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Bu süre dolunca oyuncu tatilden OTOMATİK çıkarılır. Amaç haritada sonsuza '
+      + 'kadar dokunulmaz şehirler kalmaması.',
+    note: 'Otomatik çıkış bir `vacation_end` görevi olarak girişte yazılır. ⚠️ Görev geç '
+      + 'işlense bile kaynak sıçraması olmaz: tatilde olma ölçütü zaman değil, bayrağın '
+      + 'dolu olması.',
+  },
+  {
+    key: 'vacation.cooldownDays',
+    label: 'Yeniden girme beklemesi',
+    type: 'int', default: 3, min: 0, max: 365, tag: 'design', unit: 'gün',
+    description: 'Tatilden ÇIKTIKTAN sonra yeniden girebilmek için beklenecek süre. '
+      + 'Küçültmek gir-çık döngüsüyle sürekli dokunulmaz kalmayı kolaylaştırır.',
+    note: 'Bekleme çıkıştan sayılır, girişten değil — girişten sayılsaydı 48 saat kalıp çıkan '
+      + 'oyuncu beklemeyi tatilin İÇİNDE doldurur ve hemen yeniden girebilirdi.',
+  },
+  {
+    key: 'vacation.premiumOnly',
+    label: 'Yalnız premium hesaplar',
+    type: 'boolean', default: false, tag: 'design',
+    description: 'Açıkken tatil moduna yalnız premium hesaplar girebilir. Şimdilik KAPALI '
+      + '(kullanıcı kararı): özellik herkese açık.',
+    note: 'Orijinal oyunda tatil modu premium paketin parçasıydı. Dikiş burada duruyor ki '
+      + 'ileride açmak tek anahtar olsun; kod `players.is_premium`i zaten okuyor.',
   },
 
   /* ── Bakım ve saklama (§admin Faz 8) ─────────────────────────────────────── */

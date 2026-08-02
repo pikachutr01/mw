@@ -41,7 +41,9 @@ export type CaveErrorCode =
   | 'no_job'
   | 'invalid_units'
   | 'not_enough_units'
-  | 'capacity_exceeded';
+  | 'capacity_exceeded'
+  /** §tatil modu — tatildeyken mağara doldurulup boşaltılamaz. */
+  | 'on_vacation';
 
 export class CaveError extends Error {
   constructor(readonly code: CaveErrorCode, message: string, readonly details?: unknown) {
@@ -276,11 +278,22 @@ export class CaveService {
     tx: Db, cityId: number, playerId: number, at: Date,
   ): Promise<CaveState> {
     const owner = await tx.execute<Record<string, unknown>>(sql`
-      SELECT player_id FROM cities WHERE id = ${cityId} FOR UPDATE
+      SELECT c.player_id, (p.vacation_until IS NOT NULL) AS on_vacation
+        FROM cities c JOIN players p ON p.id = c.player_id
+       WHERE c.id = ${cityId} FOR UPDATE OF c
     `);
     if (owner.length === 0) throw new CaveError('city_not_found', 'Şehir bulunamadı.');
     if (Number(owner[0]!['player_id']) !== playerId) {
       throw new CaveError('not_owner', 'Bu şehir sizin değil.');
+    }
+    /**
+     * ⭐ §tatil modu. Mağara emri bir görev (`cave_store`/`cave_withdraw`) yazıyor; tatilde
+     * görev yazılmamalı, yoksa donmuş oyuncunun sayacı işlemeye devam eder.
+     * ⚠️ `FOR UPDATE OF c`: kilit yalnız şehir satırında kalmalı. `players`ı da kilitlemek
+     * mağara emriyle tatile giriş arasında gereksiz bir çekişme yaratırdı.
+     */
+    if (owner[0]!['on_vacation'] === true) {
+      throw new CaveError('on_vacation', 'Tatil modundayken mağara kullanılamaz.');
     }
 
     const st = await this.state(cityId, at, tx as never);

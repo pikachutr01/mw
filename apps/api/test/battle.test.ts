@@ -320,8 +320,11 @@ describe('⭐ koruma kuralları (§13.5.4)', () => {
   it('tatil modundaki oyuncuya saldırılamaz', async () => {
     await giveUnits(attackCity, 'dwarf', 10);
     const at = await clock.gameNow(worldId);
+    /* ⚠️ `vacation_since` de yazılmalı: `players_vacation_pair` CHECK'i ikisini çift olmaya
+       zorluyor (§tatil modu). Tek başına `vacation_until` yazmak artık isteği patlatır. */
     await h.db.execute(sql`
-      UPDATE players SET vacation_until = ${at.toISOString()}::timestamptz + interval '48 hours'
+      UPDATE players SET vacation_since = ${at.toISOString()}::timestamptz,
+                         vacation_until = ${at.toISOString()}::timestamptz + interval '48 hours'
        WHERE id = ${defender}
     `);
     const err = await missions.sendAttack({

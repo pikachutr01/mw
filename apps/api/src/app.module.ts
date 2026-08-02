@@ -30,6 +30,8 @@ import { HealthController } from './health/health.controller.ts';
 import { MissionController } from './missions/mission.controller.ts';
 import { MissionService } from './missions/mission.service.ts';
 import { NotifyController } from './notify/notify.controller.ts';
+import { VacationController } from './vacation/vacation.controller.ts';
+import { VacationService } from './vacation/vacation.service.ts';
 import { QueueService } from './queues/queue.service.ts';
 import { SimulateController } from './simulate/simulate.controller.ts';
 import { GameClockService } from './world/game-clock.service.ts';
@@ -53,6 +55,7 @@ export { DB } from './db/tokens.ts';
     HeroController,
     MissionController, BattleController, WorldController, CommandController,
     NotifyController,
+    VacationController,
     // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
     AdminController, AdminWorldController, AdminModerationController,
     AdminActionsController, AdminDbController, AdminOpsController, AdminPlayersController,
@@ -84,6 +87,17 @@ export { DB } from './db/tokens.ts';
       provide: CityService,
       useFactory: (db: Db, s: SettingsService) => new CityService(db, (w) => s.catalog(w)),
       inject: [DB, SettingsService],
+    },
+    /**
+     * ⚠️ `VacationService` uygulamanın **CityService örneğini** alıyor (yeni bir tane kurmuyor):
+     * tatile girerken kaynak son kez materyalize ediliyor ve o hesap panelden değiştirilebilen
+     * katalog sabitlerine bağlı. Kendi örneğini kursaydı varsayılan üretim hızlarını kullanır,
+     * hızlandırılmış bir dünyada kaynağı sessizce yanlış yazardı.
+     */
+    {
+      provide: VacationService,
+      useFactory: (db: Db, c: CityService) => new VacationService(db, c),
+      inject: [DB, CityService],
     },
     {
       provide: CaveService,

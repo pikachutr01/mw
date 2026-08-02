@@ -19,6 +19,7 @@ import { NotifyService } from '../notify/notify.service.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
 import { createRankingSnapshotHandler, ensureRankingSchedule } from '../ranking/ranking.handler.ts';
+import { createVacationEndHandler } from '../vacation/vacation.handler.ts';
 import { eventForOutbox, type RealtimeBus } from '../realtime/realtime.bus.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { Heartbeat } from './heartbeat.ts';
@@ -64,12 +65,14 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
    *   `attack`/`return` → savaş çözümü + dönüş bacağı (Faz 2) ✓
    *   `transport`/`support`/`spy`/`found_city` → savaş dışı görevler (Faz 2) ✓
    *   `cave_*`          → mağara doldurma/boşaltma + yıkılınca kaçış (Faz 2) ✓
-   *   sırada: Faz 4 (hero_revive, vacation_end, abuse_scan)
+   *   `vacation_end`    → 30 günlük tatil üst sınırı dolunca otomatik çıkış ✓
+   *   sırada: Faz 4 (hero_revive, abuse_scan)
    */
   const cities = new CityService(db);
   const registry = new HandlerRegistry()
     .register('echo', echoHandler)
-    .register('ranking_snapshot', createRankingSnapshotHandler());
+    .register('ranking_snapshot', createRankingSnapshotHandler())
+    .register('vacation_end', createVacationEndHandler());
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(CAVE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);

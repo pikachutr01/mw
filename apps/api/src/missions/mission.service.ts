@@ -41,6 +41,8 @@ export type MissionErrorCode =
   | 'attack_limit'
   | 'target_protected'
   | 'target_vacation'
+  /** ⭐ **GÖNDEREN** tatil modunda — `target_vacation`ın aynası (§tatil modu). */
+  | 'on_vacation'
   /** ⭐ Hedef oyuncu cezalı ve cezası «saldırıya kapalı» (§oyuncu cezası). */
   | 'target_banned'
   | 'march_limit'
@@ -180,6 +182,7 @@ export class MissionService {
         throw new MissionError('self_attack', 'Kendi şehrinize saldıramazsınız.');
       }
 
+      await this.assertNotOnVacation(t, opts.playerId);
       await this.assertVerified(t, opts.playerId, 'attack');
       await this.assertTargetAllowed(t, target.playerId, 'attack', opts.at);
       await this.assertAttackLimit(t, opts.playerId, target.id, opts.at);
@@ -705,6 +708,7 @@ export class MissionService {
         }
       }
 
+      await this.assertNotOnVacation(t, o.playerId);
       await this.assertVerified(t, o.playerId, o.type);
       await this.assertMarchLimit(t, o.originCityId, o.playerId);
       await o.before?.(t, { units });
@@ -1043,6 +1047,28 @@ export class MissionService {
     if (!unverifiedLimits().enabled) return;              // anahtar kapalı → sorgu bile açma
     if (await isVerified(tx as never, playerId)) return;
     throw new MissionError('email_unverified', message);
+  }
+
+  /**
+   * ⭐ TATİLDEKİ OYUNCU HİÇBİR SEFER GÖNDEREMEZ (2026-08-02).
+   *
+   * ⚠️ **Nakliye de kapalı.** `0030_player_ban.sql:11` cezalı için aynı deliği kapatırken
+   * *"nakliye açık olsaydı dokunulmaz şehir güvenli bir kasa olurdu"* diyor; tatilde durum daha
+   * kötü, çünkü donmuş oyuncu yatırılanı geri gönderemez — kaynak orada kilitlenip kalırdı.
+   *
+   * ⚠️ Casusluk da kapalı: tatil bir kaçış değil, oyundan çekilme. Dünyayı izlemeye devam
+   * etmek isteyen tatile girmez.
+   */
+  private async assertNotOnVacation(tx: Tx, playerId: number): Promise<void> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM players WHERE id = ${playerId} AND vacation_until IS NOT NULL
+    `);
+    if (rows.length > 0) {
+      throw new MissionError(
+        'on_vacation',
+        'Tatil modundayken ordu gönderemezsin. Önce tatil modundan çık.',
+      );
+    }
   }
 
   private async cartographyLevel(tx: Tx, playerId: number): Promise<number> {

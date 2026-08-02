@@ -202,6 +202,12 @@ export class HeroController {
   async revive(@Param('id') id: string, @Req() req: AuthedRequest): Promise<Record<string, unknown>> {
     const player = req.player!;
     const now = await this.clock.gameNow(player.worldId);
+    /**
+     * ⭐ §tatil modu — diriltme hem kaynak harcıyor hem bir geri sayım başlatıyor; ikisi de
+     * "oyun donuk" sözüyle çelişir. Kaynak zaten donmuş olduğu için harcama yapılabilirdi
+     * ama sayaç tatilin içinde işler ve oyuncu çıkışta hazır kahramanla dönerdi.
+     */
+    await this.assertNotOnVacation(player.playerId);
     const hero = await this.load(Number(id), player.playerId);
     if (hero.status !== 'dead') throw new BadRequestException('Bu kahraman diriltilemez.');
     if (hero.cityId == null) throw new BadRequestException('Kahraman henüz şehre dönmedi.');
@@ -281,6 +287,19 @@ export class HeroController {
     if (!row) throw new NotFoundException('Kahraman bulunamadı.');
     if (Number(row['player_id']) !== playerId) throw new ForbiddenException('Bu kahraman sizin değil.');
     return mapHero(row);
+  }
+
+  /** §tatil modu — kod `on_vacation`, gövde `mission.controller.ts` ailesiyle aynı (403). */
+  private async assertNotOnVacation(playerId: number): Promise<void> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM players WHERE id = ${playerId} AND vacation_until IS NOT NULL
+    `);
+    if (rows.length > 0) {
+      throw new ForbiddenException({
+        code: 'on_vacation',
+        message: 'Tatil modundayken kahraman diriltilemez. Önce tatil modundan çık.',
+      });
+    }
   }
 
   private async templeLevel(cityId: number): Promise<number> {

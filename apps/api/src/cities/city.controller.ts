@@ -58,7 +58,9 @@ function toCaveHttp(err: unknown): Error {
   if (!(err instanceof CaveError)) return err as Error;
   const body = { code: err.code, message: err.message, details: err.details };
   if (err.code === 'city_not_found') return new NotFoundException(body);
-  if (err.code === 'not_owner') return new ForbiddenException(body);
+  /* ⭐ `on_vacation` §tatil modu — `not_owner` ile aynı aile (403): istek kusursuz,
+     oyuncunun o an bu yetkisi yok. İlk ölçümde 400 dönüyordu (varsayılan dal). */
+  if (err.code === 'not_owner' || err.code === 'on_vacation') return new ForbiddenException(body);
   // Kapasite/meşgul/onarım: istek geçerli ama şu an yapılamaz → 409.
   if (err.code === 'cave_busy' || err.code === 'cave_repairing'
     || err.code === 'capacity_exceeded' || err.code === 'not_enough_units'
@@ -132,6 +134,13 @@ export class CityController {
       isCapital: snap.isCapital,
       resources: { gold: snap.gold, food: snap.food },
       production: { goldPerHour: snap.goldPerHour, foodPerHour: snap.foodPerHour },
+      /**
+       * ⭐ §tatil modu — ekran hem «Tatilde» rozetini hem donmuş sayaçları buradan çiziyor.
+       * ⚠️ Bayrak `production` içine GÖMÜLMEDİ: hızların 0 olması tatilin SONUCU, sebebin
+       * kendisi değil. Ayrı alan olmasaydı istemci "0/sa ⇒ tatilde" diye çıkarım yapardı ve
+       * madeni olmayan yeni şehir de tatilde görünürdü.
+       */
+      onVacation: snap.onVacation,
       speed: snap.speed,
       buildings: snap.buildings,
       units,
@@ -648,6 +657,8 @@ function toHttp(err: unknown): Error {
      * yetkisi yetmiyor. `target_protected` ile aynı aile (bkz. `missionErrorToHttp`).
      */
     case 'email_unverified':
+    /** ⭐ §tatil modu — aynı aile: istek kusursuz, oyuncu kendi isteğiyle donmuş durumda. */
+    case 'on_vacation':
       return new ForbiddenException(payload);
     case 'slot_busy':
     case 'tech_already_researching':

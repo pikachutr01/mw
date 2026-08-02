@@ -298,7 +298,11 @@ describe('tarayıcı', () => {
   it('izinli kolon düzenlenir ve ESKİ hâl audit\'e yazılır', async () => {
     const r = await dbCtl.patch('players', {
       where: { username: (await usernameOf()) },
-      values: { vacation_until: new Date(Date.now() + 86_400_000).toISOString() },
+      /* ⚠️ `vacation_until` DEĞİL: tatil alanları artık salt-okunur (§tatil modu) — elle
+         temizlemek kaynak çıpasını ortada bırakıyordu. `protected_until` aynı aileden
+         (zaman damgası, düzenlenebilir) ve testin ölçtüğü şey kolonun kendisi değil,
+         izinli bir kolonun yazılıp audit'e düşmesi. */
+      values: { protected_until: new Date(Date.now() + 86_400_000).toISOString() },
     }, req());
     expect(Number(r['updated'])).toBe(1);
 

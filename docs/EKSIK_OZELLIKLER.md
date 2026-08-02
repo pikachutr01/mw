@@ -111,10 +111,22 @@ ve toplu seçim.
 > **Kalan:** infix arama (`%q%`) yok, önek eşleşmesi var (`pg_trgm` gerekirdi) ·
 > `Alliance.tsx`'teki "Başvur" listesi kendi arama kutusunu koruyor (katılma akışının parçası).
 
-### 1.5 Tatil modu — yarısı hazır
-`players.vacation_until` kolonu ✅, saldırı reddi ✅ (`mission.service.ts:825` `target_vacation`).
-**Eksik:** `ttMod.do?m=` toggle ucu · 48 saat kuralı · ön-şart kontrolü (doküman: *"şehirlerinizde
-hiçbir üretim, ilerletme ve gelen ya da giden ordu olmamalıdır"*) · üretimin durdurulması.
+### 1.5 Tatil modu — ✅ **SUNUCU TARAFI BİTTİ** (2026-08-02)
+Göç `0035_vacation_mode.sql` · `apps/api/src/vacation/` (servis + controller + `vacation_end`
+görevi) · 21 test (`test/vacation.test.ts`).
+
+Biten: `GET/POST /api/v1/vacation{,/enter,/leave}` · **48 saat** alt sınır · **30 gün** üst sınır
+ve otomatik çıkış · **3 gün** yeniden giriş beklemesi · ön-şart kontrolü (kuyruk + giden/gelen/
+dönen ordu + ceza + bekleme) · **üretimin ve kaynak birikiminin durdurulması** · tatildeyken
+sefer/kuyruk/mağara/diriltme kapalı (`on_vacation`, 403).
+
+⭐ **Kanonik yüklem `vacation_until IS NOT NULL`** (zaman karşılaştırması DEĞİL) ve çıkışın tek
+yolu `endVacation()`. İkisi birlikte "30 günlük kaynağın tek okumada bankalanması" hatasını
+yapısal olarak imkânsız kılıyor — ayrıntı göç dosyasının başında.
+
+**Kalan:** arayüz (Seçenekler paneli · ittifak listesinde mavi «Tatilde» · kaynak çubuğu rozeti)
+ve yönetim panelinde «Tatili bitir» aksiyonu (`vacation_until` elle düzenleme KALDIRILDI:
+çıpayı ortada bırakıyordu).
 
 ### 1.6 Şehir terk etme
 `trShr.do?u=`, onay *"Şehri terk ediyorsunuz. Emin misiniz!"* (`g.java:613`). Doküman kuralları
@@ -215,9 +227,9 @@ presence, sıralama) · savaş raporu detayı · kahraman yaşam döngüsü · s
 2. ✅ ~~**Web push**~~ + ✅ ~~**E-posta (Resend)**~~ — ikisi de **2026-07-31'de bitti**
    (§1.2, §1.3). Faz 2 kapandı; şifre sıfırlama artık mümkün.
 3. ✅ ~~**Arama + Dünyada Bul**~~ — **2026-07-31'de bitti** (§1.4)
-4. **Hesap/şehir aksiyonları paketi** — ✅ ad · terk · şifre · **e-posta değiştirme** ·
-   **hesap silme** girdi (2026-08-01, §9.2c). **Kalan tek madde: TATİL MODU** (§1.5 —
-   kolon ve saldırı reddi hazır, açma/kapama ucu ve 48 saat kuralı yok) ← **SIRADAKİ**
+4. ✅ ~~**Hesap/şehir aksiyonları paketi**~~ — ad · terk · şifre · e-posta değiştirme ·
+   hesap silme (2026-08-01, §9.2c) + ⭐ **TATİL MODU sunucu tarafı 2026-08-02'de bitti**
+   (§1.5). Kalan yalnız tatilin **arayüzü** ← **SIRADAKİ**
 5. **Moderasyon minimumu** (şikayet + blokla, tablolar hazır) + basit admin görünümü
 6. **Premium** — ürün kararı gerektiriyor
 7. **Yardım + i18n**

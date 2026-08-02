@@ -541,6 +541,8 @@ export function missionErrorToHttp(err: unknown): Error {
     case 'target_banned':
     /** ⭐ §verify — aynı aile: istek kusursuz, hesabın yetkisi yetmiyor. */
     case 'email_unverified':
+    /** ⭐ §tatil modu — yine aynı aile, bu sefer engel GÖNDERENDE. */
+    case 'on_vacation':
       return new ForbiddenException(payload);
     case 'attack_limit':
     case 'march_limit':

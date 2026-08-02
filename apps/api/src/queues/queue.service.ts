@@ -40,6 +40,8 @@ export class QueueError extends Error {
 export type QueueErrorCode =
   /** §verify — e-postası doğrulanmamış hesabın tavanı (403 döner, 400 değil). */
   | 'email_unverified'
+  /** §tatil modu — tatildeyken üretim ve ilerletme kapalı (403). */
+  | 'on_vacation'
   | 'city_not_found'
   | 'not_owner'
   | 'unknown_item'
@@ -516,7 +518,8 @@ export class QueueService {
    */
   private async loadCity(tx: Db, cityId: number, playerId: number): Promise<CityState> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
-      SELECT c.world_id, c.player_id, (a.email_verified_at IS NOT NULL) AS email_verified
+      SELECT c.world_id, c.player_id, (a.email_verified_at IS NOT NULL) AS email_verified,
+             (p.vacation_until IS NOT NULL) AS on_vacation
         FROM cities c
         JOIN players p ON p.id = c.player_id
         JOIN accounts a ON a.id = p.account_id
@@ -526,6 +529,20 @@ export class QueueService {
     if (!c) throw new QueueError('city_not_found', 'Şehir bulunamadı.');
     if (Number(c['player_id']) !== playerId) {
       throw new QueueError('not_owner', 'Bu şehir sizin değil.');
+    }
+    /**
+     * ⭐ §tatil modu — dört üretim kapısının (bina · teknik · savaşçı · savunma) TEK boğazı
+     * burası, o yüzden kural tek satır. Ayrı ayrı dört yere yazılsaydı beşinci kapı
+     * eklendiğinde unutulurdu.
+     *
+     * ⚠️ Kaynak zaten donmuş durumda; bu kontrol olmasaydı oyuncu tatile girerken elindeki
+     * yığınla 30 günlük kuyruk kurar, dokunulmazken üretir ve çıkışta hazır orduyla dönerdi.
+     */
+    if (c['on_vacation'] === true) {
+      throw new QueueError(
+        'on_vacation',
+        'Tatil modundayken üretim ve ilerletme yapılamaz. Önce tatil modundan çık.',
+      );
     }
 
     const [bRows, dRows, tRows] = await Promise.all([

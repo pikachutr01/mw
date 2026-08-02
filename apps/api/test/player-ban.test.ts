@@ -157,8 +157,10 @@ describe('saldırıya AÇIK ceza', () => {
   });
 
   it('açık ceza tatil modunu da EZER', async () => {
+    /* ⚠️ Çift kolon: `players_vacation_pair` CHECK'i (§tatil modu). */
     await h.db.execute(sql`
-      UPDATE players SET vacation_until = now() + interval '10 days' WHERE id = ${culprit}
+      UPDATE players SET vacation_since = now(), vacation_until = now() + interval '10 days'
+       WHERE id = ${culprit}
     `);
     await expect(attack()).rejects.toThrow(MissionError);
     await ban(culprit, { days: 3, mode: 'open' });
