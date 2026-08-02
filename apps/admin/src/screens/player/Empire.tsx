@@ -209,7 +209,11 @@ export function EmpireView({ data, onNeedStepUp }: {
         {p.protectedUntil || p.vacationUntil ? (
           <p className="border-t border-border px-3 py-2 text-xs text-warning">
             {p.protectedUntil ? `Acemi koruması: ${stamp(p.protectedUntil)}. ` : ''}
-            {p.vacationUntil ? `Tatil modu: ${stamp(p.vacationUntil)}.` : ''}
+            {/* ⚠️ §tatil modu (2026-08-02): `vacationUntil` artık "korumanın bittiği an"
+                DEĞİL, **planlanmış otomatik çıkış** anı. Oyuncu tatilde OLDUĞU sürece dolu;
+                boşsa tatilde değil. Eski metin ("Tatil modu: <tarih>") tarihi bitiş sanıp
+                yanlış okunuyordu. */}
+            {p.vacationUntil ? `Tatil modunda — otomatik çıkış: ${stamp(p.vacationUntil)}.` : ''}
           </p>
         ) : null}
       </Panel>

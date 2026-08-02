@@ -12,6 +12,7 @@ import { AccountPanel } from '../components/AccountPanel.tsx';
 import { CityAdminPanel } from '../components/CityAdminPanel.tsx';
 import { DevicesPanel } from '../components/DevicesPanel.tsx';
 import { NotifySettings } from '../components/NotifySettings.tsx';
+import { VacationPanel } from '../components/VacationPanel.tsx';
 
 function Soon({ title, lines }: { title: string; lines: string[] }) {
   return (
@@ -50,6 +51,11 @@ export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): Rea
 
       <NotifySettings />
 
+      {/* ⭐ Orijinalde de Seçenekler menüsünde (`g.java` case 63 — tatildeyken madde
+          «Tatil Modundan Çık»a dönüşüyor). Tema'dan ÖNCE: tema bir görünüm tercihi,
+          tatil hesabın durumu — hesap konuları bir arada duruyor. */}
+      <VacationPanel />
+
       <Panel title="Tema">
         <div className="flex gap-1 p-3 pb-1.5">
           {([['system', 'Sistem'], ['light', 'Gündüz'], ['dark', 'Gece']] as const).map(([id, label]) => (
@@ -70,7 +76,6 @@ export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): Rea
 
       <Soon title="Yakında" lines={[
         'Üyelik / premium',
-        'Tatil moduna al',
       ]} />
 
       <Button variant="danger" className="w-full"

@@ -86,7 +86,13 @@ export interface CityDetail {
   coordinates: { k: number; d: number; s: number };
   isCapital: boolean;
   resources: { gold: number; food: number };
+  /** ⚠️ Tatil modunda ikisi de **0** — bilgi çubuğundaki sayaç böylece kendiliğinden donuyor. */
   production: { goldPerHour: number; foodPerHour: number };
+  /**
+   * ⭐ §tatil modu. Ayrı alan, çünkü «0/sa ⇒ tatilde» çıkarımı YANLIŞ olurdu: madeni
+   * olmayan yeni bir şehrin de üretimi 0'dır.
+   */
+  onVacation?: boolean;
   /** Dünya hız çarpanları (1 = klasik). Bilgi çubuğundaki ⚡ rozeti bunu okur. */
   speed?: { resource: number; travel: number; training?: number; construction?: number };
   buildings: Record<string, number>;
@@ -297,6 +303,35 @@ export const useAccount = (): UseQueryResult<AccountInfo> => useQuery({
   queryKey: ['account'],
   queryFn: () => get<AccountInfo>('/api/v1/auth/me'),
   staleTime: 5 * 60_000,
+  enabled: useAuthed(),
+});
+
+/* ═══ TATİL MODU (§tatil modu) ════════════════════════════════════════════════ */
+
+export interface VacationStatus {
+  onVacation: boolean;
+  since: string | null;
+  /** Planlanmış otomatik çıkış (30 gün). */
+  until: string | null;
+  /** 48 saat dolmadan çıkılamaz. */
+  canLeaveAt: string | null;
+  endedAt: string | null;
+  /**
+   * Girişi engelleyen sebeplerin TAM listesi (tatildeyken boş). Dizi, tek boolean değil:
+   * oyuncu "neden olmuyor" diye tahmin yürütmesin.
+   */
+  blockers: string[];
+  rules: { minHours: number; maxDays: number; cooldownDays: number };
+}
+
+/**
+ * ⚠️ **Yoklama YOK ama `staleTime` de yok.** Engel listesi hızla eskiyor: oyuncu bir kuyruk
+ * başlatıp Seçenekler'e dönerse panel "girebilirsin" demeye devam etmemeli. Ekran her
+ * açılışta tazeleniyor; sürekli yoklamaya gerek yok çünkü panel nadir ziyaret ediliyor.
+ */
+export const useVacation = (): UseQueryResult<VacationStatus> => useQuery({
+  queryKey: ['vacation'],
+  queryFn: () => get<VacationStatus>('/api/v1/vacation'),
   enabled: useAuthed(),
 });
 
@@ -942,6 +977,11 @@ export interface AllianceMember {
   worldRank: number | null;
   /** ⭐ Çevrimiçilik yalnız ittifak üyeleri arasında görünür — başka hiçbir uç sızdırmaz. */
   online: boolean;
+  /**
+   * ⭐ §tatil modu — ekranda çevrimiçi/çevrimdışı YERİNE mavi «Tatilde» yazılır.
+   * ⚠️ `online`dan bağımsız: tatildeki oyuncu oyuna girip durumuna bakıyor olabilir.
+   */
+  onVacation: boolean;
 }
 
 export interface AllianceView {

@@ -260,11 +260,24 @@ function MemberLine({ m, index, myRole, alt }: {
       <Td className="tnum text-center">{m.worldRank ?? '-'}</Td>
       <Td><Badge tone={role.tone}>{role.text}</Badge></Td>
       <Td className="text-center">
-        {/* ⭐ Çevrimiçilik yalnız ittifak içinde görünür (kullanıcı kuralı) — yeşil/kırmızı nokta. */}
-        <span aria-label={m.online ? 'çevrimiçi' : 'çevrimdışı'}
-          className={`inline-block h-2.5 w-2.5 rounded-full border border-strong ${
-            m.online ? 'bg-success' : 'bg-danger'
+        {/**
+          * ⭐ Çevrimiçilik yalnız ittifak içinde görünür (kullanıcı kuralı) — yeşil/kırmızı nokta.
+          * ⭐ §tatil modu üçüncü hâli ekliyor: **mavi «Tatilde»**.
+          *
+          * ⚠️ Burada nokta YETMEZ, metin de yazılıyor. İki renk (yeşil/kırmızı) sezgisel;
+          * üçüncü renk değil — mavi noktanın ne demek olduğu tahmin edilemez ve renk körü
+          * bir oyuncu için yeşil/mavi ayrımı zaten yok. Sağ paneldeki liste de aynı üç
+          * kelimeyi yazıyor, ikisi tutarlı kalıyor.
+          */}
+        <span title={m.onVacation ? 'tatil modunda' : m.online ? 'çevrimiçi' : 'çevrimdışı'}
+          className={`inline-flex items-center gap-1 text-[10px] font-semibold ${
+            m.onVacation ? 'text-info' : m.online ? 'text-success' : 'text-danger'
+          }`}>
+          <span aria-hidden className={`inline-block h-2.5 w-2.5 rounded-full border border-strong ${
+            m.onVacation ? 'bg-info' : m.online ? 'bg-success' : 'bg-danger'
           }`} />
+          {m.onVacation ? 'Tatilde' : null}
+        </span>
       </Td>
       <Td className="text-right">
         <span className="flex flex-wrap justify-end gap-1">

@@ -247,6 +247,17 @@ function InfoBar() {
 
       {/* ── SAĞ: göstergeler (sağa yaslı, kullanıcı isteği) ───────────────────── */}
       <div className="flex items-center justify-end gap-2 sm:gap-3">
+        {/* ⭐ §tatil modu — kaynak sayacı donduğu için oyuncunun "neden artmıyor" diye
+            sorması an meselesi. Rozet o soruyu sormadan yanıtlıyor ve tıklanınca panele
+            götürüyor. Sayaç zaten kendiliğinden duruyor: sunucu `goldPerHour` 0 döndürüyor,
+            ekstrapolasyon da 0 ile çarpıyor. */}
+        {d?.onVacation ? (
+          <NavLink to="/options" title="Tatil modundasın — üretim ve kaynak birikimi durdu"
+            className="shrink-0 rounded-full border border-info px-2 py-0.5 text-[10px]
+              font-semibold text-info hover:bg-info/10">
+            Tatilde
+          </NavLink>
+        ) : null}
         <ConnectionDot />
         <SpeedBadge speed={d?.speed} />
       </div>
@@ -456,9 +467,12 @@ function AlliancePanel() {
         {a.members.slice(0, 15).map((m) => (
           <li key={m.playerId} className="flex items-center justify-between px-3 py-1 text-xs">
             <span className="truncate">{m.username}</span>
+            {/* ⭐ §tatil modu — «Tatilde» çevrimiçilik BİLGİSİNİN YERİNE geçer (kullanıcı
+                şartı), yanına eklenmez: tatildeki oyuncunun bağlı olup olmaması bir işe
+                yaramıyor, ona zaten hiçbir şey gönderilemez. */}
             <span className={`shrink-0 text-[10px] font-semibold ${
-              m.online ? 'text-success' : 'text-danger'}`}>
-              {m.online ? 'Online' : 'Offline'}
+              m.onVacation ? 'text-info' : m.online ? 'text-success' : 'text-danger'}`}>
+              {m.onVacation ? 'Tatilde' : m.online ? 'Online' : 'Offline'}
             </span>
           </li>
         ))}

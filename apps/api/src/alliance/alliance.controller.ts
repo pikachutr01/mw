@@ -86,6 +86,7 @@ export class AllianceController {
     /* Sıralama: rütbe (Lider üstte) → puan. Dünya sırası oyuncu sıralamasından (son snapshot). */
     const members = await this.db.execute<Record<string, unknown>>(sql`
       SELECT m.id, m.username, m.score, m.alliance_role,
+             (m.vacation_until IS NOT NULL) AS on_vacation,
              r.rank AS world_rank
         FROM players m
         LEFT JOIN rankings r ON r.world_id = m.world_id AND r.kind = 'player' AND r.subject_id = m.id
@@ -118,6 +119,15 @@ export class AllianceController {
           worldRank: m['world_rank'] == null ? null : Number(m['world_rank']),
           /* ⭐ Çevrimiçilik yalnız buradan sızar — istek sahibi bu ittifakın üyesi. */
           online: gw?.isOnline(Number(m['id'])) ?? false,
+          /**
+           * ⭐ §tatil modu — ekranda çevrimiçi/çevrimdışı YERİNE mavi «Tatilde» yazılıyor
+           * (kullanıcı şartı).
+           * ⚠️ `online` ile BİRLEŞTİRİLMEDİ, iki bağımsız alan kaldı: tatildeki oyuncu
+           * teknik olarak bağlı olabilir (oyuna girip durumuna bakıyordur). Üçlü bir enum'a
+           * sıkıştırsaydık "tatilde ve çevrimiçi" hâli temsil edilemez olurdu; hangisinin
+           * gösterileceği sunucunun değil ekranın kararı.
+           */
+          onVacation: m['on_vacation'] === true,
         })),
       },
       serverNow: new Date().toISOString(),

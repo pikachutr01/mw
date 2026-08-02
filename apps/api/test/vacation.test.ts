@@ -23,6 +23,9 @@ import { MissionError, MissionService } from '../src/missions/mission.service.ts
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { QUEUE_HANDLERS } from '../src/queues/queue.handlers.ts';
 import { QueueError, QueueService } from '../src/queues/queue.service.ts';
+import { AllianceController } from '../src/alliance/alliance.controller.ts';
+import { AllianceService } from '../src/alliance/alliance.service.ts';
+import type { AuthedRequest } from '../src/auth/auth.guard.ts';
 import { VacationError, VacationService } from '../src/vacation/vacation.service.ts';
 import { createVacationEndHandler } from '../src/vacation/vacation.handler.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
@@ -471,5 +474,45 @@ describe('tatildeyken', () => {
       units: { spy_bird: 5 }, at,
     }).catch((e: unknown) => e as MissionError);
     expect((err as MissionError).code).toBe('target_vacation');
+  });
+});
+
+/* ══ İttifak listesindeki «Tatilde» ═════════════════════════════════════════ */
+
+describe('ittifak listesi', () => {
+  /**
+   * ⭐ Ekranın mavi «Tatilde» yazısı bu tek alandan besleniyor (sağ panel + ittifak sayfası).
+   * ⚠️ `online` ile BİRLEŞTİRİLMEDİ: tatildeki oyuncu bağlı olabilir. Test ikisinin bağımsız
+   * olduğunu da kilitliyor — birleştiren bir "iyileştirme" burada kırmızı yanar.
+   */
+  it('üye satırı `onVacation` taşır ve `online`dan bağımsızdır', async () => {
+    const alliances = new AllianceService(h.db);
+    const ctl = new AllianceController(h.db);
+    const req = (pid: number): AuthedRequest =>
+      ({ player: { playerId: pid, worldId, accountId: 0, sessionId: '' } } as unknown as AuthedRequest);
+
+    /* İttifak kurmak Kale ön-şartı istiyor; bu test onu ölçmüyor, kısayoldan veriliyor. */
+    await h.db.execute(sql`
+      INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, 'castle', 20)
+      ON CONFLICT (city_id, type) DO UPDATE SET level = 20
+    `);
+    await alliances.found({ worldId, playerId, name: 'Tatilci', text: 'test' });
+    const a = await alliances.myMembership(playerId);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${a!.allianceId}, alliance_role = 1 WHERE id = ${otherId}
+    `);
+
+    const once = await ctl.mine(req(playerId)) as { alliance: { members: Record<string, unknown>[] } };
+    expect(once.alliance.members.every((m) => m['onVacation'] === false)).toBe(true);
+
+    await vacation.enter(otherId, await clock.gameNow(worldId));
+
+    const sonra = await ctl.mine(req(playerId)) as { alliance: { members: Record<string, unknown>[] } };
+    const tatilci = sonra.alliance.members.find((m) => Number(m['playerId']) === otherId)!;
+    const digeri = sonra.alliance.members.find((m) => Number(m['playerId']) === playerId)!;
+    expect(tatilci['onVacation']).toBe(true);
+    expect(digeri['onVacation']).toBe(false);
+    // Çevrimiçilik ayrı eksen: ikisi de çevrimdışı (WS ağ geçidi testte yok).
+    expect(tatilci['online']).toBe(false);
   });
 });

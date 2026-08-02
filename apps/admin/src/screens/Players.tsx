@@ -122,8 +122,10 @@ export function PlayersScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
                 {p.banned ? <Badge tone="danger">cezalı</Badge> : null}
                 {p.protectedUntil && new Date(p.protectedUntil) > new Date()
                   ? <Badge tone="warning">korumalı</Badge> : null}
-                {p.vacationUntil && new Date(p.vacationUntil) > new Date()
-                  ? <Badge tone="warning">tatilde</Badge> : null}
+                {/* ⚠️ §tatil modu — yüklem artık TARİH KARŞILAŞTIRMASI DEĞİL: `vacationUntil`
+                    dolu olmak tatilde olmak demek (gerekçe göç 0035 §2). Eski koşul, otomatik
+                    çıkış görevi geciken oyuncuyu "tatilde değil" gösterirdi. */}
+                {p.vacationUntil ? <Badge tone="info">tatilde</Badge> : null}
                 <span className="ml-auto flex flex-wrap items-center gap-3 text-[11px] text-muted">
                   <span>D{p.worldId}</span>
                   <span className="tnum">{num(p.score)} puan</span>

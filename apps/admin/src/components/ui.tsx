@@ -371,10 +371,12 @@ export function ErrorBox({ error }: { error: unknown }) {
 
 /** Yükseltme durumu rozeti — panelin her yerinde aynı yerde durur (üst şerit). */
 export function Badge({ tone = 'muted', children }: {
-  tone?: 'muted' | 'success' | 'warning' | 'danger'; children: ReactNode;
+  /** ⭐ `info` (mavi) §tatil modu ile geldi — oyun tarafında da tatil mavi gösteriliyor. */
+  tone?: 'muted' | 'info' | 'success' | 'warning' | 'danger'; children: ReactNode;
 }) {
   const cls = {
     muted: 'border-border text-muted',
+    info: 'border-info text-info',
     success: 'border-success text-success',
     warning: 'border-warning text-warning',
     danger: 'border-danger text-danger',

@@ -29,6 +29,7 @@ import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { recomputeScoreBaseFromHoldings } from '../scoring/score.service.ts';
+import { endVacation } from '../vacation/vacation.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 
@@ -433,6 +434,38 @@ export class AdminActionsController {
   }
 
   /**
+   * ⭐ TATİLİ BİTİR (§tatil modu) — veri tabanı tarayıcısındaki elle düzenlemenin YERİNE.
+   *
+   * ⚠️ `players.vacation_until`i elle NULL yapmak iki şeyi birden bozuyordu: `players_vacation_pair`
+   * CHECK'ini kırıyordu **ve** daha sinsisi, `cities.resources_at` çıpasını giriş anında bırakıyordu
+   * → oyuncu ilk okumada tüm tatil süresini kaynak olarak alıyordu. Bu yüzden kolon
+   * düzenlenebilir listesinden çıkarıldı ve iş `endVacation()`e verildi: bayrağı temizlemekle
+   * çıpayı ileri çekmek tek yerde.
+   *
+   * ⚠️ 48 saatlik alt sınır BURADA UYGULANMIYOR — o kural oyuncu için. Yönetici müdahalesi
+   * zaten kuralın dışında (destek talebi, yanlışlıkla girilmiş tatil).
+   */
+  @Post('end-vacation')
+  @HttpCode(200)
+  async endVacationAction(@Body() body: unknown, @Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const d = parse(playerOnly, body);
+    const [p] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT world_id, vacation_since, vacation_until FROM players WHERE id = ${d.playerId}
+    `);
+    if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
+    if (p['vacation_until'] == null) throw new BadRequestException('Oyuncu tatil modunda değil.');
+
+    const worldId = Number(p['world_id']);
+    const at = await this.clock.gameNow(worldId);
+    const ended = await endVacation(this.db as never, d.playerId, at);
+    await this.audit(worldId, req, 'admin.action.end_vacation', 'player', d.playerId, {
+      before: { since: p['vacation_since'], until: p['vacation_until'] },
+      after: { endedAt: at.toISOString(), ended },
+    });
+    return { ok: true, endedAt: at.toISOString() };
+  }
+
+  /**
    * Şehri başka oyuncuya taşı.
    *
    * ⚠️ Şehirle birlikte **taşınmayanlar** var ve bunlar bilerek bırakılıyor: kahramanlar
@@ -608,6 +641,13 @@ export const ADMIN_ACTIONS = [
   {
     id: 'recompute-score', label: 'Puanı yeniden hesapla',
     description: '`players.score` türevdir; sahip olunan yapı/teknik/ordudan yeniden kurulur.',
+    fields: [{ key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true }],
+  },
+  {
+    id: 'end-vacation', label: 'Tatili bitir',
+    description: '⚠️ Bunu veri tabanı tarayıcısından ELLE YAPMA: `vacation_until`i NULL yapmak '
+      + 'kaynak çıpasını giriş anında bırakır ve oyuncu ilk okumada TÜM tatil süresini kaynak '
+      + 'olarak alır. Bu aksiyon çıpayı da şimdiye çeker. 48 saatlik alt sınır uygulanmaz.',
     fields: [{ key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true }],
   },
   {

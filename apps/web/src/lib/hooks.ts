@@ -77,6 +77,32 @@ export function formatDuration(totalSeconds: number): string {
 }
 
 /**
+ * ⭐ **GÜNLERCE SÜREN** geri sayımlar için kaba biçim: `29 gün 23 sa` · `19 sa 04 dk`.
+ *
+ * ⚠️ `formatDuration`ın YERİNE GEÇMEZ, onun yanına konuldu. Oradaki «saniye hassasiyeti her
+ * zaman» kuralı kullanıcının açık kararı ve ordu hareketleri için doğru: oyuncu varışın tam
+ * anını görmek istiyor. Ama tatilin 30 günlük üst sınırı o biçimde **`719 sa 56 dk 17 sn`**
+ * diye çıkıyordu — okunmuyor, üstelik saniyesi boş yere titriyor.
+ *
+ * Kural: **bir günden uzun süreler burada, kısa olanlar `formatDuration`da.**
+ */
+export function formatLongDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  if (s < 86_400) return formatDuration(s);
+  const gun = Math.floor(s / 86_400);
+  const sa = Math.floor((s % 86_400) / 3600);
+  return sa ? `${gun} gün ${sa} sa` : `${gun} gün`;
+}
+
+/** `remaining` ile aynı, yalnız günlerce süren aralıklar için. Bitmişse `null`. */
+export function remainingLong(iso: string | null | undefined, now = serverNow()): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso) - now;
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return formatLongDuration(ms / 1000);
+}
+
+/**
  * Dar yerler için **saat biçimi**: `04:31` · `2:04:27`. Orijinal oyunun kendi gösterimi budur
  * (`images/scr_mobil02`, `scr_itv03`) ve saniye hassasiyetini kaybetmeden simgenin altına sığar.
  */
