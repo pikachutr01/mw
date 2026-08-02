@@ -9,8 +9,8 @@ import {
   HttpCode, Inject, NotFoundException, Param, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { maxCities } from '@mobiwar/catalog';
-import { sendMissionRequest } from '@mobiwar/contracts';
+import { maxCities } from '@mobilwar/catalog';
+import { sendMissionRequest } from '@mobilwar/contracts';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { toDate, type Db } from '../db/client.ts';

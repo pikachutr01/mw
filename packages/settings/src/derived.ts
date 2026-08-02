@@ -14,12 +14,12 @@
  *      bir gün 220 olur ve panel yalan söylerdi. Burada varsayılan kaynağından geliyor.
  *
  * ⚠️ Bağımlılık yönü `settings → catalog` ve TEK YÖNLÜ: `packages/catalog`in hiç bağımlılığı
- * yok (`package.json`de `dependencies` bloğu bile yok), `@mobiwar/settings`i import etmiyor.
+ * yok (`package.json`de `dependencies` bloğu bile yok), `@mobilwar/settings`i import etmiyor.
  * Döngü riski yok; `turbo.json` sıralamayı `^build` ile zaten çözüyor.
  */
 import {
   BUILDINGS, BUILDING_ORDER, TECHS, TECH_ORDER, orderBy,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import type { SettingDef } from './types.ts';
 
 /** ⚠️ Türetilmiş açıklamalar KISA: 84 uzun metin `GET /admin/settings` yükünü şişirirdi. */

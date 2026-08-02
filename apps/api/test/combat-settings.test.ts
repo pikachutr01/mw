@@ -9,8 +9,8 @@
  */
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { SETTINGS, applySettings } from '@mobiwar/settings';
-import { DEFAULT_COMBAT_CONFIG, mergeCombatConfig, simulate } from '@mobiwar/engine';
+import { SETTINGS, applySettings } from '@mobilwar/settings';
+import { DEFAULT_COMBAT_CONFIG, mergeCombatConfig, simulate } from '@mobilwar/engine';
 import type { DbHandle } from '../src/db/client.ts';
 import { MAPPED_KEYS, combatOverrides, lootOverrides } from '../src/settings/combat.ts';
 import { SettingsService } from '../src/settings/settings.service.ts';

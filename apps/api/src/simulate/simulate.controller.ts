@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
-import { simulateRequest } from '@mobiwar/contracts';
-import { simulate, type SimulateInput, type SimulateResult } from '@mobiwar/engine';
+import { simulateRequest } from '@mobilwar/contracts';
+import { simulate, type SimulateInput, type SimulateResult } from '@mobilwar/engine';
 import type { AuthedRequest } from '../auth/auth.guard.ts';
 import { OptionalAuthGuard } from '../auth/optional-auth.guard.ts';
 import { SettingsService } from '../settings/settings.service.ts';

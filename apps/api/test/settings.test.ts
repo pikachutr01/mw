@@ -8,7 +8,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { SETTINGS, SETTINGS_BY_KEY, applySettings, validatePatch } from '@mobiwar/settings';
+import { SETTINGS, SETTINGS_BY_KEY, applySettings, validatePatch } from '@mobilwar/settings';
 import type { DbHandle } from '../src/db/client.ts';
 import { chatLimits } from '../src/chat/chat.limits.ts';
 import { mailLimits } from '../src/mail/mail.limits.ts';

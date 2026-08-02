@@ -16,7 +16,7 @@ import { sql } from 'drizzle-orm';
 import {
   BUILDINGS, BUILDING_ORDER, LEVEL_BASED, TECHS, TECH_ORDER, UNITS,
   DEFENSE_ORDER, WARRIOR_ORDER, orderBy,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { PasswordService } from '../auth/password.service.ts';

@@ -1,5 +1,5 @@
 {
-  "name": "@mobiwar/admin",
+  "name": "@mobilwar/admin",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@mobiwar/catalog": "workspace:*",
-    "@mobiwar/contracts": "workspace:*",
-    "@mobiwar/design-tokens": "workspace:*",
-    "@mobiwar/settings": "workspace:*",
+    "@mobilwar/catalog": "workspace:*",
+    "@mobilwar/contracts": "workspace:*",
+    "@mobilwar/design-tokens": "workspace:*",
+    "@mobilwar/settings": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

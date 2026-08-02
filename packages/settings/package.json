@@ -1,5 +1,5 @@
 {
-  "name": "@mobiwar/settings",
+  "name": "@mobilwar/settings",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -21,6 +21,6 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
-    "@mobiwar/catalog": "workspace:*"
+    "@mobilwar/catalog": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "mobiwar",
+  "name": "mobilwar",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.33.0",
@@ -9,10 +9,10 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "tokens:build": "pnpm --filter @mobiwar/design-tokens run build",
-    "tokens:check": "pnpm --filter @mobiwar/design-tokens run check",
-    "db:generate": "pnpm --filter @mobiwar/api run db:generate",
-    "db:migrate": "pnpm --filter @mobiwar/api run db:migrate",
+    "tokens:build": "pnpm --filter @mobilwar/design-tokens run build",
+    "tokens:check": "pnpm --filter @mobilwar/design-tokens run check",
+    "db:generate": "pnpm --filter @mobilwar/api run db:generate",
+    "db:migrate": "pnpm --filter @mobilwar/api run db:migrate",
     "dev:infra": "docker compose -f compose.dev.yml up -d",
     "dev:infra:down": "docker compose -f compose.dev.yml down"
   },

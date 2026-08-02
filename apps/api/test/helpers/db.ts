@@ -2,7 +2,7 @@
  * Test veritabanı yardımcıları. GERÇEK Postgres kullanıyoruz — `SKIP LOCKED`, advisory lock ve
  * transaction davranışı taklit edilemez; Faz 1'in tüm garantileri tam olarak bunlara dayanıyor.
  *
- * Test DB'si ayrıdır (`mobiwar_test`), her dosya kendi dünyasını yaratır → paralel çalışabilir.
+ * Test DB'si ayrıdır (`mobilwar_test`), her dosya kendi dünyasını yaratır → paralel çalışabilir.
  */
 import { randomUUID } from 'node:crypto';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -13,8 +13,8 @@ import { createDb, toDate, type DbHandle } from '../../src/db/client.ts';
 import { ECHO_TABLE_DDL } from '../../src/missions/echo.handler.ts';
 
 const ADMIN_URL = process.env['DATABASE_URL']
-  ?? 'postgresql://mobiwar:mobiwar@localhost:5432/mobiwar';
-const TEST_DB = 'mobiwar_test';
+  ?? 'postgresql://mobilwar:mobilwar@localhost:5432/mobilwar';
+const TEST_DB = 'mobilwar_test';
 const TEST_URL = ADMIN_URL.replace(/\/[^/?]+(\?|$)/, `/${TEST_DB}$1`);
 
 let migrated = false;

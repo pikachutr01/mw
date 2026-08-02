@@ -22,8 +22,8 @@ const str = (name: string, fallback: string): string => {
 
 export const MAIL = {
   apiKey: str('RESEND_API_KEY', ''),
-  /** `"Mobiwar <noreply@send.scrabblecozucu.site>"` biçiminde. */
-  from: str('MAIL_FROM', 'Mobiwar <noreply@localhost>'),
+  /** `"MobilWar <noreply@send.scrabblecozucu.site>"` biçiminde. */
+  from: str('MAIL_FROM', 'MobilWar <noreply@localhost>'),
   /** Bağlantı üretimi — doğrulama/sıfırlama e-postalarındaki adres bundan kurulur. */
   appOrigin: str('APP_ORIGIN', 'http://localhost:5173'),
   /** Resend uç noktası (test/proxy için değiştirilebilir). */

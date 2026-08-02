@@ -1,5 +1,5 @@
 /**
- * @mobiwar/contracts — zod şemaları. TEK şema; sunucu doğrulaması, istemci tipleri ve form
+ * @mobilwar/contracts — zod şemaları. TEK şema; sunucu doğrulaması, istemci tipleri ve form
  * doğrulaması aynı kaynaktan gelir (SİSTEM PLANI §7).
  */
 export * from './common.ts';

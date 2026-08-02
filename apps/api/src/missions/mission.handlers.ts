@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm';
 import {
   BUILDINGS_BY_ID, clampName, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor,
   UNITS_BY_ID, type SpyLevel,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import type { CityService } from '../cities/city.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
 

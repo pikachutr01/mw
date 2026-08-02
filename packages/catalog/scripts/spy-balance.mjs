@@ -7,7 +7,7 @@
  *
  * Ağırlıkları (SPY_CONSTANTS) değiştirip yeniden koşarak kalibrasyon yapılır; kilitlenen
  * değerler `packages/catalog/test/spy.test.ts` altın testlerine işlenir.
- * (Önce `pnpm --filter @mobiwar/catalog build` — script dist'ten okur.)
+ * (Önce `pnpm --filter @mobilwar/catalog build` — script dist'ten okur.)
  */
 import { SPY_CONSTANTS, spyInterception, spyLevelFor, spyEffectiveDiff, UNITS_BY_ID } from '../dist/index.js';
 

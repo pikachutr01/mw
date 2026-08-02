@@ -39,7 +39,7 @@ girmesin. Aynı SPA içinde tembel yüklenen bir parça olsaydı kod yine dağı
 ### Geliştirmede
 
 ```bash
-pnpm --dir mw --filter @mobiwar/admin dev
+pnpm --dir mw --filter @mobilwar/admin dev
 ```
 
 Oyun 5173'te, panel **5174**'te. İkisi de `/api`yi 3002'ye proxy'liyor.
@@ -48,8 +48,8 @@ Oyun 5173'te, panel **5174**'te. İkisi de `/api`yi 3002'ye proxy'liyor.
 
 ```nginx
 server {
-    server_name yonetim.scrabblecozucu.site;
-    root /var/www/mobiwar-admin;           # apps/admin/dist
+    server_name yonetim.mobilwar.com;
+    root /var/www/mobilwar-admin;           # apps/admin/dist
     index index.html;
 
     # SPA: bilinmeyen yol index'e döner

@@ -1,5 +1,12 @@
 # MOBIWAR — SİSTEM PLANI (rebuild teknik temeli)
 
+> ### ⭐ 2026-08-02 — ÜRÜN ADI: **MobilWar** (`mobilwar.com`)
+> Bu belgenin **başlığı ve içindeki «Mobiwar» geçişleri BİLEREK KORUNDU**: burada anlatılan
+> kaynak, tersine mühendislikle çözülen **orijinal J2ME oyunudur**. Yeniden yazılan ürünün
+> adı ise **MobilWar** — kod, `@mobilwar/*` paketleri, `mobilwar` veritabanı, ekran metinleri
+> ve mail şablonlarının hepsi o adı taşıyor. Bir cümleyi okurken hangisinden bahsedildiğini
+> ayırmak için: **tasarım/ölçüm bağlamı → Mobiwar (kaynak) · çalışan sistem → MobilWar.**
+
 > **Tarih:** 2026-07-25 · **Durum:** tasarım kararları + yol haritası. Kod başlamadan önce üzerinde
 > anlaşılacak belge. Tamamlayıcılar: `MOBIWAR_MIMARI_RAPOR.md` (eski istemci analizi),
 > `TEKNIK_MANTIK_RAPORU.md` (savaş motoru v0.6), `MOBIWAR_OYUN_VERISI.md` (katalog).

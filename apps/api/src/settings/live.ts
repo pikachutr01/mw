@@ -15,7 +15,7 @@
  * geçersiz kılma **saklanıyor ve panelde görünüyor** ama tüketim dünya 0 katmanından. Gerçek
  * dünya bazlı limit gerektiğinde çağrı noktalarına `worldId` geçirilecek; depolama değişmez.
  */
-import type { SettingValue } from '@mobiwar/settings';
+import type { SettingValue } from '@mobilwar/settings';
 
 type Group = Readonly<Record<string, SettingValue>>;
 

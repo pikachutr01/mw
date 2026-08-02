@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // Test sırasında kardeş paketi build almadan, doğrudan kaynaktan çöz.
-      '@mobiwar/catalog': fileURLToPath(new URL('../catalog/src/index.ts', import.meta.url)),
+      '@mobilwar/catalog': fileURLToPath(new URL('../catalog/src/index.ts', import.meta.url)),
     },
   },
   test: {

@@ -2,6 +2,20 @@
 
 > **Tarih:** 2026-07-26 · İnceleme + temizlik yapıldı, **hiçbir servis durdurulmadı**, siteler kesintisiz.
 > **Güncelleme:** 2026-07-31 — alan adı ve kapasite yeniden ölçüldü (§0).
+>
+> ### ⛔ 2026-08-02 — §0'daki ALAN ADI KARARI GEÇERSİZ
+> Kullanıcı **`mobilwar.com`** alan adını aldı. Oyun apex'ten (`mobilwar.com`), panel
+> `yonetim.mobilwar.com` alt alanından, mail `send.mobilwar.com` üzerinden Resend ile
+> gidecek. Aşağıda `scrabblecozucu.site` geçen her yer **eski karardır**; ölçüm sonuçları
+> (sertifika, DNS sağlayıcı, kapasite) hâlâ doğru, ama alan adına bağlı üç sonuç değişti:
+>
+> | §0 bulgusu | Yeni alan adında durumu |
+> | :-- | :-- |
+> | Sertifika hazır, certbot gerekmez | ❌ **Geçersiz** — `mobilwar.com` + `yonetim.` için certbot çalıştırılacak |
+> | `.site` trafiğini `.com`'a atan iki 301 bloğu kaldırılacak | ➖ **Konusuz** — yeni alan adı o yapılandırmaya hiç uğramıyor |
+> | DNS sunucuda değil, hosting panelinde | ⚠️ **`mobilwar.com`'un kayıtları nerede tutuluyor, doğrulanmadı** — Resend kayıtlarını yazmadan önce bakılacak |
+>
+> Uygulama tarafındaki hazırlık `mw/.env.example` başındaki listede.
 
 ---
 
@@ -202,7 +216,7 @@ Ayrıca **bu sohbette paylaşılan root ve deploy parolalarını değiştir** �
 Sunucunun gerçek durumu iki mimari kararı değiştirdi:
 
 1. **Caddy YOK → mevcut nginx kullanılacak.** nginx zaten 80/443'ü tutuyor ve certbot kurulu.
-   Mobiwar için `oyun.alanadin.com` adında yeni bir nginx site dosyası + `certbot --nginx` yeterli.
+   MobilWar için `mobilwar.com` adında yeni bir nginx site dosyası + `certbot --nginx` yeterli.
    İkinci bir web sunucusu kurmak port çakışması ve boşa RAM demekti.
 2. **Docker YOK → PostgreSQL native (apt/PGDG) + uygulama PM2 ile.** Sunucuda Docker yok ve
    Docker daemon'ı ~80 MB. Mevcut düzen (nginx + PM2 + systemd) zaten çalışıyor ve sen bu düzene

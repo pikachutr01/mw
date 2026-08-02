@@ -10,7 +10,7 @@
  * şehrin içinde işleyen bir sayaç var. Yalnız `cave_return` bir "gelen destek" olarak görünür.
  */
 import { sql } from 'drizzle-orm';
-import { caveTransferSeconds, unitsArea } from '@mobiwar/catalog';
+import { caveTransferSeconds, unitsArea } from '@mobilwar/catalog';
 import type { HandlerContext, MissionHandler, Tx } from '../missions/handler-registry.ts';
 import { addCaveUnits, addCityUnits, drainCave, takeUnits } from './cave.service.ts';
 

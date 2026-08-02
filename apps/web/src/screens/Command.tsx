@@ -25,7 +25,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { api } from '../lib/api.ts';
-import { LEVEL_BASED } from '@mobiwar/catalog';
+import { LEVEL_BASED } from '@mobilwar/catalog';
 import {
   useOverview, useRankings, type NamedType, type Overview, type RankingKind,
 } from '../lib/queries.ts';

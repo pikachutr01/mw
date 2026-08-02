@@ -13,7 +13,7 @@
  *  3. **Onarımdayken hiçbir işlem yapılamaz**; modal açılır ama sebebini ve kalan süreyi yazar.
  */
 import { useState } from 'react';
-import { UNITS_BY_ID, WARRIOR_ORDER, caveTransferSeconds } from '@mobiwar/catalog';
+import { UNITS_BY_ID, WARRIOR_ORDER, caveTransferSeconds } from '@mobilwar/catalog';
 import type { CaveState, CityDetail } from '../lib/queries.ts';
 import { useCancelCaveJob, useCaveJob } from '../lib/queries.ts';
 import { fmt, formatDuration, remaining } from '../lib/hooks.ts';

@@ -19,8 +19,8 @@ import {
   Param, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { heroLevelForXp, heroReviveCost, heroReviveSeconds, heroXpForLevel } from '@mobiwar/catalog';
-import { DEFAULT_COMBAT_CONFIG } from '@mobiwar/engine';
+import { heroLevelForXp, heroReviveCost, heroReviveSeconds, heroXpForLevel } from '@mobilwar/catalog';
+import { DEFAULT_COMBAT_CONFIG } from '@mobilwar/engine';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { NAME_RULE_MESSAGE, gameName } from '../cities/city-name.ts';
@@ -37,7 +37,7 @@ const skillsRequest = z.object({
 });
 /**
  * ⚠️ Sınır 2-24'ten **3-10**'a indi (kullanıcı kararı 2026-07-31): şehir adıyla aynı kural,
- * kaynağı `@mobiwar/catalog` → `name-rules.ts`. Mevcut uzun adlar `0024_name_limits.sql`
+ * kaynağı `@mobilwar/catalog` → `name-rules.ts`. Mevcut uzun adlar `0024_name_limits.sql`
  * ile kırpıldı — yoksa oyuncu adını düzenlemek isterken kendi adını reddettirirdi.
  */
 const renameRequest = z.object({ name: gameName });

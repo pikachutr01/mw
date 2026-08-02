@@ -206,44 +206,58 @@ listen_addresses = 'localhost'
 
 ```bash
 sudo systemctl restart postgresql
-sudo -u postgres psql -c "CREATE USER mw WITH PASSWORD 'GUCLU_PAROLA';"
-sudo -u postgres psql -c "CREATE DATABASE mw OWNER mw;"
-psql "postgresql://mw:GUCLU_PAROLA@localhost/mw" -c "select version();"   # doğrula
+sudo -u postgres psql -c "CREATE USER mobilwar WITH PASSWORD 'GUCLU_PAROLA';"
+sudo -u postgres psql -c "CREATE DATABASE mobilwar OWNER mobilwar;"
+psql "postgresql://mobilwar:GUCLU_PAROLA@localhost/mobilwar" -c "select version();"   # doğrula
 ```
 
 ## B.2 Uygulama dizini ve ortam dosyası
 ```bash
-sudo -u deploy mkdir -p /home/deploy/mobiwar/{releases,shared,web}
-sudo -u deploy nano /home/deploy/mobiwar/shared/.env && chmod 600 /home/deploy/mobiwar/shared/.env
+sudo -u deploy mkdir -p /home/deploy/mobilwar/{releases,shared,web}
+sudo -u deploy nano /home/deploy/mobilwar/shared/.env && chmod 600 /home/deploy/mobilwar/shared/.env
 ```
+⚠️ Değişken adları **kodla birebir** olmak zorunda; aşağıdaki blok bu rehber yazıldığında
+uydurulmuş adlar taşıyordu (`JWT_SECRET`, `PUBLIC_URL`, `SMTP_URL`, `VAPID_PUBLIC`,
+`LOG_LEVEL` — beşi de hiç okunmuyor). **Tek doğru kaynak `mw/.env.example`**; buradaki
+liste onun prod özetidir.
+
 ```dotenv
 NODE_ENV=production
 ROLE=all
 PORT=3002
-DATABASE_URL=postgresql://mw:GUCLU_PAROLA@localhost:5432/mw
-JWT_SECRET=<openssl rand -base64 48>
-PUBLIC_URL=https://oyun.alanadin.com
-SMTP_URL=smtp://localhost:25
-VAPID_PUBLIC=...
-VAPID_PRIVATE=...
-LOG_LEVEL=info
+WORLD_ID=1
+
+DATABASE_URL=postgresql://mobilwar:GUCLU_PAROLA@localhost:5432/mobilwar
+
+JWT_ACCESS_SECRET=<openssl rand -base64 48>
+ACCESS_TOKEN_TTL_SECONDS=900
+
+# ⭐ Doğrulama / şifre sıfırlama / hesap silme bağlantılarının ÜÇÜ de bundan üretilir.
+APP_ORIGIN=https://mobilwar.com
+RESEND_API_KEY=<resend panelinden>
+MAIL_FROM="MobilWar <noreply@send.mobilwar.com>"
+
+# ⚠️ Anahtar çifti BİR KEZ üretilir; değişirse tüm push abonelikleri sessizce ölür.
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:admin@mobilwar.com
 ```
 
 ## B.3 nginx site dosyası
-`/etc/nginx/sites-available/mobiwar.conf` — mevcut iki sitenin kalıbıyla birebir aynı:
+`/etc/nginx/sites-available/mobilwar.conf` — mevcut iki sitenin kalıbıyla birebir aynı:
 ```nginx
 server {
     listen 80;
     listen [::]:80;
-    server_name oyun.alanadin.com;
+    server_name mobilwar.com;
     return 301 https://$host$request_uri;
 }
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    server_name oyun.alanadin.com;
+    server_name mobilwar.com;
 
-    root /home/deploy/mobiwar/web;
+    root /home/deploy/mobilwar/web;
     index index.html;
 
     gzip on;
@@ -263,21 +277,21 @@ server {
 }
 ```
 ```bash
-sudo ln -s /etc/nginx/sites-available/mobiwar.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/mobilwar.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d oyun.alanadin.com          # TLS (mevcut certbot kullanılıyor)
+sudo certbot --nginx -d mobilwar.com          # TLS (mevcut certbot kullanılıyor)
 ```
 > DNS A kaydını önce sunucu IP'sine yönlendirmeyi unutma.
 
 ## B.4 PM2 ile çalıştırma
 ```bash
-# /home/deploy/mobiwar/ecosystem.config.cjs
+# /home/deploy/mobilwar/ecosystem.config.cjs
 module.exports = {
   apps: [{
-    name: 'mobiwar',
+    name: 'mobilwar',
     script: 'dist/main.js',
-    cwd: '/home/deploy/mobiwar/current',
-    env_file: '/home/deploy/mobiwar/shared/.env',
+    cwd: '/home/deploy/mobilwar/current',
+    env_file: '/home/deploy/mobilwar/shared/.env',
     node_args: '--max-old-space-size=384',
     instances: 1,
     exec_mode: 'fork',
@@ -290,19 +304,19 @@ module.exports = {
 ```
 ```bash
 su - deploy
-cd /home/deploy/mobiwar && pm2 start ecosystem.config.cjs && pm2 save
-pm2 list                              # mobiwar online olmalı
+cd /home/deploy/mobilwar && pm2 start ecosystem.config.cjs && pm2 save
+pm2 list                              # mobilwar online olmalı
 ```
 `pm2 save` mevcut `pm2-deploy.service` sayesinde yeniden başlatmada otomatik ayağa kalkmasını sağlar.
 
-## B.5 Dağıtım betiği (`/home/deploy/mobiwar/deploy.sh`)
+## B.5 Dağıtım betiği (`/home/deploy/mobilwar/deploy.sh`)
 CI'dan gelen artefaktı açar, migration'ı çalıştırır, PM2'yi tazeler:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-BASE=/home/deploy/mobiwar
+BASE=/home/deploy/mobilwar
 REL="$BASE/releases/$(date +%Y%m%d%H%M%S)"
-TARBALL="${1:?kullanim: deploy.sh /yol/mobiwar-<sha>.tar.gz}"
+TARBALL="${1:?kullanim: deploy.sh /yol/mobilwar-<sha>.tar.gz}"
 
 echo "▸ artefakt açılıyor"
 mkdir -p "$REL" && tar -xzf "$TARBALL" -C "$REL"
@@ -314,13 +328,13 @@ cd "$REL" && node dist/migrate.js
 echo "▸ yayına alma"
 ln -sfn "$REL" "$BASE/current"
 cp -r "$REL/web/." "$BASE/web/"          # statik React derlemesi
-pm2 reload mobiwar --update-env          # kill_timeout sayesinde görev güvenli biter
+pm2 reload mobilwar --update-env          # kill_timeout sayesinde görev güvenli biter
 
 echo "▸ eski sürümler temizleniyor (son 5 kalır)"
 ls -1dt "$BASE"/releases/* | tail -n +6 | xargs -r rm -rf
 echo "✓ tamam"
 ```
-Geri alma: `ln -sfn $BASE/releases/<eski> $BASE/current && pm2 reload mobiwar`
+Geri alma: `ln -sfn $BASE/releases/<eski> $BASE/current && pm2 reload mobilwar`
 (**migration geri alınmaz** → expand-contract zorunlu.)
 
 ## B.6 Yedekleme
@@ -343,10 +357,10 @@ sudo chmod +x /usr/local/bin/mw-backup.sh
 ## B.7 Bakım modu (Mobiwar'a özel)
 Oyunu duraklatmak için sunucuya girmeye gerek yok — yönetici ucundan:
 ```bash
-curl -X POST https://oyun.alanadin.com/api/admin/world/1/maintenance \
+curl -X POST https://mobilwar.com/api/admin/world/1/maintenance \
      -H "Authorization: Bearer <admin-token>"
 # ...bakım...
-curl -X POST https://oyun.alanadin.com/api/admin/world/1/resume
+curl -X POST https://mobilwar.com/api/admin/world/1/resume
 ```
 Oyun saati duraklar, tüm geri sayımlar otomatik ötelenir (bkz. `MOBIWAR_SISTEM_PLANI.md` §2).
 
@@ -454,6 +468,6 @@ deploy-özel bir SSH anahtarı ekleyip `appleboy/ssh-action` ile `./deploy.sh ${
 - [ ] RAM yükseltmesi: **4 GB + 3 çekirdek**
 - [ ] PostgreSQL 17 (PGDG) + `99-mw.conf` ayarları + `mw` veritabanı
 - [ ] Alan adı DNS → sunucu IP, sonra `certbot --nginx`
-- [ ] `/home/deploy/mobiwar` dizin yapısı + `shared/.env` (chmod 600)
+- [ ] `/home/deploy/mobilwar` dizin yapısı + `shared/.env` (chmod 600)
 - [ ] nginx site dosyası (port 3002 proxy + WebSocket) + `ecosystem.config.cjs`
 - [ ] `deploy.sh` + ilk dağıtım + Postgres yedek cron'u + uzak kopya

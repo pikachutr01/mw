@@ -13,7 +13,7 @@
  * değişirse tanıtım sayfası sessizce yalan söylemesin.
  */
 import { NavLink } from 'react-router-dom';
-import { UNITS_BY_ID } from '@mobiwar/catalog';
+import { UNITS_BY_ID } from '@mobilwar/catalog';
 import { useAuthModal } from '../components/GuestShell.tsx';
 import { Button, CatalogIcon, Panel } from '../components/ui.tsx';
 
@@ -50,7 +50,7 @@ export function Landing(): React.ReactElement {
   return (
     <div className="space-y-4">
       {/* ── HERO ──────────────────────────────────────────────────────────────── */}
-      <Panel title="Mobiwar">
+      <Panel title="MobilWar">
         <div className="space-y-4 p-5 text-center sm:p-8">
           <img src="/assets/ui/logo.png" alt="" aria-hidden width={280} height={112}
             className="icon-shadow mx-auto h-16 w-auto object-contain sm:h-24" />

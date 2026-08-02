@@ -22,7 +22,7 @@ import {
   BadRequestException, Body, Controller, HttpCode, Inject, NotFoundException, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { LEVEL_BASED, NAME_MAX, NAME_MIN, UNITS_BY_ID, TECHS_BY_ID, pickHeroName } from '@mobiwar/catalog';
+import { LEVEL_BASED, NAME_MAX, NAME_MIN, UNITS_BY_ID, TECHS_BY_ID, pickHeroName } from '@mobilwar/catalog';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { CityService } from '../cities/city.service.ts';

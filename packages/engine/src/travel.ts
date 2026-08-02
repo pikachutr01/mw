@@ -13,7 +13,7 @@
  *
  * İstemci aynı fonksiyonu YALNIZ önizleme için kullanır; otorite `execute_at` yazan sunucudur.
  */
-import { UNITS_BY_ID } from '@mobiwar/catalog';
+import { UNITS_BY_ID } from '@mobilwar/catalog';
 
 export interface Coordinates {
   /** kıta */

@@ -81,7 +81,7 @@ async function bootstrap(): Promise<void> {
     if (role === 'worker' && pushEnabled()) {
       // eslint-disable-next-line no-console
       console.warn(
-        '[mobiwar] UYARI: ROLE=worker ile push açık. Bu süreç oyuncuların çevrimiçi olup '
+        '[mobilwar] UYARI: ROLE=worker ile push açık. Bu süreç oyuncuların çevrimiçi olup '
         + 'olmadığını GÖREMEZ (gateway kaydı yalnız API sürecinde dolu) → WS bağlıyken de push '
         + 'gider. Tek süreçli profil için ROLE=all kullan.',
       );
@@ -106,7 +106,7 @@ async function bootstrap(): Promise<void> {
     worker.start();
     // eslint-disable-next-line no-console
     console.log(
-      `[mobiwar] worker çalışıyor (dünya ${process.env['WORLD_ID'] ?? 1}) · `
+      `[mobilwar] worker çalışıyor (dünya ${process.env['WORLD_ID'] ?? 1}) · `
       + `push ${pushEnabled() ? 'AÇIK' : 'kapalı (VAPID anahtarı yok)'} · `
       + `posta ${mailEnabled() ? 'Resend' : 'konsol (RESEND_API_KEY yok)'}`,
     );
@@ -123,13 +123,13 @@ async function bootstrap(): Promise<void> {
     setGateway(gateway);
 
     // eslint-disable-next-line no-console
-    console.log(`[mobiwar] api hazır → http://localhost:${port}/healthz  ·  ws /ws  (ROLE=${role})`);
+    console.log(`[mobilwar] api hazır → http://localhost:${port}/healthz  ·  ws /ws  (ROLE=${role})`);
   }
 
   // Graceful shutdown: çalışan görev turu bitene kadar bekle → yarım iş kalmaz.
   const shutdown = async (signal: string): Promise<void> => {
     // eslint-disable-next-line no-console
-    console.log(`[mobiwar] ${signal} alındı, kapatılıyor…`);
+    console.log(`[mobilwar] ${signal} alındı, kapatılıyor…`);
     await settings.stop();
     await worldState?.stop();
     await gateway?.close();

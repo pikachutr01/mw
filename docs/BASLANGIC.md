@@ -1,4 +1,13 @@
-# MOBIWAR — BAŞLANGIÇ
+# MOBILWAR — BAŞLANGIÇ
+
+> ### ⭐ 2026-08-02 — ÜRÜNÜN ADI ARTIK **MobilWar**
+> Alan adı **`mobilwar.com`**. Kod, paket adları (`@mobilwar/*`), veritabanı (`mobilwar` /
+> `mobilwar_test`), ekran metinleri ve mail şablonları **tamamen** geçirildi.
+>
+> ⚠️ `docs/` altındaki **Mobiwar/MobiWar yazımları BİLEREK DURUYOR**: onlar tersine
+> mühendislikle çözülen **orijinal J2ME oyununun** kayıtları (`MobiWar.zip`, `cgs/MobiWar.java`,
+> `mobiwar-engine.js`, ölçüm raporları). Onları yeniden adlandırmak kaynağın izini bozardı.
+> Kural basit: **çalışan ürün MobilWar, tersine mühendislik kaynağı Mobiwar.**
 
 > **📍 NEREDEYİZ (2026-07-31):** Faz 0 ✅ · Faz 1 ✅ · **Faz 2 TAM KAPANDI** (son çıkış kriteri
 > offline push 2026-07-31'de girdi) · Faz 3-4 parça parça
@@ -14,8 +23,9 @@
 > orijinal Java metin taraması · denge senaryoları · moderasyon minimumu (şikayet paneli).
 > ⚠️ **Genel Sohbet kullanıcı tarafından EN SONA alındı.**
 > 🔵 **Kullanıcıdan bekleyen:** `RESEND_API_KEY` (`mw/.env`'e kendisi yazacak) +
-> `send.scrabblecozucu.site` DNS kayıtları (hostingdunyam paneli) — adımlar planda:
-> `~/.claude/plans/sorted-marinating-castle.md` §"SENİN YAPMAN GEREKENLER".
+> **`send.mobilwar.com`** DNS kayıtları (MX + SPF + DKIM). ⚠️ Alan adı `mobilwar.com`
+> olarak değişti; `send.scrabblecozucu.site` planı iptal — ayrıntı `VPS_DURUM_RAPORU.md`
+> başındaki 2026-08-02 notu ve `mw/.env.example` başlığı.
 >
 > **🔑 Test hesapları:** `wstest` / `mobiwar2026` (4 şehir, dolu ordu) · ittifak denemesi için
 > `itflider` + `itfuye` / `parola-12345` (run.dll ittifağı). Giriş **kullanıcı adıyla**.
@@ -51,7 +61,7 @@ cd C:\Projects\misc\ghidra\mw\apps\api && node --env-file=../../.env dist/main.j
 ```
 
 ```bash
-cd C:\Projects\misc\ghidra\mw && pnpm --filter @mobiwar/web dev
+cd C:\Projects\misc\ghidra\mw && pnpm --filter @mobilwar/web dev
 ```
 
 → tarayıcıda **http://localhost:5173**. API 3002'de (`ROLE=all` → worker aynı süreçte;
@@ -170,7 +180,7 @@ Koda dokunmadan önce ilgili §'yi aç.
 | **Şehir terk etme** | Altı engel: **başkent** · barakada savaşçı · **mağarada savaşçı** · **şehirde kahraman** · açık kuyruk · gelen/giden ordu. (Son ikisi ⭐ kullanıcı kararı; dokümanda yok ama `cave_units` CASCADE, `heroes.city_id` SET NULL → sessiz kayıp olurdu.) Engeller **liste** hâlinde döner; kilit altında YENİDEN kontrol edilir. Yapı+savunma puanı düşer (teknik düşmez), `city:abandoned` → `cities:changed`, `audit_log` satırı | §13.18 |
 | **Gece savaşı** | Çarpan `(1 − 3/(GG+3))×0,3 + 0,7`, **yalnız Can ve Büyü Canı**'na uygulanır — Ghidra ile satır satır doğrulandı (`FUN_00412624`: iki oku-çarp-yaz çifti, stat+0x00 ve stat+0x08). ⚠️ **Taşıma çarpılmaz** (2026-07-31'de kaldırıldı; eski raporun "HP ve Taşıma" ifadesi yanlıştı). Savunma YAPILARI etkilenir (3. döngü), **Sur/Kalkan etkilenmez** (ayrı alanlar). Ölçüm dosyası `veri/gece-savasi-olcumleri.md` | §7 |
 | **İki motor senkronu** | `scratchpad/engine_diff.mjs` keşif (`mobiwar-engine.js`) ve üretim motorunu yan yana koşturur — 6/8 birebir. ⚠️ **Birim id'leri farklı** (Türkçe/İngilizce) ve `mangonel` ikisinde BAŞKA birim; eşleme tablosu harness'te | — |
-| **Ad kuralı (şehir + kahraman)** | **3-10 karakter**, Türkçe harf ve boşluk serbest, noktalama yok. Kaynak orijinal form (`g.java:1893` → `m.a(2, 10, …)`). Kural `@mobiwar/catalog/name-rules.ts`'te TEK yerde — ⚠️ ad ÜRETEÇLERİ de ona uymak zorunda (koloni adı `"Koloni N"`, kahraman havuzu ≤10). Eski uzun adlar `0024_name_limits.sql` ile kırpıldı | §13.18 |
+| **Ad kuralı (şehir + kahraman)** | **3-10 karakter**, Türkçe harf ve boşluk serbest, noktalama yok. Kaynak orijinal form (`g.java:1893` → `m.a(2, 10, …)`). Kural `@mobilwar/catalog/name-rules.ts`'te TEK yerde — ⚠️ ad ÜRETEÇLERİ de ona uymak zorunda (koloni adı `"Koloni N"`, kahraman havuzu ≤10). Eski uzun adlar `0024_name_limits.sql` ile kırpıldı | §13.18 |
 | **Orijinal menü ağacı** | `g.java`+`k.java` çözüldü. Komuta Merkezi bir HUB: Mesajlar · Genel Durum · **İttifak** · **Arama** · Sıralamalar. Onay kalıbı ünlemle: *"… Emin misiniz!"* | §13.18 |
 | **WS + yoklama** | Ekranı WS güncel tutar; yoklama yalnız **emniyet ağı** (60 sn). Aralığı düşürme isteği = WS'te eksik konu | §13.19 |
 

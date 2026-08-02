@@ -25,8 +25,8 @@ let listener: RealtimeBus;
 beforeAll(async () => {
   h = await setupTestDb();
   listenerHandle = createDb(
-    (process.env['DATABASE_URL'] ?? 'postgresql://mobiwar:mobiwar@localhost:5432/mobiwar')
-      .replace(/\/[^/?]+(\?|$)/, '/mobiwar_test$1'),
+    (process.env['DATABASE_URL'] ?? 'postgresql://mobilwar:mobilwar@localhost:5432/mobilwar')
+      .replace(/\/[^/?]+(\?|$)/, '/mobilwar_test$1'),
     { max: 2 },
   );
   bus = new RealtimeBus(h.sql);

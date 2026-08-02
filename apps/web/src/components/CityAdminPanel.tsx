@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react';
  * yorumu "sunucudakiyle aynı sayılar" diyordu — sınır 15'e çıkınca o cümle yalan olacaktı.
  * Aynı hatanın canlı örneği `Temple.tsx`teydi: 24 yazıyordu, sunucu 10 istiyordu.
  */
-import { NAME_MAX, NAME_MIN } from '@mobiwar/catalog';
+import { NAME_MAX, NAME_MIN } from '@mobilwar/catalog';
 import { coords } from '../lib/format.ts';
 import { api } from '../lib/api.ts';
 import { useActiveCity } from '../lib/city-context.tsx';

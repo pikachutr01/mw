@@ -15,16 +15,16 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: mobiwar
-          POSTGRES_PASSWORD: mobiwar
-          POSTGRES_DB: mobiwar
+          POSTGRES_USER: mobilwar
+          POSTGRES_PASSWORD: mobilwar
+          POSTGRES_DB: mobilwar
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U mobiwar -d mobiwar"
+          --health-cmd "pg_isready -U mobilwar -d mobilwar"
           --health-interval 5s --health-timeout 3s --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://mobiwar:mobiwar@localhost:5432/mobiwar
+      DATABASE_URL: postgresql://mobilwar:mobilwar@localhost:5432/mobilwar
 
     steps:
       - uses: actions/checkout@v5

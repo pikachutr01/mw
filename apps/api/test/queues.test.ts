@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildingCost, buildingTimeSeconds, defenseCapacity, techTimeSeconds, timeFromCost,
   trainingTimeSeconds, UNITS_BY_ID,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
 import { CapacityService, DEFAULT_AREA_RULES } from '../src/cities/capacity.service.ts';

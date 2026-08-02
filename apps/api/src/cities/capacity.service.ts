@@ -10,7 +10,7 @@
  *  1. **Kale bütçesi:** Σ(BİNA seviyeleri) ≤ Kale × 10. Kale kendisi, Sur ve Büyü Kalkanı HARİÇ.
  *  2. **Savunma kapasitesi:** 25.000 × 1,30^(Sur−1). Her savunma birimi katalogdaki `area` kadar tüketir.
  */
-import { BUILDINGS_BY_ID, UNITS_BY_ID, castleBudget, defenseCapacity } from '@mobiwar/catalog';
+import { BUILDINGS_BY_ID, UNITS_BY_ID, castleBudget, defenseCapacity } from '@mobilwar/catalog';
 
 export interface AreaRules {
   buildingBudget: {

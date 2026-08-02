@@ -1,5 +1,5 @@
 /**
- * @mobiwar/catalog — oyunun DENGE VERİSİ (birim/yapı/teknik) ve doğrulanmış formülleri.
+ * @mobilwar/catalog — oyunun DENGE VERİSİ (birim/yapı/teknik) ve doğrulanmış formülleri.
  *
  * Bu paket saf veridir: DB, zaman, IO bilmez. Her savaşa `catalogHash` yazılır → hangi dengeyle
  * oynandığı kayıtlı olur (SİSTEM PLANI §5).

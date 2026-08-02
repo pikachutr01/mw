@@ -14,12 +14,12 @@ import {
   Post, Put, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { SETTINGS, SETTING_GROUPS, applySettings, validatePatch } from '@mobiwar/settings';
-import { simulate } from '@mobiwar/engine';
+import { SETTINGS, SETTING_GROUPS, applySettings, validatePatch } from '@mobilwar/settings';
+import { simulate } from '@mobilwar/engine';
 import {
   buildingCost, buildingTimeSeconds, mergeCatalogConfig, techCost, techTimeSeconds,
-} from '@mobiwar/catalog';
-import { simulateRequest } from '@mobiwar/contracts';
+} from '@mobilwar/catalog';
+import { simulateRequest } from '@mobilwar/contracts';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { AuthService } from '../auth/auth.service.ts';

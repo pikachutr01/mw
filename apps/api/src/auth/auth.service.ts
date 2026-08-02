@@ -6,7 +6,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { DELETED_NAME_RE } from '@mobiwar/catalog';
+import { DELETED_NAME_RE } from '@mobilwar/catalog';
 import { DeviceSignalService, type DeviceContext } from '../abuse/device-signal.service.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';

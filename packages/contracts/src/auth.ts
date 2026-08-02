@@ -1,4 +1,4 @@
-import { USERNAME_MAX, USERNAME_MIN, USERNAME_PATTERN, USERNAME_RULE_MESSAGE } from '@mobiwar/catalog';
+import { USERNAME_MAX, USERNAME_MIN, USERNAME_PATTERN, USERNAME_RULE_MESSAGE } from '@mobilwar/catalog';
 import { z } from 'zod';
 
 /** Orijinaldeki "3-8 karakter şifre" kuralı KULLANILMIYOR — modern minimum 8+ (§9). */
@@ -10,7 +10,7 @@ export const registerRequest = z.object({
   /**
    * Oyun içinde yalnız bu görünür ve **DEĞİŞTİRİLEMEZ**.
    *
-   * ⚠️ Sayılar artık `@mobiwar/catalog` → `name-rules.ts`ten geliyor (2026-08-01). Burada
+   * ⚠️ Sayılar artık `@mobilwar/catalog` → `name-rules.ts`ten geliyor (2026-08-01). Burada
    * elle yazılıydı ve `Auth.tsx`teki tarayıcı kuralıyla ayrışmıştı: sunucu `\p{L}` ile
    * `Ayşe`yi kabul ederken tarayıcı `[A-Za-z0-9]` deseniyle reddediyordu.
    * Sınır 10'dan **15**'e çıktı (kullanıcı; hesap silmenin ürettiği `hükümdarN` adları için).

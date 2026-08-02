@@ -428,7 +428,7 @@ export class EmailTokenService {
 
     await this.notify(String(acc['email']), passwordChanged({
       username: String(acc['username'] ?? 'oyuncu'),
-      worldName: String(acc['world_name'] ?? 'Mobiwar'),
+      worldName: String(acc['world_name'] ?? 'MobilWar'),
     }));
   }
 

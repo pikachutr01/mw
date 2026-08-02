@@ -9,7 +9,7 @@
  * ekranı: tablo, form, uzun liste. Doku burada okunabilirliği düşürür. Jetonlar ortak,
  * uygulama farklı — kasıtlı.
  */
-@import '@mobiwar/design-tokens/css';
+@import '@mobilwar/design-tokens/css';
 
 @theme inline {
   --color-bg: var(--mw-color-bg);

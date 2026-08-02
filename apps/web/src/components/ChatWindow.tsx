@@ -205,7 +205,7 @@ export function ChatWindow({ target, myId, onClose }: {
               setMenuOpen(false);
               void confirm({
                 title: 'Şikayet Et',
-                body: 'Bu sohbet MobiWar yöneticilerine şikayet edilecek. Emin misiniz!',
+                body: 'Bu sohbet MobilWar yöneticilerine şikayet edilecek. Emin misiniz!',
               }).then((ok) => { if (ok) report.mutate({ channelId, reason: 'abuse' }); });
             }}>Şikayet Et</button>
           <button type="button" className="block w-full px-1 py-1 text-left text-danger hover:opacity-80"

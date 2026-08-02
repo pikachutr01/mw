@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, ConflictException, Controller, Delete, Get, HttpCode, HttpException,
   ForbiddenException, HttpStatus, Inject, Param, Post, Req, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
-import { loginRequest, registerRequest } from '@mobiwar/contracts';
+import { loginRequest, registerRequest } from '@mobilwar/contracts';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { extractDeviceContext } from '../abuse/device-context.ts';

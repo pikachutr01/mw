@@ -13,7 +13,7 @@
  * ⚠️ **Arama yalnız BAŞKENT verir** (§13.16.5) — sunucu tarafında zorlanıyor.
  */
 import { useState } from 'react';
-import { USERNAME_MAX } from '@mobiwar/catalog';
+import { USERNAME_MAX } from '@mobilwar/catalog';
 import { useNavigate } from 'react-router-dom';
 import {
   useAllianceSearchTab, usePlayerSearch, type SearchAllianceRow, type SearchPlayerRow,

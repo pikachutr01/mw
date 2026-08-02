@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { UNITS_BY_ID, buildingCost } from '@mobiwar/catalog';
+import { UNITS_BY_ID, buildingCost } from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
 import { CityService } from '../src/cities/city.service.ts';

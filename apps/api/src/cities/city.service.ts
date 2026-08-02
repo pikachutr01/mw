@@ -14,8 +14,8 @@ import { sql } from 'drizzle-orm';
 import {
   COLONY_STARTING_RESOURCES, LEVEL_BASED, STARTING_BUILDINGS,
   farmOutput, mineOutput,
-} from '@mobiwar/catalog';
-import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
+import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobilwar/catalog';
 import type { Tx } from '../missions/handler-registry.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { materializeUnitQueues } from '../queues/unit-queue.ts';

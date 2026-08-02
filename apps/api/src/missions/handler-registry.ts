@@ -9,7 +9,7 @@
  *     transaction'da yazılır → "savaş oldu ama rapor gitmedi" imkânsız.
  */
 import type { PgTransaction } from 'drizzle-orm/pg-core';
-import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
+import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
 import type { MissionRow } from './mission.repository.ts';
 
 /** Handler'ın kullanacağı transaction tipi (drizzle'ın tx nesnesi). */

@@ -21,8 +21,8 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { HERO_SPEED, heroReviveCost } from '@mobiwar/catalog';
-import { distance, travelSeconds } from '@mobiwar/engine';
+import { HERO_SPEED, heroReviveCost } from '@mobilwar/catalog';
+import { distance, travelSeconds } from '@mobilwar/engine';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { toDate } from '../src/db/client.ts';

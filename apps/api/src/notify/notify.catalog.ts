@@ -13,7 +13,7 @@
  * bittiğinde saldıran "Saldırın başarılı" görürken savunan "Şehrin saldırıya uğradı" görür.
  * Bu yüzden dönüş tipi dizi.
  */
-import { UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID } from '@mobiwar/catalog';
+import { UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID } from '@mobilwar/catalog';
 
 import { notifyLimits, type NotifyCategory } from './notify.limits.ts';
 

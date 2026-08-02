@@ -31,7 +31,7 @@ function Frame({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-4">
       <Card className="w-full max-w-md p-5">
-        <h1 className="display mb-1 text-2xl font-semibold text-ink">Mobiwar</h1>
+        <h1 className="display mb-1 text-2xl font-semibold text-ink">MobilWar</h1>
         <p className="mb-4 text-sm text-muted">{title}</p>
         {children}
       </Card>
@@ -65,7 +65,7 @@ export function DeleteAccountScreen(): React.ReactElement {
       <Frame title="Hesap silme">
         <div className="space-y-3 text-sm text-ink">
           <p>
-            Mobiwar hesabını silmek için oyuna gir ve <strong>Seçenekler → Hesap → Hesabımı
+            MobilWar hesabını silmek için oyuna gir ve <strong>Seçenekler → Hesap → Hesabımı
             Sil</strong> adımını izle. E-posta adresine tek kullanımlık bir onay bağlantısı
             göndeririz; bağlantı <strong>12 saat</strong> geçerlidir.
           </p>

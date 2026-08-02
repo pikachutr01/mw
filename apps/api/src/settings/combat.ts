@@ -13,7 +13,7 @@
  *
  * Bu davranış `apps/api/test/combat-settings.test.ts`te ölçülüyor.
  */
-import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
+import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
 
 type Values = Readonly<Record<string, Record<string, number | boolean> | undefined>>;
 

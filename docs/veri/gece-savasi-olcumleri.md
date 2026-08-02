@@ -185,7 +185,7 @@ yerde buluşuyor → madde kapandı.
 ## E. İKİ MOTOR AYNI MI? — ölçüldü (2026-07-31)
 
 `scratchpad/engine_diff.mjs` sekiz senaryoyu keşif motoru (`mobiwar-engine.js`) ve üretim
-motoruyla (`@mobiwar/engine`) aynı anda koşuyor. **6/8 birebir aynı**; gece senaryolarının
+motoruyla (`@mobilwar/engine`) aynı anda koşuyor. **6/8 birebir aynı**; gece senaryolarının
 tamamı (N1-N4, N6) aynı. Kalan iki fark:
 
 | fark | büyüklük | teşhis |

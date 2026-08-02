@@ -25,8 +25,8 @@
  * ölmüş askerler mağarada yeniden doğardı — sessiz ve fark edilmesi çok zor bir hata.
  */
 import { sql } from 'drizzle-orm';
-import { UNITS_BY_ID, caveCapacity, caveTransferSeconds, unitsArea } from '@mobiwar/catalog';
-import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
+import { UNITS_BY_ID, caveCapacity, caveTransferSeconds, unitsArea } from '@mobilwar/catalog';
+import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobilwar/catalog';
 import { toDate, type Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
 

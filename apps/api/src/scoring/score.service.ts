@@ -23,7 +23,7 @@ import { sql } from 'drizzle-orm';
 import {
   BUILDINGS_BY_ID, LEVEL_BASED, STARTING_BUILDINGS, TECHS_BY_ID, UNITS_BY_ID,
   buildingCost, defenseStructureCost, techCost, unitCost, type CatalogConfig,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import type { Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
 

@@ -10,7 +10,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { HERO_NAMES, NAME_MAX, NAME_MIN, clampName, pickHeroName } from '@mobiwar/catalog';
+import { HERO_NAMES, NAME_MAX, NAME_MIN, clampName, pickHeroName } from '@mobilwar/catalog';
 import type { AuthedRequest } from '../src/auth/auth.guard.ts';
 import { BattleController } from '../src/battles/battle.controller.ts';
 import { CaveService } from '../src/cave/cave.service.ts';

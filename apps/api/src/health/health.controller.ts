@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
-import { ENGINE_VERSION } from '@mobiwar/engine';
-import { catalogHash, CATALOG_VERSION } from '@mobiwar/catalog';
+import { ENGINE_VERSION } from '@mobilwar/engine';
+import { catalogHash, CATALOG_VERSION } from '@mobilwar/catalog';
 
 @Controller()
 export class HealthController {

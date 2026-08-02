@@ -12,7 +12,7 @@
  * oyuncuyu büyüden CAYDIRAN bir uyarı YOK — yalnız hangi yeteneğin ne yaptığı anlatılıyor.
  */
 import { useState } from 'react';
-import { NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE } from '@mobiwar/catalog';
+import { NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE } from '@mobilwar/catalog';
 import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
 import {
   useHeroRename, useHeroRevive, useHeroReviveCancel, useHeroSkills, useTemple,

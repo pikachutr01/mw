@@ -19,7 +19,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { deletedName } from '@mobiwar/catalog';
+import { deletedName } from '@mobilwar/catalog';
 
 import { PasswordService } from './password.service.ts';
 import type { Db } from '../db/client.ts';
@@ -207,7 +207,7 @@ export class AccountDeleteService {
        */
       await tx.execute(sql`
         UPDATE accounts
-           SET email = ${`silinmis+${o.accountId}@mobiwar.invalid`},
+           SET email = ${`silinmis+${o.accountId}@mobilwar.invalid`},
                email_verified_at = NULL,
                password_hash = ${scrambled},
                notify_prefs = '{}'::jsonb,

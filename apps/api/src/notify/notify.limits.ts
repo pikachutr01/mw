@@ -68,7 +68,7 @@ export function notifyLimits(): NotifyLimits {
 export const VAPID = {
   publicKey: process.env['VAPID_PUBLIC_KEY'] ?? '',
   privateKey: process.env['VAPID_PRIVATE_KEY'] ?? '',
-  subject: process.env['VAPID_SUBJECT'] ?? 'mailto:admin@mobiwar.local',
+  subject: process.env['VAPID_SUBJECT'] ?? 'mailto:admin@mobilwar.com',
 } as const;
 
 /** Push yalnız anahtar çifti varken çalışır; yoksa bildirim WS toast'ıyla sınırlı kalır. */

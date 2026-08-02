@@ -13,7 +13,7 @@ import { Controller, Get, Inject, Query, Req, UseGuards } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import {
   DEFENSE_ORDER, TECHS, TECH_ORDER, UNITS_BY_ID, WARRIOR_ORDER, orderBy,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';

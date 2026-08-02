@@ -18,7 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   CAVE_CONSTANTS, UNITS_BY_ID, caveCapacity, caveRepairSeconds, caveTransferSeconds,
   dwarvesToBreakCave, unitsArea,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import { CAVE_HANDLERS } from '../src/cave/cave.handlers.ts';
 import { buildBattleReport } from '../src/battles/battle-report.ts';
 import { CaveError, CaveService } from '../src/cave/cave.service.ts';

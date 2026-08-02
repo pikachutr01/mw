@@ -2,13 +2,13 @@
  * Katalog `id` → oyuncuya görünen TÜRKÇE ad (§13.14).
  *
  * Kod, DB, URL ve katalog `id`'leri İngilizcedir; **ekranda İngilizce görünmez.** Adlar
- * `@mobiwar/catalog`'tan okunur — arayüzün kendi çeviri tablosu YOKTUR, olsaydı katalogtan
+ * `@mobilwar/catalog`'tan okunur — arayüzün kendi çeviri tablosu YOKTUR, olsaydı katalogtan
  * kaçınılmaz olarak sürüklenirdi.
  *
  * (Ön-şart adları sunucudan `requirementNames` ile hazır geliyor; burası birim/yapı/teknik
  * adının doğrudan lazım olduğu yerler için — ordu listesi, kuyruk satırı, savaş raporu.)
  */
-import { BUILDINGS_BY_ID, TECHS_BY_ID, UNITS_BY_ID } from '@mobiwar/catalog';
+import { BUILDINGS_BY_ID, TECHS_BY_ID, UNITS_BY_ID } from '@mobilwar/catalog';
 
 export function nameOf(id: string): string {
   return UNITS_BY_ID[id]?.name.tr

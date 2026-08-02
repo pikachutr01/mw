@@ -7,8 +7,8 @@
  */
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { maxCities, spyEffectiveDiff, spyLevelFor, teleportCooldownSeconds } from '@mobiwar/catalog';
-import { travelSeconds } from '@mobiwar/engine';
+import { maxCities, spyEffectiveDiff, spyLevelFor, teleportCooldownSeconds } from '@mobilwar/catalog';
+import { travelSeconds } from '@mobilwar/engine';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';

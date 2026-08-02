@@ -14,8 +14,8 @@ import {
   defenseStructureCost, UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
   buildingCost, buildingTimeSeconds, cancelRefund, checkRequirement, techCost, techTimeSeconds,
   timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
-} from '@mobiwar/catalog';
-import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
+import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobilwar/catalog';
 import {
   restricted, UNVERIFIED_MESSAGE, unverifiedLimits, warriorTotal,
 } from '../auth/unverified.ts';

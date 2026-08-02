@@ -12,8 +12,8 @@
  * ⚠️ **Varış anı `execute_at` OYUN saatindedir** → bakımda geri sayım durur, varış otomatik ötelenir.
  */
 import { sql } from 'drizzle-orm';
-import { HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID } from '@mobiwar/catalog';
-import { armySpeed, distance, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG } from '@mobiwar/engine';
+import { HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID } from '@mobilwar/catalog';
+import { armySpeed, distance, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG } from '@mobilwar/engine';
 import { isVerified, UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';

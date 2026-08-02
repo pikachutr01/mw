@@ -6,7 +6,7 @@
  * kapısı sessizce bozulur. Buradaki eklemeler yalnız **doku ve derinlik** katmanıdır: renk
  * üretmezler, var olan rengin üstüne saydam gölge/desen koyarlar.
  */
-@import '@mobiwar/design-tokens/css';
+@import '@mobilwar/design-tokens/css';
 
 /** Token'ları Tailwind yardımcılarına bağlar: `bg-surface`, `text-muted`, `border-strong`… */
 @theme inline {

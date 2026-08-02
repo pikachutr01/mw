@@ -15,7 +15,7 @@ function Frame({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-4">
       <Card className="w-full max-w-sm p-5">
-        <h1 className="display mb-1 text-2xl font-semibold text-ink">Mobiwar</h1>
+        <h1 className="display mb-1 text-2xl font-semibold text-ink">MobilWar</h1>
         <p className="mb-4 text-sm text-muted">{title}</p>
         {children}
       </Card>

@@ -416,7 +416,7 @@ gece; çıktı = kazanan, kayıplar, XP, ganimet, hayatta kalanlar. Entegrasyon:
 ---
 
 ## İlgili Dosyalar
-- `packages/engine/` — **savaş motorunun TypeScript portu** (`@mobiwar/engine`, 22/22 regresyon testi geçer,
+- `packages/engine/` — **savaş motorunun TypeScript portu** (`@mobilwar/engine`, 22/22 regresyon testi geçer,
   JS ile birebir). Rebuild'de tek kaynak (sunucu-otoriteli). Faz 0 başladı.
 - `MOBIWAR_OYUN_VERISI.md` — **oyun verisi kataloğu** (birim/yapı/teknik meta: Alan=train doğrulaması,
   ön-şartlar, hız/kapasite, teknik-etki, dünya kuralları). Rebuild katalog kaynağı.

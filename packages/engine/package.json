@@ -1,5 +1,5 @@
 {
-  "name": "@mobiwar/engine",
+  "name": "@mobilwar/engine",
   "version": "1.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@mobiwar/catalog": "workspace:*"
+    "@mobilwar/catalog": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

@@ -19,7 +19,7 @@ const esc = (s: string): string =>
 function shell(title: string, bodyHtml: string, ctaUrl: string, ctaLabel: string): string {
   return `<div style="margin:0;padding:24px;background:#f4f1ea;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1410">
   <div style="max-width:520px;margin:0 auto;background:#fffdf8;border:2px solid #cbbfa6;border-radius:8px;overflow:hidden">
-    <div style="background:#1a1410;color:#e8dcc0;padding:14px 20px;font-size:18px;font-weight:600;letter-spacing:.5px">Mobiwar</div>
+    <div style="background:#1a1410;color:#e8dcc0;padding:14px 20px;font-size:18px;font-weight:600;letter-spacing:.5px">MobilWar</div>
     <div style="padding:20px">
       <h1 style="margin:0 0 12px;font-size:17px;color:#1a1410">${esc(title)}</h1>
       ${bodyHtml}
@@ -39,7 +39,7 @@ function shell(title: string, bodyHtml: string, ctaUrl: string, ctaLabel: string
 
 export function verifyEmail(o: { username: string; url: string }): Template {
   const text = [
-    `Mobiwar'a hoş geldin, ${o.username}.`,
+    `MobilWar'a hoş geldin, ${o.username}.`,
     '',
     'E-posta adresini doğrulamak için aşağıdaki adresi aç:',
     o.url,
@@ -51,7 +51,7 @@ export function verifyEmail(o: { username: string; url: string }): Template {
   ].join('\n');
 
   return {
-    subject: 'Mobiwar — e-posta adresini doğrula',
+    subject: 'MobilWar — e-posta adresini doğrula',
     text,
     html: shell(
       `Hoş geldin, ${o.username}`,
@@ -77,7 +77,7 @@ export function passwordChanged(o: { username: string; worldName: string }): Tem
   const text = [
     `Merhaba ${o.username},`,
     '',
-    `Mobiwar hesabının (${o.worldName}) şifresi az önce değiştirildi.`,
+    `MobilWar hesabının (${o.worldName}) şifresi az önce değiştirildi.`,
     'Diğer cihazlardaki oturumların kapatıldı; bu cihazda açık kalmaya devam ediyorsun.',
     '',
     'Bu işlemi SEN yapmadıysan hesabın ele geçirilmiş olabilir:',
@@ -85,11 +85,11 @@ export function passwordChanged(o: { username: string; worldName: string }): Tem
   ].join('\n');
 
   return {
-    subject: 'Mobiwar — şifren değiştirildi',
+    subject: 'MobilWar — şifren değiştirildi',
     text,
     html: `<div style="margin:0;padding:24px;background:#f4f1ea;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1410">
   <div style="max-width:520px;margin:0 auto;background:#fffdf8;border:2px solid #cbbfa6;border-radius:8px;overflow:hidden">
-    <div style="background:#1a1410;color:#e8dcc0;padding:14px 20px;font-size:18px;font-weight:600;letter-spacing:.5px">Mobiwar</div>
+    <div style="background:#1a1410;color:#e8dcc0;padding:14px 20px;font-size:18px;font-weight:600;letter-spacing:.5px">MobilWar</div>
     <div style="padding:20px">
       <h1 style="margin:0 0 12px;font-size:17px;color:#1a1410">Şifren değiştirildi</h1>
       <p style="margin:0 0 10px;font-size:14px;line-height:1.5">Merhaba <strong>${esc(o.username)}</strong>,
@@ -133,7 +133,7 @@ export function deleteAccount(o: { username: string; url: string }): Template {
   ].join('\n');
 
   return {
-    subject: 'Mobiwar — hesap silme onayı',
+    subject: 'MobilWar — hesap silme onayı',
     text,
     html: shell(
       'Hesabını silmek üzeresin',
@@ -164,18 +164,18 @@ export function emailChanged(o: { username: string; newEmail: string }): Templat
   const text = [
     `Merhaba ${o.username},`,
     '',
-    `Mobiwar hesabının e-posta adresi ${o.newEmail} olarak değiştirildi.`,
+    `MobilWar hesabının e-posta adresi ${o.newEmail} olarak değiştirildi.`,
     'Doğrulama bağlantısı yeni adrese gönderildi; doğrulanana kadar hesap kısıtlı çalışır.',
     '',
     'Bu işlemi SEN yapmadıysan hesabın ele geçirilmiş olabilir — hemen bizimle iletişime geç.',
   ].join('\n');
 
   return {
-    subject: 'Mobiwar — e-posta adresin değiştirildi',
+    subject: 'MobilWar — e-posta adresin değiştirildi',
     text,
     html: `<div style="margin:0;padding:24px;background:#f4f1ea;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1410">
   <div style="max-width:520px;margin:0 auto;background:#fffdf8;border:2px solid #cbbfa6;border-radius:8px;overflow:hidden">
-    <div style="background:#1a1410;color:#e8dcc0;padding:14px 20px;font-size:18px;font-weight:600;letter-spacing:.5px">Mobiwar</div>
+    <div style="background:#1a1410;color:#e8dcc0;padding:14px 20px;font-size:18px;font-weight:600;letter-spacing:.5px">MobilWar</div>
     <div style="padding:20px">
       <h1 style="margin:0 0 12px;font-size:17px;color:#1a1410">E-posta adresin değiştirildi</h1>
       <p style="margin:0 0 10px;font-size:14px;line-height:1.5">Merhaba <strong>${esc(o.username)}</strong>,
@@ -197,7 +197,7 @@ export function resetPassword(o: { username: string; url: string }): Template {
   const text = [
     `Merhaba ${o.username},`,
     '',
-    'Mobiwar hesabın için şifre sıfırlama isteği aldık. Yeni şifreni belirlemek için:',
+    'MobilWar hesabın için şifre sıfırlama isteği aldık. Yeni şifreni belirlemek için:',
     o.url,
     '',
     `Bağlantı ${mailLimits().resetTtlMinutes} dakika geçerli ve yalnız BİR kez kullanılabilir.`,
@@ -207,7 +207,7 @@ export function resetPassword(o: { username: string; url: string }): Template {
   ].join('\n');
 
   return {
-    subject: 'Mobiwar — şifre sıfırlama',
+    subject: 'MobilWar — şifre sıfırlama',
     text,
     html: shell(
       'Şifre sıfırlama',

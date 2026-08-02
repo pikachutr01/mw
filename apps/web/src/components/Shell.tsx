@@ -199,7 +199,7 @@ function InfoBar() {
 
   /* ⭐ Pencere başlığı aktif sayfayı izler (kullanıcı, 2026-07-30); Ordular'da yalnız oyun adı. */
   useEffect(() => {
-    document.title = page && !pathname.startsWith('/armies') ? `${page} · Mobiwar` : 'Mobiwar';
+    document.title = page && !pathname.startsWith('/armies') ? `${page} · MobilWar` : 'MobilWar';
   }, [page, pathname]);
 
   const onCityScreen = CITY_SCREENS.some((r) => pathname.startsWith(r));
@@ -382,7 +382,7 @@ function SideMenu() {
   return (
     <div className="sticky top-3 space-y-3">
       <div className="flex justify-center px-2">
-        <img src="/assets/ui/logo.png" alt="Mobiwar" width={200} height={80}
+        <img src="/assets/ui/logo.png" alt="MobilWar" width={200} height={80}
           className="icon-shadow h-auto w-full max-w-[190px] object-contain" />
       </div>
 

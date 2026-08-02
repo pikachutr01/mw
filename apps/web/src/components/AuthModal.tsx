@@ -15,7 +15,7 @@
  * `onSessionChange`e abone. Ağaç kendiliğinden değişiyor ve modal onunla birlikte kalkıyor.
  */
 import { useState } from 'react';
-import { USERNAME_MAX, USERNAME_MIN, USERNAME_RULE_MESSAGE } from '@mobiwar/catalog';
+import { USERNAME_MAX, USERNAME_MIN, USERNAME_RULE_MESSAGE } from '@mobilwar/catalog';
 import { api, login, register } from '../lib/api.ts';
 import { Button, ErrorBox, Field, Input } from './ui.tsx';
 import { Modal } from './Modal.tsx';

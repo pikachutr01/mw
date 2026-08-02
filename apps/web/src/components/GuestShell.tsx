@@ -48,7 +48,7 @@ export function GuestShell({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     const page = GUEST_TITLE.find(([p]) => pathname.startsWith(p))?.[1];
-    document.title = page ? `${page} · Mobiwar` : 'Mobiwar';
+    document.title = page ? `${page} · MobilWar` : 'MobilWar';
   }, [pathname]);
 
   return (
@@ -60,7 +60,7 @@ export function GuestShell({ children }: { children: ReactNode }) {
         <header className="tex tex-header sticky top-0 z-20 border-b-2 border-strong bg-panel-header">
           <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-3 py-2 sm:gap-4">
             <NavLink to="/" className="shrink-0">
-              <img src="/assets/ui/logo.png" alt="Mobiwar" width={140} height={56}
+              <img src="/assets/ui/logo.png" alt="MobilWar" width={140} height={56}
                 className="icon-shadow h-8 w-auto object-contain sm:h-10" />
             </NavLink>
 

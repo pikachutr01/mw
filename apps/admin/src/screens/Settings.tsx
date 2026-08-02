@@ -1,12 +1,12 @@
 /**
  * ⭐ AYARLAR EKRANI (Faz 1) — form **şemadan üretilir**, elle yazılmaz.
  *
- * Alanların adı, tipi, aralığı, açıklaması ve etiketi sunucudan (`@mobiwar/settings`) geliyor.
+ * Alanların adı, tipi, aralığı, açıklaması ve etiketi sunucudan (`@mobilwar/settings`) geliyor.
  * Panelde elle bir form yazsaydık yeni bir ayar eklendiğinde iki yeri güncellemek gerekirdi ve
  * biri unutulduğunda ayar ya görünmez ya da sunucunun reddettiği bir alan olurdu.
  */
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import type { SettingDef, SettingGroup } from '@mobiwar/settings';
+import type { SettingDef, SettingGroup } from '@mobilwar/settings';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
 import {

@@ -16,8 +16,8 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { UNITS_BY_ID, wallRepairSeconds } from '@mobiwar/catalog';
-import { distance, ENGINE_VERSION, travelSeconds } from '@mobiwar/engine';
+import { UNITS_BY_ID, wallRepairSeconds } from '@mobilwar/catalog';
+import { distance, ENGINE_VERSION, travelSeconds } from '@mobilwar/engine';
 import { buildBattleReport, type BattleRow } from '../src/battles/battle-report.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';

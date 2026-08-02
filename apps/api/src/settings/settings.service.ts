@@ -21,11 +21,11 @@ import { sql } from 'drizzle-orm';
 import type postgres from 'postgres';
 import {
   applySettings, validatePatch, type EffectiveSettings, type SettingValue,
-} from '@mobiwar/settings';
-import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
+} from '@mobilwar/settings';
+import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
 import {
   catalogHash, mergeCatalogConfig, type CatalogConfig, type DeepPartialCatalog,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import type { Db } from '../db/client.ts';
 import { catalogOverrides } from './catalog.ts';
 import { combatOverrides, lootOverrides } from './combat.ts';

@@ -18,7 +18,7 @@ import {
   Controller, Get, HttpCode, Inject, NotFoundException, Param, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { BUILDINGS_BY_ID, TECHS_BY_ID, UNITS_BY_ID } from '@mobiwar/catalog';
+import { BUILDINGS_BY_ID, TECHS_BY_ID, UNITS_BY_ID } from '@mobilwar/catalog';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { AuthService } from '../auth/auth.service.ts';
 import { CityService } from '../cities/city.service.ts';

@@ -2,7 +2,7 @@
  * ⭐ SOHBET LİMİTLERİ (§13.12.4).
  *
  * ⚠️ **Artık `.env`den değil AYARLARDAN okunuyor** (admin Faz 1). Varsayılanlar ve gerekçeler
- * `@mobiwar/settings` şemasında; `.env` yalnız geriye uyum için hâlâ okunuyor ve **DB'nin
+ * `@mobilwar/settings` şemasında; `.env` yalnız geriye uyum için hâlâ okunuyor ve **DB'nin
  * ALTINDA** kalıyor — panelden kaydedilen değer env'i ezer. Tersi olsaydı panelden yapılan
  * değişiklik sunucu yeniden başlayınca sessizce geri alınırdı.
  *

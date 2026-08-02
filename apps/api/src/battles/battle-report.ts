@@ -19,7 +19,7 @@
  * koordinatlar, mağara dökümü) ÖNCEKİ savaş satırlarında yeni alanlar YOKTUR — hepsi
  * opsiyoneldir ve yoksa rapor eski davranışına düşer (ör. "N kahraman düştü" notu).
  */
-import { LEVEL_BASED, UNITS_BY_ID } from '@mobiwar/catalog';
+import { LEVEL_BASED, UNITS_BY_ID } from '@mobilwar/catalog';
 
 export type ReportSide = 'attacker' | 'defender';
 

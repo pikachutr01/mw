@@ -4,7 +4,7 @@
  * JS sürümünden (mobiwar-engine.js v0.6.0) FARKLARI:
  *   1. `Math.random()` YOK → enjekte edilen seed'li PRNG (§5). Savaş yeniden oynatılabilir.
  *   2. `global.__X` override'ları YOK → `CombatConfig` (§13.7).
- *   3. Birim id'leri İngilizce (§13.14), statlar `@mobiwar/catalog`'tan gelir.
+ *   3. Birim id'leri İngilizce (§13.14), statlar `@mobilwar/catalog`'tan gelir.
  *   4. ⭐ SAVUNMA TABANI (§13.11.10) eklendi — her savunma tipinden en az 4 kalır.
  *   5. Enkaz/XP artık NET kayıptan (taban ile geri gelenler ölü sayılmaz) — sonsuz enkaz çiftliği yok.
  *
@@ -15,7 +15,7 @@ import {
   FLYING, NONCOMBAT, NO_POOL, NO_ROUND_LOSS, OUT_OF_BATTLE, PASSIVE_STRUCTS, SETTLE_ON_LOSS,
   LEVEL_BASED, TECHS_BY_ID, TECH_BY_UNIT, UNITS, UNITS_BY_ID, catalogHash,
   type TechLevels, type UnitDef,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import { type CombatConfig, type DeepPartial, DEFAULT_COMBAT_CONFIG, mergeCombatConfig } from './config.ts';
 import { createRng, type Rng } from './rng.ts';
 import type {

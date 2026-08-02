@@ -10,7 +10,7 @@
  * ⚠️ Aynı sözleşme geçerli: **değiştirilmiş ayar yoksa `undefined`** → formüller kendi
  * `DEFAULT_CATALOG_CONFIG`ini aynen kullanır ve çıktı bit-bit eskisiyle aynı olur.
  */
-import type { DeepPartialCatalog } from '@mobiwar/catalog';
+import type { DeepPartialCatalog } from '@mobilwar/catalog';
 
 type Values = Readonly<Record<string, Record<string, number | boolean> | undefined>>;
 

@@ -1,5 +1,5 @@
 /**
- * @mobiwar/engine — savaş motoru. SAF ve YAN ETKİSİZ: girdi → çıktı.
+ * @mobilwar/engine — savaş motoru. SAF ve YAN ETKİSİZ: girdi → çıktı.
  * DB, zaman, IO bilmez; rastgelelik yalnız enjekte edilen seed'li PRNG'den gelir (§5).
  *
  * Aynı motor hem gerçek savaşları hem menüdeki dahili simülatörü besler.

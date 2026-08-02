@@ -4,7 +4,7 @@
  * Küçük sunucu profilinde (§4.0) `ROLE=all` iken API süreciyle AYNI süreçte çalışır;
  * `ROLE=worker` ise yalnız bu döngüler koşar. Kod aynı, fark yalnız neyin başlatıldığı.
  */
-import type { CombatConfig, DeepPartial, LootConfig } from '@mobiwar/engine';
+import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
 import { CAVE_HANDLERS } from '../cave/cave.handlers.ts';
 import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';

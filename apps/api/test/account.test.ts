@@ -134,7 +134,7 @@ describe('hesap silme', () => {
     const [a] = await h.db.execute<Record<string, unknown>>(sql`
       SELECT email, email_verified_at, password_hash FROM accounts WHERE id = ${accountId}
     `);
-    expect(String(a!['email'])).toBe(`silinmis+${accountId}@mobiwar.invalid`);
+    expect(String(a!['email'])).toBe(`silinmis+${accountId}@mobilwar.invalid`);
     expect(a!['email_verified_at']).toBeNull();
 
     // Eski parolayla giriş ARTIK ÇALIŞMIYOR (hash rastgeleye çevrildi).

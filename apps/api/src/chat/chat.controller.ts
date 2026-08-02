@@ -15,7 +15,7 @@ import {
   HttpStatus, Inject, NotFoundException, Param, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { chatReportRequest, openDmRequest, sendChatRequest } from '@mobiwar/contracts';
+import { chatReportRequest, openDmRequest, sendChatRequest } from '@mobilwar/contracts';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { UNVERIFIED_CODE } from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';

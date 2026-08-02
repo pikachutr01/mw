@@ -3,7 +3,7 @@
  *
  * ⚠️ `apps/web/src/lib/api.ts`'in KOPYASI DEĞİL, sadeleştirilmiş kardeşi. Oyun istemcisi
  * uçuşta tek yenileme sözü, oturum yayını, cihaz kimliği gibi işleri taşıyor; panelin hiçbirine
- * ihtiyacı yok. Ortak olan tek şey **sunucu sözleşmesi**, o da `@mobiwar/contracts`'ta.
+ * ihtiyacı yok. Ortak olan tek şey **sunucu sözleşmesi**, o da `@mobilwar/contracts`'ta.
  *
  * ⚠️ Panel oturumu oyun oturumundan **ayrı anahtarda** (`mw-admin-session`) tutulur. Aynı
  * anahtarı paylaşsalardı panelden çıkış oyundan da atardı — ve daha kötüsü, oyun sekmesindeki

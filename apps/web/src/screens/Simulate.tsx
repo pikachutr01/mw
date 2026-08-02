@@ -16,8 +16,8 @@
 import { useState } from 'react';
 import {
   TECHS, TECH_ORDER, UNITS, WARRIOR_ORDER, DEFENSE_ORDER, orderBy,
-} from '@mobiwar/catalog';
-import { HERO_POINTS_PER_LEVEL } from '@mobiwar/contracts';
+} from '@mobilwar/catalog';
+import { HERO_POINTS_PER_LEVEL } from '@mobilwar/contracts';
 import { api } from '../lib/api.ts';
 import { fmt } from '../lib/hooks.ts';
 import { AmountInput, Button, CatalogIcon, ErrorBox, Panel } from '../components/ui.tsx';

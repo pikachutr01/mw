@@ -13,7 +13,7 @@
  * Kapalı seçenek **gizlenmez**, sebebiyle gösterilir — oyuncu neden yapamadığını görmeli.
  */
 import { useState } from 'react';
-import { armySpeed, distance, travelSeconds } from '@mobiwar/engine';
+import { armySpeed, distance, travelSeconds } from '@mobilwar/engine';
 import { fmt, formatDuration } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useOpenChat } from '../lib/chat-context.tsx';

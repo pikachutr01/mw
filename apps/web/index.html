@@ -23,17 +23,22 @@
   <meta name="theme-color" content="#1a1410" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Mobiwar</title>
+  <title>MobilWar</title>
   <!-- ⭐ Ana sayfa artık herkese açık (§9.3.6): arama motoru ve paylaşım önizlemesi için
-       künye şart. `og:image` mutlak adres ister; dağıtımda alan adıyla güncellenecek. -->
+       künye şart.
+       ⚠️ `og:image` ve `og:url` **mutlak** olmak ZORUNDA — paylaşım önizlemesini üreten bot
+       sayfayı kendi sunucusunda çözer, göreli yol onda hiçbir şeye denk gelmez. Bu yüzden
+       alan adı (`mobilwar.com`) burada gömülü; localhost'ta önizleme yanlış görünür ama
+       önizlemeyi zaten yalnız botlar okur. Alan adı değişirse bu iki satır da değişir. -->
   <meta name="description"
     content="Zamanlanmış olaylar üzerine kurulu ortaçağ strateji oyunu. Başkentini kur, ordularını yönet, ittifak kur — savaş simülatörünü üye olmadan dene." />
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Mobiwar" />
-  <meta property="og:title" content="Mobiwar — ortaçağ strateji oyunu" />
+  <meta property="og:site_name" content="MobilWar" />
+  <meta property="og:title" content="MobilWar — ortaçağ strateji oyunu" />
   <meta property="og:description"
     content="Başkentini kur, ordularını yönet, dünyayı paylaş. Savaş simülatörü üyeliksiz." />
-  <meta property="og:image" content="/assets/ui/logo.png" />
+  <meta property="og:url" content="https://mobilwar.com/" />
+  <meta property="og:image" content="https://mobilwar.com/assets/ui/logo.png" />
   <meta name="twitter:card" content="summary" />
 </head>
 

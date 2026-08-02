@@ -160,7 +160,7 @@ function LoginScreen({ onDone }: { onDone: (s: AdminSession) => void }) {
   return (
     <div className="flex min-h-dvh items-center justify-center p-4">
       <form onSubmit={submit} className="w-full max-w-sm space-y-3">
-        <h1 className="display text-center text-lg tracking-wide text-ink">MOBIWAR · YÖNETİM</h1>
+        <h1 className="display text-center text-lg tracking-wide text-ink">MOBILWAR · YÖNETİM</h1>
         <Panel title="Giriş">
           <div className="space-y-3 p-3">
             {/* ⚠️ KULLANICI ADI, e-posta değil: oyunun `/auth/login` ucu `username` bekliyor
@@ -202,7 +202,7 @@ function TopBar({ me, onSignOut, onElevated, stepUpOpen, setStepUpOpen }: {
     <header className="sticky top-0 z-10 border-b border-border bg-panel-header px-3 py-2">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
         <span className="display text-sm tracking-wider text-on-panel-header">
-          MOBIWAR · YÖNETİM
+          MOBILWAR · YÖNETİM
         </span>
         <div className="flex items-center gap-2 text-xs text-on-panel-header">
           {me ? (

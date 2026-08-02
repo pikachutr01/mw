@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { farmOutput, mineOutput, STARTING_RESOURCES } from '@mobiwar/catalog';
+import { farmOutput, mineOutput, STARTING_RESOURCES } from '@mobilwar/catalog';
 import type { DeviceContext } from '../src/abuse/device-signal.service.ts';
 import { AuthError, AuthService } from '../src/auth/auth.service.ts';
 import { PasswordService } from '../src/auth/password.service.ts';

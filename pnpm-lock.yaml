@@ -23,16 +23,16 @@ importers:
 
   apps/admin:
     dependencies:
-      '@mobiwar/catalog':
+      '@mobilwar/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog
-      '@mobiwar/contracts':
+      '@mobilwar/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@mobiwar/design-tokens':
+      '@mobilwar/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
-      '@mobiwar/settings':
+      '@mobilwar/settings':
         specifier: workspace:*
         version: link:../../packages/settings
       '@tanstack/react-query':
@@ -78,16 +78,16 @@ importers:
       '@fastify/cors':
         specifier: ^10.0.1
         version: 10.1.0
-      '@mobiwar/catalog':
+      '@mobilwar/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog
-      '@mobiwar/contracts':
+      '@mobilwar/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@mobiwar/engine':
+      '@mobilwar/engine':
         specifier: workspace:*
         version: link:../../packages/engine
-      '@mobiwar/settings':
+      '@mobilwar/settings':
         specifier: workspace:*
         version: link:../../packages/settings
       '@nestjs/common':
@@ -145,16 +145,16 @@ importers:
 
   apps/web:
     dependencies:
-      '@mobiwar/catalog':
+      '@mobilwar/catalog':
         specifier: workspace:*
         version: link:../../packages/catalog
-      '@mobiwar/contracts':
+      '@mobilwar/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@mobiwar/design-tokens':
+      '@mobilwar/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
-      '@mobiwar/engine':
+      '@mobilwar/engine':
         specifier: workspace:*
         version: link:../../packages/engine
       '@tanstack/react-query':
@@ -209,7 +209,7 @@ importers:
 
   packages/contracts:
     dependencies:
-      '@mobiwar/catalog':
+      '@mobilwar/catalog':
         specifier: workspace:*
         version: link:../catalog
       zod:
@@ -234,7 +234,7 @@ importers:
 
   packages/engine:
     dependencies:
-      '@mobiwar/catalog':
+      '@mobilwar/catalog':
         specifier: workspace:*
         version: link:../catalog
     devDependencies:
@@ -247,7 +247,7 @@ importers:
 
   packages/settings:
     dependencies:
-      '@mobiwar/catalog':
+      '@mobilwar/catalog':
         specifier: workspace:*
         version: link:../catalog
     devDependencies:

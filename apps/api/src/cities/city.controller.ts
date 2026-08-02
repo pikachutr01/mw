@@ -10,14 +10,14 @@ import {
   HttpCode, Inject, NotFoundException, Param, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import { enqueueRequest } from '@mobiwar/contracts';
+import { enqueueRequest } from '@mobilwar/contracts';
 import {
   defenseStructureCost, BUILDINGS, BUILDINGS_BY_ID, BUILDING_ORDER, BUILDING_REQUIREMENTS,
   DEFENSE_ORDER, TECHS, TECHS_BY_ID, TECH_ORDER, TECH_REQUIREMENTS,
   UNITS, UNITS_BY_ID, UNIT_REQUIREMENTS, WARRIOR_ORDER,
   buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, timeFromCost,
   trainingTimeSeconds, unitCost,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import {

@@ -1,8 +1,12 @@
-# Mobiwar — yeniden inşa
+# MobilWar — yeniden inşa
 
-Tersine mühendislikle çözülen Mobiwar'ın modern yeniden yazımı.
-Tasarımın tamamı depo dışındaki `MOBIWAR_SISTEM_PLANI.md` dosyasındadır; bu README yalnız kodun
-nasıl çalıştırılacağını anlatır. Kod/dosya/URL **İngilizce**, açıklamalar **Türkçe** (§13.14).
+Tersine mühendislikle çözülen J2ME oyunu **Mobiwar**'ın modern yeniden yazımı. Ürünün adı
+**MobilWar** (`mobilwar.com`); `docs/` altında geçen *Mobiwar* yazımları **orijinal oyuna**
+aittir ve bilerek korunur.
+
+Tasarımın tamamı `docs/MOBIWAR_SISTEM_PLANI.md` dosyasındadır (2026-07-31'de depoya alındı);
+başlangıç için `docs/BASLANGIC.md`. Bu README yalnız kodun nasıl çalıştırılacağını anlatır.
+Kod/dosya/URL **İngilizce**, açıklamalar **Türkçe** (§13.14).
 
 ## Hızlı başlangıç
 
@@ -20,7 +24,7 @@ docker compose -f compose.dev.yml up -d
 API'yi çalıştır (varsayılan port 3002):
 
 ```bash
-cp .env.example .env && pnpm --filter @mobiwar/api dev
+cp .env.example .env && pnpm --filter @mobilwar/api dev
 ```
 
 Sağlık kontrolü: <http://localhost:3002/healthz> — motor sürümünü ve katalog hash'ini de döner.

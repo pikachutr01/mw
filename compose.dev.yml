@@ -5,14 +5,14 @@ services:
     image: postgres:17-alpine
     container_name: mw-postgres
     environment:
-      POSTGRES_USER: mobiwar
-      POSTGRES_PASSWORD: mobiwar
-      POSTGRES_DB: mobiwar
+      POSTGRES_USER: mobilwar
+      POSTGRES_PASSWORD: mobilwar
+      POSTGRES_DB: mobilwar
       # citext uzantısı migration'da açılır (accounts.email)
     ports: ['5432:5432']
     volumes: ['mw-pgdata:/var/lib/postgresql/data']
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U mobiwar -d mobiwar']
+      test: ['CMD-SHELL', 'pg_isready -U mobilwar -d mobilwar']
       interval: 5s
       timeout: 3s
       retries: 10

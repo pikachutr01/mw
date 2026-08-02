@@ -1,5 +1,5 @@
 /**
- * @mobiwar/settings — panelden düzenlenebilen sabitlerin **şeması ve uygulanışı**.
+ * @mobilwar/settings — panelden düzenlenebilen sabitlerin **şeması ve uygulanışı**.
  *
  * Saf paket: DB, HTTP, React bilmez. Sunucu doğrulaması da panelin form üretimi de aynı
  * listeden beslenir; iki yerde tanımlansaydı panel var olmayan bir ayarı gösterir ya da

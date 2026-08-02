@@ -18,11 +18,11 @@ import {
   wallCurrentIntegrity,
   wallRepairSeconds,
   pickHeroName,
-} from '@mobiwar/catalog';
+} from '@mobilwar/catalog';
 import {
   calculateLoot, createRng, DEFAULT_COMBAT_CONFIG, DEFAULT_LOOT_CONFIG, simulate,
   type LootResult, type SimulateInput, type SimulateResult,
-} from '@mobiwar/engine';
+} from '@mobilwar/engine';
 import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
 import { toDate } from '../db/client.ts';
 import type { CityService } from '../cities/city.service.ts';

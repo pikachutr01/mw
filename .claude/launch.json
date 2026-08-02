@@ -6,7 +6,7 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
-        "@mobiwar/web",
+        "@mobilwar/web",
         "dev"
       ],
       "port": 5173

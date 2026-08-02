@@ -1,4 +1,4 @@
-import type { TechLevels, UnitDef } from '@mobiwar/catalog';
+import type { TechLevels, UnitDef } from '@mobilwar/catalog';
 
 /** Birim id → adet. */
 export type UnitCounts = Record<string, number>;

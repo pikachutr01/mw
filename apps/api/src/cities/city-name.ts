@@ -1,9 +1,9 @@
 /**
  * Şehir / kahraman adının **zod** sarmalı. Kuralın kendisi katalogda
- * (`@mobiwar/catalog` → `name-rules.ts`): sunucu doğrulaması ile ad üreteçleri aynı sayıya
+ * (`@mobilwar/catalog` → `name-rules.ts`): sunucu doğrulaması ile ad üreteçleri aynı sayıya
  * bakmak zorunda, bu yüzden sınır orada tek yerde duruyor.
  */
-import { NAME_MAX, NAME_MIN, NAME_PATTERN, NAME_RULE_MESSAGE, normalizeName } from '@mobiwar/catalog';
+import { NAME_MAX, NAME_MIN, NAME_PATTERN, NAME_RULE_MESSAGE, normalizeName } from '@mobilwar/catalog';
 import { z } from 'zod';
 
 /**

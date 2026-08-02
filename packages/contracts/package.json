@@ -1,5 +1,5 @@
 {
-  "name": "@mobiwar/contracts",
+  "name": "@mobilwar/contracts",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mobiwar/catalog": "workspace:*",
+    "@mobilwar/catalog": "workspace:*",
     "zod": "^3.24.1"
   },
   "devDependencies": {

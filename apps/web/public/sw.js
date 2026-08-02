@@ -1,7 +1,7 @@
 /*
  * ⭐ SERVICE WORKER — **BİLEREK ÇEVRİMDIŞI DESTEĞİ YOK** (kullanıcı kararı).
  *
- * Mobiwar'da her ekran sunucu durumudur: kaynak birikimi, geri sayım, gelen ordu. Önbellekten
+ * MobilWar'da her ekran sunucu durumudur: kaynak birikimi, geri sayım, gelen ordu. Önbellekten
  * çizilen bir sayfa oyuncuya **yanlış** bir dünya gösterirdi ("gelen saldırı yok" derken saldırı
  * yolda olurdu) ve bu, oyunun kaybettirebilen bir yalanı olurdu. Bu yüzden burada hiçbir yanıt
  * saklanmıyor; SW yalnız iki iş yapıyor:
@@ -49,12 +49,12 @@ self.addEventListener('push', (event) => {
     data = {};
   }
 
-  const title = data.title || 'Mobiwar';
+  const title = data.title || 'MobilWar';
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',
       // `tag` aynı olanlar birikmez, ÜSTÜNE yazar: bir sohbetten üç mesaj = tek satır.
-      tag: data.tag || 'mobiwar',
+      tag: data.tag || 'mobilwar',
       renotify: true,
       icon: '/icon-192.png',
       badge: '/icon-192.png',
