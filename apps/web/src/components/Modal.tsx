@@ -15,6 +15,23 @@ import { Button } from './ui.tsx';
 
 /* ── Modal ─────────────────────────────────────────────────────────────────── */
 
+/**
+ * ⚠️ **KAYDIRMA KİLİDİ SAYILARAK TUTULUR, HER MODAL KENDİ YEDEĞİNİ ALMAZ.**
+ *
+ * Eskiden her `Modal` açılışta `body.style.overflow`u kendi içine yedekliyor, kapanışta geri
+ * yazıyordu. İki modal aynı anda açıkken bu bozuluyor: ikincisi yedek olarak birincinin
+ * bıraktığı `'hidden'`i alıyor, önce BİRİNCİ kapanırsa ikinci kapandığında `'hidden'` geri
+ * yazılıyor ve **sayfa kalıcı olarak kaydırılamaz kalıyordu** (yenilemeden düzelmiyor).
+ *
+ * Üst üste modal istisna değil: `ConfirmProvider` de bir `Modal` çiziyor, yani "modalın
+ * içinden onay iste" (ordu iptali gibi) her seferinde iki modal demek.
+ *
+ * Doğrusu: özgün değeri **ilk** modal saklar, **son** modal geri verir.
+ * `StrictMode`'un çift etkisi güvenli — sayaç 1→0→1 gidip aynı değeri geri koyar.
+ */
+let openModalCount = 0;
+let overflowBeforeFirstModal = '';
+
 export function Modal({
   title, onClose, children, footer, width = 'md',
 }: {
@@ -45,12 +62,14 @@ export function Modal({
     const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') closeRef.current(); };
     document.addEventListener('keydown', onKey);
     // Modal açıkken arkadaki sayfa kaymamalı (mobilde en çok bozulan davranış).
-    const prev = document.body.style.overflow;
+    if (openModalCount === 0) overflowBeforeFirstModal = document.body.style.overflow;
+    openModalCount += 1;
     document.body.style.overflow = 'hidden';
     boxRef.current?.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
+      openModalCount -= 1;
+      if (openModalCount === 0) document.body.style.overflow = overflowBeforeFirstModal;
     };
   }, []);
 

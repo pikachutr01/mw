@@ -28,7 +28,8 @@ import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
 import { useConfirm } from './Modal.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
-import { Panel, Res, Skeleton } from './ui.tsx';
+import { InstallButton } from './InstallButton.tsx';
+import { MenuIcon, Panel, Res, Skeleton } from './ui.tsx';
 
 /**
  * Sol menü sırası orijinaldeki gibi (`images/scr_web05` sol sütun). Mesajlar orijinalin **web**
@@ -125,26 +126,6 @@ export function ActivityDot() {
   return (
     <span aria-label="bu şehirde süren iş var"
       className="inline-block h-2 w-2 shrink-0 rounded-full bg-success shadow-[0_0_4px_var(--mw-color-success)]" />
-  );
-}
-
-/**
- * Sol menü ve mobil alt barın ortak simgesi. `GuestShell` de aynı seti kullanıyor.
- *
- * ⚠️ Dosya yoksa **kırık görsel yerine aynı ölçüde boşluk** bırakılır — `CatalogIcon`
- * (`ui.tsx:171-173`) yıllardır böyle yapıyordu, bu bileşende yoktu. Yeni bir menü maddesi
- * eklenip simgesi henüz çizilmediğinde menüde kırık resim simgesi çıkıyordu.
- */
-export function MenuIcon({ id, size }: { id: string; size: number }) {
-  const [broken, setBroken] = useState(false);
-  if (broken) {
-    return <span aria-hidden className="block shrink-0" style={{ width: size, height: size }} />;
-  }
-  return (
-    <img src={`/assets/menu/${id}.png`} alt="" aria-hidden width={size} height={size}
-      onError={() => setBroken(true)}
-      className="icon-shadow shrink-0 object-contain"
-      style={{ width: size, height: size }} />
   );
 }
 
@@ -408,6 +389,9 @@ function SideMenu() {
               </NavLink>
             );
           })}
+          {/* ⭐ Kurulum daveti çıkıştan ÖNCE: «Oyunu Kapat» menünün kapanış hareketi,
+              altına bir şey koymak onu listenin ortasında bırakıyor. */}
+          <InstallButton variant="side" />
           <button
             onClick={() => { void logout().then(() => window.location.reload()); }}
             className="mt-1 flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-transparent
@@ -594,6 +578,8 @@ function MoreSheet() {
                 {m.label}
               </NavLink>
             ))}
+            {/* Masaüstü menüsüyle aynı sıra: kurulum daveti, sonra çıkış. */}
+            <InstallButton variant="sheet" onDone={() => setOpen(false)} />
             <button type="button" onClick={() => void quit()}
               className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px]
                 text-danger hover:bg-raised/40">

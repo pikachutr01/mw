@@ -7,8 +7,8 @@
  *     çağırıyor. "Oturum varsa çağır" diye bir şey yok; yine iki ayrı bileşen gerekirdi.
  *  2. **Misafir düzeni alt küme değil, FARKLI bir düzen:** üst bar var; sol menü, sağ panel ve
  *     mobil alt bar yok. Ortak kod ~26 satırlık, kancasız bir ızgaradan ibaret.
- *  3. Asıl risk oturumlu deneyimin bozulması. Bu yaklaşımda `Shell.tsx`in diff'i **tek kelime**
- *     (`MenuIcon` export edildi) — dokunmadığın kod bozulmaz.
+ *  3. Asıl risk oturumlu deneyimin bozulması. Bu yaklaşımda `Shell.tsx`e hiç dokunulmadı —
+ *     ortak `MenuIcon` `ui.tsx`te duruyor (oraya 2026-08-02'de taşındı).
  *
  * ⚠️ Burada **hiçbir oyun sorgusu yok**. Misafirde 401 yağmuru olmamasının ikinci güvencesi
  * `queries.ts`teki `useAuthed()` kapısı (§9.3.3); bu bileşen o kapıya güvenmiyor, zaten
@@ -17,8 +17,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { AuthModal, type AuthMode } from './AuthModal.tsx';
-import { Button } from './ui.tsx';
-import { MenuIcon } from './Shell.tsx';
+import { Button, MenuIcon } from './ui.tsx';
 
 /** Misafirin gezebildiği tek iki ekran. Geri kalan her şey oturum istiyor. */
 const GUEST_MENU = [

@@ -179,6 +179,31 @@ export function CatalogIcon({
   );
 }
 
+/**
+ * Sol menü, mobil alt bar ve «Daha» listesinin ortak simgesi (`assets/menu/<id>.png`).
+ *
+ * ⚠️ Dosya yoksa **kırık görsel yerine aynı ölçüde boşluk** bırakılır — `CatalogIcon` yıllardır
+ * böyle yapıyordu, bu bileşende yoktu ve yeni bir menü maddesi eklenip simgesi henüz
+ * çizilmediğinde menüde kırık resim simgesi çıkıyordu.
+ *
+ * ⚠️ **Yeri `Shell.tsx` DEĞİL burası** (2026-08-02): `InstallButton` da bu simgeyi kullanıyor ve
+ * `Shell`den almak Shell ↔ InstallButton dairesel içe aktarması yaratıyordu. Fonksiyon
+ * bildirimleri sayesinde çalışırdı ama Fast Refresh'in bozulduğu, teşhisi pahalı bir sınıf.
+ * `CatalogIcon`'un yanı zaten doğal yeri: ikisi aynı desen.
+ */
+export function MenuIcon({ id, size }: { id: string; size: number }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return <span aria-hidden className="block shrink-0" style={{ width: size, height: size }} />;
+  }
+  return (
+    <img src={`/assets/menu/${id}.png`} alt="" aria-hidden width={size} height={size}
+      onError={() => setBroken(true)}
+      className="icon-shadow shrink-0 object-contain"
+      style={{ width: size, height: size }} />
+  );
+}
+
 /* ── Tablo başlığı/hücresi ─────────────────────────────────────────────────── */
 /**
  * Dünya, Sıralamalar ve Genel Durum aynı tabloyu çiziyor. Bir zamanlar her ekran kendi `Th/Td`
