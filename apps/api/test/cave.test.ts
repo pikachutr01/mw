@@ -31,7 +31,7 @@ import { MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { QueueError, QueueService } from '../src/queues/queue.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, dueAt } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -113,10 +113,14 @@ async function caveUnitsOf(cityId: number): Promise<Record<string, number>> {
  */
 async function runDue(missionId: number): Promise<void> {
   await h.db.execute(sql`
-    UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${missionId}
+    UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${missionId}
   `);
   const r = await scheduler().tick();
   expect(r.dead).toBe(0);
+  const [row] = await h.db.execute<Record<string, unknown>>(sql`
+    SELECT status FROM missions WHERE id = ${missionId}
+  `);
+  expect(row?.['status'], `görev ${missionId} işlenmedi (tick boşa döndü)`).not.toBe('scheduled');
 }
 async function openMissions(type: string, cityId = defendCity): Promise<Record<string, unknown>[]> {
   return h.db.execute<Record<string, unknown>>(sql`

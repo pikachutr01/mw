@@ -29,7 +29,7 @@ import type { AuthedRequest } from '../src/auth/auth.guard.ts';
 import { VacationError, VacationService } from '../src/vacation/vacation.service.ts';
 import { createVacationEndHandler } from '../src/vacation/vacation.handler.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
+import { createWorld, freshWorldId, setupTestDb, verifyEmail, dueAt } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -332,7 +332,7 @@ describe('çıkış', () => {
     expect(job).toBeTruthy();
 
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${Number(job!['id'])}
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${Number(job!['id'])}
     `);
     const r = await scheduler().tick();
     expect(r.dead).toBe(0);
@@ -359,7 +359,7 @@ describe('çıkış', () => {
     `);
     expect(eski).toBeTruthy();
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${Number(eski!['id'])}
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${Number(eski!['id'])}
     `);
     const r = await scheduler().tick();
     expect(r.dead).toBe(0);
@@ -379,7 +379,7 @@ describe('çıkış', () => {
       SELECT id FROM missions WHERE world_id = ${worldId} AND type = 'vacation_end'
     `);
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${Number(job!['id'])}
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${Number(job!['id'])}
     `);
     const r = await scheduler().tick();
     expect(r.dead).toBe(0);

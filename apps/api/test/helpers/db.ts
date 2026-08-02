@@ -10,6 +10,7 @@ import { sql } from 'drizzle-orm';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { createDb, toDate, type DbHandle } from '../../src/db/client.ts';
+import { GameClockService } from '../../src/world/game-clock.service.ts';
 import { ECHO_TABLE_DDL } from '../../src/missions/echo.handler.ts';
 
 const ADMIN_URL = process.env['DATABASE_URL']
@@ -36,6 +37,37 @@ export async function setupTestDb(): Promise<DbHandle> {
     migrated = true;
   }
   return createDb(TEST_URL, { max: 8 });
+}
+
+/**
+ * ⭐ **GÖREVİ VADESİNE GETİREN ZAMAN DAMGASI — SQL `now()` DEĞİL, NODE saati.**
+ *
+ * ⚠️ Bu, 2026-08-02'de bir günü yiyen bir kırılganlığın çözümü. Testler vadeyi
+ * `execute_at = now() - interval '1 second'` diye yazıyordu; `now()` **Postgres'in** saati.
+ * Zamanlayıcı ise `claimDue`'ya `gameNow`u veriyor ve o **Node'un** saati
+ * (`GameClockService.now()` → `new Date()`). İKİ AYRI SAAT.
+ *
+ * Postgres Docker'ın Linux sanal makinesinde koşuyor ve o VM'in saati ana makineden **kayar**
+ * (özellikle uyku/uyanma sonrası). Postgres 1 saniyeden fazla ileri kaydığı anda
+ * `now() - 1 s` hâlâ Node'a göre GELECEKTE kalıyor → `claimDue` görevi ALMIYOR →
+ * `tick()` hiçbir şey yapmıyor.
+ *
+ * Ve bu **sessiz** kalıyordu: `expect(r.dead).toBe(0)` sıfır görev alındığında da geçer.
+ * Sonuç, savaşın hiç olmadığı ve sonraki okumaların `rows[0]` undefined patladığı, sebebi
+ * görünmeyen bir yığın hata. 2 saniyelik yapay sapmayla birebir yeniden üretildi (17 kırılma,
+ * aynı hata metniyle).
+ *
+ * ⚠️ **Taban `Date.now()` DEĞİL, `clock.gameNow(worldId)`.** İlk düzeltmede `Date.now()`
+ * yazmıştım; doğru sonucu veriyordu ama YANLIŞ SEBEPLE: vadeyi zamanlayıcının baktığı değere
+ * değil, ona *benzeyen* bir değere bağlıyordu. `gameNow = now() − clock_offset_ms` ve offset
+ * sıfırdan farklıysa (bakım testleri) ikisi ayrışır. Tek kaynak kuralı: karşılaştırmanın iki
+ * tarafı da AYNI fonksiyondan okunur.
+ */
+export async function dueAt(
+  clock: GameClockService, worldId: number, msAgo = 1000,
+): Promise<string> {
+  const gameNow = await clock.gameNow(worldId);
+  return new Date(gameNow.getTime() - msAgo).toISOString();
 }
 
 /** Her testin kendi dünya kimliği → testler birbirinin satırlarını görmez. */

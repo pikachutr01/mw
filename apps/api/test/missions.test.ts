@@ -18,7 +18,7 @@ import { MissionController } from '../src/missions/mission.controller.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, dueAt } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -119,12 +119,27 @@ async function messagesOf(playerId: number): Promise<Record<string, unknown>[]> 
     SELECT kind, side, subject, body FROM messages WHERE player_id = ${playerId} ORDER BY id
   `);
 }
-/** Görevi vadesine getirip tek tur koşturur. */
+/**
+ * Görevi vadesine getirip tek tur koşturur (oyun saatini beklemeden).
+ *
+ * ⚠️ **İKİ KORUMA, ikisi de acıyla öğrenildi (2026-08-02):**
+ *  1. Vade `dueAt()` ile **oyun saatinden** (`clock.gameNow`) yazılıyor, SQL `now()`'dan
+ *     değil. `claimDue` tam o değerle karşılaştırıyor; `now()` ise Postgres'in saati ve o,
+ *     Docker VM'inde ayrı işliyor (gerekçenin tamamı `helpers/db.ts` → `dueAt`).
+ *  2. Görevin **gerçekten işlendiği** doğrulanıyor. Eskiden yalnız `expect(r.dead).toBe(0)`
+ *     vardı ve o, HİÇ görev alınmadığında da geçiyordu: `tick()` boşa dönüyor, savaş hiç
+ *     olmuyor, hata sonraki okumada `rows[0] undefined` diye patlıyordu — sebebi görünmeden.
+ */
 async function runDue(missionId: number): Promise<void> {
   await h.db.execute(sql`
-    UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${missionId}
+    UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${missionId}
   `);
-  await scheduler().tick();
+  const r = await scheduler().tick();
+  expect(r.dead).toBe(0);
+  const [row] = await h.db.execute<Record<string, unknown>>(sql`
+    SELECT status FROM missions WHERE id = ${missionId}
+  `);
+  expect(row?.['status'], `görev ${missionId} işlenmedi (tick boşa döndü)`).not.toBe('scheduled');
 }
 async function openReturn(): Promise<{ id: number; payload: Record<string, unknown> } | null> {
   const rows = await h.db.execute<Record<string, unknown>>(sql`

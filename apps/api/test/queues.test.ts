@@ -22,7 +22,7 @@ import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { QUEUE_HANDLERS } from '../src/queues/queue.handlers.ts';
 import { QueueError, QueueService } from '../src/queues/queue.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
+import { createWorld, freshWorldId, setupTestDb, verifyEmail, dueAt } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -125,7 +125,7 @@ describe('yapı yükseltme', () => {
 
     // Görevi vadesine getir (oyun saatini beklemek yerine vadeyi geriye alıyoruz).
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second' WHERE id IN
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id IN
         (SELECT mission_id FROM queues WHERE id = ${q.id})
     `);
     const r = await scheduler().tick();
@@ -213,11 +213,11 @@ describe('savaşçı üretimi', () => {
     // ⭐ Üretim TEKER TEKER ve tembel: zamanı ileri almak için kuyruğun başlangıcını geriye
     //    çekiyoruz (oyun saatini beklemek yerine). Beş birimlik süre geçince beşi de eklenmiş olur.
     await h.db.execute(sql`
-      UPDATE queues SET started_at = now() - interval '1 hour', finish_at = now() - interval '1 second'
+      UPDATE queues SET started_at = ${await dueAt(clock, worldId, 3600000)}::timestamptz, finish_at = ${await dueAt(clock, worldId)}::timestamptz
        WHERE id = ${q.id}
     `);
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second'
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz
        WHERE id IN (SELECT mission_id FROM queues WHERE id = ${q.id})
     `);
     await scheduler().tick();
@@ -418,7 +418,7 @@ describe('savunma birimi üretimi', () => {
     expect(q.count).toBeNull();
 
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second'
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz
        WHERE id IN (SELECT mission_id FROM queues WHERE id = ${q.id})
     `);
     await scheduler().tick();
@@ -438,7 +438,7 @@ describe('teknik araştırma', () => {
 
     const q = await queues.enqueueTech({ cityId, playerId, type: 'blacksmithing', at });
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second'
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz
        WHERE id IN (SELECT mission_id FROM queues WHERE id = ${q.id})
     `);
     await scheduler().tick();
@@ -497,13 +497,13 @@ describe('sahiplik ve idempotency', () => {
     `);
     const missionId = Number(missionRows[0]!['mission_id']);
 
-    await h.db.execute(sql`UPDATE missions SET execute_at = now() - interval '1 s' WHERE id = ${missionId}`);
+    await h.db.execute(sql`UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${missionId}`);
     await scheduler().tick();
     expect((await buildings())['farm']).toBe(2);
 
     // Görevi elle yeniden kuyruğa alıp bir daha çalıştır: seviye ARTMAMALI.
     await h.db.execute(sql`
-      UPDATE missions SET status = 'scheduled', execute_at = now() - interval '1 s', finished_at = NULL
+      UPDATE missions SET status = 'scheduled', execute_at = ${await dueAt(clock, worldId)}::timestamptz, finished_at = NULL
        WHERE id = ${missionId}
     `);
     await scheduler().tick();
@@ -607,7 +607,7 @@ describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur
 
     // Görevi zorla yeniden kuyruğa al ve çalıştır: seviye ARTMAMALI.
     await h.db.execute(sql`
-      UPDATE missions SET status = 'scheduled', execute_at = now() - interval '1 s', finished_at = NULL
+      UPDATE missions SET status = 'scheduled', execute_at = ${await dueAt(clock, worldId)}::timestamptz, finished_at = NULL
        WHERE id = ${missionId}
     `);
     await scheduler().tick();

@@ -28,7 +28,7 @@ import { MissionController } from '../src/missions/mission.controller.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, dueAt } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -131,13 +131,27 @@ async function messagesOf(playerId: number): Promise<Record<string, unknown>[]> 
      WHERE player_id = ${playerId} ORDER BY id
   `);
 }
-/** Görevi vadesine getirip tek tur koşturur (oyun saatini beklemeden). */
+/**
+ * Görevi vadesine getirip tek tur koşturur (oyun saatini beklemeden).
+ *
+ * ⚠️ **İKİ KORUMA, ikisi de acıyla öğrenildi (2026-08-02):**
+ *  1. Vade `dueAt()` ile **oyun saatinden** (`clock.gameNow`) yazılıyor, SQL `now()`'dan
+ *     değil. `claimDue` tam o değerle karşılaştırıyor; `now()` ise Postgres'in saati ve o,
+ *     Docker VM'inde ayrı işliyor (gerekçenin tamamı `helpers/db.ts` → `dueAt`).
+ *  2. Görevin **gerçekten işlendiği** doğrulanıyor. Eskiden yalnız `expect(r.dead).toBe(0)`
+ *     vardı ve o, HİÇ görev alınmadığında da geçiyordu: `tick()` boşa dönüyor, savaş hiç
+ *     olmuyor, hata sonraki okumada `rows[0] undefined` diye patlıyordu — sebebi görünmeden.
+ */
 async function runDue(missionId: number): Promise<void> {
   await h.db.execute(sql`
-    UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${missionId}
+    UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${missionId}
   `);
   const r = await scheduler().tick();
   expect(r.dead).toBe(0);
+  const [row] = await h.db.execute<Record<string, unknown>>(sql`
+    SELECT status FROM missions WHERE id = ${missionId}
+  `);
+  expect(row?.['status'], `görev ${missionId} işlenmedi (tick boşa döndü)`).not.toBe('scheduled');
 }
 async function openMissions(type: string): Promise<Record<string, unknown>[]> {
   return h.db.execute<Record<string, unknown>>(sql`
@@ -764,7 +778,7 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
     });
     // Vadeyi 2 saat GERİYE al: görev "geç" işleniyor.
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '2 hours' WHERE id = ${m.missionId}
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId, 7200000)}::timestamptz WHERE id = ${m.missionId}
     `);
     await scheduler().tick();
 
@@ -790,7 +804,7 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
 
     // Görevi zorla yeniden kuyruğa al.
     await h.db.execute(sql`
-      UPDATE missions SET status = 'scheduled', execute_at = now() - interval '1 s', finished_at = NULL
+      UPDATE missions SET status = 'scheduled', execute_at = ${await dueAt(clock, worldId)}::timestamptz, finished_at = NULL
        WHERE id = ${m.missionId}
     `);
     const r = await scheduler().tick();
@@ -1048,7 +1062,7 @@ describe('⭐ GÖREV İPTALİ (yoldaki orduyu geri çağırma)', () => {
 
     // İptal edilen saldırı vadesi gelse bile savaş ÜRETMEZ.
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 s' WHERE id = ${missionId}
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id = ${missionId}
     `);
     await scheduler().tick();
     const battles = await h.db.execute<Record<string, unknown>>(sql`
@@ -1364,7 +1378,7 @@ describe('sur yıkımı ve onarımı', () => {
     await h.db.execute(sql`
       UPDATE cities
          SET wall_integrity = 0::numeric,
-             wall_repair_from  = now() - interval '5 hours',
+             wall_repair_from  = ${await dueAt(clock, worldId, 18000000)}::timestamptz,
              wall_repair_until = now() + interval '5 hours'
        WHERE id = ${defendCity}
     `);
@@ -1482,7 +1496,7 @@ describe('sur yıkımı ve onarımı', () => {
 
     // İkisini de vadeye getir; scheduler sırayla işler (lockCity serileştirir).
     await h.db.execute(sql`
-      UPDATE missions SET execute_at = now() - interval '1 second'
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz
        WHERE id IN (${m1.missionId}, ${m2.missionId})
     `);
     const r = await scheduler().tick();
