@@ -28,12 +28,6 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
 
-      /**
-       * 4 GB'lik kutuda Postgres ~768 MB, mevcut iki site ~790 MB kullanıyor. 512 MB heap
-       * tavanı oyuna bol geliyor ve kaçak bir bellek artışında sistemi değil YALNIZ bu
-       * süreci düşürüyor — PM2 onu saniyeler içinde geri kaldırır.
-       */
-      node_args: '--max-old-space-size=512',
       max_memory_restart: '700M',
 
       env: {
@@ -45,6 +39,14 @@ module.exports = {
        * ⚠️ `node --env-file` PM2'nin `script`inden ÖNCE gelmeli; bu yüzden yorumlayıcıya
        * argüman olarak veriliyor. `.env`i PM2'nin kendi `env` alanına kopyalamak sırları
        * `pm2 describe` ve `~/.pm2/dump.pm2` çıktısına düşürürdü.
+       *
+       * ⛔ BURAYA `node_args` EKLEME. PM2'de `node_args` bu alanın **takma adıdır**, ayrı
+       * bir alan değil: ikisi birden tanımlıysa biri diğerini sessizce eziyor. 2026-08-02'de
+       * ilk dağıtım tam olarak bu yüzden düştü — `node_args` kazandı, `--env-file` düştü ve
+       * süreç «DATABASE_URL tanımsız» diyerek açılışta öldü. Bellek tavanı da bu satırda.
+       *
+       * ⚠️ Değiştirdikten sonra `pm2 describe mobilwar` çıktısındaki «interpreter args»
+       * satırına BAK: gerçekten iki argüman da orada mı? Hata bu satırda görünür.
        */
       interpreter_args: '--env-file=/etc/mobilwar/.env --max-old-space-size=512',
 

@@ -7,7 +7,25 @@
  *
  * Kullanım (API ayakta olmalı):
  *   node apps/api/scripts/smoke.mjs [http://localhost:3099]
+ *
+ * ⛔ ÜRETİMDE ÇALIŞTIRILMAZ. Betik GERÇEK hesap açıyor, GERÇEK şehir kuruyor ve kayıt
+ * doğrulama maili tetikliyor. 2026-08-02'de canlı sunucuda bir kez koşturuldu ve sonucu şu
+ * oldu: üretim veritabanına iki test oyuncusu yazıldı ve `@smoke.local` gibi VAR OLMAYAN
+ * adreslere Resend üzerinden iki mail gönderildi — ikisi de hard bounce, üstelik hesabın
+ * ilk gönderimleri oldukları için bounce oranı bir anda %100 göründü. Veritabanı sıfırlandı
+ * ama Resend'deki kayıt geri alınamıyor.
+ *
+ * Aşağıdaki kapı bu yüzden var; kaldırma. Denemek gerekiyorsa yerelde koştur.
  */
+if (process.env['NODE_ENV'] === 'production') {
+  console.error(
+    '⛔ smoke.mjs üretimde çalıştırılamaz: gerçek hesap açar ve gerçek e-posta gönderir.\n'
+    + '   Yerelde koştur. Gerçekten üretimde denemek şartsa NODE_ENV değerini geçici\n'
+    + '   değiştirmek yerine ÖNCE bu satırların üstündeki açıklamayı oku.',
+  );
+  process.exit(1);
+}
+
 const BASE = process.argv[2] ?? 'http://localhost:3099';
 const tag = Math.random().toString(36).slice(2, 6);
 

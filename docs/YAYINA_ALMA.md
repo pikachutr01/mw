@@ -1,7 +1,11 @@
 # YAYINA ALMA — mobilwar.com
 
-> **Durum (2026-08-02):** Sunucu hazırlığı **BİTTİ**, site **henüz yayında değil**.
-> Kalan dört adım aşağıda §2'de; hepsi bilinçli ve geri alınabilir.
+> ### ✅ 2026-08-02 — **CANLIDA**
+> `https://mobilwar.com` ve `https://admin.mobilwar.com` ayakta. Sertifika alındı (üç alan,
+> 2026-10-31, otomatik yenileme), nginx blokları etkin, PM2 uygulaması `online`, veritabanı
+> 36 göçle kurulu ve `Dünya 1` tohumlandı. Kalan: Always Use HTTPS · Cloudflare Access · §4.
+>
+> **İlk dağıtım ilk denemede düştü, sebebi ve dersi §5'te.**
 >
 > Bu belge iki soruyu cevaplar: **canlıya nasıl çıkılır** (§2) ve **bundan sonra her
 > değişiklik canlıya nasıl gider** (§3). Sunucunun genel künyesi `VPS_DURUM_RAPORU.md`'de,
@@ -196,3 +200,41 @@ ssh deploy@31.210.36.185 "pm2 logs mobilwar --lines 100 --nostream"
 | 6 | **Uzak yedek kopyası** | Yedekler hâlâ **aynı sunucuda**; sunucu tamamen giderse yedek de gider (rclone/restic → B2) |
 | 7 | `og:url` / `og:image` | `apps/web/index.html`'deki mutlak adresler alan adına bağlı |
 | 8 | Sohbete düşen sırlar | **Resend API anahtarı ve root/deploy parolaları bu oturumda düz metin geçti** — yayına çıkmadan döndürülmeli |
+
+---
+
+## 5. İlk dağıtımın dersleri (2026-08-02)
+
+Üç şey kırıldı; üçü de yapılandırma, hiçbiri uygulama kodu değildi.
+
+### 5.1 PM2: `node_args` ile `interpreter_args` **aynı alan**
+Tanımda ikisi birden vardı. PM2 bunları ayrı alan sanmıyor — `node_args`, `interpreter_args`'ın
+**takma adı**. Biri diğerini ezdi, `--env-file=/etc/mobilwar/.env` düştü ve süreç açılışta
+«DATABASE_URL tanımsız» diyerek öldü.
+
+Asıl sinsi kısım: **PM2 uygulamayı «online» gösterdi.** Sağlık kontrolü olmasaydı dağıtım
+başarılı sanılırdı. `surum-yayinla.sh`'in `/healthz` adımı tam da bunun için var — 30 sn
+bekledi, cevap alamadı ve sürümü kendiliğinden geri aldı. Site hiç bozulmadı.
+
+→ Değişiklikten sonra `pm2 describe mobilwar` çıktısındaki **«interpreter args»** satırına bak.
+
+### 5.2 nginx `http2 on;` — sunucuda 1.24 var
+`http2` ayrı direktif olarak 1.25.1 ile geldi. `nginx -t` bunu **reload'dan önce** yakaladı;
+üç canlı site aynı nginx'e bağlı olduğu için bu adım pazarlıksız.
+
+### 5.3 ⛔ `smoke.mjs` üretime karşı koşturuldu
+Betik gerçek hesap açıyor ve gerçek mail gönderiyor. Sonuç: üretim veritabanına iki test
+oyuncusu, Resend'den `@smoke.local` adreslerine iki mail — **hard bounce**, üstelik hesabın
+ilk gönderimleri oldukları için bounce oranı bir anda %100 göründü.
+
+Veritabanı sıfırlandı (`DROP`/`CREATE` + 36 göç + dünya kaydı; gerçek oyuncu yoktu).
+**Resend'deki kayıt geri alınamadı.** Betiğe `NODE_ENV=production` kapısı eklendi.
+
+→ Canlıyı denemenin doğru yolu: `/healthz`, `pm2 logs` ve gerçek bir tarayıcıyla tek kayıt.
+
+### 5.4 Ne İŞE YARADI
+- **Sağlık kontrolü + otomatik geri alma**: bozuk sürüm canlıya hiç oturmadı.
+- **`nginx -t && reload` zinciri**: hatalı yapılandırma diğer siteleri düşürmedi.
+- **Sürüm dizinleri**: paket sunucuda durduğu için düzeltmeden sonra **yeni bir CI koşusu
+  gerekmedi** — aynı sürüm tek komutla yeniden yayınlandı.
+- **Göç ayrı adım**: uygulama açılamadığı hâlde şema doğru kurulmuştu.
