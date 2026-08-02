@@ -2926,8 +2926,12 @@ Anlık görüntü saatleri **00:00 · 08:00 · 16:00** (oyun saati, gece savaş�
 - **Dünya ekranındaki sıra da buradan okunur** (§13.16). Eskiden orada canlı `RANK()` vardı: doğru
   sayı ama yanlış sayı — Dünya ile Sıralamalar birbirini tutmuyordu.
 - Kahraman sıralaması **seviye, sonra tecrübe** (`seviye × 1e9 + xp` tek sütuna katlanır).
-- **İttifak sıralaması boş** — `alliances` şeması İttifak turunda gelecek; ekran uydurma veri
-  yerine sebebini yazar.
+- ✅ **İttifak sıralaması hesaplanıyor** (İttifak turunda geldi): puan = üyelerin puan toplamı,
+  yasaklı ve `alliance_score_excluded` olanlar toplamdan düşer.
+- ⭐ **Sıralama muafiyeti** (kullanıcı, 2026-08-03 · göç `0036`): `players.ranking_excluded`
+  oyuncuyu listeden gizler, `players.alliance_score_excluded` puanını ittifak toplamından
+  düşürür — **ikisi bağımsız**. Kahraman sıralaması ikisinden de etkilenmez. Panelden
+  «Sıralama muafiyeti» aksiyonuyla yönetilir (denetim kaydı yazılır).
 
 ---
 

@@ -241,3 +241,22 @@ presence, sıralama) · savaş raporu detayı · kahraman yaşam döngüsü · s
 6. **Premium** — ürün kararı gerektiriyor
 7. **Yardım + i18n**
 8. **Askerî unvanlar (gösterim) · Mağara Raporu · birim detay modalı** — küçük, tatmin edici
+
+---
+
+## ⚠️ 2026-08-03 keşfi — `moderator` ile `admin` arasında yetki farkı YOK
+
+`AdminGuard` (`apps/api/src/admin/admin.guard.ts`) rolü doğru okuyor ve `req.staff.role`e
+yazıyor, ama **bu alan sunucuda tek bir yerde tüketiliyor**: `admin.controller.ts` → `/me`
+yanıtı. Yani bugün bir `moderator`, `admin`in çağırabildiği **her ucu** çağırabiliyor —
+oyuncu cezası, toplu işlem, ham veri düzenleme, dünya duraklatma dahil.
+
+Guard'ın kendi dokümantasyonu *"hangi işlemin kime açık olduğu controller'da karara bağlanır"*
+diyor; o karar henüz hiçbir controller'da verilmemiş.
+
+**Neden bu turda düzeltilmedi:** kapsamı görünenden büyük — 40+ ucun her biri için "bu kime
+açık?" sorusunun ayrı ayrı cevaplanması gerekiyor ve yanlış cevap ya yetkiyi gereksiz kısar
+ya da sessizce açık bırakır. Ayrı bir tur konusu.
+
+**Bugünkü pratik durum güvenli:** rol yalnız elle (`scripts/rol-ver.mjs`) veriliyor, yani
+`moderator` olan biri zaten güvenilen bir kişi. Risk, ekip büyüdüğünde ortaya çıkar.

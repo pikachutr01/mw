@@ -58,11 +58,20 @@ export function previousSnapshotAt(at: Date): Date {
 export async function takeSnapshot(runner: Runner, worldId: number, at: Date): Promise<number> {
   const ts = at.toISOString();
 
-  // Silinmiş/yasaklı özneler listede kalmasın (sıra numaraları da onlarsız yeniden dizilir).
+  /**
+   * Silinmiş/yasaklı/**muaf** özneler listede kalmasın (sıra numaraları da onlarsız dizilir).
+   *
+   * ⚠️ `ranking_excluded` burada da olmak ZORUNDA: yalnız aşağıdaki INSERT'e koysaydık,
+   * muafiyet açılmadan ÖNCE yazılmış satır tabloda kalır ve oyuncu listede görünmeye devam
+   * ederdi (`ON CONFLICT` yalnız var olanı günceller, silmez).
+   */
   await runner.execute(sql`
     DELETE FROM rankings r
      WHERE r.world_id = ${worldId} AND r.kind = 'player'
-       AND NOT EXISTS (SELECT 1 FROM players p WHERE p.id = r.subject_id AND p.banned_at IS NULL)
+       AND NOT EXISTS (
+         SELECT 1 FROM players p
+          WHERE p.id = r.subject_id AND p.banned_at IS NULL AND p.ranking_excluded = false
+       )
   `);
   await runner.execute(sql`
     DELETE FROM rankings r
@@ -79,7 +88,10 @@ export async function takeSnapshot(runner: Runner, worldId: number, at: Date): P
   const players = await runner.execute<Record<string, unknown>>(sql`
     WITH ordered AS (
       SELECT id, score, RANK() OVER (ORDER BY score DESC, id ASC) AS rank
-        FROM players WHERE world_id = ${worldId} AND banned_at IS NULL
+        FROM players
+       WHERE world_id = ${worldId} AND banned_at IS NULL
+         -- ⭐ Muaf oyuncu listeye hiç girmez; sıra numaraları onsuz dizilir (§0036).
+         AND ranking_excluded = false
     )
     INSERT INTO rankings (world_id, kind, subject_id, rank, prev_rank, score, taken_at)
     SELECT ${worldId}, 'player', o.id, o.rank, NULL, o.score, ${ts}::timestamptz FROM ordered o
@@ -117,10 +129,18 @@ export async function takeSnapshot(runner: Runner, worldId: number, at: Date): P
    * ⭐ İTTİFAK SIRALAMASI (§13.15b, 2026-07-30) — puan = üyelerin puan TOPLAMI (kullanıcı
    * kuralı). Yasaklı oyuncular oyuncu sıralamasından düştüğü gibi toplamdan da düşer.
    * Üyesiz ittifak kalamaz (dağıtma siliyor) ama LEFT JOIN yine de 0 toplamla dayanıklı.
+   *
+   * ⚠️ Süzgeçte `alliance_score_excluded` var, `ranking_excluded` YOK — ikisi ayrı sorulara
+   * cevap veriyor (§0036). Oyuncu sıralamasından gizlenen bir yönetici, ittifakında gerçekten
+   * oynuyorsa puanı takımının toplamına katılmaya devam edebilmeli; ikisini birden istemek
+   * ayrı bir seçim.
    */
   const alliances = await runner.execute<Record<string, unknown>>(sql`
     WITH totals AS (
-      SELECT a.id, COALESCE(SUM(p.score) FILTER (WHERE p.banned_at IS NULL), 0) AS score
+      SELECT a.id, COALESCE(
+               SUM(p.score) FILTER (
+                 WHERE p.banned_at IS NULL AND p.alliance_score_excluded = false
+               ), 0) AS score
         FROM alliances a
         LEFT JOIN players p ON p.alliance_id = a.id
        WHERE a.world_id = ${worldId}

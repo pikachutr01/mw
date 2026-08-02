@@ -41,7 +41,13 @@ export const DB_TABLES: readonly TableSpec[] = [
     name: 'players', label: 'Oyuncular', orderBy: 'id', policy: 'edit',
     columns: ['id', 'world_id', 'account_id', 'username', 'score', 'score_base', 'alliance_id',
       'protected_until', 'vacation_until', 'vacation_since', 'vacation_ended_at',
-      'banned_at', 'ban_until', 'ban_mode', 'last_seen_at'],
+      'banned_at', 'ban_until', 'ban_mode', 'last_seen_at',
+      /**
+       * ⚠️ Görünür ama **düzenlenebilir DEĞİL** (§0036): «Sıralama muafiyeti» aksiyonundan
+       * geçmeli. Buradan elle yazmak denetim kaydını atlar — muafiyet gizli bir ayrıcalık
+       * olduğu için kimin ne zaman verdiğinin kaydı tam da gereken şey.
+       */
+      'ranking_excluded', 'alliance_score_excluded'],
     /**
      * ⚠️ `score` ve `score_base` **düzenlenebilir DEĞİL**: `score` türev
      * (`floor(score_base/1000)`) ve elle yazılan değer ilk `addScoreBase` çağrısında geri

@@ -475,25 +475,24 @@ function Tabs<T extends string>({
 }
 
 /**
- * "güncelleme 08:00 · sıradaki 16:00" — sıranın neden donuk olduğunu ekranda söyler.
+ * "güncelleme 08:00" — sıranın neden donuk olduğunu ekranda söyler.
  *
  * ⚠️ Saatler **OYUN SAATİ (UTC)** ile yazılır, tarayıcının yerel saatiyle değil. Oyunun bütün
  * zaman kuralları oyun saatinde yaşıyor (gece savaşı 00:00–08:00, sıralama 00/08/16); yerel
  * saate çevirseydik UTC+3'teki oyuncu "sıralama 19:00'da" diye okur ve dokümandaki saatlerle
  * hiçbir zaman eşleşmezdi.
+ *
+ * ⚠️ **Sadeleştirildi** (kullanıcı, 2026-08-03): başlıkta yalnız son güncelleme var, "sıradaki"
+ * kaldırıldı; ipucu da tek cümleye indi. Sıradaki anı yazmak, oyuncunun ihtiyacı olmayan bir
+ * takvimi ekranın köşesine sıkıştırmaktı — bilmesi gereken tek şey verinin ne kadar taze olduğu.
  */
 function snapshotNote(r: { takenAt: string | null; nextAt: string }): React.ReactElement {
   const hhmm = (iso: string): string =>
     new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
   return (
-    <Tooltip
-      placement="left"
-      label="Sıralama günde üç kez donar: 00:00 · 08:00 · 16:00 (oyun saati, UTC)."
-    >
+    <Tooltip placement="left" label="Sıralama 8 saatte bir güncellenir.">
       <span className="cursor-help">
-        {r.takenAt
-          ? `güncelleme ${hhmm(r.takenAt)} · sıradaki ${hhmm(r.nextAt)}`
-          : `ilk güncelleme ${hhmm(r.nextAt)}`}
+        {r.takenAt ? `güncelleme ${hhmm(r.takenAt)}` : `ilk güncelleme ${hhmm(r.nextAt)}`}
       </span>
     </Tooltip>
   );

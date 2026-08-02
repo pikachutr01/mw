@@ -179,6 +179,36 @@ export function Simulate(): React.ReactElement {
   const snapshot = (): Omit<LastRun, 'v' | 'seed'> =>
     ({ repeat, night, counts, tech, heroes, temple, heroCount, vision });
 
+  /**
+   * ⭐ EKRANDAKİ SONUCU ÜRETEN GİRDİ (2026-08-03, kullanıcı hatası bildirdi).
+   *
+   * Sonuç donmuş bir fotoğraftır; form ise canlı. İkisini karıştırmak şu hataya yol açıyordu:
+   * savaştan sonra BOŞ bir kutuya (örn. Süvari) değer yazınca o satırın "kalan"ı anında
+   * kırmızı **0** görünüyordu. Çünkü `Remaining` *"bu birim savaşa girdi mi?"* sorusunu
+   * CANLI `counts`tan cevaplıyordu: yeni yazılan 50 > 0 olduğu için "girdi" sayılıyor, sonuçta
+   * o birimin anahtarı bulunmayınca `?? 0` devreye giriyor ve "hepsi öldü" gibi görünüyordu.
+   *
+   * ⚠️ Motor `undefined` (savaşa hiç girmedi) ile `0` (girdi, tamamen yok oldu) ayrımını
+   * ZATEN yapıyor (`combat.ts` → `sideResult`: `counts[e.id] = e.countFinal`, sıfır olsa bile
+   * yazılıyor; hiç girmeyen birim için anahtar yok). Hata bu anlamlı ayrımı silmekti.
+   *
+   * Çözüm: sonucu üreten fotoğrafı da sakla ve "girdi mi?" sorusunu ONA sor. Ters yön de
+   * düzeliyor — savaşa girmiş bir birimin kutusu sonradan silinince sonucu artık kaybolmuyor.
+   */
+  const [ran, setRan] = useState<Omit<LastRun, 'v' | 'seed'> | null>(null);
+
+  /**
+   * Ekrandaki sonuç, formdaki güncel girdilerle ARTIK EŞLEŞMİYOR mu?
+   *
+   * "Kalan" sütunu olmayan girdiler de (teknik, gece görüşü, tapınak, kahraman statları)
+   * sonucun tamamını geçersiz kılıyor; onlar için satır bazlı bir işaret yok, bu yüzden
+   * sonuç panelinin başında tek bir uyarı gösteriliyor.
+   *
+   * ⚠️ `JSON.stringify` karşılaştırması burada yeterli: nesne küçük, alan sırası sabit
+   * (ikisi de aynı `snapshot()` üreticisinden çıkıyor) ve render başına bir kez çalışıyor.
+   */
+  const stale = ran != null && JSON.stringify(snapshot()) !== JSON.stringify(ran);
+
   const sidePayload = (snap: Omit<LastRun, 'v' | 'seed'>, s: Side): Record<string, unknown> => ({
     counts: toCounts(snap.counts[s]),
     tech: Object.fromEntries(
@@ -214,6 +244,8 @@ export function Simulate(): React.ReactElement {
         },
       });
       setResults(r.results);
+      // ⭐ Sonuçla birlikte onu ÜRETEN girdi de saklanıyor (bkz. `ran`).
+      setRan(snap);
       setShown(0);
       // Seed ekranda yok ama cihazda duruyor — aynı savaşı tekrar oynatmanın tek yolu.
       localStorage.setItem(LAST_KEY, JSON.stringify({ v: 1, seed, ...snap } satisfies LastRun));
@@ -221,6 +253,7 @@ export function Simulate(): React.ReactElement {
     } catch (err) {
       setError(err);
       setResults(null);
+      setRan(null);
     } finally {
       setBusy(false);
     }
@@ -255,6 +288,7 @@ export function Simulate(): React.ReactElement {
     setVision({ attacker: '', defender: '' });
     setNight(false);
     setResults(null);
+    setRan(null);
   };
 
   const setCount = (s: Side, id: string, v: string): void =>
@@ -267,7 +301,7 @@ export function Simulate(): React.ReactElement {
       <div className="grid gap-3 lg:grid-cols-[1.15fr_1fr]">
         {/* ── SAVAŞÇILAR: girdi + KALAN, binary aracın ana tablosu ─────────────── */}
         <Panel title="Savaşçılar" right={view ? `${view.turns} tur` : undefined}>
-          <UnitTable units={WARRIORS} counts={counts} onCount={setCount} view={view} bothSides />
+          <UnitTable units={WARRIORS} counts={counts} ranCounts={ran?.counts ?? null} onCount={setCount} view={view} bothSides />
         </Panel>
 
         <div className="space-y-3">
@@ -357,13 +391,20 @@ export function Simulate(): React.ReactElement {
             onRows={(rows) => setHeroes((p) => ({ ...p, [s]: rows }))}
             temple={temple[s]} onTemple={(v) => setTemple((p) => ({ ...p, [s]: v }))}
             heroCount={heroCount[s]} onHeroCount={(v) => setHeroCount((p) => ({ ...p, [s]: v }))}
-            result={view ? view[s].heroes : null} />
+            /**
+             * ⚠️ Sonuç yalnız kahraman satırları DEĞİŞMEDİYSE gösteriliyor (2026-08-03).
+             * Eşleşme dizi indeksine göre yapıldığı için, var olan bir kahramanın seviyesi ya
+             * da yeteneği değiştirildiğinde eski `%durum` yeni statın sonucuymuş gibi
+             * duruyordu — `Remaining`deki hatanın kahraman tarafındaki ikizi.
+             */
+            result={view && ran && JSON.stringify(ran.heroes[s]) === JSON.stringify(heroes[s])
+              ? view[s].heroes : null} />
         ))}
       </div>
 
       {/* ── SAVUNMA YAPILARI (yalnız savunan) ──────────────────────────────────── */}
       <Panel title="Savunma yapıları" right="yalnız savunan">
-        <UnitTable units={DEFENSES} counts={counts} onCount={setCount} view={view} bothSides={false} />
+        <UnitTable units={DEFENSES} counts={counts} ranCounts={ran?.counts ?? null} onCount={setCount} view={view} bothSides={false} />
       </Panel>
 
       {/* ── ÇALIŞTIR ───────────────────────────────────────────────────────────── */}
@@ -392,7 +433,22 @@ export function Simulate(): React.ReactElement {
 
       {/* ── SONUÇ ──────────────────────────────────────────────────────────────── */}
       {results && view ? (
-        <ResultPanel results={results} shown={Math.min(shown, results.length - 1)} onShow={setShown} />
+        <>
+          {/*
+            ⭐ BAYATLIK UYARISI (2026-08-03). «Kalan» sütunu olmayan girdiler — teknikler,
+            gece görüşü, tapınak, tekrar sayısı — değiştiğinde ekrandaki sonucun tamamı
+            artık başka bir savaşa ait oluyor ama görsel olarak hiçbir şey değişmiyordu.
+            Satır bazlı işaret o girdiler için mümkün değil; tek bir şerit hepsini kapsıyor.
+          */}
+          {stale ? (
+            <div className="tex mb-3 rounded-[var(--radius-sm)] border-2 border-strong
+              bg-warning px-3 py-1.5 text-xs text-on-accent">
+              Girdiler değişti — aşağıdaki sonuç <strong>önceki savaşa</strong> ait.
+              Güncel sonuç için «Savaştır»a bas.
+            </div>
+          ) : null}
+          <ResultPanel results={results} shown={Math.min(shown, results.length - 1)} onShow={setShown} />
+        </>
       ) : null}
     </div>
   );
@@ -401,15 +457,23 @@ export function Simulate(): React.ReactElement {
 /* ── Birim tablosu: ad · saldıran · kalan · savunan · kalan ──────────────────── */
 
 function UnitTable({
-  units, counts, onCount, view, bothSides,
+  units, counts, ranCounts, onCount, view, bothSides,
 }: {
   units: typeof UNITS[number][];
   counts: Record<Side, Counts>;
+  /**
+   * ⚠️ Sonucu ÜRETEN girdi — kutulardaki canlı değerlerden AYRI (2026-08-03). "Kalan" sütunu
+   * yalnız buna bakar; ikisini tek prop'ta birleştirmek, hatanın kendisiydi (bkz. `Remaining`).
+   * Henüz koşu yoksa `null`.
+   */
+  ranCounts: Record<Side, Counts> | null;
   onCount: (s: Side, id: string, v: string) => void;
   view: SimResult | null;
   /** Savunma yapıları yalnız savunanda bulunur → saldıran sütunları çizilmez. */
   bothSides: boolean;
 }) {
+  const EMPTY: Record<Side, Counts> = { attacker: {}, defender: {} };
+  const rc = ranCounts ?? EMPTY;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -439,14 +503,14 @@ function UnitTable({
                     <NumCell min={0} placeholder="0" value={counts.attacker[u.id] ?? ''}
                       onChange={(e) => onCount('attacker', u.id, e.target.value)} />
                   </td>
-                  <Remaining id={u.id} side="attacker" counts={counts} view={view} />
+                  <Remaining id={u.id} side="attacker" counts={rc} view={view} />
                 </>
               ) : null}
               <td className="py-1 text-center">
                 <NumCell min={0} placeholder="0" value={counts.defender[u.id] ?? ''}
                   onChange={(e) => onCount('defender', u.id, e.target.value)} />
               </td>
-              <Remaining id={u.id} side="defender" counts={counts} view={view} />
+              <Remaining id={u.id} side="defender" counts={rc} view={view} />
             </tr>
           ))}
         </tbody>
@@ -460,17 +524,24 @@ function UnitTable({
  *
  * ⚠️ Sur ve Büyü Kalkanı ADET değil BÜTÜNLÜK raporlar (seviyeleri düşmez, savaş sonrası
  * onarılırlar) — motor da onları `wallIntegrity`/`shieldIntegrity` ile ayrı döndürüyor.
+ *
+ * ⚠️⚠️ **`counts` CANLI FORM DEĞİL, sonucu ÜRETEN girdidir** (`ran`, 2026-08-03). Canlı formu
+ * okumak şu hataya yol açıyordu: savaştan sonra boş bir kutuya değer yazınca "girdi sayıldı"
+ * ama sonuçta anahtarı olmadığı için `?? 0` ile kırmızı **0** basılıyordu — yani "savaşa
+ * girmedi" ile "tamamen yok oldu" karışıyordu. Bu iki durum motorda AYRI: hiç girmeyenin
+ * anahtarı yok, yok olanın anahtarı `0`.
  */
 function Remaining({ id, side, counts, view }: {
   id: string; side: Side; counts: Record<Side, Counts>; view: SimResult | null;
 }) {
-  if (!view) return <td className="py-1 pr-3 text-center text-muted">–</td>;
+  const bos = <td className="py-1 pr-3 text-center text-muted">–</td>;
+  if (!view) return bos;
   const before = num(counts[side][id]);
   const r = view[side];
 
   if (LEVEL_BASED.has(id)) {
     const integrity = id === 'wall' ? r.wallIntegrity : r.shieldIntegrity;
-    if (before <= 0 || integrity == null) return <td className="py-1 pr-3 text-center text-muted">–</td>;
+    if (before <= 0 || integrity == null) return bos;
     const pct = Math.round(integrity * 1000) / 10;
     return (
       <td className={`tnum py-1 pr-3 text-center ${pct <= 0 ? 'text-danger' : 'text-ink'}`}>
@@ -479,9 +550,16 @@ function Remaining({ id, side, counts, view }: {
     );
   }
 
-  const left = r.counts[id] ?? 0;
+  if (before <= 0) return bos;
+  /**
+   * ⚠️ `?? 0` DEĞİL: koşuya girmiş ama sonuçta anahtarı olmayan bir birim beklenmez; olursa
+   * bunu "hepsi öldü" diye göstermek yalan olur. Böyle bir hâl motorun sözleşmesi değiştiği
+   * anlamına gelir ve `–` ile görünür kalması doğrudur.
+   */
+  const raw = r.counts[id];
+  if (raw == null) return bos;
+  const left = raw;
   const restored = r.floorRestored?.[id] ?? 0;
-  if (before <= 0) return <td className="py-1 pr-3 text-center text-muted">–</td>;
   return (
     <td className={`tnum py-1 pr-3 text-center ${left <= 0 ? 'text-danger' : 'text-ink'}`}>
       {fmt(left)}

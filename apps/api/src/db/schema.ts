@@ -134,6 +134,17 @@ export const players = pgTable('players', {
    * tek ittifakta olabilir, her sorguda JOIN taşımak gereksiz.
    */
   allianceRole: smallint('alliance_role'),
+  /**
+   * ⭐ SIRALAMA MUAFİYETİ (kullanıcı, 2026-08-03) — yönetici/servis hesaplarını vitrinden gizler.
+   *
+   * ⚠️ İki ayrı bayrak, bilerek: "listede görünmesin ama ittifakının puanına katkısı sayılsın"
+   * gerçek bir durum (ittifakında oynayan bir yönetici). Tek bayrak bunu imkânsız kılardı.
+   *
+   * ⚠️ **Kahraman sıralaması ikisinden de etkilenmez** (kullanıcı şartı) — o liste `heroes`
+   * tablosundan geliyor ve sahibinin bayrağına bakmıyor.
+   */
+  rankingExcluded: boolean('ranking_excluded').notNull().default(false),
+  allianceScoreExcluded: boolean('alliance_score_excluded').notNull().default(false),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   /**
    * ⭐ HESABINI SİLDİ (2026-08-01). Satır **kalıyor**: başkent dünyada duran gerçek bir şehir

@@ -44,7 +44,11 @@ pnpm --dir mw --filter @mobilwar/admin dev
 
 Oyun 5173'te, panel **5174**'te. İkisi de `/api`yi 3002'ye proxy'liyor.
 
-### Üretimde (nginx — henüz uygulanmadı)
+### Üretimde (nginx — ✅ UYGULANDI, 2026-08-02)
+
+> ⚠️ Aşağıdaki blok **öğretici bir özet**; canlıdaki gerçek dosya `ops/nginx/admin.mobilwar.com.conf`
+> ve ondan daha fazlasını içeriyor (Cloudflare dışından gelen isteği düşüren `444` kuralı,
+> `/healthz` proxy'si, önbellek başlıkları). Değişiklik gerekiyorsa **o dosyayı** düzenle.
 
 Alt alan **`admin.mobilwar.com`** (2026-08-02 kullanıcı kararı; eskiden `yonetim.` yazıyordu).
 Önünde ayrıca **Cloudflare Access** var: panele ulaşmadan önce e-posta doğrulamalı kapı — bot

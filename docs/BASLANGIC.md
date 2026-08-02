@@ -323,7 +323,8 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 |---|---|
 | **`MOBIWAR_SISTEM_PLANI.md`** | **Projenin beyni.** Kural, formül ve gerekçe (§13.5 harita · §13.9 ekonomi · §13.11 şehir/üretim · §13.12 sohbet · §13.13 tema · §13.16 dünya). ⚠️ Yalnız **kural değişince** güncellenir, özellik bitince değil |
 | **`EKSIK_OZELLIKLER.md`** | **Tek backlog.** Yeni iş seçerken açılır (arayüz listesi de buraya katlandı) |
-| **`YAYINA_ALMA.md`** | ⭐ **Dağıtımın tek kaynağı.** Sunucu künyesi · canlıya çıkışın kalan 4 adımı · her değişikliğin canlıya nasıl gittiği ve **her kararın gerekçesi** · geri alma komutları |
+| **`DAGITIM.md`** | ⭐ **«Bunu canlıya nasıl alırım?»** — değişiklik türüne göre akış (cevap: hepsi aynı), göç kuralları (expand-contract), **servis başlat/durdur/log komutları**, ilk admin, ileride Flutter CI/CD |
+| **`YAYINA_ALMA.md`** | Sunucu künyesi · ilk kurulumda ne yapıldı · canlıya çıkışın kalan adımları · **kararların gerekçesi** |
 | `VPS_DURUM_RAPORU.md` | Sunucunun 2026-07-26 tarihli genel denetimi (temizlik, MySQL, diğer siteler). ⚠️ §0 ve §1 bayat — güncel künye `YAYINA_ALMA.md`'de |
 | `referans/teknik_ve_yapi_dokumantasyonu.md` | Oyunun kendi kuralları — tartışmalarda **resmî kaynak** |
 | `referans/TEKNIK_MANTIK_RAPORU.md` | **Savaş motoruna dokunmadan önce** — özellikle §0 "stat adları yanılsaması" |

@@ -215,6 +215,81 @@ describe('sıralama anlık görüntüsü', () => {
     expect(after.get(playerId)?.rank).toBe(1);
   });
 
+  /**
+   * ⭐ SIRALAMA MUAFİYETİ (§0036) — iki bayrak, iki ayrı soru.
+   *
+   * ⚠️ En kritik iddia sonuncusu: muaf oyuncunun **kahramanı listede kalır**. Bu kullanıcının
+   * açık şartıydı ve kahraman dalını "temizlik" niyetiyle muafiyete bağlamak, sessizce ihlal
+   * edilmesi çok kolay bir karar — testi bu yüzden var.
+   */
+  it('muaf oyuncu sıralamadan düşer', async () => {
+    const muaf = await createPlayer(h, worldId, 'muaf');
+    await setScore(playerId, 100);
+    await setScore(muaf, 500);
+    await takeSnapshot(h.db, worldId, new Date('2026-07-28T08:00:00.000Z'));
+    expect((await ranks()).get(muaf)?.rank).toBe(1);
+
+    await h.db.execute(sql`UPDATE players SET ranking_excluded = true WHERE id = ${muaf}`);
+    await takeSnapshot(h.db, worldId, new Date('2026-07-28T16:00:00.000Z'));
+
+    const after = await ranks();
+    expect(after.has(muaf)).toBe(false);
+    expect(after.get(playerId)?.rank).toBe(1);
+  });
+
+  it('ittifak toplamı YALNIZ alliance_score_excluded ile düşer', async () => {
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO alliances (world_id, name, leader_id)
+      VALUES (${worldId}, 'Muaf Testi', ${playerId}) RETURNING id
+    `);
+    const allianceId = Number(a!['id']);
+    await h.db.execute(sql`UPDATE players SET alliance_id = ${allianceId} WHERE id = ${playerId}`);
+    await setScore(playerId, 400);
+
+    const total = async (): Promise<number> => {
+      const rows = await h.db.execute<Record<string, unknown>>(sql`
+        SELECT score FROM rankings
+         WHERE world_id = ${worldId} AND kind = 'alliance' AND subject_id = ${allianceId}
+      `);
+      return Number(rows[0]?.['score'] ?? -1);
+    };
+
+    // Sıralamadan muaf ama ittifak toplamına DAHİL → puan takımında sayılmaya devam eder.
+    await h.db.execute(sql`
+      UPDATE players SET ranking_excluded = true, alliance_score_excluded = false
+       WHERE id = ${playerId}
+    `);
+    await takeSnapshot(h.db, worldId, new Date('2026-07-29T08:00:00.000Z'));
+    expect(await total()).toBe(400);
+
+    // İkinci bayrak açılınca toplamdan da düşer.
+    await h.db.execute(sql`
+      UPDATE players SET alliance_score_excluded = true WHERE id = ${playerId}
+    `);
+    await takeSnapshot(h.db, worldId, new Date('2026-07-29T16:00:00.000Z'));
+    expect(await total()).toBe(0);
+  });
+
+  it('muaf oyuncunun KAHRAMANI kahraman sıralamasında kalır', async () => {
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, name, level, xp, status)
+      VALUES (${worldId}, ${playerId}, 'Muaf Kahraman', 5, 100, 'alive') RETURNING id
+    `);
+    const heroId = Number(hero!['id']);
+
+    await h.db.execute(sql`
+      UPDATE players SET ranking_excluded = true, alliance_score_excluded = true
+       WHERE id = ${playerId}
+    `);
+    await takeSnapshot(h.db, worldId, new Date('2026-07-30T08:00:00.000Z'));
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT subject_id FROM rankings
+       WHERE world_id = ${worldId} AND kind = 'hero' AND subject_id = ${heroId}
+    `);
+    expect(rows.length).toBe(1);
+  });
+
   it('bir sonraki görevi yazar ve aynı ana İKİNCİ görev yazılamaz', async () => {
     const gameNow = new Date('2026-07-28T09:00:00.000Z');
     const at = await scheduleSnapshot(h.db, worldId, gameNow);

@@ -149,6 +149,14 @@ function LoginScreen({ onDone }: { onDone: (s: AdminSession) => void }) {
     setBusy(true);
     setError(null);
     try {
+      /*
+       * ⚠️ `worldId: 1` SABİT — oyun tarafı 2026-08-03'te dünya seçicisi kazandı, panel
+       * kazanmadı. Bilerek: rol **hesap** düzeyinde (`accounts.role`) ve bir admin tüm
+       * dünyaları yönetiyor; giriş yalnız oturumun hangi oyuncu satırına bağlanacağını
+       * belirliyor. ⚠️ Yine de bir tuzağı var: yönetici hesabının 1 numaralı dünyada bir
+       * `players` satırı YOKSA giriş sessizce «invalid_credentials» döner — mesaj "parolan
+       * yanlış" der ama sebep dünyadır. İkinci dünya açıldığı gün buraya da seçici gerekecek.
+       */
       onDone(await login({ username, password, worldId: 1 }));
     } catch (err) {
       setError(err);

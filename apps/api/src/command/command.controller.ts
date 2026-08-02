@@ -192,8 +192,11 @@ export class CommandController {
         SELECT p.username, p.score, p.score_base, p.alliance_id,
                r.rank, r.prev_rank,
                a.name AS alliance_name, ar.rank AS alliance_rank, ar.prev_rank AS alliance_prev_rank,
+               -- ⚠️ Payda sıralamadaki satır sayısıyla AYNI olmalı: muaflar listede
+               -- olmadığı için burada da sayılmaz, yoksa "12 oyuncudan 12.si" gibi
+               -- imkânsız bir ifade çıkar (§0036).
                (SELECT COUNT(*) FROM players WHERE world_id = ${player.worldId}
-                  AND banned_at IS NULL) AS total_players
+                  AND banned_at IS NULL AND ranking_excluded = false) AS total_players
           FROM players p
           LEFT JOIN rankings r
             ON r.world_id = p.world_id AND r.kind = 'player' AND r.subject_id = p.id

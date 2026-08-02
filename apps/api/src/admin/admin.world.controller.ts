@@ -200,7 +200,14 @@ export class AdminWorldController {
    * olayını birlikte üretiyor. Burada elle `takeSnapshot` çağırsaydık aynı işi ikinci bir
    * kod yolundan yapardık ve ikisi zamanla ayrışırdı.
    */
+  /**
+   * ⚠️ Adım yükseltmesi 2026-08-03'te EKLENDİ — kardeş yazma uçlarının hepsinde vardı, burada
+   * unutulmuştu. Sıralamayı elle koşturmak görünürde zararsız ama tüm oyuncuların sırasını
+   * yeniden diziyor ve `prev_rank`i kaydırıyor: bir sonraki düzenli koşumda "değişim" sütunu
+   * yanlış görünür. Yani geri alınamayan bir yazma.
+   */
   @Post('worlds/:id/ranking-run')
+  @UseGuards(AdminStepUpGuard)
   @HttpCode(200)
   async runRanking(
     @Param('id') id: string, @Req() req: AdminRequest,

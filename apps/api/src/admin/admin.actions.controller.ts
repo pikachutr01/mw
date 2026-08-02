@@ -79,6 +79,17 @@ const structureBody = z.object({
 const cancelBody = z.object({ id: z.number().int().positive() });
 const playerOnly = z.object({ playerId: z.number().int().positive() });
 
+/**
+ * ⚠️ Bayraklar `boolean` değil `'evet' | 'hayır'`: panelin form üreticisinde (`ActionForm.tsx`)
+ * `boolean` alan tipi yok, `select` var. Yeni bir alan tipi eklemek yerine mevcut olanı
+ * kullanmak paneli hiç değiştirmeden çalışmayı sağlıyor.
+ */
+const rankingExemptBody = z.object({
+  playerId: z.number().int().positive(),
+  excluded: z.enum(['evet', 'hayır']),
+  allianceToo: z.enum(['evet', 'hayır']).default('hayır'),
+});
+
 const moveCityBody = z.object({ cityId, toPlayerId: z.number().int().positive() });
 
 @Controller('api/v1/admin/actions')
@@ -466,6 +477,46 @@ export class AdminActionsController {
   }
 
   /**
+   * ⭐ SIRALAMA MUAFİYETİ (kullanıcı, 2026-08-03) — yönetici/servis hesabını vitrinden gizler.
+   *
+   * İki bayrak ayrı ayrı yazılıyor (§0036): oyuncu sıralaması ve ittifak toplamı bağımsız
+   * sorular. Kahraman sıralamasına **dokunulmuyor** — kullanıcı şartı.
+   *
+   * ⚠️ Etki ANINDA değil: `rankings` tablosu 8 saatte bir yeniden kuruluyor. Yönetici hemen
+   * görmek isterse Dünya ekranındaki «Sıralamayı şimdi güncelle» düğmesi var. Aksiyonun
+   * künye açıklaması bunu söylüyor.
+   */
+  @Post('ranking-exempt')
+  @HttpCode(200)
+  async rankingExempt(@Body() body: unknown, @Req() req: AdminRequest): Promise<{ ok: true }> {
+    const d = parse(rankingExemptBody, body);
+    const [p] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT world_id, username, ranking_excluded, alliance_score_excluded
+        FROM players WHERE id = ${d.playerId}
+    `);
+    if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
+
+    const excluded = d.excluded === 'evet';
+    /**
+     * ⚠️ Muafiyet kapatılırken ittifak bayrağı da kapanıyor: "sıralamada görünsün ama puanı
+     * takımına sayılmasın" anlamlı bir durum değil, kazara bırakılmış bir bayrak olurdu.
+     */
+    const allianceToo = excluded && d.allianceToo === 'evet';
+
+    await this.db.execute(sql`
+      UPDATE players
+         SET ranking_excluded = ${excluded}, alliance_score_excluded = ${allianceToo}
+       WHERE id = ${d.playerId}
+    `);
+    await this.audit(Number(p['world_id']), req, 'admin.action.ranking_exempt', 'player', d.playerId, {
+      before: { excluded: p['ranking_excluded'], allianceToo: p['alliance_score_excluded'] },
+      after: { excluded, allianceToo },
+      username: p['username'],
+    });
+    return { ok: true };
+  }
+
+  /**
    * Şehri başka oyuncuya taşı.
    *
    * ⚠️ Şehirle birlikte **taşınmayanlar** var ve bunlar bilerek bırakılıyor: kahramanlar
@@ -649,6 +700,26 @@ export const ADMIN_ACTIONS = [
       + 'kaynak çıpasını giriş anında bırakır ve oyuncu ilk okumada TÜM tatil süresini kaynak '
       + 'olarak alır. Bu aksiyon çıpayı da şimdiye çeker. 48 saatlik alt sınır uygulanmaz.',
     fields: [{ key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true }],
+  },
+  {
+    id: 'ranking-exempt', label: 'Sıralama muafiyeti',
+    description: 'Oyuncuyu SIRALAMA listelerinden gizler — yönetici ve servis hesapları için. '
+      + '«İttifak toplamı» evet ise puanı ittifakının toplamına da eklenmez; hayır ise listede '
+      + 'görünmez ama takımının puanına katkısı sürer. ⚠️ KAHRAMAN sıralaması bundan '
+      + 'etkilenmez: muaf oyuncunun kahramanı o listede görünmeye devam eder. '
+      + '⚠️ Etki anında değil — sıralama 8 saatte bir yeniden kuruluyor; hemen görmek için '
+      + 'Dünya ekranındaki «Sıralamayı şimdi güncelle» düğmesini kullan.',
+    fields: [
+      { key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true },
+      {
+        key: 'excluded', label: 'Sıralamadan muaf', type: 'select', options: ['evet', 'hayır'],
+        optionLabels: ['Evet', 'Hayır'], default: 'evet',
+      },
+      {
+        key: 'allianceToo', label: 'İttifak toplamından da muaf', type: 'select',
+        options: ['evet', 'hayır'], optionLabels: ['Evet', 'Hayır'], default: 'hayır',
+      },
+    ],
   },
   {
     id: 'move-city', label: 'Şehri başka oyuncuya taşı',

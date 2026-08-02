@@ -12,7 +12,8 @@ import tailwind from '@tailwindcss/vite';
  * ⚠️ `apps/web`ten HİÇBİR ŞEY import edilmez. Ortak olan tek şey paketler
  * (`contracts`, `catalog`, `design-tokens`) — ters bağımlılık yok.
  *
- * Dev'de 5174 (oyun 5173'te). Üretimde `yonetim.<alan>` alt alanı, ayrı nginx `server` bloğu.
+ * Dev'de 5174 (oyun 5173'te). Üretimde **`admin.mobilwar.com`** alt alanı, ayrı nginx `server`
+ * bloğu (`ops/nginx/admin.mobilwar.com.conf`).
  */
 const API = process.env['API_URL'] ?? 'http://localhost:3002';
 
