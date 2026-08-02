@@ -20,6 +20,7 @@ import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { coords } from '../lib/format.ts';
 import { fmt, useTick } from '../lib/hooks.ts';
 import { VerifyBanner } from './VerifyBanner.tsx';
+import { NotifyBanner } from './NotifyBanner.tsx';
 import {
   armiesBadge, useAlliance, useChatConversations, useCity, useMessages, useMovements,
   type CityDetail,
@@ -164,6 +165,9 @@ export function Shell({ children }: { children: ReactNode }) {
             <InfoBar />
             {/* Doğrulama uyarısı şehir şeridinin ÜSTÜNDE: bilgi çubuğundan sonraki ilk şey. */}
             <VerifyBanner />
+            {/* ⚠️ Bildirim daveti doğrulamadan SONRA: ikisi aynı anda görünebilir ve
+                doğrulama daha acildir (kısıtları o kaldırıyor). */}
+            <NotifyBanner />
             <CityStrip />
           </div>
 
@@ -344,8 +348,8 @@ function ConnectionDot() {
 
   const { label, note, color } = state === 'online'
     ? {
-      label: 'Canlı bağlantı açık',
-      note: 'Savaş, gelen ordu ve üretim bitişleri anında düşüyor.',
+      label: 'Sunucuya bağlandı',
+      note: 'Anlık olay bildirimleri alınıyor.',
       color: 'bg-success',
     }
     : state === 'connecting'

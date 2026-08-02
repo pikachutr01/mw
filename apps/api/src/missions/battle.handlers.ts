@@ -12,6 +12,7 @@
  *   • Ganimet savunandan **savaş anında** düşülür, saldırana **dönüş anında** eklenir.
  */
 import { sql } from 'drizzle-orm';
+import { routeOf } from './report-route.ts';
 import {
   LEVEL_BASED, UNITS_BY_ID, cancelRefund, caveRepairSeconds, dwarvesToBreakCave, heroReviveSeconds,
   heroLevelForXp,
@@ -1141,10 +1142,14 @@ async function writeMessage(ctx: HandlerContext, o: {
   subject: string;
   body: Record<string, unknown>;
 }): Promise<void> {
+  // ⭐ Güzergâh her raporda — bkz. `mission.handlers.ts` içindeki ikizi ve `report-route.ts`.
+  const route = await routeOf(ctx);
+  const body = route ? { ...o.body, route } : o.body;
+
   await ctx.tx.execute(sql`
     INSERT INTO messages (world_id, player_id, kind, side, battle_id, mission_id, subject, body, at)
     VALUES (${ctx.worldId}, ${o.playerId}, ${o.kind}, ${o.side}, ${o.battleId}, ${ctx.mission.id},
-            ${o.subject}, ${JSON.stringify(o.body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
+            ${o.subject}, ${JSON.stringify(body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
   `);
   // Mesaj yazımı ve haberi aynı yerde — bkz. `mission.handlers.ts` içindeki ikizi.
   await ctx.emit('message:written', { playerId: o.playerId, kind: o.kind });

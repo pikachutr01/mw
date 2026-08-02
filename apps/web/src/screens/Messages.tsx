@@ -11,7 +11,7 @@
  * sunucu yanıtı beklenmez (bkz. `useMarkRead`).
  */
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
@@ -420,9 +420,66 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
         <div className="mb-2 text-[11px] text-muted">
           {new Date(m.at).toLocaleString('tr-TR')}
         </div>
-        {m.battleId ? <BattleReport battleId={m.battleId} /> : <PlainBody m={m} onDone={onClose} />}
+        {/*
+          Güzergâh TÜM raporlarda ve tek yerde — gövde tipine göre tekrarlanmıyor.
+          ⚠️ Savaş raporu kendi koordinatını `battles` kaydından ayrıca alıyor (eski kayıtlarda
+          `route` yok); orası `BattleReport` içinde degrade ediyor.
+        */}
+        {!m.battleId ? (
+          <RouteLine
+            origin={(m.body?.['route'] as { origin?: Coord } | undefined)?.origin}
+            target={(m.body?.['route'] as { target?: Coord } | undefined)?.target}
+            onNavigate={onClose}
+          />
+        ) : null}
+        {m.battleId
+          ? <BattleReport battleId={m.battleId} onNavigate={onClose} />
+          : <PlainBody m={m} onDone={onClose} />}
       </div>
     </Modal>
+  );
+}
+
+interface Coord { k: number; d: number; s: number }
+
+/**
+ * ⭐ RAPOR GÜZERGÂHI — «kaynak → hedef», iki uç da TIKLANABİLİR (kullanıcı, 2026-08-02).
+ *
+ * Tıklayınca o diyar Dünya ekranında açılır (`/world/:k/:d`) ve **modal kapanır**: raporu
+ * okuyup "peki bu nerede?" diye soran oyuncunun bir sonraki adımı zaten haritaya bakmak.
+ * Modal açık kalsaydı altındaki ekranın değiştiğini görmezdi.
+ *
+ * ⚠️ Şehir NUMARASI (`s`) rotada yok — Dünya ekranı diyar listesi, şehir değil (§13.16).
+ * Koordinatın tamamı yine yazılıyor, yalnız hedef bağlantı diyar düzeyinde.
+ */
+function RouteLine({ origin, target, onNavigate }: {
+  origin?: Coord | null; target?: Coord | null; onNavigate?: () => void;
+}) {
+  const nav = useNavigate();
+  if (!origin && !target) return null;
+
+  const go = (c: Coord): void => {
+    onNavigate?.();
+    nav(`/world/${c.k}/${c.d}`);
+  };
+
+  const Part = ({ c }: { c: Coord | null | undefined }): React.ReactElement => (
+    c ? (
+      <button type="button" onClick={() => go(c)}
+        title="Dünya'da göster"
+        className="tnum rounded-[var(--radius-sm)] px-1 font-semibold text-ink underline
+          decoration-dotted underline-offset-2 transition-colors hover:bg-raised hover:text-accent">
+        {c.k}:{c.d}:{c.s}
+      </button>
+    ) : <span className="text-muted">—</span>
+  );
+
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-1 text-xs text-muted">
+      <Part c={origin} />
+      <span aria-hidden>→</span>
+      <Part c={target} />
+    </div>
   );
 }
 
@@ -578,7 +635,9 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
         {lost > 0 ? <span className="text-danger"> · {fmt(lost)} tanesi vuruldu</span> : ' · kayıp yok'}
         {Number(body['birdsBlocked'] ?? 0) > 0
           ? <span className="text-warning"> · {fmt(Number(body['birdsBlocked']))} tanesi engellendi</span> : null}
-        {body['diff'] != null ? ` · etkin fark ${String(body['diff'])}` : ''}
+        {/* ⚠️ «etkin fark» sayısı 2026-08-02'de kaldırıldı (kullanıcı): iç hesabın ara
+            değeriydi, oyuncuya hiçbir şey anlatmıyordu. Sunucu `diff`i göndermeye devam
+            ediyor — dengelemede işimize yarıyor, yalnız ekranda yazmıyor. */}
       </div>
 
       {body['level'] == null ? (
@@ -657,15 +716,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function BattleReport({ battleId }: { battleId: number }) {
+function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?: () => void }) {
   const battle = useBattle(battleId);
   if (battle.isLoading) return <div className="py-2 text-xs text-muted">Rapor yükleniyor…</div>;
   if (battle.isError) return <div className="py-2 text-xs text-danger">Rapor okunamadı.</div>;
   if (!battle.data) return null;
   const r = battle.data;
-  const coordText = (x: { k: number; d: number; s: number } | null): string =>
-    x ? `${x.k}:${x.d}:${x.s}` : '—';
-  const escaped = Object.entries(r.cave?.escaped ?? {}).filter(([, n]) => n > 0);
+  const escaped =Object.entries(r.cave?.escaped ?? {}).filter(([, n]) => n > 0);
 
   return (
     <div>
@@ -676,12 +733,8 @@ function BattleReport({ battleId }: { battleId: number }) {
           {r.turns} tur{r.night ? ' · gece savaşı' : ''}
         </span>
       </div>
-      {r.coords ? (
-        <div className="tnum mb-3 text-xs text-muted">
-          Kaynak: <b className="text-ink">{coordText(r.coords.origin)}</b>
-          {' → '}Hedef: <b className="text-ink">{coordText(r.coords.target)}</b>
-        </div>
-      ) : null}
+      {/* Diğer raporlarla aynı görünüm ve aynı davranış: tıklanınca Dünya'da açılır. */}
+      <RouteLine origin={r.coords?.origin} target={r.coords?.target} onNavigate={onNavigate} />
 
       {r.sections.map((s) => (
         <div key={s.key} className="mb-3">
@@ -788,10 +841,61 @@ function BattleReport({ battleId }: { battleId: number }) {
         <div key={n} className="text-xs text-muted">• {n}</div>
       ))}
 
-      {/* Determinizm künyesi: "sonuç neden böyle" tartışmasında kanıt oyuncunun elinde (§5). */}
-      <div className="mt-3 border-t border-border pt-2 text-[10px] text-muted">
-        motor {r.provenance.engineVersion} · katalog {r.provenance.catalogHash} · seed {r.provenance.seed}
-      </div>
+      {/*
+        Determinizm künyesi: "sonuç neden böyle" tartışmasında kanıt oyuncunun elinde (§5).
+        ⚠️ Etiketler (motor/katalog/seed) 2026-08-02'de kaldırıldı: oyuncunun bu değerleri
+        OKUMASI gerekmiyor, yalnız **bize iletebilmesi** gerekiyor. O yüzden künye artık
+        sağa yaslı, küçük ve tek tıkla kopyalanıyor.
+      */}
+      <ProvenanceLine p={r.provenance} />
+    </div>
+  );
+}
+
+/**
+ * Determinizm künyesi — motor sürümü · katalog hash'i · RNG tohumu.
+ *
+ * ⚠️ Etiketsiz ve küçük: oyuncu bu değerleri anlamak zorunda değil, yalnız bir tartışmada
+ * bize **iletebilmeli**. Bu yüzden asıl işlev kopyalama; okunabilirlik ikincil.
+ *
+ * ⚠️ `navigator.clipboard` güvenli olmayan kökende (düz `http://`, `localhost` hariç)
+ * TANIMSIZDIR — bu yüzden çağrı korumalı ve hata yutuluyor: kopyalanamaması raporu
+ * bozmamalı.
+ */
+function ProvenanceLine({ p }: { p: { seed: number; engineVersion: string; catalogHash: string } }) {
+  const [copied, setCopied] = useState(false);
+  const text = `${p.engineVersion} · ${p.catalogHash} · ${p.seed}`;
+
+  const copy = (): void => {
+    void navigator.clipboard?.writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => { /* kopyalanamadı — sessiz geç */ });
+  };
+
+  return (
+    <div className="mt-3 flex items-center justify-end gap-1.5 border-t border-border pt-2
+      text-[9px] leading-none text-muted/70">
+      <span className="tnum truncate">{text}</span>
+      <button type="button" onClick={copy}
+        title={copied ? 'Kopyalandı' : 'Kopyala'} aria-label="Rapor künyesini kopyala"
+        className="shrink-0 rounded-[var(--radius-sm)] p-0.5 transition-colors hover:bg-raised
+          hover:text-ink">
+        {copied ? (
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor"
+            strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+            <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }

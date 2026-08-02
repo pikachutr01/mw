@@ -8,6 +8,7 @@
  * CASUSLUK · ŞEHİR KURMA başlıkları).
  */
 import { sql } from 'drizzle-orm';
+import { routeOf } from './report-route.ts';
 import {
   BUILDINGS_BY_ID, clampName, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor,
   UNITS_BY_ID, type SpyLevel,
@@ -524,10 +525,19 @@ async function techLevel(tx: Tx, playerId: number, type: string): Promise<number
 async function writeMessage(ctx: HandlerContext, o: {
   playerId: number; kind: string; side: string; subject: string; body: Record<string, unknown>;
 }): Promise<void> {
+  /**
+   * ⭐ GÜZERGÂH HER RAPORDA (kullanıcı, 2026-08-02): kaynak → hedef koordinatı gövdeye
+   * yazılıyor ve ekranda tıklanabilir oluyor. Handler'lara tek tek eklenseydi biri mutlaka
+   * unutulurdu (nakliyenin GÖNDEREN kopyası tam da öyle bir yerdi) — bu yüzden burada,
+   * tüm raporların geçtiği tek kapıda.
+   */
+  const route = await routeOf(ctx);
+  const body = route ? { ...o.body, route } : o.body;
+
   await ctx.tx.execute(sql`
     INSERT INTO messages (world_id, player_id, kind, side, battle_id, mission_id, subject, body, at)
     VALUES (${ctx.worldId}, ${o.playerId}, ${o.kind}, ${o.side}, NULL, ${ctx.mission.id},
-            ${o.subject}, ${JSON.stringify(o.body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
+            ${o.subject}, ${JSON.stringify(body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
   `);
   await ctx.emit('message:written', { playerId: o.playerId, kind: o.kind });
 }
