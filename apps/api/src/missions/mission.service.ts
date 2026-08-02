@@ -262,6 +262,7 @@ export class MissionService {
                 ${JSON.stringify({
                   missionId,
                   ownerPlayerId: opts.playerId,
+                  targetPlayerId: target.playerId,
                   originCityId: opts.originCityId,
                   targetCityId: target.id,
                   type: 'attack',
@@ -789,6 +790,12 @@ export class MissionService {
                 ${JSON.stringify({
                   missionId,
                   ownerPlayerId: o.playerId,
+                  /**
+                   * ⚠️ ALICI da yazılıyor (2026-08-03): gelen nakliye/destek/şehir kurma
+                   * savunan tarafta HİÇ olay üretmiyordu — `city:incoming_*` yalnız saldırı
+                   * ve casuslukta var. Alıcının Ordular satırı 60 sn'lik yoklamayı bekliyordu.
+                   */
+                  targetPlayerId,
                   originCityId: o.originCityId,
                   targetCityId: targetId,
                   type: o.type,

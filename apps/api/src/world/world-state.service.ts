@@ -31,6 +31,8 @@ const REFRESH_MS = 30_000;
 
 export interface WorldState {
   worldId: number;
+  /** ⭐ Giriş/kayıt formundaki dünya seçici bunu gösteriyor (2026-08-03). */
+  name: string;
   state: 'running' | 'maintenance' | 'archived';
   paused: boolean;
   pausedAt: Date | null;
@@ -52,7 +54,7 @@ export class WorldStateService {
 
   async load(): Promise<void> {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT id, state, paused_at, maintenance_notice, maintenance_eta FROM worlds
+      SELECT id, name, state, paused_at, maintenance_notice, maintenance_eta FROM worlds
     `);
     const next = new Map<number, WorldState>();
     for (const r of rows) {
@@ -60,6 +62,7 @@ export class WorldStateService {
       const pausedAt = r['paused_at'] == null ? null : new Date(String(r['paused_at']));
       next.set(worldId, {
         worldId,
+        name: String(r['name'] ?? `Dünya ${worldId}`),
         state: String(r['state']) as WorldState['state'],
         paused: pausedAt !== null,
         pausedAt,
@@ -116,6 +119,20 @@ export class WorldStateService {
 
   get(worldId: number): WorldState | null {
     return this.states.get(worldId) ?? null;
+  }
+
+  /**
+   * ⭐ Oyuncuya AÇIK dünya listesi — giriş/kayıt formundaki seçici (2026-08-03).
+   *
+   * ⚠️ Yalnız `running`: bakımdaki ya da arşivlenmiş bir dünyaya kayıt olmak ya da giriş
+   * yapmak anlamsız — arşivlenmişte oyun bitmiş, bakımdakinde her yazma 503 dönecek.
+   * Liste **bellekten** okunuyor, DB'ye inmiyor (durum zaten `LISTEN` ile güncel).
+   */
+  listOpen(): Array<{ id: number; name: string }> {
+    return [...this.states.values()]
+      .filter((w) => w.state === 'running')
+      .sort((a, b) => a.worldId - b.worldId)
+      .map((w) => ({ id: w.worldId, name: w.name }));
   }
 
   isLoaded(): boolean {

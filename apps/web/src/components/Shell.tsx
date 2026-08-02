@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { coords } from '../lib/format.ts';
-import { fmt, useTick } from '../lib/hooks.ts';
+import { fmt, useMediaQuery, useTick } from '../lib/hooks.ts';
 import { VerifyBanner } from './VerifyBanner.tsx';
 import { NotifyBanner } from './NotifyBanner.tsx';
 import {
@@ -152,6 +152,7 @@ export function ActivityDot() {
  * ⚠️ `#root` yüksekliği `index.css`te `height: 100%` — buradaki `h-full` ona dayanıyor.
  */
 export function Shell({ children }: { children: ReactNode }) {
+  const wide = useMediaQuery('(min-width: 1280px)');
   return (
     <div className="flex h-full flex-col">
       <div className="mx-auto flex h-full w-full max-w-[1700px] justify-center gap-3 px-3 py-3 lg:gap-8 2xl:gap-14">
@@ -177,9 +178,17 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </main>
 
-        <aside className="hidden w-60 shrink-0 overflow-y-auto xl:block">
-          <SidePanels />
-        </aside>
+        {/*
+          ⚠️ `hidden xl:block` TEK BAŞINA YETMİYOR: o yalnız görünürlüğü kapatıyor, bileşen
+          mobilde de mount oluyordu ve içindeki `/alliance` sorgusu hiç kimsenin bakmadığı
+          bir panel için dakikada bir dönüyordu (2026-08-03). Kırılımı JS'e taşıyıp
+          bileşeni hiç kurmuyoruz; `xl` = 1280 px, Tailwind sınıfıyla aynı eşik.
+        */}
+        {wide ? (
+          <aside className="w-60 shrink-0 overflow-y-auto">
+            <SidePanels />
+          </aside>
+        ) : null}
       </div>
 
       <BottomBar />
@@ -390,7 +399,13 @@ const BADGE_TONE: Record<string, string> = {
 };
 
 function SideMenu() {
-  const messages = useMessages();
+  /**
+   * ⚠️ `pageSize: 1` — burada YALNIZ `unread` sayacı okunuyor, satırlar değil (2026-08-03).
+   * Varsayılan 20'ydi ve bu sorgu her ekranda, her emniyet ağı turunda dönüyordu: hiç
+   * çizilmeyen 20 satır boşuna taşınıyordu. Sayaçlar `COUNT(*)` ile ayrıca hesaplandığı
+   * için sayfa boyu onları etkilemiyor.
+   */
+  const messages = useMessages({ pageSize: 1 });
   const chats = useChatConversations();
   const movements = useMovements();
   const session = getSession();
@@ -457,7 +472,12 @@ function SideMenu() {
 /**
  * ⭐ SAĞ SÜTUN İTTİFAK PANELİ (2026-07-30) — ekran görüntüsündeki "run.dll İttifağı" listesi:
  * üye adları + Online/Offline renkli durum. Çevrimiçilik yalnız ittifak üyeleri arasında
- * görünür; presence olayı geldikçe liste kendiliğinden tazelenir (`realtime.ts`).
+ * görünür.
+ *
+ * ⚠️ Bu yorum 2026-08-03'e kadar *"presence olayı geldikçe liste kendiliğinden tazelenir"*
+ * diyordu ve **yanlıştı**: sunucu `presence:update` yayıyordu ama istemcide dinleyicisi yoktu,
+ * rozet yalnız 60 saniyelik yoklamayla değişiyordu. Dinleyici artık `realtime.ts`'te (2 sn
+ * debounce'lı) — yani yorum ancak şimdi doğru.
  */
 function AlliancePanel() {
   const view = useAlliance(0);
@@ -531,7 +551,13 @@ function SidePanels() {
 /* ── Alt bar (YALNIZ mobil) ────────────────────────────────────────────────── */
 
 function BottomBar() {
-  const messages = useMessages();
+  /**
+   * ⚠️ `pageSize: 1` — burada YALNIZ `unread` sayacı okunuyor, satırlar değil (2026-08-03).
+   * Varsayılan 20'ydi ve bu sorgu her ekranda, her emniyet ağı turunda dönüyordu: hiç
+   * çizilmeyen 20 satır boşuna taşınıyordu. Sayaçlar `COUNT(*)` ile ayrıca hesaplandığı
+   * için sayfa boyu onları etkilemiyor.
+   */
+  const messages = useMessages({ pageSize: 1 });
   const chats = useChatConversations();
   const movements = useMovements();
   const { pathname } = useLocation();

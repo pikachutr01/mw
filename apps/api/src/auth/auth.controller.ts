@@ -27,8 +27,14 @@ function dropSockets(sessionIds: readonly string[]): number {
   return getGateway()?.revokeSessions(sessionIds) ?? 0;
 }
 
-const registerBody = registerRequest.extend({ worldId: z.number().int().positive().default(1) });
-const loginBody = loginRequest.extend({ worldId: z.number().int().positive().default(1) });
+/**
+ * ⚠️ `worldId` artık **sözleşmenin kendisinde** (`packages/contracts/src/auth.ts`) ve
+ * varsayılanı YOK (2026-08-03). Buradaki `.extend({ … .default(1) })` yaması kaldırıldı:
+ * alanın sessizce 1'e düşmesi, ikinci bir dünya açıldığı gün herkesi birinci dünyaya
+ * kaydeden bir hataya dönerdi. İstemci artık formdaki seçimi gönderiyor.
+ */
+const registerBody = registerRequest;
+const loginBody = loginRequest;
 const refreshBody = z.object({ refreshToken: z.string().min(10) });
 const tokenBody = z.object({ token: z.string().min(10).max(200) });
 const resetBody = tokenBody.extend({ password: z.string().min(8).max(200) });
@@ -365,6 +371,14 @@ export class AuthController {
       if (err instanceof AuthError) {
         if (err.code === 'email_taken' || err.code === 'username_taken') {
           throw new ConflictException({ code: err.code, message: err.message });
+        }
+        /**
+         * ⚠️ `world_not_found` bir kimlik hatası DEĞİL, istek hatası: 401 döndürmek istemciyi
+         * "parolan yanlış" demeye iterdi. Dünya seçimi forma gelince (2026-08-03) bu ayrım
+         * gerçekten görünür oldu.
+         */
+        if (err.code === 'world_not_found') {
+          throw new BadRequestException({ code: err.code, message: err.message });
         }
         throw new UnauthorizedException({ code: err.code, message: err.message });
       }

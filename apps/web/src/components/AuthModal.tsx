@@ -17,7 +17,8 @@
 import { useState } from 'react';
 import { USERNAME_MAX, USERNAME_MIN, USERNAME_RULE_MESSAGE } from '@mobilwar/catalog';
 import { api, login, register } from '../lib/api.ts';
-import { Button, ErrorBox, Field, Input } from './ui.tsx';
+import { useWorlds } from '../lib/queries.ts';
+import { Button, ErrorBox, Field, Input, Select } from './ui.tsx';
 import { Modal } from './Modal.tsx';
 
 export type AuthMode = 'login' | 'register' | 'forgot';
@@ -40,6 +41,18 @@ export function AuthModal({ mode: initialMode = 'login', onClose }: {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
 
+  /**
+   * ⭐ DÜNYA SEÇİMİ (kullanıcı, 2026-08-03). Kullanıcı adı **dünya başına** tekil olduğu için
+   * hem kayıtta hem girişte hangi dünya olduğu belirleyici; buna rağmen istemci uzun süre
+   * sabit `1` gönderiyordu.
+   *
+   * ⚠️ Seçim state'i `null` başlıyor ve liste gelince ilk dünyaya oturuyor: sabit bir `1`
+   * varsayılanı, birinci dünya kapatıldığında var olmayan bir dünyaya istek atardı.
+   */
+  const worlds = useWorlds().data?.worlds ?? [];
+  const [worldId, setWorldId] = useState<number | null>(null);
+  const activeWorld = worldId ?? worlds[0]?.id ?? null;
+
   const go = (next: AuthMode): void => {
     setMode(next); setError(null); setSent(false);
   };
@@ -54,8 +67,9 @@ export function AuthModal({ mode: initialMode = 'login', onClose }: {
         setSent(true);
         return;
       }
-      if (mode === 'login') await login(username, password);
-      else await register(email, password, username);
+      if (activeWorld == null) throw new Error('Dünya listesi yüklenemedi, sayfayı yenile.');
+      if (mode === 'login') await login(username, password, activeWorld);
+      else await register(email, password, username, activeWorld);
       // Başarılıysa `setSession` ağacı değiştiriyor; modal zaten sökülüyor.
     } catch (err) {
       setError(err);
@@ -102,6 +116,26 @@ export function AuthModal({ mode: initialMode = 'login', onClose }: {
             <Field label="E-posta">
               <Input type="email" required autoComplete="email"
                 value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+          ) : null}
+
+          {/*
+            ⚠️ `forgot` modunda YOK: şifre sıfırlama e-posta üzerinden çalışıyor ve hesap
+            (e-posta) dünya bağımsız — orada dünya sormak yanıltıcı olurdu.
+            ⚠️ Tek dünya varken `disabled`: seçim diye bir şey yok, ama oyuncunun hangi dünyaya
+            girdiğini görmesi ileride ikinci dünya açıldığında alışkanlığı hazırlar.
+          */}
+          {mode !== 'forgot' && worlds.length > 0 ? (
+            <Field label="Dünya">
+              <Select
+                value={activeWorld ?? ''}
+                disabled={worlds.length === 1}
+                onChange={(e) => setWorldId(Number(e.target.value))}
+              >
+                {worlds.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </Select>
             </Field>
           ) : null}
 

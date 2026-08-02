@@ -16,7 +16,7 @@ import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
   useAllianceDecide, useBattle, useChatConversations, useClearConversation, useDeleteMessages,
-  useMarkRead, useMessages,
+  useMarkRead, useMessageBody, useMessages,
   type ChatConversation, type MessageRow, type ReportHeroLine,
 } from '../lib/queries.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
@@ -412,7 +412,18 @@ function Pagination({
   );
 }
 
+/**
+ * ⚠️ Gövde artık LİSTEDEN gelmiyor, modal açılınca ayrı çekiliyor (`useMessageBody`,
+ * 2026-08-03). Sebep: liste ucu 60 saniyede bir dönüyordu ve gövdeleri de taşıyordu —
+ * bir savaş raporunun ganimet/mağara dökümleri hiç kullanılmadan her dakika geliyordu.
+ * Savaş raporu zaten böyle çalışıyordu (`useBattle`); diğer türler ona katıldı.
+ */
 function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
+  // Savaş raporunun gövdesi `battles` kaydından geliyor; onda bu isteğe gerek yok.
+  const detail = useMessageBody(m.battleId ? null : m.id);
+  const body = detail.data?.body ?? null;
+  const route = (body?.['route'] ?? null) as { origin?: Coord; target?: Coord } | null;
+
   return (
     <Modal title={m.subject} onClose={onClose} width="lg"
       footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}>
@@ -426,15 +437,18 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
           `route` yok); orası `BattleReport` içinde degrade ediyor.
         */}
         {!m.battleId ? (
-          <RouteLine
-            origin={(m.body?.['route'] as { origin?: Coord } | undefined)?.origin}
-            target={(m.body?.['route'] as { target?: Coord } | undefined)?.target}
-            onNavigate={onClose}
-          />
+          <RouteLine origin={route?.origin} target={route?.target} onNavigate={onClose} />
         ) : null}
-        {m.battleId
-          ? <BattleReport battleId={m.battleId} onNavigate={onClose} />
-          : <PlainBody m={m} onDone={onClose} />}
+
+        {m.battleId ? (
+          <BattleReport battleId={m.battleId} onNavigate={onClose} />
+        ) : detail.isLoading ? (
+          <div className="py-2 text-xs text-muted">Yükleniyor…</div>
+        ) : detail.isError ? (
+          <div className="py-2 text-xs text-danger">Mesaj okunamadı.</div>
+        ) : (
+          <PlainBody m={m} body={body ?? {}} onDone={onClose} />
+        )}
       </div>
     </Modal>
   );
@@ -488,13 +502,15 @@ function RouteLine({ origin, target, onNavigate }: {
  *
  * ⚠️ Birim adları **`nameOf` üzerinden** yazılır: ham `id` ekranda İngilizce görünürdü (§13.14).
  */
-function PlainBody({ m, onDone }: { m: MessageRow; onDone?: () => void }) {
-  const b = m.body ?? {};
+function PlainBody({ m, body, onDone }: {
+  m: MessageRow; body: Record<string, unknown>; onDone?: () => void;
+}) {
+  const b = body;
   if (m.kind === 'spy_report') {
     return m.side === 'target' ? <SpyDefenseBody body={b} /> : <SpyBody body={b} />;
   }
   if (m.kind === 'alliance_invite' || m.kind === 'alliance_application') {
-    return <AllianceRequestBody m={m} onDone={onDone} />;
+    return <AllianceRequestBody m={m} body={b} onDone={onDone} />;
   }
   if (m.kind === 'alliance_message') {
     return (
@@ -554,8 +570,10 @@ function PlainBody({ m, onDone }: { m: MessageRow; onDone?: () => void }) {
  * döner ve hata kutusunda görünür. Davet: kabul eden BEN katılırım. Başvuru: ben (yönetici)
  * başvuranı kabul ederim.
  */
-function AllianceRequestBody({ m, onDone }: { m: MessageRow; onDone?: () => void }) {
-  const b = m.body ?? {};
+function AllianceRequestBody({ m, body, onDone }: {
+  m: MessageRow; body: Record<string, unknown>; onDone?: () => void;
+}) {
+  const b = body;
   const decide = useAllianceDecide();
   const inviteId = Number(b['inviteId'] ?? 0);
   const isInvite = m.kind === 'alliance_invite';

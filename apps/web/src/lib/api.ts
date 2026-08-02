@@ -209,8 +209,15 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   return body as T;
 }
 
-/** ⭐ Giriş KULLANICI ADIYLA (kullanıcı kararı): oyuncunun ezberlediği ad e-posta değil. */
-export async function login(username: string, password: string, worldId = 1): Promise<Session> {
+/**
+ * ⭐ Giriş KULLANICI ADIYLA (kullanıcı kararı): oyuncunun ezberlediği ad e-posta değil.
+ *
+ * ⚠️ `worldId` **zorunlu** (2026-08-03). Önceden `= 1` varsayılanıydı ve `AuthModal` onu hiç
+ * geçmiyordu — yani "dünya başına tekil kullanıcı adı" kuralı vardı ama dünyayı kimse
+ * seçmiyordu. Varsayılanı kaldırmak, ikinci dünya açıldığı gün herkesi sessizce birinci
+ * dünyaya yönlendiren hatayı derleme zamanında yakalar.
+ */
+export async function login(username: string, password: string, worldId: number): Promise<Session> {
   const r = await api<AuthResponse>('/api/v1/auth/login', {
     method: 'POST', body: { username, password, worldId }, noRetry: true,
   });
@@ -220,7 +227,7 @@ export async function login(username: string, password: string, worldId = 1): Pr
 }
 
 export async function register(
-  email: string, password: string, username: string, worldId = 1,
+  email: string, password: string, username: string, worldId: number,
 ): Promise<Session> {
   const r = await api<AuthResponse>('/api/v1/auth/register', {
     method: 'POST', body: { email, password, username, worldId }, noRetry: true,

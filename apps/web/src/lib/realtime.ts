@@ -12,6 +12,7 @@
  * ⚠️ Kopukken kaçan olaylar: yeniden bağlanınca **her şey tazelenir**. Kaçırılan bildirim kalıcı
  * kayıtta (DB) zaten var; WS "hızlı" katman, "kayıpsız" katman değil (§1 outbox).
  */
+import { useSyncExternalStore } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { QueryClient } from '@tanstack/react-query';
 import { getSession, onSessionChange, setSession } from './api.ts';
@@ -36,6 +37,17 @@ export function onConnectionChange(fn: (s: ConnectionState) => void): () => void
   stateListeners.add(fn);
   return () => stateListeners.delete(fn);
 }
+
+/**
+ * ⭐ Bağlantı durumunu React'e bağlar — **yoklama aralığı buna göre belirleniyor**
+ * (`queries.ts` → `useSafetyNet`).
+ *
+ * `getConnectionState` ve `onConnectionChange` modül düzeyinde kararlı referanslar olduğu
+ * için `useSyncExternalStore` sözleşmesi (değişmeyen abone + değişmeyen anlık görüntü)
+ * kendiliğinden sağlanıyor; `useSession` de aynı deseni kullanıyor.
+ */
+export const useConnection = (): ConnectionState =>
+  useSyncExternalStore(onConnectionChange, getConnectionState, getConnectionState);
 
 /**
  * Sunucu olayı → tazelenecek sorgu anahtarları. Eşleme TEK yerde.
@@ -157,6 +169,28 @@ export function connectRealtime(queryClient: QueryClient): () => void {
         for (const key of keys) void queryClient.invalidateQueries({ queryKey: [key] });
       });
     }
+
+    /**
+     * ⭐ ÇEVRİMİÇİLİK (2026-08-03) — **sunucu bunu aylardır yayıyordu, istemci hiç dinlemiyordu.**
+     *
+     * `realtime.gateway.ts` üç yerden `presence:update` gönderiyor (bağlanma/kopma ve ittifak
+     * değişimi) ama `INVALIDATES` tablosunda karşılığı yoktu. Sonuç: sağ paneldeki Online/Offline
+     * rozeti yalnız 60 saniyelik `['alliance']` yoklamasıyla değişiyordu. `Shell.tsx`'te
+     * *"presence olayı geldikçe liste kendiliğinden tazelenir"* diye bir yorum vardı; **yanlıştı**.
+     *
+     * ⚠️ `INVALIDATES` tablosuna KONMADI, ayrı ele alınıyor: bu olay üye başına ve bağlantı
+     * başına geliyor. Kalabalık bir ittifakta akşam saatlerinde saniyeler içinde onlarca
+     * olay düşebilir; her biri ayrı bir `/alliance` isteği demek olurdu. **Debounce şart** —
+     * rozet için 2 saniyelik gecikme fark edilmez, istek fırtınası edilir.
+     */
+    let presenceTimer: ReturnType<typeof setTimeout> | null = null;
+    socket.on('presence:update', () => {
+      if (presenceTimer) return;
+      presenceTimer = setTimeout(() => {
+        presenceTimer = null;
+        void queryClient.invalidateQueries({ queryKey: ['alliance'] });
+      }, 2000);
+    });
 
     /**
      * Sohbet olayları ayrıca abonelere de dağıtılır (pencere balonu anında eklesin diye).

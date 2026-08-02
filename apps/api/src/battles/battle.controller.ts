@@ -68,8 +68,17 @@ export class BattleController {
       : kind === 'messages' ? sql`AND NOT (${isReport})`
         : sql``;
 
+    /**
+     * ⭐ `body` BU LİSTEDE YOK (2026-08-03) — gövdeler `GET messages/:id` ile ayrı geliyor.
+     *
+     * ⚠️ Neden: bu uç **60 saniyede bir, her açık sekmede** çekiliyor ve gövdeler küçük
+     * değil — bir savaş raporunda ganimet dökümü, mağara dökümü ve iki birim sözlüğü,
+     * bir casus raporunda hedefin TÜM birim/savunma sayımı duruyor. Liste satırı bunların
+     * hiçbirini okumuyor: ekranda yalnız `kind`, `side`, `subject`, `at`, `readAt` görünüyor.
+     * Yani her dakika, hiç kullanılmayan onlarca KB taşınıyordu.
+     */
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT id, kind, side, battle_id, mission_id, subject, body, at, read_at
+      SELECT id, kind, side, battle_id, mission_id, subject, at, read_at
         FROM messages m
        WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
          ${filter}
@@ -111,11 +120,38 @@ export class BattleController {
         battleId: r['battle_id'] == null ? null : Number(r['battle_id']),
         missionId: r['mission_id'] == null ? null : Number(r['mission_id']),
         subject: String(r['subject']),
-        body: r['body'] ?? {},
         at: toDate(r['at']).toISOString(),
         readAt: r['read_at'] == null ? null : toDate(r['read_at']).toISOString(),
       })),
       serverNow: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * ⭐ TEK MESAJIN GÖVDESİ — liste ucundan ayrıldı (2026-08-03).
+   *
+   * Rapor modalı açılınca çağrılır. `useBattle` ile aynı model: gövde bir olayın kaydı,
+   * listeyle birlikte sürekli taşınmasının bir sebebi yok.
+   *
+   * ⚠️ Sahiplik kontrolü sorgunun İÇİNDE (`player_id` + `world_id`): id sıralı ve tahmin
+   * edilebilir, aksi hâlde herhangi bir oyuncu başkasının savaş raporunu okuyabilirdi.
+   */
+  @Get('messages/:id')
+  async messageBody(
+    @Param('id') id: string,
+    @Req() req: AuthedRequest,
+  ): Promise<{ id: number; body: Record<string, unknown> }> {
+    const player = req.player!;
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT id, body FROM messages
+       WHERE id = ${Number(id)}
+         AND world_id = ${player.worldId}
+         AND player_id = ${player.playerId}
+    `);
+    if (!row) throw new NotFoundException('Mesaj bulunamadı.');
+    return {
+      id: Number(row['id']),
+      body: (row['body'] ?? {}) as Record<string, unknown>,
     };
   }
 

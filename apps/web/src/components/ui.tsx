@@ -298,6 +298,25 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 /**
+ * Açılır liste — `Input` ile **aynı** ölçü ve çerçevede (2026-08-03, dünya seçici için).
+ *
+ * ⚠️ Projede `<select>` üç ekranda üç farklı satır içi sınıf dizisiyle stilleniyordu
+ * (`World.tsx`, `Messages.tsx`, `Simulate.tsx`) ve hiçbiri `Input`la aynı yükseklikte
+ * değildi. Formda yan yana duracakları için ölçü artık tek yerden geliyor.
+ */
+export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={
+        'w-full rounded-[var(--radius-sm)] border border-border bg-raised px-3 py-2 text-sm '
+        + `text-ink disabled:opacity-70 ${props.className ?? ''}`
+      }
+    />
+  );
+}
+
+/**
  * Çok satırlı metin kutusu — ittifak metni, toplu mesaj ve sohbet yazma alanı aynı görünümü
  * paylaşsın diye tek yerde (üç ekran aynı sınıf dizisini kopyalıyordu).
  */

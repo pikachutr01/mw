@@ -125,8 +125,30 @@ export function eventForOutbox(
     case 'mission:sent':
       return {
         topic: 'missions:changed', worldId,
-        playerIds: players(num(payload['ownerPlayerId'])),
+        /**
+         * ⚠️ **ALICI da burada** (2026-08-03). Önce yalnız gönderen vardı ve bu, gelen
+         * nakliye/destek/şehir-kurmanın savunan tarafta HİÇ olayı olmaması demekti:
+         * `city:incoming_attack` ve `city:incoming_spy` yalnız saldırı ve casuslukta
+         * yazılıyor, diğer üç görev tipi 60 saniyelik emniyet yoklamasını bekliyordu.
+         * Tek satır üç tipi birden kapatıyor.
+         */
+        playerIds: players(num(payload['ownerPlayerId']), num(payload['targetPlayerId'])),
         ref: { cityId: num(payload['originCityId']), missionId: num(payload['missionId']) },
+      };
+
+    /**
+     * ⭐ TATİL OTOMATİK BİTTİ (2026-08-03) — **yazılıp eşlenmemiş üçüncü olay.**
+     *
+     * `vacation.handler.ts:48` bunu outbox'a yazıyordu ama burada karşılığı yoktu →
+     * `default: null` ile sessizce düşüyordu. Sonuç: 30 günü dolan oyuncunun kaynakları
+     * sunucuda akmaya başlıyor, ekranda ise donmuş sayaç ve mavi «Tatilde» rozeti duruyordu.
+     * `city:changed` konusu hem şehri hem de tatil panelini tazeliyor (`realtime.ts`).
+     */
+    case 'vacation:ended':
+      return {
+        topic: 'city:changed', worldId,
+        playerIds: players(num(payload['playerId'])),
+        ref: { playerId: num(payload['playerId']) },
       };
 
     /**

@@ -5,7 +5,7 @@
  * kaydırılmış) olabilir; her yanıtta gelen `serverNow` ile offset tutulur ve tüm geri sayımlar
  * ondan beslenir. Aksi hâlde saati ileri alan oyuncu "ordum vardı" sanır, sunucu katılmaz.
  */
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { getSession, onSessionChange, type Session } from './api.ts';
 
 /**
@@ -23,6 +23,33 @@ import { getSession, onSessionChange, type Session } from './api.ts';
  */
 export const useSession = (): Session | null =>
   useSyncExternalStore(onSessionChange, getSession, getSession);
+
+/**
+ * ⭐ CSS kırılımını JavaScript'e taşır — `hidden lg:block` ile gizlenen bir bileşeni
+ * **hiç mount etmemek** için (2026-08-03).
+ *
+ * ⚠️ Gerekçe ölçülebilir: sağ sütundaki ittifak paneli `hidden xl:block` ile gizleniyordu
+ * ama o yalnız görünürlük — bileşen mobilde de mount oluyor, kancaları çalışıyor ve
+ * `/alliance` sorgusu **hiç kimsenin bakmadığı bir panel için** dakikada bir dönüyordu.
+ * Görsel gizleme ile mount ayrı şeyler; ağ trafiği ikincisine bakar.
+ *
+ * `matchMedia` aboneliği `useSyncExternalStore` ile: her çağıran kendi `useEffect`ini
+ * kurmuyor, React kiralama sırasında da doğru değeri okuyor.
+ */
+export function useMediaQuery(query: string): boolean {
+  const [subscribe, getSnapshot] = useMemo(() => {
+    const mql = window.matchMedia(query);
+    return [
+      (cb: () => void) => {
+        mql.addEventListener('change', cb);
+        return () => mql.removeEventListener('change', cb);
+      },
+      () => mql.matches,
+    ] as const;
+  }, [query]);
+
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
 
 /**
  * ⭐ İKİ AYRI SAAT — karıştırmak 2026-08-02'de canlıda bir hataya yol açtı.

@@ -20,6 +20,17 @@ import { z } from 'zod';
  */
 const usernameField = z.string().max(200).transform(normalizeName);
 
+/**
+ * ⭐ DÜNYA — 2026-08-03'te sözleşmeye taşındı.
+ *
+ * ⚠️ Önceden şemada hiç yoktu; `auth.controller.ts` `.extend({ worldId: … .default(1) })`
+ * ile ekliyordu ve istemci hiç göndermiyordu (`api.ts`'te `worldId = 1` varsayılan argümanı).
+ * Yani "dünya başına tekil kullanıcı adı" kuralı vardı ama dünyayı **kimse seçmiyordu**.
+ * Varsayılan bilerek KALDIRILDI: alanın sessizce 1'e düşmesi, ikinci bir dünya açıldığı gün
+ * herkesi birinci dünyaya kaydeden bir hataya dönerdi.
+ */
+const worldIdField = z.number().int().positive();
+
 /** Orijinaldeki "3-8 karakter şifre" kuralı KULLANILMIYOR — modern minimum 8+ (§9). */
 export const password = z.string().min(8).max(200);
 
@@ -40,6 +51,7 @@ export const registerRequest = z.object({
       .max(USERNAME_MAX, USERNAME_RULE_MESSAGE)
       .regex(USERNAME_PATTERN, USERNAME_RULE_MESSAGE),
   ),
+  worldId: worldIdField,
 });
 export type RegisterRequest = z.infer<typeof registerRequest>;
 
@@ -54,6 +66,7 @@ export const loginRequest = z.object({
   // Normalizasyon yine de VAR — kayıtta ne yazıldıysa girişte de o aranmalı.
   username: usernameField.pipe(z.string().min(USERNAME_MIN).max(USERNAME_MAX)),
   password,
+  worldId: worldIdField,
 });
 export type LoginRequest = z.infer<typeof loginRequest>;
 

@@ -93,6 +93,24 @@ export class AuthService {
     worldId: number;
   }, ctx: DeviceContext): Promise<AuthResult> {
     const email = input.email.trim().toLowerCase();
+    /**
+     * ⚠️ DÜNYA ÖNCE DOĞRULANIR (2026-08-03). Öncesinde doğrudan `clock.gameNow(worldId)`
+     * çağrılıyordu ve olmayan bir dünyada `GameClockService.read()` **düz `Error`** fırlatıyordu
+     * (`game-clock.service.ts`) — `run()`'daki `catch` onu `AuthError` sanmadığı için istemciye
+     * **500** dönüyordu. Dünya seçimi forma gelince bu yol artık gerçekten tetiklenebilir.
+     *
+     * `archived`/`maintenance` dünyaya kayıt da engelleniyor: arşivlenmişte oyun bitmiş,
+     * bakımdakinde ilk yazma zaten 503 alacak.
+     *
+     * ⚠️ Bellek-içi `WorldStateService` yerine doğrudan sorgu: `AuthService`in DI zincirinde
+     * o servis yok ve kayıt seyrek bir işlem — tek `SELECT` için bağımlılık eklemeye değmez.
+     */
+    const [world] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT state FROM worlds WHERE id = ${input.worldId}
+    `);
+    if (!world || String(world['state']) !== 'running') {
+      throw new AuthError('world_not_found', 'Seçilen dünya kayda kapalı.');
+    }
     const gameNow = await this.clock.gameNow(input.worldId);
     const passwordHash = await this.passwords.hash(input.password);
 

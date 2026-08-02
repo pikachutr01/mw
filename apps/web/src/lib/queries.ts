@@ -14,6 +14,7 @@ import {
 } from '@tanstack/react-query';
 import { api } from './api.ts';
 import { noteServerTime, useSession } from './hooks.ts';
+import { useConnection } from './realtime.ts';
 
 async function get<T>(path: string): Promise<T> {
   const r = await api<T>(path);
@@ -258,9 +259,12 @@ export interface MessageRow {
   battleId: number | null;
   missionId: number | null;
   subject: string;
-  body: Record<string, unknown>;
   at: string;
   readAt: string | null;
+  /**
+   * ⚠️ `body` BU TİPTE YOK — liste ucu artık gövde taşımıyor (2026-08-03). Gövde modal
+   * açılınca `useMessageBody(id)` ile geliyor; gerekçe `battle.controller.ts`'te.
+   */
 }
 
 export interface WorldSlot {
@@ -358,6 +362,28 @@ export const useVacation = (): UseQueryResult<VacationStatus> => useQuery({
 const SAFETY_NET_MS = 60_000;
 
 /**
+ * ⭐ **WS BAĞLIYKEN EMNİYET AĞI SEYREKLEŞİR** (kullanıcı, 2026-08-03).
+ *
+ * Kullanıcı ağ sekmesinde dakikada 7 eşzamanlı istek gördü ve haklı olarak sordu: madem
+ * WS kuruldu, neden hâlâ bu kadar yoklama var? Cevap yukarıdaki mantığın devamı — emniyet
+ * ağı **tanımı gereği WS'in çalışmadığı durum içindir.** Soket bağlıyken 60 saniyede bir
+ * dönmesinin bir gerekçesi yok: kritik değişikliklerin hepsi olayla geliyor.
+ *
+ * ⚠️ **Neden sıfır değil de 5 dakika:** "bağlı" olmak "her olay eşlendi" demek değil. Bu
+ * projede yazılıp eşlenmemiş olay üç kez yaşandı (`city:incoming_spy`, `city:changed`,
+ * `vacation:ended`). Dördüncüsünün olmadığının garantisi yok; 5 dakika, böyle bir boşluğun
+ * ekranı SÜRESİZ dondurmasını engelleyen ucuz bir sigorta.
+ *
+ * ⚠️ Değer bir **kanca**dan geliyor: bağlantı koptuğunda bileşen yeniden render olur ve
+ * TanStack yeni aralığı alır. Sabit bir sayı olsaydı durum değişimine tepki veremezdi.
+ * Yeniden bağlanmada `realtime.ts` zaten tüm sorguları bir kez tazeliyor.
+ */
+const WS_IDLE_MS = 300_000;
+
+const useSafetyNet = (): number =>
+  (useConnection() === 'online' ? WS_IDLE_MS : SAFETY_NET_MS);
+
+/**
  * ⚠️⚠️ **KANCA `&&`'İN SAĞINA YAZILMAZ.** `enabled: cityId != null && useAuthed()` yazmak
  * kancayı KOŞULLU çağırır: `cityId` null iken `&&` kısa devre yapıp `useAuthed()`i atlar,
  * dolunca çağırır → kanca sırası değişir → React bileşeni çökertir ve **ekran bembeyaz kalır**
@@ -372,7 +398,7 @@ export const useCity = (cityId: number | null): UseQueryResult<CityDetail> => {
     /* ⚠️ `cityId` `localStorage['mw-active-city']`ten geliyor ve ÇIKIŞTAN SONRA DA duruyor —
        tek başına `cityId != null` misafirde 401 üretiyordu. */
     enabled: cityId != null && authed,
-    refetchInterval: SAFETY_NET_MS,
+    refetchInterval: useSafetyNet(),
   });
 };
 
@@ -395,7 +421,7 @@ export const useMovements = (): UseQueryResult<{ movements: Movement[] }> =>
      * boşuna istek üretiyordu. 60 sn **emniyet ağı** olarak duruyor: WS kopuk kaldığı bir
      * pencerede ekran tamamen donmasın.
      */
-    refetchInterval: SAFETY_NET_MS,
+    refetchInterval: useSafetyNet(),
     enabled: useAuthed(),
   });
 
@@ -455,7 +481,7 @@ export const useMessages = (
   queryFn: () => get<MessagePage>(
     `/api/v1/messages?kind=${opts.kind ?? 'all'}&page=${opts.page ?? 0}&limit=${opts.pageSize ?? 20}`,
   ),
-  refetchInterval: SAFETY_NET_MS,
+  refetchInterval: useSafetyNet(),
   /** ⚠️ Sayfa değişince liste boşalıp zıplamasın — önceki sayfa yerinde kalır. */
   placeholderData: (prev) => prev,
   enabled: useAuthed(),
@@ -467,10 +493,14 @@ export const useMessages = (
  * WS olayı (`world:maintenance`) yalnız **değişim anını** taşır; bakım sürerken sayfayı açan
  * oyuncu onu kaçırmış olur. Bu sorgu o boşluğu kapatır.
  *
- * ⚠️ Emniyet ağı burada **30 sn** — diğerlerinin yarısı. Gerekçe: bakımın BİTTİĞİNİ kaçırmak,
- * başladığını kaçırmaktan daha can sıkıcı. Bakım bittiğinde WS olayı gelir ama tam o anda
- * soketi kopuk olan oyuncu, perde kalkana kadar oyunun kapalı olduğunu sanır. Sunucu tarafı
- * bu isteği **bellekten** karşılıyor (sorgu yok), yani sıklaştırmanın DB maliyeti sıfır.
+ * ⚠️ Emniyet ağı burada **kopukken 30 sn** — diğerlerinin yarısı. Gerekçe: bakımın BİTTİĞİNİ
+ * kaçırmak, başladığını kaçırmaktan daha can sıkıcı. Bakım bittiğinde WS olayı gelir ama tam
+ * o anda soketi kopuk olan oyuncu, perde kalkana kadar oyunun kapalı olduğunu sanır. Sunucu
+ * tarafı bu isteği **bellekten** karşılıyor (sorgu yok), yani sıklaştırmanın DB maliyeti sıfır.
+ *
+ * ⚠️ **Bağlıyken diğerleriyle aynı** (5 dk): sıklaştırmanın tek gerekçesi soketin KOPUK olduğu
+ * pencereydi; bağlıyken `world:maintenance` olayı zaten dünya geneli yayınla geliyor ve
+ * (istisnai olarak) yükü de taşıyor. `refetchOnWindowFocus` ayrıca duruyor.
  */
 export interface WorldMaintenance {
   paused: boolean;
@@ -480,10 +510,26 @@ export interface WorldMaintenance {
   pausedAt: string | null;
 }
 
+/**
+ * ⭐ AÇIK DÜNYALAR — giriş/kayıt formundaki seçici (2026-08-03).
+ *
+ * ⚠️ **`enabled` kapısı YOK, bilerek**: bu sorgu tam olarak oturumu OLMAYAN oyuncu için var.
+ * Sunucu ucu da guard'sız (`worlds-public.controller.ts`) ve bellekten karşılıyor.
+ *
+ * ⚠️ `staleTime` uzun: dünya listesi neredeyse hiç değişmiyor, form her açıldığında
+ * yeniden çekmenin anlamı yok.
+ */
+export const useWorlds = (): UseQueryResult<{ worlds: Array<{ id: number; name: string }> }> =>
+  useQuery({
+    queryKey: ['worlds'],
+    queryFn: () => get<{ worlds: Array<{ id: number; name: string }> }>('/api/v1/worlds'),
+    staleTime: 600_000,
+  });
+
 export const useWorldState = (): UseQueryResult<WorldMaintenance> => useQuery({
   queryKey: ['world-state'],
   queryFn: () => get<WorldMaintenance>('/api/v1/world/state'),
-  refetchInterval: 30_000,
+  refetchInterval: useConnection() === 'online' ? WS_IDLE_MS : 30_000,
   // Sekmeye dönen oyuncu perdeyi anında doğru görsün.
   refetchOnWindowFocus: true,
   /* ⚠️ `/world/state` AuthGuard arkasında → misafir bakım perdesini zaten göremez (§10.x). */
@@ -538,7 +584,7 @@ export const useWorld = (k: number, d: number, enabled = true): UseQueryResult<{
   // ⭐ Açılışta aktif şehrin diyarı bilinene kadar BEKLENİR (1:1 parlamasın diye).
   enabled,
   // Diyar listesi nadiren değişir; şehir kurulunca `cities:changed` zaten tazeliyor.
-  refetchInterval: SAFETY_NET_MS,
+  refetchInterval: useSafetyNet(),
 });
 
 /* ── Komuta Merkezi ────────────────────────────────────────────────────────── */
@@ -637,7 +683,7 @@ export interface RankingPage {
 export const useOverview = (): UseQueryResult<Overview> => useQuery({
   queryKey: ['overview'],
   queryFn: () => get<Overview>('/api/v1/command/overview'),
-  refetchInterval: SAFETY_NET_MS,
+  refetchInterval: useSafetyNet(),
 });
 
 /**
@@ -663,6 +709,25 @@ export const useBattle = (battleId: number | null): UseQueryResult<BattleReport>
   enabled: battleId != null,
   staleTime: 0,
   refetchOnMount: 'always',
+});
+
+/**
+ * ⭐ TEK MESAJIN GÖVDESİ — liste ucundan ayrıldı (2026-08-03).
+ *
+ * Liste her 60 saniyede bir dönüyordu ve gövdeleri de taşıyordu; oysa gövde yalnız modal
+ * açılınca gerekiyor. `useBattle` ile aynı kalıp — savaş raporu zaten böyle çalışıyordu,
+ * diğer rapor türleri de artık ona katıldı.
+ *
+ * ⚠️ `staleTime` VARSAYILAN (2 sn) bırakıldı, `useBattle`daki gibi 0 değil: gövde savaş
+ * raporunun aksine değişmiyor (yazıldığı gibi kalıyor), aynı modalı kapatıp açan oyuncuya
+ * ikinci bir istek attırmaya gerek yok.
+ */
+export const useMessageBody = (
+  id: number | null,
+): UseQueryResult<{ id: number; body: Record<string, unknown> }> => useQuery({
+  queryKey: ['message-body', id],
+  queryFn: () => get<{ id: number; body: Record<string, unknown> }>(`/api/v1/messages/${id}`),
+  enabled: id != null,
 });
 
 export interface ReportLine {
@@ -855,23 +920,41 @@ export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api(`/api/v1/messages/${id}/read`, { method: 'POST' }),
+    /**
+     * ⚠️ **ÖNEK EŞLEŞMESİ ŞART** (`setQueriesData`, çoğul — 2026-08-03'te düzeltildi).
+     *
+     * Buradaki güncelleme uzun süredir **ölüydü**: `getQueryData(['messages'])` TAM eşleşme
+     * arıyor, oysa anahtar 2026-08-01'de sayfalamayla birlikte
+     * `['messages', kind, page, pageSize]` oldu. `previous` daima `undefined` dönüyordu,
+     * yani yorumda anlatılan iyimser düşüş hiç gerçekleşmiyordu — rozet ancak sunucu turu
+     * dönünce azalıyordu. Tip hatası da vermiyordu (generic'i biz veriyoruz), bu yüzden
+     * sessizce yaşadı.
+     *
+     * Artık ÖNEKLE eşleşen tüm `messages` sorguları güncelleniyor: Shell'in sayaç sorgusu
+     * (`pageSize: 1`) ile Mesajlar ekranının liste sorgusu ayrı anahtarlarda ve ikisi de
+     * aynı anda düşmeli.
+     */
     onMutate: async (id: number) => {
       await qc.cancelQueries({ queryKey: ['messages'] });
-      const previous = qc.getQueryData<{ unread: number; items: MessageRow[] }>(['messages']);
-      if (previous) {
-        const target = previous.items.find((m) => m.id === id);
-        if (target && !target.readAt) {
-          qc.setQueryData(['messages'], {
-            unread: Math.max(0, previous.unread - 1),
-            items: previous.items.map((m) =>
-              (m.id === id ? { ...m, readAt: new Date().toISOString() } : m)),
-          });
-        }
-      }
+      const previous = qc.getQueriesData<MessagePage>({ queryKey: ['messages'] });
+
+      qc.setQueriesData<MessagePage>({ queryKey: ['messages'] }, (old) => {
+        if (!old) return old;
+        // Satır bu sayfada olmayabilir (sayaç sorgusunda `items` tek satır) — sayaç yine düşer.
+        const target = old.items.find((m) => m.id === id);
+        if (target?.readAt) return old;
+        return {
+          ...old,
+          unread: Math.max(0, old.unread - 1),
+          items: old.items.map((m) =>
+            (m.id === id ? { ...m, readAt: new Date().toISOString() } : m)),
+        };
+      });
+
       return { previous };
     },
     onError: (_err, _id, ctx) => {
-      if (ctx?.previous) qc.setQueryData(['messages'], ctx.previous);
+      for (const [key, data] of ctx?.previous ?? []) qc.setQueryData(key, data);
     },
     onSettled: () => { void qc.invalidateQueries({ queryKey: ['messages'] }); },
   });
@@ -950,7 +1033,7 @@ export const useTemple = (cityId: number | null): UseQueryResult<TempleView> => 
   queryKey: ['temple', cityId],
   queryFn: () => get<TempleView>(`/api/v1/cities/${cityId}/temple`),
   enabled: cityId != null,
-  refetchInterval: SAFETY_NET_MS,
+  refetchInterval: useSafetyNet(),
 });
 
 /** Kahraman aksiyonları — hepsi tapınağı ve şehri tazeler (diriltme kaynak harcar). */
@@ -1017,7 +1100,7 @@ export interface AllianceListRow {
 export const useAlliance = (page = 0): UseQueryResult<AllianceView> => useQuery({
   queryKey: ['alliance', page],
   queryFn: () => get<AllianceView>(`/api/v1/alliance?page=${page}`),
-  refetchInterval: SAFETY_NET_MS,
+  refetchInterval: useSafetyNet(),
   enabled: useAuthed(),
 });
 
@@ -1147,7 +1230,7 @@ export const useChatConversations = (): UseQueryResult<{ items: ChatConversation
   useQuery({
     queryKey: ['chat'],
     queryFn: () => get<{ items: ChatConversation[]; unread: number }>('/api/v1/chat/conversations'),
-    refetchInterval: SAFETY_NET_MS,
+    refetchInterval: useSafetyNet(),
     enabled: useAuthed(),
   });
 

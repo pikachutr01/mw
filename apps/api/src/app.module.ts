@@ -38,6 +38,7 @@ import { GameClockService } from './world/game-clock.service.ts';
 import { MaintenanceInterceptor } from './world/maintenance.interceptor.ts';
 import { WorldStateService } from './world/world-state.service.ts';
 import { WorldController } from './world/world.controller.ts';
+import { WorldsPublicController } from './world/worlds-public.controller.ts';
 
 export { DB } from './db/tokens.ts';
 
@@ -53,7 +54,7 @@ export { DB } from './db/tokens.ts';
     HealthController, SimulateController, AuthController, CityController,
     AllianceController, ChatController,
     HeroController,
-    MissionController, BattleController, WorldController, CommandController,
+    MissionController, BattleController, WorldController, WorldsPublicController, CommandController,
     NotifyController,
     VacationController,
     // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
