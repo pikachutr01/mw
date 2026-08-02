@@ -83,15 +83,21 @@ export function MovementIcon({
     >
       <span className="relative">
         {/* ⭐ Boyut ŞEHİR SİMGESİYLE AYNI (kullanıcı kararı): olay simgeleri kalenin altında
-            küçücük kalınca dizi "kale + tozlar" gibi görünüyordu; artık aynı ağırlıkta. */}
+            küçücük kalınca dizi "kale + tozlar" gibi görünüyordu; artık aynı ağırlıkta.
+            ⚠️ Kale 2026-08-02'de küçülünce bu da küçüldü — kural "aynı boyut", sabit sayı değil. */}
         <img src={`/assets/missions/${m.icon}.png`} alt={titleOf(m)}
           width={80} height={80}
-          className={`icon-shadow h-14 w-14 object-contain sm:h-20 sm:w-20 ${
+          className={`icon-shadow h-8 w-8 object-contain sm:h-14 sm:w-14 ${
             m.direction === 'in' ? 'drop-shadow-[0_0_5px_var(--mw-color-danger)]' : ''
           }`} />
-        {/* ⭐ Dönüş rozeti: oyuncu İLK BAKIŞTA giden mi dönen mi ayırt edebilmeli. */}
+        {/* ⭐ Dönüş rozeti: oyuncu İLK BAKIŞTA giden mi dönen mi ayırt edebilmeli.
+            ⚠️ `title` YOK — üst düğmedekiyle aynı gerekçe: fareyi takip eden kendi
+            tooltip'imiz varken tarayıcının gecikmeli kutusu da açılıp üstüne biniyordu.
+            ⚠️ Bu yorum BURADA duruyor, `isReturn ? (` içinde DEĞİL: orada iki kardeş öge
+            döndürmüş olur ve derleme «JSX expressions must have one parent element» ile
+            patlar — projenin tuzak tablosundaki kayıtlı hata (üçüncü kez yaşandı). */}
         {isReturn ? (
-          <span aria-hidden title="Geri dönüyor"
+          <span aria-hidden
             className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full
               border border-strong bg-success text-[11px] leading-none text-on-accent shadow">
             ↩

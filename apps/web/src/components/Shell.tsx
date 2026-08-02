@@ -129,42 +129,53 @@ export function ActivityDot() {
   );
 }
 
+/**
+ * ⭐ ÜST BÖLGE SABİT — ama `position: sticky` DEĞİL (kullanıcı, 2026-08-02).
+ *
+ * Önce sticky denendi ve kötü göründü, çünkü sticky öge kayan içeriği ancak **opak bir arka
+ * planı varsa** örter. Gövdenin arka planı ise düz renk değil: `--tex-grain` + `--tex-page`
+ * dokuları `background-attachment: fixed` ile duruyor (`index.css`). Şeride düz `bg-bg`
+ * vermek o dokuyu tam da orada kesiyordu; üstelik içerik yine de altından geçtiği için
+ * kenarlarda sızıyordu.
+ *
+ * Doğru çözüm arka plan değil **yerleşim**: sayfa gövdesi hiç kaydırılmıyor, yalnız
+ * içerik sütunu kendi içinde kayıyor. Böylece
+ *   - üst bölge arka plansız kalabiliyor (doku bozulmuyor),
+ *   - içerik oraya **hiç girmiyor** — şehir şeridinin bittiği yerin biraz altında kesiliyor,
+ *   - mobil ve masaüstü aynı davranıyor.
+ *
+ * ⚠️ `min-h-0`: flex çocuğunun varsayılan `min-height:auto` değeri içeriğe göre büyür ve
+ * `overflow-y-auto`yu ETKİSİZ kılar (kaydırma yine gövdeye taşardı). Bu satır olmadan
+ * düzenin tamamı sessizce eski davranışa döner.
+ *
+ * ⚠️ `#root` yüksekliği `index.css`te `height: 100%` — buradaki `h-full` ona dayanıyor.
+ */
 export function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-full flex-col">
-      <div className="flex-1">
-        <div className="mx-auto flex w-full max-w-[1700px] justify-center gap-3 px-3 py-3 lg:gap-8 2xl:gap-14">
-          <aside className="hidden w-52 shrink-0 lg:block">
-            <SideMenu />
-          </aside>
+    <div className="flex h-full flex-col">
+      <div className="mx-auto flex h-full w-full max-w-[1700px] justify-center gap-3 px-3 py-3 lg:gap-8 2xl:gap-14">
+        {/* Yan sütunlar da kendi içlerinde kayar; uzun ittifak/sohbet listesi sayfayı itmez. */}
+        <aside className="hidden w-52 shrink-0 overflow-y-auto lg:block">
+          <SideMenu />
+        </aside>
 
-          <main className="w-full min-w-0 max-w-3xl pb-24 lg:pb-3">
-            {/*
-              ⭐ ÜST ŞERİT SABİT (kullanıcı, 2026-08-02): bilgi çubuğu ve şehir şeridi
-              kaydırmada yukarı kaçmıyor — kaynak sayaçları ve şehir değiştirme her ekranda,
-              her kaydırma konumunda elin altında. Mobilde de aynı (Ordular'da şerit görünür).
+        <main className="flex h-full w-full min-w-0 max-w-3xl flex-col">
+          <div className="shrink-0">
+            <InfoBar />
+            {/* Doğrulama uyarısı şehir şeridinin ÜSTÜNDE: bilgi çubuğundan sonraki ilk şey. */}
+            <VerifyBanner />
+            <CityStrip />
+          </div>
 
-              ⚠️ `-mt-3 pt-3`: dış sarmalayıcının `py-3` boşluğu bloğun İÇİNE alınıyor.
-              Alınmasaydı şerit `top-0`'a yapıştığında üstünde 12 px'lik saydam bir aralık
-              kalır ve altından kayan içerik oradan görünürdü. Negatif marj bilerek yalnız
-              DİKEY: yatayda `-mx` vermek şeridi masaüstünde sol menünün üstüne taşırırdı.
-
-              `bg-bg` şart — arka planı olmayan sticky öge kayan içeriği örtmez.
-              `z-20`: alt bar ve sohbetin (30) altında, sayfa içeriğinin üstünde.
-            */}
-            <div className="sticky top-0 z-20 -mt-3 bg-bg pt-3">
-              <InfoBar />
-              {/* Doğrulama uyarısı şehir şeridinin ÜSTÜNDE: bilgi çubuğundan sonraki ilk şey. */}
-              <VerifyBanner />
-              <CityStrip />
-            </div>
+          {/* `pb-24`: mobilde alt bar `fixed`, son satır onun altında kalmasın. */}
+          <div className="min-h-0 flex-1 overflow-y-auto pb-24 lg:pb-3">
             {children}
-          </main>
+          </div>
+        </main>
 
-          <aside className="hidden w-60 shrink-0 xl:block">
-            <SidePanels />
-          </aside>
-        </div>
+        <aside className="hidden w-60 shrink-0 overflow-y-auto xl:block">
+          <SidePanels />
+        </aside>
       </div>
 
       <BottomBar />

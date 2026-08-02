@@ -114,6 +114,22 @@ export function eventForOutbox(
       };
 
     /**
+     * ⭐ GÖREV GÖNDERİLDİ → GÖNDERENE (kullanıcı, 2026-08-02). Ordular rozeti görev verilir
+     * verilmez belirsin.
+     *
+     * ⚠️ Bu satır olmadan rozet YALNIZ isteği yapan sekmede güncelleniyordu (mutation kendi
+     * sorgusunu tazeliyor). Oyuncunun açık ikinci sekmesi ya da telefonu 60 sn'lik emniyet
+     * yoklamasına kadar hiçbir şey görmüyordu — ve nakliye/destek/şehir kurmanın zaten hiç
+     * olayı yoktu. `city:incoming_*` yalnız SAVUNANA gider, bu ise gönderene.
+     */
+    case 'mission:sent':
+      return {
+        topic: 'missions:changed', worldId,
+        playerIds: players(num(payload['ownerPlayerId'])),
+        ref: { cityId: num(payload['originCityId']), missionId: num(payload['missionId']) },
+      };
+
+    /**
      * ⭐ BİRLEŞİK GÖREV BİTİŞİ (2026-07-30) — scheduler her Ordular-görünür görevi başarıyla
      * işleyince yazar. Tek olay üç işi görür: (1) Ordular sayfasında satır ANINDA düşer,
      * (2) başka sayfadayken sol menü rozeti kendiliğinden güncellenir, (3) payload gelecekte

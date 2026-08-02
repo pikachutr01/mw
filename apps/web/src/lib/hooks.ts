@@ -24,17 +24,47 @@ import { getSession, onSessionChange, type Session } from './api.ts';
 export const useSession = (): Session | null =>
   useSyncExternalStore(onSessionChange, getSession, getSession);
 
-/** Sunucu ile istemci saati farkı (ms). Tek yerde tutulur, her yanıtta tazelenir. */
+/**
+ * ⭐ İKİ AYRI SAAT — karıştırmak 2026-08-02'de canlıda bir hataya yol açtı.
+ *
+ *   `serverNow()` — sunucunun **gerçek** saati. Yalnız gerçek zamanda tutulan değerler için
+ *                   (bakım perdesinin `maintenance_eta`'sı) ve süre FARKI hesapları için.
+ *   `gameNow()`   — **oyun saati** = gerçek saat − dünyanın toplam duraklama süresi.
+ *                   `execute_at`, `finish_at`, `resources_at` — yani ekranda geri sayımı
+ *                   çizilen HER mutlak damga bu ölçekte tutulur (`game-clock.service.ts`).
+ *
+ * ⚠️ Hata şuydu: geri sayımlar oyun saatindeki damgaları GERÇEK saatle karşılaştırıyordu.
+ * Fark, dünyanın duraklama toplamı kadardır (canlıda 202 sn). Uzun görevlerde bu fark
+ * yutuluyor ve hiç fark edilmiyordu; ama **casusluk 120 sn sürdüğü için varış anı hep
+ * "geçmiş" çıkıyordu** → geri sayım yerine sürekli «varıyor» yazıyordu. Yani hata görev
+ * SÜRESİ kısaldıkça görünür oluyordu — en sinsi türden.
+ *
+ * Her iki çıpa da her yanıtta tazeleniyor; `gameNow` alanını göndermeyen uçlar offset'i
+ * bozmaz, yalnız güncellemez (şehir detayı her ekranda çalışıyor ve ikisini de gönderiyor).
+ */
 let clockSkewMs = 0;
+let gameOffsetMs = 0;
 
-export function noteServerTime(serverNow: string | undefined): void {
-  if (!serverNow) return;
-  const t = Date.parse(serverNow);
-  if (Number.isFinite(t)) clockSkewMs = t - Date.now();
+export function noteServerTime(serverNow: string | undefined, gameNow?: string): void {
+  if (serverNow) {
+    const t = Date.parse(serverNow);
+    if (Number.isFinite(t)) clockSkewMs = t - Date.now();
+  }
+  if (serverNow && gameNow) {
+    const s = Date.parse(serverNow);
+    const g = Date.parse(gameNow);
+    if (Number.isFinite(s) && Number.isFinite(g)) gameOffsetMs = g - s;
+  }
 }
 
+/** Sunucunun gerçek saati (tarayıcı saati + ölçülen sapma). */
 export function serverNow(): number {
   return Date.now() + clockSkewMs;
+}
+
+/** Oyun saati — geri sayımların TAMAMI bunu kullanmalı. */
+export function gameNow(): number {
+  return serverNow() + gameOffsetMs;
 }
 
 /**
@@ -51,8 +81,13 @@ export function useTick(active = true): number {
   return serverNow();
 }
 
-/** Kalan süreyi "2 sa 04 dk" / "3 dk 12 sn" biçiminde verir. Bitmişse `null`. */
-export function remaining(iso: string | null | undefined, now = serverNow()): string | null {
+/**
+ * Kalan süreyi "2 sa 04 dk" / "3 dk 12 sn" biçiminde verir. Bitmişse `null`.
+ *
+ * ⚠️ Varsayılan çıpa **oyun saati**: geri sayımı çizilen damgaların hepsi o ölçekte tutuluyor.
+ * Gerçek zamanda tutulan bir değer için (yalnız bakım ETA'sı) `now` AÇIKÇA geçilmeli.
+ */
+export function remaining(iso: string | null | undefined, now = gameNow()): string | null {
   if (!iso) return null;
   const ms = Date.parse(iso) - now;
   if (!Number.isFinite(ms) || ms <= 0) return null;
@@ -115,7 +150,7 @@ export function formatClock(totalSeconds: number): string {
 }
 
 /** `remaining` ile aynı, yalnız saat biçiminde. Bitmişse `null`. */
-export function remainingClock(iso: string | null | undefined, now = serverNow()): string | null {
+export function remainingClock(iso: string | null | undefined, now = gameNow()): string | null {
   if (!iso) return null;
   const ms = Date.parse(iso) - now;
   if (!Number.isFinite(ms) || ms <= 0) return null;

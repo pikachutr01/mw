@@ -73,7 +73,7 @@ export function CityStrip() {
      * paylaşıyor, hiçbiri sabit genişlik dayatmıyor → toplam asla ekranı aşmıyor.
      * `sm:` ve üstünde eski sabit genişlikli, ortalanmış düzen aynen sürüyor.
      */
-    <div className={`mb-3 sm:overflow-x-auto ${onArmies ? '' : 'hidden lg:block'}`}>
+    <div className={`mb-2 sm:overflow-x-auto ${onArmies ? '' : 'hidden lg:block'}`}>
       <div className="flex gap-1 px-1 sm:mx-auto sm:min-w-max sm:justify-center sm:gap-4">
         {list.map((c) => {
           const active = c.id === cityId;
@@ -97,7 +97,9 @@ export function CityStrip() {
                  */
                 aria-label={`${c.name} ${coords(c.coordinates)}`}
                 aria-current={active ? 'true' : undefined}
-                className={`group w-full rounded-[var(--radius-md)] border-2 px-1 pt-1 pb-1.5 transition-all ${
+                /* ⚠️ İç boşluklar 2026-08-02'de kısıldı: şerit artık SABİT (kaydırmada
+                   yukarı kaçmıyor), yani kapladığı her piksel içerikten çalınıyor. */
+                className={`group w-full rounded-[var(--radius-md)] border-2 px-0.5 pt-0.5 pb-1 transition-all ${
                   active
                     ? 'border-accent bg-accent/15 shadow-[0_0_0_1px_var(--mw-color-accent)]'
                     : 'border-transparent hover:border-border hover:bg-raised/60'
@@ -105,14 +107,16 @@ export function CityStrip() {
               >
                 <span className="relative block">
                   {/* ⚠️ Mobilde 56px → 40px (kullanıcı: "bu şehir simgeleri küçültülebilir"):
-                      5 şehir 375px'lik ekranda taşmadan sığsın. `max-w-full` ikinci emniyet. */}
+                      5 şehir 375px'lik ekranda taşmadan sığsın. `max-w-full` ikinci emniyet.
+                      ⚠️ 2026-08-02'de bir tur daha küçüldü (40→32 · masaüstü 80→56): şerit
+                      sabitlenince aşağıdaki içeriğe kalan yer belirleyici oldu. */}
                   <img
                     src="/assets/buildings/city.png"
                     alt=""
                     width={96}
                     height={77}
-                    className={`icon-shadow mx-auto h-10 w-auto max-w-full object-contain
-                      transition-transform sm:h-20 ${
+                    className={`icon-shadow mx-auto h-8 w-auto max-w-full object-contain
+                      transition-transform sm:h-14 ${
                       active ? 'scale-105' : 'group-hover:scale-105'
                     }`}
                   />

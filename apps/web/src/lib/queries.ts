@@ -17,7 +17,10 @@ import { noteServerTime, useSession } from './hooks.ts';
 
 async function get<T>(path: string): Promise<T> {
   const r = await api<T>(path);
-  noteServerTime((r as { serverNow?: string } | null)?.serverNow);
+  // ⚠️ İKİ alan da geçiliyor: `gameNow` olmadan geri sayımlar oyun saatindeki damgaları
+  // gerçek saatle karşılaştırır ve dünyanın duraklama toplamı kadar sapar (bkz. `hooks.ts`).
+  const t = r as { serverNow?: string; gameNow?: string } | null;
+  noteServerTime(t?.serverNow, t?.gameNow);
   return r;
 }
 

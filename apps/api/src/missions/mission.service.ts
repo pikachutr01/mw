@@ -255,6 +255,19 @@ export class MissionService {
                 })}::jsonb)
       `);
 
+      // ⭐ Gönderenin Ordular rozeti de anında güncellensin (bkz. `march` içindeki ikizi).
+      await t.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${opts.worldId}, 'mission:sent',
+                ${JSON.stringify({
+                  missionId,
+                  ownerPlayerId: opts.playerId,
+                  originCityId: opts.originCityId,
+                  targetCityId: target.id,
+                  type: 'attack',
+                })}::jsonb)
+      `);
+
       return {
         missionId,
         originCityId: opts.originCityId,
@@ -757,6 +770,29 @@ export class MissionService {
                   executeAt: executeAt.toISOString(), ...(o.payloadExtra ?? {}),
                 })}::jsonb,
                 ${`mission:${missionId}`})
+      `);
+
+      /**
+       * ⭐ GÖNDERENE de haber ver (kullanıcı, 2026-08-02): görev verilir verilmez sol menüdeki
+       * (ve mobilde alt bardaki) **Ordular rozeti** belirsin.
+       *
+       * ⚠️ Buraya kadar yalnız SAVUNANA olay yazılıyordu (`city:incoming_*`). Gönderenin
+       * ekranı, isteği yapan mutation'ın sorguyu tazelemesine bağlıydı — yani rozet YALNIZ
+       * görevi veren sekmede güncelleniyordu. Oyuncunun ikinci bir sekmesi ya da telefonu
+       * açıksa orada 60 sn'lik emniyet yoklamasına kadar hiçbir şey değişmiyordu.
+       *
+       * Nakliye, destek ve şehir kurmanın hiçbir olayı yoktu; bu satır dördünü birden kapatıyor.
+       */
+      await t.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${o.worldId}, 'mission:sent',
+                ${JSON.stringify({
+                  missionId,
+                  ownerPlayerId: o.playerId,
+                  originCityId: o.originCityId,
+                  targetCityId: targetId,
+                  type: o.type,
+                })}::jsonb)
       `);
 
       // ⭐ CASUSLUK GİDİŞİ HEDEFTE GÖRÜNÜR (kullanıcı, §13.11.6): kırmızı kuş simgesi. Kaç kuş
