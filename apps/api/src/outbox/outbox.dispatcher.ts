@@ -9,6 +9,7 @@
  * Faz 1'de yalnız iskelet + kanal kaydı var; gerçek WS gateway Faz 2'de bağlanır.
  */
 import { sql } from 'drizzle-orm';
+import { toDate } from '../db/client.ts';
 import type { Db } from '../db/client.ts';
 import type { Heartbeat } from '../worker/heartbeat.ts';
 
@@ -29,6 +30,12 @@ export interface OutboxRow {
   topic: string;
   payload: Record<string, unknown>;
   attempts: number;
+  /**
+   * ⭐ Satırın yazılma anı — **idempotency anahtarını benzersizleştirmek için** taşınıyor
+   * (2026-08-03). Tek başına `id` yetmiyor: `id` bir dizi sayacı ve veritabanı sıfırlanınca
+   * 1'den yeniden başlıyor. Gerekçesi `worker.ts`'teki `mail:send` sink'inde.
+   */
+  createdAt: Date;
 }
 
 interface OutboxRowRaw extends Record<string, unknown> {
@@ -89,7 +96,7 @@ export class OutboxDispatcher {
   async tick(): Promise<{ dispatched: number; failed: number; skipped: number }> {
     // SKIP LOCKED: birden çok dispatcher aynı satırı iki kez göndermez.
     const raw = await this.db.execute<OutboxRowRaw>(sql`
-      SELECT id, world_id AS "worldId", topic, payload, attempts
+      SELECT id, world_id AS "worldId", topic, payload, attempts, created_at AS "createdAt"
         FROM outbox
        WHERE dispatched_at IS NULL AND attempts < ${this.opts.maxAttempts}
        ORDER BY id
@@ -102,6 +109,8 @@ export class OutboxDispatcher {
       topic: r.topic,
       payload: r.payload ?? {},
       attempts: Number(r.attempts),
+      // ⚠️ postgres.js `timestamptz`i DİZE döndürebiliyor — sınırda `toDate()` (projenin tuzağı).
+      createdAt: toDate(r['createdAt']),
     }));
 
     let dispatched = 0;

@@ -25,14 +25,34 @@ import postgres from 'postgres';
 
 const ROLLER = ['player', 'moderator', 'admin'];
 
-const [hedef, rol] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const [hedef, rol] = argv;
+
+const KULLANIM =
+  'Kullanım: node scripts/rol-ver.mjs "<kullanıcıadı|e-posta>" <player|moderator|admin>\n'
+  + '  ⚠️ Kullanıcı adı BOŞLUK içeriyorsa TIRNAK içine al:  ... "Eru Ilúvatar" admin';
 
 if (!hedef || !rol) {
-  console.error('Kullanım: node scripts/rol-ver.mjs <kullanıcıadı|e-posta> <player|moderator|admin>');
+  console.error(KULLANIM);
   process.exit(1);
 }
+
+/**
+ * ⚠️ Boşluklu kullanıcı adları tırnaksız yazılınca kabuk onları ayrı argümanlara böler ve
+ * ikinci parça rol sanılır — canlıda tam olarak bu yaşandı (`"Eru Ilúvatar" admin` yerine
+ * `Eru Ilúvatar admin` yazılınca «Geçersiz rol: Ilúvatar» dedi). Kullanıcı adları boşluk
+ * içerebiliyor (2026-08-02 kuralı), o yüzden hata mesajı bunu ADIYLA söylemeli.
+ */
+if (argv.length > 2) {
+  console.error(`Fazladan argüman var: ${argv.slice(1, -1).join(' ')}`);
+  console.error('Kullanıcı adında boşluk mu var? Tırnak içine al:');
+  console.error(`  node scripts/rol-ver.mjs "${argv.slice(0, -1).join(' ')}" ${argv.at(-1)}`);
+  process.exit(1);
+}
+
 if (!ROLLER.includes(rol)) {
   console.error(`Geçersiz rol: ${rol}. Geçerli olanlar: ${ROLLER.join(' · ')}`);
+  console.error(KULLANIM);
   process.exit(1);
 }
 

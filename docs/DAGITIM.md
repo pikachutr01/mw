@@ -234,3 +234,26 @@ acilse önce `pm2 stop mobilwar` (oyun kapanır ama veri güvende).
 **"Yedek nerede?"**
 `/var/backups/mobilwar/*.dump` (günlük 04:45, 14 gün). ⚠️ **Aynı sunucuda** — sunucu tamamen
 giderse yedek de gider. Uzak kopya hâlâ yapılacaklar listesinde.
+
+---
+
+## 8. ⚠️ Veritabanını sıfırlamanın görünmeyen bedeli
+
+Canlı veritabanını `DROP`/`CREATE` ile sıfırlarken **dizi sayaçları da sıfırlanır**
+(`outbox.id` yeniden 1'den başlar). Bu tek başına zararsız görünür ama dışarıdaki servisler
+o kimlikleri hatırlıyor olabilir.
+
+**2026-08-03'te yaşandı:** Resend'e giden `Idempotency-Key` `outbox-<id>` biçimindeydi.
+Sıfırlamadan önce `outbox-1` ve `outbox-2` anahtarları kullanılmıştı; sıfırlamadan sonraki
+ilk kayıt maili aynı anahtarları **farklı gövdeyle** istedi ve Resend
+**409 `invalid_idempotent_request`** döndürdü. Doğrulama e-postası hiç gitmedi, üstelik
+ekranda "Gönderdik" yazıyordu (o mesaj bilerek iyimser — sayım sızdırmamak için).
+
+Anahtar artık `outbox-<id>-<created_at ms>`; sıfırlanmış bir veritabanı eski anahtarlarla
+çakışmıyor. Ama ders daha genel:
+
+> **Dış servise gönderdiğin her kimliğe, veritabanı sıfırlansa da tekrar etmeyecek bir
+> bileşen ekle.** Dizi sayaçları bu garantiyi vermez.
+
+Aynı risk taşıyan yerler: ödeme sağlayıcısına gidecek sipariş kimlikleri, mağaza satın alma
+doğrulamaları, dış webhook'lara verilen `event_id`'ler.

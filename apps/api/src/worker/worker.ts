@@ -157,7 +157,20 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
         subject: String(p['subject'] ?? ''),
         html: String(p['html'] ?? ''),
         text: String(p['text'] ?? ''),
-        idempotencyKey: `outbox-${row.id}`,
+        /**
+         * ⚠️⚠️ **ANAHTAR `id` TEK BAŞINA YETMEZ** (2026-08-03, canlıda yaşandı).
+         *
+         * `outbox-<id>` kullanılıyordu ve şu hatayı üretti: canlı veritabanı sıfırlandığında
+         * `outbox.id` dizisi 1'den yeniden başladı, ama Resend o anahtarları **son 24 saatte
+         * görmüştü** (sıfırlamadan önceki satırlar). Yeni kayıt maili aynı anahtarla ama
+         * farklı gövdeyle gidince Resend **409 `invalid_idempotent_request`** döndürdü ve
+         * doğrulama e-postası HİÇ gitmedi — üstelik ekranda "gönderdik" yazıyordu.
+         *
+         * `created_at` eklemek anahtarı gerçekten benzersiz yapıyor: aynı satırın yeniden
+         * denenmesinde DEĞİŞMEZ (idempotency'nin asıl amacı korunur), ama sıfırlanmış bir
+         * veritabanının ya da başka bir ortamın aynı `id`si artık çakışmaz.
+         */
+        idempotencyKey: `outbox-${row.id}-${row.createdAt.getTime()}`,
       });
     });
   }
