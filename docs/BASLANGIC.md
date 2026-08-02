@@ -9,26 +9,35 @@
 > `mobiwar-engine.js`, ölçüm raporları). Onları yeniden adlandırmak kaynağın izini bozardı.
 > Kural basit: **çalışan ürün MobilWar, tersine mühendislik kaynağı Mobiwar.**
 
-> **📍 NEREDEYİZ (2026-07-31):** Faz 0 ✅ · Faz 1 ✅ · **Faz 2 TAM KAPANDI** (son çıkış kriteri
-> offline push 2026-07-31'de girdi) · Faz 3-4 parça parça
+> **📍 NEREDEYİZ (2026-08-02):** Faz 0 ✅ · Faz 1 ✅ · Faz 2 ✅ · **yönetim paneli 9 faz ✅** ·
+> hesap/şehir aksiyonları paketi **TAMAMEN KAPANDI** (tatil modu son maddeydi).
 >
-> **Eski özet (2026-07-30):**
-> Oyun **tarayıcıda oynanabilir ve anlık**. Altı görev tipi · üretim bandı · Mağara · Kahramanlar
-> (Tapınak) · **İttifak sistemi** (roller, davet/başvuru, canlı durum, sıralama) · zengin **savaş
-> raporu** (kahraman kartları, Sur/Mağara, ganimet dökümü) · **şehir kurma yarışı görünürlüğü** ·
-> **dört dünya hız çarpanı (hepsi 1)** · motor **1.0.0**.
-> Kod `mw/`, GitHub'da, **571 test yeşil**, 21 migration.
+> Oyun **tarayıcıda oynanabilir ve anlık**. Altı görev tipi · üretim bandı · Mağara ·
+> Kahramanlar · **İttifak** (roller, davet/başvuru, canlı durum, sıralama) · zengin **savaş
+> raporu** · **misafir modu** (giriş yapmadan ana sayfa + savaş simülatörü) · **PWA kurulum
+> daveti** · **tatil modu** · dört dünya hız çarpanı (hepsi **1**) · motor **1.1.0**.
+> Kod `mw/`, GitHub'da, **696 test yeşil**, **36 migration**, 80 commit.
 >
-> **🚦 SIRADAKİ İŞ:** **Hesap/şehir aksiyonları** (tatil modu · şehir terk · şehir adı) ·
-> orijinal Java metin taraması · denge senaryoları · moderasyon minimumu (şikayet paneli).
-> ⚠️ **Genel Sohbet kullanıcı tarafından EN SONA alındı.**
-> 🔵 **Kullanıcıdan bekleyen:** `RESEND_API_KEY` (`mw/.env`'e kendisi yazacak) +
-> **`send.mobilwar.com`** DNS kayıtları (MX + SPF + DKIM). ⚠️ Alan adı `mobilwar.com`
-> olarak değişti; `send.scrabblecozucu.site` planı iptal — ayrıntı `VPS_DURUM_RAPORU.md`
-> başındaki 2026-08-02 notu ve `mw/.env.example` başlığı.
+> **🚦 SIRADAKİ İŞ — kullanıcı henüz seçmedi.** Sıradaki turun konusunu SOR; aşağıdakiler
+> envanterde duran adaylar, sıralama değil:
+> - **Moderasyon minimumu** — şikayet kuyruğu var, inceleme ekranı yok (§1.8)
+> - **Yardım ekranı** hâlâ yer tutucu · i18n hiç yok
+> - **Genel Sohbet** ⚠️ kullanıcı tarafından **EN SONA** alındı
+> - **Premium / üyelik** — ürün kararı bekliyor; tatil modunda dikiş hazır
+>   (`vacation.premiumOnly`), `players.is_premium` kolonu hâlâ okunmuyor
+> - **Mağaza bağlantıları** (Play/App Store) — PWA düğmesinde yorumla dikiş bırakıldı
+> - Denge senaryoları · orijinal Java metin taraması · askerî unvan rozetleri
 >
-> **🔑 Test hesapları:** `wstest` / `mobiwar2026` (4 şehir, dolu ordu) · ittifak denemesi için
-> `itflider` + `itfuye` / `parola-12345` (run.dll ittifağı). Giriş **kullanıcı adıyla**.
+> **🔵 Kullanıcıdan bekleyen** (tam liste `mobiwar-acik-kararlar` hafızasında):
+> `RESEND_API_KEY` (`mw/.env`'e **kendisi** yazacak) + **`send.mobilwar.com`** DNS kayıtları
+> (MX + SPF + DKIM) · canlıya çıkmadan **4 GB RAM yükseltmesi** · `mobilwar.com`'un DNS'i
+> nerede tutuluyor (Resend kayıtları oraya girecek — doğrulanmadı).
+>
+> **🔑 Test hesapları:** `wstest` / `mobiwar2026` (5 şehir, dolu ordu — ⚠️ parola DB'de öyle,
+> marka değişse de değişmedi) · ittifak denemesi için `itflider` + `itfuye` / `parola-12345`
+> (run.dll ittifağı). Giriş **kullanıcı adıyla**.
+> ⚠️ `wstest` **e-postası doğrulanmamış** → yapı/teknik seviye 3 tavanı ve saldırı yasağı onda
+> geçerli; bir kısıtı ölçerken önce bunun mu çarptığına bak (§verify).
 >
 > ### 🔵 KULLANICIDAN CEVAP BEKLEYEN SORU
 > 1. ✅ **Büyü Kalkanı + Sur — ÇÖZÜLDÜ ve 24 ÖLÇÜMLE DOĞRULANDI (2026-07-29).** İkisi de aynı
@@ -199,11 +208,14 @@ Koda dokunmadan önce ilgili §'yi aç.
 2. ✅ ~~Web Push~~ — **2026-07-31'de bitti** (§7.2b), **Faz 2 kapandı**. Kalan: Flutter/FCM
    token kaydı (aynı tabloya girer) · bildirim geçmişi ekranı.
 2b. ✅ ~~E-posta (Resend)~~ — **2026-07-31'de bitti** (§9.2). Kod anahtarsız da çalışıyor
-   (gövde konsola). 🔵 **Kullanıcıdan bekleyen:** `RESEND_API_KEY` + `send.scrabblecozucu.site`
-   DNS kayıtları (hostingdunyam paneli).
+   (gövde konsola). 🔵 **Kullanıcıdan bekleyen:** `RESEND_API_KEY` + **`send.mobilwar.com`**
+   DNS kayıtları. ⚠️ Alan adı 2026-08-02'de `mobilwar.com` oldu; `scrabblecozucu.site`
+   planı iptal.
 3. ✅ ~~Arama + Dünyada Bul~~ — **2026-07-31'de bitti** (§13.18.0). Kalan: infix arama.
-4. **Hesap/şehir aksiyonları** — Tatil Modu toggle (savunma tarafı hazır) · Şehir Terk Et ·
-   Şehir Adı Değiştir · Şifre Değiştir/Hatırlat
+4. ✅ ~~**Hesap/şehir aksiyonları**~~ — **paket tamamen kapandı.** Şehir Adı Değiştir · Şehir
+   Terk Et · Şifre/E-posta Değiştir · Hesap Silme (2026-08-01) + **Tatil Modu** (2026-08-02,
+   uçtan uca: göç 0035, `apps/api/src/vacation/`, `VacationPanel`, mavi «Tatilde», yönetici
+   «Tatili bitir» aksiyonu)
 5. **Orijinal Java metin taraması** — bildirim/uyarı/rapor adlarının sistematik uygulanması
 6. **Askerî unvanlar** (Subay/Komutan/Başkomutan/Mareşal) — kazanma şartı orijinalde
    sunucudaydı, bilinmiyor; kullanıcı "büyük savaş başarısı + süreli" diyor
@@ -274,7 +286,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | # | Karar | Varsayılanım |
 |---|---|---|
 | 0 | Mağara yıkma tabanı **100** (tablo) mu **150** (doküman metni) mi? (§13.20.1) | tablo = 100 |
-| 1 | ✅ **Alan adı — `scrabblecozucu.site` (apex)** seçildi (2026-07-31). Sertifika HAZIR (apex+www, otomatik yenileniyor). Bugün nginx'te `.site` tüm trafiği `.com`'a 301'liyor (`scrabblecozucu.com` conf, satır 70 ve 79) — yayına alırken o iki blok kaldırılacak. Mail alt alanı: `send.scrabblecozucu.site` | — |
+| 1 | ✅ **Alan adı — `mobilwar.com`** (2026-08-02, kullanıcı satın aldı). Oyun apex'ten, panel `yonetim.mobilwar.com`, mail `send.mobilwar.com`. ⛔ **Eski `scrabblecozucu.site` kararı İPTAL** — o alan adına ait sertifika/301 notları artık konusuz. ⚠️ Yeni alan adı için **certbot çalıştırılacak** ve `mobilwar.com`'un DNS'inin nerede tutulduğu **doğrulanmadı**. Uygulama tarafı hazır: `mw/.env.example` başındaki liste | — |
 | 2 | ✅ Dünya hızı — **x1'e çekildi** (2026-07-30, dört çarpan da 1) | — |
 | 3 | Palet tonları + başlık fontu (§13.13.2) | ekranda görünce ayarlarız |
 | 4 | Tuzak savunma tabanına girsin mi (§13.11.10) | hayır (tek kullanımlık) |
