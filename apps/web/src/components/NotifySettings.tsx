@@ -112,10 +112,9 @@ export function NotifySettings(): React.ReactElement {
         ))}
       </div>
 
-      <div className="px-3 py-2 text-[11px] text-muted">
-        Oyun açıkken bildirim <strong>telefonuna/masaüstüne düşmez</strong> — sağ altta kısa bir
-        şerit olarak görünür. Sistem bildirimi yalnız oyun kapalıyken gelir.
-      </div>
+      {/* ⚠️ Buradaki «oyun açıkken sistem bildirimi gitmez» açıklaması 2026-08-02'de
+          kaldırıldı (kullanıcı): davranışın kendisi DEĞİŞMEDİ (`NotifyService.deliver()`
+          tek dallanma), yalnız anlatımı gereksiz bulundu. */}
     </Panel>
   );
 }

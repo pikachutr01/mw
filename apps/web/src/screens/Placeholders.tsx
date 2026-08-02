@@ -5,9 +5,7 @@
  * oyuncu (ve biz) neyin eksik olduğunu ekrandan görüyoruz. `duzenleme_onerileri.txt`'teki
  * kalemler burada tek tek adlandırıldı.
  */
-import { logout } from '../lib/api.ts';
-import { useTheme } from '../lib/hooks.ts';
-import { Badge, Button, Panel } from '../components/ui.tsx';
+import { Badge, Panel } from '../components/ui.tsx';
 import { AccountPanel } from '../components/AccountPanel.tsx';
 import { CityAdminPanel } from '../components/CityAdminPanel.tsx';
 import { DevicesPanel } from '../components/DevicesPanel.tsx';
@@ -34,54 +32,39 @@ export const HelpScreen = (): React.ReactElement => (
   ]} />
 );
 
-/** Seçenekler — hesap ve tema; mobilde "Daha Fazla" sekmesi de buraya düşer. */
-export function OptionsScreen({ onLoggedOut }: { onLoggedOut: () => void }): React.ReactElement {
-  const [theme, setTheme] = useTheme();
-
+/**
+ * Seçenekler — hesap, cihazlar, bildirimler, şehir ve tatil; mobilde "Daha Fazla" da buraya düşer.
+ *
+ * ⭐ DÜZEN 2026-08-02'de derlendi (kullanıcı). Öncesinde her şey tek sütunda alt alta
+ * uzuyordu; masaüstünde yarısı boş kalıyordu. Şimdi:
+ *   - **Hesap** tam genişlikte üstte — tema seçici artık onun başlık bandında (kendi kartı
+ *     kaldırıldı: tek seferlik bir tercih tam bir kart kadar yer hak etmiyor).
+ *   - Kalan dört kart masaüstünde **iki sütun**, mobilde tek sütun. Sıra konu bazlı:
+ *     üstte cihazla ilgili ikisi (bildirim + oturumlar), altta dünyayla ilgili ikisi
+ *     (şehir + tatil).
+ *   - «Oyunu Kapat» kaldırıldı: çıkış zaten sol menüde ve mobilde «Daha» listesinde var,
+ *     bu ÜÇÜNCÜ kopyaydı.
+ *
+ * ⚠️ `lg:items-start`: grid hücreleri varsayılan olarak satırın en uzun kartı kadar
+ * gerilir; kısa kart altında koca bir boşlukla dururdu.
+ */
+export function OptionsScreen(): React.ReactElement {
   return (
     <div className="space-y-3">
       <AccountPanel />
 
-      {/* ⭐ Orijinalde de Seçenekler menüsünün maddesi (`g.java` case 63). */}
-      <CityAdminPanel />
-
-      {/* ⭐ Aktif cihazlar HESAP panelinin hemen ardında: ikisi de "hesabım" konusu ve
-          oyuncu şüphelendiğinde ikisine art arda bakıyor (cihazı çıkar → parolayı değiştir). */}
-      <DevicesPanel />
-
-      <NotifySettings />
-
-      {/* ⭐ Orijinalde de Seçenekler menüsünde (`g.java` case 63 — tatildeyken madde
-          «Tatil Modundan Çık»a dönüşüyor). Tema'dan ÖNCE: tema bir görünüm tercihi,
-          tatil hesabın durumu — hesap konuları bir arada duruyor. */}
-      <VacationPanel />
-
-      <Panel title="Tema">
-        <div className="flex gap-1 p-3 pb-1.5">
-          {([['system', 'Sistem'], ['light', 'Gündüz'], ['dark', 'Gece']] as const).map(([id, label]) => (
-            <button key={id} onClick={() => setTheme(id)}
-              className={`flex-1 rounded-[var(--radius-sm)] border-2 px-2 py-1.5 text-xs ${
-                theme === id
-                  ? 'border-strong bg-accent text-on-accent'
-                  : 'border-border bg-surface text-muted hover:bg-raised'
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="px-3 pb-3 text-[11px] text-muted">
-          «Sistem» seçiliyken işletim sisteminin gece moduna geçişini canlı izler.
-        </div>
-      </Panel>
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+        <NotifySettings />
+        <DevicesPanel />
+        {/* ⭐ İkisi de orijinalde Seçenekler menüsünün maddesiydi (`g.java` case 63 —
+            tatildeyken madde «Tatil Modundan Çık»a dönüşüyor). */}
+        <CityAdminPanel />
+        <VacationPanel />
+      </div>
 
       <Soon title="Yakında" lines={[
         'Üyelik / premium',
       ]} />
-
-      <Button variant="danger" className="w-full"
-        onClick={() => { void logout().then(onLoggedOut); }}>
-        Oyunu Kapat
-      </Button>
     </div>
   );
 }

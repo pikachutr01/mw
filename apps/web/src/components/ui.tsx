@@ -191,16 +191,27 @@ export function CatalogIcon({
  * bildirimleri sayesinde çalışırdı ama Fast Refresh'in bozulduğu, teşhisi pahalı bir sınıf.
  * `CatalogIcon`'un yanı zaten doğal yeri: ikisi aynı desen.
  */
-export function MenuIcon({ id, size }: { id: string; size: number }) {
+/**
+ * ⚠️ `className` verildiğinde inline `style` YAZILMAZ — bilerek. Inline stil her zaman
+ * CSS sınıfını ezer, dolayısıyla ikisi birlikte gönderilseydi `sm:h-5` gibi kırılıma bağlı
+ * bir boyut sessizce hiç uygulanmazdı (mobilde ikonları büyütürken tam bu tuzağa düşüldü).
+ * Kırılıma göre boyut isteyen çağıran `className` verir ve ölçüyü oradan yönetir; `size`
+ * yine de HTML `width`/`height` niteliği olarak kalır (CSS'ten zayıftır, düzen sıçramasını
+ * önler).
+ */
+export function MenuIcon({ id, size, className = '' }: {
+  id: string; size: number; className?: string;
+}) {
   const [broken, setBroken] = useState(false);
+  const sized = className ? undefined : { width: size, height: size };
   if (broken) {
-    return <span aria-hidden className="block shrink-0" style={{ width: size, height: size }} />;
+    return <span aria-hidden className={`block shrink-0 ${className}`} style={sized} />;
   }
   return (
     <img src={`/assets/menu/${id}.png`} alt="" aria-hidden width={size} height={size}
       onError={() => setBroken(true)}
-      className="icon-shadow shrink-0 object-contain"
-      style={{ width: size, height: size }} />
+      className={`icon-shadow shrink-0 object-contain ${className}`}
+      style={sized} />
   );
 }
 

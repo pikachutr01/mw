@@ -33,9 +33,16 @@ export const NAME_RULE_MESSAGE =
   `Ad ${NAME_MIN}-${NAME_MAX} karakter olmalı; harf, rakam ve boşluk kullanılabilir.`;
 
 /* ── KULLANICI ADI ───────────────────────────────────────────────────────────
- * ⚠️ Şehir/kahraman adından TEK farkı: **boşluk yok**. Kullanıcı adı giriş ekranında
- * yazılıyor, sıralamada ve mesaj başlığında geçiyor; baştaki/sondaki boşluk görünmeyen ama
- * girişte eşleşmeyi bozan bir fark üretirdi.
+ * ⭐ **Boşluk 2026-08-02'de SERBEST bırakıldı** (kullanıcı): `Eru Ilúvatar` gibi iki parçalı
+ * adlar reddediliyordu. Kural artık şehir/kahraman adıyla aynı — harf, rakam ve boşluk.
+ * (Aksanlı harfler zaten geçiyordu: `\p{L}` `ú`yü de kapsıyor; reddedilen şey boşluktu.)
+ *
+ * ⚠️ Boşluğu serbest bırakmanın tek gerçek riski şuydu: baştaki/sondaki ya da içerideki
+ * çoklu boşluk **görünmez** ama girişte eşleşmeyi bozar — oyuncu doğru yazdığını sanıp
+ * giremez. Bu yüzden kullanıcı adı hem KAYITTA hem GİRİŞTE `normalizeName`den geçiyor
+ * (`packages/contracts/src/auth.ts`); yani "  Eru   Ilúvatar " ile "Eru Ilúvatar" aynı ada
+ * çözülüyor. Normalizasyon şemada, servis katmanında değil: iki uçtan biri unutulursa
+ * kayıt bir adı, giriş başka bir adı arar.
  *
  * ⚠️ **Neden burada, `contracts`ta değil**: uzunluk sınırı üç yerde birden gerekiyor (zod
  * şeması · tarayıcı `maxLength` · hesap silmenin ürettiği anonim ad) ve üçü ayrı sayı
@@ -45,9 +52,10 @@ export const NAME_RULE_MESSAGE =
  */
 export const USERNAME_MIN = NAME_MIN;
 export const USERNAME_MAX = NAME_MAX;
-export const USERNAME_PATTERN = /^[\p{L}\p{N}]+$/u;
+export const USERNAME_PATTERN = /^[\p{L}\p{N} ]+$/u;
 export const USERNAME_RULE_MESSAGE =
-  `Kullanıcı adı ${USERNAME_MIN}-${USERNAME_MAX} karakter olmalı; boşluk ve noktalama kullanılamaz.`;
+  `Kullanıcı adı ${USERNAME_MIN}-${USERNAME_MAX} karakter olmalı; harf, rakam ve boşluk `
+  + `kullanılabilir, noktalama ve simge kullanılamaz.`;
 
 /**
  * ⭐ HESAP SİLMEDE ÜRETİLEN ANONİM AD DESENİ — `hükümdar12`.

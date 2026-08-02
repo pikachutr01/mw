@@ -97,7 +97,7 @@ export function App() {
       <ConfirmProvider>
         <BrowserRouter>
           {session
-            ? <AuthedApp onLoggedOut={() => setSessionState(null)} />
+            ? <AuthedApp />
             : <GuestApp />}
         </BrowserRouter>
       </ConfirmProvider>
@@ -106,7 +106,7 @@ export function App() {
 }
 
 /** Oturumlu ağaç — rota tablosu tur öncesiyle BİREBİR aynı. */
-function AuthedApp({ onLoggedOut }: { onLoggedOut: () => void }) {
+function AuthedApp() {
   return (
     <Routes>
       {emailRoutes}
@@ -129,12 +129,12 @@ function AuthedApp({ onLoggedOut }: { onLoggedOut: () => void }) {
         <Route path="/command/rankings" element={<CommandScreen />} />
         <Route path="/command/alliance" element={<CommandScreen />} />
         <Route path="/command/search" element={<CommandScreen />} />
-        <Route path="/options" element={<OptionsScreen onLoggedOut={onLoggedOut} />} />
+        <Route path="/options" element={<OptionsScreen />} />
         <Route path="/help" element={<HelpScreen />} />
         <Route path="/simulate" element={<SimulateScreen />} />
         {/* Mobil "Şehir" ve "Daha" sekmeleri */}
         <Route path="/city" element={<CityHub />} />
-        <Route path="/more" element={<OptionsScreen onLoggedOut={onLoggedOut} />} />
+        <Route path="/more" element={<OptionsScreen />} />
         <Route path="*" element={<Navigate to="/armies" replace />} />
       </Route>
     </Routes>

@@ -139,10 +139,25 @@ export function Shell({ children }: { children: ReactNode }) {
           </aside>
 
           <main className="w-full min-w-0 max-w-3xl pb-24 lg:pb-3">
-            <InfoBar />
-            {/* Doğrulama uyarısı şehir şeridinin ÜSTÜNDE: bilgi çubuğundan sonraki ilk şey. */}
-            <VerifyBanner />
-            <CityStrip />
+            {/*
+              ⭐ ÜST ŞERİT SABİT (kullanıcı, 2026-08-02): bilgi çubuğu ve şehir şeridi
+              kaydırmada yukarı kaçmıyor — kaynak sayaçları ve şehir değiştirme her ekranda,
+              her kaydırma konumunda elin altında. Mobilde de aynı (Ordular'da şerit görünür).
+
+              ⚠️ `-mt-3 pt-3`: dış sarmalayıcının `py-3` boşluğu bloğun İÇİNE alınıyor.
+              Alınmasaydı şerit `top-0`'a yapıştığında üstünde 12 px'lik saydam bir aralık
+              kalır ve altından kayan içerik oradan görünürdü. Negatif marj bilerek yalnız
+              DİKEY: yatayda `-mx` vermek şeridi masaüstünde sol menünün üstüne taşırırdı.
+
+              `bg-bg` şart — arka planı olmayan sticky öge kayan içeriği örtmez.
+              `z-20`: alt bar ve sohbetin (30) altında, sayfa içeriğinin üstünde.
+            */}
+            <div className="sticky top-0 z-20 -mt-3 bg-bg pt-3">
+              <InfoBar />
+              {/* Doğrulama uyarısı şehir şeridinin ÜSTÜNDE: bilgi çubuğundan sonraki ilk şey. */}
+              <VerifyBanner />
+              <CityStrip />
+            </div>
             {children}
           </main>
 

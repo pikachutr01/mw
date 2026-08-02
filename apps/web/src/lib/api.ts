@@ -101,6 +101,35 @@ async function parse(res: Response): Promise<unknown> {
   }
 }
 
+/**
+ * ⭐ Zod doğrulama hatasından okunabilir cümle çıkarır.
+ *
+ * Şema hataları gövdeye `flatten()` biçiminde iniyor:
+ * `{ formErrors: [], fieldErrors: { username: ["Kullanıcı adı 3-15 karakter olmalı…"] } }`
+ * — yani mesaj ORADA, ama `message` alanı olmadığı için eski kod onu hiç görmüyor ve
+ * ekrana «İstek başarısız (400)» yazıyordu. Oyuncu neyi yanlış yazdığını öğrenemiyordu;
+ * kayıt formunda tam olarak bu yaşandı (2026-08-02).
+ *
+ * Birden fazla alan hatalıysa hepsi tek satırda birleştirilir: form alan alan hata
+ * göstermiyor, kullanıcının eksiği tek bakışta görünmeli.
+ */
+function zodMessage(b: Record<string, unknown>): string | null {
+  const fieldErrors = b['fieldErrors'];
+  const formErrors = b['formErrors'];
+  const parts: string[] = [];
+
+  if (fieldErrors && typeof fieldErrors === 'object') {
+    for (const list of Object.values(fieldErrors as Record<string, unknown>)) {
+      if (Array.isArray(list)) parts.push(...list.filter((m): m is string => typeof m === 'string'));
+    }
+  }
+  if (Array.isArray(formErrors)) {
+    parts.push(...formErrors.filter((m): m is string => typeof m === 'string'));
+  }
+  // Aynı kural birden çok alandan gelebilir (min/max/regex hepsi aynı cümleyi taşıyor).
+  return parts.length > 0 ? [...new Set(parts)].join(' ') : null;
+}
+
 /** Sunucu hata gövdesinden okunabilir mesaj ve kod çıkarır. */
 function errorOf(status: number, body: unknown): ApiError {
   const b = (body ?? {}) as Record<string, unknown>;
@@ -109,6 +138,9 @@ function errorOf(status: number, body: unknown): ApiError {
   const message =
     (typeof inner === 'object' && inner && typeof inner['message'] === 'string' ? inner['message'] : null)
     ?? (typeof b['message'] === 'string' ? b['message'] : null)
+    ?? zodMessage(b)
+    // Nest bazı yollarda gövdeyi `{ message: {...} }` içine sarıyor; oraya da bak.
+    ?? (typeof inner === 'object' && inner ? zodMessage(inner) : null)
     ?? `İstek başarısız (${status})`;
   return new ApiError(status, code ?? null, message, body);
 }

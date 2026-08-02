@@ -43,7 +43,7 @@ export function CityAdminPanel(): React.ReactElement | null {
           {active.isCapital ? <span className="ml-1 text-xs text-muted">(başkent)</span> : null}
         </div>
         <div className="text-xs text-muted">
-          İşlem <b>seçili şehir</b> için geçerlidir; şehri üstteki şeritten değiştirebilirsin.
+          İşlem <b>seçili şehir</b> için geçerlidir.
         </div>
       </div>
 

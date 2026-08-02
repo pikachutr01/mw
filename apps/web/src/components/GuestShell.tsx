@@ -58,20 +58,25 @@ export function GuestShell({ children }: { children: ReactNode }) {
             ipucu 60 — `Toaster.tsx:124`). Giriş modalı bunun üstünde açılmalı. */}
         <header className="tex tex-header sticky top-0 z-20 border-b-2 border-strong bg-panel-header">
           <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-3 py-2 sm:gap-4">
+            {/*
+              ⚠️ Mobil ölçüler 2026-08-02'de büyütüldü (kullanıcı: «çok küçük kalıyor»).
+              Telefonda etiketler gizli olduğu için (`hidden sm:inline`) logo ve ikonlar
+              barın TEK görsel içeriği; masaüstündeki ölçüler orada fazla ufak kalıyordu.
+            */}
             <NavLink to="/" className="shrink-0">
               <img src="/assets/ui/logo.png" alt="MobilWar" width={140} height={56}
-                className="icon-shadow h-8 w-auto object-contain sm:h-10" />
+                className="icon-shadow h-11 w-auto object-contain sm:h-12" />
             </NavLink>
 
             {GUEST_MENU.map((m) => (
               <NavLink key={m.to} to={m.to}
                 className={({ isActive }) => `flex items-center gap-1.5 rounded-[var(--radius-sm)]
-                  border px-2 py-1 text-[13px] transition-colors ${
+                  border px-2.5 py-1.5 text-[13px] transition-colors sm:px-2 sm:py-1 ${
                   isActive
                     ? 'border-strong bg-accent font-semibold text-on-accent shadow-[var(--bevel)]'
                     : 'border-transparent text-on-panel-header hover:border-border hover:bg-raised/40'
                 }`}>
-                <MenuIcon id={m.icon} size={20} />
+                <MenuIcon id={m.icon} size={26} className="h-[26px] w-[26px] sm:h-5 sm:w-5" />
                 <span className="hidden sm:inline">{m.label}</span>
               </NavLink>
             ))}

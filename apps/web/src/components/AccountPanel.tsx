@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, getSession } from '../lib/api.ts';
 import { useAccount, useCities } from '../lib/queries.ts';
+import { ThemePicker } from './ThemePicker.tsx';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './ui.tsx';
 
 export function AccountPanel(): React.ReactElement {
@@ -32,7 +33,8 @@ export function AccountPanel(): React.ReactElement {
 
   return (
     <>
-      <Panel title="Hesap">
+      {/* Tema seçici başlık bandının sağında — kendi kartı 2026-08-02'de kaldırıldı. */}
+      <Panel title="Hesap" right={<ThemePicker />}>
         <div className="space-y-1 p-3 text-sm">
           <div className="text-ink">{session?.username}</div>
           <div className="text-xs text-muted">
