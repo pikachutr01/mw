@@ -128,10 +128,21 @@ export function ActivityDot() {
   );
 }
 
-/** Sol menü ve mobil alt barın ortak simgesi. `GuestShell` de aynı seti kullanıyor. */
+/**
+ * Sol menü ve mobil alt barın ortak simgesi. `GuestShell` de aynı seti kullanıyor.
+ *
+ * ⚠️ Dosya yoksa **kırık görsel yerine aynı ölçüde boşluk** bırakılır — `CatalogIcon`
+ * (`ui.tsx:171-173`) yıllardır böyle yapıyordu, bu bileşende yoktu. Yeni bir menü maddesi
+ * eklenip simgesi henüz çizilmediğinde menüde kırık resim simgesi çıkıyordu.
+ */
 export function MenuIcon({ id, size }: { id: string; size: number }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return <span aria-hidden className="block shrink-0" style={{ width: size, height: size }} />;
+  }
   return (
     <img src={`/assets/menu/${id}.png`} alt="" aria-hidden width={size} height={size}
+      onError={() => setBroken(true)}
       className="icon-shadow shrink-0 object-contain"
       style={{ width: size, height: size }} />
   );

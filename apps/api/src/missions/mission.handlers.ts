@@ -305,6 +305,18 @@ async function gatherIntel(
       castle: levels['castle'] ?? 0,
       wall: dl['wall'] ?? 0,
       magic_shield: dl['magic_shield'] ?? 0,
+      /**
+       * ⭐ MAĞARA SEVİYESİ (kullanıcı, 2026-08-02) — yalnız SEVİYE.
+       *
+       * ⚠️ Mağaranın **İÇİNDEKİ askerler verilmez**: onlar ayrı bir tabloda (`cave_units`)
+       * ve mağaranın bütün varlık sebebi orduyu casustan da saldırıdan da gizlemek. Seviye
+       * ise düşmanın "bu şehir ne kadar asker saklayabilir" sorusuna cevap veriyor — casusun
+       * en üst kademesinde bilinmesi makul, saklananın kendisi değil.
+       *
+       * Ek sorgu yok: `levels` yukarıda (`:263`) zaten tüm `buildings` satırlarını okuyor ve
+       * mağara orada sıradan bir bina satırı (`cave.service.ts` de aynı yerden okuyor).
+       */
+      cave: levels['cave'] ?? 0,
     };
   }
   return out;

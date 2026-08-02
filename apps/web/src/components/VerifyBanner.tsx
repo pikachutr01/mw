@@ -52,7 +52,7 @@ export function VerifyBanner(): React.ReactElement | null {
     /* ⚠️ Renk sınıfı `Badge` tone="warning" ile AYNI (`Shell.tsx:302`): `bg-warning` + zıt
        metin için `text-on-accent`. `text-on-warning` diye bir token YOK — Tailwind bilinmeyen
        sınıfı sessizce üretmez, metin varsayılan renkte kalırdı. */
-    <div className="tex mb-2 flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)]
+    <div className="tex mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-sm)]
       border-2 border-strong bg-warning px-3 py-1.5 text-xs text-on-accent">
       <span className="min-w-0 flex-1">
         {sent ? (
@@ -64,14 +64,18 @@ export function VerifyBanner(): React.ReactElement | null {
           </>
         )}
       </span>
+      {/* ⚠️ Kapatma düğmesi DOM'da metnin hemen ardında ki dar ekranda onunla AYNI satırda
+          kalsın; masaüstünde `sm:order-last` ile yine en sağa geçiyor. */}
+      <button type="button" aria-label="Kapat" onClick={dismiss}
+        className="shrink-0 px-1 text-sm leading-none hover:opacity-80 sm:order-last">×</button>
+      {/* ⚠️ Dar ekranda `w-full` ile ALT SATIRA iner (kullanıcı: "küçük ekranlı cihazlarda kötü
+          görünüyor"). Eskiden `shrink-0` idi ve metni sıkıştırıp iki kelimeye düşürüyordu. */}
       {sent ? null : (
         <button type="button" disabled={busy} onClick={() => void resend()}
-          className="shrink-0 underline hover:opacity-80">
+          className="w-full text-left underline hover:opacity-80 sm:w-auto sm:text-right">
           Doğrulama e-postası gönder
         </button>
       )}
-      <button type="button" aria-label="Kapat" onClick={dismiss}
-        className="shrink-0 px-1 text-sm leading-none hover:opacity-80">×</button>
     </div>
   );
 }

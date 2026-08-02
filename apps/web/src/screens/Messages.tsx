@@ -266,23 +266,35 @@ export function Messages() {
             {visible.map((row, i) => {
               const key = rowKey(row);
               /**
-               * ⭐ KUTUCUK SATIRIN İÇİNDE, KENARLIK EN SOLDA (kullanıcı, 2026-08-01).
+               * ⭐ SATIR TEK PARÇA (kullanıcı, 2026-08-02). Üç ayrı kusur birlikte giderildi:
                *
-               * ⚠️ Eskiden okunmamış kenarlığı `<button>`ün üzerindeydi ve kutucuk onun
-               * SOLUNDA kalıyordu; sonuç: renkli çizgi satırın ortasından geçiyor, kutucuk
-               * "dışarıda" duruyordu. Artık kenarlık ve zemin `<li>`de, kutucuk da onun içinde.
+               * ⚠️ 1. **Hover kutucuğu kapsamıyordu.** `hover:bg-raised` `<button>`deydi, kutucuk
+               *    ise onun KARDEŞİ → soldaki ~28px (kenarlık + `ml-2.5` + kutucuk) hiçbir zaman
+               *    zemin değiştirmiyordu; üstelik tam kutucuğun üstündeyken satır hiç tepki
+               *    vermiyordu. Dolgu ve hover `<li>`ye taşındı, `<button>` dolgusuz kaldı.
                *
-               * ⚠️ Kutucuk hâlâ `<button>`ün DIŞINDA: iç içe düğme geçersiz HTML ve kutucuğa
-               * basınca raporun açılmaması gerekiyor.
+               * ⚠️ 2. **Karanlık temada hover görünmüyordu.** `--mw-color-row-alt` ile
+               *    `--mw-color-surface-raised` karanlıkta AYNI renk (#2A2218) → tek satırlarda
+               *    `hover:bg-raised` hiçbir şey yapmıyordu. Yarı saydam `bg-accent/10` altındaki
+               *    zeminin üstüne biniyor, iki temada ve iki bantta da görünüyor.
+               *
+               * ⚠️ 3. **İki zemin sınıfı çakışıyordu.** Okunmamış + tek satırda `bg-row-alt` ve
+               *    `bg-danger/5` aynı ögedeydi; kazanan Tailwind'in çıktı sırasıydı, yazım sırası
+               *    değil. Artık tek zemin: okunmamışsa kırmızı ton, değilse bant.
+               *
+               * ⚠️ Kutucuk `<button>`ün DIŞINDA kalmaya devam ediyor: iç içe düğme geçersiz HTML
+               * ve kutucuğa basınca raporun açılmaması gerekiyor.
                */
-              const alt = `flex items-center ${i % 2 === 1 ? 'bg-row-alt' : ''} ${
-                row.unread ? 'border-l-2 border-danger bg-danger/5' : 'border-l-2 border-transparent'
+              const alt = `flex items-center gap-2.5 px-3 py-2 transition-colors hover:bg-accent/10 ${
+                row.unread
+                  ? 'border-l-2 border-danger bg-danger/5'
+                  : `border-l-2 border-transparent ${i % 2 === 1 ? 'bg-row-alt' : ''}`
               }`;
-              const shell = 'w-full px-3 py-2 text-left hover:bg-raised';
+              const shell = 'min-w-0 flex-1 text-left';
               const check = (
                 <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)}
                   aria-label="Seç"
-                  className="ml-2.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--mw-color-accent)]" />
+                  className="h-4 w-4 shrink-0 cursor-pointer accent-[var(--mw-color-accent)]" />
               );
 
               /* ⭐ SOHBET SATIRI: tıklayınca pencere açılır (modal DEĞİL). Önizleme karşı
@@ -523,7 +535,7 @@ function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
     armyTotals: '+ toplam savaşçı ve savunma sayısı',
     armyTypes: '+ birim tipleri',
     armyCounts: '+ savaşçıların tek tek sayıları',
-    full: 'TAM RAPOR (teknikler + Kale/Sur/Kalkan dahil)',
+    full: 'TAM RAPOR (teknikler + Kale/Sur/Kalkan/Mağara seviyesi dahil)',
   };
   return (
     <div className="space-y-2 text-sm">
@@ -612,7 +624,10 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
         <Section title="Yapılar">
           <span className="tnum">
             Kale {structures['castle'] ?? 0} · Sur {structures['wall'] ?? 0} ·
-            {' '}Büyü Kalkanı {structures['magic_shield'] ?? 0}
+            {' '}Büyü Kalkanı {structures['magic_shield'] ?? 0} ·
+            {/* ⚠️ Yalnız SEVİYE. Mağaranın içindeki askerler casusa GÖRÜNMEZ — mağaranın
+                bütün varlık sebebi orduyu saklamak (`mission.handlers.ts` gatherIntel). */}
+            {' '}Mağara {structures['cave'] ?? 0}
           </span>
         </Section>
       ) : null}

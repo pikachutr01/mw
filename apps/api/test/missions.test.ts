@@ -77,6 +77,13 @@ async function giveUnits(cityId: number, type: string, count: number): Promise<v
     ON CONFLICT (city_id, type) DO UPDATE SET count = ${count}
   `);
 }
+/** Mağaranın İÇİNE asker koyar — `units` değil `cave_units` tablosu (casus göremez). */
+async function putInCave(cityId: number, type: string, count: number): Promise<void> {
+  await h.db.execute(sql`
+    INSERT INTO cave_units (city_id, type, count) VALUES (${cityId}, ${type}, ${count})
+    ON CONFLICT (city_id, type) DO UPDATE SET count = ${count}
+  `);
+}
 async function giveDefenses(cityId: number, type: string, count: number): Promise<void> {
   await h.db.execute(sql`
     INSERT INTO defenses (city_id, type, count) VALUES (${cityId}, ${type}, ${count})
@@ -269,7 +276,7 @@ describe('casusluk', () => {
     expect(spyLevelFor(9)).toBe('full');     // tavan
   });
 
-  it('yüksek farkta TAM rapor gelir (teknikler + Kale/Sur)', async () => {
+  it('yüksek farkta TAM rapor gelir (teknikler + Kale/Sur/Mağara)', async () => {
     await giveUnits(home, 'spy_bird', 16);   // log2(16) = +4
     await setTech(me, 'espionage', 5);
     await giveUnits(enemy, 'dwarf', 120);
@@ -277,6 +284,7 @@ describe('casusluk', () => {
     await giveDefenses(enemy, 'wall', 3);
     await setResources(enemy, 5555, 4444);
     await setBuilding(enemy, 'mine', 8);
+    await setBuilding(enemy, 'cave', 6);
     const at = await clock.gameNow(worldId);
 
     const m = await missions.sendSpy({
@@ -297,6 +305,32 @@ describe('casusluk', () => {
     // Sur ADET değil SEVİYE → "toplam savunma" sayısına girmez.
     expect((intel['totals'] as Record<string, number>)['defenses']).toBe(7);
     expect((intel['structures'] as Record<string, number>)['wall']).toBe(3);
+    // ⭐ Mağara SEVİYESİ en üst kademede görünür (kullanıcı, 2026-08-02).
+    expect((intel['structures'] as Record<string, number>)['cave']).toBe(6);
+  });
+
+  it('⚠️ mağaranın İÇİNDEKİ askerler TAM raporda bile sızmaz', async () => {
+    await setBuilding(enemy, 'cave', 6);
+    await giveUnits(enemy, 'dwarf', 60);       // meydanda
+    await putInCave(enemy, 'dwarf', 40);       // mağarada — görünmemeli
+    await giveUnits(home, 'spy_bird', 16);
+    await setTech(me, 'espionage', 5);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 16 }, at,
+    });
+    await runDue(m.missionId);
+
+    const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    const intel = body['intel'] as Record<string, unknown>;
+    expect(body['level']).toBe('full');
+    // Seviye görünür…
+    expect((intel['structures'] as Record<string, number>)['cave']).toBe(6);
+    // …ama içerideki 40 cüce raporun HİÇBİR yerinde geçmez: yalnız meydandaki 60 sayılır.
+    expect((intel['warriors'] as Record<string, number>)['dwarf']).toBe(60);
+    expect(JSON.stringify(intel)).not.toContain('caveUnits');
   });
 
   it('düşük farkta YALNIZ kaynak bilgisi gelir', async () => {
