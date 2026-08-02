@@ -3,19 +3,26 @@
 > **Tarih:** 2026-07-26 · İnceleme + temizlik yapıldı, **hiçbir servis durdurulmadı**, siteler kesintisiz.
 > **Güncelleme:** 2026-07-31 — alan adı ve kapasite yeniden ölçüldü (§0).
 >
-> ### ⛔ 2026-08-02 — §0'daki ALAN ADI KARARI GEÇERSİZ
-> Kullanıcı **`mobilwar.com`** alan adını aldı. Oyun apex'ten (`mobilwar.com`), panel
-> `yonetim.mobilwar.com` alt alanından, mail `send.mobilwar.com` üzerinden Resend ile
-> gidecek. Aşağıda `scrabblecozucu.site` geçen her yer **eski karardır**; ölçüm sonuçları
-> (sertifika, DNS sağlayıcı, kapasite) hâlâ doğru, ama alan adına bağlı üç sonuç değişti:
+> ### ⛔ 2026-08-02 — §0 ve §1 BAYAT. Güncel künye: **`YAYINA_ALMA.md`**
+> O gün üç şey birden değişti ve aşağıdaki eski ölçümlerin bir kısmını geçersiz kıldı:
 >
-> | §0 bulgusu | Yeni alan adında durumu |
+> | Konu | Yeni durum (2026-08-02 20:00'de ölçüldü) |
 > | :-- | :-- |
-> | Sertifika hazır, certbot gerekmez | ❌ **Geçersiz** — `mobilwar.com` + `yonetim.` için certbot çalıştırılacak |
-> | `.site` trafiğini `.com`'a atan iki 301 bloğu kaldırılacak | ➖ **Konusuz** — yeni alan adı o yapılandırmaya hiç uğramıyor |
-> | DNS sunucuda değil, hosting panelinde | ⚠️ **`mobilwar.com`'un kayıtları nerede tutuluyor, doğrulanmadı** — Resend kayıtlarını yazmadan önce bakılacak |
+> | **Kapasite** | ✅ Yükseltme **YAPILDI**: RAM **3915 MB (4 GB)** · **3 vCPU** · disk **40 GB, %25**. §5'teki hesap tuttu |
+> | **Alan adı** | `mobilwar.com` · panel **`admin.`** (eskiden `yonetim.` yazıyordu) · posta **`mailer.`** (eskiden `send.`) |
+> | **DNS** | ⭐ Artık **Cloudflare** (Free): NS `craig`/`serena.ns.cloudflare.com`, apex **proxy'li**. §0'daki «DNS hosting panelinde» bulgusu `mobilwar.com` için geçersiz |
+> | **Sertifika** | ❌ `.site` sertifikası konusuz. `mobilwar.com` + `www` + `admin.` için certbot çalıştırılacak (`certonly --webroot`) |
+> | **PostgreSQL** | ✅ **Kuruldu** — 17.10 (PGDG), 4 GB profili ayarlı. §2'deki «PostgreSQL YOK» artık yanlış |
+> | **Node** | ✅ **v22.23.2 → `/opt/node22`** (izole). Sistem Node'u **v20'de kaldı**; iki canlı site ona bağlı ve dokunulmadı |
+> | **Yedek** | ✅ MobilWar için günlük `pg_dump` 04:45'te (MySQL 04:30'da). ⚠️ Yedekler **hâlâ aynı sunucuda** |
 >
-> Uygulama tarafındaki hazırlık `mw/.env.example` başındaki listede.
+> ### ⚠️ Uygulanamayan öneri — «80/443'ü yalnız Cloudflare'e aç»
+> Cloudflare geçiş raporu bunu öneriyor ama **bu kutuda uygulanamaz**: `scrabblecozucu.com`,
+> `api.scrabblecozucu.com` ve `klavyetest.xyz` Cloudflare'de **değil**, doğrudan bu IP'ye
+> bakıyorlar — kural onları anında erişilemez yapar, üstelik certbot'un HTTP-01 doğrulamasını
+> da keser. Aynı sebeple **origin IP gizliliği de sağlanamaz** (o siteler IP'yi zaten açıkça
+> gösteriyor). Uygulanabilir hâli nginx katmanında ve yalnız panel bloğunda: bkz.
+> `YAYINA_ALMA.md §1.3`.
 
 ---
 

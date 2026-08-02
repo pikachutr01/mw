@@ -90,8 +90,11 @@ ve toplu seçim.
 > doğrulama düşer, eski adrese bilgi maili), **şifre değiştirme** artık aktif oturumu
 > düşürmüyor + bilgilendirme maili gönderiyor. Ad sınırı 10 → **15**.
 >
-> **Kalan (kullanıcıya bağlı):** `RESEND_API_KEY` üretilip `mw/.env`'e yazılacak ve
-> `send.scrabblecozucu.site` alt alanının DNS kayıtları hosting paneline eklenecek.
+> ✅ **2026-08-02: posta altyapısı KAPANDI.** Alan adı `mailer.mobilwar.com`, Resend'de
+> **verified** (DKIM `resend._domainkey.mailer`, SPF+MX `send.mailer` altında — Return-Path
+> Resend'in kendi alt alanı). DNS **Cloudflare**'de. `RESEND_API_KEY` üretimde
+> `/etc/mobilwar/.env`'de. Gelen posta için sunucu YOK: `destek@mobilwar.com` Cloudflare
+> Email Routing ile gerçek bir kutuya yönleniyor ve `MAIL_REPLY_TO` onu gösteriyor.
 > **Kalan (kod):** gönderim günlüğü/panel yok.
 
 ### 1.4 Arama (Oyuncu Ara) + Dünyada Bul — ✅ **YAPILDI (2026-07-31)**

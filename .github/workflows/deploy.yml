@@ -1,0 +1,149 @@
+name: Canlıya çıkış
+
+# ⭐ YALNIZ ELLE tetiklenir (kullanıcı kararı, 2026-08-02). `push` tetiği bilerek YOK:
+# testin yakalamadığı bir hata, commit atar atmaz canlıya inmesin. Akış şu:
+#   commit → CI (ci.yml) yeşil → Actions ekranından «Run workflow» → canlı.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Yayınlanacak dal ya da commit (varsayılan: main)'
+        required: false
+        default: 'main'
+      skip_tests:
+        description: 'Testleri atla (YALNIZ acil geri alma için)'
+        type: boolean
+        required: false
+        default: false
+
+# Aynı anda iki dağıtım = yarı yazılmış sürüm dizini ve çakışan göç. Sıraya girsinler;
+# `cancel-in-progress` KAPALI, çünkü yarıda kesilen bir dağıtım en kötü hâldir.
+concurrency:
+  group: mobilwar-deploy
+  cancel-in-progress: false
+
+jobs:
+  yayinla:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # ⚠️ Testler CI'da zaten koşuyor ama BURADA TEKRAR koşuyor — bilerek. «Run workflow»
+    # keyfî bir commit'e basılabilir; o commit'in CI'dan geçtiğinin garantisi yok.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mobilwar
+          POSTGRES_PASSWORD: mobilwar
+          POSTGRES_DB: mobilwar
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U mobilwar -d mobilwar"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://mobilwar:mobilwar@localhost:5432/mobilwar
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: pnpm/action-setup@v4
+
+      # ⚠️ Node 22 — sunucudaki `/opt/node22` ile AYNI ana sürüm olmalı. `@node-rs/argon2`
+      # yerel bir ikili yükler; burada derlenen paket doğrudan sunucuya gidiyor, yani
+      # platform (linux-x64-gnu) ve NAPI sürümü tutmak zorunda. Bu yüzden dağıtım paketi
+      # ASLA yerel Windows makinesinde üretilmemeli.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        if: ${{ !inputs.skip_tests }}
+        run: pnpm typecheck
+
+      - name: Göçler + testler
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          pnpm db:migrate
+          pnpm test
+
+      - name: Tasarım token'ları senkron mu
+        if: ${{ !inputs.skip_tests }}
+        run: pnpm tokens:check
+
+      # ── Derleme ────────────────────────────────────────────────────────────
+      - name: Derle (api · web · admin · paketler)
+        run: pnpm build
+
+      # ⭐ `--config.node-linker=hoisted` ŞART. Varsayılan (symlink'li) çıktıda
+      # `node_modules/@mobilwar/*` **mutlak** yollara işaret ediyor; paket sunucuda başka
+      # bir dizine açıldığı anda hepsi kırılırdı ve hata ancak süreç başlarken görünürdü.
+      # `hoisted` düz, taşınabilir bir ağaç üretir (ölçüldü: 0 symlink).
+      - name: Üretim paketi (api + prod bağımlılıkları)
+        run: |
+          pnpm deploy --filter @mobilwar/api --prod --legacy \
+            --config.node-linker=hoisted /tmp/paket/api
+
+      - name: Paketi topla
+        id: paket
+        run: |
+          set -euo pipefail
+          SURUM="$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
+          echo "surum=$SURUM" >> "$GITHUB_OUTPUT"
+
+          # Üretimde gereksiz olanlar: TypeScript kaynağı, testler, derleme yapılandırması.
+          rm -rf /tmp/paket/api/src /tmp/paket/api/test \
+                 /tmp/paket/api/vitest.config.ts /tmp/paket/api/tsconfig.json
+
+          cp -r apps/web/dist   /tmp/paket/web
+          cp -r apps/admin/dist /tmp/paket/admin
+          mkdir -p /tmp/paket/ops
+          cp ops/surum-yayinla.sh /tmp/paket/ops/
+          chmod +x /tmp/paket/ops/surum-yayinla.sh
+
+          tar -czf "/tmp/$SURUM.tar.gz" -C /tmp/paket .
+          ls -lh "/tmp/$SURUM.tar.gz"
+
+      # ── Sunucuya aktarım ───────────────────────────────────────────────────
+      - name: SSH anahtarını kur
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # ⚠️ `ssh-keyscan` yerine SABİT parmak izi: keyscan, ortadaki adam saldırısına
+          # açık (ne alırsa ona güvenir). Parmak izi secret'ta tutuluyor.
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Paketi gönder ve aç
+        env:
+          H: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          S: ${{ steps.paket.outputs.surum }}
+        run: |
+          set -euo pipefail
+          scp "/tmp/$S.tar.gz" "$H:/tmp/"
+          ssh "$H" "set -euo pipefail
+            mkdir -p /var/www/mobilwar/releases/$S
+            tar -xzf /tmp/$S.tar.gz -C /var/www/mobilwar/releases/$S
+            rm -f /tmp/$S.tar.gz"
+
+      - name: Yayınla (göç → symlink → reload → sağlık)
+        env:
+          H: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          S: ${{ steps.paket.outputs.surum }}
+        run: ssh "$H" "/var/www/mobilwar/releases/$S/ops/surum-yayinla.sh $S"
+
+      - name: Dışarıdan doğrula
+        run: |
+          set -euo pipefail
+          # Cloudflare üzerinden gerçek kullanıcı yolunu dener: sertifika, proxy, nginx,
+          # SPA fallback ve API'nin tamamı tek çağrıda sınanmış olur.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -m 20 https://mobilwar.com/)
+          echo "mobilwar.com → $code"
+          [[ "$code" == "200" ]] || { echo "⛔ site 200 dönmedi"; exit 1; }

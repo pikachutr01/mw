@@ -28,10 +28,23 @@
 > - **Mağaza bağlantıları** (Play/App Store) — PWA düğmesinde yorumla dikiş bırakıldı
 > - Denge senaryoları · orijinal Java metin taraması · askerî unvan rozetleri
 >
-> **🔵 Kullanıcıdan bekleyen** (tam liste `mobiwar-acik-kararlar` hafızasında):
-> `RESEND_API_KEY` (`mw/.env`'e **kendisi** yazacak) + **`send.mobilwar.com`** DNS kayıtları
-> (MX + SPF + DKIM) · canlıya çıkmadan **4 GB RAM yükseltmesi** · `mobilwar.com`'un DNS'i
-> nerede tutuluyor (Resend kayıtları oraya girecek — doğrulanmadı).
+> ### 🚀 2026-08-02 — DAĞITIM HATTI KURULDU (`docs/YAYINA_ALMA.md`)
+> Sunucu hazırlığı **bitti**, site **henüz yayında değil**. Kurulan: PostgreSQL 17.10 · Node 22
+> `/opt/node22`'de **izole** (sistem Node'u v20'de kaldı, iki canlı site ona bağlı) ·
+> `/etc/mobilwar/.env` (sırlar üretildi; `deploy` okur, yazamaz) · nginx blokları
+> `sites-available`'da (**etkinleştirilmedi**) · PM2 tanımı · günlük `pg_dump` · dağıtım
+> anahtarı. RAM yükseltmesi **gerçekleşti: 4 GB / 3 vCPU**.
+>
+> Dağıtım: `commit → CI → **elle** «Run workflow» → runner'da derleme → tarball → rsync →
+> göç → symlink → `pm2 reload` → `/healthz` (geçmezse **otomatik geri alma**)`.
+> ⚠️ Sunucuda derleme YASAK; paket **Linux runner'da** üretilir (`@node-rs/argon2` yerel ikili).
+>
+> **Kalan 4 adım** (hepsi `YAYINA_ALMA.md §2`): `admin` DNS kaydı · certbot · nginx etkinleştir ·
+> Cloudflare SSL «Full (Strict)» + Access + **GitHub secret'ları**.
+>
+> **🔵 Kullanıcıdan bekleyen:** ✅ ~~RESEND anahtarı ve DNS~~ (bitti: `mailer.mobilwar.com`
+> Resend'de verified, DNS **Cloudflare**'de) · ✅ ~~4 GB RAM~~ (yapıldı) ·
+> 🔵 **GitHub secret'ları** (`YAYINA_ALMA.md §2.5`) · 🔵 Cloudflare panel ayarları (§2.4).
 >
 > **🔑 Test hesapları:** `wstest` / `mobiwar2026` (5 şehir, dolu ordu — ⚠️ parola DB'de öyle,
 > marka değişse de değişmedi) · ittifak denemesi için `itflider` + `itfuye` / `parola-12345`
@@ -207,10 +220,10 @@ Koda dokunmadan önce ilgili §'yi aç.
    Sil / toplu seçim · şikayet moderasyon paneli · ittifak & genel sohbet (aynı altyapı).
 2. ✅ ~~Web Push~~ — **2026-07-31'de bitti** (§7.2b), **Faz 2 kapandı**. Kalan: Flutter/FCM
    token kaydı (aynı tabloya girer) · bildirim geçmişi ekranı.
-2b. ✅ ~~E-posta (Resend)~~ — **2026-07-31'de bitti** (§9.2). Kod anahtarsız da çalışıyor
-   (gövde konsola). 🔵 **Kullanıcıdan bekleyen:** `RESEND_API_KEY` + **`send.mobilwar.com`**
-   DNS kayıtları. ⚠️ Alan adı 2026-08-02'de `mobilwar.com` oldu; `scrabblecozucu.site`
-   planı iptal.
+2b. ✅ ~~E-posta (Resend)~~ — **2026-07-31'de bitti** (§9.2), **altyapısı 2026-08-02'de
+   kapandı**: `mailer.mobilwar.com` Resend'de verified, anahtar üretimde `/etc/mobilwar/.env`'de,
+   yanıt adresi `destek@mobilwar.com` (Cloudflare Email Routing → gerçek kutu; kendi posta
+   sunucumuz yok). Kod anahtarsız da çalışıyor (gövde konsola).
 3. ✅ ~~Arama + Dünyada Bul~~ — **2026-07-31'de bitti** (§13.18.0). Kalan: infix arama.
 4. ✅ ~~**Hesap/şehir aksiyonları**~~ — **paket tamamen kapandı.** Şehir Adı Değiştir · Şehir
    Terk Et · Şifre/E-posta Değiştir · Hesap Silme (2026-08-01) + **Tatil Modu** (2026-08-02,
@@ -286,12 +299,12 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | # | Karar | Varsayılanım |
 |---|---|---|
 | 0 | Mağara yıkma tabanı **100** (tablo) mu **150** (doküman metni) mi? (§13.20.1) | tablo = 100 |
-| 1 | ✅ **Alan adı — `mobilwar.com`** (2026-08-02, kullanıcı satın aldı). Oyun apex'ten, panel `yonetim.mobilwar.com`, mail `send.mobilwar.com`. ⛔ **Eski `scrabblecozucu.site` kararı İPTAL** — o alan adına ait sertifika/301 notları artık konusuz. ⚠️ Yeni alan adı için **certbot çalıştırılacak** ve `mobilwar.com`'un DNS'inin nerede tutulduğu **doğrulanmadı**. Uygulama tarafı hazır: `mw/.env.example` başındaki liste | — |
+| 1 | ✅ **Alan adı — `mobilwar.com`** (2026-08-02). Oyun apex'ten · panel **`admin.mobilwar.com`** · posta **`mailer.mobilwar.com`**. DNS **Cloudflare**'de (apex proxy'li). ⛔ Eski `scrabblecozucu.site` kararı ve `yonetim.`/`send.` yazımları İPTAL. Kalan adımlar `YAYINA_ALMA.md §2` | — |
 | 2 | ✅ Dünya hızı — **x1'e çekildi** (2026-07-30, dört çarpan da 1) | — |
 | 3 | Palet tonları + başlık fontu (§13.13.2) | ekranda görünce ayarlarız |
 | 4 | Tuzak savunma tabanına girsin mi (§13.11.10) | hayır (tek kullanımlık) |
 | 5 | Kahraman ölünce **ücretsiz otomatik dirilme** doğru mu? | evet; ücretli süre kısaltma Faz 4'te |
-| 6 | RAM yükseltme zamanı (4 GB + 3 çekirdek) | canlıya çıkmadan önce |
+| 6 | ✅ RAM yükseltmesi — **YAPILDI** (2026-08-02: 4 GB / 3 vCPU / 40 GB disk, ölçüldü) | — |
 
 ---
 
@@ -304,7 +317,8 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 |---|---|
 | **`MOBIWAR_SISTEM_PLANI.md`** | **Projenin beyni.** Kural, formül ve gerekçe (§13.5 harita · §13.9 ekonomi · §13.11 şehir/üretim · §13.12 sohbet · §13.13 tema · §13.16 dünya). ⚠️ Yalnız **kural değişince** güncellenir, özellik bitince değil |
 | **`EKSIK_OZELLIKLER.md`** | **Tek backlog.** Yeni iş seçerken açılır (arayüz listesi de buraya katlandı) |
-| `VPS_DURUM_RAPORU.md` | Canlıya çıkmadan önce (⚠️ yedekler hâlâ aynı sunucuda) |
+| **`YAYINA_ALMA.md`** | ⭐ **Dağıtımın tek kaynağı.** Sunucu künyesi · canlıya çıkışın kalan 4 adımı · her değişikliğin canlıya nasıl gittiği ve **her kararın gerekçesi** · geri alma komutları |
+| `VPS_DURUM_RAPORU.md` | Sunucunun 2026-07-26 tarihli genel denetimi (temizlik, MySQL, diğer siteler). ⚠️ §0 ve §1 bayat — güncel künye `YAYINA_ALMA.md`'de |
 | `referans/teknik_ve_yapi_dokumantasyonu.md` | Oyunun kendi kuralları — tartışmalarda **resmî kaynak** |
 | `referans/TEKNIK_MANTIK_RAPORU.md` | **Savaş motoruna dokunmadan önce** — özellikle §0 "stat adları yanılsaması" |
 | `referans/MOBIWAR_TEKNIK_KURULUM.md` · `referans/KURULUM_REHBERI.md` | DB şeması · sunucu profili · kurulumu **uygularken** |

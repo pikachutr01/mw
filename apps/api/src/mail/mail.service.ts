@@ -51,6 +51,8 @@ export class ResendSender implements MailSender {
         },
         body: JSON.stringify({
           from: MAIL.from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text,
+          // Resend alanı `reply_to`; boşken hiç göndermiyoruz (API boş dizeyi reddeder).
+          ...(MAIL.replyTo ? { reply_to: MAIL.replyTo } : {}),
         }),
         signal: controller.signal,
       });

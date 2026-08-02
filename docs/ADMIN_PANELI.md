@@ -46,9 +46,14 @@ Oyun 5173'te, panel **5174**'te. İkisi de `/api`yi 3002'ye proxy'liyor.
 
 ### Üretimde (nginx — henüz uygulanmadı)
 
+Alt alan **`admin.mobilwar.com`** (2026-08-02 kullanıcı kararı; eskiden `yonetim.` yazıyordu).
+Önünde ayrıca **Cloudflare Access** var: panele ulaşmadan önce e-posta doğrulamalı kapı — bot
+taraması panelin giriş ekranını hiç görmez. Access, panelin kendi `AdminGuard`'ının **yerine
+geçmez**, önüne eklenir.
+
 ```nginx
 server {
-    server_name yonetim.mobilwar.com;
+    server_name admin.mobilwar.com;
     root /var/www/mobilwar-admin;           # apps/admin/dist
     index index.html;
 

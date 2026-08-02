@@ -739,8 +739,11 @@ kuralıyla çelişiyordu — "Ayşe" tarayıcıda reddediliyor, sunucuda kabul e
 ayarlanabilir DEĞİL ve öyle kalıyor: 0 bir denge düğmesi değil **değişmez** — koloniye kese
 vermek "kur → al → terk et" döngüsünü açardı. `catalogHash` kaymadı (`diffFromDefault`).
 
-**Gönderen:** `send.scrabblecozucu.site` (alt alan; apex SPF `-all` ile sert kapalı ve hosting
-paneline ait, ona dokunulmuyor). DNS kayıtları **VPS'te değil, hostingdunyam panelinde**.
+**Gönderen:** `noreply@mailer.mobilwar.com` · **Yanıt adresi:** `destek@mobilwar.com`
+(2026-08-02). Alt alan kullanılmasının sebebi değişmedi: gönderim itibarı kök alandan yalıtık
+kalsın ve kök alanın kendi posta kayıtlarına hiç dokunulmasın. DNS **Cloudflare**'de;
+`mobilwar.com`un MX'i Cloudflare Email Routing'e ait (**Locked**, elle düzenlenmez) ve
+`destek@` oradan gerçek bir kutuya yönleniyor — **kendi posta sunucumuz yok, olmayacak da**.
 
 ---
 

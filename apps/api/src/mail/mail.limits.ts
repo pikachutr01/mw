@@ -22,8 +22,15 @@ const str = (name: string, fallback: string): string => {
 
 export const MAIL = {
   apiKey: str('RESEND_API_KEY', ''),
-  /** `"MobilWar <noreply@send.scrabblecozucu.site>"` biçiminde. */
+  /** `"MobilWar <noreply@mailer.mobilwar.com>"` biçiminde. */
   from: str('MAIL_FROM', 'MobilWar <noreply@localhost>'),
+  /**
+   * Cevap adresi. `from` bir `noreply@` olduğu için, oyuncu doğrulama ya da sıfırlama
+   * mailini **yanıtlarsa** cevabı kimsenin okumadığı bir kutuya değil desteğe gitsin.
+   * Üretimde `destek@mobilwar.com`; o adres Cloudflare Email Routing ile gerçek bir
+   * kutuya yönleniyor (kendi mail sunucumuz yok). Boşsa başlık hiç gönderilmez.
+   */
+  replyTo: str('MAIL_REPLY_TO', ''),
   /** Bağlantı üretimi — doğrulama/sıfırlama e-postalarındaki adres bundan kurulur. */
   appOrigin: str('APP_ORIGIN', 'http://localhost:5173'),
   /** Resend uç noktası (test/proxy için değiştirilebilir). */

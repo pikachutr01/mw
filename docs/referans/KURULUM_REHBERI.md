@@ -235,7 +235,8 @@ ACCESS_TOKEN_TTL_SECONDS=900
 # ⭐ Doğrulama / şifre sıfırlama / hesap silme bağlantılarının ÜÇÜ de bundan üretilir.
 APP_ORIGIN=https://mobilwar.com
 RESEND_API_KEY=<resend panelinden>
-MAIL_FROM="MobilWar <noreply@send.mobilwar.com>"
+MAIL_FROM="MobilWar <noreply@mailer.mobilwar.com>"
+MAIL_REPLY_TO=destek@mobilwar.com
 
 # ⚠️ Anahtar çifti BİR KEZ üretilir; değişirse tüm push abonelikleri sessizce ölür.
 VAPID_PUBLIC_KEY=...
