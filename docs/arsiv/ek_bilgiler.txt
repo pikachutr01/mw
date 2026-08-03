@@ -25,3 +25,5 @@ Teleport kullanıldıktan sonra yeniden kullanılması için gereken süreyi bel
 Dünya ekranında aktif şehri belli edecek bir işaret olsun.
 
 Görevi iptal edince geri dönüş tahminiğ süresini modalde yazmasın. Aynı şekilde bir yükseltmeyi iptal ederken de geri ödenecek fiyatı yazmasın. Ekranda görünen değerle iptal onayını verildiği anda farklılık olur. Sadece bilgilendirme olması yeterli. Savaşçı ve savunma ünitesi üretimi için de geçerli.
+
+Casusluk raporunda yazan Bilgi alınamadı — kuşlar ya vuruldu ya da rakip kuşlarca engellendi. notunun bu şekilde detaylı yazmaısna gerek yok. Bilgi alınamadıysa daha sade bilgi vermesi yeterli.
