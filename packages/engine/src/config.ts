@@ -179,6 +179,16 @@ export interface CombatConfig {
 
   /** Enkaz oranı: ölen birim maliyeti × bu oran. */
   debrisRate: number;
+
+  /**
+   * ⭐ Savunma birimleri de enkaz versin mi? **Varsayılan `false`** — binary böyle
+   * (2026-08-03 ölçümü, gerekçesi `combat.ts` · `debris()`).
+   *
+   * ⚠️ Açmak yalnız bir sayı değiştirmez, DENGEYİ ters çevirir: savunma yığan şehir
+   * saldırganı besleyen bir kaynak çiftliğine döner. Bir dünyada bilerek denenmek istenirse
+   * diye ayar var, varsayılan olması için değil.
+   */
+  debrisFromDefenses: boolean;
 }
 
 export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
@@ -214,6 +224,7 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   defenderTypeFilter: false,
   combatThreshold: 0,
   debrisRate: 0.3,
+  debrisFromDefenses: false,   // ⭐ binary: savunma birimleri enkaz vermez (2026-08-03 ölçümü)
 };
 
 /** Ganimet ayarları (§13.10.4 — havuz + kaynak-bazlı oran modeli, 2026-07-30). */

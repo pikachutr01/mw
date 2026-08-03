@@ -541,11 +541,36 @@ function trapVolley(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): void {
  * "NET ölü" = savaş öncesi − (onarım + SAVUNMA TABANI sonrası) → taban ile geri gelen birimler
  * enkaz üretmez. Bu olmadan saldıran, dokunulmaz 4'lükleri her saldırıda "öldürüp" sonsuz enkaz
  * çiftliği kurardı (§13.11.10, adım 5).
+ *
+ * ⭐⭐ **SAVUNMA BİRİMLERİ ENKAZ VERMEZ** (2026-08-03, kullanıcının binary ölçümü).
+ *
+ * ⚠️ Motor doğduğundan beri savunma birimlerini de sayıyordu ve bu **yanlıştı**. Kullanıcının
+ * orijinal simülatörde (v0.5.5) yaptığı iki ölçüm kuralı izole ediyor — saldıran hiç kayıp
+ * vermiyor, ölen her şey savunma birimi:
+ *   • 1 Kaos ↔ 46 Mangonel → 10 Mangonel yıkıldı, **enkaz 0 altın / 0 yemek**
+ *     (bizim motor: 10 × 1.000 × 0,3 = 3.000 altın · 10 × 8.000 × 0,3 = 24.000 yemek)
+ *   • 1 Kaos ↔ 143 Okçu + 123 Tuzak + 143 Kazancı + 46 Mangonel + 65 Muhafız + 33 Balista
+ *     → 188 savunma birimi yıkıldı, yine **0 / 0** (bizim motor: 67.860 / 86.100)
+ *
+ * Binary de bunu söylüyor. `FUN_00411c4c` (savunanın enkaz hesabı) İKİ liste geziyor:
+ *   1. liste (`+4`) → her girdi için `[+0x78] × [+0x84] × 0,3` toplanır  (`FUN_004120bc`)
+ *   2. liste (`+8`) → **yalnız `[+0xB8] == 6` olan girdi** katkı verir, o da 1,15 çarpanlı
+ *      (`FUN_00412a88` içinde `0x3ff2666666666666` = 1,15 → Ogre kuralı)
+ * Yani ikinci listedeki (savunma) birimler tip 6 olmadıkça hiçbir şey eklemiyor.
+ *
+ * ⚠️ **`scratchpad/test_debris.js`teki T3/T9 ölçümleri bu soruyu ÇÖZEMEZ** — orada iki taraf da
+ * savaşçı kaybediyor ve motorun kayıp sayıları zaten orijinalden sapıyor; iki hipotez de ölçümün
+ * bir tarafında kalıyor (H1 +%11/+%19, H2 −%7/−%22). Ayrımı yapan, saldıranın hiç kayıp
+ * vermediği yukarıdaki iki senaryo.
+ *
+ * ⚠️ Bu bir DENGE düzeltmesi de: yalnız savunma yığan bir şehir, saldırana her seferinde
+ * yağmalanabilir enkaz basıyordu — savunma yatırımı saldırganı besliyordu.
  */
 function debris(army: Army, heroLevel: number, cfg: CombatConfig): { gold: number; food: number } {
   let gold = 0;
   let food = 0;
   for (const e of army.units) {
+    if (!cfg.debrisFromDefenses && e.kind === 'defense') continue;
     const dead = cfg.defenseFloor.debrisFromNetLosses || e.kind === 'defense'
       ? Math.max(0, e.count0 - e.countFinal)
       : Math.max(0, e.count0 - e.count);

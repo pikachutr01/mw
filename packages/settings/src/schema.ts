@@ -474,8 +474,21 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'combat.debrisRate',
     label: 'Enkaz oranı',
-    type: 'number', default: 0.3, min: 0, max: 1, tag: 'design',
-    description: 'Yıkılan savunma yapılarının kaçta kaçının enkaz olarak geri geldiği.',
+    type: 'number', default: 0.3, min: 0, max: 1, tag: 'measured',
+    description: 'Savaşta ölen SAVAŞÇILARIN maliyetinin kaçta kaçı enkaz olarak ortaya çıkar. Enkaz, '
+      + 'şehrin kasasıyla aynı havuza girer ve ganimet oradan alınır.',
+    note: 'Binary\'den ölçüldü: 0,3 (FUN_004120bc → maliyet × adet × sabit).',
+  },
+  {
+    key: 'combat.debrisFromDefenses',
+    label: 'Savunma birimleri de enkaz versin',
+    type: 'boolean', default: false, tag: 'measured',
+    description: '⚠️ **Kapalı olmalı** — orijinal oyun böyle. Açarsan yıkılan okçu kulesi, tuzak, '
+      + 'balista vb. de yağmalanabilir enkaz üretir ve savunmaya yatırım yapan oyuncu, kendisine '
+      + 'saldıranı besleyen bir kaynak çiftliğine dönüşür. Yalnız bilinçli bir denge denemesi için var.',
+    note: 'Ölçüldü (2026-08-03): 1 Kaos ile 46 Mangonel yıkıldığında orijinal simülatör 0 altın '
+      + '0 yemek veriyor; 188 savunma birimi yıkılan ikinci ölçümde de 0/0. Binary\'de savunma '
+      + 'listesi enkaza yalnız tip 6 (Ogre) için katkı veriyor.',
   },
   {
     key: 'combat.combatThreshold',

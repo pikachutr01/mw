@@ -70,6 +70,12 @@ self.addEventListener('push', (event) => {
        * ⚠️ `badge-96.png` **monokrom siluet + şeffaf zemin** olmalı; renkli ya da zeminli bir
        * görsel koyulursa hata aynen geri gelir. iOS/Safari `badge`i yok sayar ve uygulama
        * ikonunu kullanır → orada ek iş yok.
+       *
+       * ⚠️ **Kaynağı `public/badge.svg`** (kullanıcının seçtiği ikon). PNG ondan türetildi:
+       * `currentColor` → `#ffffff`, 96×96 tuvale **%10 iç boşlukla** çizildi (tarayıcı rozeti
+       * kendi maskesine oturtuyor, kenara dayanan şekil kırpılır). İkon değişirse PNG'yi
+       * yeniden üretmek gerekir — SVG tek başına yeterli DEĞİL, `badge` alanı SVG'yi her
+       * tarayıcıda kabul etmiyor.
        */
       icon: '/icon-192.png',
       badge: '/badge-96.png',

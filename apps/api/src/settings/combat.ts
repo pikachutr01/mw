@@ -53,6 +53,7 @@ const COMBAT_MAP: Readonly<Record<string, Setter>> = {
   'combat.gnomeSabotagePerStruct': nest('gnomeSabotage', 'perStruct'),
   'combat.gnomeSabotageMax': nest('gnomeSabotage', 'max'),
   'combat.debrisRate': flat('debrisRate'),
+  'combat.debrisFromDefenses': flat('debrisFromDefenses'),
   'combat.combatThreshold': flat('combatThreshold'),
 
   'hero.levelBase': nest('hero', 'levelBase'),

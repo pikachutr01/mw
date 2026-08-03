@@ -1632,11 +1632,32 @@ Eşitlikte (aynı mikrosaniye) `id` küçük olan, yani önce oluşturulan göre
 **1) HAVUZ** — altın ve yemek **AYRI AYRI**:
 ```
 havuz_altın = kasa_altın + enkaz_altın        (yemek aynı)
-enkaz       = Σ(KALICI ölü birim × maliyet) × 0,30      // iki tarafın ölüleri, Ogre ×1,15^khrSv
+enkaz       = Σ(KALICI ölü SAVAŞÇI × maliyet) × 0,30    // iki tarafın ölüleri, Ogre ×1,15^khrSv
 ```
 ⚠️ **KALICI ölü**: onarım (%50-70) ve savunma tabanı (§13.11.10) geri getirdiklerini enkaz
-saymaz — yoksa dokunulmaz 4'lükler sonsuz enkaz çiftliği olurdu. Yıkılan savunma birimleri
-de enkaz VERİR (2026-07-23'te orijinal simülatörle doğrulandı: T3 enkaz 1.119.168 ≈ 1.121.252).
+saymaz — yoksa dokunulmaz 4'lükler sonsuz enkaz çiftliği olurdu.
+
+⚠️⚠️ **YIKILAN SAVUNMA BİRİMLERİ ENKAZ VERMEZ** (2026-08-03'te düzeltildi). Motor doğduğundan
+beri veriyordu ve burada da *"savunma birimleri de enkaz VERİR (T3: 1.119.168 ≈ 1.121.252)"*
+yazıyordu — **o kanıt geçersiz**: T3/T9 ölçümlerinde iki taraf da savaşçı kaybediyor ve
+motorun kayıp sayıları zaten orijinalden sapıyor, dolayısıyla yakınlık kuralı doğrulamıyor
+(iki hipotez de ölçümün bir yanında kalıyor: +%11/+%19 ile −%7/−%22).
+
+Kuralı **izole eden** ölçüm, kullanıcının orijinal simülatörde (v0.5.5) yaptığı iki koşu —
+saldıran tarafta tek bir Kaos var ve hiç kayıp vermiyor, yani ölen her şey savunma birimi:
+* 1 Kaos ↔ 46 Mangonel → 10 Mangonel yıkıldı, **enkaz 0 altın / 0 yemek**
+  (motorumuz: 10 × 1.000 × 0,3 = 3.000 altın · 10 × 8.000 × 0,3 = 24.000 yemek)
+* 1 Kaos ↔ 143 Okçu + 123 Tuzak + 143 Kazancı + 46 Mangonel + 65 Muhafız + 33 Balista →
+  188 savunma birimi yıkıldı, yine **0 / 0** (motorumuz: 67.860 / 86.100)
+
+Binary de bunu söylüyor. `FUN_00411c4c` (savunanın enkaz hesabı) iki liste geziyor: birincinin
+her girdisi için `[+0x78] × [+0x84] × 0,3` toplanıyor (`FUN_004120bc`), ikinci listeden ise
+**yalnız `[+0xB8] == 6`** olan girdi katkı veriyor — ve o dal `0x3ff2666666666666` (= 1,15)
+taşıyor, yani Ogre kuralı. Savunma birimleri hiçbir şey eklemiyor.
+
+⚠️ Bu aynı zamanda bir DENGE düzeltmesi: savunma yığan şehir, kendisine saldırana her
+seferinde yağmalanabilir enkaz basıyordu. `combat.debrisFromDefenses` ayarıyla (varsayılan
+**kapalı**) bilerek geri açılabilir.
 
 **2) ORAN** — kaynak başına bağımsız eğri (girdi HAVUZ, kullanıcı kararı):
 ```
