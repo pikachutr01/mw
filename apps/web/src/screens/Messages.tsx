@@ -538,6 +538,15 @@ function PlainBody({ m, body, onDone }: {
           <div className="text-ink">{describeUnits(units, fmt)}</div>
         </div>
       ) : null}
+      {/* ⭐ Kahramanlar (kullanıcı, 2026-08-03): rapor yalnız birimleri yazıyordu — «9 casus
+          kuş» görünüyor, kahramandan hiç söz edilmiyordu. Ayrı satır, çünkü kahraman bir
+          "birim adedi" değil. */}
+      {Array.isArray(b['heroes']) && (b['heroes'] as string[]).length > 0 ? (
+        <div>
+          <div className="mb-1 text-xs font-semibold text-muted uppercase">Kahraman</div>
+          <div className="text-accent">{(b['heroes'] as string[]).join(' · ')}</div>
+        </div>
+      ) : null}
       {carried && (carried.gold > 0 || carried.food > 0) ? (
         <div className="flex items-center gap-2 text-ink">
           <span>{m.kind === 'return_report' ? 'Getirilen:' : 'Taşınan:'}</span>

@@ -10,7 +10,7 @@
 import { sql } from 'drizzle-orm';
 import { routeOf } from './report-route.ts';
 import {
-  BUILDINGS_BY_ID, clampName, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor,
+  BUILDINGS_BY_ID, clampName, colonyName, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor,
   UNITS_BY_ID, type SpyLevel,
 } from '@mobilwar/catalog';
 import type { CityService } from '../cities/city.service.ts';
@@ -112,7 +112,19 @@ export function createSupportHandler(cities: CityService): MissionHandler {
         ON CONFLICT (city_id, type) DO UPDATE SET count = units.count + ${count}
       `);
     }
-    // Kahramanlar hedef şehrin tapınağına yerleşir.
+    /**
+     * Kahramanlar hedef şehrin tapınağına yerleşir.
+     * ⚠️ Adları **taşınmadan ÖNCE** okunuyor: `mission_heroes` hemen ardından siliniyor ve
+     * rapor gövdesi ondan sonra yazılıyor. Kullanıcı 2026-08-03'te tam bu eksiği bildirdi —
+     * *"destek raporunda Birlikler altında sadece 9 casus kuş yazıyor, kahramana dair bilgi yok"*.
+     */
+    const heroRows = await ctx.tx.execute<Record<string, unknown>>(sql`
+      SELECT h.name FROM mission_heroes mh JOIN heroes h ON h.id = mh.hero_id
+       WHERE mh.mission_id = ${ctx.mission.id}
+       ORDER BY h.level DESC, h.name
+    `);
+    const heroNames = heroRows.map((r: Record<string, unknown>) => String(r['name']));
+
     await ctx.tx.execute(sql`
       UPDATE heroes SET city_id = ${targetCityId}
        WHERE id IN (SELECT hero_id FROM mission_heroes WHERE mission_id = ${ctx.mission.id})
@@ -128,7 +140,7 @@ export function createSupportHandler(cities: CityService): MissionHandler {
       kind: 'support_report',
       side: 'receiver',
       subject: 'Destek ulaştı',
-      body: { cityId: targetCityId, units, cargo, at: ctx.at.toISOString() },
+      body: { cityId: targetCityId, units, cargo, heroes: heroNames, at: ctx.at.toISOString() },
     });
     await ctx.emit('city:changed', { cityId: targetCityId, playerId: target.playerId, reason: 'support' });
 
@@ -411,12 +423,25 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
  * etmiyor. Kural koyup üreteci unutmak, kuralı kâğıt üstünde bırakmak olurdu.
  * "Koloni 100"e kadar (10 karakter) sığar; şehir üst sınırı bunun çok altında.
  */
+/**
+ * ⭐ Yeni şehrin adı: **başkent adı + sıra** (kullanıcı, 2026-08-03) — «Çığlıktepe 2».
+ * Önceki hâl `Koloni 2` idi ve oyuncunun kimliğiyle hiçbir bağı yoktu.
+ *
+ * ⚠️ Sıra = mevcut şehir sayısı + 1, yani BAŞKENT 1 sayılıyor: ilk koloni «… 2» oluyor
+ * (kullanıcının örneği birebir bu).
+ * ⚠️ Başkent yoksa (teorik: silinmiş hesap artığı) eski `Koloni N` desenine düşülüyor —
+ * ad üretmek zorundayız, atacak muhatap yok.
+ */
 async function nextColonyName(tx: Tx, playerId: number): Promise<string> {
   const rows = await tx.execute<Record<string, unknown>>(sql`
-    SELECT (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS n
-      FROM players WHERE id = ${playerId}
+    SELECT (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS n,
+           (SELECT name FROM cities WHERE player_id = ${playerId} AND is_capital LIMIT 1) AS capital
   `);
-  return clampName(`Koloni ${Number(rows[0]?.['n'] ?? 1)}`);
+  const index = Number(rows[0]?.['n'] ?? 1) + 1;
+  const capital = rows[0]?.['capital'];
+  return capital == null
+    ? clampName(`Koloni ${index}`)
+    : colonyName(String(capital), index);
 }
 
 /* ═══ Ortak yardımcılar ════════════════════════════════════════════════════ */

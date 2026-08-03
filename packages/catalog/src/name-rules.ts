@@ -80,3 +80,31 @@ export const normalizeName = (raw: string): string => raw.trim().replace(/\s+/g,
  */
 export const clampName = (raw: string): string =>
   normalizeName(raw).slice(0, NAME_MAX).trim();
+
+/**
+ * ⭐ KOLONİ ADI — «başkentAdı sıra» (kullanıcı, 2026-08-03).
+ *
+ * *"Başkentlerinin adının yanına bu şehrin kaçıncı şehri olduğunu yazarak yeni şehri
+ * adlandıralım. Örneğin başkentin adı çığlıktepe olunca yeni kuracağı şehir de ikinci
+ * şehriyse çığlıktepe 2 şeklinde olsun. Eğer yanına bir boşluk ve sayı yazınca 15 karakter
+ * sınırı aşılıyorsa şehrin son 2 karakterini silip sonuna boşluk ile şehir adı yazılsın."*
+ *
+ * Önceki hâl `Koloni 2` idi — oyuncunun kendi kimliğiyle hiçbir bağı yoktu ve iki farklı
+ * oyuncunun şehirleri dünya listesinde birbirinin aynı görünüyordu.
+ *
+ * ⚠️ **Kırpma SONDAN ve tek seferde yetmeyebilir.** Kullanıcı "son 2 karakteri sil" diyor;
+ * bu 15 karakterlik bir başkent adı + " 2" (2 karakter) için tam olarak yeter. Ama sıra
+ * numarası iki basamağa çıkarsa (" 10" = 3 karakter) 2 karakter yetmez. Bu yüzden kural
+ * "gereken kadar kırp" olarak genelleştirildi: sonuç HER ZAMAN sınırın içinde kalır ve
+ * iki basamaklı örnekte kullanıcının verdiği örnekle aynı sonucu verir.
+ *
+ * ⚠️ Kırpma sonrası oluşabilecek sondaki boşluk temizleniyor: "Çığlık Tepe" → "Çığlık Te"
+ * değil "Çığlık T" gibi bir kenar durumda ad boşlukla bitmemeli.
+ */
+export function colonyName(capitalName: string, index: number): string {
+  const suffix = ` ${index}`;
+  const base = normalizeName(capitalName);
+  const room = NAME_MAX - suffix.length;
+  const head = base.length <= room ? base : base.slice(0, room).trimEnd();
+  return `${head}${suffix}`;
+}

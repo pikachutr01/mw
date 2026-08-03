@@ -14,14 +14,15 @@ import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from './game-clock.service.ts';
 import { WorldStateService } from './world-state.service.ts';
+import { WORLD_SHAPE } from './world-shape.ts';
 
-/** §13.16.1 — oyunun kendi dokümanından, BİREBİR. Koordinatlar 1-indekslidir. */
-export const WORLD_SHAPE = {
-  continents: 10,
-  districtsPerContinent: 500,
-  citiesPerDistrict: 10,
-  oneIndexed: true,
-} as const;
+/**
+ * §13.16.1 — oyunun kendi dokümanından, BİREBİR. Koordinatlar 1-indekslidir.
+ * ⚠️ Tanım `world-shape.ts`e taşındı (2026-08-03): burada ve `auth.service.ts`te İKİ ayrı
+ * kopya duruyordu ve biri değişse diğeri sessizce eski kalırdı. Yeniden dışa aktarılıyor,
+ * çünkü uç bunu yanıtta `shape` olarak gönderiyor ve istemci ona bakıyor.
+ */
+export { WORLD_SHAPE } from './world-shape.ts';
 
 @Controller('api/v1/world')
 @UseGuards(AuthGuard)

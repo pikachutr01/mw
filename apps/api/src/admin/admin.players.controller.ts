@@ -280,11 +280,29 @@ export class AdminPlayersController {
     const missionIds = [...outRows, ...inRows]
       .map((m) => Number(m['id'])).filter((n) => Number.isInteger(n));
     const unitsByMission = new Map<number, Counted[]>();
+    /**
+     * ⭐ KAHRAMANLAR (kullanıcı, 2026-08-03: *"aktif hareketleri gösteren kısımda kahraman
+     * gözükmüyor; casus kuş + kahraman görevinde sadece 9 casus kuşun adı gözüküyor"*).
+     *
+     * ⚠️ Eksiklik yeni değildi ama 2026-08-03'e kadar **görünmüyordu**: istemci kahraman
+     * göndermiyordu, dolayısıyla `mission_heroes` pratikte hep boştu. Kahraman seçici
+     * eklenince aynı gün ortaya çıktı.
+     */
+    const heroesByMission = new Map<number, string[]>();
     if (missionIds.length > 0) {
-      const mu = await this.db.execute<Record<string, unknown>>(sql`
-        SELECT mission_id, unit_type, count FROM mission_units
-         WHERE mission_id = ANY(${sql.raw(`ARRAY[${missionIds.join(',')}]::bigint[]`)})
-      `);
+      const idArray = sql.raw(`ARRAY[${missionIds.join(',')}]::bigint[]`);
+      const [mu, mh] = await Promise.all([
+        this.db.execute<Record<string, unknown>>(sql`
+          SELECT mission_id, unit_type, count FROM mission_units
+           WHERE mission_id = ANY(${idArray})
+        `),
+        this.db.execute<Record<string, unknown>>(sql`
+          SELECT mh.mission_id, h.name, h.level
+            FROM mission_heroes mh JOIN heroes h ON h.id = mh.hero_id
+           WHERE mh.mission_id = ANY(${idArray})
+           ORDER BY h.level DESC, h.name
+        `),
+      ]);
       for (const r of mu) {
         const key = Number(r['mission_id']);
         const list = unitsByMission.get(key) ?? [];
@@ -294,6 +312,12 @@ export class AdminPlayersController {
           count: Number(r['count']),
         });
         unitsByMission.set(key, list);
+      }
+      for (const r of mh) {
+        const key = Number(r['mission_id']);
+        const list = heroesByMission.get(key) ?? [];
+        list.push(`${String(r['name'])} (sv ${Number(r['level'] ?? 0)})`);
+        heroesByMission.set(key, list);
       }
     }
     const toMission = (m: Record<string, unknown>): Record<string, unknown> => ({
@@ -308,6 +332,7 @@ export class AdminPlayersController {
         ? (m['target_k'] == null ? null : `${m['target_k']}:${m['target_d']}:${m['target_s']}`)
         : String(m['target_name']),
       units: unitsByMission.get(Number(m['id'])) ?? [],
+      heroes: heroesByMission.get(Number(m['id'])) ?? [],
     });
 
     const gateway = getGateway();

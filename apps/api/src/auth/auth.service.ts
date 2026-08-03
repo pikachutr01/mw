@@ -12,6 +12,7 @@ import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { EmailTokenService } from '../mail/email-token.service.ts';
 import type { GameClockService } from '../world/game-clock.service.ts';
+import { PlacementService } from '../world/placement.service.ts';
 import { PasswordService } from './password.service.ts';
 import { hashRefreshToken, type TokenPair, type TokenService } from './token.service.ts';
 
@@ -55,16 +56,10 @@ export interface AuthResult extends TokenPair {
 }
 
 /**
- * ⭐ DÜNYA BOYUTLARI — oyunun kendi dokümanından (`teknik_ve_yapi_dokumantasyonu.md`):
- * *"Bir dünyada 10 kıta, bir kıtada 500 diyar ve bir diyarda da 10 şehir bulunmaktadır."*
- * → dünya başına 50.000 boş şehir yeri. Koordinatlar **1-indeksli** (1:45:10).
- * Faz 3'te `world_config.map`'e taşınacak; yerleşim algoritması da (§13.6) bunu kullanacak.
+ * Yerleşim kilidinin ad alanı (`pg_advisory_xact_lock(klass, worldId)`).
+ * ⚠️ Sabit bir sayı: aynı dünyaya iki kayıt aynı anda gelirse ikisi de aynı kilidi ister.
  */
-export const WORLD_SHAPE = {
-  continents: 10,
-  districtsPerContinent: 500,
-  citiesPerDistrict: 10,
-} as const;
+const PLACEMENT_LOCK = 4713;
 
 /** Yanlış parola denemesi bu sayıyı aşarsa hesap kısa süre kilitlenir (kaba kuvvet freni). */
 const MAX_FAILED_LOGINS = 10;
@@ -75,6 +70,7 @@ export class AuthService {
   private readonly devices: DeviceSignalService;
   private readonly cities: CityService;
   private readonly emailTokens: EmailTokenService;
+  private readonly placement: PlacementService;
 
   constructor(
     private readonly db: Db,
@@ -84,6 +80,7 @@ export class AuthService {
     this.devices = new DeviceSignalService(db);
     this.cities = new CityService(db);
     this.emailTokens = new EmailTokenService(db);
+    this.placement = new PlacementService(db);
   }
 
   async register(input: {
@@ -148,8 +145,24 @@ export class AuthService {
       `);
       const playerId = Number(ply[0]!.id);
 
-      // Başkent: yerleşim algoritması Faz 3'te (§13.6); şimdilik ilk boş şehir yeri.
-      const slot = await this.findFreeSlot(input.worldId, tx as never);
+      /**
+       * ⭐ BAŞKENT — yerleşim algoritması §13.6 (`PlacementService`, 2026-08-03).
+       *
+       * ⚠️ **YARIŞ ÖNCE KİLİTLENİR, SONRA SEÇİLİR.** `pickCapital` "boş" gördüğü bir yeri
+       * seçtikten sonra, aynı milisaniyede kaydolan başka bir oyuncu orayı kapabilir; o
+       * durumda `cities_world_coords` benzersizlik ihlali ham Postgres hatası olarak çıkar ve
+       * istemciye **500** gider (`auth.controller.ts`in `catch`i yalnız `AuthError` eşliyor).
+       *
+       * ⚠️ Çözüm "hata yakala, tekrar dene" DEĞİL: Postgres başarısız bir ifadeden sonra
+       * transaction'ı iptal eder, sonraki her sorgu «current transaction is aborted» der.
+       * Yeniden denemek savepoint gerektirirdi ve `cities.create` kendi savepoint'ini açmıyor.
+       *
+       * Dünya başına **advisory kilit** hem daha basit hem daha dürüst: yerleşim yalnız
+       * kayıtta çalışan, dünya başına saniyede bir bile olmayan bir işlem — sıraya sokmanın
+       * ölçülebilir maliyeti yok. Kilit transaction bitince kendiliğinden bırakılıyor.
+       */
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${PLACEMENT_LOCK}, ${input.worldId})`);
+      const slot = await this.placement.pickCapital(input.worldId, accountId, tx as never);
       await this.cities.create({
         worldId: input.worldId,
         playerId,
@@ -419,41 +432,4 @@ export class AuthService {
     };
   }
 
-  /**
-   * İlk boş harita noktası. **Geçici** — gerçek yerleşim algoritması (§13.6: nefes payı, komşu
-   * skoru, tehdit çarpanı) Faz 3'te haritayla birlikte gelecek. Şimdilik determinist tarama:
-   * `cities(world_id,k,d,s)` UNIQUE olduğu için yarış durumunda ikinci ekleme DB'de patlar.
-   */
-  /**
-   * İlk BOŞ şehir yeri. Gerçek yerleşim algoritması §13.6 (Faz 3); bu geçici ama **doğru** olmak zorunda.
-   *
-   * ⚠️ Eskiden şehir yeri şehir SAYISINDAN türetiliyordu (`count % 10`). Bu, şehirler tam sırayla
-   * oluşturulup hiç silinmediği sürece çalışır; bir şehir silinince veya bir şehir yeri elle dolunca
-   * **aynı koordinat ikinci kez üretilir** ve kayıt `cities_world_coords` ihlaliyle 500 verir.
-   * Şimdi gerçekten boş olan en küçük şehir yeri bulunuyor (boşluk varsa onu doldurur).
-   *
-   * ⭐ Dünya boyutları oyunun kendi dokümanından: 10 kıta × 500 diyar × 10 şehir,
-   * koordinatlar **1-indeksli** (1:45:10 = 1. kıta, 45. diyar, 10. şehir).
-   */
-  private async findFreeSlot(worldId: number, tx: Db): Promise<{ k: number; d: number; s: number }> {
-    const perDistrict = WORLD_SHAPE.citiesPerDistrict;
-    const perContinent = perDistrict * WORLD_SHAPE.districtsPerContinent;
-
-    const rows = await tx.execute<{ idx: number } & Record<string, unknown>>(sql`
-      WITH used AS (
-        SELECT ((k - 1) * ${WORLD_SHAPE.districtsPerContinent} + (d - 1)) * ${perDistrict} + (s - 1) AS idx
-          FROM cities WHERE world_id = ${worldId}
-      )
-      SELECT MIN(i)::int AS idx
-        FROM generate_series(0, COALESCE((SELECT MAX(idx) FROM used), -1) + 1) AS i
-       WHERE i NOT IN (SELECT idx FROM used)
-    `);
-    const idx = Number(rows[0]?.idx ?? 0);
-
-    return {
-      k: Math.floor(idx / perContinent) + 1,
-      d: (Math.floor(idx / perDistrict) % WORLD_SHAPE.districtsPerContinent) + 1,
-      s: (idx % perDistrict) + 1,
-    };
-  }
 }

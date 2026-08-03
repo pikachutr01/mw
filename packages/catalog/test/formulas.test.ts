@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildingCost, buildingTimeSeconds, castleBudget, caveCapacity, defenseCapacity,
   dwarvesToBreakCave, farmOutput, heroLevelForXp, heroReviveCost, heroReviveSeconds,
-  heroXpForLevel, mergeCatalogConfig, mineOutput, STARTING_RESOURCES, teleportCooldownSeconds,
+  colonyName, heroXpForLevel, mergeCatalogConfig, mineOutput, NAME_MAX, STARTING_RESOURCES, teleportCooldownSeconds,
   wallCurrentIntegrity, wallRepairSeconds,
   timeFromCost, trainingTimeSeconds, unitCost, unitTimeValue, UNITS_BY_ID,
 } from '../src/index.ts';
@@ -395,5 +395,46 @@ describe('yapı ve teknik süresi', () => {
     const deger = unitTimeValue('dwarf');
     expect(timeFromCost({ gold: deger, food: 0 }, 0) / trainingTimeSeconds('dwarf', 0))
       .toBeCloseTo(400 / 190, 6);
+  });
+});
+
+/**
+ * ⭐ KOLONİ ADI — «başkentAdı sıra» (kullanıcı, 2026-08-03).
+ *
+ * Önceki hâl `Koloni 2` idi: oyuncunun kimliğiyle hiçbir bağı yoktu ve iki farklı oyuncunun
+ * şehirleri dünya listesinde birbirinin aynı görünüyordu.
+ */
+describe('koloni adı', () => {
+  it('başkent adının yanına sıra numarası gelir', () => {
+    expect(colonyName('Çığlıktepe', 2)).toBe('Çığlıktepe 2');
+    expect(colonyName('Bal', 3)).toBe('Bal 3');
+  });
+
+  it('⭐ 15 karakteri aşarsa başkent adı KIRPILIR (kullanıcının kuralı)', () => {
+    // 15 karakterlik ad + " 2" = 17 → sondan 2 karakter kırpılır.
+    const uzun = 'Aaaaabbbbbccccc';            // tam 15
+    expect(uzun.length).toBe(NAME_MAX);
+    expect(colonyName(uzun, 2)).toBe('Aaaaabbbbbccc 2');
+    expect(colonyName(uzun, 2).length).toBeLessThanOrEqual(NAME_MAX);
+  });
+
+  /**
+   * ⚠️ İki basamaklı sıra numarasında " 10" ÜÇ karakter tutar; kullanıcının verdiği "son 2
+   * karakteri sil" kuralı bu durumda yetmezdi. Kural "gereken kadar kırp" olarak
+   * genelleştirildi — sonuç HER ZAMAN sınırın içinde.
+   */
+  it('iki basamaklı sırada da sınır aşılmaz', () => {
+    const uzun = 'Aaaaabbbbbccccc';
+    expect(colonyName(uzun, 10)).toBe('Aaaaabbbbbcc 10');
+    expect(colonyName(uzun, 10).length).toBe(NAME_MAX);
+  });
+
+  it('kırpma sondaki boşluğu bırakmaz', () => {
+    // "Aaaaabbbbbcc dd" (15) → kırpınca "Aaaaabbbbbcc " olurdu; boşluk temizlenmeli.
+    expect(colonyName('Aaaaabbbbbcc dd', 2)).toBe('Aaaaabbbbbcc 2');
+  });
+
+  it('kısa adlar hiç kırpılmaz', () => {
+    expect(colonyName('Kale', 5)).toBe('Kale 5');
   });
 });

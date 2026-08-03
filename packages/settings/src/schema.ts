@@ -116,6 +116,17 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'sefer varış anı girerken hesaplanıp yazılıyor; yalnız bundan sonraki işler etkilenir.',
   },
   {
+    id: 'placement',
+    label: 'Yerleşim (yeni oyuncu)',
+    description: '⭐ Yeni kaydolan oyuncunun BAŞKENTİ dünyada nereye kurulur (§13.6). '
+      + 'Açık bir «yerleşim cephesi» oyuncu sayısıyla büyür; cepheden rastgele diyarlar '
+      + 'örneklenir, her biri üç çarpanla puanlanır (boşluk × komşuluk × güç uyumu) ve '
+      + 'AĞIRLIKLI RASTGELE seçim yapılır. '
+      + '⚠️ Deterministik «en iyi diyar» seçilmiyor — seçilseydi aynı anda kaydolan herkes '
+      + 'aynı yere giderdi. '
+      + '⚠️ KOLONİLERİ etkilemez: oyuncu kolonisini istediği boş şehre kurar (§13.6.5).',
+  },
+  {
     id: 'teleport',
     label: 'Teleport',
     description: '⭐ Teleport binası birlikleri iki şehir arasında ANINDA taşır — mesafe, '
@@ -803,6 +814,84 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     label: 'Teknik fiyat çarpanı',
     type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
     description: 'TÜM teknik fiyatlarını topluca ölçekler.',
+  },
+
+  /* ── Yerleşim (§13.6) ────────────────────────────────────────────────────── */
+  {
+    key: 'placement.capitalQuota',
+    label: 'Diyar başına başkent kotası',
+    type: 'int', default: 5, min: 1, max: 10, tag: 'design', unit: 'adet',
+    description: 'Bir diyara OTOMATİK yerleştirmeyle en fazla kaç başkent konabilir. '
+      + 'Büyütürsen oyuncular sıkışır (erken savaş, hızlı eleme); küçültürsen dünya yayılır '
+      + 've kimse kimseyi bulamaz.',
+    note: 'Diyarda 10 şehir yeri var; kalan yerler kolonilere ve terk edilmiş şehirlere '
+      + 'açık kalıyor. Kota YALNIZ otomatik yerleştirmeyi sınırlıyor.',
+  },
+  {
+    key: 'placement.targetOccupancy',
+    label: 'Cephe hedef doluluğu',
+    type: 'number', default: 0.6, min: 0.1, max: 1, tag: 'design',
+    description: 'Açık yerleşim bölgesinin ne kadar dolu tutulacağı. 0,60 = bölge hep ~%60 '
+      + 'dolu. Büyütürsen oyuncular birbirine yakın doğar; küçültürsen dünya seyrelir.',
+    note: 'Açık bölge [1..N] ÖNEKİ olduğu için eski diyarlar daima aday kalır — «dünya '
+      + 'büyüdükçe geriye dönüp serpiştir» kuralı bu doluluk ağırlığından kendiliğinden çıkıyor.',
+  },
+  {
+    key: 'placement.minOpenDistricts',
+    label: 'En az açık diyar',
+    type: 'int', default: 8, min: 1, max: 500, tag: 'design', unit: 'adet',
+    description: 'Dünya bomboşken bile bu kadar diyar açık tutulur. İlk oyuncuların hepsinin '
+      + 'tek diyara yığılmasını engeller.',
+  },
+  {
+    key: 'placement.sampleSize',
+    label: 'Aday örneklem boyu',
+    type: 'int', default: 60, min: 5, max: 500, tag: 'design', unit: 'adet',
+    description: 'Açık bölgeden kaç diyar puanlanacak. Büyütmek seçimi biraz iyileştirir ama '
+      + 'kayıt sorgusunu ağırlaştırır.',
+    note: 'Tüm bölgeyi puanlamak 5.000 satır okumak demekti; örneklem hem O(1) maliyet hem '
+      + 'kümelenme kırıcı.',
+  },
+  {
+    key: 'placement.neighborIdeal',
+    label: 'İdeal komşu sayısı',
+    type: 'number', default: 2, min: 0, max: 10, tag: 'design', unit: 'adet',
+    description: '⭐ Yeni oyuncunun düşmeyi TERCİH ettiği başkent sayısı. 2 = «yanımda birkaç '
+      + 'komşu olsun ama kalabalık olmasın». 0 yaparsan herkes ıssız diyarlara dağılır.',
+    note: 'Bu çarpan tasarımın özü: boş diyar (n=0) ağırlık 0,25 · n=1 → 0,71 · n=2 → 1,00 · '
+      + 'n=4 → 0,25. Kimse ıssız çölde tek başına uyanmaz, kimse 5 kişinin ortasına düşmez.',
+  },
+  {
+    key: 'placement.neighborSigma',
+    label: 'Komşuluk toleransı',
+    type: 'number', default: 1.2, min: 0.1, max: 5, tag: 'design',
+    description: 'İdeal komşu sayısından sapmanın ne kadar cezalandırılacağı. Büyütmek '
+      + 'tercihi düzleştirir (fark etmez hâle getirir), küçültmek katılaştırır.',
+  },
+  {
+    key: 'placement.emptinessExponent',
+    label: 'Boşluk tercihi üssü',
+    type: 'number', default: 1.5, min: 0, max: 5, tag: 'design',
+    description: 'Boş diyarların ne kadar kayırılacağı. 0 = doluluk hiç bakılmaz.',
+  },
+  {
+    key: 'placement.threatExponent',
+    label: 'Güç uyumu üssü',
+    type: 'number', default: 1.5, min: 0, max: 5, tag: 'design',
+    description: '⭐ Yeni oyuncunun KENDİ KUŞAĞININ yanına düşmesini sağlar: çevresi güçlü '
+      + 'olan diyarlar cezalandırılır. **0 = güç uyumu kapalı.**',
+    note: 'Yumuşak ağırlık, sert dışlama değil — dünya doyduğunda yine de yer bulunur. '
+      + 'Tehdit, diyarın ve İKİ KOMŞU diyarının 75. persentil puanı: sefer süreleri komşu '
+      + 'diyarı zaten ulaşılabilir kılıyor.',
+  },
+  {
+    key: 'placement.threatWindowDays',
+    label: 'Tehdit çıpası penceresi',
+    type: 'int', default: 14, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Güç uyumunun çıpası: son kaç günde kaydolanların medyan puanı «normal» '
+      + 'sayılacak.',
+    note: 'Tüm dünyanın ortalaması DEĞİL — çıpa yeni oyuncunun kuşağı olmalı, yoksa dünya '
+      + 'yaşlandıkça çıpa yükselir ve güç uyumu kendiliğinden işlevsizleşirdi.',
   },
 
   /* ── Teleport (§13.11.4) ─────────────────────────────────────────────────── */

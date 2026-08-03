@@ -1264,10 +1264,24 @@ kalsaydı 3 kıta ötesi de tavana yapışır ve haritanın uzak yarısı tek bi
 
 ---
 
-## 13.6 ⭐ YERLEŞİM ALGORİTMASI (yeni oyuncu başkenti nereye kurulur?)
+## 13.6 ⭐ YERLEŞİM ALGORİTMASI (yeni oyuncu başkenti nereye kurulur?) ✅ YAPILDI 2026-08-03
 
 Kullanıcı isteği: 1. kıtanın erken diyarlarından başla · diyar başına en fazla 4-5 başkent · erken
 safhada herkesi aynı diyara yığma ama birbirinden de koparma · dünya büyüdükçe geriye dönüp serpiştir.
+
+> ⚠️ **Bu bölüm 2026-08-03'e kadar YALNIZ TASARIMDI.** Kod düpedüz *"en küçük boş indeks"*
+> diyordu ve diyarları sırayla dolduruyordu (1:1:1 → 1:1:2 → …). Kullanıcı bunu canlıda gördü:
+> *"benden sonra kayıt olan bir başka hesap da 1:1:2'ye yerleştirildi."* Uygulama:
+> `apps/api/src/world/placement.service.ts`, ayarlar `placement.*` grubunda.
+>
+> **Canlı ölçüm (10 art arda kayıt):** 1:16:8 · 1:16:10 · 1:11:7 · 1:16:1 · 1:7:4 · 1:14:6 ·
+> 1:11:8 · 1:13:2 · 1:8:1 · 1:14:10 → **6 farklı diyar**, ardışık şehir yeri yok.
+>
+> ⚠️ **Yarış çözümü kilit, tekrar denemek DEĞİL.** İki kayıt aynı anda aynı yeri seçerse
+> `cities_world_coords` ihlali ham Postgres hatası olarak çıkıp **500** dönüyordu. "Yakala ve
+> tekrar dene" işlemez: Postgres başarısız ifadeden sonra transaction'ı iptal eder. Kayıt
+> transaction'ı dünya başına `pg_advisory_xact_lock` alıyor — yerleşim saniyede bir bile
+> olmayan bir işlem, sıraya sokmanın ölçülebilir maliyeti yok.
 
 ### 13.6.1 Yapı
 - Diyar başına **10 şehir yeri**. Bunların en fazla **`BAŞKENT_KOTA = 5`**'i *otomatik yerleştirme*
@@ -1323,6 +1337,13 @@ C(d) = 1 / (1 + (tehdit(d) / tehdit_ref)^1.5)      // GÜÇ UYUMU
 - Seçim **tohumlu** (`hash(world_seed, player_id)`) → tekrar üretilebilir ve denetlenebilir.
 - Yarış koşulu: şehir yeri `UNIQUE(world_id, k, d, s)` + `INSERT ... ON CONFLICT DO NOTHING`; çakışırsa
   bir sonraki aday denenir (en fazla 5 deneme, sonra örneklem yenilenir).
+- **Koloninin ADI: «başkentAdı sıra»** (kullanıcı, 2026-08-03) — «Çığlıktepe 2». Öncesinde
+  `Koloni 2` idi ve oyuncunun kimliğiyle hiçbir bağı yoktu; iki farklı oyuncunun şehirleri
+  dünya listesinde birbirinin aynı görünüyordu. Sıra = mevcut şehir sayısı + 1, yani başkent 1
+  sayılıyor. 15 karakter sınırı aşılırsa başkent adı **sondan kırpılır** (`colonyName`).
+  ⚠️ Kullanıcının kuralı *"son 2 karakteri sil"* idi; bu tek basamaklı sıra için tam yeter ama
+  iki basamakta (« 10» = 3 karakter) yetmiyor → kural "gereken kadar kırp" olarak
+  genelleştirildi, sonuç her zaman sınırın içinde.
 - **Koloni (sömürgecilik) şehri: KONUM KISITI YOK** (kullanıcı kararı, 2026-07-26). Oyuncu dünyadaki
   **herhangi bir kıtanın, herhangi bir diyarının, herhangi bir boş şehir yerinı** seçebilir.
   Tek koşullar: şehir yeri boş olmalı · Sömürgecilik/3 kadar şehir hakkı · en fazla 5 şehir.

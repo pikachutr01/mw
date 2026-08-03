@@ -22,6 +22,8 @@ interface Mission {
   id: number; type: string; status: string; executeAt: string | null;
   ownerPlayerId: number | null; ownerName: string | null;
   origin: string | null; target: string | null; units: Counted[];
+  /** «Ad (sv N)» biçiminde — yoldaki kahramanlar. */
+  heroes: string[];
 }
 interface City {
   id: number; name: string; coordinates: string; isCapital: boolean;
@@ -118,6 +120,11 @@ function MissionList({ title, items, showOwner }: {
                 <span className="text-[11px] text-muted">
                   {m.units.map((u) => `${u.name} ${num(u.count)}`).join(' · ')}
                 </span>
+              ) : null}
+              {/* ⭐ Kahramanlar (kullanıcı, 2026-08-03): birimler yazıyordu, kahraman yazmıyordu.
+                  Ayrı renkte, çünkü savaşın sonucunu birimlerden çok daha fazla etkiliyorlar. */}
+              {m.heroes.length > 0 ? (
+                <span className="text-[11px] text-accent">⚔ {m.heroes.join(' · ')}</span>
               ) : null}
               <span className="ml-auto text-xs text-muted" title={stamp(m.executeAt)}>
                 {when(m.executeAt)}
