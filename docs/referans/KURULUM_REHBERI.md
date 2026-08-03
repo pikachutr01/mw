@@ -230,7 +230,7 @@ WORLD_ID=1
 DATABASE_URL=postgresql://mobilwar:GUCLU_PAROLA@localhost:5432/mobilwar
 
 JWT_ACCESS_SECRET=<openssl rand -base64 48>
-ACCESS_TOKEN_TTL_SECONDS=900
+# Jeton ömürleri env'de DEĞİL: panel → Ayarlar → Oturum (`session.accessTtlHours` = 12 sa).
 
 # ⭐ Doğrulama / şifre sıfırlama / hesap silme bağlantılarının ÜÇÜ de bundan üretilir.
 APP_ORIGIN=https://mobilwar.com

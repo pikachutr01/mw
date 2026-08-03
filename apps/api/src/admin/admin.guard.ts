@@ -5,15 +5,17 @@
  *   `AdminStepUpGuard`  → yıkıcı işlem (silme · sabit kaydetme · ham düzenleme).
  *                          `sessions.elevated_until > now()` şart.
  *
- * ⚠️ **ROL TOKEN'DAN OKUNMAZ, HER İSTEKTE DB'DEN GELİR.** Access token 15 dakika yaşıyor;
- * rolü içine gömseydik yetkiyi geri aldığımızda 15 dakika boyunca geçerli kalırdı — yani
- * "adminliği aldım" dedikten sonra çeyrek saat hâlâ admin olurdu. Bedeli `accounts_staff`
- * kısmi indeksi üzerinden tek satır okuması.
+ * ⚠️ **ROL TOKEN'DAN OKUNMAZ, HER İSTEKTE DB'DEN GELİR.** Rolü jetona gömseydik yetkiyi geri
+ * aldığımızda jetonun ömrü boyunca geçerli kalırdı — 2026-08-03'te o ömür 12 saate çıktığı
+ * için bu kural artık çok daha kritik: "adminliği aldım" dedikten sonra yarım gün hâlâ admin
+ * olurdu. Bedeli `accounts_staff` kısmi indeksi üzerinden tek satır okuması.
  *
  * ⚠️ Bu guard'lar `AuthGuard`ın YERİNE değil ARDINDAN çalışır: `req.player` dolu olmalı.
  * Controller'da sıra `@UseGuards(AuthGuard, AdminGuard)` — Nest soldan sağa uygular.
  */
-import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException, Inject, Injectable, ServiceUnavailableException, UnauthorizedException,
+} from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { AuthedRequest } from '../auth/auth.guard.ts';
@@ -37,12 +39,21 @@ export class AdminGuard implements CanActivate {
     const player = req.player;
     if (!player) throw new UnauthorizedException('Oturum yok.');
 
-    const [row] = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT a.role, s.elevated_until
-        FROM accounts a
-        JOIN sessions s ON s.id = ${player.sessionId}::uuid
-       WHERE a.id = ${player.accountId}
-    `);
+    // ⚠️ `AuthGuard` ile aynı gerekçe: geçici DB hatası 500 değil 503 olmalı, yoksa panel
+    //    «yetkin yok» sanıp seni giriş ekranına atar. Bkz. `auth.guard.ts`.
+    let row: Record<string, unknown> | undefined;
+    try {
+      [row] = await this.db.execute<Record<string, unknown>>(sql`
+        SELECT a.role, s.elevated_until
+          FROM accounts a
+          JOIN sessions s ON s.id = ${player.sessionId}::uuid
+         WHERE a.id = ${player.accountId}
+      `);
+    } catch (err) {
+      throw new ServiceUnavailableException(
+        `Yetki doğrulanamadı (geçici): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     const role = String(row?.['role'] ?? 'player');
     /**
      * ⚠️ Yetkisiz istekte 404 DEĞİL 403 dönülüyor. Panel zaten ayrı bir alt alanda ve varlığı

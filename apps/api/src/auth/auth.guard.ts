@@ -5,7 +5,7 @@
  * Bu, §13.12.1b dünya yalıtımının üçüncü katmanı: "başka dünyanın kanalına yaz" saldırısı
  * şema/sorgu/soket katmanlarına hiç ulaşamaz.
  */
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
@@ -47,13 +47,35 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Token geçersiz veya süresi dolmuş.');
     }
 
-    // Oturum iptal edilmiş olabilir (çıkış / parola değişimi / şüpheli erişim). Access token
-    // durumsuz olduğu için bu kontrol şart — yoksa iptal 15 dk boyunca işlemezdi.
-    const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT 1 FROM sessions
-       WHERE id = ${claims.sid}::uuid AND revoked_at IS NULL AND expires_at > now()
-    `);
-    if (rows.length === 0) throw new UnauthorizedException('Oturum kapatılmış.');
+    /**
+     * Oturum iptal edilmiş olabilir (çıkış / parola değişimi / şüpheli erişim). Access token
+     * durumsuz olduğu için bu kontrol şart.
+     *
+     * ⭐ Bu sorgu, jeton ömrünün ne olduğunun neden önemsiz olduğunun da cevabı: iptal
+     * **her istekte** buradan görülüyor, jetonun süresinin dolmasını beklemiyor. Ömür bu
+     * yüzden 15 dakikadan 12 saate çıkarılabildi (`session.accessTtlHours`).
+     *
+     * ⚠️ TRY İÇİNDE — ve hata **503**, 401 DEĞİL. Eskiden bu çağrı try dışındaydı: geçici bir
+     * DB tökezlemesi ya da havuz tükenmesi doğrudan **500**'e dönüşüyor ve TÜM korumalı uçları
+     * aynı anda vuruyordu (tarayıcı konsolunda `/messages`, `/missions`, `/cities/:id`
+     * salvosu). 401 döndürmek de yanlış olurdu: istemci onu «jetonum bayat» diye okuyup
+     * yenilemeye kalkar, yenileme de aynı DB'ye gittiği için düşer ve oyuncu geçici bir
+     * arıza yüzünden oturumundan atılır. `optional-auth.guard.ts:40-56` aynı sorguyu zaten
+     * try içine almıştı; asimetri kasıtsızdı.
+     */
+    let alive: number;
+    try {
+      const rows = await this.db.execute<Record<string, unknown>>(sql`
+        SELECT 1 FROM sessions
+         WHERE id = ${claims.sid}::uuid AND revoked_at IS NULL AND expires_at > now()
+      `);
+      alive = rows.length;
+    } catch (err) {
+      throw new ServiceUnavailableException(
+        `Oturum doğrulanamadı (geçici): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (alive === 0) throw new UnauthorizedException('Oturum kapatılmış.');
 
     req.player = {
       accountId: Number(claims.sub),

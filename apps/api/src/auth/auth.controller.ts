@@ -52,7 +52,17 @@ const changeEmailBody = z.object({
   currentPassword: z.string().min(1).max(200),
 });
 
-/** İstemciye dönen gövde — refresh token dâhil (web'de httpOnly çereze de yazılır). */
+/**
+ * İstemciye dönen gövde.
+ *
+ * ⚠️ Buradaki yorum 2026-08-03'e kadar *"web'de httpOnly çereze de yazılır"* diyordu ve bu
+ * **doğru değildi**: tüm `apps/api/src` içinde tek bir `setCookie` yok, jetonlar istemcide
+ * `localStorage`ta duruyor. Yanlış yorum, çereze güvenen bir düzeltme yazmayı davet ediyordu.
+ *
+ * ⭐ `accessExpiresAt` süs değil: istemci ömrün son %10'una girince jetonu **kendiliğinden**
+ * yeniliyor (`apps/web/src/lib/api.ts`). Bu alanı kaldırmak proaktif yenilemeyi öldürür ve
+ * 401 gürültüsünü geri getirir.
+ */
 interface AuthResponse {
   accessToken: string;
   refreshToken: string;

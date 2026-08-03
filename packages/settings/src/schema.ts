@@ -37,6 +37,17 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'Hiçbir şey geri alınmaz.',
   },
   {
+    id: 'session',
+    label: 'Oturum',
+    description: '⭐ Giriş yapmış oyuncunun jeton ömürleri ve **tek cihaz kuralı**. '
+      + '⚠️ Erişim jetonunun kısa olması güvenlik SAĞLAMAZ: `AuthGuard` zaten HER istekte '
+      + '`sessions` tablosuna bakıyor, yani «çıkış yap» ve «bu cihazı at» ömürden bağımsız '
+      + 'olarak ANINDA işliyor. Kısa ömrün tek etkisi, süresi dolan jetonla giden isteklerin '
+      + '401 alıp yenilenmesi — tarayıcı konsolunda kırmızı hata olarak görünür. '
+      + '⚠️ Buradaki değişiklik ZATEN VERİLMİŞ jetonları etkilemez; bir sonraki yenilemede '
+      + 'geçerli olur.',
+  },
+  {
     id: 'ratelimit',
     label: 'Hız sınırı (kimliksiz uçlar)',
     description: '⭐ Yalnız GİRİŞ YAPMAMIŞ ziyaretçinin ulaşabildiği uçlara IP başına sınır. '
@@ -857,6 +868,51 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'number', default: 0.92, min: 0.1, max: 1, tag: 'design',
     description: 'Surun her seviyesi onarımı ne kadar kısaltır. Seviye 20 sur 2 sa 28 dk\'da toparlanır.',
     note: 'Dokümanda yok, bilerek eklendi: suru yükseltmek toparlanma hızı da kazandırmalı.',
+  },
+
+  /* ── Oturum — jeton ömürleri ve tek cihaz kuralı (§9) ────────────────────── */
+  {
+    key: 'session.accessTtlHours',
+    label: 'Erişim jetonu ömrü',
+    type: 'number', default: 12, min: 0.25, max: 168, tag: 'design', unit: 'sa',
+    description: 'Bir girişin kaç saat sonra sessizce yenilenmesi gerektiği. Büyütürsen '
+      + 'yenileme seyrelir ve konsoldaki 401 gürültüsü azalır; küçültürsen ÇALINMIŞ bir '
+      + 'jetonun (oturum iptal edilmemişse) geçerli kalma süresi kısalır.',
+    note: '⭐ 15 dakikaydı, 12 saate çıkarıldı (kullanıcı, 2026-08-03). Kısa ömrün güvenlik '
+      + 'kazancı ÖLÇÜLDÜĞÜNDE SIFIR çıktı: `auth.guard.ts` her istekte `sessions` satırına '
+      + 'bakıp `revoked_at`/`expires_at` kontrol ediyor, yani iptal ömürden bağımsız olarak '
+      + 'anında işliyor. Geriye yalnız maliyeti kalıyordu: 15 dakikada bir tüm yoklama '
+      + 'istekleri 401 alıp yenileniyor ve tarayıcı konsolu kırmızıya boyanıyordu.',
+  },
+  {
+    key: 'session.refreshTtlDays',
+    label: 'Yenileme jetonu ömrü',
+    type: 'int', default: 90, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Oyuncunun yeniden giriş yapmadan kaç gün dönebileceği. Bu süre dolunca '
+      + 'kullanıcı adı ve parola tekrar sorulur.',
+    note: 'Jeton tek kullanımlık ve döndürmeli: her yenilemede yenisi verilip eskisi iptal '
+      + 'ediliyor (`auth.service.ts` `refresh`). Yani uzun ömür «aynı dize 90 gün geçerli» '
+      + 'demek değil — zincirin ne kadar sürebileceği demek.',
+  },
+  {
+    key: 'session.singleDevice',
+    label: 'Tek cihaz kuralı',
+    type: 'boolean', default: false, tag: 'design',
+    description: 'Açıkken bir hesap aynı anda yalnız TEK yerde açık olabilir (ikinci sekme '
+      + 'dâhil). İkinci cihaz tam ekran uyarı görür ve isterse oyunu oraya devralır. '
+      + '⚠️ Yalnız üretim ortamında uygulanır; geliştirmede daima kapalıdır.',
+    note: 'Altyapı Tur 2\'de kuruldu ama varsayılan KAPALI: kural canlıda gözle '
+      + 'doğrulanmadan açılmamalı, yanlış çalışırsa oyuncuları kendi hesaplarından kilitler.',
+  },
+  {
+    key: 'session.claimGraceSeconds',
+    label: 'Cihaz sahipliği zaman aşımı',
+    type: 'int', default: 90, min: 15, max: 3600, tag: 'design', unit: 'sn',
+    description: 'Tek cihaz kuralında, sahibi olan cihazdan bu süre boyunca ses çıkmazsa '
+      + 'sahiplik serbest kalır. Küçültürsen tarayıcısı çöken oyuncu daha çabuk geri girer; '
+      + 'büyütürsen kısa ağ kesintisinde sahiplik elden gitmez.',
+    note: 'Soket kopması saniyeler içinde fark edilir; bu süre asıl olarak soketsiz '
+      + '(yalnız yoklama yapan) istemciler ve ani kapanmalar için var.',
   },
 
   /* ── Hız sınırı — yalnız kimliksiz uçlar (§9.3.7) ────────────────────────── */

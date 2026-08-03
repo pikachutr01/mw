@@ -2,7 +2,7 @@
  * JWT access + **döndürmeli (rotating) refresh** (SİSTEM PLANI §9).
  *
  * Tasarım:
- *  - **Access token kısa ömürlü (15 dk)** ve durumsuz → her istekte DB'ye gitmeye gerek yok.
+ *  - **Access token durumsuz** → imzası doğrulanabildiği sürece kim olduğunu söyler.
  *  - **Refresh token uzun ömürlü ama TEK KULLANIMLIK.** Her yenilemede yenisi verilir, eskisi
  *    geçersizleşir. Böylece çalınan bir refresh token en fazla bir kez kullanılabilir ve
  *    kullanıldığı anda gerçek kullanıcının oturumu düşer → hırsızlık **fark edilir**.
@@ -13,6 +13,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { jwtVerify, SignJWT } from 'jose';
+import { liveNumber } from '../settings/live.ts';
 
 export interface AccessClaims {
   /** account id */
@@ -45,16 +46,33 @@ export function hashRefreshToken(token: string): string {
 
 export class TokenService {
   private readonly key: Uint8Array;
-  readonly accessTtl: number;
-  readonly refreshTtl: number;
+  /** Testlerin sabitlemesi için; üretimde `null` → ömür panelden okunur. */
+  private readonly accessTtlFixed: number | null;
+  private readonly refreshTtlFixed: number | null;
 
   constructor(opts: TokenServiceOptions) {
     if (!opts.accessSecret || opts.accessSecret.length < 16) {
       throw new Error('JWT_ACCESS_SECRET en az 16 karakter olmalı.');
     }
     this.key = new TextEncoder().encode(opts.accessSecret);
-    this.accessTtl = opts.accessTtlSeconds ?? 15 * 60;          // 15 dk
-    this.refreshTtl = opts.refreshTtlSeconds ?? 30 * 24 * 3600; // 30 gün
+    this.accessTtlFixed = opts.accessTtlSeconds ?? null;
+    this.refreshTtlFixed = opts.refreshTtlSeconds ?? null;
+  }
+
+  /**
+   * ⭐ Ömürler ALAN DEĞİL erişimci: panelden değiştirilen değer süreç yeniden başlamadan
+   * geçerli olsun (`CityService`/`MissionService`'teki dünya başına çözücü deseninin
+   * kurulum-geneli kardeşi — `settings/live.ts` kapsam notuna bakın).
+   *
+   * ⚠️ Kurucuda dondurulsaydı ömür yalnız yeniden başlatmayla değişirdi ve panelde
+   * görünen sayı ile gerçekte verilen jeton **sessizce** ayrışırdı.
+   */
+  get accessTtl(): number {
+    return this.accessTtlFixed ?? Math.round(liveNumber('session', 'accessTtlHours', 12) * 3600);
+  }
+
+  get refreshTtl(): number {
+    return this.refreshTtlFixed ?? Math.round(liveNumber('session', 'refreshTtlDays', 90) * 86_400);
   }
 
   async signAccess(claims: AccessClaims, now = new Date()): Promise<{ token: string; expiresAt: Date }> {
@@ -73,12 +91,16 @@ export class TokenService {
     if (!payload.sub || typeof payload['pid'] !== 'number' || typeof payload['wid'] !== 'number') {
       throw new Error('Token içeriği eksik.');
     }
-    return {
-      sub: payload.sub,
-      pid: payload['pid'],
-      wid: payload['wid'],
-      sid: String(payload['sid'] ?? ''),
-    };
+    /**
+     * ⚠️ `sid` DE doğrulanır. Eskiden `String(payload['sid'] ?? '')` yazıyordu: `sid` taşımayan
+     * bir jeton sessizce boş dizeye düşüyor, `AuthGuard` onu `''::uuid` diye sorguya koyuyor ve
+     * Postgres «invalid input syntax for type uuid» diyordu. Sonuç 401 değil **500** oluyordu —
+     * yani bozuk jeton, sunucu hatası gibi görünüyordu.
+     */
+    const sid = payload['sid'];
+    if (typeof sid !== 'string' || sid === '') throw new Error('Token oturum kimliği taşımıyor.');
+
+    return { sub: payload.sub, pid: payload['pid'], wid: payload['wid'], sid };
   }
 
   /** Refresh token rastgele 32 bayt — JWT değil, çünkü içeriğine gerek yok, yalnız eşleşmesi lazım. */

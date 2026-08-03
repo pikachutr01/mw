@@ -2,8 +2,9 @@
  * Panelin API istemcisi.
  *
  * ⚠️ `apps/web/src/lib/api.ts`'in KOPYASI DEĞİL, sadeleştirilmiş kardeşi. Oyun istemcisi
- * uçuşta tek yenileme sözü, oturum yayını, cihaz kimliği gibi işleri taşıyor; panelin hiçbirine
- * ihtiyacı yok. Ortak olan tek şey **sunucu sözleşmesi**, o da `@mobilwar/contracts`'ta.
+ * proaktif yenileme, sekmeler arası senkron, cihaz kimliği ve 5xx tekrarı gibi işleri de
+ * taşıyor; panelin hiçbirine ihtiyacı yok — **tek uçuş yenileme** ortak olan tek parça ve o da
+ * mecburen (yenileme jetonu tek kullanımlık). Ortak sözleşme `@mobilwar/contracts`'ta.
  *
  * ⚠️ Panel oturumu oyun oturumundan **ayrı anahtarda** (`mw-admin-session`) tutulur. Aynı
  * anahtarı paylaşsalardı panelden çıkış oyundan da atardı — ve daha kötüsü, oyun sekmesindeki
@@ -69,12 +70,46 @@ async function parse(res: Response): Promise<unknown> {
 }
 
 /**
- * ⚠️ 401'de **sessiz yenileme YOK**. Oyunda var çünkü oyuncu oynarken kesintiye uğramamalı;
- * panelde 401 "oturumun düştü" demektir ve doğru davranış giriş ekranına dönmektir. Sessiz
- * yenileme burada yalnız hata ayıklamayı zorlaştırırdı.
+ * ⭐ 401'DE SESSİZ YENİLEME (2026-08-03). Eskiden yoktu ve gerekçesi *"panelde 401 oturumun
+ * düştü demektir"* diye yazılıydı — ama pratikte 401'in sebebi oturumun düşmesi değil, access
+ * jetonunun 15 dakikada dolmasıydı. Panel bir ayarı kaydedip çay içmeye gidince dönüşte giriş
+ * ekranı buluyordu (kullanıcı: *"bu kadar kısa sürede oturumun düşmesi benim sinirimi bozuyor"*).
+ *
+ * Yenileme jetonu tek kullanımlık olduğu için oyundaki **tek uçuş** kuralı burada da şart:
+ * iki eşzamanlı 401 iki yenileme başlatırsa ikincisi iptal edilmiş jetonu kullanır ve oturumu
+ * gerçekten düşürür. Depolama anahtarı ayrı kalıyor (dosya başındaki gerekçe).
  */
+let refreshing: Promise<boolean> | null = null;
+
+async function refresh(): Promise<boolean> {
+  if (!session?.refreshToken) return false;
+  refreshing ??= (async () => {
+    try {
+      const res = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ refreshToken: session!.refreshToken }),
+      });
+      if (!res.ok) {
+        // Yalnız gerçek redde oturum düşer; 502/503 API'nin yeniden başlaması olabilir.
+        if (res.status === 401 || res.status === 403) setSession(null);
+        return false;
+      }
+      const b = (await parse(res)) as { accessToken?: string; refreshToken?: string } | null;
+      if (!b?.accessToken || !b?.refreshToken) { setSession(null); return false; }
+      setSession({ ...session!, accessToken: b.accessToken, refreshToken: b.refreshToken });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
+}
+
 export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
-  const res = await fetch(path, {
+  const send = (): Promise<Response> => fetch(path, {
     method: opts.method ?? 'GET',
     headers: {
       ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
@@ -82,6 +117,12 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
     },
     ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
   });
+
+  let res = await send();
+  // ⚠️ Giriş isteğinin kendisi 401 alırsa yenileme denenmez — ortada oturum yok.
+  if (res.status === 401 && session && !path.endsWith('/auth/login')) {
+    if (await refresh()) res = await send();
+  }
 
   const body = await parse(res);
   if (res.ok) return body as T;

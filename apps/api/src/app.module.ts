@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminController } from './admin/admin.controller.ts';
 import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
 import { AdminActionsController } from './admin/admin.actions.controller.ts';
@@ -36,6 +36,7 @@ import { QueueService } from './queues/queue.service.ts';
 import { SimulateController } from './simulate/simulate.controller.ts';
 import { GameClockService } from './world/game-clock.service.ts';
 import { MaintenanceInterceptor } from './world/maintenance.interceptor.ts';
+import { HttpExceptionFilter } from './common/http-exception.filter.ts';
 import { WorldStateService } from './world/world-state.service.ts';
 import { WorldController } from './world/world.controller.ts';
 import { WorldsPublicController } from './world/worlds-public.controller.ts';
@@ -71,11 +72,17 @@ export { DB } from './db/tokens.ts';
         return createDb(url).db;
       },
     },
+    /**
+     * ⚠️ TTL burada GEÇİLMİYOR — bilerek. Geçilseydi kurucuda donar ve `session.accessTtlHours`
+     * panelde görünüp hiçbir işe yaramazdı. `TokenService` ömrü erişimciden, `settings/live.ts`
+     * köprüsü üzerinden okuyor.
+     * ⚠️ Eski `ACCESS_TOKEN_TTL_SECONDS` değişkeni artık OKUNMUYOR (bkz. `.env.example`
+     * «BURADA OLMAYANLAR»): sunucudaki `.env`de kalmış olabilir, etkisi yok.
+     */
     {
       provide: TokenService,
       useFactory: (): TokenService => new TokenService({
         accessSecret: process.env['JWT_ACCESS_SECRET'] ?? '',
-        accessTtlSeconds: Number(process.env['ACCESS_TOKEN_TTL_SECONDS'] ?? 900),
       }),
     },
     { provide: GameClockService, useFactory: (db: Db) => new GameClockService(db), inject: [DB] },
@@ -148,6 +155,12 @@ export { DB } from './db/tokens.ts';
      * global guard'lar `AuthGuard`tan ÖNCE koşuyor, interceptor'lar SONRA → kimlik hazır.
      */
     { provide: APP_INTERCEPTOR, useClass: MaintenanceInterceptor },
+    /**
+     * ⭐ HATA FİLTRESİ — GLOBAL. `main.ts`teki `useGlobalFilters` yerine burada: filtre
+     * sağlayıcı olarak kayıtlıysa Nest'in enjeksiyon zincirine girer ve ileride bir servise
+     * (ör. denetim günlüğü) bağlanması tek satırlık iş olur.
+     */
+    { provide: APP_FILTER, useClass: HttpExceptionFilter },
     /**
      * ⭐ HIZ SINIRI — GLOBAL guard, ama **yalnız kimliksiz uçlarda** iş yapıyor
      * (`rate-limit.ts` içindeki dar liste). Guard olması burada DOĞRU: `AuthGuard`tan önce

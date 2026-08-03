@@ -1,16 +1,12 @@
-Sıralama tablosundaki mesaj / Dünyada Bul simgeleri büyüyecek
+Sıralama tablosundaki mesaj / Dünyada Bul simgeleri büyüyecek 
 
 Online kontrolü sadece aktif oturum varsa yapılacak. Tek sayfa kontrolü de aynı şekilde.
-
-Dünyadaki ulaşım süreleri yeniden incelenecek.
 
 15dk da bir oturumun düşmesi sorununa çözüm üretelim.
 
 Yeni kayıt olan kullanıcının şehrinin yerleşimi konusunda inceleme yapılacak.
 
 Mobil görünümde şehir sayfasında şehir seçme kısmının hemen altındaki şehrin adını ve ganimet bilgilerini gösteren kartı kaldıralım. Bu bilgi zaten en üstteki navbar da yazıyor.
-
-Tek kaosta savunmdaki tuzaklar neden kayıp vermiyor araştırılacak.
 
 Ulaşım sürelerini askerlere göre haritacılık seviyesine göre ayrıntılı şekilde gösterecek harita.html şeklinde bir sayfa oluştur.
 
@@ -24,6 +20,19 @@ Teleport kullanıldıktan sonra yeniden kullanılması için gereken süreyi bel
 
 Dünya ekranında aktif şehri belli edecek bir işaret olsun.
 
-Görevi iptal edince geri dönüş tahminiğ süresini modalde yazmasın. Aynı şekilde bir yükseltmeyi iptal ederken de geri ödenecek fiyatı yazmasın. Ekranda görünen değerle iptal onayını verildiği anda farklılık olur. Sadece bilgilendirme olması yeterli. Savaşçı ve savunma ünitesi üretimi için de geçerli.
+Görevi iptal edince geri dönüş tahmini süresini modalde yazmasın. Aynı şekilde bir yükseltmeyi iptal ederken de geri ödenecek fiyatı yazmasın. Ekranda görünen değerle iptal onayını verildiği anda farklılık olur. Sadece bilgilendirme olması yeterli. Savaşçı ve savunma ünitesi üretimi için de geçerli. Ayrıca iptal onay modalında yazan alfa9lth bu hareketin iptal edildiğini görecek. gibi bilgiyi de kaldıralım.
 
-Casusluk raporunda yazan Bilgi alınamadı — kuşlar ya vuruldu ya da rakip kuşlarca engellendi. notunun bu şekilde detaylı yazmaısna gerek yok. Bilgi alınamadıysa daha sade bilgi vermesi yeterli.
+Casusluk raporunda yazan Bilgi alınamadı — kuşlar ya vuruldu ya da rakip kuşlarca engellendi. notunun bu şekilde detaylı yazmasına gerek yok. Bilgi alınamadıysa daha sade bilgi vermesi yeterli.
+
+Destek yaparken casus kuşlar da destek olarak gönderilebilsin.
+
+Çoklu hesap detaylı kontrol sistemi. Birkaç farklı veri türünü analiz edip multi hesaplara karşı bir kontrol sistemi yazalım. Şüpheli durumları admin panelde gösterelim.
+
+
+-----
+
+Saldırı, casusluk, nakliye gibi raporlarda hedef şehrin koordinatının yanında o andaki şehir adı da yazılsın
+
+Kayıt sırasında kullanılan şüpheli e posta durumlarını tespit et, temp mail gibi servislerden alınan garip e postalar ile e posta doğrulama aşaması geçilebilir. Bunların tespitini yapıp banlayabilecek bir admin bölümü
+
+Bot hesap oluşturmayı tespit edip engelleme

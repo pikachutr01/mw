@@ -5,6 +5,14 @@
  * gelir ve eskisi iptal olur. Bu yüzden iki eşzamanlı 401 iki ayrı yenileme başlatırsa **ikincisi
  * iptal edilmiş token'ı kullanır ve oturumu düşürür**. Çözüm: uçuşta tek yenileme sözü tutulur
  * (`refreshing`), diğer istekler onu bekler.
+ *
+ * ⭐ **YENİLEME ARTIK 401'İ BEKLEMİYOR** (2026-08-03, kullanıcı: *"ben konsolu açtığımda orada
+ * kırmızı hata uyarıları görmek hiç hoşuma gitmiyor"*). Eskiden tek tetikleyici 401'di: jeton
+ * her dolduğunda uçuştaki bütün yoklama istekleri önce **başarısız oluyor**, sonra yenilenip
+ * tekrarlanıyordu. Sonuç doğruydu ama tarayıcı başarısız isteği JS'ten bağımsız olarak konsola
+ * kırmızı yazar — yani o gürültü kod tarafından SUSTURULAMAZ. Tek çözüm süresi dolmuş jetonu
+ * hiç göndermemek: `api()` istekten önce ömrün son %10'una girilmişse yenilemeyi bekliyor.
+ * 401 yolu yine duruyor ama artık yalnız bir emniyet ağı (saat kayması, sunucuda iptal).
  */
 export interface Session {
   accessToken: string;
@@ -12,6 +20,27 @@ export interface Session {
   playerId: number;
   worldId: number;
   username: string;
+  /**
+   * Yenilemenin başlaması gereken an — **yerel saat** (epoch ms).
+   *
+   * ⚠️ Sunucunun ISO damgası SAKLANMIYOR, bilerek. Tarayıcı saati sunucununkinden dakikalarca
+   * sapabiliyor; mutlak bir sunucu damgasını `Date.now()` ile karşılaştırmak, saati ileri olan
+   * makinede her istekte yenileme, geri olanda hiç yenileme yapmak demekti. Burada yalnız
+   * sunucunun kendi içindeki FARK kullanılıyor (`accessExpiresAt − serverNow`) ve yanıtın
+   * geldiği andaki yerel saate ekleniyor → saat sapması denklemden tamamen çıkıyor.
+   *
+   * ⚠️ İsteğe bağlı: 2026-08-03 öncesinde kaydedilmiş oturumlarda YOK. O durumda proaktif
+   * yenileme devre dışı kalır ve eski 401 yolu çalışır — kimse çıkışa zorlanmaz.
+   */
+  refreshAt?: number;
+}
+
+/** Ömrün son %10'una girince yenile; en az 30 sn, en çok 10 dk önceden. */
+function refreshDeadline(r: AuthResponse): number | undefined {
+  const lifetimeMs = Date.parse(r.accessExpiresAt) - Date.parse(r.serverNow);
+  if (!Number.isFinite(lifetimeMs) || lifetimeMs <= 0) return undefined;
+  const lead = Math.min(Math.max(lifetimeMs * 0.1, 30_000), 600_000);
+  return Date.now() + (lifetimeMs - lead);
 }
 
 /** Sunucunun `/auth/*` yanıt gövdesi (bkz. `auth.controller.ts`). */
@@ -31,6 +60,7 @@ function toSession(r: AuthResponse): Session {
     playerId: r.player.id,
     worldId: r.player.worldId,
     username: r.player.username,
+    refreshAt: refreshDeadline(r),
   };
 }
 
@@ -91,6 +121,27 @@ export function onSessionChange(fn: (s: Session | null) => void): () => void {
   return () => listeners.delete(fn);
 }
 
+/**
+ * ⭐ SEKMELER ARASI SENKRON (2026-08-03).
+ *
+ * Yenileme jetonu tek kullanımlık: A sekmesi yenileyince B sekmesinin BELLEĞİNDEKİ jeton
+ * iptal olmuş olur. B bunu bilmediği için ilk 401'inde o ölü jetonla yenilemeye kalkıyor,
+ * sunucu reddediyor ve **B sekmesi kendiliğinden çıkış yapıyordu**. `localStorage` yazımı
+ * zaten diğer sekmelere `storage` olayı olarak düşüyordu; kimse dinlemiyordu.
+ *
+ * ⚠️ `setSession` DEĞİL doğrudan alan ataması: `setSession` tekrar `localStorage`a yazar ve
+ * sekmeler birbirini sonsuz tetikler.
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== STORAGE_KEY) return;
+    const next = loadSession();
+    if (next?.accessToken === session?.accessToken) return;
+    session = next;
+    for (const fn of listeners) fn(next);
+  });
+}
+
 async function parse(res: Response): Promise<unknown> {
   const text = await res.text();
   if (!text) return null;
@@ -145,8 +196,15 @@ function errorOf(status: number, body: unknown): ApiError {
   return new ApiError(status, code ?? null, message, body);
 }
 
+/**
+ * Başarısız bir yenilemeden sonraki kısa sessizlik. Proaktif yenileme her istekten önce
+ * bakıyor; bu olmasaydı API kapalıyken saniyede onlarca yenileme denemesi giderdi.
+ */
+let refreshBlockedUntil = 0;
+
 async function refresh(): Promise<boolean> {
   if (!session?.refreshToken) return false;
+  if (Date.now() < refreshBlockedUntil) return false;
   // Uçuşta yenileme varsa ONU bekle — ikinci yenileme iptal edilmiş token'la oturumu düşürürdü.
   refreshing ??= (async () => {
     try {
@@ -155,8 +213,17 @@ async function refresh(): Promise<boolean> {
         headers: { 'content-type': 'application/json', 'x-device-id': deviceId() },
         body: JSON.stringify({ refreshToken: session!.refreshToken }),
       });
-      if (!res.ok) {
+      /**
+       * ⚠️ OTURUM YALNIZ **GERÇEK REDDE** DÜŞER (401/403). Eskiden her `!res.ok` oturumu
+       * siliyordu — yani API yeniden başlarken gelen bir 502/503, oyuncuyu jetonu hâlâ
+       * geçerliyken giriş ekranına atıyordu. Geçici arıza kimlik doğrulama kararı değildir.
+       */
+      if (res.status === 401 || res.status === 403) {
         setSession(null);
+        return false;
+      }
+      if (!res.ok) {
+        refreshBlockedUntil = Date.now() + 10_000;
         return false;
       }
       const body = (await parse(res)) as AuthResponse | null;
@@ -167,6 +234,8 @@ async function refresh(): Promise<boolean> {
       setSession(toSession(body));
       return true;
     } catch {
+      // Ağ hatası — jeton hakkında hiçbir şey söylemez, oturum korunur.
+      refreshBlockedUntil = Date.now() + 10_000;
       return false;
     } finally {
       refreshing = null;
@@ -174,6 +243,21 @@ async function refresh(): Promise<boolean> {
   })();
   return refreshing;
 }
+
+/** Yukarı akış geçici olarak yokken gelen durumlar — bir kez sessizce tekrarlanır. */
+const RETRY_STATUS = new Set([502, 503, 504]);
+
+/**
+ * ⭐ KISA DEVRE. API kapalıyken (dev'de her yeniden derleme, üretimde dağıtım) aynı anda
+ * uçuşta olan yoklama isteklerinin HEPSİ ayrı ayrı hata alıyordu — beş uç, beş kırmızı satır.
+ * Biri 503 görünce kısa bir süre diğerlerini bekletmek, o beşi **bire** indiriyor.
+ *
+ * ⚠️ Tarayıcı, durumu ne olursa olsun başarısız her isteği konsola kendisi yazar ve bu
+ * JS'ten susturulamaz. Yani buradaki hedef hatayı gizlemek değil, aynı olayın beş kez
+ * raporlanmasını engellemek.
+ */
+let apiDownUntil = 0;
+const DOWN_PAUSE_MS = 800;
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'DELETE' | 'PATCH';
@@ -199,9 +283,33 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
       ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
     });
 
+  /**
+   * ⭐ ÖNCE yenile, SONRA gönder. Gerekçe dosyanın başında: 401 alıp düzeltmek doğru sonucu
+   * verir ama tarayıcı konsolunu kırmızıya boyar ve bu susturulamaz.
+   */
+  if (!opts.noRetry && session?.refreshAt != null && Date.now() >= session.refreshAt) {
+    await refresh();
+  }
+
+  // Başka bir istek az önce «API kapalı» gördüyse boşuna gidip ikinci bir hata üretme.
+  const wait = apiDownUntil - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+
   let res = await send();
+
   if (res.status === 401 && !opts.noRetry && session) {
+    // Emniyet ağı: sunucuda iptal, saat sapması, ya da `refreshAt` taşımayan eski oturum.
     if (await refresh()) res = await send();
+  } else if (RETRY_STATUS.has(res.status)) {
+    /**
+     * ⚠️ API yeniden başlarken (dev'de her derlemede, üretimde dağıtımda) yukarı akış birkaç
+     * saniye kapalı kalıyor. Vite proxy'si ve nginx bunu 502/503/504 olarak döndürüyor.
+     * TEK bir sessiz tekrar o pencereyi kapatıyor; daha fazlası gerçek bir arızayı gizlerdi.
+     */
+    apiDownUntil = Date.now() + DOWN_PAUSE_MS;
+    await new Promise((r) => setTimeout(r, DOWN_PAUSE_MS));
+    res = await send();
+    if (!RETRY_STATUS.has(res.status)) apiDownUntil = 0;   // ayağa kalktı, freni bırak
   }
 
   const body = await parse(res);

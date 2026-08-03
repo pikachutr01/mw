@@ -219,6 +219,60 @@ describe('token ve oturum', () => {
     await expect(tokens.verifyAccess(r.accessToken.slice(0, -3) + 'AAA')).rejects.toThrow();
   });
 
+  /**
+   * ⭐ `sid` TAŞIMAYAN JETON REDDEDİLİR (2026-08-03).
+   *
+   * Eskiden `String(payload['sid'] ?? '')` yazıyordu: böyle bir jeton sessizce boş dizeye
+   * düşüyor, `AuthGuard` onu `''::uuid` diye sorguya koyuyor ve Postgres «invalid input
+   * syntax for type uuid» diyordu. İstemci 401 yerine **500** görüyordu — yani BOZUK JETON,
+   * SUNUCU HATASI gibi görünüyordu ve gerçek 500'lerin arasında kayboluyordu.
+   */
+  it('⭐ oturum kimliği (sid) taşımayan jeton 500 değil RET üretir', async () => {
+    const { SignJWT } = await import('jose');
+    const key = new TextEncoder().encode('test-secret-en-az-16-karakter');
+    const sidsiz = await new SignJWT({ pid: 1, wid: worldId })   // sid YOK
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('1')
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(key);
+
+    await expect(tokens.verifyAccess(sidsiz)).rejects.toThrow(/oturum kimliği/i);
+  });
+
+  /**
+   * ⭐ ÖMÜR PANELDEN (2026-08-03). Kurucuda dondurulsaydı `session.accessTtlHours` panelde
+   * görünür ama hiçbir işe yaramazdı: panelden 12'yi 24 yapmak, süreç yeniden başlayana kadar
+   * hiçbir şeyi değiştirmezdi ve ekranda yazan sayı ile verilen jeton sessizce ayrışırdı.
+   *
+   * ⚠️ Kısa ömrün güvenlik kazancının SIFIR olduğu iddiasının dayanağı `auth.guard.ts`:
+   * iptal her istekte `sessions` satırından okunuyor, jetonun dolmasını beklemiyor.
+   */
+  it('⭐ jeton ömürleri canlı ayardan okunur (kurucuda donmaz)', async () => {
+    const { setLiveSettings } = await import('../src/settings/live.ts');
+    const t = new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' });
+
+    expect(t.accessTtl).toBe(12 * 3600);       // şema varsayılanı
+    expect(t.refreshTtl).toBe(90 * 86_400);
+
+    try {
+      setLiveSettings({ session: { accessTtlHours: 24, refreshTtlDays: 7 } });
+      expect(t.accessTtl).toBe(24 * 3600);     // AYNI örnek, yeni değer
+      expect(t.refreshTtl).toBe(7 * 86_400);
+    } finally {
+      setLiveSettings({});
+    }
+
+    // Testlerin sabitleyebilmesi için açık geçiş hâlâ kazanır.
+    const sabit = new TokenService({ accessSecret: 'test-secret-en-az-16-karakter', accessTtlSeconds: 60 });
+    setLiveSettings({ session: { accessTtlHours: 24 } });
+    try {
+      expect(sabit.accessTtl).toBe(60);
+    } finally {
+      setLiveSettings({});
+    }
+  });
+
   it('refresh token DB’de DÜZ METİN saklanmaz', async () => {
     const r = await auth.register({ ...cred('gizli'), worldId }, webCtx());
     const rows = await h.db.execute<{ refresh_hash: string } & Record<string, unknown>>(sql`
