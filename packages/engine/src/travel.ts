@@ -20,7 +20,7 @@
  *
  * İstemci aynı fonksiyonu YALNIZ önizleme için kullanır; otorite `execute_at` yazan sunucudur.
  */
-import { UNITS_BY_ID } from '@mobilwar/catalog';
+import { HERO_SPEED, UNITS_BY_ID } from '@mobilwar/catalog';
 
 export interface Coordinates {
   /** kıta */
@@ -109,13 +109,23 @@ export function route(a: Coordinates, b: Coordinates, cfg: MapConfig = DEFAULT_M
 }
 
 /**
- * Ordunun hızı = **en yavaş birimin** hızı. Kahraman orduyu hızlandırmaz (§13.5.5), bu yüzden
- * kahramanlar bu hesaba hiç girmez.
+ * Ordunun hızı = **en yavaş üyenin** hızı.
+ *
+ * ⭐ **KAHRAMAN DA ÜYEDİR** (kullanıcı, 2026-08-03). Kural bir süre *"kahraman orduyu
+ * hızlandırmaz, bu yüzden hesaba hiç girmez"* diye yazılıydı ve pratikte doğru sonuç
+ * veriyordu — çünkü kahramanın hızı (200) her savaşçıdan yüksekti (80-160), yani en yavaş
+ * hiçbir zaman o olmuyordu.
+ *
+ * ⚠️ Casus Kuş **6000** hızıyla bu varsayımı kırıyor. Kuş destek görevine katılabilir hâle
+ * gelince (aynı gün) "9 kuş + 1 kahraman" ordusu ortaya çıktı ve önizleme **52 saniye**
+ * gösterdi: kahraman ışınlanmış gibi. Doğrusu 200, yani kuş kahramanı bekler.
+ * Yani kural değişmedi — *"kahraman hızlandırmaz"* hâlâ geçerli; eksik olan **yavaşlatır**
+ * tarafıydı ve o zamana kadar hiç gözlemlenememişti.
  *
  * Bilinmeyen birim id'si veya yürüyemeyen (hız 0) birim varsa `null` döner — çağıran bunu
  * doğrulama hatası olarak işler.
  */
-export function armySpeed(counts: Record<string, number>): number | null {
+export function armySpeed(counts: Record<string, number>, heroCount = 0): number | null {
   let slowest = Infinity;
   for (const [id, n] of Object.entries(counts)) {
     if (!(n > 0)) continue;
@@ -123,6 +133,7 @@ export function armySpeed(counts: Record<string, number>): number | null {
     if (speed <= 0) return null;
     if (speed < slowest) slowest = speed;
   }
+  if (heroCount > 0 && HERO_SPEED < slowest) slowest = HERO_SPEED;
   return Number.isFinite(slowest) ? slowest : null;
 }
 

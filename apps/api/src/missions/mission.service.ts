@@ -12,7 +12,10 @@
  * ⚠️ **Varış anı `execute_at` OYUN saatindedir** → bakımda geri sayım durur, varış otomatik ötelenir.
  */
 import { sql } from 'drizzle-orm';
-import { HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID } from '@mobilwar/catalog';
+import {
+  DEFAULT_CATALOG_CONFIG, HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID,
+  type CatalogConfig,
+} from '@mobilwar/catalog';
 import {
   armySpeed, distance, route, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG,
 } from '@mobilwar/engine';
@@ -150,11 +153,21 @@ export class MissionService {
      * doldurulmuyordu — kanca duruyor ama kabloya bağlı değildi.
      */
     private readonly mapFor?: (worldId: number) => MapConfig,
+    /**
+     * ⭐ Katalog ayarları — şimdilik yalnız **teleport bekleme süresi** için gerekiyor
+     * (`teleport.baseHours` / `levelStep`, 2026-08-03). Aynı dünya-başına-çözücü deseni.
+     */
+    private readonly catFor?: (worldId: number) => CatalogConfig,
   ) {}
 
   /** Bu dünyanın harita ayarı; çözücü yoksa motor varsayılanı. */
   private map(worldId: number): MapConfig {
     return this.mapFor?.(worldId) ?? DEFAULT_MAP_CONFIG;
+  }
+
+  /** Bu dünyanın katalog ayarı; çözücü yoksa katalog varsayılanı. */
+  private cat(worldId: number): CatalogConfig {
+    return this.catFor?.(worldId) ?? DEFAULT_CATALOG_CONFIG;
   }
 
   async sendAttack(opts: {
@@ -184,11 +197,15 @@ export class MissionService {
       }
     }
 
-    // Ordunun hızı = EN YAVAŞ birim. Kahraman bu hesaba GİRMEZ (§13.5.5).
-    const speed = armySpeed(units);
-    if (speed == null) throw new MissionError('unit_cannot_march', 'Bu ordu sefere çıkamaz.');
-
+    /**
+     * Ordunun hızı = EN YAVAŞ ÜYE. Kahraman orduyu hızlandırmaz ama **yavaşlatabilir**
+     * (2026-08-03) — gerekçe `travel.ts` `armySpeed`te.
+     * ⚠️ Bu yüzden `heroIds` hız hesabından ÖNCE çözülüyor; sıra ters olsaydı kahraman
+     * sayısı henüz bilinmezdi.
+     */
     const heroIds = [...new Set(opts.heroIds ?? [])];
+    const speed = armySpeed(units, heroIds.length);
+    if (speed == null) throw new MissionError('unit_cannot_march', 'Bu ordu sefere çıkamaz.');
 
     return this.db.transaction(async (tx) => {
       const t = tx as unknown as Tx;
@@ -350,6 +367,18 @@ export class MissionService {
       ...opts,
       type: 'support',
       requireOwnTarget: true,
+      /**
+       * ⭐ CASUS KUŞ DESTEKLE TAŞINABİLİR (kullanıcı, 2026-08-03).
+       *
+       * ⚠️ Bu bir denge kararı değil, bir ÇIKMAZIN çözümü: şehir terk etmek barakanın
+       * TAMAMEN boş olmasını istiyor (`city.service.ts` `abandonBlockers`) ama kuş yalnız
+       * casusluğa katılabildiği için şehirden hiç çıkarılamıyordu → kuşu olan şehir
+       * **terk edilemiyordu**.
+       * ⚠️ Savaş dengesi etkilenmiyor: destek kendi şehrine gider, kuşun savaş statı yok ve
+       * saldırıya/nakliyeye hâlâ katılamıyor.
+       * ⚠️ Ordu hızı yine en yavaş birimden: kuş (6000) hızı YÜKSELTMEZ.
+       */
+      allowSpyBird: true,
       payloadExtra: { cargo },
       before: async (t, ctx) => {
         if (cargo.gold + cargo.food > 0) {
@@ -504,7 +533,8 @@ export class MissionService {
         }
       }
 
-      const readyAt = new Date(opts.at.getTime() + teleportCooldownSeconds(fromLevel) * 1000);
+      const cooldown = teleportCooldownSeconds(fromLevel, this.cat(opts.worldId));
+      const readyAt = new Date(opts.at.getTime() + cooldown * 1000);
       await t.execute(sql`
         UPDATE cities SET teleport_ready_at = ${readyAt.toISOString()}::timestamptz
          WHERE id = ${opts.originCityId}
@@ -679,7 +709,7 @@ export class MissionService {
     forbidOwnTarget?: boolean;
     /** Hedef BOŞ şehir olmalı (şehir kurma). */
     targetMustBeEmpty?: boolean;
-    /** Casus Kuş'a izin ver (yalnız casusluk). */
+    /** Casus Kuş'a izin ver — casusluk ve **destek** (2026-08-03; gerekçe `sendSupport`ta). */
     allowSpyBird?: boolean;
     payloadExtra?: Record<string, unknown>;
     before?: (t: Tx, ctx: { units: Record<string, number> }) => Promise<void>;
@@ -695,12 +725,17 @@ export class MissionService {
         throw new MissionError('unit_cannot_march', `${def.name.tr} sefere çıkamaz (savunma birimi).`);
       }
       if (id === 'spy_bird' && !o.allowSpyBird) {
-        throw new MissionError('unit_cannot_march', 'Casus Kuş yalnız casusluk görevine katılır.');
+        // ⚠️ Metin 2026-08-03'te güncellendi: destek de artık kuş taşıyor, eski cümle
+        //    ("yalnız casusluk görevine katılır") oyuncuya yanlış kural öğretiyordu.
+        throw new MissionError(
+          'unit_cannot_march', 'Casus Kuş yalnız casusluk ve destek görevine katılır.',
+        );
       }
     }
-    const speed = armySpeed(units);
-    if (speed == null) throw new MissionError('unit_cannot_march', 'Bu ordu sefere çıkamaz.');
+    // ⚠️ `heroIds` hız hesabından ÖNCE: kahraman orduyu yavaşlatabilir (bkz. `sendAttack`).
     const heroIds = [...new Set(o.heroIds ?? [])];
+    const speed = armySpeed(units, heroIds.length);
+    if (speed == null) throw new MissionError('unit_cannot_march', 'Bu ordu sefere çıkamaz.');
 
     return this.db.transaction(async (tx) => {
       const t = tx as unknown as Tx;

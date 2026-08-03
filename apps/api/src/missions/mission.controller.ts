@@ -184,6 +184,8 @@ export class MissionController {
     const teleportReady = r['teleport_ready'] == null ? null : toDate(r['teleport_ready']);
 
     let attacksLeft: number | null = null;
+    /** Teleport beklemedeyse hazır olacağı an (OYUN saati) — istemci geri sayım çiziyor. */
+    let teleportReadyAt: string | null = null;
     const opts: { type: string; label: string; enabled: boolean; reason: string | null }[] = [];
 
     /**
@@ -225,11 +227,18 @@ export class MissionController {
       const toTeleport = await this.teleportLevel(target.id);
       const ready = teleportReady == null || teleportReady <= at;
       const canTeleport = fromTeleport >= 1 && toTeleport >= 1 && ready;
+      /**
+       * ⭐ BEKLEME SÜRESİ EKRANDA (kullanıcı, 2026-08-03). Sebep metni ham ISO damgası
+       * basıyordu (`…hazır değil (2026-08-04T09:12:33.201Z)`) — oyuncuya "ne kadar kaldı"
+       * sorusunun cevabını vermiyordu. Artık kalan an ayrı bir alanda dönüyor ve istemci
+       * geri sayım çiziyor; metin de sadeleşti.
+       */
       add('teleport', 'Teleport', canTeleport,
         canTeleport ? null
           : fromTeleport < 1 || toTeleport < 1
             ? 'Teleport için her iki şehirde de Teleport binası en az 1. seviye olmalı.'
-            : `Teleport binası hazır değil (${teleportReady!.toISOString()}).`);
+            : 'Teleport binası henüz hazır değil.');
+      if (!ready && teleportReady != null) teleportReadyAt = teleportReady.toISOString();
     } else {
       // ── BAŞKA OYUNCU ──
       const prot = target.protected_until == null ? null : toDate(target.protected_until);
@@ -258,6 +267,7 @@ export class MissionController {
       target: target ? describeTarget(target) : null,
       options: opts,
       attacksLeft,
+      teleportReadyAt,
       gameNow: at.toISOString(),
       serverNow: new Date().toISOString(),
     };

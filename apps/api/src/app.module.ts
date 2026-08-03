@@ -121,7 +121,7 @@ export { DB } from './db/tokens.ts';
       //    bir config geçirmek panelden yapılan değişikliği süreç yeniden başlayana kadar
       //    görünmez kılardı.
       useFactory: (db: Db, cities: CityService, s: SettingsService) =>
-        new MissionService(db, cities, undefined, (w) => s.map(w)),
+        new MissionService(db, cities, undefined, (w) => s.map(w), (w) => s.catalog(w)),
       inject: [DB, CityService, SettingsService],
     },
     {

@@ -762,7 +762,7 @@ Dokuz metnin dokuzu da koda karşı okundu. **Tek gerçek çelişki Mimar Okulu'
 
 | Yapı | Bulgu |
 | :-- | :-- |
-| **Mimar Okulu** | ⚠️ Metin *"**diğer** şehir yapıları"* diyordu; kodumuz Mimar Okulu'nun **kendi inşasını da** hızlandırıyor (`formulas.ts:318-320` — orijinaldeki özel dal, bölen 1,4'ten 1,2'ye inince bilerek kaldırılmıştı). **Metin düzeltildi, kod değil**: özel dalı geri koymak sessiz bir tutarsızlık kaynağı olurdu. |
+| **Mimar Okulu** | ✅ **ÇÖZÜLDÜ 2026-08-03** — artık metin de kod da *"**diğer** şehir yapıları"* diyor. Bir süre tersi geçerliydi: kod Mimar Okulu'nun kendi inşasını da hızlandırıyordu ve *"metin düzeltildi, kod değil"* denmişti (gerekçe: bölen 1,4'ten 1,2'ye inince özel dal gereksiz görülmüştü). Kullanıcı kararıyla istisna geri geldi — kendi kendini hızlandıran bir yapı seviye atladıkça **giderek daha ucuza** seviye atlıyor, yani sv1→2 ile sv19→20 arasındaki gerçek maliyet farkı kapanıyordu. Ayar: `economy.architectSelfExempt` (varsayılan açık). |
 | **Tapınak** | Çelişki değil **eksik**: kahraman çıkma olasılığı o şehrin değil, oyuncunun **TÜM şehirlerindeki tapınakların toplamı** (`battle.handlers.ts:498-505`, 28/28 ölçülmüş binary sabiti). Dirilme süresi tarafı ✅ o şehrin tapınağı. `extra`'ya yazıldı. |
 | **Baraka** | ✅ eğitim hızı. Eksik: seviye aynı zamanda **eşzamanlı sefer ve sipariş sayısını** da sınırlıyor (`queue.service.ts:178`). |
 | **Kale** | ✅ ×10 bütçe. Eksik: Kale'nin kendisi ile Sur/Büyü Kalkanı bütçeyi **tüketmiyor**. |
@@ -1159,7 +1159,7 @@ D = Δşehir + U·Δdiyar + W·Δkıta          U = 20, W = 4000
 ```
 T = (TABAN + geçiş + K · D^p / (1 + 0,05 · Haritacılık)) · (100 / v)
 K = 1200, p = 0,42, TABAN = 20 dk, geçiş = 0 (diyar/kıta), TAVAN = 24 sa
-v = ordudaki EN YAVAŞ birimin hızı (kahraman orduyu hızlandırmaz)
+v = ordudaki EN YAVAŞ ÜYENİN hızı — kahraman DAHİL (kahraman hızlandırmaz ama yavaşlatır)
 ```
 - **Haritacılık = hız çarpanı** `(1 + 0,05·L)` — dokümanın "hızını %5 arttırır" ifadesinin birebir
   karşılığı. Süre cinsinden azalan getiri: L=10 → −%33, L=20 → −%50. Üst sınır yok (maliyet 1,4^L
@@ -2025,10 +2025,17 @@ istisna sessiz bir tutarsızlık kaynağı olurdu.
 ### 13.11.4 Teleport
 - **Seviye 1 maliyeti: 500.000 altın + 500.000 yemek** (kullanıcı hatırası) → §13.9 formülüyle
   sonraki seviyeler `500.000 × 1,8^(seviye−1)`.
-- Bekleme (cooldown): doküman *"her seviye %2 kısaltır"*. Taban **20 saat** öneriyorum:
-  `bekleme = 20sa × 0,98^(seviye−1)` → sv1 20 sa, sv10 16,7 sa, sv20 13,7 sa.
-  Gerekçe: teleport **anında** ordu taşıyor (savunmada ezici avantaj); saldırılar 20 dk-8 saat
-  sürerken bekleme 13-20 saat olmalı ki günde bir kez kullanılan acil-durum aracı olsun.
+- Bekleme (cooldown): doküman *"her seviye %2 kısaltır"*. Taban **24 saat**
+  (kullanıcı, 2026-08-03; önceki öneri 20'ydi): `bekleme = 24sa × 0,98^(sv−1)` →
+  sv1 **24 sa**, sv5 22 sa 08 dk, sv10 20 sa 01 dk, sv20 **16 sa 21 dk**.
+  Gerekçe: teleport **anında** ordu taşıyor (savunmada ezici avantaj); seferler 40 dk-24 saat
+  sürerken bekleme günde bir kullanımı zorlamalı ki acil-durum aracı olarak kalsın.
+  ⭐ Taban ve seviye adımı **panelde**: `teleport.baseHours` / `teleport.levelStep`. İkisi de
+  kurgu olduğu için (doküman süreyi hiç vermiyor) sabitlenmedi.
+  ⚠️ Bekleme **kaynak** şehrin seviyesinden hesaplanıp `cities.teleport_ready_at`e yazılıyor;
+  ayar değişikliği SÜREN bir beklemeyi etkilemez.
+  ⚠️ Kalan süre Dünya ekranındaki hedef modalında geri sayım olarak yazıyor — 2026-08-03'e
+  kadar sebep metninde ham ISO damgası basılıyordu.
 - Teleport ile **kaynak taşınmaz**; her iki şehirde de Teleport ≥ 1 olmalı.
 
 ### 13.11.4b Kahraman diriltme (tamamen sunucu tarafı — tasarlandı)
@@ -2250,7 +2257,19 @@ seviyeleri toplamıdır; diriltme süresi ise **o şehrin kendi** tapınağına 
   orada durur/savunur; ama o şehirde Ejderha **üretilemez**. Ön-şartlar yalnız **üretimi** kapılar.
 - **Ordu hareket limiti:** şehir başına eşzamanlı görev sayısı ≤ Baraka seviyesi (doküman).
 - **Şehir terk etme:** başkent terk edilemez · o şehirde gelen/giden ordu, üretim, ilerletme olmamalı ·
-  barakada savaşçı kalmamalı · terk edilince binalar silinir, kaynaklar yok olur, o şehirden gelen puan düşer.
+  barakada, mağarada ve tapınakta hiçbir şey kalmamalı · terk edilince binalar silinir, kaynaklar
+  yok olur, o şehirden gelen puan düşer.
+  > ⚠️ **2026-08-03'e kadar KAPANDI kalıyordu.** Casus Kuş da barakada duruyor ve engeli
+  > tetikliyor; ama kuş yalnız casusluğa katılabildiği için şehirden ÇIKARILAMIYORDU — yani
+  > kuşu olan bir şehir hiçbir şekilde terk edilemiyordu. Çözüm: **kuş destek görevine
+  > katılabiliyor** (aşağı bak). Aynı sebeple kahraman da destekle taşınabilmeliydi; sunucu
+  > bunu zaten destekliyordu, eksik olan tek şey formun kahraman seçtirmemesiydi.
+- **Casus Kuş nerede sefere çıkar:** casusluk **ve destek** (2026-08-03). Saldırı, nakliye ve
+  şehir kurmada hâlâ yasak. Destekte savaş dengesi etkilenmiyor — kendi şehrine gidiyor,
+  kuşun savaş statı yok ve ordu hızı yine EN YAVAŞ birimden hesaplanıyor.
+- **Kahraman hangi görevlere katılır:** saldırı · destek · teleport · şehir kurma. Nakliye ve
+  casusluk dışarıda. ⚠️ Sunucu dördünü de aylardır destekliyordu; istemci daima `heroIds: []`
+  gönderdiği için özellik **ulaşılamaz** durumdaydı (2026-08-03'te form eklendi).
 - **Şehir kurma:** Sömürgecilik/3 kadar ek şehir (en fazla 5) · hedef koordinat boş olmalı ·
   **konum serbest — dünyanın herhangi bir kıtası/boş şehri** (mesafe kısıtı YOK) ·
   **yalnız Casus Kuş ile kurulamaz** (en az 1 casus-dışı savaşçı şart) · yanında kaynak götürülebilir ·

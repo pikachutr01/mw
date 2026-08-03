@@ -53,6 +53,11 @@ export const UNITS: readonly UnitDef[] = [
 /**
  * Kahraman hızı (§13.5.5 cetveli). Kahraman ordunun hızını YÜKSELTMEZ — yalnız tek başına
  * yola çıktığında bu hızla gider (`harita.html`: "Kahraman orduyu hızlandırmaz").
+ *
+ * ⚠️ **Ama YAVAŞLATIR** (2026-08-03). Kural yıllarca "kahraman hız hesabına hiç girmez" diye
+ * uygulandı ve doğru göründü — çünkü 200, her savaşçıdan (80-160) hızlıydı. Casus Kuş'un
+ * **6000**'i bu varsayımı kırdı: "9 kuş + 1 kahraman" ordusu 52 saniyede varıyor göründü.
+ * Doğrusu `armySpeed(units, heroCount)` (bkz. `packages/engine/src/travel.ts`).
  */
 export const HERO_SPEED = 200;
 

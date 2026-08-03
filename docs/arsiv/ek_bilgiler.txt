@@ -38,3 +38,7 @@ Kayıt sırasında kullanılan şüpheli e posta durumlarını tespit et, temp m
 Bot hesap oluşturmayı tespit edip engelleme
 
 Admin panelinden oyunculara sistem mesajı göndermek, özel veya herkese bildirim mesajı iletmek. Bu mesaj Mesajlarda Mesajlar sekmesine düşebilir. Önemli bir bilgi veya güncelleme olursa oyuncuları hızlıca bilgilendirmek amaçlı. Tıpkı raporlar gibi modal üzerinde açılırlar, sistem tarafından gönderilmiş gözükürler. Açılınca okunmuş sayılırlar.
+
+Bir kuş ile kahramanı aynı destek görevinde göndermek 52 saniye süremez. Kahramanın da kendine ait bir hızı vardır ve kuş ile birlikte gönderilirse daha düşük olan kahramanın hızı baz alınır. Kayıtlarda da göreceğin gibi kahraman hızı 200 dür.
+
+Oyuncuların yeni oluşturdukları şehirlerin varsayılan adı ne oluyor. Başkentlerinin adlarını yanına bu şehrin kaçıncı şehri olduğunu yazarak yeni şehri adlandıralım. Örneğin başkentin adı çığlıktepe olunca yeni kuracağı şehir de ikinci şehriyse çığlıktepe 2 şeklinde olsun. Eğer yanına bir boşluk ve sayı yazınca 15 karakter sınırı aşılıyorsa şehrin son 2 karakterini silip sonuna boşluk ile şehir adı yazılsın.

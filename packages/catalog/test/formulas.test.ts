@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildingCost, buildingTimeSeconds, castleBudget, caveCapacity, defenseCapacity,
   dwarvesToBreakCave, farmOutput, heroLevelForXp, heroReviveCost, heroReviveSeconds,
-  heroXpForLevel, mineOutput, STARTING_RESOURCES, wallCurrentIntegrity, wallRepairSeconds,
+  heroXpForLevel, mergeCatalogConfig, mineOutput, STARTING_RESOURCES, teleportCooldownSeconds,
+  wallCurrentIntegrity, wallRepairSeconds,
   timeFromCost, trainingTimeSeconds, unitCost, unitTimeValue, UNITS_BY_ID,
 } from '../src/index.ts';
 
@@ -341,12 +342,52 @@ describe('yapı ve teknik süresi', () => {
     expect(buildingTimeSeconds('castle', 2, 0)).toBeLessThan(600);   // ilk yükseltme dakikalar
   });
 
-  it('Mimar Okulu kendi seviyesiyle hızlanır (özel dal YOK)', () => {
-    expect(buildingTimeSeconds('architect_school', 5, 4))
-      .toBeCloseTo(buildingTimeSeconds('architect_school', 5, 4), 10);
-    // Aynı maliyetli iki yapı aynı süreyi alır: Mimar Okulu artık istisna değil.
+  /**
+   * ⭐ MİMAR OKULU KENDİNİ HIZLANDIRMAZ (kullanıcı, 2026-08-03).
+   *
+   * ⚠️ Bu test bir süre TAM TERSİNİ çıpalıyordu (*"kendi seviyesiyle hızlanır, özel dal YOK"*).
+   * Kural kullanıcı kararıyla döndü; eski hâli, kendi kendini besleyen bir merdiven
+   * yaratıyordu — yapı seviye atladıkça kendi yükseltmesi giderek ucuzluyordu.
+   */
+  it('⭐ Mimar Okulu KENDİ yükseltmesinde hızlanma uygulanmaz', () => {
     const c = buildingCost('architect_school', 5);
-    expect(buildingTimeSeconds('architect_school', 5, 4)).toBeCloseTo(timeFromCost(c, 4), 10);
+    // Bölen 4 değil 0: süre, hiç Mimar Okulu yokmuş gibi hesaplanır.
+    expect(buildingTimeSeconds('architect_school', 5, 4)).toBeCloseTo(timeFromCost(c, 0), 10);
+    // Mimar Okulu seviyesi ne olursa olsun kendi süresi DEĞİŞMEZ.
+    expect(buildingTimeSeconds('architect_school', 5, 12))
+      .toBeCloseTo(buildingTimeSeconds('architect_school', 5, 0), 10);
+  });
+
+  it('istisna DİĞER yapıları etkilemez — onlar hâlâ hızlanır', () => {
+    const yavas = buildingTimeSeconds('castle', 5, 0);
+    const hizli = buildingTimeSeconds('castle', 5, 8);
+    expect(hizli).toBeLessThan(yavas);
+    expect(hizli).toBeCloseTo(timeFromCost(buildingCost('castle', 5), 8), 10);
+  });
+
+  it('istisna panelden kapatılabilir (architectSelfExempt)', () => {
+    const cfg = mergeCatalogConfig({ economy: { architectSelfExempt: false } });
+    const c = buildingCost('architect_school', 5, cfg);
+    // Kapalıyken eski davranış: kendi seviyesiyle hızlanır.
+    expect(buildingTimeSeconds('architect_school', 5, 4, cfg)).toBeCloseTo(timeFromCost(c, 4, cfg), 10);
+  });
+
+  /**
+   * ⭐ TELEPORT BEKLEME SÜRESİ — taban 24 sa (kullanıcı, 2026-08-03; önceden 20).
+   * İkisi de kurgu (doküman süreyi vermiyor), o yüzden ikisi de panelde.
+   */
+  it('teleport bekleme süresi: sv1 = 24 sa, her seviye %2 kısaltır', () => {
+    expect(teleportCooldownSeconds(1)).toBeCloseTo(24 * 3600, 6);
+    expect(teleportCooldownSeconds(2)).toBeCloseTo(24 * 3600 * 0.98, 6);
+    expect(teleportCooldownSeconds(20)).toBeCloseTo(24 * 3600 * 0.98 ** 19, 6);
+    // Seviye 0/negatif seviye 1 sayılır (bina yoksa zaten teleport yapılamıyor).
+    expect(teleportCooldownSeconds(0)).toBeCloseTo(teleportCooldownSeconds(1), 6);
+  });
+
+  it('teleport sabitleri panelden değiştirilebilir', () => {
+    const cfg = mergeCatalogConfig({ teleport: { baseHours: 6, levelStep: 0.1 } });
+    expect(teleportCooldownSeconds(1, cfg)).toBeCloseTo(6 * 3600, 6);
+    expect(teleportCooldownSeconds(3, cfg)).toBeCloseTo(6 * 3600 * 0.9 ** 2, 6);
   });
 
   it('aynı DEĞERDE yapı, birimin ~2 katı sürer (400/190)', () => {

@@ -14,12 +14,12 @@
  */
 import { useState } from 'react';
 import { armySpeed, route, travelSeconds } from '@mobilwar/engine';
-import { fmt, formatDuration } from '../lib/hooks.ts';
+import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useOpenChat } from '../lib/chat-context.tsx';
 import {
   useAlliance, useAllianceInvite, useCatalog, useCity, useMissionOptions, useSendMission,
-  type MissionOption, type WorldSlot,
+  useTemple, type MissionOption, type WorldSlot,
 } from '../lib/queries.ts';
 import { AmountInput, Badge, Button, Empty, ErrorBox, MissionIcon } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
@@ -116,7 +116,8 @@ export function TargetModal({
         ) : null}
 
         {data && !data.activeCity && !picked ? (
-          <OptionList options={data.options} onPick={setPicked} />
+          <OptionList options={data.options} onPick={setPicked}
+            teleportReadyAt={data.teleportReadyAt ?? null} />
         ) : null}
 
         {picked ? (
@@ -160,7 +161,13 @@ function InviteRow({ targetPlayerId, targetName }: { targetPlayerId: number; tar
 
 /* ── 1. adım: seçenek listesi ───────────────────────────────────────────────── */
 
-function OptionList({ options, onPick }: { options: MissionOption[]; onPick: (t: string) => void }) {
+function OptionList({ options, onPick, teleportReadyAt }: {
+  options: MissionOption[];
+  onPick: (t: string) => void;
+  /** Teleport beklemedeyse hazır olacağı an — sebebin altına geri sayım düşer. */
+  teleportReadyAt: string | null;
+}) {
+  useTick();
   if (options.length === 0) return <Empty>Bu hedefe gönderilebilecek görev yok.</Empty>;
   return (
     <ul className="divide-y divide-border">
@@ -186,6 +193,13 @@ function OptionList({ options, onPick }: { options: MissionOption[]; onPick: (t:
                 <span className={`block text-[11px] ${o.enabled ? 'text-muted' : 'text-danger'}`}>
                   {o.enabled ? info?.hint ?? '' : o.reason}
                 </span>
+                {/* ⭐ Teleport beklemesi: "hazır değil" yetmez, NE KADAR kaldığı lazım
+                    (kullanıcı, 2026-08-03). Süre oyun saatinde işliyor. */}
+                {o.type === 'teleport' && !o.enabled && teleportReadyAt ? (
+                  <span className="tnum block text-[11px] text-warning">
+                    Hazır olmasına {remaining(teleportReadyAt) ?? 'birazdan'}
+                  </span>
+                ) : null}
               </span>
               {o.enabled ? <span aria-hidden className="shrink-0 text-muted">›</span> : null}
             </button>
@@ -198,15 +212,73 @@ function OptionList({ options, onPick }: { options: MissionOption[]; onPick: (t:
 
 /* ── 2. adım: görev formu ───────────────────────────────────────────────────── */
 
-/** Hangi görevde ne seçilir — tek tabloda, dallanma formun içine dağılmasın diye. */
-const FORM_RULES: Record<string, { units: 'warriors' | 'spy' | 'none'; cargo: boolean }> = {
+/**
+ * Hangi görevde ne seçilir — tek tabloda, dallanma formun içine dağılmasın diye.
+ *
+ * ⭐ `all` = casus kuş DAHİL her savaşçı (kullanıcı, 2026-08-03). Destek ve teleport bunu
+ * kullanıyor, çünkü ikisi de **kendi şehrine** birlik taşıyor — savaşa sokmuyor.
+ * ⚠️ Asıl gerekçe bir çıkmazdı: şehir terk etmek barakanın ve tapınağın TAMAMEN boş olmasını
+ * istiyor (`city.service.ts` `abandonBlockers`), ama casus kuş yalnız casusluğa
+ * katılabildiği için şehirden ÇIKARILAMIYORDU — yani kuşu olan şehir hiç terk edilemiyordu.
+ */
+const FORM_RULES: Record<string, { units: 'warriors' | 'spy' | 'all' | 'none'; cargo: boolean }> = {
   attack: { units: 'warriors', cargo: false },
   spy: { units: 'spy', cargo: false },
   transport: { units: 'warriors', cargo: true },
-  support: { units: 'warriors', cargo: true },
+  support: { units: 'all', cargo: true },
   found_city: { units: 'warriors', cargo: false },
-  teleport: { units: 'warriors', cargo: false },
+  teleport: { units: 'all', cargo: false },
 };
+
+/**
+ * ⭐ KAHRAMAN GÖNDERİLEBİLEN GÖREVLER (kullanıcı, 2026-08-03).
+ *
+ * ⚠️ Sunucu bunların ÜÇÜNÜ DE zaten destekliyordu (`march()` → `reserveHeroes`, teleport da
+ * kahraman taşıyor) — eksik olan tek şey formun hiç kahraman seçtirmemesi ve istemcinin daima
+ * `heroIds: []` göndermesiydi. Yani özellik aylardır yazılıydı ve **ulaşılamıyordu**.
+ *
+ * ⚠️ Nakliye ve casusluk DIŞARIDA: nakliye kaynak taşır (kahramanın işi değil), casuslukta
+ * yalnız kuş gider.
+ */
+const HERO_MISSIONS = new Set(['attack', 'support', 'teleport', 'found_city']);
+
+/**
+ * Şehirdeki kahramanlardan sefere katılacakları seçtirir.
+ *
+ * ⚠️ Yalnız `in_city` olanlar listelenir: ölü, dirilen, seferde ya da dönüş yolundaki bir
+ * kahraman seçilirse sunucu `hero_unavailable` ile reddeder ve oyuncu formu doldurduktan
+ * SONRA hatayı görür — reddi önce söylemek daha dürüst (aynı kalıp görev seçeneklerinde de var).
+ */
+function HeroPicker({ cityId, picked, onChange }: {
+  cityId: number | null;
+  picked: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const temple = useTemple(cityId);
+  const list = (temple.data?.heroes ?? []).filter((h) => h.state === 'in_city');
+  if (list.length === 0) return null;
+
+  const toggle = (id: number): void => {
+    onChange(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
+  };
+
+  return (
+    <div>
+      <div className="mb-1 text-[11px] text-muted">Kahraman (isteğe bağlı)</div>
+      <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
+        {list.map((h) => (
+          <li key={h.id}>
+            <label className="flex cursor-pointer items-center gap-2.5 px-2.5 py-1.5 hover:bg-raised">
+              <input type="checkbox" checked={picked.includes(h.id)} onChange={() => toggle(h.id)} />
+              <span className="min-w-0 flex-1 truncate text-sm text-ink">{h.name}</span>
+              <span className="tnum shrink-0 text-xs text-muted">sv {h.level}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function MissionForm({
   type, target, option, attacksLeft, onDone,
@@ -222,6 +294,7 @@ function MissionForm({
   const catalog = useCatalog(cityId);
   const send = useSendMission();
   const [picked, setPicked] = useState<Record<string, string>>({});
+  const [heroIds, setHeroIds] = useState<number[]>([]);
   const [gold, setGold] = useState('');
   const [food, setFood] = useState('');
 
@@ -246,7 +319,9 @@ function MissionForm({
   const mapCfg = city.data?.map;
   const leg = origin ? route(origin, target, mapCfg) : null;
   const D = leg?.distance ?? 0;
-  const speed = hasUnits ? armySpeed(units) : null;
+  // ⚠️ Kahraman sayısı da geçiliyor: kahraman orduyu yavaşlatabilir (`travel.ts` `armySpeed`).
+  //    Geçmezsek "9 kuş + 1 kahraman" önizlemesi 52 sn yazar, sunucu ise 26 dk hesaplar.
+  const speed = hasUnits ? armySpeed(units, HERO_MISSIONS.has(type) ? heroIds.length : 0) : null;
   const cartography = city.data?.techs['cartography'] ?? 0;
   // Dünya hız çarpanı sunucu hesabıyla AYNI olmalı — yoksa gösterilen süre hızlı dünyada
   // çarpan katı kadar yanlış çıkar.
@@ -270,6 +345,7 @@ function MissionForm({
   const list = (catalog.data?.units ?? []).filter((u) => {
     if (rule.units === 'spy') return u.id === 'spy_bird';
     if (rule.units === 'warriors') return u.id !== 'spy_bird';
+    if (rule.units === 'all') return true;
     return false;
   });
 
@@ -353,6 +429,10 @@ function MissionForm({
         </>
       ) : null}
 
+      {HERO_MISSIONS.has(type) ? (
+        <HeroPicker cityId={cityId} picked={heroIds} onChange={setHeroIds} />
+      ) : null}
+
       {/**
         * ⭐ SABİT ALT BÖLÜM (kullanıcı 2026-07-30): kargo + hata + başlat düğmesi modalın
         * scroll'una KARIŞMAZ — birim listesi uzun olsa da hep görünür. `sticky bottom-0`
@@ -400,6 +480,7 @@ function MissionForm({
                 originCityId: cityId!,
                 target,
                 units,
+                ...(HERO_MISSIONS.has(type) && heroIds.length > 0 ? { heroIds } : {}),
                 ...(rule.cargo ? { cargo } : {}),
               },
               { onSuccess: onDone },

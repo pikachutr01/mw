@@ -885,6 +885,12 @@ export interface TargetOptions {
   options: MissionOption[];
   /** Bu hedefe bugün kalan saldırı hakkı (yalnız yabancı şehirde dolu). */
   attacksLeft: number | null;
+  /**
+   * Teleport beklemedeyse hazır olacağı an (ISO, oyun saati). Hazırsa `null`.
+   * ⚠️ Sunucu eskiden bu bilgiyi yalnız sebep metninin İÇİNDE ham ISO olarak veriyordu;
+   * geri sayım çizilemiyordu.
+   */
+  teleportReadyAt: string | null;
 }
 
 export const useMissionOptions = (
@@ -918,7 +924,8 @@ export function useSendMission() {
       method: 'POST',
       body: { heroIds: [], ...input },
     }),
-    onSuccess: () => invalidate(['city', 'cities', 'missions', 'world', 'mission-options']),
+    // ⚠️ `temple` de tazelenir: kahraman sefere çıkınca tapınak listesindeki durumu değişiyor.
+    onSuccess: () => invalidate(['city', 'cities', 'missions', 'world', 'mission-options', 'temple']),
   });
 }
 

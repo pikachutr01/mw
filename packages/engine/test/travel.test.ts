@@ -60,6 +60,33 @@ describe('ordu hızı = EN YAVAŞ birim (§13.5.5)', () => {
     expect(armySpeed({ hayalet_birlik: 1 })).toBeNull();
     expect(armySpeed({})).toBeNull();
   });
+
+  /**
+   * ⭐ KAHRAMAN DA ÜYEDİR (kullanıcı, 2026-08-03).
+   *
+   * ⚠️ Bu, kuralın *"kahraman hesaba hiç girmez"* hâlinin neden yıllarca doğru göründüğünü de
+   * açıklıyor: kahraman 200, savaşçılar 80-160 → en yavaş hiçbir zaman kahraman olmuyordu.
+   * Casus Kuş'un 6000'i varsayımı kırdı; kuş destek görevine katılabilir olunca
+   * "9 kuş + 1 kahraman" ordusu 52 SANİYEDE varıyor göründü.
+   */
+  it('⭐ kahraman orduyu HIZLANDIRMAZ ama YAVAŞLATIR', () => {
+    // Savaşçılar zaten kahramandan yavaş → kahraman hiçbir şey değiştirmez.
+    expect(armySpeed({ dwarf: 100 }, 1)).toBe(100);
+    expect(armySpeed({ cavalry: 10 }, 3)).toBe(140);
+    // Kuş kahramandan HIZLI → artık kahramanın hızı geçerli.
+    expect(armySpeed({ spy_bird: 9 })).toBe(6000);
+    expect(armySpeed({ spy_bird: 9 }, 1)).toBe(200);
+    // Kahramansız çağrı eski davranışı aynen korur (geriye uyum).
+    expect(armySpeed({ spy_bird: 9 }, 0)).toBe(6000);
+  });
+
+  it('kahraman yavaşlatması süreye yansır', () => {
+    const leg = route({ k: 1, d: 7, s: 2 }, { k: 1, d: 7, s: 5 });
+    const kussuz = travelSeconds({ ...leg, speed: armySpeed({ spy_bird: 9 })! });
+    const kahramanli = travelSeconds({ ...leg, speed: armySpeed({ spy_bird: 9 }, 1)! });
+    // 6000 → 200 = 30 kat yavaş.
+    expect(kahramanli / kussuz).toBeCloseTo(30, 0);
+  });
 });
 
 describe('⭐ örnek cetvel (§13.5.5, Haritacılık 0)', () => {

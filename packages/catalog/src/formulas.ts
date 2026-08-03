@@ -315,13 +315,24 @@ export function timeFromCost(cost: Cost, divisorLevel: number, cfg: CatalogConfi
 /**
  * Yapı inşa süresi (saniye). Hızlandıran: **Mimar Okulu**.
  *
- * ⚠️ Mimar Okulu'nun kendisi için ayrı kural YOK: o da kendi **mevcut** seviyesiyle hızlanır.
- * Orijinaldeki özel dal (`/1,2^sv`, 10× çarpansız) 1,4'lük bölenin kaçışını frenlemek içindi;
- * bölen 1,2'ye inince frene gerek kalmadı ve özel dal sessiz bir tutarsızlık kaynağı olurdu.
+ * ⭐ **MİMAR OKULU KENDİNİ HIZLANDIRMAZ** (kullanıcı, 2026-08-03): kendi yükseltmesinde bölen
+ * seviyesi 0 geçilir, yani hızlanma uygulanmaz. Diğer bütün yapılar Mimar Okulu'nun mevcut
+ * seviyesiyle hızlanmaya devam eder.
+ *
+ * ⚠️ Bu yorum bir süre **tam tersini** savunuyordu: *"Mimar Okulu'nun kendisi için ayrı kural
+ * YOK… özel dal sessiz bir tutarsızlık kaynağı olurdu."* O gerekçe orijinaldeki `/1,4^sv`
+ * bölenine göre yazılmıştı ve bölen 1,2'ye indiği için gereksiz görülmüştü. Kullanıcı kararı
+ * bunun önünde: kendi kendini hızlandıran bir yapı, seviye atladıkça **giderek daha ucuza**
+ * seviye atlıyor — istenen bu değil.
+ *
+ * ⚠️ İstisna `architectSelfExempt` ayarına bağlı (varsayılan açık) → panelden geri alınabilir.
  */
 export function buildingTimeSeconds(
   buildingId: string, level: number, architectSchool: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
 ): number {
+  const divisor = buildingId === 'architect_school' && cfg.economy.architectSelfExempt
+    ? 0
+    : architectSchool;
   /**
    * ⭐ SÜRE ÇARPANI (2. nesil Tur 4) — 1,0 varsayılan.
    *
@@ -334,7 +345,7 @@ export function buildingTimeSeconds(
    * ⚠️ Çarpan `timeFromCost`ta DEĞİL burada: o fonksiyon yalnız `Cost` görüyor, varlık
    * kimliğini bilmiyor; imzasına id eklemek en çok paylaşılan fonksiyonu kirletirdi.
    */
-  const raw = timeFromCost(buildingCost(buildingId, level, cfg), architectSchool, cfg);
+  const raw = timeFromCost(buildingCost(buildingId, level, cfg), divisor, cfg);
   return raw * (cfg.buildingTuning[`${buildingId}:timeFactor`] ?? 1);
 }
 
@@ -466,12 +477,18 @@ export function maxCities(colonization: number): number {
 /**
  * ⭐ Teleport'un yeniden hazır olma süresi (saniye).
  * Doküman: *"Teleport binası seviyesini ilerlettiğinizde teleportun kendini hazır hale getirme
- * süresi %2 kısalır."* → `taban × 0,98^(seviye−1)`. Taban §13.11.4'ten: **20 saat**.
+ * süresi %2 kısalır."* → `taban × (1 − adım)^(seviye−1)`.
+ *
+ * ⭐ Taban **24 saat** (kullanıcı, 2026-08-03; önceden 20). Doküman süreyi vermiyor, ikisi de
+ * kurgu — bu yüzden hem taban hem adım panelde (`teleport.baseHours` / `teleport.levelStep`).
+ * Sv1 = 24 sa · sv20 ≈ 16 sa 24 dk.
  */
-export const TELEPORT_BASE_COOLDOWN_SECONDS = 20 * 3600;
-export function teleportCooldownSeconds(teleportLevel: number): number {
+export function teleportCooldownSeconds(
+  teleportLevel: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): number {
   const lvl = Math.max(1, teleportLevel);
-  return TELEPORT_BASE_COOLDOWN_SECONDS * 0.98 ** (lvl - 1);
+  const step = Math.min(0.99, Math.max(0, cfg.teleport.levelStep));
+  return cfg.teleport.baseHours * 3600 * (1 - step) ** (lvl - 1);
 }
 
 /**

@@ -20,23 +20,26 @@ type Values = Readonly<Record<string, Record<string, number | boolean> | undefin
  * sınavı buydu. Anahtarlar `grup.alan` biçiminde kaldığı sürece (bkz. `config.ts`
  * `TuningConfig`) yeni bir katalog ailesi açmak tek satırlık iş.
  */
-export const CATALOG_GROUPS = ['economy', 'cave', 'wall', 'buildingTuning', 'techTuning'] as const;
+export const CATALOG_GROUPS = [
+  'economy', 'cave', 'wall', 'teleport', 'buildingTuning', 'techTuning',
+] as const;
 
 export function catalogOverrides(
   values: Values, overridden: readonly string[],
 ): DeepPartialCatalog | undefined {
-  const out: Record<string, Record<string, number>> = {};
+  const out: Record<string, Record<string, number | boolean>> = {};
   let touched = false;
   for (const key of overridden) {
     const [group, leaf] = key.split('.') as [string, string];
     if (!(CATALOG_GROUPS as readonly string[]).includes(group)) continue;
     const v = values[group]?.[leaf];
     /**
-     * ⚠️ Yalnız SAYI kabul ediliyor. Katalog config'inde boolean alan yok; bir gün eklenirse
-     * burası sessizce atlamak yerine değiştirilmeli — bu yüzden tip daraltması `typeof` ile
-     * açıkça yazılı, `as` ile susturulmadı.
+     * ⚠️ Sayı VE boolean kabul ediliyor. Bir süre yalnız sayı geçiyordu ve buradaki yorum
+     * *"katalog config'inde boolean alan yok; bir gün eklenirse burası sessizce atlamak
+     * yerine DEĞİŞTİRİLMELİ"* diye uyarıyordu. O gün 2026-08-03'te geldi
+     * (`economy.architectSelfExempt`) — uyarı işe yaradı, ayar sessizce yutulmadı.
      */
-    if (typeof v !== 'number') continue;
+    if (typeof v !== 'number' && typeof v !== 'boolean') continue;
     (out[group] ??= {})[leaf] = v;
     touched = true;
   }

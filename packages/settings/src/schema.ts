@@ -116,6 +116,15 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'sefer varış anı girerken hesaplanıp yazılıyor; yalnız bundan sonraki işler etkilenir.',
   },
   {
+    id: 'teleport',
+    label: 'Teleport',
+    description: '⭐ Teleport binası birlikleri iki şehir arasında ANINDA taşır — mesafe, '
+      + 'sefer süresi ve yol riski yok. Tek frenі bekleme süresi. '
+      + '⚠️ Süre KAYNAK şehrin teleport seviyesinden hesaplanıyor ve kullanıldığı anda '
+      + '`cities.teleport_ready_at`e yazılıyor; buradaki değişiklik SÜREN bir beklemeyi '
+      + 'etkilemez, bir sonraki kullanımda geçerli olur.',
+  },
+  {
     id: 'cave',
     label: 'Mağara',
     description: 'Kapasite ve yıkılma eşiği ÖLÇÜLDÜ (kapasite tablosu 20/20, cüce tablosu '
@@ -727,6 +736,17 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'hissedilir ama tek eksenli değil.',
   },
   {
+    key: 'economy.architectSelfExempt',
+    label: 'Mimar Okulu kendini hızlandırmasın',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'Açıkken Mimar Okulu\'nun KENDİ yükseltmesine hızlanma uygulanmaz; diğer tüm '
+      + 'yapılar onun seviyesiyle hızlanmaya devam eder. Kapatırsan Mimar Okulu kendi süresini '
+      + 'de kısaltır.',
+    note: '⭐ Kullanıcı isteği (2026-08-03). Kendi kendini hızlandıran bir yapı, seviye '
+      + 'atladıkça giderek DAHA UCUZA seviye atlıyor: sv1→2 ile sv19→20 arasındaki gerçek '
+      + 'maliyet farkı kapanıyor ve yapı kendi kendini besleyen bir merdivene dönüşüyor.',
+  },
+  {
     key: 'economy.timeExponent',
     label: 'Süre üssü',
     type: 'number', default: 0.8, min: 0.1, max: 2, tag: 'design',
@@ -783,6 +803,28 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     label: 'Teknik fiyat çarpanı',
     type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
     description: 'TÜM teknik fiyatlarını topluca ölçekler.',
+  },
+
+  /* ── Teleport (§13.11.4) ─────────────────────────────────────────────────── */
+  {
+    key: 'teleport.baseHours',
+    label: 'Bekleme süresi (seviye 1)',
+    type: 'number', default: 24, min: 0.25, max: 168, tag: 'design', unit: 'sa',
+    description: 'Teleport kullanıldıktan sonra tekrar hazır olması için geçmesi gereken süre. '
+      + 'Küçültürsen teleport günde birkaç kez kullanılabilir hâle gelir ve sefer süreleri '
+      + 'anlamsızlaşır; büyütürsen bina 500.000 altınlık bedelini hak etmez.',
+    note: '⭐ 20 saatti, kullanıcı isteğiyle 24\'e çıktı (2026-08-03). Doküman süreyi hiç '
+      + 'vermiyor — ikisi de kurgu, o yüzden ikisi de panelde.',
+  },
+  {
+    key: 'teleport.levelStep',
+    label: 'Seviye başına kısalma',
+    type: 'number', default: 0.02, min: 0, max: 0.5, tag: 'design',
+    description: 'Teleport binasının her seviyesi bekleme süresini bu oranda kısaltır. '
+      + '0,02 = seviye başına %2 → seviye 20\'de 24 sa yerine ~16 sa 24 dk.',
+    note: 'Oranın kendisi DOKÜMANDAN: *"Teleport binası seviyesini ilerlettiğinizde teleportun '
+      + 'kendini hazır hale getirme süresi %2 kısalır."* Yine de ayarlanabilir bırakıldı '
+      + '(kullanıcı isteği) — 20 seviyede %2 toplamda ancak %32 kazandırıyor.',
   },
 
   /* ── Mağara ──────────────────────────────────────────────────────────────── */

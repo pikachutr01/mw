@@ -69,10 +69,35 @@ export interface EconomyConfig {
   startingGold: number;
   startingFood: number;
 
+  /**
+   * ⭐ MİMAR OKULU KENDİNİ HIZLANDIRMASIN (kullanıcı, 2026-08-03).
+   *
+   * `true` iken Mimar Okulu'nun **kendi** yükseltmesi bölene 0 verir, yani hızlanma
+   * uygulanmaz. Diğer bütün yapılar Mimar Okulu'nun mevcut seviyesiyle hızlanmaya devam eder.
+   *
+   * ⚠️ Bu, 2. nesilde BİLEREK KALDIRILMIŞ bir istisnanın geri gelmesi. O zamanki gerekçe
+   * *"bölen 1,4'ten 1,2'ye inince frene gerek kalmadı"* idi; kullanıcı kararı bunun önünde.
+   * Ayar olarak duruyor ki geri almak tek tık olsun.
+   */
+  architectSelfExempt: boolean;
+
   /* ── Emekli süre modelleri (yalnız denge düğmesi) ─────────────────────────── */
   trainTimeAreaDecay: number;
   originalTrainFactor: number;
   originalDivisorRate: number;
+}
+
+/**
+ * ⭐ TELEPORT (§13.11.4) — anlık şehirler arası birlik transferi.
+ *
+ * Sabitler 2026-08-03'e kadar `formulas.ts`te gömülüydü; kullanıcı ikisini de panelden
+ * ayarlanabilir istedi. Taban aynı gün **20 → 24 saate** çıkarıldı.
+ */
+export interface TeleportConfig {
+  /** Seviye 1 teleportun yeniden hazır olma süresi (saat). */
+  baseHours: number;
+  /** Her seviyenin süreyi kısaltma oranı. 0,02 = seviye başına %2 (doküman). */
+  levelStep: number;
 }
 
 /**
@@ -117,6 +142,7 @@ export interface CatalogConfig {
   economy: EconomyConfig;
   cave: CaveConfig;
   wall: WallConfig;
+  teleport: TeleportConfig;
   /** `castle:gold` · `castle:rate` · `castle:timeFactor` … — bkz. `TuningConfig`. */
   buildingTuning: TuningConfig;
   /** `blacksmithing:gold` · `blacksmithing:rate` … */
@@ -151,9 +177,15 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     // ⚠️ `STARTING_RESOURCES` ile AYNI sayılar — o sabit hâlâ tek gerçek kaynak (`buildings.ts`).
     startingGold: STARTING_RESOURCES.gold,
     startingFood: STARTING_RESOURCES.food,
+    architectSelfExempt: true,
     trainTimeAreaDecay: 0.95,
     originalTrainFactor: 65,
     originalDivisorRate: 1.4,
+  },
+  // ⚠️ Taban 20 değil **24** saat (kullanıcı, 2026-08-03). Doküman süreyi vermiyor; 20 kurguydu.
+  teleport: {
+    baseHours: 24,
+    levelStep: 0.02,
   },
   cave: {
     capacityBase: 50,
@@ -195,6 +227,7 @@ export function mergeCatalogConfig(overrides?: DeepPartialCatalog): CatalogConfi
     economy: { ...DEFAULT_CATALOG_CONFIG.economy, ...overrides.economy },
     cave: { ...DEFAULT_CATALOG_CONFIG.cave, ...overrides.cave },
     wall: { ...DEFAULT_CATALOG_CONFIG.wall, ...overrides.wall },
+    teleport: { ...DEFAULT_CATALOG_CONFIG.teleport, ...overrides.teleport },
     // ⚠️ Seyreklik korunuyor: override yoksa boş nesne kalır (bkz. `TuningConfig` yorumu).
     buildingTuning: { ...DEFAULT_CATALOG_CONFIG.buildingTuning, ...overrides.buildingTuning },
     techTuning: { ...DEFAULT_CATALOG_CONFIG.techTuning, ...overrides.techTuning },

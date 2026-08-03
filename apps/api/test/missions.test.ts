@@ -752,13 +752,42 @@ describe('ortak sefer kuralları', () => {
     })).rejects.toThrow(/sefere çıkamaz/i);
   });
 
-  it('Casus Kuş casusluk DIŞINDA sefere katılamaz', async () => {
+  /**
+   * ⭐ KUŞ SALDIRI ve NAKLİYEDEN HÂLÂ DIŞLANIYOR — ama DESTEKTEN artık değil (kullanıcı,
+   * 2026-08-03). Bu test eskiden desteği örnek alıyordu; kural değişince örnek saldırıya
+   * çevrildi, çünkü ölçtüğü şey "kuş her yere gidemez" değişmezi.
+   */
+  it('Casus Kuş saldırıya ve nakliyeye katılamaz', async () => {
     await giveUnits(home, 'spy_bird', 5);
     const at = await clock.gameNow(worldId);
-    await expect(missions.sendSupport({
+    await expect(missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 4 }, units: { spy_bird: 5 }, at,
+    })).rejects.toThrow(/katılamaz/i);
+    await expect(missions.sendTransport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 3 }, units: { spy_bird: 5 },
+      cargo: { gold: 1, food: 0 }, at,
+    })).rejects.toThrow(/casusluk ve destek/i);
+  });
+
+  /**
+   * ⭐ KUŞ DESTEKLE TAŞINABİLİR (kullanıcı, 2026-08-03).
+   *
+   * ⚠️ Bu bir denge kararı değil, bir ÇIKMAZIN çözümü: şehir terk etmek barakanın tamamen
+   * boş olmasını istiyor ama kuş yalnız casusluğa katılabildiği için şehirden hiç
+   * çıkarılamıyordu → kuşu olan şehir **terk edilemiyordu**.
+   */
+  it('⭐ Casus Kuş DESTEKLE başka şehre taşınabilir', async () => {
+    await giveUnits(home, 'spy_bird', 5);
+    const at = await clock.gameNow(worldId);
+    const r = await missions.sendSupport({
       originCityId: home, playerId: me, worldId,
       target: { k: 1, d: 1, s: 3 }, units: { spy_bird: 5 }, at,
-    })).rejects.toThrow(/yalnız casusluk/i);
+    });
+    expect(r.missionId).toBeGreaterThan(0);
+    // Kuşun 6000 hızı orduyu HIZLANDIRMAZ diye bir şey yok — tek birim, hız onun.
+    expect(r.speed).toBe(6000);
   });
 });
 

@@ -382,7 +382,9 @@ function render(){
   if(slow.spy)bd+='<span class="badge">🕊 Casusluk faaliyeti — kuş yalnız uçar</span>';
   else{
    if(arr.length>1)bd+='<span class="badge">'+arr.length+" birim türü</span>";
-   if(arr.some(u=>u.n==="Kahraman")&&arr.length>1)bd+='<span class="badge warn">Kahraman orduyu hızlandırmaz</span>';
+   /* ⚠️ Bu araç kahramanı en-yavaş hesabına HEP katıyordu (satır 375) — yani DOĞRUYDU;
+      2026-08-03'e kadar yanlış olan oyunun kendisiydi. Rozet metni de o gün düzeltildi. */
+   if(arr.some(u=>u.n==="Kahraman")&&arr.length>1)bd+='<span class="badge warn">Kahraman hızlandırmaz; ordudan yavaşsa yavaşlatır</span>';
   }
   if(T>=K.cap-.5)bd+='<span class="badge warn">Tavan süreye dayandı</span>';
   $("badges").innerHTML=bd;

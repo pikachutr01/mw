@@ -167,6 +167,20 @@ describe('şehir terk etme — engeller', () => {
     expect(await blockers()).toContain('Barakada 120 savaşçı var.');
   });
 
+  /**
+   * ⭐ ÇIKMAZIN KENDİSİ (kullanıcı, 2026-08-03): *"Casus kuşları destek olarak
+   * gönderemezsek şehri terk edemeyiz."*
+   *
+   * Casus Kuş da barakada duruyor ve terk engelini tetikliyor; kuş 2026-08-03'e kadar
+   * yalnız casusluğa katılabildiği için şehirden ÇIKARILAMIYORDU → kuşu olan bir şehir
+   * hiçbir şekilde terk edilemiyordu. Bu test o kapanı çıpalıyor: engel gerçek, çıkış yolu
+   * artık destek görevi (bkz. `missions.test.ts` → «Casus Kuş DESTEKLE taşınabilir»).
+   */
+  it('⭐ barakadaki Casus Kuş da terk engeli sayılır (çıkış yolu: destek görevi)', async () => {
+    await h.db.execute(sql`INSERT INTO units (city_id, type, count) VALUES (${colony}, 'spy_bird', 7)`);
+    expect(await blockers()).toContain('Barakada 7 savaşçı var.');
+  });
+
   /** ⚠️ Dokümanda YOK: `cave_units` cascade ile sessizce silinirdi (kullanıcı kararı). */
   it('⭐ mağarada savaşçı varsa engellenir', async () => {
     await h.db.execute(sql`INSERT INTO cave_units (city_id, type, count) VALUES (${colony}, 'elf', 300)`);
