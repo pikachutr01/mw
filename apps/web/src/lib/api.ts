@@ -14,6 +14,8 @@
  * hiç göndermemek: `api()` istekten önce ömrün son %10'una girilmişse yenilemeyi bekliyor.
  * 401 yolu yine duruyor ama artık yalnız bir emniyet ağı (saat kayması, sunucuda iptal).
  */
+import { setConflict } from './session-conflict.ts';
+
 export interface Session {
   accessToken: string;
   refreshToken: string;
@@ -90,6 +92,30 @@ function deviceId(): string {
   return id;
 }
 
+/**
+ * ⭐ ÖRNEK (INSTANCE) KİMLİĞİ — tek cihaz kuralının SEKME düzeyindeki ayracı.
+ *
+ * ⚠️ `sessionStorage`, `localStorage` DEĞİL — fark kuralın tamamı:
+ *   • `localStorage` sekmeler arasında PAYLAŞILIR → iki sekme aynı kimliği taşır, ayırt
+ *     edilemezler ve "aynı cihazda ikinci sekme" kuralı hiç çalışmaz.
+ *   • `sessionStorage` sekme başına ayrı → yeni sekme yeni kimlik, sayfa yenileme aynı kimlik
+ *     (istenen davranış: F5 seni kendi hesabından atmamalı).
+ *
+ * ⚠️ Bu kimlik `deviceId` ile karıştırılmamalı: o KALICI ve çoklu hesap analizi için, bu ise
+ * geçici ve yalnız "hangi kopya" sorusunu yanıtlıyor. Sunucu ikisini de kimlik doğrulamada
+ * kullanmaz.
+ */
+function instanceId(): string {
+  let id = sessionStorage.getItem('mw-instance-id');
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem('mw-instance-id', id);
+  }
+  return id;
+}
+
+export { instanceId };
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -113,6 +139,12 @@ export function getSession(): Session | null {
 export function setSession(s: Session | null): void {
   session = s;
   saveSession(s);
+  /**
+   * ⚠️ Oturum bitince tek cihaz kapısı da kapanır. Kapanmasaydı çıkış yapan oyuncu giriş
+   * ekranının ÜSTÜNDE asılı kalan bir modalla baş başa kalırdı ve modalın kendi yoklaması
+   * kimliksiz istek atıp «Yetki başlığı yok» hatası yazardı (ölçümde birebir bu görüldü).
+   */
+  if (!s) setConflict(null);
   for (const fn of listeners) fn(s);
 }
 
@@ -277,6 +309,7 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
         //    başlık "gövde geliyor" diye söz verir, gövde gelmez, ayrıştırıcı 400 döner.
         ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
         'x-device-id': deviceId(),
+        'x-client-instance': instanceId(),
         'x-platform': 'web',
         ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}),
       },
@@ -313,9 +346,38 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   }
 
   const body = await parse(res);
+
+  /**
+   * ⭐ TEK CİHAZ KURALI — hesap başka bir yerde açık (409 `session_conflict`).
+   * Durum global tutuluyor ki `SessionConflictGate` hangi ekranda olursak olalım tam ekran
+   * modalı açsın. Hata yine de fırlatılıyor: çağıran sorgu "başarısız" saymalı, boş veriyle
+   * ekran çizmemeli.
+   */
+  if (res.status === 409) {
+    /**
+     * ⚠️ Gövde DÜZ: `{ code, message, holder }`. `message.code` diye aramak ilk yazımdaki
+     * hataydı — modal açılıyordu ama sahibin platformu ve son hareketi hep boş kalıyordu,
+     * yani metin "telefonunda açık" diyemiyordu. Nest'in bazı yolları gövdeyi `message`in
+     * içine sarıyor (`errorOf` bu yüzden iki yere birden bakıyor), o yüzden ikisi de kontrol
+     * ediliyor.
+     */
+    const b = (body ?? {}) as Record<string, unknown>;
+    const flat = (b['code'] === 'session_conflict' ? b : b['message']) as
+      { code?: string; holder?: ConflictHolder } | undefined;
+    if (flat?.code === 'session_conflict') {
+      setConflict({
+        platform: flat.holder?.platform ?? null,
+        seenAt: flat.holder?.seenAt ?? null,
+        kind: 'blocked',
+      });
+    }
+  }
+
   if (!res.ok) throw errorOf(res.status, body);
   return body as T;
 }
+
+interface ConflictHolder { platform?: string | null; seenAt?: string | null }
 
 /**
  * ⭐ Giriş KULLANICI ADIYLA (kullanıcı kararı): oyuncunun ezberlediği ad e-posta değil.

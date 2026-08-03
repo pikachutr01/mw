@@ -442,6 +442,33 @@ export const sessions = pgTable('sessions', {
 ]);
 
 /**
+ * ⭐ TEK CİHAZ KURALI (kullanıcı, 2026-08-03) — hesap başına **tek satır**: şu an nerede açık.
+ *
+ * ⚠️ Anahtar `sessions.id` DEĞİL `instance_id`. Aynı tarayıcının iki sekmesi aynı
+ * `localStorage`ı ve dolayısıyla aynı oturum satırını paylaşır; `sessions` sekmeleri ayırt
+ * edemez. `instance_id` istemcide **`sessionStorage`**ta üretilir → yeni sekme yeni kimlik,
+ * sayfa yenileme aynı kimlik. Kimlik doğrulamada ASLA kullanılmaz (taklit edilebilir); yalnız
+ * "bu istek sahibinden mi geliyor" karşılaştırması için.
+ *
+ * ⚠️ Zorlama şarta bağlı: `session.singleDevice` ayarı AÇIK **ve** üretim ortamı. Tablo her
+ * ortamda yazılır — kural kapalıyken bile "kim nerede" bilgisi doğru kalsın ve açıldığı gün
+ * boş bir tabloya bakılmasın.
+ */
+export const accountPresence = pgTable('account_presence', {
+  accountId: bigint('account_id', { mode: 'number' }).primaryKey()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  instanceId: text('instance_id').notNull(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  worldId: smallint('world_id'),
+  platform: text('platform'),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Sahibin son ses verdiği an — GERÇEK saat. Zaman aşımı buradan ölçülür. */
+  seenAt: timestamp('seen_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('account_presence_seen').on(t.seenAt),
+]);
+
+/**
  * Oyuncu × cihaz sayaç tablosu. `sessions` 90 günde budanır ama öbek bilgisi burada kalır
  * (satır sayısı oyuncu×cihaz ile sınırlı → sınırsız büyümez).
  * ⭐ Kabul kriteri: aynı tarayıcıdan iki hesaba girilirse aynı `device_id` iki `player_id` ile görünür.

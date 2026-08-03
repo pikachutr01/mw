@@ -12,7 +12,8 @@ import { EmailError, EmailTokenService } from '../mail/email-token.service.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
 import { AccountDeleteError, AccountDeleteService } from './account-delete.service.ts';
 import { AuthError, AuthService, type AuthResult } from './auth.service.ts';
-import { AuthGuard, type AuthedRequest } from './auth.guard.ts';
+import { AuthGuard, platformOf, type AuthedRequest } from './auth.guard.ts';
+import { PresenceService } from './presence.service.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -77,7 +78,11 @@ export class AuthController {
   private readonly emails: EmailTokenService;
   private readonly deletes: AccountDeleteService;
 
-  constructor(private readonly auth: AuthService, @Inject(DB) private readonly db: Db) {
+  constructor(
+    private readonly auth: AuthService,
+    private readonly presence: PresenceService,
+    @Inject(DB) private readonly db: Db,
+  ) {
     this.emails = new EmailTokenService(db);
     this.deletes = new AccountDeleteService(db);
   }
@@ -106,8 +111,45 @@ export class AuthController {
   @Post('logout')
   @UseGuards(AuthGuard)
   async logout(@Req() req: AuthedRequest): Promise<{ ok: true }> {
-    await this.auth.logout(req.player!.sessionId);
+    const p = req.player!;
+    // Sahipliği HEMEN bırak (yumuşak değil): çıkış yapan oyuncu kendi hesabına anında
+    // dönebilmeli. Yumuşak bırakma sayfa yenilemesi içindir, çıkış için değil.
+    await this.presence.releaseNow(p.accountId, p.instanceId).catch(() => { /* önemsiz */ });
+    await this.auth.logout(p.sessionId);
     return { ok: true };
+  }
+
+  /**
+   * ⭐ TEK CİHAZ KURALI — «Bu cihazda devam et» (kullanıcı kararı, 2026-08-03).
+   *
+   * Kullanıcı kesin engelleme yerine devralmayı seçti: tek anda tek oyun kuralı korunuyor ama
+   * tarayıcısı çöken ya da telefonunu kaybeden oyuncu kendi hesabından kilitli kalmıyor.
+   *
+   * ⚠️ Bu uç `PRESENCE_EXEMPT` listesinde (`/api/v1/auth/**`) — olmasaydı **kilidi açan
+   * düğmenin kendisi 409 alırdı** ve modalda çıkış yapmaktan başka seçenek kalmazdı.
+   *
+   * ⚠️ `force` olmadan da çağrılabilir: istemci modalı kapatmadan önce "sahiplik boşalmış mı"
+   * diye yokluyor. Çöken bir sekmenin sahipliği zaman aşımıyla düştüğünde oyuncu düğmeye
+   * basmadan geri girebilsin.
+   */
+  @Post('session/claim')
+  @UseGuards(AuthGuard)
+  async claimSession(
+    @Body() body: unknown, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const p = req.player!;
+    const force = (body as { force?: unknown } | null)?.force === true;
+    const res = await this.presence.claim({
+      accountId: p.accountId, sessionId: p.sessionId, instanceId: p.instanceId,
+      worldId: p.worldId, platform: platformOf(req.headers), force,
+    });
+
+    if (!res.ok) {
+      return { ok: false, holder: { platform: res.holder.platform, seenAt: res.holder.seenAt } };
+    }
+    // Devraldıysak eski örneğin soketini düşür ki o da modalını açsın.
+    if (res.previous) getGateway()?.kickInstance(p.accountId, res.previous.instanceId);
+    return { ok: true, tookOver: res.tookOver };
   }
 
   /* ── Aktif cihazlar (§admin Faz 3) ─────────────────────────────────────────── */

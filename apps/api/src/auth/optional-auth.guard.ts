@@ -22,6 +22,7 @@ import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { TokenService } from './token.service.ts';
 import type { AuthedRequest } from './auth.guard.ts';
+import { instanceOf } from './auth.guard.ts';
 
 @Injectable()
 export class OptionalAuthGuard implements CanActivate {
@@ -50,6 +51,9 @@ export class OptionalAuthGuard implements CanActivate {
         playerId: claims.pid,
         worldId: claims.wid,
         sessionId: claims.sid,
+        // ⚠️ Tek cihaz kuralı BURADA UYGULANMAZ: bu guard'ın arkasındaki uçlar kimliksiz de
+        //    çalışıyor (ana sayfa, simülatör). Kimlik yalnız kişiselleştirme için okunuyor.
+        instanceId: instanceOf(req.headers, claims.sid),
       };
     } catch {
       // Geçersiz/süresi dolmuş token → anonim devam. Yukarıdaki gerekçe.

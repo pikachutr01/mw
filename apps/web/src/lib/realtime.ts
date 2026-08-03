@@ -15,7 +15,8 @@
 import { useSyncExternalStore } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { QueryClient } from '@tanstack/react-query';
-import { getSession, onSessionChange, setSession } from './api.ts';
+import { getSession, instanceId, onSessionChange, setSession } from './api.ts';
+import { setConflict } from './session-conflict.ts';
 
 export type ConnectionState = 'connecting' | 'online' | 'offline';
 
@@ -131,7 +132,13 @@ export function connectRealtime(queryClient: QueryClient): () => void {
 
     socket = io({
       path: '/ws',
-      auth: { token: session.accessToken },
+      /**
+       * ⚠️ `instanceId` el sıkışmada gönderiliyor: tek cihaz kuralının sahipliğini asıl olarak
+       * SOKET alıyor (bağlanınca sahiplen, kopunca bırak). HTTP tarafı yalnız kontrol ediyor —
+       * yani tarayıcı kapanınca sahiplik saniyeler içinde serbest kalıyor, zaman aşımını
+       * beklemek gerekmiyor.
+       */
+      auth: { token: session.accessToken, instanceId: instanceId() },
       transports: ['websocket', 'polling'],
       // Üstel backoff + jitter: sunucu yeniden başlarken tüm istemciler aynı anda vurmasın.
       reconnection: true,
@@ -164,6 +171,29 @@ export function connectRealtime(queryClient: QueryClient): () => void {
     socket.on('session:revoked', () => {
       setSession(null);
       queryClient.clear();
+    });
+
+    /**
+     * ⭐ DEVRALINDIK (tek cihaz kuralı) — başka bir cihaz «Bu cihazda devam et» dedi.
+     *
+     * ⚠️ Oturum DÜŞÜRÜLMÜYOR, `session:revoked`ın aksine. Jeton hâlâ geçerli; kaybettiğimiz
+     * yalnız sahiplik. Oyuncu modaldaki düğmeyle oyunu buraya geri alabilmeli — çıkış
+     * yaptırsaydık parolayı yeniden girmesi gerekirdi ve devralma "iki cihaz arasında gidip
+     * gelme" değil "tek yönlü kapı" olurdu.
+     */
+    socket.on('session:takeover', () => {
+      setConflict({ platform: null, seenAt: null, kind: 'takeover' });
+    });
+
+    /**
+     * ⚠️ El sıkışma reddi tek cihaz kuralından geliyorsa modalı AÇ. Bunu `connect_error`
+     * içinde ayırmak şart: aksi hâlde socket.io kopmayı ağ arızası sanıp sonsuz yeniden
+     * bağlanma döngüsüne girerdi ve oyuncu neden oynayamadığını hiç öğrenemezdi.
+     */
+    socket.on('connect_error', (err: Error) => {
+      if (err?.message === 'session_conflict') {
+        setConflict({ platform: null, seenAt: null, kind: 'blocked' });
+      }
     });
 
     for (const [topic, keys] of Object.entries(INVALIDATES)) {

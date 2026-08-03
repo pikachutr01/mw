@@ -4,6 +4,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import type { Server as HttpServer } from 'node:http';
 import { AppModule } from './app.module.ts';
 import { TokenService } from './auth/token.service.ts';
+import { PresenceService } from './auth/presence.service.ts';
 import { createDb } from './db/client.ts';
 import { mailEnabled } from './mail/mail.limits.ts';
 import { defaultMailSender } from './mail/mail.service.ts';
@@ -117,7 +118,10 @@ async function bootstrap(): Promise<void> {
     await app.listen({ port, host: '0.0.0.0' });
 
     // Soket sunucusu Fastify'ın HTTP sunucusuna takılır → tek port, tek köken, CORS yok.
-    gateway = new RealtimeGateway(handle.db, app.get(TokenService), bus);
+    // ⚠️ `PresenceService` Nest'ten alınıyor, burada yeni bir tane KURULMUYOR: tek cihaz
+    //    kuralının kısma haritası guard'ın statik alanında ve iki farklı örnek onu ikiye
+    //    bölerdi (bkz. `app.module.ts`).
+    gateway = new RealtimeGateway(handle.db, app.get(TokenService), bus, app.get(PresenceService));
     await gateway.attach(app.getHttpServer() as HttpServer);
     // İttifak uçları çevrimiçi rozeti + oda senkronu için aynı instance'a buradan ulaşır.
     setGateway(gateway);

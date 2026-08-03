@@ -21,6 +21,8 @@ import type { Server as HttpServer } from 'node:http';
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import type { TokenService } from '../auth/token.service.ts';
+import type { PresenceService } from '../auth/presence.service.ts';
+import { singleDeviceEnforced } from '../auth/presence.service.ts';
 import type { RealtimeBus, RealtimeEvent } from './realtime.bus.ts';
 
 interface SocketPlayer {
@@ -35,6 +37,11 @@ interface SocketPlayer {
    * kalırdık — oysa iptal edilen tek bir cihazdır.
    */
   sessionId: string;
+  /**
+   * ⭐ Tek cihaz kuralının sekme düzeyindeki ayracı. `sessionId` YETMEZ: aynı tarayıcının iki
+   * sekmesi aynı oturumu paylaşır, ayırt edilemezler.
+   */
+  instanceId: string;
 }
 
 /** Oda adları tek yerde — elle string birleştirmek yalıtım hatasının en kolay yolu. */
@@ -73,6 +80,7 @@ export class RealtimeGateway {
     private readonly db: Db,
     private readonly tokens: TokenService,
     private readonly bus: RealtimeBus,
+    private readonly presence: PresenceService,
   ) {}
 
   async attach(httpServer: HttpServer): Promise<void> {
@@ -102,13 +110,38 @@ export class RealtimeGateway {
         const pRows = await this.db.execute<Record<string, unknown>>(sql`
           SELECT alliance_id FROM players WHERE id = ${claims.pid}
         `);
+        const rawInstance = String(socket.handshake.auth?.['instanceId'] ?? '').trim();
         const player: SocketPlayer = {
           playerId: claims.pid,
           worldId: claims.wid,
           accountId: Number(claims.sub),
           allianceId: pRows[0]?.['alliance_id'] == null ? null : Number(pRows[0]['alliance_id']),
           sessionId: claims.sid,
+          instanceId: rawInstance && rawInstance.length <= 64 ? rawInstance : `s:${claims.sid}`,
         };
+
+        /**
+         * ⭐ TEK CİHAZ KURALI — sahipliğin ASIL sahibi burası (kullanıcı, 2026-08-03).
+         *
+         * Neden HTTP değil soket: soket koptuğu an sahiplik BIRAKILIYOR. Yalnız HTTP'ye
+         * dayansaydık tarayıcısını kapatan oyuncunun sahipliği zaman aşımı dolana kadar
+         * (90 sn) asılı kalırdı ve kendi hesabına dönemezdi.
+         *
+         * ⚠️ Reddetme sebebi istemciye AÇIK gönderiliyor (`session_conflict`): socket.io'nun
+         * genel `unauthorized` hatasıyla karışsaydı istemci "jetonum bozuk" sanıp sonsuz
+         * yeniden bağlanma döngüsüne girerdi — oysa yapması gereken modalı açmak.
+         */
+        if (singleDeviceEnforced()) {
+          const res = await this.presence.claim({
+            accountId: player.accountId,
+            sessionId: player.sessionId,
+            instanceId: player.instanceId,
+            worldId: player.worldId,
+          });
+          if (!res.ok) { next(new Error('session_conflict')); return; }
+          if (res.previous) this.kickInstance(player.accountId, res.previous.instanceId);
+        }
+
         (socket.data as { player?: SocketPlayer }).player = player;
         next();
       } catch {
@@ -147,7 +180,49 @@ export class RealtimeGateway {
       socket.to(room.chat(p.worldId, channelId)).emit('chat:typing', { channelId, playerId: p.playerId });
     });
 
-    socket.on('disconnect', () => this.markOnline(p, -1));
+    socket.on('disconnect', () => {
+      this.markOnline(p, -1);
+      /**
+       * ⭐ Sahipliği BIRAK — ama yalnız bu hesabın bu örneğine ait BAŞKA soket kalmadıysa.
+       * Aynı sekme kısa bir ağ kesintisinde yeniden bağlanırken iki soket bir an üst üste
+       * binebiliyor; koşulsuz silmek yeni soketin az önce aldığı sahipliği düşürürdü.
+       * ⚠️ `release` KENDİ örneğinden başkasına dokunmuyor: devralınmışsa yeni sahibin satırı
+       * korunur.
+       */
+      if (!this.hasOtherSocket(p, socket.id)) {
+        void this.presence.release(p.accountId, p.instanceId).catch(() => { /* önemsiz */ });
+      }
+    });
+  }
+
+  /** Bu hesabın bu örneğine ait, verilen soketten BAŞKA açık soket var mı? */
+  private hasOtherSocket(p: SocketPlayer, exceptId: string): boolean {
+    if (!this.io) return false;
+    for (const [id, s] of this.io.of('/').sockets) {
+      if (id === exceptId) continue;
+      const q = (s.data as { player?: SocketPlayer }).player;
+      if (q && q.accountId === p.accountId && q.instanceId === p.instanceId) return true;
+    }
+    return false;
+  }
+
+  /**
+   * ⭐ DEVRALINDI — eski örneğin soketlerini düşür.
+   *
+   * ⚠️ Önce **olay**, sonra `disconnect` (`revokeSessions` ile aynı gerekçe): istemci kopmayı
+   * ağ arızasından ayırabilsin ve yeniden bağlanmaya çalışmak yerine modalını açsın.
+   */
+  kickInstance(accountId: number, instanceId: string): number {
+    if (!this.io) return 0;
+    let closed = 0;
+    for (const [, socket] of this.io.of('/').sockets) {
+      const q = (socket.data as { player?: SocketPlayer }).player;
+      if (!q || q.accountId !== accountId || q.instanceId !== instanceId) continue;
+      socket.emit('session:takeover', { reason: 'takeover' });
+      socket.disconnect(true);
+      closed++;
+    }
+    return closed;
   }
 
   /**

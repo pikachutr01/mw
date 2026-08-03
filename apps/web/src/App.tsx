@@ -8,6 +8,7 @@ import { ChatProvider } from './lib/chat-context.tsx';
 import { ConfirmProvider } from './components/Modal.tsx';
 import { MaintenanceCurtain } from './components/MaintenanceCurtain.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
+import { SessionConflictGate } from './components/SessionConflictGate.tsx';
 import { NotifyProvider } from './components/Toaster.tsx';
 import { Shell } from './components/Shell.tsx';
 import { GuestLayout } from './components/GuestShell.tsx';
@@ -93,6 +94,10 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <OfflineBanner />
+      {/* ⭐ Tek cihaz kapısı EN ÜSTTE ve oturum dalının DIŞINDA: çakışma anında oturum hâlâ
+          geçerli (yalnız sahiplik kaybedildi), yani `session` dolu ve oyun ağacı çiziliyor.
+          Kapıyı içeriye koysaydık her ekranın ayrıca onu çizmesi gerekirdi. */}
+      <SessionConflictGate />
       {/* Onay diyaloğu GLOBAL: her çağıran kendi diyaloğunu kursa metinler ve davranış ayrışırdı. */}
       <ConfirmProvider>
         <BrowserRouter>

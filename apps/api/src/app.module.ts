@@ -13,6 +13,7 @@ import { SettingsService } from './settings/settings.service.ts';
 import { AllianceController } from './alliance/alliance.controller.ts';
 import { AuthController } from './auth/auth.controller.ts';
 import { AuthGuard } from './auth/auth.guard.ts';
+import { PresenceService } from './auth/presence.service.ts';
 import { PublicRateLimitGuard } from './auth/rate-limit.ts';
 import { OptionalAuthGuard } from './auth/optional-auth.guard.ts';
 import { AuthService } from './auth/auth.service.ts';
@@ -135,6 +136,7 @@ export { DB } from './db/tokens.ts';
         new AuthService(db, tokens, clock),
       inject: [DB, TokenService, GameClockService],
     },
+
     /**
      * ⭐ AYAR SERVİSİ — bellek-içi anlık görüntü. `main.ts` açılışta `start()` çağırıp ham
      * bağlantıyı veriyor (LISTEN için); burada yalnız DI kaydı var.
@@ -168,6 +170,13 @@ export { DB } from './db/tokens.ts';
      * deneme saldırısı argon2 doğrulamasını hiç tetiklemesin.
      */
     { provide: APP_GUARD, useClass: PublicRateLimitGuard },
+    /**
+     * ⭐ Tek cihaz kuralı (§Tur 2). Hem `AuthGuard` hem `AuthController` hem de
+     * `RealtimeGateway` AYNI örneği kullanmalı — ayrı örnekler kurmak bir sorun yaratmazdı
+     * (durum tamamen DB'de) ama kısma haritası guard'ın statik alanında olduğu için tek
+     * örnek daha az sürpriz.
+     */
+    { provide: PresenceService, useFactory: (db: Db) => new PresenceService(db), inject: [DB] },
     AuthGuard,
     OptionalAuthGuard,
     AdminGuard,
