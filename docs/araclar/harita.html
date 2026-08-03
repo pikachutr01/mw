@@ -200,14 +200,13 @@ footer{text-align:center;font-size:11px;color:#4E6C6A;font-family:var(--mono);pa
     <div class="consts">
       <label><span>U · diyar aralığı</span><input type="number" id="cU" value="20" min="2" step="1"></label>
       <label><span>W · kıta aralığı</span><input type="number" id="cW" value="4000" min="100" step="100"></label>
-      <label><span>K · ölçek sabiti</span><input type="number" id="cK" value="600" min="10" step="10"></label>
-      <label><span>p · sıkıştırma üssü</span><input type="number" id="cP" value="0.46" min="0.2" max="1" step="0.01"></label>
-      <label><span>Ordu tabanı (dk)</span><input type="number" id="cFA" value="10" min="0" step="1"></label>
-      <label><span>Casus tabanı (dk)</span><input type="number" id="cFS" value="2" min="0" step="1"></label>
-      <label><span>Tavan süre (saat)</span><input type="number" id="cCap" value="18" min="1" step="1"></label>
+      <label><span>K · ölçek sabiti</span><input type="number" id="cK" value="1200" min="10" step="10"></label>
+      <label><span>p · sıkıştırma üssü</span><input type="number" id="cP" value="0.42" min="0.2" max="1" step="0.01"></label>
+      <label><span>Taban (dk, hız 100)</span><input type="number" id="cFA" value="20" min="0" step="1"></label>
+      <label><span>Tavan süre (saat)</span><input type="number" id="cCap" value="24" min="1" step="1"></label>
       <label><span>Haritacılık katsayısı k</span><input type="number" id="cStep" value="0.05" min="0.005" max="0.2" step="0.005"></label>
     </div>
-    <div class="formula">D = Δüs + U·Δdiyar + W·Δkıta &nbsp;·&nbsp; T = Taban + K · D<sup>p</sup> · (100 ÷ v) ÷ (1 + 0,05·L)</div>
+    <div class="formula">D = Δüs + U·Δdiyar + W·Δkıta &nbsp;·&nbsp; T = (Taban + K · D<sup>p</sup> ÷ (1 + 0,05·L)) · (100 ÷ v)</div>
     <div class="note">
       <p><b>Taban süre haritacılıktan ETKİLENMEZ.</b> "Orduyu toplayıp yola çıkarmak" sabit bedelidir ve
       kısa mesafelerde süreyi o belirler. Böylece yüksek haritacılık, komşu şehre yapılan baskını
@@ -261,9 +260,9 @@ const $=id=>document.getElementById(id);
 const sel=new Set(["Cüce"]);
 
 function C(){return{
- U:+$("cU").value||20, W:+$("cW").value||4000, K:+$("cK").value||600, p:+$("cP").value||.46,
- fArmy:(+$("cFA").value||10)*60, fSpy:(+$("cFS").value||2)*60,
- cap:(+$("cCap").value||18)*3600, step:+$("cStep").value||.05
+ U:+$("cU").value||20, W:+$("cW").value||4000, K:+$("cK").value||1200, p:+$("cP").value||.42,
+ fArmy:(+$("cFA").value||20)*60,
+ cap:(+$("cCap").value||24)*3600, step:+$("cStep").value||.05
 };}
 
 function parse(s){
@@ -283,9 +282,10 @@ function dist(a,b,K){return Math.abs(a.u-b.u)+K.U*Math.abs(a.d-b.d)+K.W*Math.abs
 
 // Haritacılık = HIZ çarpanı (doküman: "tüm ünitelerin hızını %5 arttırır"); yalnız YOL terimine uygulanır
 function mult(L,K){return 1+K.step*L;}
-function calc(D,v,L,K,spy){
- const floor=spy?K.fSpy:K.fArmy;
- return Math.min(floor+K.K*Math.pow(Math.max(0,D),K.p)*(100/v)/mult(L,K),K.cap);
+// ⭐ 2026-08-03: TABAN da hıza bölünür ve casusun AYRI tabanı YOK — süre baştan sona hıza
+// orantılı (kuş 6000 hızıyla ordunun tam 1/60'i). Haritacılık yine yalnız yol terimini kısaltır.
+function calc(D,v,L,K){
+ return Math.min((K.fArmy+K.K*Math.pow(Math.max(0,D),K.p)/mult(L,K))*(100/v),K.cap);
 }
 
 function fmt(s){
@@ -373,7 +373,7 @@ function render(){
   $("badges").innerHTML="";
  }else{
   const slow=arr.reduce((x,y)=>y.v<x.v?y:x);
-  const T=calc(D,slow.v,L,K,slow.spy);
+  const T=calc(D,slow.v,L,K);
   $("time").className="big";$("time").textContent=fmt(T);
   $("spd").textContent=Math.round(slow.v*M);
   $("slow").textContent=slow.n;
@@ -390,17 +390,17 @@ function render(){
 
  const slowV=arr.length?Math.min(...arr.map(u=>u.v)):null;
  $("unitTable").querySelector("tbody").innerHTML=UNITS.map(u=>{
-  const t=calc(D,u.v,L,K,u.spy),t0=calc(D,u.v,0,K,u.spy);
+  const t=calc(D,u.v,L,K),t0=calc(D,u.v,0,K);
   const on=sel.has(u.n),isSlow=on&&u.v===slowV;
   return '<tr class="'+(isSlow?"hi":(on?"":"dim"))+'"><td>'+u.n+"</td><td>"+u.v+"</td><td>"+Math.round(u.v*M)+
    '</td><td class="t">'+fmtS(t)+"</td><td>"+(t0>t?"−%"+((1-t/t0)*100).toFixed(1):"—")+"</td></tr>";
  }).join("");
 
  if(arr.length){
-  const slowU=arr.reduce((x,y)=>y.v<x.v?y:x), v=slowU.v, base=calc(D,v,0,K,slowU.spy);
+  const slowU=arr.reduce((x,y)=>y.v<x.v?y:x), v=slowU.v, base=calc(D,v,0,K);
   let prev=base;
   $("lvlTable").querySelector("tbody").innerHTML=Array.from({length:21},(_,l)=>{
-   const m=mult(l,K),t=calc(D,v,l,K,slowU.spy);
+   const m=mult(l,K),t=calc(D,v,l,K);
    const row='<tr class="'+(l==L?"hi":"")+'"><td>'+l+"</td><td>"+m.toFixed(3)+"</td><td>"+Math.round(v*m)+
     '</td><td class="t">'+fmtS(t)+"</td><td>"+(l?"−%"+((1-t/base)*100).toFixed(1):"—")+
     "</td><td>"+(l?"−"+fmtS(Math.max(0,prev-t)):"—")+"</td></tr>";
@@ -409,7 +409,7 @@ function render(){
  }else $("lvlTable").querySelector("tbody").innerHTML="";
 }
 
-["src","dst","carto","cU","cW","cK","cP","cFA","cFS","cCap","cStep"].forEach(i=>{
+["src","dst","carto","cU","cW","cK","cP","cFA","cCap","cStep"].forEach(i=>{
  $(i).addEventListener("input",render);
  $(i).addEventListener("change",render);
 });

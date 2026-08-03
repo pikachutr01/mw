@@ -22,13 +22,13 @@ import type postgres from 'postgres';
 import {
   applySettings, validatePatch, type EffectiveSettings, type SettingValue,
 } from '@mobilwar/settings';
-import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
+import { mergeMapConfig, type CombatConfig, type DeepPartial, type LootConfig, type MapConfig } from '@mobilwar/engine';
 import {
   catalogHash, mergeCatalogConfig, type CatalogConfig, type DeepPartialCatalog, type MeritConfig,
 } from '@mobilwar/catalog';
 import type { Db } from '../db/client.ts';
 import { catalogOverrides } from './catalog.ts';
-import { combatOverrides, lootOverrides, meritOverrides } from './combat.ts';
+import { combatOverrides, lootOverrides, mapOverrides, meritOverrides } from './combat.ts';
 import { setLiveSettings } from './live.ts';
 
 /** Ayar değişikliğinin duyurulduğu Postgres kanalı. */
@@ -179,6 +179,16 @@ export class SettingsService {
   merit(worldId: number): MeritConfig | undefined {
     const s = this.snapshot(worldId);
     return meritOverrides(s.effective, s.overridden);
+  }
+
+  /**
+   * ⭐ Harita/sefer sabitleri. Diğerlerinden FARKLI olarak **her zaman dolu bir config** döner
+   * (`undefined` değil): `travelSeconds` varsayılanı parametre olarak alıyor ve çağıranların
+   * hepsi bir `MapConfig` tutuyor; `undefined` döndürmek her çağrı noktasına bir `??` eklerdi.
+   */
+  map(worldId: number): MapConfig {
+    const s = this.snapshot(worldId);
+    return mergeMapConfig(mapOverrides(s.effective, s.overridden));
   }
 
   /**

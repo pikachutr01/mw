@@ -386,11 +386,15 @@ describe('casusluk', () => {
   });
 
   /**
-   * ⭐ Casus seferi KUŞ TABANIYLA uçar (kullanıcı onayı 2026-07-30): `march()` motora
-   * `spy: true` geçirir → taban `baseSpySeconds` (120 sn), ordu tabanı (600 sn) DEĞİL.
-   * Bayrak düşerse süre ~5 kat uzar — bu test onu anında yakalar.
+   * ⭐ Casus seferinin GÖREV TİPİNE özel bir sabiti YOK (kullanıcı kararı, 2026-08-03) —
+   * farkını yalnız Casus Kuş'un 6000 hızından alır.
+   *
+   * ⚠️ 2026-07-30'dan bu tarihe kadar motora `spy: true` geçiriliyor ve kuş ayrı bir tabanla
+   * (120 sn) uçuyordu. O sabit, katalogdaki hız sütununu anlamsızlaştırıyordu: 60 kat hızlı
+   * kuş komşu şehre 2 dk 10 sn'de, ordu 20 dk'da gidiyordu — yani 60 kat fark 9 kata iniyordu.
+   * Artık oran hızın kendisi: **tam 1/60**.
    */
-  it('casus seferi kuş tabanını kullanır (600 sn ordu tabanı değil)', async () => {
+  it('casus seferi süresini yalnız KUŞUN HIZINDAN alır (tipe özel taban yok)', async () => {
     await giveUnits(home, 'spy_bird', 3);
     const at = await clock.gameNow(worldId);
     const m = await missions.sendSpy({
@@ -402,10 +406,12 @@ describe('casusluk', () => {
       SELECT payload FROM missions WHERE id = ${m.missionId}
     `);
     const seconds = Number((rows[0]!['payload'] as Record<string, unknown>)['travelSeconds']);
-    expect(seconds).toBe(travelSeconds({
-      distance: 1, speed: 6000, cartography: 0, speedMultiplier: 1, spy: true,
-    }));
-    expect(seconds).toBeLessThan(300);   // 120 sn taban + küçücük yol terimi
+    const beklenen = travelSeconds({ distance: 1, speed: 6000, cartography: 0, speedMultiplier: 1 });
+    expect(seconds).toBe(beklenen);
+
+    // ⭐ Aynı rotada hızı 100 olan bir ordu tam 60 katı sürer.
+    const ordu = travelSeconds({ distance: 1, speed: 100, cartography: 0, speedMultiplier: 1 });
+    expect(ordu / seconds).toBeCloseTo(60, 0);
   });
 
   it('yalnız Casus Kuş gönderilir', async () => {

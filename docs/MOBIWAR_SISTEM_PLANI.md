@@ -1157,27 +1157,59 @@ D = Δşehir + U·Δdiyar + W·Δkıta          U = 20, W = 4000
 
 ### 13.5.2 Süre
 ```
-T = TABAN(görev) + K · D^p · (100 / v) / (1 + 0,05 · Haritacılık)
-K = 600, p = 0,46, TABAN_ordu = 10 dk, TABAN_casus = 2 dk, TAVAN = 18 sa
+T = (TABAN + geçiş + K · D^p / (1 + 0,05 · Haritacılık)) · (100 / v)
+K = 1200, p = 0,42, TABAN = 20 dk, geçiş = 0 (diyar/kıta), TAVAN = 24 sa
 v = ordudaki EN YAVAŞ birimin hızı (kahraman orduyu hızlandırmaz)
 ```
 - **Haritacılık = hız çarpanı** `(1 + 0,05·L)` — dokümanın "hızını %5 arttırır" ifadesinin birebir
   karşılığı. Süre cinsinden azalan getiri: L=10 → −%33, L=20 → −%50. Üst sınır yok (maliyet 1,4^L
   doğal tavanı koyar). *(Alternatif `1/(1−0,05L)` modeli L=20'de sonsuza gittiği için elendi.)*
-- **`p` sıkıştırma:** mesafe 100× artınca süre ~8× artar; olmasa uzak seferler günlerce sürerdi.
-- **Dönüş aynı süre.** Görev tipi süreyi değiştirmez (saldırı = destek = nakliye).
+- **`p` sıkıştırma:** mesafe 100× artınca süre ~7× artar; olmasa uzak seferler günlerce sürerdi.
+- **Dönüş aynı süre.** Görev tipi süreyi değiştirmez (saldırı = destek = nakliye = casus).
+
+> ### ⭐⭐ 2026-08-03 — İKİ DEĞİŞİKLİK (kullanıcı kararı)
+>
+> **1) Süreler iki katına çıktı.** Komşu şehre sefer 20 dakikaydı; kullanıcı bunu erken oyunda
+> *"hızlı yağma → hızlı gelişme"* sarmalı olarak gördü ve 35-45 dk istedi. Seçilen **40 dk**.
+> `TABAN` 600→1200 sn, `K` 600→1200; `p` 0,46→0,42 ve `TAVAN` 18→24 sa oldu ki K iki katına
+> çıkınca kıtalar arası süreler tek bir tavana ezilmesin.
+> ⚠️ Komşu şehirde `D=1` ve `1^p = 1` → **mesafe terimi hiç iş yapmaz**; 40 dakikayı belirleyen
+> tek şey `TABAN + K`. `p` yalnız uzağı şekillendirir.
+> **Neden yarı yarıya?** Üç seçenek vardı ve *"dengeli"* olan seçildi: her şeyi tabana
+> yüklemek Haritacılık'ın komşu baskınındaki kazancını −%21'den −%11'e düşürüp tekniği erken
+> oyunda değersizleştiriyordu; her şeyi K'ya yüklemek uzak mesafeleri tavana yapıştırıyordu.
+>
+> **2) HER ŞEY HIZLA ORANTILI — casus kuşun ayrı tabanı KALKTI.** Eskiden taban hızdan
+> bağımsızdı ve kuşun kendi tabanı vardı (120 sn). Sonuç: 60 kat hızlı olan kuş komşu şehre
+> 2 dk 10 sn'de, ordu 20 dk'da gidiyordu — **60 kat fark 9 kata iniyordu**, yani katalogdaki
+> hız sütunu yok sayılıyordu. Artık `(100/v)` çarpanı tabanı ve geçiş ek süresini de böler;
+> kuşun süresi ordununkinin **tam 1/60'ı**. `travelSeconds`te görev tipine bakan tek bir dal
+> bile yok.
+> ⚠️ Haritacılık yine **yalnız yol terimini** kısaltır (§13.5.3'ün çıpası korundu). Her şeyi
+> bölseydi Haritacılık 15'te komşu baskını 23 dakikaya inerdi.
+>
+> **3) Sabitler artık PANELDE.** `map` ayar grubu (9 anahtar) — `travel.ts`teki değerler
+> yalnızca varsayılan. `MissionService` ve `CityService` ayarı **dünya başına** çözüyor
+> (`(w) => s.map(w)`), Dünya ekranındaki süre önizlemesi de aynı sabitleri sunucudan alıyor
+> (`/cities/:id` → `map`) — yoksa panelde bir sayı değişir değişmez önizleme gerçek varış
+> anından sapardı. §13.5.6'nın *"tüm sabitler tunable"* vaadi ancak bugün karşılandı.
+>
+> **Yeni ayar: diyar/kıta geçiş ek süresi.** Kullanıcının sorduğu *"geçişlerde eklenen sabit
+> bir süre"* bugüne kadar yoktu; `districtCrossSeconds` / `continentCrossSeconds` eklendi,
+> ikisi de **varsayılan 0** (cetvel değişmiyor). Taban gibi davranırlar: Haritacılık kısaltmaz,
+> hıza bölünür.
 
 ### 13.5.3 ⭐ Taban süre: baskın–savunma dengesinin ayar vidası
-**TABAN, Haritacılık'tan ETKİLENMEZ ve mesafeden bağımsızdır.** ("Orduyu toplayıp yola çıkarmak.")
+**TABAN, Haritacılık'tan ETKİLENMEZ ve mesafeden bağımsızdır** ("orduyu toplayıp yola çıkarmak") — ama **HIZA bölünür** (2026-08-03).
 Bu tek karar, kullanıcının sorduğu senaryoyu çözer:
 
 | Cüce ile komşu şehir | Haritacılık 0 | Haritacılık 15 | kazanç |
 |---|---|---|---|
-| süre | **20 dk** | **15 dk 43 sn** | −%21 |
+| süre | **40 dk** | **31 dk 26 sn** | −%21 |
 
 | Cüce ile 200 diyar / 1 kıta | Haritacılık 0 | Haritacılık 15 | kazanç |
 |---|---|---|---|
-| süre | **7 sa 43 dk** | **4 sa 29 dk** | −%42 |
+| süre | **11 sa 11 dk** | **6 sa 32 dk** | −%42 |
 
 → **Haritacılık bir sefer tekniğidir, baskın tekniği değil.** Yatırım yapan oyuncu uzak mesafede iki kat
 kazanır, komşusunu gafil avlamada neredeyse hiçbir avantaj elde etmez. Taban süre olmasaydı, yüksek
@@ -1185,7 +1217,7 @@ haritacılıklı oyuncunun komşuya saldırısı 5 dakikaya düşerdi ve savunma
 
 **Sürpriz ölmez, ama kör talih olmaktan çıkar.** Kullanıcının senaryosu (gece yarısı yan parsele şehir
 kurup hemen saldırma) hâlâ mümkün ve meşrudur — oyunun ruhu budur. Onu adil kılan üç ek kural:
-1. **Taban süre 20 dk** (bu bölümün konusu): Haritacılık'tan etkilenmeyen bu taban, savunmacıya
+1. **Taban süre 20 dk + yol terimi 20 dk = 40 dk** (bu bölümün konusu): Haritacılık'tan etkilenmeyen bu taban, savunmacıya
    her hâlükârda bir pencere verir. ⭐ 2026-07-31'de içerik gizliliği kalkınca dengenin ana
    vidası buraya taşındı — eskiden "birleşim gizli" de bir denge ayağıydı.
 2. **Gelen ordu görünür** (orijinalde de vardı: `g.java` "Gelen Ordu") → varış saati, kaynak şehir
@@ -1202,19 +1234,25 @@ kurup hemen saldırma) hâlâ mümkün ve meşrudur — oyunun ruhu budur. Onu a
 - Mevcut kurallar korunur: bir şehre 24 saatte en fazla 3 saldırı; tatil modu koşulları.
 
 ### 13.5.5 Örnek cetvel (Haritacılık 0)
-| Rota | D | Cüce (100) | Süvari (140) | Kaos (80) | Casus Kuş |
+| Rota | D | Cüce (100) | Süvari (140) | Kaos (80) | Casus Kuş (6000) |
 |---|---|---|---|---|---|
-| aynı diyar, komşu şehir | 1 | 20 dk | 17 dk | 22 dk | 2 dk 10 sn |
-| aynı diyar, en uzak | 9 | 37 dk | 30 dk | 44 dk | 2 dk 27 sn |
-| komşu diyar | 20 | 50 dk | 38 dk | 60 dk | 2 dk 40 sn |
-| 10 diyar | 200 | 2 sa 04 dk | 1 sa 31 dk | 2 sa 33 dk | 3 dk 54 sn |
-| 50 diyar | 1.000 | 4 sa 09 dk | 3 sa 01 dk | 5 sa 09 dk | 6 dk |
-| komşu kıta / 200 diyar | 4.000 | 7 sa 43 dk | 5 sa 34 dk | 9 sa 37 dk | 9 dk 34 sn |
-| 3 kıta ötesi | 13.400 | 13 sa 21 dk | 9 sa 35 dk | 16 sa 39 dk | 15 dk |
-| zıt köşe | 45.989 | 18 sa (tavan) | 16 sa 47 dk | 18 sa (tavan) | 25 dk |
+| aynı diyar, komşu şehir | 1 | **40 dk** | 28 dk 35 sn | 50 dk | 40 sn |
+| aynı diyar, en uzak | 9 | 1 sa 10 dk | 50 dk 14 sn | 1 sa 28 dk | 1 dk 11 sn |
+| komşu diyar | 20 | 1 sa 30 dk | 1 sa 04 dk | 1 sa 53 dk | 1 dk 31 sn |
+| 10 diyar | 200 | 3 sa 25 dk | 2 sa 26 dk | 4 sa 16 dk | 3 dk 26 sn |
+| 50 diyar | 1.000 | 6 sa 23 dk | 4 sa 34 dk | 7 sa 59 dk | 6 dk 24 sn |
+| komşu kıta / 200 diyar | 4.000 | 11 sa 11 dk | 7 sa 59 dk | 13 sa 59 dk | 11 dk 12 sn |
+| 3 kıta ötesi | 13.400 | 18 sa 22 dk | 13 sa 07 dk | 22 sa 58 dk | 18 dk 23 sn |
+| zıt köşe | 45.989 | 24 sa (tavan) | 21 sa 52 dk | 24 sa (tavan) | 30 dk 37 sn |
 
-Casus kuş her yerde dakikalar mertebesinde ama asla anlık değil → keşif ucuz, sürekli, ama spam
-edilebilir değil. Kaos en yavaş birim olduğu için Kaos'lu ordu daima geç varır (stratejik bedel).
+⭐ **Her sütun bir öncekinin hız oranı kadar**: Kuş sütunu Cüce'nin tam **1/60'ı**, Süvari
+Cüce'nin 100/140'ı. Görev tipine özel hiçbir sabit yok (2026-08-03).
+
+Kuş her yerde dakikalar mertebesinde → keşif ucuz ve sürekli. Kaos en yavaş birim olduğu için
+Kaos'lu ordu daima geç varır (stratejik bedel).
+
+⚠️ Tavana yalnız zıt köşe çarpıyor; 1/2/3 kıta ötesi hâlâ ayırt edilebiliyor. `capHours` 18'de
+kalsaydı 3 kıta ötesi de tavana yapışır ve haritanın uzak yarısı tek bir süreye ezilirdi.
 
 ### 13.5.6 Uygulama notları
 - `worlds.speed_multiplier` süreyi böler (hızlı dünya seçeneği). Tüm sabitler `world_config`'te tunable.
@@ -3015,6 +3053,51 @@ yeni kırıldı" istihbaratı.
 Şema `0037_merit_rank.sql` (`players.merit_tier/score/battle_id/granted_at/expires_at`),
 mantık `apps/api/src/merit/merit.service.ts`, savaşa bağlanma noktası `battle.handlers.ts` ·
 `grantMerits` (kayıp tablosu zaten orada hesaplanıyor, ikinci kez çıkarılmıyor).
+
+---
+
+### 13.11.12 ⭐ TUZAK SALVOSU — binary'den çözüldü (2026-08-03)
+
+Tuzak Tur 1'de, karşılıklı vuruşma başlamadan **tek seferlik** patlar; tetiklenen tuzak tükenir
+ve **onarılmaz** (savunma tabanı da onu korumaz). Kural:
+
+```
+ESIK        = tuzakAdedi × rastgele(%75 … %99)
+BASKI       = Σ saldıranın YER birimleri: (yakınSavunma + dayanıklılık) × adet
+tetiklenen  = min( BASKI × basınçÇarpanı / tuzağınVuruşGücü , ESIK )
+kalan       = tuzakAdedi − tetiklenen
+```
+
+⚠️ **Belirleyici olan düşman birim SAYISI değil AĞIRLIĞI.** Tek bir Kaos bütün tarlayı
+tetikler, tek bir Cüce yarım tuzağa yeter. Motor doğduğundan beri doygunluğu **adetle**
+ölçüyordu (`yerBirimiAdedi × 0,2`) ve bu, tek birimlik orduda `Math.round`'a takılıp **hiç tuzak
+patlatmıyordu** — kullanıcı 123 tuzağın 123 kaldığını gördü.
+
+**Binary kaynağı:** `FUN_0040e794` (Tur 1) · `0040ea15`-`0040ebdb`.
+`FUN_004121d4(kayıt, idx)` statı `kayıt+0x10`den okuyup `[kayıt+0x8]` (adet) ile çarpıyor;
+getter ofsetleri altı double veriyor → `1=hp · 2=magicHp · 3=pAtk · 4=pDef · 5=mAtk · 6=mDef`.
+Salvo `idx4 + idx6` topluyor, tuzağın `idx1`ine bölüyor, `%75-99` tavanıyla kırpıyor.
+
+⚠️ **Hasara MİTİGASYON uygulanır** — tuzak yakın dövüş (tip 2) vuruşudur, hedefin *yakın
+savunması* düşülür. Eskiden *"ayak altında patlayan tuzağa karşı zırh işlemez"* diye
+atlanıyordu; bu [REKON] varsayım iki ölçümle birden çürüdü:
+
+| Ölçüm | Mitigasyonsuz | Mitigasyonlu | Orijinal |
+|---|---|---|---|
+| 1 Kaos ↔ 123 Tuzak | Kaos **ölüyor** | Kaos sağ, 92-121 tuzak patlar | saldıran **0 kayıp**, 121 patladı |
+| 1200 Elf ↔ 1000 Tuzak | — | **1 turda 1200 elf ölür**, 160-250 tuzak kalır | *"1 TURDA 1200 elf öldürür, kendi 30-250 kalır"* |
+
+⚠️ **Tur 1 KOŞULSUZ çalışır**, yenik kontrolü ondan sonra gelir (binary: `FUN_0040dcb4` önce
+`FUN_0040e794`'ü çağırıp `FUN_00410390`'ı sonra soruyor). Eskiden kontrol döngünün başındaydı
+ve savunmasında **yalnız tuzak** olan şehir "savaşacak birimi yok" sayılıp tuzaklarını hiç
+patlatamıyordu.
+
+⚠️ Uçanlar (`FLYING`) ve yere basmayanlar (`NO_ROUND_LOSS`) hem BASKI'ya hem hasara girmez.
+Binary'nin toplamında bu süzgeç **görünmüyor**, ama oyunun kendi dokümanı tuzağın *"yer
+ünitelerine"* zarar verdiğini söylüyor — doküman lehine korundu.
+
+Panel: `combat.trapPressureScale` (eski `combat.trapPerGroundUnit`), `combat.trapTriggerMin/Max`,
+`combat.trapGnomeDisarm`, `combat.trapPower`.
 
 ---
 

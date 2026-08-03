@@ -13,11 +13,16 @@
  */
 import { sql } from 'drizzle-orm';
 import { HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID } from '@mobilwar/catalog';
-import { armySpeed, distance, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG } from '@mobilwar/engine';
+import {
+  armySpeed, distance, route, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG,
+} from '@mobilwar/engine';
 import { isVerified, UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import type { Tx } from './handler-registry.ts';
+
+/** `route()` çıktısı — mesafe + geçiş bayrakları birlikte taşınır. */
+type RouteLeg = ReturnType<typeof route>;
 
 /** Hedefi olan sefer tipleri — hedef kuralları (koruma/tatil/ceza) bunlara uygulanır. */
 export type MissionKind = 'attack' | 'transport' | 'support' | 'spy' | 'found_city';
@@ -136,8 +141,21 @@ export class MissionService {
     private readonly db: Db,
     private readonly cities: CityService,
     private readonly rules: AttackRules = DEFAULT_ATTACK_RULES,
-    private readonly map: MapConfig = DEFAULT_MAP_CONFIG,
+    /**
+     * ⭐ Harita/sefer ayarları **dünya başına** çözülür (`CaveService`/`QueueService` deseni).
+     * Verilmezse motor varsayılanı — testler bu yüzden onu geçmeden çalışmaya devam ediyor.
+     *
+     * ⚠️ Sabit bir `MapConfig` almıyoruz: panelden yapılan değişiklik süreç yeniden başlayana
+     * kadar görünmez kalırdı. Sürüm 2026-08-03'e kadar bu parametre vardı ve üretimde HİÇ
+     * doldurulmuyordu — kanca duruyor ama kabloya bağlı değildi.
+     */
+    private readonly mapFor?: (worldId: number) => MapConfig,
   ) {}
+
+  /** Bu dünyanın harita ayarı; çözücü yoksa motor varsayılanı. */
+  private map(worldId: number): MapConfig {
+    return this.mapFor?.(worldId) ?? DEFAULT_MAP_CONFIG;
+  }
 
   async sendAttack(opts: {
     originCityId: number;
@@ -199,8 +217,10 @@ export class MissionService {
       const cartography = await this.cartographyLevel(t, opts.playerId);
       const speedMultiplier = await this.speedMultiplier(t, opts.worldId);
 
-      const D = distance(origin, target, this.map);
-      const seconds = travelSeconds({ distance: D, speed, cartography, speedMultiplier }, this.map);
+      const map = this.map(opts.worldId);
+      const leg = route(origin, target, map);
+      const D = leg.distance;
+      const seconds = travelSeconds({ ...leg, speed, cartography, speedMultiplier }, map);
       const executeAt = new Date(opts.at.getTime() + seconds * 1000);
 
       const rows = await t.execute<Record<string, unknown>>(sql`
@@ -212,7 +232,7 @@ export class MissionService {
                 ${executeAt.toISOString()}::timestamptz,
                 ${JSON.stringify({
                   distance: D, speed, travelSeconds: seconds, cartography,
-                  ...this.heroTravel(heroIds, D, cartography, speedMultiplier),
+                  ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
                   departedAt: opts.at.toISOString(),
                 })}::jsonb,
                 ${opts.idempotencyKey ?? null})
@@ -730,12 +750,16 @@ export class MissionService {
 
       const cartography = await this.cartographyLevel(t, o.playerId);
       const speedMultiplier = await this.speedMultiplier(t, o.worldId);
-      const D = distance(origin, o.target, this.map);
-      // ⭐ Casus seferi KUŞ tabanını kullanır (baseSpySeconds) — 2026-07-30'a kadar bayrak
-      //    geçirilmiyordu ve casuslar ordu tabanıyla (600 sn) uçuyordu (kullanıcı onayıyla düzeltildi).
-      const seconds = travelSeconds(
-        { distance: D, speed, cartography, speedMultiplier, spy: o.type === 'spy' }, this.map,
-      );
+      const map = this.map(o.worldId);
+      const leg = route(origin, o.target, map);
+      const D = leg.distance;
+      /**
+       * ⚠️ Görev tipine göre AYRI bir taban YOK (2026-08-03). Casus seferi de bu satırdan geçer
+       * ve farkını yalnız Casus Kuş'un hızından (6000) alır — süre baştan sona hıza orantılı.
+       * Eskiden `spy: true` ile ayrı bir taban (120 sn) veriliyordu ve o, katalogdaki hız
+       * sütununu anlamsızlaştırıyordu (kullanıcı kararıyla kaldırıldı).
+       */
+      const seconds = travelSeconds({ ...leg, speed, cartography, speedMultiplier }, map);
       const executeAt = new Date(o.at.getTime() + seconds * 1000);
 
       const rows = await t.execute<Record<string, unknown>>(sql`
@@ -748,7 +772,7 @@ export class MissionService {
                 ${JSON.stringify({
                   ...(o.payloadExtra ?? {}),
                   distance: D, speed, travelSeconds: seconds, cartography,
-                  ...this.heroTravel(heroIds, D, cartography, speedMultiplier),
+                  ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
                   departedAt: o.at.toISOString(),
                 })}::jsonb,
                 ${o.idempotencyKey ?? null})
@@ -1144,12 +1168,12 @@ export class MissionService {
    * Yolda olan ESKİ görevlerde alan yok; handler'lar `?? travelSeconds`e düşüyor.
    */
   private heroTravel(
-    heroIds: number[], distanceValue: number, cartography: number, speedMultiplier: number,
+    heroIds: number[], leg: RouteLeg, cartography: number, speedMultiplier: number, map: MapConfig,
   ): Record<string, number> {
     if (heroIds.length === 0) return {};
     return {
       heroTravelSeconds: travelSeconds(
-        { distance: distanceValue, speed: HERO_SPEED, cartography, speedMultiplier }, this.map,
+        { ...leg, speed: HERO_SPEED, cartography, speedMultiplier }, map,
       ),
     };
   }

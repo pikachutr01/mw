@@ -86,6 +86,18 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'Mareşal ≈ dolu bir Sur 24 şehrini süpürmek. Düşürmek rozetleri sıradanlaştırır.',
   },
   {
+    id: 'map',
+    label: 'Harita ve sefer süreleri',
+    description: '⭐ Ordunun A noktasından B noktasına kaç dakikada gittiği. Formül: '
+      + '`(taban + geçiş + K × mesafe^p / (1 + %5×Haritacılık)) × (100 / birim hızı)`, sonuç '
+      + 'tavanla sınırlı ve dünya hız çarpanına bölünür. '
+      + '⚠️ **Komşu şehirde mesafe terimi hiç iş yapmaz** (mesafe 1, 1^p = 1) — o süreyi '
+      + 'belirleyen yalnız «taban» ile «K»dır; `p` yalnız uzak mesafeleri şekillendirir. '
+      + '⚠️ Buradaki bir değişiklik **süren seferleri etkilemez**: varış anı kalkışta '
+      + 'hesaplanıp yazılıyor. ⚠️ Süre baştan sona birim hızına orantılıdır; görev tipine '
+      + 'özel hiçbir sabit yoktur (casus kuş farkını yalnız 6000 hızından alır).',
+  },
+  {
     id: 'economy',
     label: 'Ekonomi ve süre',
     description: '⭐ Oyunun temposunu belirleyen eğriler: üretim, maliyet büyümesi ve süre '
@@ -440,10 +452,16 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     description: 'En fazla ne kadarı patlar. Aradaki fark rastgele belirlenir.',
   },
   {
-    key: 'combat.trapPerGroundUnit',
-    label: 'Tuzak doygunluğu',
-    type: 'number', default: 0.2, min: 0.01, max: 5, tag: 'design',
-    description: 'Bir tuzağın kaç yaya düşman birimini durdurabildiği. Büyütmek tuzağı güçlendirir.',
+    key: 'combat.trapPressureScale',
+    label: 'Tuzak basıncı çarpanı',
+    type: 'number', default: 1.0, min: 0.01, max: 20, tag: 'measured',
+    description: 'Üstünden geçen ordunun tuzak tarlasına ne kadar bastığı. Patlayan tuzak sayısı = '
+      + 'yaya birimlerin (yakın savunma + dayanıklılık) toplamı × bu çarpan / tuzağın vuruş gücü — '
+      + 'yukarıdaki %75-99 tavanıyla sınırlı. Büyütmek tuzakları daha çabuk tüketir.',
+    note: 'Binary\'den okundu (FUN_0040e794 Tur 1): çarpan 1. ⚠️ Belirleyici olan düşman birim '
+      + 'SAYISI değil AĞIRLIĞI — tek bir Kaos bütün tarlayı tetikler, tek bir Cüce bir tuzağa bile '
+      + 'yetmez. Eski «doygunluk» ayarı adetle çarpıyordu ve tek birimlik ordu hiç tuzak '
+      + 'patlatamıyordu (2026-08-03 düzeltmesi).',
   },
   {
     key: 'combat.trapGnomeDisarm',
@@ -997,6 +1015,78 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'int', default: 30, min: 5, max: 3600, tag: 'design', unit: 'sn',
     description: 'Bir sunucu döngüsünün nabzı kaç saniye güncellenmezse «ölü» sayılır. Nabız 5 saniyede '
       + 'bir yazıldığı için 30 sn altı yanlış alarm üretir.',
+  },
+
+  /* ── Harita ve sefer süreleri ────────────────────────────────────────────────
+   *
+   * ⚠️ Sayılar 2026-08-03'te iki katına çıktı: komşu şehre sefer 20 dk'ydı ve kullanıcı bunu
+   * erken oyunda "hızlı yağma → hızlı gelişme" sarmalı olarak gördü. Hedef 35-45 dk, seçilen 40.
+   * ⚠️ Varsayılanlar `@mobilwar/engine` · `travel.ts` · `DEFAULT_MAP_CONFIG`ten KOPYA;
+   * `settings.test.ts` ikisinin eşitliğini kilitliyor.
+   */
+  {
+    key: 'map.baseSeconds',
+    label: 'Taban süre',
+    type: 'int', default: 1200, min: 0, max: 86400, tag: 'design', unit: 'sn',
+    description: 'Mesafeden ve Haritacılık\'tan BAĞIMSIZ süre — "orduyu toplayıp yola çıkarmak". '
+      + 'Hız 100 için yazılır; hızlı birimler oransal olarak daha az bekler. ⚠️ Baskın–savunma '
+      + 'dengesinin ana vidası: sıfırlarsan yüksek Haritacılıklı oyuncu komşuya dakikalar içinde iner.',
+  },
+  {
+    key: 'map.k',
+    label: 'Yol katsayısı (K)',
+    type: 'int', default: 1200, min: 0, max: 86400, tag: 'design', unit: 'sn',
+    description: 'Mesafe teriminin ağırlığı. ⚠️ Komşu şehirde `mesafe^p = 1` olduğu için bu sayı '
+      + 'oraya olduğu gibi eklenir; uzakta `mesafe^p` ile çarpılır. Haritacılık YALNIZ bu terimi '
+      + 'kısaltır — büyütmek tekniği değerlendirir, küçültmek değersizleştirir.',
+  },
+  {
+    key: 'map.p',
+    label: 'Mesafe üssü (p)',
+    type: 'number', default: 0.42, min: 0.05, max: 1, tag: 'design',
+    description: 'Mesafe büyüdükçe sürenin ne kadar yavaş arttığı. 1 = doğrusal (uzak seferler '
+      + 'imkânsızlaşır), küçük değerler haritayı düzleştirir. ⚠️ Komşu şehri HİÇ etkilemez.',
+  },
+  {
+    key: 'map.districtWeight',
+    label: 'Diyar ağırlığı',
+    type: 'int', default: 20, min: 1, max: 10000, tag: 'design', unit: 'şehir',
+    description: 'Bir diyar farkının kaç «şehir» mesafesi saydığı.',
+  },
+  {
+    key: 'map.continentWeight',
+    label: 'Kıta ağırlığı',
+    type: 'int', default: 4000, min: 1, max: 1000000, tag: 'design', unit: 'şehir',
+    description: 'Bir kıta farkının kaç «şehir» mesafesi saydığı (varsayılan: 200 diyar).',
+  },
+  {
+    key: 'map.districtCrossSeconds',
+    label: 'Diyar geçiş ek süresi',
+    type: 'int', default: 0, min: 0, max: 86400, tag: 'design', unit: 'sn',
+    description: 'Diyar değiştiren sefere eklenen sabit süre. Taban gibi davranır: Haritacılık '
+      + 'kısaltmaz, hıza bölünür. Varsayılan 0 — bugün geçişin ek bir bedeli yok.',
+  },
+  {
+    key: 'map.continentCrossSeconds',
+    label: 'Kıta geçiş ek süresi',
+    type: 'int', default: 0, min: 0, max: 604800, tag: 'design', unit: 'sn',
+    description: 'Kıta değiştiren sefere eklenen sabit süre. Denizaşırı seferi caydırmak için '
+      + 'kıta ağırlığını büyütmeye göre daha keskin bir araç. Varsayılan 0.',
+  },
+  {
+    key: 'map.cartographyStep',
+    label: 'Haritacılık seviye kazancı',
+    type: 'number', default: 0.05, min: 0, max: 1, tag: 'measured',
+    description: 'Her Haritacılık seviyesinin yol terimini ne kadar kısalttığı. 0,05 = seviye '
+      + 'başına %5 hız.',
+    note: 'Oyunun kendi dokümanı: «Haritacılık: Tüm ünitelerin hızını %5 arttırır.»',
+  },
+  {
+    key: 'map.capHours',
+    label: 'Sefer süresi tavanı',
+    type: 'number', default: 24, min: 1, max: 168, tag: 'design', unit: 'sa',
+    description: 'Hiçbir sefer bundan uzun sürmez. ⚠️ Düşürmek haritanın uzak yarısını tek bir '
+      + 'süreye eziyor: 1 kıta ötesi ile 5 kıta ötesi ayırt edilemez hâle gelir.',
   },
 
   /* ── Askerî ünvanlar ─────────────────────────────────────────────────────────

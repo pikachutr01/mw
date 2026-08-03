@@ -12,7 +12,7 @@ export {
 } from './config.ts';
 export { createRng, hashSeed, type Rng } from './rng.ts';
 export {
-  distance, armySpeed, travelSeconds, DEFAULT_MAP_CONFIG,
+  distance, route, armySpeed, travelSeconds, DEFAULT_MAP_CONFIG, mergeMapConfig,
   type Coordinates, type MapConfig, type TravelInput,
 } from './travel.ts';
 export {

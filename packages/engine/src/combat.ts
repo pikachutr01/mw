@@ -497,6 +497,39 @@ function turn1GnomeSkirmish(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): 
 /**
  * §Z TUZAK SALVOSU — tek kullanımlık, Tur 1'de yalnız YER birimlerine, mitigasyonsuz.
  * Tetiklenen tuzak tükenir ve ONARILMAZ → kalan tuzak savaştan savaşa çok dalgalı.
+ *
+ * ⭐⭐ **KAÇ TUZAK PATLAR: ordunun ADEDİ değil AĞIRLIĞI belirler** (2026-08-03'te düzeltildi).
+ *
+ * ⚠️ Eski hâl doygunluğu `yerBirimiADEDİ × 0,2 / armed` ile ölçüyordu. `armed` sadeleşince
+ * geriye `fired = adet × 0,2 × U(0,75…0,99)` kalıyor, yani **yer birimi başına en fazla 0,198
+ * tuzak**. Tek birimlik bir ordu (1 Kaos) için `fired ≈ 0,2` → aşağıdaki `Math.round` bunu
+ * yutuyor → **123 tuzak 123 kalıyor.** Kullanıcı bunu orijinal simülatörle yakaladı: orada
+ * aynı savaşta **121 tuzak patlıyor, 2 kalıyor**.
+ *
+ * ⭐ Binary'deki gerçek kural (Ghidra, `FUN_0040e794` Tur 1 · `0040ea15`-`0040ebdb`):
+ * ```
+ *   ESIK       = tuzakAdedi × (rand%25 + 75)/100          ; 0040ea39-ea56 → %75-99
+ *   BASKI      = Σ saldıranın birimleri: (stat4 + stat6) × adet
+ *   tetiklenen = min( BASKI / tuzak.stat1 , ESIK )        ; 0040eb44 CMP/JLE
+ * ```
+ * `FUN_004121d4(kayıt, idx)` statı `kayıt+0x10`den okuyup **`[kayıt+0x8]` (adet) ile çarpıyor**;
+ * getter ofsetleri (`00412afc/b1c/b3c/b5c/b7c/b9c`) altı double veriyor:
+ * `1=hp · 2=magicHp · 3=pAtk · 4=pDef · 5=mAtk · 6=mDef`. Yani **BASKI = Σ(pDef + mDef) × adet**,
+ * bölen **tuzağın hp'si** (katalogda 340 — burada `poolHp`).
+ *
+ * Sezgisi de doğru: tuzak tarlasına basan şey birimlerin SAYISI değil, üstünden geçen ordunun
+ * kütlesi. Tek bir Kaos (mDef 1.200.000) bütün tarlayı tetikler, tek bir Cüce (mDef 182) bir
+ * tuzağa bile yetmez.
+ *
+ * ⚠️ İki bağımsız ölçüm de bunu tutuyor:
+ *   • 1 Kaos ↔ 123 Tuzak → `min(1.240.000/340, 123×0,75…0,99)` = `min(3647, 92…121)` → **92…121**
+ *     patlar (ölçüm: 121 patladı, 2 kaldı)
+ *   • 1200 Elf ↔ 1000 Tuzak → ESİK baskın → kalan **10…250** (arşiv ölçümü: 30-250)
+ *
+ * ⚠️ **Uçanlar hâlâ dışarıda.** Binary'nin toplamında böyle bir süzgeç GÖRÜNMÜYOR (iki liste
+ * ham toplanıyor), ama oyunun kendi dokümanı tuzağın *"yer ünitelerine"* zarar verdiğini
+ * söylüyor (`teknik_ve_yapi_dokumantasyonu.md`). Doküman lehine korundu; ölçümle çürütülürse
+ * `ground` filtresinden `FLYING`i çıkarmak tek satır.
  */
 function trapVolley(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): void {
   const tr = def.units.find((e) => e.id === 'trap');
@@ -509,23 +542,44 @@ function trapVolley(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): void {
   const armed = tr.count - disarmed;
 
   const ground = atk.units.filter((e) => e.count > 0 && !FLYING.has(e.id) && !NO_ROUND_LOSS.has(e.id));
-  const groundCount = ground.reduce((n, e) => n + e.count, 0);
-  if (armed <= 0 || groundCount <= 0) {
+  if (armed <= 0 || ground.length === 0) {
     tr.count = Math.max(0, tr.count - disarmed);
     tr.spent = true;
     return;
   }
 
-  const saturation = Math.min(1, (groundCount * cfg.trap.perGroundUnit) / armed);
-  const rate = saturation * rng.range(cfg.trap.triggerMin, cfg.trap.triggerMax);
-  const fired = armed * rate;
+  /**
+   * ⚠️ `poolHp` sıfır olamaz (Tuzak hp 340) ama dünya ayarıyla katalog fiyatları/statları
+   * oynanabildiği için bölme korumasız bırakılmıyor: 0 olursa salvo hiç olmasın, `Infinity`
+   * tuzağın tamamını tavana dayamasın.
+   */
+  const resistance = Math.max(1e-9, tr.stats.poolHp);
+  const pressure = ground.reduce((s, e) => s + (e.stats.pDef + e.stats.mDef) * e.count, 0);
+  const cap = armed * rng.range(cfg.trap.triggerMin, cfg.trap.triggerMax);
+  const fired = Math.min((pressure * cfg.trap.pressureScale) / resistance, cap);
   if (fired > 0) {
     const pool = tr.stats.poolHp * fired * cfg.trap.power * jitter(rng);
     const P = ground.reduce((s, e) => s + e.stats.unitPower * e.count, 0);
     if (P > 0) {
       for (const e of ground) {
-        // Ayak altında patlayan tuzağa karşı zırh işlemez → mitigasyon UYGULANMAZ.
-        const net = (e.stats.unitPower * e.count * pool) / P;
+        /**
+         * ⭐ MİTİGASYON UYGULANIR — tuzak **yakın dövüş** (tip 2) vuruşudur, dolayısıyla
+         * hedefin *yakın savunması* (`pDef`) düşülür. `dealType`teki formülün aynısı.
+         *
+         * ⚠️ Burada eskiden *"ayak altında patlayan tuzağa karşı zırh işlemez"* diye mitigasyon
+         * ATLANIYORDU. Bu [REKON] bir varsayımdı ve İKİ ölçümle birden çürüdü:
+         *   • 1 Kaos ↔ 123 Tuzak: orijinalde saldıran **hiç kayıp vermiyor**. Mitigasyonsuz
+         *     hesapta Kaos ölüyordu (pay ~34.000, `mDef` 1.200.000 → 0,03 kayıp; sonraki
+         *     turlarda bu fark onu 0,5'in altına düşürüyor). Mitigasyonla: pay 34.000 −
+         *     40.000 = negatif → **sıfır kayıp** ✓
+         *   • 1200 Elf ↔ 1000 Tuzak: arşiv ölçümü *"1 TURDA 1200 elf öldürür"*. Elf'in yakın
+         *     savunması 4 → 306.000 − 4.800 = 301.200 → 1287 elf ölür (hepsi) ✓
+         * Binary de aynı yolu izliyor: tuzak salvosu standart hasar çekirdeğinden
+         * (`FUN_0040e0c4`) geçiyor ve o çekirdek `net = pay − mitigasyon × adet` yapıyor.
+         */
+        const share = (e.stats.unitPower * e.count * pool) / P;
+        const net = share - e.stats.pDef * e.count;
+        if (net <= 0) continue;
         atk.lossMag += applyLoss(e, net);
       }
     }
@@ -664,25 +718,35 @@ export function simulate(
     applyNight(def, input.nightVisionDefender ?? 0, cfg);
   }
 
-  let turns = 0;
-  for (let r = 1; r <= 5; r++) {
+  /**
+   * ⭐ TUR 1 **KOŞULSUZ** çalışır — yenik kontrolü ondan SONRA gelir.
+   *
+   * Binary de böyle: `FUN_0040dcb4` (savaş koordinatörü) önce `FUN_0040e794`'ü (Tur 1) çağırıyor,
+   * `FUN_00410390` yenik kontrolünü ancak ondan sonra yapıyor.
+   *
+   * ⚠️ Eskiden kontrol döngünün BAŞINDAYDI ve şu deliği açıyordu: savunmasında **yalnız tuzak**
+   * olan şehir "savaşacak birimi yok" sayılıp döngü hiç dönmüyor, dolayısıyla **tuzaklar hiç
+   * patlamıyordu**. Oysa tuzak surun dışında duruyor ve yaklaşan orduyu vuruyor
+   * (`teknik_ve_yapi_dokumantasyonu.md`); savunanın başka birimi olması şart değil.
+   */
+  let turns = 1;
+  for (const e of atk.units) e.snap = e.count;
+  for (const e of def.units) e.snap = e.count;
+  // §Z Tuzak salvosu: ordu şehre yaklaşırken, karşılıklı vuruşma başlamadan.
+  trapVolley(atk, def, rng, cfg);
+  if (cfg.turn1GnomeSkirmish) turn1GnomeSkirmish(atk, def, rng, cfg);
+
+  for (let r = 2; r <= 5; r++) {
     if (combatAlive(atk, cfg) <= 0 || combatAlive(def, cfg) <= 0) break;
     turns = r;
     // Tur başı fotoğrafı (yalnız HAVUZLAR için).
     for (const e of atk.units) e.snap = e.count;
     for (const e of def.units) e.snap = e.count;
 
-    if (r === 1) {
-      // §Z Tuzak salvosu: ordu şehre yaklaşırken, karşılıklı vuruşma başlamadan.
-      trapVolley(atk, def, rng, cfg);
-      if (cfg.turn1GnomeSkirmish) turn1GnomeSkirmish(atk, def, rng, cfg);
-      continue;
-    }
     const types = cfg.turnSchedule[r] ?? [];
     for (const t of types) dealType(atk, def, t, rng, cfg);                  // saldıran → savunan
     for (const t of types) dealType(def, atk, t, rng, cfg, cfg.counterK);    // savunan → saldıran
   }
-  if (turns === 0) turns = 1;
 
   // §4b KAYBEDEN tarafın savaş-dışı birimleri (yük/gnom) orantısal kayıp alır; casus uçarak kaçar.
   {

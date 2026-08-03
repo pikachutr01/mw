@@ -38,8 +38,14 @@ export interface CombatConfig {
   trap: {
     triggerMin: number;
     triggerMax: number;
-    /** 1 tuzağın tetiklenmesi için gereken yer-birimi payı (doygunluk). */
-    perGroundUnit: number;
+    /**
+     * ⭐ Tuzak basıncı çarpanı. Tetiklenen tuzak = `Σ(pDef+mDef)×adet × bu / tuzakHP`,
+     * `triggerMin/Max` tavanıyla sınırlı. 1 = binary'deki hâli.
+     *
+     * ⚠️ Eskiden `perGroundUnit` (0,2) idi ve yer birimlerinin **ADEDİYLE** çarpılıyordu;
+     * tek birimlik ordu hiç tuzak tetikleyemiyordu. Gerekçe `combat.ts` · `trapVolley`.
+     */
+    pressureScale: number;
     /** Saldırandaki her Gnom ortalama bu kadar tuzağı etkisiz bırakır (±%30 rastgele). */
     gnomeDisarm: number;
     /** Salvo şiddeti çarpanı. */
@@ -195,7 +201,7 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   engineVersion: ENGINE_VERSION,
   wall: { base: 1.8, durumMax: 100 },          // ⭐ binary: kalkanla ortak (FUN_00413610/41338c)
   magicShield: { base: 1.8, durumMax: 100 },   // ⭐ binary: FUN_00413610/41338c (1.8^Sv, durum 0..100)
-  trap: { triggerMin: 0.75, triggerMax: 0.99, perGroundUnit: 0.2, gnomeDisarm: 1.5, power: 1.0 },
+  trap: { triggerMin: 0.75, triggerMax: 0.99, pressureScale: 1.0, gnomeDisarm: 1.5, power: 1.0 },
   gnomeSabotage: { perStruct: 4, max: 0.35 },
   // ⚠️ 0,50-0,70 DEĞİL — bkz. yukarıdaki not (ölçüm 2026-07-31, 12 gözlem).
   repair: { min: 0.76, max: 0.81 },

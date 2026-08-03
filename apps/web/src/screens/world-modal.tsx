@@ -13,7 +13,7 @@
  * Kapalı seçenek **gizlenmez**, sebebiyle gösterilir — oyuncu neden yapamadığını görmeli.
  */
 import { useState } from 'react';
-import { armySpeed, distance, travelSeconds } from '@mobilwar/engine';
+import { armySpeed, route, travelSeconds } from '@mobilwar/engine';
 import { fmt, formatDuration } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useOpenChat } from '../lib/chat-context.tsx';
@@ -235,17 +235,25 @@ function MissionForm({
   }
   const hasUnits = Object.keys(units).length > 0;
 
-  // ⭐ Önizleme motorun AYNI `travel.ts`'ini kullanır; otorite yine sunucudur.
+  /**
+   * ⭐ Önizleme motorun AYNI `travel.ts`'ini kullanır; otorite yine sunucudur.
+   *
+   * ⚠️ Harita sabitleri **sunucudan** geliyor (`city.map`), `DEFAULT_MAP_CONFIG`ten değil:
+   * o sabitler artık panelden dünya başına ayarlanabiliyor ve varsayılanı kullansaydık
+   * panelde bir sayı değişir değişmez ekranda yazan süre gerçek varış anından sapardı.
+   */
   const origin = city.data?.coordinates;
-  const D = origin ? distance(origin, target) : 0;
+  const mapCfg = city.data?.map;
+  const leg = origin ? route(origin, target, mapCfg) : null;
+  const D = leg?.distance ?? 0;
   const speed = hasUnits ? armySpeed(units) : null;
   const cartography = city.data?.techs['cartography'] ?? 0;
-  // Dünya hız çarpanı ve casus tabanı sunucu hesabıyla AYNI olmalı — yoksa gösterilen
-  // süre hızlı dünyada çarpan katı kadar yanlış çıkar.
+  // Dünya hız çarpanı sunucu hesabıyla AYNI olmalı — yoksa gösterilen süre hızlı dünyada
+  // çarpan katı kadar yanlış çıkar.
   const speedMultiplier = city.data?.speed?.travel ?? 1;
   const eta = type === 'teleport' ? 0
-    : speed
-      ? travelSeconds({ distance: D, speed, cartography, speedMultiplier, spy: type === 'spy' })
+    : speed && leg
+      ? travelSeconds({ ...leg, speed, cartography, speedMultiplier }, mapCfg)
       : null;
 
   // Taşıma kapasitesi ordudan gelir → oyuncu ne kadar yükleyebileceğini ANINDA görür.

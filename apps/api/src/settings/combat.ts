@@ -13,7 +13,7 @@
  *
  * Bu davranış `apps/api/test/combat-settings.test.ts`te ölçülüyor.
  */
-import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
+import type { CombatConfig, DeepPartial, LootConfig, MapConfig } from '@mobilwar/engine';
 import type { MeritConfig, MeritTier } from '@mobilwar/catalog';
 
 type Values = Readonly<Record<string, Record<string, number | boolean> | undefined>>;
@@ -47,7 +47,7 @@ const COMBAT_MAP: Readonly<Record<string, Setter>> = {
   'combat.defenseFloorMin': nest('defenseFloor', 'minPerType'),
   'combat.trapTriggerMin': nest('trap', 'triggerMin'),
   'combat.trapTriggerMax': nest('trap', 'triggerMax'),
-  'combat.trapPerGroundUnit': nest('trap', 'perGroundUnit'),
+  'combat.trapPressureScale': nest('trap', 'pressureScale'),
   'combat.trapGnomeDisarm': nest('trap', 'gnomeDisarm'),
   'combat.trapPower': nest('trap', 'power'),
   'combat.gnomeSabotagePerStruct': nest('gnomeSabotage', 'perStruct'),
@@ -168,7 +168,37 @@ export function meritOverrides(
   return touched ? out : undefined;
 }
 
+/** ⭐ Harita/sefer eşlemesi — hedef nesne düz, `LOOT_MAP` ile aynı desen. */
+const MAP_MAP: Readonly<Record<string, keyof MapConfig>> = {
+  'map.baseSeconds': 'baseSeconds',
+  'map.k': 'k',
+  'map.p': 'p',
+  'map.districtWeight': 'districtWeight',
+  'map.continentWeight': 'continentWeight',
+  'map.districtCrossSeconds': 'districtCrossSeconds',
+  'map.continentCrossSeconds': 'continentCrossSeconds',
+  'map.cartographyStep': 'cartographyStep',
+  'map.capHours': 'capHours',
+};
+
+export function mapOverrides(
+  values: Values, overridden: readonly string[],
+): Partial<MapConfig> | undefined {
+  const out: Partial<MapConfig> = {};
+  let touched = false;
+  for (const key of overridden) {
+    const field = MAP_MAP[key];
+    if (!field) continue;
+    const v = pick(values, key);
+    if (typeof v !== 'number') continue;
+    (out as Record<string, number>)[field] = v;
+    touched = true;
+  }
+  return touched ? out : undefined;
+}
+
 /** Testin kullandığı liste: motora bağlı olması gereken tüm anahtarlar. */
 export const MAPPED_KEYS: readonly string[] = [
   ...Object.keys(COMBAT_MAP), ...Object.keys(LOOT_MAP), ...Object.keys(MERIT_MAP),
+  ...Object.keys(MAP_MAP),
 ];

@@ -142,6 +142,12 @@ export class CityController {
        */
       onVacation: snap.onVacation,
       speed: snap.speed,
+      /**
+       * ⭐ Harita/sefer sabitleri — Dünya ekranındaki süre önizlemesi bunları `travelSeconds`e
+       * verir. ⚠️ Panelden dünya başına ayarlanabildikleri için istemci `DEFAULT_MAP_CONFIG`e
+       * güvenemez: bir sayı değişir değişmez ekranda yazan süre gerçek varış anından sapardı.
+       */
+      map: snap.map,
       buildings: snap.buildings,
       units,
       defenses,

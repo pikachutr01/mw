@@ -1,9 +1,27 @@
 Sıralama tablosundaki mesaj / Dünyada Bul simgeleri büyüyecek
 
-Casusluk raporunda rakibin mağara seviyesi alınıyor mu araştırılacak.
-
-Sol Menüye herkese açıp Uygulamayı İndir butonu eklenecek. Buna tıklayınca PWA uygulaması kurulacak. Eğer cihaz ios ise ana ekrana ekleme yönergeleri detaylı anlatılacak.
-
 Online kontrolü sadece aktif oturum varsa yapılacak. Tek sayfa kontrolü de aynı şekilde.
 
-Tepedeki e posta doğrulama hatırlatıcı alertinde Doğrulama postası gönder yazısı alta alınsın, küçük ekranlı cihazlarda kötü görünüyor
+Dünyadaki ulaşım süreleri yeniden incelenecek.
+
+15dk da bir oturumun düşmesi sorununa çözüm üretelim.
+
+Yeni kayıt olan kullanıcının şehrinin yerleşimi konusunda inceleme yapılacak.
+
+Mobil görünümde şehir sayfasında şehir seçme kısmının hemen altındaki şehrin adını ve ganimet bilgilerini gösteren kartı kaldıralım. Bu bilgi zaten en üstteki navbar da yazıyor.
+
+Tek kaosta savunmdaki tuzaklar neden kayıp vermiyor araştırılacak.
+
+Ulaşım sürelerini askerlere göre haritacılık seviyesine göre ayrıntılı şekilde gösterecek harita.html şeklinde bir sayfa oluştur.
+
+Mimar okulu kendi yükseltme süresini kısaltmasın.
+
+Admin panelde tootltipler collapse kartların altında kalıyor, tooltip içi tam gözükmüyor.
+
+Admin panelde otuumun boşa düşme süresini uzatalım
+
+Teleport kullanıldıktan sonra yeniden kullanılması için gereken süreyi belirleyelim ve seviyesi arttıkça bu seviye kısalsın. Bu süre admin panelden değiştirilebilir olsun. Seviyeye göre kısalma oranını da admin panelden yönetebilelim.
+
+Dünya ekranında aktif şehri belli edecek bir işaret olsun.
+
+Görevi iptal edince geri dönüş tahminiğ süresini modalde yazmasın. Aynı şekilde bir yükseltmeyi iptal ederken de geri ödenecek fiyatı yazmasın. Ekranda görünen değerle iptal onayını verildiği anda farklılık olur. Sadece bilgilendirme olması yeterli. Savaşçı ve savunma ünitesi üretimi için de geçerli.

@@ -5,11 +5,18 @@
  * bu koddan da çıkar). Motor gibi bu modül de SAF: DB, zaman, IO bilmez.
  *
  *   D = Δşehir + U·Δdiyar + W·Δkıta                 U = 20, W = 4000  (Manhattan/toplamalı)
- *   T = TABAN + K · D^p · (100/v) / (1 + 0,05·Haritacılık)          tavan 18 saat
+ *   T = (TABAN + geçiş + K · D^p / (1 + 0,05·Haritacılık)) · (100/v)      tavan 24 saat
  *
- * ⚠️ **TABAN mesafeden ve Haritacılık'tan ETKİLENMEZ** (§13.5.3). Baskın–savunma dengesinin
- * ayar vidası budur: taban olmasaydı yüksek haritacılıklı oyuncunun komşuya saldırısı 5 dakikaya
- * inerdi ve savunma diye bir şey kalmazdı.
+ * ⭐⭐ **HER ŞEY HIZLA ORANTILI** (kullanıcı kararı, 2026-08-03). Taban da `100/v` ile bölünür ve
+ * casus kuşun **ayrı tabanı yoktur** — kuşun 6000 hızı farkı kendisi yaratır. Eski hâlde taban
+ * hızdan bağımsızdı (ordu 600 sn / casus 120 sn) ve sonuç şuydu: 60 kat hızlı olan kuş komşu
+ * şehre 2 dk 10 sn'de, ordu 20 dk'da gidiyordu — yani **hız birimi yok sayılıyordu**. Artık
+ * kuşun süresi ordununkinin tam 1/60'ı.
+ *
+ * ⚠️ **Haritacılık YALNIZ yol terimini kısaltır** (taban ve geçiş ek süresi hariç, §13.5.3).
+ * Baskın–savunma dengesinin ayar vidası budur: her şeyi bölseydi Haritacılık 15'te komşu
+ * baskını 23 dakikaya inerdi ve erken oyundaki "hızlı yağma → hızlı gelişme" sarmalı geri
+ * gelirdi (kullanıcı bu seçeneği bilerek almadı).
  *
  * İstemci aynı fonksiyonu YALNIZ önizleme için kullanır; otorite `execute_at` yazan sunucudur.
  */
@@ -31,28 +38,48 @@ export interface MapConfig {
   continentWeight: number;
   /** Yol terimi katsayısı. */
   k: number;
-  /** Mesafe sıkıştırma üssü: mesafe 100× artınca süre ~8× artar. */
+  /** Mesafe sıkıştırma üssü: mesafe 100× artınca süre ~7× artar. */
   p: number;
-  /** Ordu taban süresi (sn) — "orduyu toplayıp yola çıkarmak". */
-  baseArmySeconds: number;
-  /** Casus kuş taban süresi (sn). */
-  baseSpySeconds: number;
+  /**
+   * Taban süre (sn) — "orduyu toplayıp yola çıkarmak", hız 100 için.
+   * ⚠️ Tek taban: casus kuşun ayrı tabanı YOK, hızı farkı kendisi yaratıyor.
+   */
+  baseSeconds: number;
+  /** Diyar değiştiren sefere eklenen süre (sn, hız 100 için). Haritacılık kısaltmaz. */
+  districtCrossSeconds: number;
+  /** Kıta değiştiren sefere eklenen süre (sn, hız 100 için). Haritacılık kısaltmaz. */
+  continentCrossSeconds: number;
   /** Süre tavanı (sa) — zıt köşe bile bunu aşmaz. */
   capHours: number;
   /** Haritacılık seviye başına hız kazancı. */
   cartographyStep: number;
 }
 
+/**
+ * ⚠️ Sayılar 2026-08-03'te **iki katına** çıktı: komşu şehre sefer 20 dk'ydı ve kullanıcı bunu
+ * erken oyunda *"hızlı yağma → hızlı gelişme"* sarmalı olarak gördü. Hedef 35-45 dk, seçilen
+ * **40 dk**. Komşu şehirde `D=1` ve `1^p = 1` olduğu için mesafe terimi hiç iş yapmaz —
+ * 40 dakikayı belirleyen tek şey `baseSeconds + k`. `p` yalnız uzağı şekillendirir ve
+ * 0,46 → 0,42'ye indi ki K iki katına çıkınca kıtalar arası süreler tavana yapışmasın.
+ */
 export const DEFAULT_MAP_CONFIG: MapConfig = {
   districtWeight: 20,
   continentWeight: 4000,
-  k: 600,
-  p: 0.46,
-  baseArmySeconds: 600,
-  baseSpySeconds: 120,
-  capHours: 18,
+  k: 1200,
+  p: 0.42,
+  baseSeconds: 1200,
+  // ⚠️ Varsayılan 0 — bugün geçişin ek bir bedeli YOK. Kullanıcı bunu ileride açmak için
+  //    ayarlanabilir istedi; sıfır bırakıldığı sürece cetvel yalnız `baseSeconds + k`'dan çıkar.
+  districtCrossSeconds: 0,
+  continentCrossSeconds: 0,
+  capHours: 24,
   cartographyStep: 0.05,
 };
+
+/** Kısmi override'ı varsayılanla birleştirir (`mergeCombatConfig` deseni). */
+export function mergeMapConfig(patch?: Partial<MapConfig>): MapConfig {
+  return patch ? { ...DEFAULT_MAP_CONFIG, ...patch } : DEFAULT_MAP_CONFIG;
+}
 
 /**
  * Kademeli/toplamalı mesafe. **Öklid DEĞİL**: her koordinat basamağındaki fark süreye mutlaka
@@ -62,6 +89,23 @@ export function distance(a: Coordinates, b: Coordinates, cfg: MapConfig = DEFAUL
   return Math.abs(a.s - b.s)
     + cfg.districtWeight * Math.abs(a.d - b.d)
     + cfg.continentWeight * Math.abs(a.k - b.k);
+}
+
+/**
+ * Mesafe + geçiş bayrakları tek çağrıda.
+ *
+ * ⚠️ Bayrakları her çağıranın kendisi (`a.d !== b.d`) hesaplamasındansa burada üretiliyor:
+ * dört ayrı çağrı noktası var (saldırı · yürüyüş · kahraman dönüşü · istemci önizlemesi) ve
+ * birinde unutulursa **önizleme ile gerçek varış anı sessizce ayrışır**.
+ */
+export function route(a: Coordinates, b: Coordinates, cfg: MapConfig = DEFAULT_MAP_CONFIG): {
+  distance: number; crossesDistrict: boolean; crossesContinent: boolean;
+} {
+  return {
+    distance: distance(a, b, cfg),
+    crossesDistrict: a.d !== b.d,
+    crossesContinent: a.k !== b.k,
+  };
 }
 
 /**
@@ -89,23 +133,32 @@ export interface TravelInput {
   speed: number;
   /** Saldıranın Haritacılık seviyesi. */
   cartography?: number;
-  /** Casus seferi mi (tabanı `baseSpySeconds` yapar)? */
-  spy?: boolean;
-  /** Dünya hız çarpanı — YOL terimini de tabanı da böler (`worlds.speed_multiplier`). */
+  /** Sefer diyar değiştiriyor mu (`districtCrossSeconds` eklenir)? */
+  crossesDistrict?: boolean;
+  /** Sefer kıta değiştiriyor mu (`continentCrossSeconds` eklenir)? */
+  crossesContinent?: boolean;
+  /** Dünya hız çarpanı — TÜM süreyi böler (`worlds.speed_multiplier`). */
   speedMultiplier?: number;
 }
 
 /**
  * Sefer süresi (saniye, yukarı yuvarlanmış tam sayı).
  *
- * Dönüş bacağı da AYNI süredir; görev tipi süreyi değiştirmez (saldırı = destek = nakliye).
+ * Dönüş bacağı da AYNI süredir; görev tipi süreyi değiştirmez (saldırı = destek = nakliye = casus).
+ *
+ * ⚠️ Görev tipine bakan tek bir dal bile YOK — casus seferi de bu fonksiyondan geçer ve
+ * farkını yalnız Casus Kuş'un hızından (6000) alır. Buraya tipe özel bir sabit eklemek,
+ * katalogdaki hız sütununu yeniden anlamsızlaştırır.
  */
 export function travelSeconds(input: TravelInput, cfg: MapConfig = DEFAULT_MAP_CONFIG): number {
-  const base = input.spy ? cfg.baseSpySeconds : cfg.baseArmySeconds;
   const speed = Math.max(1, input.speed);
   const cartographyFactor = 1 + cfg.cartographyStep * Math.max(0, input.cartography ?? 0);
-  const road = cfg.k * Math.max(0, input.distance) ** cfg.p * (100 / speed) / cartographyFactor;
-  const capped = Math.min(base + road, cfg.capHours * 3600);
+  const road = cfg.k * Math.max(0, input.distance) ** cfg.p / cartographyFactor;
+  const cross = (input.crossesDistrict ? cfg.districtCrossSeconds : 0)
+    + (input.crossesContinent ? cfg.continentCrossSeconds : 0);
+  // ⭐ Taban ve geçiş de `100/v` ile ölçeklenir → süre baştan sona hıza orantılı.
+  const total = (cfg.baseSeconds + cross + road) * (100 / speed);
+  const capped = Math.min(total, cfg.capHours * 3600);
   // Hızlı dünya seçeneği süreyi böler; tavan da aynı oranda iner (§13.5.6).
   return Math.max(1, Math.ceil(capped / Math.max(0.01, input.speedMultiplier ?? 1)));
 }

@@ -16,6 +16,7 @@ import {
   farmOutput, mineOutput,
 } from '@mobilwar/catalog';
 import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobilwar/catalog';
+import { DEFAULT_MAP_CONFIG, type MapConfig } from '@mobilwar/engine';
 import type { Tx } from '../missions/handler-registry.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { materializeUnitQueues } from '../queues/unit-queue.ts';
@@ -47,6 +48,12 @@ export interface CitySnapshot {
   onVacation: boolean;
   /** Dünya hız çarpanları (1 = klasik). Arayüz "hızlandırılmış dünya" rozetini bundan çizer. */
   speed: { resource: number; travel: number; training: number; construction: number };
+  /**
+   * ⭐ Harita/sefer sabitleri — Dünya ekranındaki süre önizlemesi için. Bu değerler artık
+   * panelden dünya başına ayarlanabiliyor; istemci varsayılana güvenseydi önizleme gerçek
+   * varış anından sapardı.
+   */
+  map: MapConfig;
   buildings: Record<string, number>;
   resourcesAt: Date;
 }
@@ -63,6 +70,13 @@ export class CityService {
      * sonraki istekte güncel olsun, süreç ömrü boyunca donmasın.
      */
     private readonly catalogFor?: (worldId: number) => CatalogConfig,
+    /**
+     * ⭐ Harita/sefer sabitleri — **yalnız istemciye göndermek için** (§sefer süreleri).
+     * Şehir okuması bunu hesapta kullanmaz; Dünya ekranındaki süre önizlemesi motorun aynı
+     * `travelSeconds`ini çağırıyor ve sunucuyla AYNI sabitleri görmezse ekranda yazan süre
+     * gerçek varış anından sapar.
+     */
+    private readonly mapFor?: (worldId: number) => MapConfig,
   ) {}
 
   /** Bu dünyanın etkin katalog sabitleri (yoksa varsayılan). */
@@ -196,6 +210,8 @@ export class CityService {
         training: Number(c['training_multiplier'] ?? 1),
         construction: Number(c['construction_multiplier'] ?? 1),
       },
+      /** ⭐ Sefer süresi önizlemesi sunucuyla aynı sabitlerle hesaplasın diye gönderiliyor. */
+      map: this.mapFor?.(Number(c['world_id'])) ?? DEFAULT_MAP_CONFIG,
       buildings,
       resourcesAt: toDate(c['resources_at']),
     };

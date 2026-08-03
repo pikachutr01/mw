@@ -86,7 +86,8 @@ export { DB } from './db/tokens.ts';
      */
     {
       provide: CityService,
-      useFactory: (db: Db, s: SettingsService) => new CityService(db, (w) => s.catalog(w)),
+      useFactory: (db: Db, s: SettingsService) =>
+        new CityService(db, (w) => s.catalog(w), (w) => s.map(w)),
       inject: [DB, SettingsService],
     },
     /**
@@ -108,8 +109,12 @@ export { DB } from './db/tokens.ts';
     {
       provide: MissionService,
       // Nakliye/destek kaynağı şehirden düşerken tembel birikim uygulanmalı → CityService şart.
-      useFactory: (db: Db, cities: CityService) => new MissionService(db, cities),
-      inject: [DB, CityService],
+      // ⭐ Harita/sefer ayarı DÜNYA BAŞINA çözülür (`CaveService`/`QueueService` deseni): sabit
+      //    bir config geçirmek panelden yapılan değişikliği süreç yeniden başlayana kadar
+      //    görünmez kılardı.
+      useFactory: (db: Db, cities: CityService, s: SettingsService) =>
+        new MissionService(db, cities, undefined, (w) => s.map(w)),
+      inject: [DB, CityService, SettingsService],
     },
     {
       provide: QueueService,

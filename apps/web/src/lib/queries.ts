@@ -12,6 +12,7 @@ import {
   useInfiniteQuery, useMutation, useQuery, useQueryClient,
   type UseInfiniteQueryResult, type UseQueryResult,
 } from '@tanstack/react-query';
+import type { MapConfig } from '@mobilwar/engine';
 import { api } from './api.ts';
 import { noteServerTime, useSession } from './hooks.ts';
 import { useConnection } from './realtime.ts';
@@ -99,6 +100,12 @@ export interface CityDetail {
   onVacation?: boolean;
   /** Dünya hız çarpanları (1 = klasik). Bilgi çubuğundaki ⚡ rozeti bunu okur. */
   speed?: { resource: number; travel: number; training?: number; construction?: number };
+  /**
+   * ⭐ Harita/sefer sabitleri — **sunucudan** gelir, istemcide sabit tutulmaz.
+   * Dünya ekranındaki süre önizlemesi bunu `travelSeconds`e verir; panelden ayarlanabildiği
+   * için varsayılana güvenmek önizlemeyi gerçek varış anından saptırırdı.
+   */
+  map?: MapConfig;
   buildings: Record<string, number>;
   units: Record<string, number>;
   defenses: Record<string, number>;

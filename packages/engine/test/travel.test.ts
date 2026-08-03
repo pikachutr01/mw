@@ -3,7 +3,7 @@
  * Cetvel `harita.html`'den üretildi; bu testler portun onunla birebir aynı olduğunu gösterir.
  */
 import { describe, expect, it } from 'vitest';
-import { armySpeed, distance, travelSeconds } from '../src/travel.ts';
+import { armySpeed, distance, mergeMapConfig, route, travelSeconds } from '../src/travel.ts';
 
 const dk = (s: number): number => s / 60;
 const sa = (s: number): number => s / 3600;
@@ -66,7 +66,8 @@ describe('⭐ örnek cetvel (§13.5.5, Haritacılık 0)', () => {
   const cuce = (D: number): number => travelSeconds({ distance: D, speed: 100 });
   const suvari = (D: number): number => travelSeconds({ distance: D, speed: 140 });
   const kaos = (D: number): number => travelSeconds({ distance: D, speed: 80 });
-  const kus = (D: number): number => travelSeconds({ distance: D, speed: 6000, spy: true });
+  // ⚠️ Kuşa özel bir taban YOK — farkını yalnız 6000 hızından alıyor (2026-08-03).
+  const kus = (D: number): number => travelSeconds({ distance: D, speed: 6000 });
 
   /**
    * ⚠️ Cetvel DAKİKA hassasiyetinde yazılmış (bazı hücreler yuvarlanmış: 49 dk 40 sn → "50 dk").
@@ -74,15 +75,15 @@ describe('⭐ örnek cetvel (§13.5.5, Haritacılık 0)', () => {
    * (yanlış sabit, yanlış üs, tabanın unutulması) bu toleransı fazlasıyla aşar.
    */
   const cetvel: [string, number, number, number, number, number][] = [
-    // rota                       D        cüce   süvari  kaos   kuş   (dakika)
-    ['aynı diyar, komşu şehir',      1,     20,     17,     22,   2.17],
-    ['aynı diyar, en uzak',          9,     37,     30,     44,   2.45],
-    ['komşu diyar',                 20,     50,     38,     60,   2.67],
-    ['10 diyar',                   200,    124,     91,    153,   3.9],
-    ['50 diyar',                  1000,    249,    181,    309,   6],
-    ['komşu kıta / 200 diyar',    4000,    463,    334,    577,   9.57],
-    ['3 kıta ötesi',             13400,    801,    575,    999,  15],
-    ['zıt köşe',                 45989,   1080,   1007,   1080,  25.27],
+    // rota                       D        cüce   süvari  kaos    kuş   (dakika)
+    ['aynı diyar, komşu şehir',      1,     40,     29,     50,   0.67],
+    ['aynı diyar, en uzak',          9,     70,     50,     88,   1.18],
+    ['komşu diyar',                 20,     90,     65,    113,   1.52],
+    ['10 diyar',                   200,    205,    147,    256,   3.43],
+    ['50 diyar',                  1000,    384,    274,    480,   6.4],
+    ['komşu kıta / 200 diyar',    4000,    672,    480,    839,  11.2],
+    ['3 kıta ötesi',             13400,   1103,    788,   1378,  18.4],
+    ['zıt köşe',                 45989,   1440,   1312,   1440,  30.6],
   ];
 
   /** ±1 dakika: cetvelin kendi hassasiyeti. */
@@ -97,16 +98,25 @@ describe('⭐ örnek cetvel (§13.5.5, Haritacılık 0)', () => {
     dakikaTut(kus(D), mKus);
   });
 
-  it('gösterim biçimi cetveldeki gibi okunur', () => {
-    expect(fmt(cuce(1))).toBe('20 dk 00 sn');
-    expect(fmt(cuce(4000))).toBe('7 sa 43 dk');
-    expect(fmt(kus(1))).toBe('2 dk 10 sn');
+  it('⭐ kullanıcı hedefi: komşu şehre Cüce TAM 40 dakikada gider', () => {
+    // Kullanıcı 20 dk'yı erken oyunda "hızlı yağma" sarmalı olarak gördü; hedef 35-45 dk.
+    expect(fmt(cuce(1))).toBe('40 dk 00 sn');
+    expect(fmt(cuce(4000))).toBe('11 sa 11 dk');
   });
 
-  it('⭐ zıt köşede Cüce ve Kaos TAVANA (18 sa) çarpar, Süvari çarpmaz', () => {
-    expect(sa(cuce(45_989))).toBeCloseTo(18, 3);
-    expect(sa(kaos(45_989))).toBeCloseTo(18, 3);
-    expect(sa(suvari(45_989))).toBeLessThan(18);
+  it('⭐ HER ŞEY HIZLA ORANTILI: kuşun süresi ordununkinin tam 1/60\'ı', () => {
+    // Kuşa özel taban kalktı → 6000/100 = 60 kat hız, her mesafede 60 kat kısa süre.
+    for (const [, D] of cetvel) {
+      if (cuce(D) >= 24 * 3600) continue;               // tavana çarpan satırda oran bozulur
+      expect(cuce(D) / kus(D)).toBeGreaterThan(58);
+      expect(cuce(D) / kus(D)).toBeLessThan(62);
+    }
+  });
+
+  it('⭐ zıt köşede Cüce ve Kaos TAVANA (24 sa) çarpar, Süvari çarpmaz', () => {
+    expect(sa(cuce(45_989))).toBeCloseTo(24, 3);
+    expect(sa(kaos(45_989))).toBeCloseTo(24, 3);
+    expect(sa(suvari(45_989))).toBeLessThan(24);
   });
 
   it('Kaos en yavaş birim → Kaos\'lu ordu daima geç varır (stratejik bedel)', () => {
@@ -115,8 +125,8 @@ describe('⭐ örnek cetvel (§13.5.5, Haritacılık 0)', () => {
 
   it('casus kuş her yerde dakikalar mertebesinde ama asla anlık değil', () => {
     for (const [, D] of cetvel) {
-      expect(kus(D)).toBeGreaterThanOrEqual(120);
-      expect(kus(D)).toBeLessThan(30 * 60);
+      expect(kus(D)).toBeGreaterThan(0);
+      expect(kus(D)).toBeLessThanOrEqual(31 * 60);
     }
   });
 });
@@ -125,21 +135,57 @@ describe('⭐ TABAN SÜRE: baskın–savunma dengesinin ayar vidası (§13.5.3)'
   it('Haritacılık TABANI etkilemez — komşu şehirde kazanç yalnız %21', () => {
     const l0 = travelSeconds({ distance: 1, speed: 100, cartography: 0 });
     const l15 = travelSeconds({ distance: 1, speed: 100, cartography: 15 });
-    expect(dk(l0)).toBeCloseTo(20, 0);
-    expect(dk(l15)).toBeCloseTo(15.7, 1);
+    expect(dk(l0)).toBeCloseTo(40, 0);
+    expect(dk(l15)).toBeCloseTo(31.4, 1);
+    // ⭐ Süreler ikiye katlanırken bu oran KORUNDU: "dengeli" eğri seçilmesinin sebebi buydu.
     expect(1 - l15 / l0).toBeCloseTo(0.21, 2);
   });
 
   it('uzak mesafede aynı Haritacılık %42 kazandırır → SEFER tekniği, baskın tekniği değil', () => {
     const l0 = travelSeconds({ distance: 4000, speed: 100, cartography: 0 });
     const l15 = travelSeconds({ distance: 4000, speed: 100, cartography: 15 });
-    expect(sa(l15)).toBeCloseTo(4.49, 1);
+    expect(sa(l15)).toBeCloseTo(6.54, 1);
     expect(1 - l15 / l0).toBeCloseTo(0.42, 2);
   });
 
-  it('sıfır mesafede bile taban süre geçerlidir (ordu toplanır)', () => {
-    expect(travelSeconds({ distance: 0, speed: 100 })).toBe(600);
-    expect(travelSeconds({ distance: 0, speed: 6000, spy: true })).toBe(120);
+  it('sıfır mesafede bile taban süre geçerlidir — ama o da hıza bölünür', () => {
+    expect(travelSeconds({ distance: 0, speed: 100 })).toBe(1200);
+    // ⚠️ Kuş için ayrı bir taban YOK: 1200 / 60 = 20 sn.
+    expect(travelSeconds({ distance: 0, speed: 6000 })).toBe(20);
+  });
+});
+
+describe('⭐ diyar/kıta geçiş ek süresi', () => {
+  const cfg = mergeMapConfig({ districtCrossSeconds: 600, continentCrossSeconds: 3600 });
+
+  it('varsayılan 0 — açılmadıkça cetvel değişmez', () => {
+    const komsuDiyar = { k: 1, d: 2, s: 1 };
+    const leg = route({ k: 1, d: 1, s: 1 }, komsuDiyar);
+    expect(travelSeconds({ ...leg, speed: 100 }))
+      .toBe(travelSeconds({ distance: leg.distance, speed: 100 }));
+  });
+
+  it('diyar değişince eklenir, aynı diyarda eklenmez', () => {
+    const ayni = route({ k: 1, d: 1, s: 1 }, { k: 1, d: 1, s: 2 }, cfg);
+    const farkli = route({ k: 1, d: 1, s: 1 }, { k: 1, d: 2, s: 1 }, cfg);
+    expect(ayni.crossesDistrict).toBe(false);
+    expect(farkli.crossesDistrict).toBe(true);
+
+    const eksiz = travelSeconds({ ...ayni, speed: 100 }, cfg);
+    const ekli = travelSeconds({ distance: ayni.distance, crossesDistrict: true, speed: 100 }, cfg);
+    expect(ekli - eksiz).toBe(600);
+  });
+
+  it('ek süre Haritacılık\'tan etkilenmez ama HIZA bölünür', () => {
+    const taban = { distance: 1, crossesContinent: true } as const;
+    const yavas = travelSeconds({ ...taban, speed: 100 }, cfg);
+    const hizli = travelSeconds({ ...taban, speed: 200 }, cfg);
+    expect(yavas / hizli).toBeCloseTo(2, 5);
+
+    // Haritacılık yalnız yol terimini kısaltır → 3600'lük ek aynen kalır.
+    const l0 = travelSeconds({ ...taban, speed: 100, cartography: 0 }, cfg);
+    const l15 = travelSeconds({ ...taban, speed: 100, cartography: 15 }, cfg);
+    expect(l0 - l15).toBeCloseTo(1200 - 1200 / 1.75, 0);
   });
 });
 
