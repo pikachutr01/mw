@@ -20,7 +20,8 @@ import { ResetPasswordScreen, VerifyEmailScreen } from './screens/EmailActions.t
 import { Messages } from './screens/Messages.tsx';
 import { CommandScreen } from './screens/Command.tsx';
 import { Landing } from './screens/Landing.tsx';
-import { HelpScreen, OptionsScreen } from './screens/Placeholders.tsx';
+import { OptionsScreen } from './screens/Placeholders.tsx';
+import { HelpScreen } from './screens/Help.tsx';
 import { SimulateScreen } from './screens/Simulate.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
 import { World } from './screens/World.tsx';
@@ -135,7 +136,9 @@ function AuthedApp() {
         <Route path="/command/alliance" element={<CommandScreen />} />
         <Route path="/command/search" element={<CommandScreen />} />
         <Route path="/options" element={<OptionsScreen />} />
+        {/* Sekme = rota (aynı desen `/command`ta): geri tuşu ve derin bağlantı çalışsın. */}
         <Route path="/help" element={<HelpScreen />} />
+        <Route path="/help/sefer" element={<HelpScreen />} />
         <Route path="/simulate" element={<SimulateScreen />} />
         {/* Mobil "Şehir" ve "Daha" sekmeleri */}
         <Route path="/city" element={<CityHub />} />

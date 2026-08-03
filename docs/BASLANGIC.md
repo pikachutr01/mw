@@ -353,7 +353,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | `referans/*.txt` | Kullanıcının kendi kaynak metinleri (`duzenleme_onerileri` · `mesajlar` · `prod_notlar`) |
 | `veri/` | Kalibrasyon çıkarımları (birim statları, üretim tabloları, mağara kapasitesi) |
 | `DecompiledSrc/src/` | Orijinal J2ME java kaynağı — `g.java` menüler, `k.java` protokol |
-| `araclar/harita.html` | Sefer süresini elle denemek için — tarayıcıda aç, oyna |
+| `araclar/harita.html` | Sefer süresini elle denemek için — tarayıcıda aç, oyna. ⚠️ Kendi sayı kutuları var (koddan bağımsız); oyuncuya açık sürüm **Yardım → Sefer Cetveli** ve o sabitleri sunucudan alıyor |
 
 **⚫ `arsiv/` — açma.** Tarihsel ölçüm kayıtları ve eski oturumların dökümü. İçerik korunuyor
 ama hiçbiri güncel değil; bir şeyi doğrulamak için değil, **ne yaptığımızı hatırlamak** için var.

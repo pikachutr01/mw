@@ -1,35 +1,4 @@
-Sıralama tablosundaki mesaj / Dünyada Bul simgeleri büyüyecek 
-
-Online kontrolü sadece aktif oturum varsa yapılacak. Tek sayfa kontrolü de aynı şekilde.
-
-15dk da bir oturumun düşmesi sorununa çözüm üretelim.
-
-Yeni kayıt olan kullanıcının şehrinin yerleşimi konusunda inceleme yapılacak.
-
-Mobil görünümde şehir sayfasında şehir seçme kısmının hemen altındaki şehrin adını ve ganimet bilgilerini gösteren kartı kaldıralım. Bu bilgi zaten en üstteki navbar da yazıyor.
-
-Ulaşım sürelerini askerlere göre haritacılık seviyesine göre ayrıntılı şekilde gösterecek harita.html şeklinde bir sayfa oluştur.
-
-Mimar okulu kendi yükseltme süresini kısaltmasın.
-
-Admin panelde tootltipler collapse kartların altında kalıyor, tooltip içi tam gözükmüyor.
-
-Admin panelde otuumun boşa düşme süresini uzatalım
-
-Teleport kullanıldıktan sonra yeniden kullanılması için gereken süreyi belirleyelim ve seviyesi arttıkça bu seviye kısalsın. Bu süre admin panelden değiştirilebilir olsun. Seviyeye göre kısalma oranını da admin panelden yönetebilelim.
-
-Dünya ekranında aktif şehri belli edecek bir işaret olsun.
-
-Görevi iptal edince geri dönüş tahmini süresini modalde yazmasın. Aynı şekilde bir yükseltmeyi iptal ederken de geri ödenecek fiyatı yazmasın. Ekranda görünen değerle iptal onayını verildiği anda farklılık olur. Sadece bilgilendirme olması yeterli. Savaşçı ve savunma ünitesi üretimi için de geçerli. Ayrıca iptal onay modalında yazan alfa9lth bu hareketin iptal edildiğini görecek. gibi bilgiyi de kaldıralım.
-
-Casusluk raporunda yazan Bilgi alınamadı — kuşlar ya vuruldu ya da rakip kuşlarca engellendi. notunun bu şekilde detaylı yazmasına gerek yok. Bilgi alınamadıysa daha sade bilgi vermesi yeterli.
-
-Destek yaparken casus kuşlar da destek olarak gönderilebilsin.
-
 Çoklu hesap detaylı kontrol sistemi. Birkaç farklı veri türünü analiz edip multi hesaplara karşı bir kontrol sistemi yazalım. Şüpheli durumları admin panelde gösterelim.
-
-
------
 
 Saldırı, casusluk, nakliye gibi raporlarda hedef şehrin koordinatının yanında o andaki şehir adı da yazılsın
 
@@ -39,20 +8,10 @@ Bot hesap oluşturmayı tespit edip engelleme
 
 Admin panelinden oyunculara sistem mesajı göndermek, özel veya herkese bildirim mesajı iletmek. Bu mesaj Mesajlarda Mesajlar sekmesine düşebilir. Önemli bir bilgi veya güncelleme olursa oyuncuları hızlıca bilgilendirmek amaçlı. Tıpkı raporlar gibi modal üzerinde açılırlar, sistem tarafından gönderilmiş gözükürler. Açılınca okunmuş sayılırlar.
 
-Oyuncuların yeni oluşturdukları şehirlerin varsayılan adı ne oluyor. Başkentlerinin adlarını yanına bu şehrin kaçıncı şehri olduğunu yazarak yeni şehri adlandıralım. Örneğin başkentin adı çığlıktepe olunca yeni kuracağı şehir de ikinci şehriyse çığlıktepe 2 şeklinde olsun. Eğer yanına bir boşluk ve sayı yazınca 15 karakter sınırı aşılıyorsa şehrin son 2 karakterini silip sonuna boşluk ile şehir adı yazılsın.
-
-Admin panelde bir kullanıcının aktif hareketlerini gösteren kısımda kahraman gözükmüyor. Az önce yaptığın casus kuş ile kahraman görevinde sadece 9 casus kuşun adı gözüküyor.
-
-Yeni oyuncunun başkentinin nerede olduğu hesaplandıktan sonra şu kontrolleri de ele almalıyız. Spawn olan bu şehrin konumuna eğer o sırada başka bir oyuncunun şehir kurma görevi varsa bu görev iptal edilmeli. Veya tersi. Hesaplanan bu konuma bir şehri kurma görevi varsa bu konumda yeni oyuncunun şehri oluşturulmamalı, başka safe bir yer hesaplanmalı
-
 Ordular sayfasında aktif hareketleri listeleyen tablodaki geri sayım sürelerinin rengi neye göre belirleniyor. Giden destekte turuncu, gelen destekte kırmızı renk görünüyor. Bu renkleri görevin tipine göre belirleyelimç Giden destek yeşil, gelen destek sarıya yakın turuncu olsa iyi olur. Yine giden dönen saldırı yeşil, gelen saldırı kırmızı, gelen casusluk kırmızı, giden dönen casusluk yeşil. Giden dönen nakliye yeşil, bize gelen nakliye sarıya yakın turuncu. Mağara yıkımı sonrası şehre gelen ordu da tek yönlü destek olduğu için o da sarıya yakın turuncu
 
 Ayrıca seçenekler kısmına tercihler bölümü açalım. Oyundaki bazı arayüzleri bu tercihlerden kontrol edeceğiz. Buraya ilk olarak ordular sayfasında Ordular tablosunun gözüküp gözükmemesi seçeneği olsun. Zaten aynı bilgiler şehir kale simgelerinin altına sıralanmış durumda, aynıları bir de tablo olarak gösteriliyor. Bu kısmın gösterimin seçeneklerde ayarlara bağlayalım. Varsayılan olarak açık olsun. Kullanıcı switch düğmesi ile kapatırsa Ordular sayfasında ordular tablosu gözükmez. Switch kapandığı an otomatik kayıt edilir ve ayarlar localstorage de saklanır. Başka bu şekilde swich ile açılıp kapatılan ayarlar ekleyeceğiz sonradan.
 
 Sunucu üzerinde admin panelinden Sıralamayı şimdi güncelle butonuna tıkladım ve sıralama mnauel olarak tetiklendi. Bu işlemi saat 22:51 de yaptım. Oyunda sıralamayı girdiğimde ise güncelleme 19:51 yazıyor. Sanırım bu sıralamaa UTC 0 a göre yapılıyor. Oysaki oyunun hedef kitlesi Türkiye ve Türkiye'de +3 saat dilimi kullanılıyor. Bu zaman farkı sorununu kökten çözmemiz gerek.
 
-Önceki turda çözdüğümüz casus kuş ile birlikte kahraman gönderme olayının Destek raporuna baktığımda Birlikler altında sadece 9 casus kuş yazıyor. Kahramana dair bir bilgi yok
-
 Admin panele o anda sunucuda devam eden görevleri listeleyecek bir tablo ekleyelim. Hangi görevin kime ait olduğunu göstersin. Sanırım şu anda bir kullanıcının ayrıntılarına girince onu hareketlerini görüyoruz. Tüm görevleri sunucu taraflı bir pagination tabloda bir arada görmek istiyorum.hangi şehirden hangi şehre gidiyor, bu şehirler kime ait, kalan süresi vs tüm ayrıntıları
-
-admin içindeki index.html yorum satırlarını ben sildim, geri alma :)

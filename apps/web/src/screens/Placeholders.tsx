@@ -25,12 +25,10 @@ function Soon({ title, lines }: { title: string; lines: string[] }) {
   );
 }
 
-export const HelpScreen = (): React.ReactElement => (
-  <Soon title="Yardım" lines={[
-    'Oyun kuralları ve ekran açıklamaları',
-    'Kaynak: teknik_ve_yapi_dokumantasyonu.md',
-  ]} />
-);
+/*
+ * ⚠️ `HelpScreen` buradan 2026-08-03'te ÇIKTI — artık gerçek bir ekran (`screens/Help.tsx`),
+ * "yakında" kartı değil.
+ */
 
 /**
  * Seçenekler — hesap, cihazlar, bildirimler, şehir ve tatil; mobilde "Daha Fazla" da buraya düşer.

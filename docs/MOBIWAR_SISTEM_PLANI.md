@@ -1141,6 +1141,23 @@ Referans uygulama: `harita.html` (interaktif cetvel, sabitler oynatılabilir). S
 `packages/engine/travel.ts` olarak yaşayacak; istemci aynı fonksiyonu **yalnız önizleme** için kullanır,
 otorite `arrival_at` yazan sunucudur.
 
+> ⭐ **OYUN İÇİ CETVEL: Yardım → Sefer Cetveli** (`apps/web/src/screens/Help.tsx`, 2026-08-03,
+> kullanıcı isteği). `harita.html`in oyuncuya açık sürümü: hedef koordinat, hazır rotalar,
+> Haritacılık kaydırağı, birim başına süre ve seviye seviye kazanç tablosu.
+>
+> ⚠️ **Sabitler KOPYALANMADI.** `harita.html` kendi sayı kutularını taşıyor çünkü o bir
+> geliştirici aracı — koddan bağımsız oynayabilmek işine yarıyor. Oyun içindeki sayfa aynı
+> şeyi yapsaydı panelden bir sayı değiştiği anda oyuncuya **yalan söylemeye** başlardı.
+> Hesap `@mobilwar/engine`den, sabitler `/cities/:id` → `map` bloğundan, hızlar katalogdan.
+>
+> **Doğrulandı (1:7:2 → 1:7:5, mesafe 3):** Yardım sayfası Cüce **51 dk 44 sn** yazıyor,
+> Dünya ekranının hedef modalı da **51 dk 44 sn**. Casus Kuş 52 sn ve Kahraman 25 dk 52 sn
+> değerleri de sunucunun yazdığı `travelSeconds` ile birebir.
+>
+> ⚠️ Misafir (oturumsuz) hâlde cetvel çizilmiyor, açıklama yazıyor: çıkış noktası olmadan
+> hesaplanan bir süre sayfanın tek vaadini (*"gördüğün süre gönderirken çıkanla aynıdır"*)
+> sessizce bozardı.
+
 ### 13.5.1 Mesafe — kademeli/toplamalı
 ```
 D = Δşehir + U·Δdiyar + W·Δkıta          U = 20, W = 4000
