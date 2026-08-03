@@ -14,9 +14,10 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { UNVERIFIED_CODE } from '../auth/unverified.ts';
-import type { Db } from '../db/client.ts';
+import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
+import { GameClockService } from '../world/game-clock.service.ts';
 import { AllianceError, AllianceService, ROLE } from './alliance.service.ts';
 
 /** Üye listesi sayfa boyu — orijinal web ekranıyla aynı (ARAYÜZ C: "sayfa başına 20"). */
@@ -44,9 +45,12 @@ function toHttp(err: unknown): Error {
 @UseGuards(AuthGuard)
 export class AllianceController {
   private readonly service: AllianceService;
+  /** Ünvan süresi OYUN saatinde ölçülüyor → burada da oyun saati gerekiyor. */
+  private readonly clock: GameClockService;
 
   constructor(@Inject(DB) private readonly db: Db) {
     this.service = new AllianceService(db);
+    this.clock = new GameClockService(db);
   }
 
   /* ── Benim ittifağım ──────────────────────────────────────────────────────── */
@@ -84,10 +88,17 @@ export class AllianceController {
     const page = Math.max(0, Number(pageRaw ?? 0) | 0);
     const memberCount = Number(a['member_count']);
     /* Sıralama: rütbe (Lider üstte) → puan. Dünya sırası oyuncu sıralamasından (son snapshot). */
+    const gameNow = await this.clock.gameNow(player.worldId);
     const members = await this.db.execute<Record<string, unknown>>(sql`
       SELECT m.id, m.username, m.score, m.alliance_role,
              (m.vacation_until IS NOT NULL) AS on_vacation,
-             r.rank AS world_rank
+             r.rank AS world_rank,
+             -- ⭐ Askerî ünvan YALNIZ BURADA görünür (§ünvanlar). Süresi geçmiş satır tabloda
+             -- kalıyor (temizleyen görev yok, bilerek) → burada süzülmek ZORUNDA.
+             CASE WHEN m.merit_expires_at > ${gameNow.toISOString()}::timestamptz
+                  THEN m.merit_tier END AS merit_tier,
+             CASE WHEN m.merit_expires_at > ${gameNow.toISOString()}::timestamptz
+                  THEN m.merit_expires_at END AS merit_expires_at
         FROM players m
         LEFT JOIN rankings r ON r.world_id = m.world_id AND r.kind = 'player' AND r.subject_id = m.id
        WHERE m.alliance_id = ${my.allianceId}
@@ -128,6 +139,17 @@ export class AllianceController {
            * gösterileceği sunucunun değil ekranın kararı.
            */
           onVacation: m['on_vacation'] === true,
+          /**
+           * ⭐ ASKERÎ ÜNVAN — **yalnız ittifak içinde** (kullanıcı şartı).
+           *
+           * ⚠️ Dünya, Sıralama, Arama ve savaş raporu uçlarına EKLENMEMELİ. Kullanıcının
+           * gerekçesi stratejik: *"Bunu gören düşmanlar yakın zamanda büyük bir savaştan
+           * çıktığını anlar ve sistematik olarak saldırı yaparlar."* Rozet bir başarı
+           * göstergesi ama aynı zamanda "ordusu yeni kırıldı" istihbaratı.
+           */
+          meritTier: m['merit_tier'] == null ? null : Number(m['merit_tier']),
+          meritExpiresAt: m['merit_expires_at'] == null
+            ? null : toDate(m['merit_expires_at']).toISOString(),
         })),
       },
       serverNow: new Date().toISOString(),

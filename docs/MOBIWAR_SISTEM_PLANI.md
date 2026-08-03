@@ -2932,6 +2932,68 @@ Anlık görüntü saatleri **00:00 · 08:00 · 16:00** (oyun saati, gece savaş�
   oyuncuyu listeden gizler, `players.alliance_score_excluded` puanını ittifak toplamından
   düşürür — **ikisi bağımsız**. Kahraman sıralaması ikisinden de etkilenmez. Panelden
   «Sıralama muafiyeti» aksiyonuyla yönetilir (denetim kaydı yazılır).
+- ⭐⭐ **GÖSTERİLEN PUAN DA DONUK** (kullanıcı kararı, 2026-08-03). Genel Durum paneli eskiden
+  canlı `players.score`u yazıyordu: ekranın köşesinde *"güncelleme 08:00"* dururken puan bina
+  dikildiği anda değişiyordu ve Sıralamalar sayfasındakiyle tutmuyordu. Kullanıcı bunu canlıda
+  yakaladı: *"herhangi bir güncelleme olmadan 4 puan nasıl yazıyor?"* Artık `/overview` de
+  `rankings.score` okuyor; `players.score` duruyor ama **anlık görüntünün girdisi**, ekranın
+  kaynağı değil. Yan etki: *"1.000'e N kaldı"* göstergesi (`toNextPoint`) kaldırıldı — donmuş
+  bir sayının yanında canlı bir artık göstermek yeni bir yalan olurdu.
+
+### 13.17.3 ⭐ ASKERÎ RÜTBELER — Subay · Komutan · Başkomutan · Mareşal
+
+Kullanıcının tanımı: *"Bir savaşta öldürülen asker sayısına ve türüne göre özel bir hesaplama
+türetelim… 400 tane cüce öldürmekle 400 tane ejderha öldürmek aynı başarı sayılmaz."*
+
+**Değer ölçüsü — yeni bir ağırlık tablosu YAZILMADI.** Öldürülen ordunun değeri kaynak
+bedelidir (`lossValue()`, altın + yemek, dünya çarpanları dâhil), 1000'e bölününce oyunun
+kendi puan birimi çıkar: *düşmana kaybettirdiğin puan*. Savunan zaten tam bu kadar puan
+kaybediyor (`debitLosses`), yani rütbe sistemi mevcut ekonomiyle **aynı parayı** kullanıyor.
+
+> ⚠️ **Neden stat değil maliyet?** `formulas.ts` · `unitTimeValue` bunu zaten ölçmüş: katalogdaki
+> `area` motorda birimin SAVAŞ GÜCÜdür ve savaşçılarda `maliyet/güç` oranı 63-100 arasında
+> (ortalama 81). Tasarımcılar birimleri **zaten güçleriyle orantılı fiyatlamış**; maliyeti
+> kullanmak gücü kullanmaktır. Elle bir ağırlık tablosu yazmak, denge değiştiğinde sessizce
+> bayatlayan ikinci bir doğruluk kaynağı üretirdi.
+
+Birim başına kıyım puanı: Casus Kuş 0,3 · Tuzak 0,4 · **Cüce 0,65** · Okçu Kulesi 0,75 ·
+**Elf 1,1** · Yük Arabası 2 · Gnom 3,2 · Süvari 3,6 · Şaman 4 · Muhafız 4,4 · Kazancı 5,6 ·
+Pegasus 7,2 · Mangonel 9 · Mancınık 18 · Balista 36 · Ogre 42 · **Ejderha 65** · **Kaos 4.000**.
+Sur/Kalkan/Tapınak **sıfır** (`LEVEL_BASED` — savaşta adet kaybetmezler).
+→ 400 Cüce = 260 ↔ 400 Ejderha = 26.000 (**100 kat**) · 1000 Elf = 1.100 ↔ 15 Kaos = 60.000.
+
+| Rütbe | Eşik (puan) | Süre | Çıpası |
+| :-- | --: | --: | :-- |
+| Subay | 5.000 | 7 gün | dolu bir **Sur 8** şehrinin savunmasını süpürmek |
+| Komutan | 25.000 | 14 gün | Sur 13 |
+| Başkomutan | 100.000 | 21 gün | Sur 18 |
+| Mareşal | 500.000 | 30 gün | **Sur 24** — kullanıcı şartı: *"oyunun çok ilerleyen aşamalarında ancak"* |
+
+Çıpa uydurma değil: `defenseCapacity(sur) = 25.000 × 1,3^(sur−1)` **alan** verir ve savunma
+birimlerinde kaynak/alan oranı ≈ 35. Eşikler ve süreler dünya başına ayarlanabilir
+(`merit.*` ayar grubu); varsayılanlar `@mobilwar/catalog` · `merit.ts`te.
+
+| Karar | Gerekçe |
+| :-- | :-- |
+| **Tek savaş** sayılır, biriktirme yok | Kullanıcının tanımı böyle. Toplam üzerinden verseydik rütbe bir başarı değil kıdem göstergesi olurdu |
+| Hem saldıran hem savunan alır, **kaybeden de** | Ölçü sonucu değil, **verilen zararı** görüyor |
+| Terfi süreyi **sıfırdan** başlatır | Kullanıcının örneği: Subay'ken 2 gün kala Başkomutan eşiğini geçen oyuncu 3 haftayı baştan alır |
+| Aynı basamak yalnız **süreyi yeniler** | Aynı başarıyı tekrar gösteren oyuncunun rozetinin sönmesi anlamsız olurdu |
+| Küçük savaş yüksek rütbeı **düşürmez** | `applyMerit` satırı `FOR UPDATE` ile kilitleyip karşılaştırıyor |
+| Aynı ittifaktakiler arası savaş **sayılmaz** | Anlaşmalı rozet dağıtımını kapatır. ⚠️ Sömürü zaten kârsız (Mareşal için 500M kaynaklık ordu öldürmek gerekiyor, o orduyu kurmak da aynı kaynak) ama emniyet bedavaya geliyor |
+| Süre dolunca temizleyen **görev YOK** | Okuma anında `merit_expires_at > gameNow` süzülüyor. §3'ün *"üretim tembeldir, tick yok"* kararıyla aynı yön: oyuncu başına bir görev satırının tek kazancı bir bildirim olurdu |
+| Zamanlar **oyun saatinde** | Bakımda duran dünyada rütbe süresi de durmalı |
+
+⚠️⚠️ **GÖRÜNÜRLÜK — sistemin en kolay yanlış yapılacak parçası.** Rütbe yalnız **ittifak
+sayfasında** (`/alliance`) ve **oyuncunun kendi Genel Durum'unda** (`/overview`) görünür.
+Dünya, Sıralama, Arama ve savaş raporu uçlarına **eklenmemeli**. Kullanıcının gerekçesi
+stratejik: *"Bunu gören düşmanlar yakın zamanda büyük bir savaştan çıktığını anlar ve
+sistematik olarak saldırı yaparlar."* Rozet bir başarı göstergesi ama aynı zamanda "ordusu
+yeni kırıldı" istihbaratı.
+
+Şema `0037_merit_rank.sql` (`players.merit_tier/score/battle_id/granted_at/expires_at`),
+mantık `apps/api/src/merit/merit.service.ts`, savaşa bağlanma noktası `battle.handlers.ts` ·
+`grantMerits` (kayıp tablosu zaten orada hesaplanıyor, ikinci kez çıkarılmıyor).
 
 ---
 

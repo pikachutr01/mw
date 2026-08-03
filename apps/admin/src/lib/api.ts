@@ -101,8 +101,10 @@ export async function api<T = unknown>(path: string, opts: Options = {}): Promis
  * Panel girişi — oyunun `/auth/login` ucunu kullanır; yetki kontrolü `/admin/me`de.
  *
  * ⚠️ Alan **`username`**, `email` DEĞİL. İlk sürümde forma e-posta koymuştum ve uç 400
- * döndürüyordu: `loginRequest` (`packages/contracts/src/auth.ts:24`) `username` bekliyor ve
- * üstelik `max(10)` — bir e-posta adresi doğrulamayı iki ayrı sebeple geçemiyordu.
+ * döndürüyordu: `loginRequest` (`packages/contracts/src/auth.ts`) `username` bekliyor ve
+ * üstelik uzunluk sınırı var — bir e-posta adresi doğrulamayı iki ayrı sebeple geçemiyordu.
+ * (Sınır 2026-08-01'de 10'dan **15**'e çıktı; formdaki değer artık `USERNAME_MAX`ten geliyor,
+ * elle yazılmıyor.)
  * Oyunun kimlik alanı kullanıcı adıdır; e-posta yalnız doğrulama ve şifre sıfırlama için var.
  */
 export async function login(o: {

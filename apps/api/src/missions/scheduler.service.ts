@@ -94,6 +94,12 @@ export class SchedulerService {
       claimed: 0, done: 0, retried: 0, dead: 0, reaped: 0, skippedPaused: false, lagMs: 0,
     };
 
+    /**
+     * ⚠️ Bu okuma yalnız **bakım kontrolü** için. Görev vadesi ARTIK BURADAN GEÇMİYOR:
+     * `claimDue`/`lagMs` oyun saatini kendi SQL'i içinde hesaplıyor (gerekçe:
+     * `mission.repository.ts` · `GAME_NOW_SQL`). Buraya `world.gameNow`'u geri koyup
+     * depoya parametre olarak vermek 2026-08-03'te canlıda yaşanan hatayı geri getirir.
+     */
     const world = await this.clock.read(this.opts.worldId);
     if (world.paused) {
       // Bakım: yeni görev ALINMAZ. Oyun saati de donduğu için vade zaten ilerlemiyor.
@@ -108,11 +114,10 @@ export class SchedulerService {
     }
 
     result.reaped = await this.repo.reapStale(this.opts.worldId, this.opts.staleLockMs);
-    result.lagMs = await this.repo.lagMs(this.opts.worldId, world.gameNow);
+    result.lagMs = await this.repo.lagMs(this.opts.worldId);
 
     const claimed = await this.repo.claimDue({
       worldId: this.opts.worldId,
-      gameNow: world.gameNow,
       limit: this.opts.batchSize,
       workerId: this.opts.workerId,
     });

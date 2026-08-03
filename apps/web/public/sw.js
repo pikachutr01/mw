@@ -56,8 +56,23 @@ self.addEventListener('push', (event) => {
       // `tag` aynı olanlar birikmez, ÜSTÜNE yazar: bir sohbetten üç mesaj = tek satır.
       tag: data.tag || 'mobilwar',
       renotify: true,
+      /**
+       * ⭐ `icon` ≠ `badge` — İKİSİ FARKLI DOSYA OLMALI (2026-08-03).
+       *
+       * `icon`  → bildirim gövdesindeki büyük görsel. Tam renkli, 192 px. Uygulama ikonu doğru.
+       * `badge` → **Android durum çubuğu** simgesi. Tarayıcı burada rengi tamamen atar ve
+       *           **yalnız alfa kanalını** maske olarak kullanır.
+       *
+       * ⚠️ İkisine de `/icon-192.png` veriliyordu: tam opak bir PNG'nin alfa maskesi dolu bir
+       * karedir, dolayısıyla durum çubuğunda içi dolu bir leke çıkıyordu. Kullanıcının
+       * bildirdiği "sıradan ikon" tam olarak buydu.
+       *
+       * ⚠️ `badge-96.png` **monokrom siluet + şeffaf zemin** olmalı; renkli ya da zeminli bir
+       * görsel koyulursa hata aynen geri gelir. iOS/Safari `badge`i yok sayar ve uygulama
+       * ikonunu kullanır → orada ek iş yok.
+       */
       icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      badge: '/badge-96.png',
       data: { url: data.url || '/armies' },
     }),
   );

@@ -25,7 +25,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { api } from '../lib/api.ts';
-import { LEVEL_BASED } from '@mobilwar/catalog';
+import { LEVEL_BASED, MERIT_BY_TIER } from '@mobilwar/catalog';
 import {
   useOverview, useRankings, type NamedType, type Overview, type RankingKind,
 } from '../lib/queries.ts';
@@ -34,6 +34,7 @@ import { fmt } from '../lib/hooks.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
+import { MeritBadge, meritRemaining } from '../components/MeritBadge.tsx';
 import { AllianceScreen } from './Alliance.tsx';
 import { SearchScreen } from './Search.tsx';
 
@@ -100,6 +101,28 @@ function Realm({ d }: { d: Overview }): React.ReactElement {
           <Line label="Puan" value={fmt(p.score)} strong />
           <Line label="Sıra" value={p.rank == null ? '—' : `${fmt(p.rank)} / ${fmt(p.totalPlayers)}`} />
           <Line label="Sıra Değişim" value={changeMark(p.rankChange)} tone={changeTone(p.rankChange)} />
+          {/**
+            * ⭐ Kendi askerî rütbesi — oyuncunun rozetini ve kalan süresini görebildiği TEK yer
+            * (terfi bildirimi anlıktır ve kaybolur). Rütbesizken satır hiç çizilmiyor: boş bir
+            * "Rütbe: -" satırı, çoğu oyuncunun hiç kazanamayacağı bir alanı sürekli hatırlatırdı.
+            * ⚠️ Bu satır BAŞKA bir oyuncunun ekranında görünmez — `/overview` yalnız isteği
+            * yapanın verisini döndürüyor.
+            * ⚠️ Buradaki «Rütbe» ile İTTİFAK sayfasındaki «Rütbe» sütunu farklı şeyler (orası
+            * Asker/Konsey/Lider). Kullanıcı ikisi için de bu kelimeyi seçti; bu panelde ittifak
+            * rolü hiç yazmadığı için çakışma ekrana yansımıyor.
+            */}
+          {p.meritTier != null ? (
+            <div className="flex items-center justify-between gap-2 py-0.5">
+              <span className="text-muted">Rütbe</span>
+              <span className="flex items-center gap-1.5 font-semibold text-gold">
+                <MeritBadge tier={p.meritTier} expiresAt={p.meritExpiresAt} size={18} />
+                {MERIT_BY_TIER[p.meritTier]?.name}
+                <span className="text-[11px] font-normal text-muted">
+                  {meritRemaining(p.meritExpiresAt) ? `· ${meritRemaining(p.meritExpiresAt)}` : ''}
+                </span>
+              </span>
+            </div>
+          ) : null}
           <Line label="İttifak Adı" value={p.alliance ?? '-'} />
           <Line label="İttifak Sırası" value={p.allianceRank == null ? '-' : fmt(p.allianceRank)} />
           <Line label="İttifak Sıra Değişim" value={changeMark(p.allianceRankChange)}
@@ -475,7 +498,11 @@ function Tabs<T extends string>({
 }
 
 /**
- * "güncelleme 08:00" — sıranın neden donuk olduğunu ekranda söyler.
+ * "güncelleme 08:00" — **puanın ve sıranın** neden donuk olduğunu ekranda söyler.
+ *
+ * ⚠️ Bir dönem bu not yalan söylüyordu: yanındaki «Puan» canlı `players.score`ten geliyordu ve
+ * oyuncu bina diktiği anda değişiyordu (2026-08-03, kullanıcının bildirdiği hata). Artık iki
+ * sayı da anlık görüntüden okunuyor — not tek gerçeği anlatıyor.
  *
  * ⚠️ Saatler **OYUN SAATİ (UTC)** ile yazılır, tarayıcının yerel saatiyle değil. Oyunun bütün
  * zaman kuralları oyun saatinde yaşıyor (gece savaşı 00:00–08:00, sıralama 00/08/16); yerel
@@ -490,7 +517,7 @@ function snapshotNote(r: { takenAt: string | null; nextAt: string }): React.Reac
   const hhmm = (iso: string): string =>
     new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
   return (
-    <Tooltip placement="left" label="Sıralama 8 saatte bir güncellenir.">
+    <Tooltip placement="left" label="Puan ve sıralama 8 saatte bir güncellenir.">
       <span className="cursor-help">
         {r.takenAt ? `güncelleme ${hhmm(r.takenAt)}` : `ilk güncelleme ${hhmm(r.nextAt)}`}
       </span>

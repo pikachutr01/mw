@@ -39,12 +39,34 @@ interface MissionRowRaw extends Record<string, unknown> {
 
 export interface ClaimOptions {
   worldId: number;
-  /** Oyun saati — bu ana kadar vadesi gelmiş görevler alınır. */
-  gameNow: Date;
   limit: number;
   /** Worker kimliği (bayat kilidi tanımak ve loglamak için). */
   workerId: string;
 }
+
+/**
+ * ⭐⭐ OYUN SAATİNİN TEK OTORİTESİ VERİTABANIDIR — uygulama süreci DEĞİL (2026-08-03).
+ *
+ * ⚠️ **CANLIDA YAŞANDI.** Vade karşılaştırması `execute_at <= ${gameNow}` biçimindeydi ve
+ * `gameNow` Node'un `new Date()`'inden geliyordu. 3 Ağustos 08:12'de tek bir turda **vadesi
+ * 16:00 olan** `ranking_snapshot` ile **vadesi 14 sn sonra** olan bir `defense_finish` birlikte
+ * alındı; öncesi ve sonrası kusursuzdu, `clock_offset_ms` 0, dünya çalışıyordu. Yani sürecin
+ * saati bir an için ileri okudu ve **7 saat 47 dakika erken** bir sıralama anlık görüntüsü
+ * alındı (geri alınamaz: `prev_rank` kaydı kayar, o dönemin "değişim" sütunu kaybolur).
+ *
+ * Kök nedeni kanıtlayamadım (tek seferlik konak saati sıçraması en olası açıklama), ama
+ * **hata sınıfı** kapatılabilir: kıyaslamanın iki tarafı da aynı saatten gelsin. `execute_at`
+ * zaten veritabanında; `now()` de öyle olsun. Böylece süreç saati ne okursa okusun vade
+ * kayamaz — ve çok süreçli dağıtımda süreçler arası kayma sorunu da doğmaz.
+ *
+ * Aynı ifade `admin.ops.controller.ts`te gecikme ölçmek için zaten kullanılıyordu; kuyruk
+ * onu kullanmıyordu. Tek yerde durması için burada.
+ *
+ * ⚠️ `COALESCE(paused_at, now())`: bakımda oyun saati DONAR (`game-clock.service.ts`).
+ * Scheduler bakımda zaten erken dönüyor, ama formülün burada da eksiksiz olması şart —
+ * `lagMs` bakım sırasında da çağrılabilir ve `now()` kullansaydı gecikme sonsuza büyürdü.
+ */
+const GAME_NOW_SQL = sql`(COALESCE(w.paused_at, now()) - (w.clock_offset_ms * interval '1 millisecond'))`;
 
 export class MissionRepository {
   constructor(private readonly db: Db) {}
@@ -55,6 +77,10 @@ export class MissionRepository {
    * `SKIP LOCKED` sayesinde N worker aynı anda çalışabilir: biri bir satırı kilitlemişse
    * diğeri onu atlar, beklemez. Alt sorgu `FOR UPDATE` ile satırları tutar, dış `UPDATE`
    * aynı transaction'da durumu değiştirir → iki worker aynı görevi ALAMAZ.
+   *
+   * ⚠️ `FOR UPDATE` yalnız `missions` satırlarını kilitler (`OF m`): `worlds` JOIN'i sırf
+   * oyun saatini okumak için var ve dünya satırını kilitlemek tüm kuyruğu tek satıra seri
+   * hâle getirirdi.
    */
   async claimDue(opts: ClaimOptions): Promise<MissionRow[]> {
     const rows = await this.db.execute<MissionRowRaw>(sql`
@@ -64,12 +90,13 @@ export class MissionRepository {
              locked_at = now(),
              attempts = m.attempts + 1
        WHERE m.id IN (
-             SELECT id FROM missions
-              WHERE world_id = ${opts.worldId}
-                AND status = 'scheduled'
-                AND execute_at <= ${opts.gameNow.toISOString()}::timestamptz
-              ORDER BY execute_at, id
-                FOR UPDATE SKIP LOCKED
+             SELECT m2.id FROM missions m2
+               JOIN worlds w ON w.id = m2.world_id
+              WHERE m2.world_id = ${opts.worldId}
+                AND m2.status = 'scheduled'
+                AND m2.execute_at <= ${GAME_NOW_SQL}
+              ORDER BY m2.execute_at, m2.id
+                FOR UPDATE OF m2 SKIP LOCKED
               LIMIT ${opts.limit}
        )
       RETURNING m.id, m.world_id AS "worldId", m.type, m.status,
@@ -150,11 +177,12 @@ export class MissionRepository {
   }
 
   /** SLO metriği: görev gecikmesi = gameNow − execute_at (§8, p95 < 2 sn hedefi). */
-  async lagMs(worldId: number, gameNow: Date): Promise<number> {
+  async lagMs(worldId: number): Promise<number> {
     const rows = await this.db.execute<{ lag: number } & Record<string, unknown>>(sql`
-      SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (${gameNow.toISOString()}::timestamptz - execute_at)) * 1000), 0)::bigint AS lag
-        FROM missions
-       WHERE world_id = ${worldId} AND status = 'scheduled' AND execute_at <= ${gameNow.toISOString()}::timestamptz
+      SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (${GAME_NOW_SQL} - m.execute_at)) * 1000), 0)::bigint AS lag
+        FROM missions m JOIN worlds w ON w.id = m.world_id
+       WHERE m.world_id = ${worldId} AND m.status = 'scheduled'
+         AND m.execute_at <= ${GAME_NOW_SQL}
     `);
     return Number(rows[0]?.lag ?? 0);
   }

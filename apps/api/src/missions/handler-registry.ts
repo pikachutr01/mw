@@ -10,6 +10,7 @@
  */
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
+import type { MeritConfig } from '@mobilwar/catalog';
 import type { MissionRow } from './mission.repository.ts';
 
 /** Handler'ın kullanacağı transaction tipi (drizzle'ın tx nesnesi). */
@@ -46,6 +47,13 @@ export interface HandlerContext {
   engine?: {
     combat?: DeepPartial<CombatConfig>;
     loot?: Partial<LootConfig>;
+    /**
+     * ⭐ Askerî ünvan eşikleri/süreleri (§ünvanlar). Verilmezse katalog varsayılanı.
+     * ⚠️ Buraya eklemek YETMEZ: `worker.ts` → `engineFor` çıktısına ve `SettingsService`
+     * okuyucusuna da bağlanmalı, yoksa panelde görünen ayar motora hiç ulaşmaz
+     * (`combat.ts`in aynı uyarısı).
+     */
+    merit?: MeritConfig;
     /** `battles.settings_revision_id` — hangi ayar sürümüyle çözüldüğünün künyesi. */
     settingsRevisionId?: number | null;
   };

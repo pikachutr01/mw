@@ -217,6 +217,28 @@ export function notificationForOutbox(
       return out;
     }
 
+    /**
+     * ⭐ ASKERÎ ÜNVAN (§ünvanlar) — rozetin kazanıldığını söyleyen TEK anlık haber.
+     *
+     * ⚠️ Ayrı bir `tag` kullanılıyor (`merit:<tier>`), savaşınkiyle aynı değil: aynı savaş
+     * hem "Savaş bitti" hem "Başkomutan oldun" üretiyor ve ikisi aynı etikete düşseydi
+     * biri ötekini ezerdi (`renotify: true` ile aynı etiket tek bildirim demek).
+     *
+     * ⚠️ **Terfi olmayan yenilemede bildirim YOK.** Aynı ünvanı tekrar hak eden oyuncuya her
+     * büyük savaşta "Subay oldun" demek gürültü olurdu; haber olan şey basamağın DEĞİŞMESİ.
+     */
+    case 'merit:granted': {
+      const to = n(payload['playerId']);
+      if (to == null || payload['promoted'] !== true) return [];
+      const name = String(payload['name'] ?? 'Rütbe');
+      return [note({
+        playerId: to, worldId, category: 'report',
+        title: `${name} oldun`,
+        body: 'Savaşta verdiğin zarar askerî rütbe kazandırdı. İttifak sayfasında görünüyor.',
+        url: '/command', tag: `merit:${String(payload['tier'] ?? '')}`,
+      })];
+    }
+
     /** Mesaj kutusuna düşen diğer satırlar. Savaş raporu yukarıda ele alındı → burada atlanır. */
     case 'message:written': {
       const to = n(payload['playerId']);

@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { USERNAME_MAX, USERNAME_MIN } from '@mobilwar/catalog';
 import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, Countdown, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
@@ -171,11 +172,16 @@ function LoginScreen({ onDone }: { onDone: (s: AdminSession) => void }) {
         <h1 className="display text-center text-lg tracking-wide text-ink">MOBILWAR · YÖNETİM</h1>
         <Panel title="Giriş">
           <div className="space-y-3 p-3">
-            {/* ⚠️ KULLANICI ADI, e-posta değil: oyunun `/auth/login` ucu `username` bekliyor
-                (`loginRequest`, en fazla 10 karakter). E-posta yalnız doğrulama ve şifre
-                sıfırlama akışlarında kullanılıyor. */}
+            {/* ⚠️ KULLANICI ADI, e-posta değil: oyunun `/auth/login` ucu `username` bekliyor.
+                E-posta yalnız doğrulama ve şifre sıfırlama akışlarında kullanılıyor.
+
+                ⚠️ Sınır **katalogdan** okunuyor, elle yazılmıyor: burada sabit `10` duruyordu
+                ve tavan 2026-08-01'de 15'e çıkınca bayatladı — 15 karakterli adı olan bir
+                yönetici panele giremiyordu (2026-08-03'te kullanıcı bildirdi). `name-rules.ts`
+                bu sayının TEK kaynağı; oyun tarafındaki `AuthModal` da oradan besleniyor. */}
             <Field label="Kullanıcı adı">
-              <Input type="text" required autoComplete="username" maxLength={10}
+              <Input type="text" required autoComplete="username"
+                minLength={USERNAME_MIN} maxLength={USERNAME_MAX}
                 value={username} onChange={(e) => setUsername(e.target.value)} />
             </Field>
             <Field label="Parola">

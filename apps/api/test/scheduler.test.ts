@@ -88,6 +88,42 @@ describe('görev alma ve uygulama', () => {
     expect(labels).toEqual(['birinci', 'ikinci', 'ucuncu', 'dorduncu-a', 'besinci-b']);
   });
 
+  /**
+   * ⭐ REGRESYON — 2026-08-03 canlı hatası. Vade eskiden **sürecin** saatiyle
+   * karşılaştırılıyordu; süreç saati bir an ileri okuyunca vadesi 8 saat sonraki
+   * `ranking_snapshot` erken alındı. Artık kıyaslama SQL'de, iki taraf da veritabanının
+   * saatinden geliyor → sürecin saati ne derse desin vade kayamaz.
+   */
+  it('⭐ vade veritabanının saatiyle ölçülür: sürecin saati ileri gitse bile erken alınmaz', async () => {
+    const dbNow = await clock.dbGameNow(worldId);
+    const future = await enqueue(h, {
+      worldId, executeAt: new Date(dbNow.getTime() + 8 * 3_600_000), label: 'sekiz-saat-sonra',
+    });
+
+    // Sürecin saati 12 saat ileri okuyor (canlıdaki anomalinin taklidi).
+    const kayikSaat = new GameClockService(h.db);
+    kayikSaat.now = () => new Date(Date.now() + 12 * 3_600_000);
+    const s = new SchedulerService(h.db, kayikSaat, registry, {
+      worldId, workerId: 'kayik-saatli-worker', staleLockMs: 60_000,
+      maxAttempts: 3, retryBackoffMs: 0, batchSize: 50,
+    });
+
+    // Saatin gerçekten kaydığını doğrula — yoksa test hiçbir şey kanıtlamazdı.
+    const kayik = (await kayikSaat.read(worldId)).gameNow.getTime() - dbNow.getTime();
+    expect(kayik).toBeGreaterThan(11 * 3_600_000);
+
+    const r = await s.tick();
+    expect(r.claimed).toBe(0);                                  // eski kod 1 alırdı
+    expect((await missionRow(h, future)).status).toBe('scheduled');
+
+    // Dünyanın saatini gerçekten ileri al (negatif offset) → aynı görev artık alınmalı.
+    await h.db.execute(sql`
+      UPDATE worlds SET clock_offset_ms = ${-9 * 3_600_000} WHERE id = ${worldId}
+    `);
+    expect((await scheduler().tick()).done).toBe(1);
+    expect((await missionRow(h, future)).status).toBe('done');
+  });
+
   it('catch-up: worker uzun süre kapalı kaldıysa birikmişleri sırayla işler', async () => {
     const t = Date.now() - 3 * 3_600_000;   // 3 saat önce başlayan zincir
     for (let i = 0; i < 20; i++) {
@@ -106,9 +142,7 @@ describe('⭐ crash kurtarma (çıkış kriteri)', () => {
 
     // 1) "Ölen" worker görevi kilitler ama uygulamaz (crash'i böyle taklit ediyoruz).
     const repo = new MissionRepository(h.db);
-    const claimed = await repo.claimDue({
-      worldId, gameNow: new Date(), limit: 10, workerId: 'olen-worker',
-    });
+    const claimed = await repo.claimDue({ worldId, limit: 10, workerId: 'olen-worker' });
     expect(claimed).toHaveLength(1);
     expect((await missionRow(h, id)).status).toBe('running');
 
@@ -128,7 +162,7 @@ describe('⭐ crash kurtarma (çıkış kriteri)', () => {
   it('taze kilit KURTARILMAZ (çalışan worker elinden görev çalınmaz)', async () => {
     const id = await enqueue(h, { worldId, executeAt: ago(1_000), label: 'taze' });
     const repo = new MissionRepository(h.db);
-    await repo.claimDue({ worldId, gameNow: new Date(), limit: 10, workerId: 'calisan-worker' });
+    await repo.claimDue({ worldId, limit: 10, workerId: 'calisan-worker' });
 
     const r = await scheduler({ workerId: 'baska-worker', staleLockMs: 60_000 }).tick();
 
@@ -297,7 +331,7 @@ describe('metrikler (§8)', () => {
   it('görev gecikmesi ölçülür', async () => {
     await enqueue(h, { worldId, executeAt: ago(30_000) });
     const repo = new MissionRepository(h.db);
-    const lag = await repo.lagMs(worldId, new Date());
+    const lag = await repo.lagMs(worldId);
     expect(lag).toBeGreaterThanOrEqual(29_000);
     expect(lag).toBeLessThan(60_000);
   });

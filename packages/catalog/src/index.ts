@@ -12,6 +12,7 @@ export * from './config.ts';
 export * from './formulas.ts';
 export * from './prerequisites.ts';
 export * from './display-order.ts';
+export * from './merit.ts';
 export { catalogHash, CATALOG_VERSION } from './hash.ts';
 export { HERO_NAMES, pickHeroName } from './hero-names.ts';
 export {

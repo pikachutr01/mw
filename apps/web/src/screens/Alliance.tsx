@@ -23,6 +23,7 @@ import {
   Badge, Button, Empty, ErrorBox, Input, Panel, Skeleton, Td, TextArea, Th,
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
+import { MERIT_ROW_CLASS, MeritBadge } from '../components/MeritBadge.tsx';
 
 /** Rütbe adları — ekran görüntüsündeki yazımla ("Konsey Üyesi"; istemci içi string "Konsey"). */
 export const ROLE_LABEL: Record<number, { text: string; tone: 'muted' | 'success' | 'warning' | 'danger' }> = {
@@ -212,6 +213,10 @@ function MemberView({ a, page, setPage }: {
               <Th>Oyuncu</Th>
               <Th className="w-24 text-right">Puan</Th>
               <Th className="w-14 text-center">Sıra</Th>
+              {/* ⚠️ Bu «Rütbe» İTTİFAK ROLÜdür (Asker/Konsey/Lider). Askerî rütbe için ayrı bir
+                  sütun **istenmedi** (kullanıcı, `docs/arsiv/ek_bilgiler.txt`): rozet oyuncu
+                  adının başında duruyor, ipucu adını ve kalan gününü yazıyor. Zaten dar olan
+                  tabloya yedinci sütun eklemek mobilde taşırıyordu. */}
               <Th className="w-28">Rütbe</Th>
               <Th className="w-16 text-center">Durum</Th>
               <Th className="w-40 text-right">İşlem</Th>
@@ -253,9 +258,24 @@ function MemberLine({ m, index, myRole, alt }: {
   };
 
   return (
-    <tr className={`h-8 border-b border-border ${alt ? 'bg-row-alt' : ''}`}>
+    /**
+     * ⭐ Ünvanlı satır renklenir — **yalnız ittifak sayfasında** (kullanıcı isteği).
+     * ⚠️ Ünvan rengi `bg-row-alt`i EZER: zebra deseni yalnız okumayı kolaylaştıran bir süs,
+     * ünvan ise bilgi. İkisini birleştirseydik tek numaralı satırdaki Mareşal ile çift
+     * numaralıdaki farklı görünürdü.
+     */
+    <tr className={`h-8 border-b border-border ${
+      m.meritTier != null ? MERIT_ROW_CLASS[m.meritTier] ?? '' : alt ? 'bg-row-alt' : ''
+    }`}>
       <Td className="tnum text-center">{index + 1}</Td>
-      <Td className="max-w-[9rem] truncate">{m.username}</Td>
+      <Td className="max-w-[9rem]">
+        {/* Rozet adın ÖNÜNDE (kullanıcı isteği). `truncate` iç `span`e taşındı: dış hücrede
+            kalsaydı rozeti de kırpardı. */}
+        <span className="flex items-center gap-1.5">
+          <MeritBadge tier={m.meritTier} expiresAt={m.meritExpiresAt} size={18} />
+          <span className="truncate">{m.username}</span>
+        </span>
+      </Td>
       <Td className="tnum text-right">{fmt(m.score)}</Td>
       <Td className="tnum text-center">{m.worldRank ?? '-'}</Td>
       <Td><Badge tone={role.tone}>{role.text}</Badge></Td>

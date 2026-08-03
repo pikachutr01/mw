@@ -152,6 +152,23 @@ export function eventForOutbox(
       };
 
     /**
+     * ⭐ ASKERÎ ÜNVAN KAZANILDI (§ünvanlar).
+     *
+     * ⚠️ Olay YALNIZ ünvanı kazanana gidiyor — ittifak arkadaşlarına yayın YOK. İki sebep:
+     *   1. Rozet düşmana verilmemesi gereken bir istihbarat; alıcı listesi ne kadar dar o
+     *      kadar iyi (ittifak üyeliği anlık değişir, yayın anındaki liste yanılabilir).
+     *   2. İttifak sayfası zaten emniyet ağı yoklamasıyla tazeleniyor; arkadaşın rozetini
+     *      saniyesinde görmek bir ihtiyaç değil.
+     * `overview` konusu oyuncunun kendi Genel Durum'undaki ünvan satırını tazeler.
+     */
+    case 'merit:granted':
+      return {
+        topic: 'merit:granted', worldId,
+        playerIds: players(num(payload['playerId'])),
+        ref: { playerId: num(payload['playerId']) },
+      };
+
+    /**
      * ⭐ BİRLEŞİK GÖREV BİTİŞİ (2026-07-30) — scheduler her Ordular-görünür görevi başarıyla
      * işleyince yazar. Tek olay üç işi görür: (1) Ordular sayfasında satır ANINDA düşer,
      * (2) başka sayfadayken sol menü rozeti kendiliğinden güncellenir, (3) payload gelecekte

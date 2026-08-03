@@ -24,11 +24,11 @@ import {
 } from '@mobilwar/settings';
 import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
 import {
-  catalogHash, mergeCatalogConfig, type CatalogConfig, type DeepPartialCatalog,
+  catalogHash, mergeCatalogConfig, type CatalogConfig, type DeepPartialCatalog, type MeritConfig,
 } from '@mobilwar/catalog';
 import type { Db } from '../db/client.ts';
 import { catalogOverrides } from './catalog.ts';
-import { combatOverrides, lootOverrides } from './combat.ts';
+import { combatOverrides, lootOverrides, meritOverrides } from './combat.ts';
 import { setLiveSettings } from './live.ts';
 
 /** Ayar değişikliğinin duyurulduğu Postgres kanalı. */
@@ -173,6 +173,12 @@ export class SettingsService {
   loot(worldId: number): Partial<LootConfig> | undefined {
     const s = this.snapshot(worldId);
     return lootOverrides(s.effective, s.overridden);
+  }
+
+  /** ⭐ Askerî ünvan eşikleri/süreleri. Aynı sözleşme: dokunulmamışsa `undefined`. */
+  merit(worldId: number): MeritConfig | undefined {
+    const s = this.snapshot(worldId);
+    return meritOverrides(s.effective, s.overridden);
   }
 
   /**

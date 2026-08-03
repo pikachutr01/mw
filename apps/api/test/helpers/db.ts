@@ -40,33 +40,27 @@ export async function setupTestDb(): Promise<DbHandle> {
 }
 
 /**
- * ⭐ **GÖREVİ VADESİNE GETİREN ZAMAN DAMGASI — SQL `now()` DEĞİL, NODE saati.**
+ * ⭐ **GÖREVİ VADESİNE GETİREN ZAMAN DAMGASI — VERİTABANININ oyun saatinden.**
  *
- * ⚠️ Bu, 2026-08-02'de bir günü yiyen bir kırılganlığın çözümü. Testler vadeyi
- * `execute_at = now() - interval '1 second'` diye yazıyordu; `now()` **Postgres'in** saati.
- * Zamanlayıcı ise `claimDue`'ya `gameNow`u veriyor ve o **Node'un** saati
- * (`GameClockService.now()` → `new Date()`). İKİ AYRI SAAT.
+ * Kural tek cümle: *karşılaştırmanın iki tarafı da aynı saatten okunur.* `claimDue`
+ * `execute_at`i veritabanının oyun saatiyle kıyaslıyor (`mission.repository.ts` ·
+ * `GAME_NOW_SQL`), o yüzden vade damgası da oradan gelmeli.
  *
- * Postgres Docker'ın Linux sanal makinesinde koşuyor ve o VM'in saati ana makineden **kayar**
- * (özellikle uyku/uyanma sonrası). Postgres 1 saniyeden fazla ileri kaydığı anda
- * `now() - 1 s` hâlâ Node'a göre GELECEKTE kalıyor → `claimDue` görevi ALMIYOR →
- * `tick()` hiçbir şey yapmıyor.
+ * ⚠️ **İKİ KEZ YANLIŞ YAZILDI, ikisi de sessizce kırıldı:**
+ *   1. `now() - interval '1 second'` (2026-08-02) — Postgres'in saati; zamanlayıcı o zaman
+ *      Node'un saatine bakıyordu. Docker VM'i uyku sonrası 1 sn'den fazla ileri kayınca vade
+ *      Node'a göre GELECEKTE kalıyor, `tick()` hiçbir şey yapmıyordu. `expect(r.dead).toBe(0)`
+ *      sıfır görevde de geçtiği için hata görünmüyor, savaş hiç olmuyor, sonraki okumalar
+ *      `rows[0]` undefined ile patlıyordu (17 kırılma, 2 sn'lik yapay sapmayla yeniden üretildi).
+ *   2. `clock.gameNow(worldId)` (Node) — 1. kusurun aynası. 2026-08-03'te vade karşılaştırması
+ *      SQL'e taşınınca bu sefer bu taraf yanlış saate bağlanmış oldu.
  *
- * Ve bu **sessiz** kalıyordu: `expect(r.dead).toBe(0)` sıfır görev alındığında da geçer.
- * Sonuç, savaşın hiç olmadığı ve sonraki okumaların `rows[0]` undefined patladığı, sebebi
- * görünmeyen bir yığın hata. 2 saniyelik yapay sapmayla birebir yeniden üretildi (17 kırılma,
- * aynı hata metniyle).
- *
- * ⚠️ **Taban `Date.now()` DEĞİL, `clock.gameNow(worldId)`.** İlk düzeltmede `Date.now()`
- * yazmıştım; doğru sonucu veriyordu ama YANLIŞ SEBEPLE: vadeyi zamanlayıcının baktığı değere
- * değil, ona *benzeyen* bir değere bağlıyordu. `gameNow = now() − clock_offset_ms` ve offset
- * sıfırdan farklıysa (bakım testleri) ikisi ayrışır. Tek kaynak kuralı: karşılaştırmanın iki
- * tarafı da AYNI fonksiyondan okunur.
+ * Artık iki taraf da Postgres'ten geliyor ve VM saat kayması bu testleri hiç etkilemiyor.
  */
 export async function dueAt(
   clock: GameClockService, worldId: number, msAgo = 1000,
 ): Promise<string> {
-  const gameNow = await clock.gameNow(worldId);
+  const gameNow = await clock.dbGameNow(worldId);
   return new Date(gameNow.getTime() - msAgo).toISOString();
 }
 

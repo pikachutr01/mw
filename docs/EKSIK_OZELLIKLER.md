@@ -188,6 +188,16 @@ gösteriliyor ama §9.1.1 gereği otomatik karar üretmiyor).
 
 ## 3. 🟢 KÜÇÜK
 
+- **Rütbesin sona erdiği bildirilmiyor** — askerî rütbe (§rütbeler) süresi dolunca sessizce
+  kayboluyor. Süreyi temizleyen bir görev **bilerek yok** (okuma anında süzülüyor); bildirim
+  istenirse reçete hazır: `vacation_end` deseni (`vacation.handler.ts` — yükte `grantedAt`
+  taşınır, handler DB'deki değerle karşılaştırıp eşleşmezse dokunmaz).
+- **`sw.js` push yükündeki `category` hiç okunmuyor** — `notify.service.ts` gönderiyor, service
+  worker görmezden geliyor. Kategoriye göre farklı bildirim ikonu vermek için hazır ama
+  bağlanmamış bir kanca.
+- **Müttefike destek yok** — destek yalnız kendi şehirlerine gidiyor (`mission.service.ts`).
+  ⚠️ Eklenirse **askerî rütbe payı bölüşümü gerekir**: bugün savunan taraf tek oyuncu olduğu
+  için kıyım puanının tamamı şehir sahibine yazılıyor (`grantMerits`).
 - **Beni Hatırla** onay kutusu (refresh token altyapısı ✅ var, UI yok)
 - **Hepsini Seç** / toplu mesaj silme
 - **Arkadaşına Tavsiye Et** (`arTvs.do`) — ⚠️ **bilinçli ertelendi**: çoklu hesap vektörü (§9.1)

@@ -5,6 +5,7 @@
  * `ROLE=worker` ise yalnız bu döngüler koşar. Kod aynı, fark yalnız neyin başlatıldığı.
  */
 import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
+import type { MeritConfig } from '@mobilwar/catalog';
 import { CAVE_HANDLERS } from '../cave/cave.handlers.ts';
 import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';
@@ -42,6 +43,8 @@ export interface WorkerOptions {
   settings?: {
     combat(worldId: number): DeepPartial<CombatConfig> | undefined;
     loot(worldId: number): Partial<LootConfig> | undefined;
+    /** Askerî ünvan eşikleri/süreleri (§ünvanlar). */
+    merit(worldId: number): MeritConfig | undefined;
     revisionId(worldId: number): number | null;
   } | null;
 }
@@ -96,6 +99,7 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
       ? (worldId) => ({
         combat: opts.settings!.combat(worldId),
         loot: opts.settings!.loot(worldId),
+        merit: opts.settings!.merit(worldId),
         settingsRevisionId: opts.settings!.revisionId(worldId),
       })
       : undefined,

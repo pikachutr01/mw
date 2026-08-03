@@ -145,6 +145,24 @@ export const players = pgTable('players', {
    */
   rankingExcluded: boolean('ranking_excluded').notNull().default(false),
   allianceScoreExcluded: boolean('alliance_score_excluded').notNull().default(false),
+  /**
+   * ⭐ ASKERÎ ÜNVAN (kullanıcı, 2026-08-03) — bir savaşta öldürülen ordunun kaynak bedeli
+   * eşiği geçince kazanılan **süreli** rozet. Formül ve eşikler `@mobilwar/catalog` · `merit.ts`.
+   *
+   * ⚠️ Süresi dolanı temizleyen bir görev YOK: okuma anında `merit_expires_at > gameNow`
+   * süzülüyor (§3 "tembel" kararı). Yani bu sütunlar geçmiş değerler taşıyabilir — okuyan
+   * her sorgu süzmek ZORUNDA, yoksa süresi bitmiş ünvan ekranda kalır.
+   *
+   * ⚠️ Zamanlar OYUN saatinde: bakımda duran dünyada ünvan süresi de durmalı.
+   *
+   * ⚠️ Görünürlük sorguda: yalnız ittifak listesi ve oyuncunun kendisi. Dünya/Sıralama/Arama
+   * ekranlarına sızarsa "bu oyuncu yeni büyük savaş verdi" istihbaratı bedavaya dağıtılır.
+   */
+  meritTier: smallint('merit_tier'),
+  meritScore: bigint('merit_score', { mode: 'number' }),
+  meritBattleId: bigint('merit_battle_id', { mode: 'number' }),
+  meritGrantedAt: timestamp('merit_granted_at', { withTimezone: true }),
+  meritExpiresAt: timestamp('merit_expires_at', { withTimezone: true }),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   /**
    * ⭐ HESABINI SİLDİ (2026-08-01). Satır **kalıyor**: başkent dünyada duran gerçek bir şehir

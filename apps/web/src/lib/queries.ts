@@ -609,14 +609,20 @@ export interface OverviewCity {
 export interface Overview {
   player: {
     username: string;
+    /**
+     * ⚠️ **DONMUŞ** puan — anlık görüntüden (00/08/16), canlı `players.score`ten değil.
+     * Sıralamalar sayfasındaki sayıyla birebir aynı olmalı; ayrışırlarsa sunucu tarafında
+     * biri yanlış sütunu okuyor demektir (`command.controller.ts` · `/overview`).
+     */
     score: number;
-    /** Bir sonraki puana kalan kaynak (1.000 kaynak = 1 puan). */
-    toNextPoint: number;
     rank: number | null;
     prevRank: number | null;
     /** Pozitif = yukarı çıktı. Önceki anlık görüntü yoksa `null`. */
     rankChange: number | null;
     totalPlayers: number;
+    /** ⭐ Kendi askerî ünvanı. Oyuncu kendi rozetini her zaman görür; başkalarınınki yalnız ittifak listesinde. */
+    meritTier: number | null;
+    meritExpiresAt: string | null;
     alliance: string | null;
     allianceRank: number | null;
     allianceRankChange: number | null;
@@ -1068,6 +1074,14 @@ export interface AllianceMember {
    * ⚠️ `online`dan bağımsız: tatildeki oyuncu oyuna girip durumuna bakıyor olabilir.
    */
   onVacation: boolean;
+  /**
+   * ⭐ ASKERÎ ÜNVAN (1 Subay … 4 Mareşal) — **yalnız bu uçtan gelir**.
+   * ⚠️ Dünya/Sıralama/Arama yanıtlarına eklenmemeli: rozet aynı zamanda "ordusu yeni kırıldı"
+   * istihbaratı ve düşmana bedavaya verilmemeli (kullanıcı kuralı).
+   * Sunucu süresi geçmişleri zaten `null`a çeviriyor; istemcinin ayrıca süzmesi gerekmez.
+   */
+  meritTier: number | null;
+  meritExpiresAt: string | null;
 }
 
 export interface AllianceView {

@@ -182,6 +182,18 @@ export class CommandController {
    * Tek çağrı, çünkü ekran hepsini aynı anda gösteriyor; şehir başına ayrı istek atmak
    * 4 şehirli bir oyuncuda 5 gidiş-dönüş demekti.
    */
+  /**
+   * ⭐⭐ PUAN **DONMUŞ** SÜTUNDAN: `rankings.score` (kullanıcı kararı, 2026-08-03).
+   *
+   * ⚠️ Eskiden `players.score` okunuyordu — her harcamada anında değişen CANLI sütun
+   * (`score.service.ts` · `addScoreBase`). Sonuç, aynı panelde "güncelleme 08:00" yazarken
+   * saniyesinde artan bir puan ve Sıralamalar sayfasındakinden FARKLI bir sayıydı. Kullanıcı
+   * bunu canlıda yakaladı: *"herhangi bir güncelleme olmadan 4 puan nasıl yazıyor?"*
+   *
+   * Sıra zaten anlık görüntüden geliyordu; puan da oradan gelmeli, yoksa tek panel iki ayrı
+   * tazelikte iki gerçek anlatır. `players.score` duruyor — o **anlık görüntünün girdisi**
+   * (`ranking.service.ts`), ekranın kaynağı değil.
+   */
   @Get('overview')
   async overview(@Req() req: AuthedRequest): Promise<Record<string, unknown>> {
     const player = req.player!;
@@ -189,8 +201,20 @@ export class CommandController {
 
     const [meRows, cityRows, techRows] = await Promise.all([
       this.db.execute<Record<string, unknown>>(sql`
-        SELECT p.username, p.score, p.score_base, p.alliance_id,
+        SELECT p.username, p.alliance_id,
+               -- ⭐⭐ PUAN **DONMUŞ** SÜTUNDAN (kullanıcı kararı, 2026-08-03) — gerekçesi
+               -- aşağıdaki JSDoc'ta; buraya yazmıyoruz çünkü SQL yorumu bir template
+               -- literal'in içinde ve ters tırnak şablonu kapatır (bu satırlar bir kez
+               -- öyle kırıldı).
+               COALESCE(r.score, 0) AS score,
                r.rank, r.prev_rank,
+               -- Askerî ünvan: oyuncu KENDİ ünvanını her zaman görür (kullanıcı kararı).
+               -- Başkalarına yalnız ittifak listesinde açılır (alliance.controller).
+               -- Süresi geçmiş satır tabloda kalır → burada da süzülüyor.
+               CASE WHEN p.merit_expires_at > ${gameNow.toISOString()}::timestamptz
+                    THEN p.merit_tier END AS merit_tier,
+               CASE WHEN p.merit_expires_at > ${gameNow.toISOString()}::timestamptz
+                    THEN p.merit_expires_at END AS merit_expires_at,
                a.name AS alliance_name, ar.rank AS alliance_rank, ar.prev_rank AS alliance_prev_rank,
                -- ⚠️ Payda sıralamadaki satır sayısıyla AYNI olmalı: muaflar listede
                -- olmadığı için burada da sayılmaz, yoksa "12 oyuncudan 12.si" gibi
@@ -258,12 +282,24 @@ export class CommandController {
       player: {
         username: String(me['username'] ?? ''),
         score: Number(me['score'] ?? 0),
-        /** Bir sonraki puana kalan kaynak — "1.000 kaynakta 1 puan" kuralını ekranda görünür kılar. */
-        toNextPoint: Math.max(0, 1000 - Math.floor(Number(me['score_base'] ?? 0) % 1000)),
+        /**
+         * ⚠️ `toNextPoint` KALDIRILDI (2026-08-03). "1.000 kaynakta 1 puan" göstergesi canlı
+         * `score_base % 1000`den türüyordu; puan donunca donmuş bir sayının yanında canlı bir
+         * artık göstermek ikinci bir tutarsızlık olurdu ("puan 4, 1.000'e 340 kaldı" — ama
+         * puan 8 saat boyunca 4'te kalacak).
+         */
         rank,
         prevRank,
         rankChange: rank != null && prevRank != null ? prevRank - rank : null,
         totalPlayers: Number(me['total_players'] ?? 0),
+        /**
+         * ⭐ Kendi askerî ünvanı + bitiş anı. Terfi bildirimi anlıktır ve kaybolur; oyuncunun
+         * rozetini ve kalan süresini görebileceği tek kalıcı yer burası (kullanıcı kararı:
+         * *"Kendisi her zaman görsün"*) — ittifaksız oyuncu için de tek yer.
+         */
+        meritTier: me['merit_tier'] == null ? null : Number(me['merit_tier']),
+        meritExpiresAt: me['merit_expires_at'] == null
+          ? null : toDate(me['merit_expires_at']).toISOString(),
         alliance: me['alliance_name'] == null ? null : String(me['alliance_name']),
         allianceRank: me['alliance_rank'] == null ? null : Number(me['alliance_rank']),
         allianceRankChange: me['alliance_rank'] != null && me['alliance_prev_rank'] != null

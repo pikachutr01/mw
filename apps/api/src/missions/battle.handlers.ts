@@ -27,6 +27,7 @@ import {
 import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
 import { toDate } from '../db/client.ts';
 import type { CityService } from '../cities/city.service.ts';
+import { applyMerit, sameAlliance } from '../merit/merit.service.ts';
 import { debitLosses, debitRefund } from '../scoring/score.service.ts';
 import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
 
@@ -160,8 +161,25 @@ export function createAttackHandler(cities: CityService): MissionHandler {
      * kaybedilmiş sayılmaz ve puan götürmez; bu, savunma tabanının (§13.11.10) puan
      * tarafındaki doğal karşılığı.
      */
-    await debitLosses(ctx.tx, attackerPlayerId, perTypeLosses(attacker.units, result.attacker.counts));
-    await debitLosses(ctx.tx, defenderCity.playerId, perTypeLosses(defender.units, result.defender.counts));
+    const attackerLosses = perTypeLosses(attacker.units, result.attacker.counts);
+    const defenderLosses = perTypeLosses(defender.units, result.defender.counts);
+    await debitLosses(ctx.tx, attackerPlayerId, attackerLosses);
+    await debitLosses(ctx.tx, defenderCity.playerId, defenderLosses);
+
+    /**
+     * ⭐ ASKERÎ ÜNVAN — aynı kayıp tablosunun ikinci okuyucusu.
+     *
+     * Puan kaybı "kendi ordumun bedeli", ünvan ise "düşmanın ordusunun bedeli": aynı iki
+     * `Record` ters çaprazlanıyor. Bu yüzden burada, `debitLosses`ın hemen yanında —
+     * kayıpları ikinci kez hesaplamak için başka bir yere koymak gerekirdi.
+     */
+    await grantMerits(ctx, {
+      battleId,
+      attackerPlayerId,
+      defenderPlayerId: defenderCity.playerId,
+      attackerLosses,
+      defenderLosses,
+    });
 
     // ⭐ Yağma savunandan SAVAŞ ANINDA düşülür (§13.10.4): yoldaki mal kimsenin değildir,
     //    savunan geri alamaz, saldıran ancak dönüşte alır.
@@ -773,6 +791,69 @@ async function resolveCaveBreak(ctx: HandlerContext, o: {
   });
 
   return { ...base, broken: true, escaped: inside, repairUntil: until.toISOString() };
+}
+
+/**
+ * ⭐ ASKERÎ ÜNVAN DAĞITIMI — iki tarafa da, kim kazandığına BAKMADAN.
+ *
+ * Kullanıcı kuralı: *"hem savunan hem saldıran için geçerli… Savaşı kaybetse bile verilsin."*
+ * Ölçü sonucu değil, düşmana verilen zararı görüyor — bu yüzden saldırana **savunanın**
+ * kayıpları, savunana **saldıranın** kayıpları veriliyor.
+ *
+ * ⚠️ Destek bugün yalnız **kendi şehirlerine** gidiyor (`mission.service.ts`), yani savunan
+ * taraf tek oyuncu ve pay bölüşümü gerekmiyor. Müttefike destek eklenirse burası
+ * "kim ne kadar ordu koydu" oranına göre bölünmek zorunda kalacak.
+ *
+ * ⚠️ Aynı ittifaktakiler arası savaş SAYILMAZ — anlaşmalı rozet dağıtımını kapatır.
+ *
+ * ⚠️ Hata YUTULMUYOR: ünvan savaşla aynı transaction'da. Bir sorun çıkarsa savaşın tamamı
+ * geri alınıp yeniden denenir; "savaş oldu ama rozet yarım yazıldı" hâli oluşamaz.
+ */
+async function grantMerits(ctx: HandlerContext, o: {
+  battleId: number;
+  attackerPlayerId: number;
+  defenderPlayerId: number;
+  attackerLosses: Record<string, number>;
+  defenderLosses: Record<string, number>;
+}): Promise<void> {
+  if (await sameAlliance(ctx.tx, o.attackerPlayerId, o.defenderPlayerId)) return;
+
+  const taraflar: { playerId: number; enemyLosses: Record<string, number>; side: 'attacker' | 'defender' }[] = [
+    { playerId: o.attackerPlayerId, enemyLosses: o.defenderLosses, side: 'attacker' },
+    { playerId: o.defenderPlayerId, enemyLosses: o.attackerLosses, side: 'defender' },
+  ];
+
+  for (const t of taraflar) {
+    const grant = await applyMerit({
+      tx: ctx.tx,
+      playerId: t.playerId,
+      battleId: o.battleId,
+      enemyLosses: t.enemyLosses,
+      at: ctx.at,
+      merit: ctx.engine?.merit,
+    });
+    if (!grant) continue;
+
+    await ctx.emit('merit:granted', {
+      worldId: ctx.worldId,
+      playerId: grant.playerId,
+      tier: grant.tier,
+      name: grant.name,
+      killScore: grant.killScore,
+      expiresAt: grant.expiresAt.toISOString(),
+      promoted: grant.promoted,
+      battleId: o.battleId,
+      side: t.side,
+    });
+    await ctx.audit({
+      action: 'merit.granted', entity: 'player', entityId: grant.playerId,
+      playerId: grant.playerId,
+      after: {
+        tier: grant.tier, name: grant.name, killScore: grant.killScore,
+        expiresAt: grant.expiresAt.toISOString(), promoted: grant.promoted, battleId: o.battleId,
+      },
+    });
+  }
 }
 
 /** Savaş öncesi/sonrası adetlerden tür tür kayıp. Artı yönde değişim (taban onarımı) sayılmaz. */

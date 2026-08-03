@@ -47,9 +47,17 @@ export const WARRIOR_ORDER: readonly string[] = [
   'spy_bird', 'cargo_wagon', 'gnome', 'chaos',
 ];
 
-/** Savunma ekranı — kullanıcı onayı: "böyle iyi". */
+/**
+ * Savunma ekranı — **Sur ve Büyü Kalkanı EN ÜSTTE** (kullanıcı, 2026-08-03).
+ *
+ * ⚠️ Bu dizi Savunma ekranıyla **simülatörü birlikte** sıralıyor (`Simulate.tsx`). İkisinin
+ * ayrışması istenirse simülatöre ayrı bir sabit gerekir; bugün bilerek tek liste.
+ *
+ * Gerekçe: ikisi `LEVEL_BASED` — adet değil SEVİYE taşırlar ve savaşta hiç ölmezler. Listenin
+ * sonunda dururken "en önemsiz" gibi okunuyorlardı; oysa savunmanın çatısı onlar.
+ */
 export const DEFENSE_ORDER: readonly string[] = [
-  'archer_tower', 'trap', 'oil_cauldron', 'mangonel_tower', 'guard', 'ballista', 'wall', 'magic_shield',
+  'wall', 'magic_shield', 'archer_tower', 'trap', 'oil_cauldron', 'mangonel_tower', 'guard', 'ballista',
 ];
 
 /** Verilen sıraya göre diziyi düzenler; listede olmayanlar sona, kendi aralarında sırayı korur. */

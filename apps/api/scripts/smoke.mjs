@@ -151,12 +151,17 @@ async function main() {
   ok(typeof ov.body?.player?.score === 'number', 'genel durum puan döndürüyor', ov.body);
   ok(Array.isArray(ov.body?.cities) && ov.body.cities.length > 0, 'şehir tablosu dolu', ov.body);
   ok(Array.isArray(ov.body?.techs) && ov.body.techs[0]?.name, 'teknik adları TÜRKÇE geliyor', ov.body?.techs?.[0]);
-  // ⭐ Puan harcamayla yazılıyor: 7. adımda Çiftlik yükseltmesi yapıldı (sonra iptal edildi),
-  //    yani taban artmış olmalı. Sıfır dönerse puanlama hattı kopmuş demektir.
-  ok(ov.body?.player?.toNextPoint <= 1000, 'sonraki puana kalan kaynak hesaplanıyor', ov.body?.player);
 
   const rank = await call('GET', '/api/v1/command/rankings?kind=player', { token: A });
   ok(Array.isArray(rank.body?.rows), 'oyuncu sıralaması listeleniyor', rank.body);
+  /**
+   * ⭐ Genel Durum ile Sıralamalar AYNI puanı göstermeli (2026-08-03 kararı). Eskiden ilki
+   * canlı `players.score`, ikincisi donmuş `rankings.score` okuyordu; ikisi ayrıştığı anda
+   * ekranda "güncelleme 08:00" yazarken puan saniyesinde değişiyordu.
+   */
+  const benim = rank.body?.rows?.find((r) => r.isMine);
+  ok(benim == null || benim.score === ov.body?.player?.score,
+    'Genel Durum puanı = sıralama puanı (ikisi de donmuş)', { ov: ov.body?.player?.score, rank: benim?.score });
   ok(rank.body?.nextAt?.endsWith(':00:00.000Z'), 'sıradaki anlık görüntü tam saatte', rank.body?.nextAt);
   const ally = await call('GET', '/api/v1/command/rankings?kind=alliance', { token: A });
   ok(Array.isArray(ally.body?.rows), 'ittifak sıralaması şekil olarak doğru (boşsa unavailable dolu)', ally.body);

@@ -14,6 +14,7 @@
  * Bu davranış `apps/api/test/combat-settings.test.ts`te ölçülüyor.
  */
 import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
+import type { MeritConfig, MeritTier } from '@mobilwar/catalog';
 
 type Values = Readonly<Record<string, Record<string, number | boolean> | undefined>>;
 
@@ -135,7 +136,38 @@ export function lootOverrides(
   return touched ? out : undefined;
 }
 
+/**
+ * ⭐ ASKERÎ ÜNVAN eşlemesi. Diğer ikisinden farklı olarak hedef nesne **basamak indeksli**
+ * (`thresholds[2]`), o yüzden ayrı bir tablo: anahtar `merit.threshold2` → `thresholds[2]`.
+ */
+const MERIT_MAP: Readonly<Record<string, { field: 'thresholds' | 'days'; tier: MeritTier }>> = {
+  'merit.threshold1': { field: 'thresholds', tier: 1 },
+  'merit.threshold2': { field: 'thresholds', tier: 2 },
+  'merit.threshold3': { field: 'thresholds', tier: 3 },
+  'merit.threshold4': { field: 'thresholds', tier: 4 },
+  'merit.days1': { field: 'days', tier: 1 },
+  'merit.days2': { field: 'days', tier: 2 },
+  'merit.days3': { field: 'days', tier: 3 },
+  'merit.days4': { field: 'days', tier: 4 },
+};
+
+export function meritOverrides(
+  values: Values, overridden: readonly string[],
+): MeritConfig | undefined {
+  const out: MeritConfig = { thresholds: {}, days: {} };
+  let touched = false;
+  for (const key of overridden) {
+    const m = MERIT_MAP[key];
+    if (!m) continue;
+    const v = pick(values, key);
+    if (typeof v !== 'number') continue;
+    out[m.field][m.tier] = v;
+    touched = true;
+  }
+  return touched ? out : undefined;
+}
+
 /** Testin kullandığı liste: motora bağlı olması gereken tüm anahtarlar. */
 export const MAPPED_KEYS: readonly string[] = [
-  ...Object.keys(COMBAT_MAP), ...Object.keys(LOOT_MAP),
+  ...Object.keys(COMBAT_MAP), ...Object.keys(LOOT_MAP), ...Object.keys(MERIT_MAP),
 ];

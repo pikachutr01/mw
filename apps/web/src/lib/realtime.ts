@@ -68,6 +68,8 @@ const INVALIDATES: Record<string, string[]> = {
   'battle:resolved': ['messages', 'missions', 'city'],
   // Sıralama günde 3 kez donuyor; donduğu an ekrandaki sıra bayatlamasın.
   'ranking:updated': ['rankings', 'overview', 'world'],
+  // Askerî ünvan: kendi Genel Durum satırı + (ittifaktaysa) kendi satırındaki rozet.
+  'merit:granted': ['overview', 'alliance'],
   /**
    * ⭐ BAKIM MODU (admin Faz 2) — perde bu olayla açılıp kapanır.
    *

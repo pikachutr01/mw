@@ -13,7 +13,7 @@
  * Tüm `execute_at`, `finish_at`, `resources_at` değerleri OYUN SAATİNDE tutulur.
  */
 import { eq, sql } from 'drizzle-orm';
-import type { Db } from '../db/client.ts';
+import { toDate, type Db } from '../db/client.ts';
 import { worlds } from '../db/schema.ts';
 
 export interface WorldClock {
@@ -54,6 +54,24 @@ export class GameClockService {
 
   async gameNow(worldId: number, realNow = this.now()): Promise<Date> {
     return (await this.read(worldId, realNow)).gameNow;
+  }
+
+  /**
+   * ⭐ Oyun saatini **veritabanının** saatinden okur (`gameNow()` sürecin saatini kullanır).
+   *
+   * ⚠️ Fark ihmal edilebilir görünür ama bir kez canlıda vurdu: görev vadesi süreç saatiyle
+   * kıyaslanırken saat bir an ileri okudu ve 7,5 saat erken bir sıralama anlık görüntüsü
+   * alındı (`mission.repository.ts` · `GAME_NOW_SQL`). Kuyruk artık kıyaslamayı SQL içinde
+   * yapıyor; **vadeyle karşılaştırılacak** bir zaman üretmesi gereken her yer (testler,
+   * elle görev yazan kod) bunu kullanmalı — `gameNow()`u değil.
+   */
+  async dbGameNow(worldId: number): Promise<Date> {
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT (COALESCE(paused_at, now()) - (clock_offset_ms * interval '1 millisecond')) AS at
+        FROM worlds WHERE id = ${worldId}
+    `);
+    if (!row) throw new Error(`Dünya bulunamadı: ${worldId}`);
+    return toDate(row['at']);
   }
 
   /**

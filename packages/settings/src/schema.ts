@@ -75,6 +75,17 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     description: 'Savaş sonrası kahraman kazanma ihtimali (28/28 ölçüm, hepsi binary sabiti).',
   },
   {
+    id: 'merit',
+    label: 'Askerî rütbeler',
+    description: '⭐ Subay · Komutan · Başkomutan · Mareşal — TEK bir savaşta düşmana '
+      + 'kaybettirilen puan eşiği geçerse verilen süreli rozetler. Hem saldıran hem savunan '
+      + 'alır, savaşı kaybeden de alır. Yalnız ittifak sayfasında görünür. '
+      + '⚠️ Eşik birimi «puan» = kaybettirilen kaynak / 1000 (oyunun kendi puan birimi): '
+      + '1 Ejderha 65, 1 Süvari 3,6, 1 Cüce 0,65, 1 Kaos 4.000 puan eder. '
+      + '⚠️ Varsayılanlar şehir savunma kapasitesine çıpalı — Subay ≈ dolu bir Sur 8 şehrini, '
+      + 'Mareşal ≈ dolu bir Sur 24 şehrini süpürmek. Düşürmek rozetleri sıradanlaştırır.',
+  },
+  {
     id: 'economy',
     label: 'Ekonomi ve süre',
     description: '⭐ Oyunun temposunu belirleyen eğriler: üretim, maliyet büyümesi ve süre '
@@ -973,6 +984,65 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'int', default: 30, min: 5, max: 3600, tag: 'design', unit: 'sn',
     description: 'Bir sunucu döngüsünün nabzı kaç saniye güncellenmezse «ölü» sayılır. Nabız 5 saniyede '
       + 'bir yazıldığı için 30 sn altı yanlış alarm üretir.',
+  },
+
+  /* ── Askerî ünvanlar ─────────────────────────────────────────────────────────
+   *
+   * ⚠️ Varsayılanlar `@mobilwar/catalog` · `merit.ts`ten KOPYALANDI, türetilmedi. Türetilmiş
+   * ayarların (`derived.ts`) makinesi yapı/teknik için kurulu ve buraya uydurmak sekiz satır
+   * uğruna o makineyi genelleştirmek olurdu. ⚠️ Bedeli: katalogdaki sayı değişirse BURASI da
+   * değişmeli — `settings.test.ts` ikisinin eşitliğini kilitliyor.
+   */
+  {
+    key: 'merit.threshold1',
+    label: 'Subay eşiği',
+    type: 'int', default: 5_000, min: 100, max: 100_000_000, tag: 'design', unit: 'puan',
+    description: 'Tek bir savaşta düşmana bu kadar puan kaybettiren Subay olur (≈ 77 Ejderha ya da '
+      + '1.390 Süvari). ⚠️ Sıradan bir baskında ulaşılmamalı — düşürürsen rozet anlamını yitirir.',
+  },
+  {
+    key: 'merit.threshold2',
+    label: 'Komutan eşiği',
+    type: 'int', default: 25_000, min: 100, max: 100_000_000, tag: 'design', unit: 'puan',
+    description: 'Komutan için gereken kıyım puanı (≈ 385 Ejderha · dolu bir Sur 13 şehrinin savunması).',
+  },
+  {
+    key: 'merit.threshold3',
+    label: 'Başkomutan eşiği',
+    type: 'int', default: 100_000, min: 100, max: 100_000_000, tag: 'design', unit: 'puan',
+    description: 'Başkomutan için gereken kıyım puanı (≈ 1.540 Ejderha · dolu bir Sur 18 şehri).',
+  },
+  {
+    key: 'merit.threshold4',
+    label: 'Mareşal eşiği',
+    type: 'int', default: 500_000, min: 100, max: 100_000_000, tag: 'design', unit: 'puan',
+    description: 'Mareşal için gereken kıyım puanı (≈ 7.700 Ejderha ya da 125 Kaos · dolu bir Sur 24 '
+      + 'şehri). ⚠️ Oyunun çok ileri aşamasına ait olması KASITLI (kullanıcı şartı).',
+  },
+  {
+    key: 'merit.days1',
+    label: 'Subay süresi',
+    type: 'int', default: 7, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Subay rozetinin taşınacağı gün sayısı. ⚠️ **Oyun saatiyle** işler: bakımda duran '
+      + 'dünyada süre de durur.',
+  },
+  {
+    key: 'merit.days2',
+    label: 'Komutan süresi',
+    type: 'int', default: 14, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Komutan rozetinin ömrü. Bir üst rütbeye terfi edilirse süre sıfırdan başlar.',
+  },
+  {
+    key: 'merit.days3',
+    label: 'Başkomutan süresi',
+    type: 'int', default: 21, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Başkomutan rozetinin ömrü.',
+  },
+  {
+    key: 'merit.days4',
+    label: 'Mareşal süresi',
+    type: 'int', default: 30, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Mareşal rozetinin ömrü.',
   },
 ] as const;
 
