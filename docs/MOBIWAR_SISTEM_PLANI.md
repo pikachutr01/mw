@@ -1145,6 +1145,22 @@ otorite `arrival_at` yazan sunucudur.
 > kullanıcı isteği). `harita.html`in oyuncuya açık sürümü: hedef koordinat, hazır rotalar,
 > Haritacılık kaydırağı, birim başına süre ve seviye seviye kazanç tablosu.
 >
+> ⚠️ **HAZIR ROTALAR AKTİF ŞEHRE GÖRE TÜRETİLİR** — sabit koordinat DEĞİL. İlk sürümde
+> `1:1:2` gibi sabitlerdi ve kullanıcı hatayı yakaladı: *"her şehirde aynı koordinatı
+> veriyor"*. Sayfanın bütün fikri "senin şehrinden" hesaplamak; sabit hedef o fikri kökünden
+> bozuyordu. Kural: eksen değeri 1'den büyükse bir aşağı, değilse bir yukarı
+> (`k=1` iken komşu kıta `k+1`). Sabit hedefler kaldırıldı, üç ön ayar kaldı:
+> komşu şehir · komşu diyar · komşu kıta.
+>
+> ⚠️ Hedef aktif şehrin KENDİSİ ise süre hesaplanmaz (çizgi düşer): kendi şehrine mesafe
+> anlamsız. Ekranda **mesafe sayısı da yazmaz** — teknik bir ara değer, oyuncunun işine
+> yaramıyor.
+>
+> ⚠️ `/help` bir **konu indeksidir**, cetvel değil (kullanıcı düzeltmesi): oyunun bütün
+> sistemleri madde madde, hesap gerektiren araçlar ilgili konunun altından ayrı sayfaya
+> bağlanıyor. Metinlere **ayarlanabilir sayı yazılmaz** — fiyat/süre/oran panelden dünya
+> başına değişiyor, sabit yazmak ilk ayar değişikliğinde oyuncuya yalan söylemek olurdu.
+>
 > ⚠️ **Sabitler KOPYALANMADI.** `harita.html` kendi sayı kutularını taşıyor çünkü o bir
 > geliştirici aracı — koddan bağımsız oynayabilmek işine yarıyor. Oyun içindeki sayfa aynı
 > şeyi yapsaydı panelden bir sayı değiştiği anda oyuncuya **yalan söylemeye** başlardı.

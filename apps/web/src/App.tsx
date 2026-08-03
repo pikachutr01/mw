@@ -21,7 +21,7 @@ import { Messages } from './screens/Messages.tsx';
 import { CommandScreen } from './screens/Command.tsx';
 import { Landing } from './screens/Landing.tsx';
 import { OptionsScreen } from './screens/Placeholders.tsx';
-import { HelpScreen } from './screens/Help.tsx';
+import { HelpScreen, TravelHelpScreen } from './screens/Help.tsx';
 import { SimulateScreen } from './screens/Simulate.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
 import { World } from './screens/World.tsx';
@@ -136,9 +136,10 @@ function AuthedApp() {
         <Route path="/command/alliance" element={<CommandScreen />} />
         <Route path="/command/search" element={<CommandScreen />} />
         <Route path="/options" element={<OptionsScreen />} />
-        {/* Sekme = rota (aynı desen `/command`ta): geri tuşu ve derin bağlantı çalışsın. */}
+        {/* ⚠️ `/help` KONU İNDEKSİ, cetvel değil (kullanıcı, 2026-08-03). Araçlar ayrı sayfa:
+            yardım metinleri oturum istemez, cetvel ister (çıkış noktası aktif şehir). */}
         <Route path="/help" element={<HelpScreen />} />
-        <Route path="/help/sefer" element={<HelpScreen />} />
+        <Route path="/help/sefer" element={<TravelHelpScreen />} />
         <Route path="/simulate" element={<SimulateScreen />} />
         {/* Mobil "Şehir" ve "Daha" sekmeleri */}
         <Route path="/city" element={<CityHub />} />
@@ -192,7 +193,10 @@ function GuestApp() {
         {/* ⭐ Simülatör oturumsuz çalışıyor: uç `OptionalAuthGuard` ile korunuyor ve kimlik
             yoksa dünya-0 denge katmanına düşüyor (`simulate.controller.ts:38`). */}
         <Route path="/simulate" element={<SimulateScreen />} />
+        {/* ⭐ Yardım MİSAFİRE DE AÇIK (kullanıcı): metinler oturum istemiyor. Cetvel de
+            açılıyor ama içeride "giriş yapınca burada çıkar" diyor — çıkış noktası aktif şehir. */}
         <Route path="/help" element={<HelpScreen />} />
+        <Route path="/help/sefer" element={<TravelHelpScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
