@@ -66,11 +66,27 @@ export class DeviceSignalService {
    */
   async record(playerId: number, ctx: DeviceContext): Promise<void> {
     if (ctx.deviceId) {
+      /**
+       * ⚠️ Künye alanları **COALESCE ile** yazılıyor: `EXCLUDED` boşsa eski değer korunur.
+       * Sebep, aynı cihazın iki yoldan gelmesi — mobil uygulama `X-Device-Model` gönderir,
+       * aynı telefonun tarayıcısı göndermez. Düz atama olsaydı tarayıcıdan gelen tek bir
+       * istek, uygulamanın topladığı künyeyi NULL'a çevirirdi.
+       */
       await this.db.execute(sql`
-        INSERT INTO player_devices (player_id, device_id, platform)
-        VALUES (${playerId}, ${ctx.deviceId}, ${ctx.platform})
+        INSERT INTO player_devices (player_id, device_id, platform,
+                                    os_version, device_model, app_version, timezone, locale)
+        VALUES (${playerId}, ${ctx.deviceId}, ${ctx.platform},
+                ${ctx.osVersion ?? null}, ${ctx.deviceModel ?? null}, ${ctx.appVersion ?? null},
+                ${ctx.timezone ?? null}, ${ctx.locale ?? null})
         ON CONFLICT (player_id, device_id)
-        DO UPDATE SET last_seen = now(), hits = player_devices.hits + 1
+        DO UPDATE SET last_seen    = now(),
+                      hits         = player_devices.hits + 1,
+                      platform     = EXCLUDED.platform,
+                      os_version   = COALESCE(EXCLUDED.os_version,   player_devices.os_version),
+                      device_model = COALESCE(EXCLUDED.device_model, player_devices.device_model),
+                      app_version  = COALESCE(EXCLUDED.app_version,  player_devices.app_version),
+                      timezone     = COALESCE(EXCLUDED.timezone,     player_devices.timezone),
+                      locale       = COALESCE(EXCLUDED.locale,       player_devices.locale)
       `);
     }
     if (ctx.ip) {

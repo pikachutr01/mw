@@ -5,6 +5,7 @@ import { AdminGuard, AdminStepUpGuard } from './admin/admin.guard.ts';
 import { AdminActionsController } from './admin/admin.actions.controller.ts';
 import { AdminBulkController } from './admin/admin.bulk.controller.ts';
 import { AdminDbController } from './admin/admin.db.controller.ts';
+import { AdminAbuseController } from './admin/admin.abuse.controller.ts';
 import { AdminModerationController } from './admin/admin.moderation.controller.ts';
 import { AdminOpsController } from './admin/admin.ops.controller.ts';
 import { AdminPlayersController } from './admin/admin.players.controller.ts';
@@ -62,7 +63,7 @@ export { DB } from './db/tokens.ts';
     // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
     AdminController, AdminWorldController, AdminModerationController,
     AdminActionsController, AdminDbController, AdminOpsController, AdminPlayersController,
-    AdminBulkController,
+    AdminBulkController, AdminAbuseController,
   ],
   providers: [
     {

@@ -171,6 +171,16 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'Teknikte seviye tavanı yoktur, o yüzden büyüme oranı burada en sert düğme.',
   },
   {
+    id: 'abuse',
+    label: 'Çoklu hesap tespiti',
+    description: '⭐ İki hesabın **aynı kişiye ait olma** şüphesini puanlayan ağırlıklar (§9.1). '
+      + '⚠️ **Sistem asla ceza vermez** — çıktı yalnız skorlu bir rapordur, kararı sen '
+      + 'verirsin. Sebep: her teknik izin masum açıklaması var (aynı evdeki kardeşler, '
+      + 'okul/ofis ağı, mobil operatör NAT\'ı, paylaşılan tablet) ve haksız banın bedeli '
+      + 'çok yüksek. ⚠️ Ağırlıkları büyütmek "daha çok yakalamak" değil, **rapora daha çok '
+      + 'masum sokmak** demek olabilir: eşiği aşan her çift bir insanın vaktini alıyor.',
+  },
+  {
     id: 'loot',
     label: 'Ganimet',
     description: 'Havuz + kaynak-bazlı yağma oranı (§13.10.4). Ölçüm değil TASARIM: '
@@ -894,6 +904,106 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'yaşlandıkça çıpa yükselir ve güç uyumu kendiliğinden işlevsizleşirdi.',
   },
 
+  /* ── Çoklu hesap tespiti (§9.1) ──────────────────────────────────────────────
+   *
+   * ⚠️ Bu sayıların HİÇBİRİ kendiliğinden bir şey yapmaz — hepsi tek bir rapor listesinin
+   * sıralamasını belirliyor. §9.1.1'in değişmezi: otomatik ceza YOK.
+   *
+   * ⚠️ Varsayılanlar **tahmin**, ölçüm değil. Gerçek oyuncu davranışı görülmeden doğru eşik
+   * bilinemez; bu yüzden hepsi panelde ve bu yüzden çıktı bir rapor, bir karar değil.
+   */
+  {
+    key: 'abuse.reportThreshold',
+    label: 'Rapor eşiği',
+    type: 'int', default: 60, min: 1, max: 500, tag: 'design', unit: 'puan',
+    description: 'Bir oyuncu çiftinin toplam şüphe puanı bu değere ULAŞIRSA panelde listelenir. '
+      + 'Düşürmek daha çok çift gösterir (çoğu masum çıkar ve liste okunmaz hâle gelir); '
+      + 'yükseltmek yalnız en bariz olanları bırakır.',
+    note: '⚠️ 60 seçilmesinin sebebi varsayılan ağırlıklar: «aynı cihaz» (40) TEK BAŞINA '
+      + 'eşiği geçmiyor — geçseydi aynı tableti kullanan iki kardeş her hafta rapora düşerdi. '
+      + 'Cihaz + tam IP (40+20) ya da cihaz + kayıt kohortu + devralma (40+10+15) geçiyor.',
+  },
+  {
+    key: 'abuse.weightSameDevice',
+    label: 'Ağırlık: aynı cihaz',
+    type: 'int', default: 40, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: 'İki hesabın aynı `device_id`yi paylaşması. En güçlü teknik iz — ama '
+      + 'silinebilir (çerez/depo temizliği) ve paylaşılabilir (ev tableti).',
+    note: '⚠️ Bu kimlik istemcide üretiliyor ve sunucu onu kimlik doğrulamada ASLA '
+      + 'kullanmıyor; yalnız korelasyon sinyali. Bilen biri her hesap için farklı bir tarayıcı '
+      + 'profili kullanarak bu sinyalden tamamen kaçabilir — asıl güçlü sinyaller davranışsal '
+      + 'olanlar (§9.1.2 B1-B7).',
+  },
+  {
+    key: 'abuse.weightSameIp',
+    label: 'Ağırlık: aynı tam IP',
+    type: 'int', default: 20, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: 'İki hesabın birebir aynı IP adresini kullanmış olması.',
+    note: '⚠️ Aynı evdeki herkes aynı IP\'yi paylaşır; mobil operatörlerde ise binlerce abone '
+      + 'tek IP\'nin arkasında olabilir (CGNAT). Bu yüzden tek başına ceza sebebi değil.',
+  },
+  {
+    key: 'abuse.weightSameIpBlock',
+    label: 'Ağırlık: aynı IP öbeği',
+    type: 'int', default: 8, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: 'Tam IP tutmuyor ama /24 öbeği (IPv6\'da /48) aynı — dinamik IP alan aynı '
+      + 'abonelik böyle görünür.',
+    note: '⚠️ Tam IP puanının ÜSTÜNE EKLENMEZ, onun yerine geçer: aynı ilişkiyi iki kez '
+      + 'saymak çifti hak etmediği bir skora çıkarırdı.',
+  },
+  {
+    key: 'abuse.weightRegistrationCohort',
+    label: 'Ağırlık: kayıt kohortu',
+    type: 'int', default: 12, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: 'İki hesabın aynı IP öbeğinden, dakikalar içinde açılmış olması. Seri hesap '
+      + 'açmanın imzası.',
+    note: 'Aynı evdeki iki kardeşin oyuna birlikte başlaması da tam olarak böyle görünür — '
+      + 'bu yüzden ağırlık düşük tutuldu.',
+  },
+  {
+    key: 'abuse.weightSessionHandoff',
+    label: 'Ağırlık: sıra sıra oturum',
+    type: 'int', default: 15, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: '⭐ İki hesap **hiç aynı anda çevrimiçi olmamış**, ama biri kapanır kapanmaz '
+      + 'diğeri açılmış. Tek kişinin hesap değiştirdiğinin en tipik izi (§9.1.2 B3).',
+    note: '⚠️ «Aynı anda çevrimiçi olmamak» TEK BAŞINA sayılmıyor: farklı saatlerde oynayan '
+      + 'iki gerçek oyuncu da hiç örtüşmez. Sinyal ancak DEVRALMA da varsa veriliyor — '
+      + 'birinin son hareketiyle diğerinin ilk hareketi arasında aşağıdaki pencere kadar '
+      + 'süre olması.',
+  },
+  {
+    key: 'abuse.cohortMinutes',
+    label: 'Kayıt kohortu penceresi',
+    type: 'int', default: 120, min: 1, max: 10_080, tag: 'design', unit: 'dk',
+    description: 'Aynı IP öbeğinden bu süre içinde açılan hesaplar «aynı kohort» sayılır.',
+  },
+  {
+    key: 'abuse.handoffMinutes',
+    label: 'Devralma penceresi',
+    type: 'int', default: 20, min: 1, max: 1440, tag: 'design', unit: 'dk',
+    description: 'Bir hesabın son hareketiyle diğerinin ilk hareketi arasındaki süre bundan '
+      + 'kısaysa «devralma» sayılır. Büyütmek sinyali gevşetir.',
+  },
+  {
+    key: 'abuse.maxGroupSize',
+    label: 'En büyük anlamlı grup',
+    type: 'int', default: 8, min: 2, max: 200, tag: 'design', unit: 'oyuncu',
+    description: '⭐ Bir cihazı ya da IP\'yi bundan FAZLA oyuncu paylaşıyorsa o sinyal '
+      + 'tamamen yok sayılır.',
+    note: '⚠️ İki sebep var, ikisi de önemli. (1) **Anlam**: 40 kişinin paylaştığı bir IP '
+      + 'internet kafe ya da operatör NAT\'ıdır; oradaki iki hesabın aynı kişiye ait olma '
+      + 'ihtimali normalden yüksek DEĞİLDİR. (2) **Maliyet**: n oyuncu n×(n-1)/2 çift üretir '
+      + '— 200 kişilik bir okul ağı tek başına 19.900 satır demek ve rapor kullanılamaz hâle '
+      + 'gelirdi.',
+  },
+  {
+    key: 'abuse.lookbackDays',
+    label: 'İnceleme penceresi',
+    type: 'int', default: 90, min: 1, max: 3650, tag: 'design', unit: 'gün',
+    description: 'Sinyaller son kaç günlük iz üzerinden hesaplanır. ⚠️ Saklama süresinden '
+      + '(«Bakım ve saklama» grubu) uzun yazmanın faydası yok: silinmiş satır aranamaz.',
+  },
+
   /* ── Teleport (§13.11.4) ─────────────────────────────────────────────────── */
   {
     key: 'teleport.baseHours',
@@ -1187,6 +1297,17 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'tablo burası.',
     note: 'Canlı oturumlar etkilenmez: aktif bir satırın son kullanma tarihi gelecekte ve iptal '
       + 'kaydı boştur, iki koşula da girmez. Oyuncu temizlikten sonra oturumundan DÜŞMEZ.',
+  },
+  {
+    key: 'ops.deviceSignalDays',
+    label: 'Cihaz/IP izi saklama',
+    type: 'int', default: 90, min: 7, max: 3650, tag: 'design', unit: 'gün',
+    description: '⭐ Çoklu hesap analizinin ham izleri (`player_devices`, `player_ips`) son '
+      + 'kullanımdan kaç gün sonra silinir. §9.1.2\'nin gizlilik taahhüdü **90 gün**.',
+    note: '⚠️ Kısaltmak GERİ ALINAMAZ kanıt kaybıdır: "bu iki hesap aynı cihazdan mı '
+      + 'giriyordu" sorusunun cevabı yalnız bu satırlarda. ⚠️ Uzatmak da bedava değil — '
+      + 'gizlilik metninde yazan süreyi aşmak taahhüdü bozar. ⚠️ «Çoklu hesap tespiti» '
+      + 'grubundaki inceleme penceresini bundan uzun yazmanın faydası yok.',
   },
   {
     key: 'ops.cleanupBatch',

@@ -478,6 +478,16 @@ export const playerDevices = pgTable('player_devices', {
     .references(() => players.id, { onDelete: 'cascade' }),
   deviceId: text('device_id').notNull(),
   platform: text('platform'),
+  /**
+   * ⭐ Mobil künye (2026-08-04). Başlıklar `device-context.ts`te ZATEN ayrıştırılıyordu ve
+   * `sessions`a yazılıyordu; oraya yazmak yetmiyor çünkü `sessions` 90 günde budanıyor.
+   * Kalıcı korelasyon değeri sayaç tablosunda durmalı. Flutter geldiğinde şema değişmeyecek.
+   */
+  osVersion: text('os_version'),
+  deviceModel: text('device_model'),
+  appVersion: text('app_version'),
+  timezone: text('timezone'),
+  locale: text('locale'),
   firstSeen: timestamp('first_seen', { withTimezone: true }).notNull().defaultNow(),
   lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
   hits: integer('hits').notNull().default(1),
@@ -500,6 +510,11 @@ export const playerIps = pgTable('player_ips', {
 }, (t) => [
   uniqueIndex('player_ips_pk').on(t.playerId, t.ip),
   index('player_ips_by_block').on(t.ipBlock24),
+  /**
+   * ⚠️ `player_ips_pk`in öneki `player_id`, yani "bu TAM IP'yi kim kullandı" sorgusuna
+   * uymuyordu. Tam IP eşleşmesi /24'ten çok daha güçlü bir sinyal; sorgusu da olmalı.
+   */
+  index('player_ips_by_ip').on(t.ip),
 ]);
 
 /**
@@ -522,11 +537,17 @@ export const playerBlocks = pgTable('player_blocks', {
   index('player_blocks_target').on(t.blockedPlayerId),
 ]);
 
-/** Analizörün (Faz 4) ürettiği şüphe sinyalleri. Faz 2'de tablo boş durur. */
+/**
+ * Analizörün ürettiği şüphe sinyalleri.
+ *
+ * ⚠️ Çift **SIRALI** tutulur (`subject_player_id < related_player_id`): (A,B) ile (B,A) aynı
+ * ilişkidir ve iki satır olarak dururlarsa skor iki kez sayılır. Kural `link.service.ts`te ve
+ * `abuse_signals_unique_open` kısmi indeksinde yaşıyor.
+ */
 export const abuseSignals = pgTable('abuse_signals', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   worldId: smallint('world_id'),
-  /** sameDeviceId · oneWayResourceFlow · profitlessAttackFarm · … (§9.1.2) */
+  /** sameDevice · sameIp · sameIpBlock · registrationCohort · sessionHandoff (§9.1.2) */
   kind: text('kind').notNull(),
   subjectPlayerId: bigint('subject_player_id', { mode: 'number' }),
   relatedPlayerId: bigint('related_player_id', { mode: 'number' }),
@@ -536,11 +557,14 @@ export const abuseSignals = pgTable('abuse_signals', {
   windowTo: timestamp('window_to', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-  /** Yöneticinin kararı: 'innocent' | 'warned' | 'banned' | 'watch' */
+  /** Yöneticinin kararı: 'innocent' | 'watch' | 'warned' | 'banned'. Sistem ASLA yazmaz. */
   resolution: text('resolution'),
+  resolvedBy: bigint('resolved_by', { mode: 'number' }),
+  note: text('note'),
 }, (t) => [
   index('abuse_signals_pair').on(t.subjectPlayerId, t.relatedPlayerId),
   index('abuse_signals_open').on(t.createdAt).where(sql`${t.resolvedAt} IS NULL`),
+  index('abuse_signals_score').on(t.score).where(sql`${t.resolvedAt} IS NULL`),
 ]);
 
 /**

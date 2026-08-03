@@ -116,6 +116,28 @@ function instanceId(): string {
 
 export { instanceId };
 
+/**
+ * Saat dilimi + dil (§9.1.2'nin ⭐ tek yıldızlı, yani ZAYIF sinyali).
+ *
+ * ⚠️ Tek başına hiçbir şey söylemez — bir ülkedeki herkes aynı saat dilimindedir ve VPN onu
+ * değiştirir. Değeri yalnız DİĞER sinyallerle birlikte: aynı cihazı paylaşan iki hesaptan
+ * birinin saat dilimi tutmuyorsa "gerçekten iki farklı insan" ihtimali yükselir.
+ *
+ * ⚠️ Bir kez hesaplanıp saklanıyor: `resolvedOptions()` her istekte çağrılacak kadar ucuz
+ * değil ve değer sekmenin ömrü boyunca değişmiyor. Eski tarayıcıda `timeZone` boş dönebilir,
+ * o yüzden `?? ''` — boş başlık sunucuda `null`a düşüyor (`device-context.ts`).
+ */
+const clientHints: Record<string, string> = ((): Record<string, string> => {
+  try {
+    return {
+      'x-timezone': Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
+      'x-locale': navigator.language ?? '',
+    };
+  } catch {
+    return {};
+  }
+})();
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -242,7 +264,18 @@ async function refresh(): Promise<boolean> {
     try {
       const res = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-device-id': deviceId() },
+        /**
+         * ⚠️ Cihaz künyesi BURADA da gönderiliyor. Yenileme, oyuncu bir kez giriş yaptıktan
+         * sonra cihaz sinyalinin yazıldığı **en sık** yol (`auth.service` üçünde de
+         * `devices.record` çağırıyor); künyeyi yalnız girişe koysaydık aylarca açık kalan bir
+         * oturumun künyesi ilk günden kalma olurdu.
+         */
+        headers: {
+          'content-type': 'application/json',
+          'x-device-id': deviceId(),
+          'x-platform': 'web',
+          ...clientHints,
+        },
         body: JSON.stringify({ refreshToken: session!.refreshToken }),
       });
       /**
@@ -311,6 +344,7 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
         'x-device-id': deviceId(),
         'x-client-instance': instanceId(),
         'x-platform': 'web',
+        ...clientHints,
         ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}),
       },
       ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),

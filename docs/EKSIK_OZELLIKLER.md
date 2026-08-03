@@ -158,8 +158,13 @@ sıralama · bakım modu (donma + perde + mutasyon kilidi) · oturum/cihaz yöne
 
 **Kalan:** veri tabanı tarayıcı + küratörlü aksiyonlar + ham kip (Faz 7) ·
 bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görüntüleme ·
-çoklu hesap **analizi** (toplama ✅ çalışıyor, skorlama/rapor ❌ — künyede sayı olarak
-gösteriliyor ama §9.1.1 gereği otomatik karar üretmiyor).
+çoklu hesap **davranış sinyalleri** (§9.1.3 B1/B2/B6/B7 + haftalık `abuse_scan` görevi +
+rapor e-postası).
+
+⭐ **Çoklu hesap TEKNİK sinyalleri 2026-08-04'te girdi** (§9.1.2b): panelde «Çoklu hesap»
+sekmesi, ağırlıklı çift skoru (cihaz · IP · /24 · kayıt kohortu · sıra sıra oturum),
+her sinyalin yanında **masum açıklaması**, karar kaydı ve gerçek IP zinciri teşhisi.
+§9.1.1 aynen geçerli: **otomatik ceza yok**, çıktı yalnız skorlu rapor.
 
 ---
 

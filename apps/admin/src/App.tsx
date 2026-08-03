@@ -16,6 +16,7 @@ import { USERNAME_MAX, USERNAME_MIN } from '@mobilwar/catalog';
 import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, Countdown, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
+import { AbuseScreen } from './screens/Abuse.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
 import { BulkScreen } from './screens/Bulk.tsx';
@@ -38,6 +39,10 @@ const NAV: [string, string][] = [
   ['/ayarlar', 'Ayarlar'],
   ['/toplu', 'Toplu işlem'],
   ['/moderasyon', 'Moderasyon'],
+  // ⭐ «Çoklu hesap» Moderasyon'dan AYRI sekme: o ekran gelen ŞİKAYETİ işliyor (birileri
+  // bildirdi), bu ise kimsenin bildirmediği bir deseni arıyor. İkisini birleştirmek, ikinci
+  // listenin birincinin altında kaybolması demekti.
+  ['/coklu-hesap', 'Çoklu hesap'],
   ['/veri', 'Veri tabanı'],
   ['/bakim', 'Bakım'],
 ];
@@ -106,6 +111,10 @@ export function App() {
               />
               <Route path="/toplu" element={<BulkScreen onNeedStepUp={openStepUp} />} />
               <Route path="/moderasyon" element={<ModerationScreen onNeedStepUp={openStepUp} />} />
+              <Route
+                path="/coklu-hesap"
+                element={<AbuseScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
+              />
               <Route path="/veri" element={<DatabaseScreen onNeedStepUp={openStepUp} />} />
               <Route path="/bakim" element={<HealthScreen onNeedStepUp={openStepUp} />} />
               <Route path="*" element={<Navigate to="/oyuncular" replace />} />

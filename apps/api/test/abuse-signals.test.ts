@@ -141,6 +141,60 @@ describe('⭐ kabul kriteri: sinyaller birikiyor', () => {
     expect(Number(rows[0]!.hits)).toBe(3);
   });
 
+  /**
+   * ⭐ BAŞLIKTAN SÜTUNA — 2026-08-04. `device-context.ts` bu beş alanı **baştan beri**
+   * ayrıştırıyordu ama `record()` yalnız `platform`u yazıyordu: künye `sessions`a düşüyor,
+   * `sessions` 90 günde budanıyor, kalıcı sayaç tablosunda hiçbir iz kalmıyordu.
+   */
+  it('mobil künyesi player_devices’a yazılır', async () => {
+    const [p1] = await twoPlayers();
+    await svc.record(p1, extractDeviceContext({
+      headers: {
+        'x-device-id': DEV_B, 'x-platform': 'android', 'x-os-version': '14',
+        'x-device-model': 'Pixel 8', 'x-app-version': '1.0.3',
+        'x-timezone': 'Europe/Istanbul', 'x-locale': 'tr',
+      },
+      ip: '85.104.12.7',
+    }));
+
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT platform, os_version, device_model, app_version, timezone, locale
+        FROM player_devices WHERE player_id = ${p1}
+    `);
+    expect(row).toMatchObject({
+      platform: 'android', os_version: '14', device_model: 'Pixel 8',
+      app_version: '1.0.3', timezone: 'Europe/Istanbul', locale: 'tr',
+    });
+  });
+
+  /**
+   * ⚠️ Künye alanları **COALESCE ile** yazılıyor. Senaryo: aynı telefonun uygulaması modeli
+   * gönderir, aynı telefonun TARAYICISI göndermez. Düz atama olsaydı tarayıcıdan gelen tek
+   * bir istek, uygulamanın topladığı künyeyi NULL'a çevirirdi.
+   */
+  it('sonraki BOŞ künye eskisini silmez', async () => {
+    const [p1] = await twoPlayers();
+    await svc.record(p1, extractDeviceContext({
+      headers: {
+        'x-device-id': DEV_B, 'x-platform': 'android', 'x-device-model': 'Pixel 8',
+      },
+      ip: '85.104.12.7',
+    }));
+    // Aynı cihaz, bu kez tarayıcıdan: model başlığı YOK.
+    await svc.record(p1, extractDeviceContext({
+      headers: { 'x-device-id': DEV_B, 'user-agent': 'Mozilla/5.0' },
+      ip: '85.104.12.7',
+    }));
+
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT device_model, platform, hits FROM player_devices WHERE player_id = ${p1}
+    `);
+    expect(row!['device_model']).toBe('Pixel 8');
+    // ⚠️ `platform` bilerek COALESCE'siz: o alan "en son nereden geldi" sorusunu cevaplıyor.
+    expect(row!['platform']).toBe('web');
+    expect(Number(row!['hits'])).toBe(2);
+  });
+
   it('device_id yoksa IP yine kaydedilir (kısmi sinyal de değerlidir)', async () => {
     const [p1] = await twoPlayers();
     await svc.record(p1, { deviceId: null, ip: '85.104.12.7', userAgent: null, platform: 'unknown' });
@@ -155,14 +209,40 @@ describe('⭐ kabul kriteri: sinyaller birikiyor', () => {
     expect(ips).toHaveLength(1);
   });
 
-  it('analiz tabloları hazır ama BOŞ (Faz 4’e kadar hiçbir karar üretilmez)', async () => {
-    const signals = await h.db.execute<{ n: number } & Record<string, unknown>>(sql`
+  /**
+   * ⚠️ **BU TEST 2026-08-04'te DEĞİŞTİ.** Eskiden *"`abuse_signals` BOŞ"* diyordu ve gerekçesi
+   * `Faz 4'e kadar hiçbir karar üretilmez` idi. Analiz katmanı girdiği gün (§9.1.2b) bu iddia
+   * geçerliliğini yitirdi: tablo artık gerçekten YAZILIYOR. Ayrıca kırılgandı — dünya filtresi
+   * olmayan genel bir sayım, tabloya dokunan HERHANGİ bir test dosyası yüzünden düşüyordu
+   * (nitekim `abuse-link.test.ts` eklenince düştü).
+   *
+   * ⭐ Yerine geçen iddia daha güçlü ve KALICI: §9.1.1'in değişmezi. Tablodaki her satır bir
+   * İNSANIN kararıdır — sistemin kendiliğinden yazdığı, kararsız bir satır ASLA olmamalı.
+   * Bu, "tablo boş mu" sorusundan farklı olarak analiz büyüdükçe de doğru kalacak bir kural.
+   *
+   * ⚠️ Ölçüt `resolution` + `resolved_at`; **`resolved_by` DEĞİL.** İlk yazımda onu da şart
+   * koşmuştum ve test düştü: `resolved_by` şemada `ON DELETE SET NULL` — kararı veren yönetici
+   * hesabı silinirse alan boşalır ama KARAR durur. Bu bilinçli bir tasarım (kararı kaybetmemek
+   * için) ve testin onu ihlal olarak görmesi yanlıştı. "Kim verdi" bilgisi kalıcı olarak
+   * `audit_log`ta zaten duruyor.
+   */
+  it('⭐ hiçbir sinyal satırı İNSAN KARARI olmadan var olamaz (§9.1.1)', async () => {
+    const orphan = await h.db.execute<{ n: number } & Record<string, unknown>>(sql`
       SELECT COUNT(*)::int AS n FROM abuse_signals
+       WHERE resolution IS NULL OR resolved_at IS NULL
     `);
+    expect(Number(orphan[0]!.n)).toBe(0);
+  });
+
+  /**
+   * ⚠️ `abuse_scan_runs` HÂLÂ boş: haftalık `abuse_scan` görevi yazılmadı (§9.1.3, Tur 8).
+   * Bu satır o günün çıpası — görev geldiğinde bu test bilerek düşecek ve yerine taramanın
+   * pencere ilerletmesini ölçen bir test gelecek.
+   */
+  it('tarama görevi henüz yok — koşu kaydı üretilmiyor', async () => {
     const runs = await h.db.execute<{ n: number } & Record<string, unknown>>(sql`
       SELECT COUNT(*)::int AS n FROM abuse_scan_runs
     `);
-    expect(Number(signals[0]!.n)).toBe(0);
     expect(Number(runs[0]!.n)).toBe(0);
   });
 });

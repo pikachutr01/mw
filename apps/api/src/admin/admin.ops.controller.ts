@@ -65,6 +65,7 @@ export class AdminOpsController {
       pushFailThreshold: g['pushFailThreshold'] ?? 5,
       rankingRunDays: g['rankingRunDays'] ?? 90,
       sessionDays: g['sessionDays'] ?? 90,
+      deviceSignalDays: g['deviceSignalDays'] ?? 90,
       cleanupBatch: g['cleanupBatch'] ?? 20_000,
       staleHeartbeatS: g['staleHeartbeatS'] ?? 30,
     };

@@ -26,6 +26,8 @@ export interface OpsRetention {
   pushFailThreshold: number;
   rankingRunDays: number;
   sessionDays: number;
+  /** Çoklu hesap izlerinin (`player_devices`, `player_ips`) saklama süresi — §9.1.2: 90 gün. */
+  deviceSignalDays: number;
   cleanupBatch: number;
   staleHeartbeatS: number;
 }
@@ -140,6 +142,37 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
       (revoked_at IS NOT NULL AND revoked_at < ${daysAgo(r.sessionDays)})
       OR expires_at < ${daysAgo(r.sessionDays)}
     `,
+  },
+  /**
+   * ⭐ ÇOKLU HESAP İZLERİ (2026-08-04). §9.1.2 *"topladığımız veri … **90 gün** saklanır,
+   * gizlilik metninde açıkça yazılır"* diyordu ama **hiçbir iş bu iki tabloya dokunmuyordu**
+   * — taahhüt yazılıydı, uygulaması yoktu. `sessions` temizliği bunları kapsamıyor: sayaç
+   * tabloları bilerek `sessions`tan bağımsız yaşıyor (budamadan sonra öbek bilgisi kalsın diye).
+   *
+   * ⚠️ Ölçüt `last_seen`, `first_seen` DEĞİL: hâlâ kullanılan bir cihazın kaydı, ilk görüldüğü
+   * gün eskidiği için silinmemeli — silseydik aktif oyuncunun cihazı her 90 günde bir "yeni
+   * cihaz" olarak yeniden doğar ve korelasyon tarihi sürekli sıfırlanırdı.
+   */
+  {
+    id: 'player_ips',
+    label: 'Eski IP izleri',
+    table: 'player_ips',
+    timeColumn: 'last_seen',
+    description: 'Çoklu hesap analizinin ham IP kayıtları. Gizlilik taahhüdü: 90 gün.',
+    keeps: 'Son kullanımı pencerenin içinde olan kayıtlar — aktif oyuncunun IP\'si silinmez.',
+    settings: ['ops.deviceSignalDays'],
+    where: (r) => sql`last_seen < ${daysAgo(r.deviceSignalDays)}`,
+  },
+  {
+    id: 'player_devices',
+    label: 'Eski cihaz izleri',
+    table: 'player_devices',
+    timeColumn: 'last_seen',
+    description: 'Çoklu hesap analizinin ham cihaz kayıtları. ⚠️ Silinen satır geri gelmez '
+      +'ve onunla birlikte "bu iki hesap aynı cihazdan mı giriyordu" sorusunun cevabı da gider.',
+    keeps: 'Son kullanımı pencerenin içinde olan kayıtlar.',
+    settings: ['ops.deviceSignalDays'],
+    where: (r) => sql`last_seen < ${daysAgo(r.deviceSignalDays)}`,
   },
 ] as const;
 

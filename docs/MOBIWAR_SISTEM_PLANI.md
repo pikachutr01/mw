@@ -519,6 +519,59 @@ abuse_scan_runs(id, window_from, window_to, started_at, finished_at,
 `player_devices` ve `player_ips` **sayaç tablosu** (satır sayısı oyuncu×cihaz ile sınırlı) → tüm
 oturum geçmişini saklamaya gerek yok, `sessions` 90 günde budanır ama öbek bilgisi kalır.
 
+### 9.1.2b ✅ ANALİZ KATMANI YAPILDI (2026-08-04) — teknik sinyaller
+
+Toplama Faz 2'de kurulmuştu ama **hiçbir çağıranı yoktu**: `DeviceSignalService.playersSharingDevice`
+/`playersSharingIpBlock` yazılıydı, veri birikiyordu, kimse bakmıyordu. Kapandı.
+
+**Yeni:** `apps/api/src/abuse/link.service.ts` — oyuncu ÇİFTİ başına ağırlıklı skor ·
+`AdminAbuseController` (`/api/v1/admin/abuse/*`) · panelde **«Çoklu hesap»** sekmesi ·
+`abuse` ayar grubu (ağırlıklar, eşik, pencereler) · migration `0039_abuse_link`.
+
+| Sinyal | Varsayılan | Ne yakalar |
+| :-- | :-: | :-- |
+| `sameDevice` | 40 | aynı `device_id` |
+| `sameIp` | 20 | birebir aynı IP |
+| `sameIpBlock` | 8 | aynı /24 (⚠️ `sameIp` varsa EKLENMEZ, onun yerine geçer) |
+| `registrationCohort` | 12 | aynı öbekten, `cohortMinutes` içinde kayıt |
+| `sessionHandoff` | 15 | hiç örtüşmeyen ama sırayla devralan oturumlar (B3) |
+
+**Rapor eşiği 60** bilinçli: «aynı cihaz» (40) **tek başına** eşiği geçmiyor — geçseydi aynı
+tableti kullanan iki kardeş her hafta rapora düşerdi.
+
+⚠️ **Üç eleme kuralı, üçü de sessiz hata kaynağı olurdu:**
+1. **Yalnız aynı dünya.** Farklı dünyalardaki hesaplar birbirini besleyemez. Bu kural aynı zamanda
+   en büyük yanlış pozitifi kapatıyor: **tek bir hesabın iki dünyadaki oyuncusu** doğal olarak aynı
+   cihazı paylaşır ve dünya kısıtı olmasa her çoklu-dünya oyuncusu kendini en yüksek skorla ihbar
+   ederdi.
+2. **Aynı hesap elenir** (`account_id` karşılaştırması). Bugün hiçbir satır elemiyor —
+   `players_world_account` benzersiz indeksi zaten bir hesaba dünya başına tek oyuncu veriyor —
+   ama 1. kural gevşetilirse koruma kendiliğinden devrede olsun diye duruyor.
+3. **Büyük gruplar tamamen yok sayılır** (`maxGroupSize`, 8). Bir cihazı/IP'yi 40 kişi
+   paylaşıyorsa orası internet kafe ya da operatör NAT'ıdır; oradaki iki hesabın aynı kişiye ait
+   olma ihtimali normalden **yüksek değildir**. Üstüne n oyuncu n×(n−1)/2 çift üretiyor.
+
+⚠️ **`sessionHandoff` yalnız BAŞKA bir sinyali olan çiftler için hesaplanıyor.** «Hiç aynı anda
+çevrimiçi olmamak» tek başına hiçbir şey söylemez — sabah oynayanla gece oynayan iki yabancı da
+hiç örtüşmez.
+
+⭐ **Gerçek IP zinciri teşhisi panele gömüldü.** `cloudflare-realip.conf` sunucuda yüklü değilse
+`player_ips` herkes için Cloudflare edge IP'sini kaydeder ve IP sinyalleri **sessizce**
+değersizleşir. Cloudflare aralık listesini kopyalamak yerine bozukluğun kendisi ölçülüyor
+(oyuncuların çoğu tek IP'de mi) — liste bayatlamıyor, yanlış alarm vermiyor. Yerel adres (dev)
+ile genel adres ayrı cümle kuruyor; aksi hâlde geliştirmede her gün yanlış teşhis okunurdu.
+
+⚠️ **Skorlar canlı hesaplanıyor**, `abuse_signals`tan okunmuyor: ağırlık panelden değişince etkisi
+anında görünmeli. Tablodaki satırlar yalnız **kararları** taşıyor (`innocent | watch | warned |
+banned` + not + kimin verdiği). §9.1.1 aynen geçerli: panelin «Cezalandırıldı» düğmesi bile ceza
+**vermez**, verilmiş bir cezayı kaydeder.
+
+⭐ **Saklama taahhüdü artık uygulanıyor.** §9.1.2 *"90 gün saklanır"* diyordu ama hiçbir iş
+`player_devices`/`player_ips`e dokunmuyordu — taahhüt yazılıydı, uygulaması yoktu. İki temizlik
+görevi eklendi (`ops.deviceSignalDays`, ölçüt `last_seen`).
+
+Kalan: **davranış sinyalleri (B1, B2, B6, B7) ve haftalık tarama görevi** — §9.1.3.
+
 ### 9.1.3 B katmanı — tarama işi
 **Tarama bir GÖREV TİPİDİR** (`abuse_scan`) → Faz 1 omurgasını olduğu gibi kullanır: zamanlanır,
 tekrarlanır, crash'e dayanır, denetlenir, bakımda durur. Ayrı bir cron/altyapı **gerekmez**.
@@ -543,10 +596,16 @@ tekrarlanır, crash'e dayanır, denetlenir, bakımda durur. Ayrı bir cron/altya
 - DM içeriğini analize sokmak — yalnız **var/yok** ve **sıklık** (B7 sinyali); metin okunmaz (§13.12.4 gizlilik).
 - Canvas/WebGL parmak izi.
 
-### 9.1.6 Kabul kriteri
+### 9.1.6 Kabul kriteri ✅
 Faz 2 çıkışında: iki farklı hesapla aynı tarayıcıdan giriş yapıldığında `player_devices`'ta
 **aynı `device_id` iki `player_id` ile** görünüyor; `player_ips` dolu; `sessions.platform` web/mobil
-ayrımını taşıyor. Analiz henüz yok — **veri var.**
+ayrımını taşıyor.
+
+⭐ **2026-08-04'te panelde ölçüldü** (geliştirme veritabanı, 67 oyuncu): «Çoklu hesap» sekmesi
+`admin ↔ kullanici2`, `admin ↔ wstest`, `wstest ↔ itflider` çiftlerini **55 puanla** listeledi —
+kanıt «aynı cihaz» (+40) ve «sıra sıra oturum» (+15). Üçü de aynı tarayıcıdan sırayla girilen
+test hesapları, yani beklenen sonuç. IP sinyalleri **doğru şekilde** düştü: dev'de 67 oyuncunun
+tamamı `127.0.0.1`de ve grup sınırı bunu eliyor.
 
 ## 9.2 ⭐ E-POSTA (Resend) — doğrulama + şifre sıfırlama (kullanıcı, 2026-07-31) ✅ YAPILDI
 
