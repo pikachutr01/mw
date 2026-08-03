@@ -144,6 +144,17 @@ export function World() {
               {slots.map((slot, i) => {
                 const c = slot.city;
                 const shortcuts = shortcutsFor(slot, cityId);
+                /**
+                 * ⭐ AKTİF ŞEHİR BELİRTECİ (kullanıcı, 2026-08-03): *"Bize ait şehirler belirgin
+                 * ama aktif şehri de anlamak için bir işaret koyalım."*
+                 *
+                 * ⚠️ Renkle DEĞİL kenarla ayrılıyor. "Bize ait" zaten `text-accent` kullanıyor;
+                 * aktif şehri de renkle işaretlemek iki farklı anlamı aynı kanala yığardı ve
+                 * ikisi de okunmaz hâle gelirdi.
+                 * ⚠️ Yanına «(buradasın)» yazısı da konmuştu; kullanıcı aynı gün kaldırttı —
+                 * *"soldaki kenarlık rengi yeterli"*. Satır zaten dar, metin gürültü oluyordu.
+                 */
+                const isActive = c != null && c.id === cityId;
                 return (
                   <tr
                     key={slot.s}
@@ -152,7 +163,9 @@ export function World() {
                        kaplar, böylece 10 satır her ekranda aynı yüksekliği tutar. */
                     className={`h-9 cursor-pointer border-b border-border transition-colors hover:bg-raised ${
                       i % 2 === 1 ? 'bg-row-alt' : ''
-                    } ${c?.isOwn ? 'text-accent' : 'text-ink'}`}
+                    } ${c?.isOwn ? 'text-accent' : 'text-ink'} ${
+                      isActive ? 'bg-raised/60 shadow-[inset_3px_0_0_0_var(--color-accent)]' : ''
+                    }`}
                   >
                     <Td className="tnum text-center text-muted">{slot.s}</Td>
                     <Td className="max-w-[9rem] truncate font-medium">

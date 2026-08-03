@@ -6,6 +6,7 @@
  * okunabilirliği düşürüyor. Ortak olan **jetonlar**, bileşenler değil.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 const HEAD = `flex items-center justify-between gap-3 border-b border-border
   bg-panel-header px-3 py-2`;
@@ -62,10 +63,52 @@ export function Panel({
  * ⚠️ Yine `<details>`: `Ctrl+F` içeriği bulabilsin diye. Dışarı tıklayınca kapanma
  * eklenmedi — bir balonu kapatmak için aynı ⓘ'ya basmak yeterli ve dışarı-tıklama
  * dinleyicisi, açık bir formda istemeden kapanmalara yol açardı.
+ *
+ * ⭐ **BALON `document.body`'YE ÇİZİLİYOR** (kullanıcı, 2026-08-03: *"tooltipler collapse
+ * kartların altında kalıyor, tooltip içi tam gözükmüyor"*).
+ *
+ * ⚠️ Sebep `z-index` DEĞİLDİ, `overflow` idi: balon `absolute` duruyordu ve en yakın kesici
+ * ata `Panel`in **`overflow-hidden`**'ıydı (yukarıdaki `box`). `z-10`u yükseltmek hiçbir işe
+ * yaramazdı — `overflow: hidden` bir kutuyu z ekseninde değil, geometrik olarak kırpar.
+ * Portal bu zinciri tamamen atlıyor; aynı sorunu oyun tarafındaki `Tooltip.tsx` de böyle
+ * çözmüştü.
+ *
+ * ⚠️ `position: fixed` + ölçülmüş koordinat: `absolute` kalsaydı portal içinde sayfanın sol
+ * üstüne yapışırdı. Ölçüm yapılana kadar `visibility: hidden` — yanlış yerde bir kare
+ * parlamasın.
  */
 export function Info({ children, label = 'açıklama' }: { children: ReactNode; label?: string }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  /**
+   * ⚠️ Portal YALNIZ AÇIKKEN basılıyor (`pos != null`). İlk yazımda koşulsuzdu ve ayarlar
+   * sayfasında **148 ⓘ** olduğu için `document.body` altına 148 gizli kutu iniyordu — hepsi
+   * görünmez, hepsi bedava değil.
+   */
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const place = (): void => {
+      if (!el.open) { setPos(null); return; }
+      const a = el.getBoundingClientRect();
+      const W = 288;   // w-72
+      // Sağ kenardan taşmayı kelepçele: `overflow` kırpması gitti ama pencere sınırı duruyor.
+      setPos({ top: a.bottom + 4, left: Math.min(window.innerWidth - W - 8, Math.max(8, a.left)) });
+    };
+    el.addEventListener('toggle', place);
+    // Sayfa kayarsa balon ⓘ'dan kopmasın (ayarlar sayfası çok uzun).
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      el.removeEventListener('toggle', place);
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, []);
+
   return (
-    <details className="relative inline-block align-middle">
+    <details ref={ref} className="inline-block align-middle">
       <summary
         aria-label={label}
         className="inline-flex size-4 cursor-pointer list-none items-center justify-center
@@ -74,10 +117,16 @@ export function Info({ children, label = 'açıklama' }: { children: ReactNode; 
       >
         i
       </summary>
-      <div className="absolute left-0 top-5 z-10 w-72 rounded-[var(--radius-sm)] border
-        border-strong bg-raised p-2 text-[11px] leading-snug text-ink shadow-md">
-        {children}
-      </div>
+      {pos ? createPortal(
+        <div
+          style={{ top: pos.top, left: pos.left }}
+          className="fixed z-[100] w-72 rounded-[var(--radius-sm)] border border-strong
+            bg-raised p-2 text-[11px] leading-snug text-ink shadow-md"
+        >
+          {children}
+        </div>,
+        document.body,
+      ) : null}
     </details>
   );
 }

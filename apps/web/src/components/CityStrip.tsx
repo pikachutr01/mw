@@ -116,6 +116,11 @@ export function CityStrip() {
           <img src="/assets/buildings/city.png" alt="" width={96} height={77}
             className="icon-shadow h-5 w-auto shrink-0 object-contain" />
           <span className="display truncate font-semibold text-accent">{activeCity?.name}</span>
+          {/* ⭐ Başkent etiketi buraya 2026-08-03'te taşındı: `CityHub`taki ad kartı kaldırıldı
+              ve mobilde "hangisi başkentim?" sorusunun cevabı başka hiçbir yerde kalmıyordu. */}
+          {activeCity?.isCapital ? (
+            <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted">Başkent</span>
+          ) : null}
           <span className="tnum shrink-0 text-muted">{activeCity ? coords(activeCity.coordinates) : ''}</span>
           <span aria-hidden className={`ml-auto shrink-0 text-muted transition-transform ${
             stripOpen ? 'rotate-180' : ''

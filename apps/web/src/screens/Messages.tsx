@@ -658,8 +658,12 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
             ediyor — dengelemede işimize yarıyor, yalnız ekranda yazmıyor. */}
       </div>
 
+      {/* ⚠️ Sebep AÇIKLANMIYOR (kullanıcı, 2026-08-03). Metin *"kuşlar ya vuruldu ya da rakip
+          kuşlarca engellendi"* diyordu; zaten üstteki satırda kaç kuşun vurulduğu ve kaçının
+          engellendiği yazıyor — tekrarın ötesinde, hangi ihtimalin gerçekleştiğini bilmediğimiz
+          için cümle de belirsizdi. */}
       {body['level'] == null ? (
-        <div className="text-danger">Bilgi alınamadı — kuşlar ya vuruldu ya da rakip kuşlarca engellendi.</div>
+        <div className="text-danger">Bilgi alınamadı.</div>
       ) : null}
 
       {res ? (

@@ -8,13 +8,14 @@
  * yere gezdiriyordu. Artık ilerleme çubuğu + geri sayım + iptal, ilerleyen kalemin **kendi
  * satırının altında** karşıdan karşıya duruyor.
  *
- * ⭐ **İptal onaydan geçer** ve onay metni **geri alınamayacak tutarı** yazar — iade kuralı
- * kaleme göre değişiyor (yapı/teknik süreye göre, savaşçı bir birim eksik), oyuncunun bunu
- * ezberlemesi beklenemez.
+ * ⭐ **İptal onaydan geçer** ve onay metni iade KURALINI yazar — kaleme göre değişiyor
+ * (yapı/teknik süreye göre, savaşçı bir birim eksik), oyuncunun bunu ezberlemesi beklenemez.
+ * ⚠️ **Tutar YAZMAZ** (kullanıcı, 2026-08-03): gerçek iade sunucuda onay anında hesaplanıyor,
+ * ekranda gösterilen tahmin aradan geçen saniyelerle ayrışıyordu.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { cancelRefund, caveRepairSeconds, wallCurrentIntegrity } from '@mobilwar/catalog';
+import { caveRepairSeconds, wallCurrentIntegrity } from '@mobilwar/catalog';
 import { nameOf } from '../lib/names.ts';
 import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
 import {
@@ -205,61 +206,33 @@ function WallRepairRow({ repair }: { repair: { integrity: number; from: string |
  * Kural katalogdan (`cancelRefund`): yapı/teknik **süreye göre**, adetli kalem **bir birim eksik**.
  */
 function useCancelWithConfirm(): (q: {
-  id: number; label: string; startedAt: string; finishAt: string;
-  spent: { gold: number; food: number }; count: number | null; done?: number;
+  id: number; label: string; count: number | null;
 }) => Promise<void> {
   const confirm = useConfirm();
   const cancel = useCancelQueue();
 
   return async (q) => {
-    const start = Date.parse(q.startedAt);
-    const end = Date.parse(q.finishAt);
-    const progress = Math.min(1, Math.max(0, (serverNow() - start) / Math.max(1, end - start)));
-
-    // Savaşçıda üretilenler zaten şehirde → hesap KALAN adet üzerinden.
-    const remainingCount = q.count != null ? Math.max(0, q.count - (q.done ?? 0)) : null;
-    const spent = remainingCount != null && q.count
-      ? {
-        gold: (q.spent.gold / q.count) * remainingCount,
-        food: (q.spent.food / q.count) * remainingCount,
-      }
-      : q.spent;
-
-    const refund = cancelRefund({
-      rule: q.count != null ? 'minusOneUnit' : 'timeProgress',
-      spent,
-      progress,
-      count: remainingCount ?? 1,
-    });
-    const lost = {
-      gold: Math.max(0, Math.round(q.spent.gold - refund.gold)),
-      food: Math.max(0, Math.round(q.spent.food - refund.food)),
-    };
-
+    /**
+     * ⚠️ RAKAM YOK (kullanıcı, 2026-08-03): *"Ekranda görünen değerle iptal onayını verildiği
+     * anda farklılık olur. Sadece bilgilendirme olması yeterli."*
+     *
+     * Burada `cancelRefund` istemcide çalıştırılıp "geri alamayacağın kaynak" ve "iade
+     * edilecek" kutuları çiziliyordu. Gerçek iade **sunucuda, onay anında** yeniden
+     * hesaplanıyor (`queue.service.ts`) ve arada geçen saniyeler ilerlemeyi değiştirdiği için
+     * iki sayı kaçınılmaz olarak ayrışıyordu. Kural cümlesi kalıyor, tahmin gidiyor.
+     */
     const ok = await confirm({
       title: `${q.label} iptal edilsin mi?`,
       danger: true,
       confirmLabel: 'İptal et',
       body: (
-        <div className="space-y-2 text-sm">
-          <p>
-            {q.count != null
-              ? 'Üretimi biten birimler şehirde kalır; iadede kalan siparişten bir birimin bedeli düşülür.'
-              : 'İade süreye göre yapılır: harcanan kaynağın tamamlanmamış kısmı geri verilir.'}
-          </p>
-          <div className="rounded-[var(--radius-sm)] border border-danger bg-danger/10 px-2.5 py-2">
-            <div className="mb-1 text-xs font-semibold text-danger">Geri alamayacağın kaynak</div>
-            <div className="flex items-center gap-3">
-              <Res kind="gold" value={fmt(lost.gold)} size={14} />
-              <Res kind="food" value={fmt(lost.food)} size={14} />
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-muted">
-            <span>İade edilecek:</span>
-            <Res kind="gold" value={fmt(Math.round(refund.gold))} size={13} />
-            <Res kind="food" value={fmt(Math.round(refund.food))} size={13} />
-          </div>
-        </div>
+        <p className="text-sm">
+          {q.count != null
+            ? 'Üretimi biten birimler şehirde kalır. Kalan siparişin bedeli iade edilir; '
+              + 'iadeden bir birimin bedeli düşülür.'
+            : 'Harcanan kaynağın tamamlanmamış kısmı iade edilir; geçen süreye karşılık gelen '
+              + 'kısım geri verilmez.'}
+        </p>
       ),
     });
     if (ok) cancel.mutate(q.id);
@@ -270,11 +243,12 @@ function useCancelWithConfirm(): (q: {
 const queueFor = (city: CityDetail, category: string, itemType: string): QueueRow | undefined =>
   city.queues.find((q) => q.category === category && q.itemType === itemType);
 
-/** Kalemin harcanmış kaynağı — iptal onayında "kaybedilecek" hesabı için gerekiyor. */
-function spentOf(cost: { gold: number; food: number }, count: number | null): { gold: number; food: number } {
-  const n = count ?? 1;
-  return { gold: cost.gold * n, food: cost.food * n };
-}
+/*
+ * ⚠️ Burada `spentOf()` vardı — iptal onayında "kaybedilecek kaynak" hesabı için. 2026-08-03'te
+ * onay metninden rakamlar kaldırılınca (kullanıcı: *"ekranda görünen değerle iptal onayı
+ * verildiği anda farklılık olur"*) tek çağıranı kalmadı ve silindi. İadenin gerçek hesabı
+ * zaten hep sunucudaydı: `queue.service.ts` → `cancelRefund`.
+ */
 
 /* ── Yapılar ────────────────────────────────────────────────────────────────── */
 
@@ -372,8 +346,7 @@ function Buildings({ city }: { city: CityDetail }) {
                   startedAt={q.startedAt} finishAt={q.finishAt}
                   label={`seviye ${q.targetLevel}`}
                   onCancel={() => void askCancel({
-                    id: q.id, label: b.name, startedAt: q.startedAt, finishAt: q.finishAt,
-                    spent: spentOf(cost ?? { gold: 0, food: 0 }, null), count: null,
+                    id: q.id, label: b.name, count: null,
                   })}
                 />
               ) : null}
@@ -682,12 +655,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
           onMove={(queueId, direction) => move.mutate({ queueId, direction })}
           onCancel={(q) => {
             const u = list.find((x) => x.id === q.itemType);
-            void askCancel({
-              id: q.id, label: u?.name ?? q.itemType,
-              startedAt: q.startedAt, finishAt: q.finishAt,
-              spent: spentOf(u?.cost ?? { gold: 0, food: 0 }, q.count),
-              count: q.count, done: q.done,
-            });
+            void askCancel({ id: q.id, label: u?.name ?? q.itemType, count: q.count });
           }}
         />
       ) : null}
@@ -796,8 +764,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   startedAt={q.startedAt} finishAt={q.finishAt}
                   label={q.count ? <span className="tnum">{fmt(q.count)} adet</span> : `seviye ${q.targetLevel}`}
                   onCancel={() => void askCancel({
-                    id: q.id, label: u.name, startedAt: q.startedAt, finishAt: q.finishAt,
-                    spent: spentOf(u.cost, q.count), count: q.count, done: q.done,
+                    id: q.id, label: u.name, count: q.count,
                   })}
                 />
               )) : null}
@@ -861,8 +828,7 @@ function Techs({ city }: { city: CityDetail }) {
                   label={<>seviye {q.targetLevel}{mineHere ? '' : ` · ${q.cityName}`}</>}
                   canCancel={mineHere}
                   onCancel={() => void askCancel({
-                    id: q.id, label: t.name, startedAt: q.startedAt, finishAt: q.finishAt,
-                    spent: t.nextCost, count: null,
+                    id: q.id, label: t.name, count: null,
                   })}
                 />
               ) : null}

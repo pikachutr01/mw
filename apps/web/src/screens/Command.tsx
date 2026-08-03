@@ -333,7 +333,9 @@ function Rankings(): React.ReactElement {
                         <Th className="w-16 text-center">Üye</Th></>
                       : <><Th className="w-24 text-right">Puan</Th><Th className="w-16 text-center">Değişim</Th>
                         <Th className="w-28">İttifak</Th></>}
-                  <Th className="w-10 text-center"> </Th>
+                  {/* ⚠️ `w-10` (40px) İKİ 32px'lik ikonu taşımıyordu; flex kutusu ikisini de
+                      ~10px'e EZİYORDU (ölçüldü). Genişlik iki ikon + boşluğu almalı. */}
+                  <Th className="w-24 text-center"> </Th>
                 </tr>
               </thead>
               <tbody>
@@ -427,9 +429,13 @@ function MessageButton({ name, playerId, disabled }: {
         onClick={() => openChat(playerId, name)}
         className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
         {/* ⭐ 26 → 32px (kullanıcı): sıralama tablosunun son sütunundaki iki simge çok küçük
-            kalıyordu; dokunmatikte de 26px hedef alanı sınırın altındaydı. */}
+            kalıyordu; dokunmatikte de 26px hedef alanı sınırın altındaydı.
+            ⚠️ `shrink-0` OLMADAN `w-8` HİÇBİR ŞEY İFADE ETMİYOR: bu ikonlar bir flex kutusunda
+            ve sütun dar olduğunda flex onları yatayda eziyor. 2026-08-03'te ölçüldü —
+            32 yazıyordu, ekranda **10px** çiziliyordu ve `object-contain` yüksekliği
+            koruduğu için ikon "minicik" görünüyordu. Aynı desen `CityHub.tsx`te de var. */}
         <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={32} height={32}
-          className="icon-shadow h-8 w-8 object-contain" />
+          className="icon-shadow h-8 w-8 shrink-0 object-contain" />
       </button>
     </Tooltip>
   );
@@ -468,9 +474,10 @@ function FindInWorldButton({ playerId }: { playerId: number | null }) {
       <button type="button" aria-label="Dünyada Bul" disabled={busy}
         onClick={() => void go()}
         className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
-        {/* Mesaj düğmesiyle aynı boy — ikisi yan yana duruyor, ayrı boy göze batıyordu. */}
+        {/* Mesaj düğmesiyle aynı boy — ikisi yan yana duruyor, ayrı boy göze batıyordu.
+            `shrink-0` gerekçesi `MessageButton`ta. */}
         <img src="/assets/menu/dunya.png" alt="" aria-hidden width={32} height={32}
-          className="icon-shadow h-8 w-8 object-contain" />
+          className="icon-shadow h-8 w-8 shrink-0 object-contain" />
       </button>
     </Tooltip>
   );

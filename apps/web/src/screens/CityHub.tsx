@@ -5,11 +5,9 @@
  * arasında geçerken aynı sırayı bulsun.
  */
 import { Link } from 'react-router-dom';
-import { coords } from '../lib/format.ts';
-import { fmt } from '../lib/hooks.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity } from '../lib/queries.ts';
-import { Panel, Res } from '../components/ui.tsx';
+import { Panel } from '../components/ui.tsx';
 import { ActivityDot, cityActivity } from '../components/Shell.tsx';
 
 const ITEMS = [
@@ -29,14 +27,15 @@ export function CityHub() {
 
   return (
     <div className="space-y-3">
-      <Panel title={d ? `${d.name}${d.isCapital ? ' · Başkent' : ''}` : 'Şehir'}
-        right={d ? coords(d.coordinates) : undefined}>
-        <div className="flex items-center gap-4 px-3 py-2 text-sm">
-          <Res kind="gold" value={fmt(d?.resources.gold ?? 0)} />
-          <Res kind="food" value={fmt(d?.resources.food ?? 0)} />
-        </div>
-      </Panel>
-
+      {/**
+        * ⚠️ Burada bir «şehir adı + altın/yemek» kartı vardı; 2026-08-03'te kullanıcı isteğiyle
+        * KALDIRILDI. Üçü de zaten ekranda: ad ve koordinat şehir şeridinin başlığında,
+        * altın/yemek üst çubukta — üstelik oradaki sayılar üretim hızıyla CANLI akıyor,
+        * buradaki ham `resources` ise akmıyordu. Yani kart yalnız tekrar değil, aynı zamanda
+        * daha bayat bir tekrardı.
+        *
+        * Kaybolan tek bilgi «· Başkent» etiketiydi; o da şerit başlığına taşındı.
+        */}
       <Panel title="Şehir ekranları">
         <ul className="divide-y divide-border">
           {ITEMS.map((it, i) => (

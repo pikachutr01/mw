@@ -4,7 +4,7 @@
  * Şehir şeridi her ekranda olduğu için (bkz. `CityStrip`) bu parçalar da Ordular ekranına özel
  * olamaz — oyuncu Baraka'dayken de gelen saldırının üstüne gelip ne olduğunu görebilmeli.
  */
-import { fmt, formatDuration, remaining, remainingClock, serverNow, useTick } from '../lib/hooks.ts';
+import { fmt, remaining, remainingClock, useTick } from '../lib/hooks.ts';
 import { describeHeroes, describeUnits } from '../lib/names.ts';
 import { useCancelMission, type Coords, type Movement } from '../lib/queries.ts';
 import { Button, ErrorBox, Res } from './ui.tsx';
@@ -161,26 +161,25 @@ export function MovementModal({ m, onClose }: { m: Movement; onClose: () => void
   const cancelMission = useCancelMission();
   useTick();
 
-  const elapsedS = Math.max(0, Math.round((serverNow() - Date.parse(m.startedAt)) / 1000));
   const left = remaining(m.executeAt);
   const units = describeUnits(m.units, fmt);
 
   const onCancel = async (): Promise<void> => {
+    /**
+     * ⚠️ SAYI YOK (kullanıcı, 2026-08-03). Burada *"şu ana kadar X yol aldı, dönüş de yaklaşık
+     * o kadar sürer"* yazıyordu ve süre İSTEMCİDE hesaplanıyordu. Gerçek dönüş süresini sunucu
+     * onay ANINDA hesaplıyor (`mission.service.ts` — ayrıca toplam yol süresiyle kırpıyor), yani
+     * ekrandaki sayı ile gerçekleşen değer ayrışabiliyordu. Kural cümlesi zaten yeterli;
+     * yanıltıcı bir tahmin göstermenin faydası yok.
+     *
+     * ⚠️ *"<oyuncu> bu hareketin iptal edildiğini görecek"* satırı da kullanıcı isteğiyle
+     * kaldırıldı.
+     */
     const ok = await confirm({
       title: `${titleOf(m)} iptal edilsin mi?`,
       danger: true,
       confirmLabel: 'Orduyu geri çağır',
-      body: (
-        <div className="space-y-2">
-          <p>Ordu geri çağrılacak ve <b>gittiği yol kadar</b> sürede şehre dönecek.</p>
-          <p className="text-muted">
-            Şu ana kadar <b>{formatDuration(elapsedS)}</b> yol aldı; dönüş de yaklaşık o kadar sürer.
-          </p>
-          {m.direction === 'out' && m.targetPlayer ? (
-            <p className="text-muted">{m.targetPlayer} bu hareketin iptal edildiğini görecek.</p>
-          ) : null}
-        </div>
-      ),
+      body: <p>Ordu geri çağrılacak ve <b>gittiği yol kadar</b> sürede şehre dönecek.</p>,
     });
     if (!ok) return;
     cancelMission.mutate(m.id, { onSuccess: onClose });

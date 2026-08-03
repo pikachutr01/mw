@@ -36,3 +36,5 @@ Saldırı, casusluk, nakliye gibi raporlarda hedef şehrin koordinatının yanı
 Kayıt sırasında kullanılan şüpheli e posta durumlarını tespit et, temp mail gibi servislerden alınan garip e postalar ile e posta doğrulama aşaması geçilebilir. Bunların tespitini yapıp banlayabilecek bir admin bölümü
 
 Bot hesap oluşturmayı tespit edip engelleme
+
+Admin panelinden oyunculara sistem mesajı göndermek, özel veya herkese bildirim mesajı iletmek. Bu mesaj Mesajlarda Mesajlar sekmesine düşebilir. Önemli bir bilgi veya güncelleme olursa oyuncuları hızlıca bilgilendirmek amaçlı. Tıpkı raporlar gibi modal üzerinde açılırlar, sistem tarafından gönderilmiş gözükürler. Açılınca okunmuş sayılırlar.
