@@ -2050,6 +2050,26 @@ eder: ikinci ordu, ilkinin tüm sonuçları (iade + hasarlı sur) uygulandıktan
   Dirilt menüsü açılır (§13.11.4d). Eski "yok edilir → 1 saat sonra silinir" dalı kaldırıldı.
 - Nakliye/destek dönüşleri aynı mantık; casusluk dönüşü yalnız casus kuşları getirir.
 
+### 13.10.5 ⭐ Rapor güzergâhı — koordinat + **o anki** şehir adı
+
+Her rapor (saldırı · casusluk · nakliye · destek · şehir kurma) başında tek satırlık bir
+«kaynak → hedef» güzergâhı taşır. İki uç da tıklanabilir: o diyar Dünya ekranında açılır ve
+modal kapanır — raporu okuyup *"peki bu nerede?"* diyen oyuncunun bir sonraki adımı zaten
+haritaya bakmaktır.
+
+⭐ **Şehir adı koordinatın yanında** (kullanıcı, 2026-08-04) ve **olay anında dondurulur**.
+Gerekçe koordinattan farklı: koordinat zaten hiç değişmez, ad ise oyuncu tarafından her an
+değiştirilebilir. Rapor adı okuma anında `cities`ten çekseydi, aylar önceki bir saldırının
+raporu bugünkü adı gösterir ve oyuncunun hatırladığı olayla çelişirdi. Kullanıcının cümlesi de
+bunu söylüyor: *"o andaki şehir adı"*.
+
+⚠️ İki ayrı yazım yolu var ve **ikisi de** adı taşımak zorunda: savaş dışı raporlar
+`routeOf` → mesaj gövdesindeki `route`, savaş raporu ise `battles.result.coords`. Savaş
+raporunun eski kayıtlar için `cities` JOIN'inden türeyen bir koordinat yedeği var; **oraya ad
+konmuyor** — JOIN'in verdiği ad *bugünkü* addır ve donmuş addan ayırt edilemezdi, yani eski
+rapor hiç taşımadığı bir bilgiyi taşıyormuş gibi görünürdü. Bu alandan eski raporlar yalnız
+koordinat gösterir.
+
 ---
 
 ## 13.11 ⭐ ŞEHİR, YAPI VE ÜRETİM KURALLARI (kullanıcı düzeltmeleri, 2026-07-26)

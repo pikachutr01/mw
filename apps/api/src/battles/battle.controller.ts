@@ -254,7 +254,15 @@ export class BattleController {
       winner: String(b['winner']),
       input: b['input'] as BattleRow['input'],
       result: result as unknown as BattleRow['result'],
-      // Eski kayıtlarda `result.coords` yok → şehirler hâlâ duruyorsa JOIN'den türet.
+      /**
+       * Eski kayıtlarda `result.coords` yok → şehirler hâlâ duruyorsa JOIN'den türet.
+       *
+       * ⚠️ **Yedeğe ŞEHİR ADI bilerek konmuyor.** Koordinat hiç değişmediği için JOIN'den
+       * gelen değer olayın anına da sadıktır; ad ise değişebilir. JOIN'in verdiği ad
+       * *bugünkü* addır ve donmuş addan ayırt edilemezdi — yani eski bir rapor, hiç
+       * taşımadığı bir bilgiyi taşıyormuş gibi görünürdü. Adsız kalması doğru davranış:
+       * bu raporlar dün de yalnız koordinat gösteriyordu.
+       */
       fallbackCoords: {
         origin: coord(b['ok'], b['od'], b['os']),
         target: coord(b['tk'], b['td'], b['ts']),

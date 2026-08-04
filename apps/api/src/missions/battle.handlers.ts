@@ -369,12 +369,19 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       alive: after[i]?.alive !== false,
       xpGained: settled.gained.find((g) => g.id === h.id)?.xp ?? 0,
     }));
+    /**
+     * ⚠️ Savaş raporu güzergâhı `routeOf`tan GEÇMİYOR: o, mesaj gövdesine yazıyor, bu ise
+     * `battles.result`e. İki yol da aynı alanları taşımak zorunda — `name` (2026-08-04) buraya
+     * da eklendi, yoksa saldırı raporu tek başına adsız kalırdı.
+     */
     const coordRows = await ctx.tx.execute<Record<string, unknown>>(sql`
-      SELECT id, k, d, s FROM cities WHERE id IN (${originCityId}, ${targetCityId})
+      SELECT id, k, d, s, name FROM cities WHERE id IN (${originCityId}, ${targetCityId})
     `);
-    const coordOf = (cid: number): { k: number; d: number; s: number } | null => {
+    const coordOf = (cid: number): { k: number; d: number; s: number; name: string } | null => {
       const r = coordRows.find((x: Record<string, unknown>) => Number(x['id']) === cid);
-      return r ? { k: Number(r['k']), d: Number(r['d']), s: Number(r['s']) } : null;
+      return r
+        ? { k: Number(r['k']), d: Number(r['d']), s: Number(r['s']), name: String(r['name']) }
+        : null;
     };
     await ctx.tx.execute(sql`
       UPDATE battles SET result = result || ${JSON.stringify({

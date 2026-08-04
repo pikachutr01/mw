@@ -54,6 +54,9 @@ export interface ReportHeroLine {
   xpGained: number;
 }
 
+/** Rapordaki bir şehir: koordinat + O ANKİ ad. `name` bu alandan önceki savaşlarda yok. */
+export interface ReportCoord { k: number; d: number; s: number; name?: string }
+
 export interface BattleReport {
   battleId: number;
   side: ReportSide;
@@ -63,10 +66,14 @@ export interface BattleReport {
   turns: number;
   night: boolean;
   at: string;
-  /** Kaynak (saldıranın şehri) → Hedef (savunanın şehri). Eski kayıtlarda şehir silindiyse null. */
+  /**
+   * Kaynak (saldıranın şehri) → Hedef (savunanın şehri). Eski kayıtlarda şehir silindiyse null.
+   * `name` savaş ANINDAKİ ad (2026-08-04); şehir sonradan yeniden adlandırılsa bile rapor
+   * anlattığı olaya sadık kalır. Bu alandan önceki savaşlarda `undefined`.
+   */
   coords: {
-    origin: { k: number; d: number; s: number } | null;
-    target: { k: number; d: number; s: number } | null;
+    origin: ReportCoord | null;
+    target: ReportCoord | null;
   } | null;
   sections: ReportSection[];
   /** Kahramanlar okuyanın perspektifinde; `captured` = savaştan çıkan YENİ kahraman. */
@@ -152,8 +159,8 @@ interface BattleResultShape {
   };
   wall?: { level: number; destroyed: boolean };
   coords?: {
-    origin: { k: number; d: number; s: number } | null;
-    target: { k: number; d: number; s: number } | null;
+    origin: ReportCoord | null;
+    target: ReportCoord | null;
   };
   /** Savunana ÖZEL blok — controller saldıran tarafta anahtarı komple siler. */
   defenderPrivate?: {
@@ -388,8 +395,9 @@ function renderText(r: BattleReport): string {
     : r.won ? 'Kazandınız !' : 'Kaybettiniz !';
   out.push(`${outcome} — ${r.turns} tur${r.night ? ' (gece savaşı)' : ''}`);
   if (r.coords?.origin || r.coords?.target) {
-    const c = (x: { k: number; d: number; s: number } | null): string =>
-      x ? `${x.k}:${x.d}:${x.s}` : '—';
+    // Ad varsa koordinatın yanına parantezle; eski savaşlarda ad yok, satır kısalıyor.
+    const c = (x: ReportCoord | null): string =>
+      x ? `${x.k}:${x.d}:${x.s}${x.name ? ` (${x.name})` : ''}` : '—';
     out.push(`Kaynak: ${c(r.coords.origin)} → Hedef: ${c(r.coords.target)}`);
   }
   out.push('');

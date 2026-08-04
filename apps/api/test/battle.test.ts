@@ -860,9 +860,44 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(atk.sections[0]!.key).toBe('myArmy');
     expect(def.sections.some((s) => s.key === 'enemyArmy')).toBe(true);
     expect(def.sections.some((s) => s.key === 'defenderStructs')).toBe(true);
-    // ⭐ Zenginleştirme: koordinatlar savaş anında satıra işlendi.
-    expect(atk.coords?.target).toEqual({ k: 1, d: 1, s: 2 });
-    expect(atk.coords?.origin).toEqual({ k: 1, d: 1, s: 1 });
+    // ⭐ Zenginleştirme: koordinatlar VE o anki şehir adları savaş anında satıra işlendi.
+    expect(atk.coords?.target).toEqual({ k: 1, d: 1, s: 2, name: 'savunan' });
+    expect(atk.coords?.origin).toEqual({ k: 1, d: 1, s: 1, name: 'saldiran' });
+    // Metin dökümünde de ad koordinatın yanında (kullanıcı, 2026-08-04).
+    expect(atk.text).toMatch(/Kaynak: 1:1:1 \(saldiran\) → Hedef: 1:1:2 \(savunan\)/);
+  });
+
+  /**
+   * ⭐ **ADIN DONMASI** — bu testin ölçtüğü şey tasarımın kendisi.
+   *
+   * Şehir adı koordinat gibi kalıcı değil: oyuncu her an değiştirebilir. Rapor okuma anında
+   * `cities`ten okusaydı, aylar önceki bir saldırının raporu bugünkü adı gösterir ve oyuncunun
+   * hatırladığı olayla çelişirdi. Kullanıcının isteği de bunu söylüyor: *"o andaki şehir adı"*.
+   */
+  it('savaştan SONRA şehir yeniden adlandırılsa bile rapor eski adı gösterir', async () => {
+    await giveUnits(attackCity, 'dwarf', 3000);
+    await giveUnits(defendCity, 'dwarf', 200);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 3000 }, at,
+    });
+    await runDue(m.missionId);
+
+    // Savunan, savaştan sonra şehrini yeniden adlandırıyor.
+    await h.db.execute(sql`UPDATE cities SET name = 'yeni-ad' WHERE id = ${defendCity}`);
+
+    const b = (await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, at, night, winner, input, result FROM battles WHERE world_id = ${worldId}
+    `))[0]!;
+    const report = buildBattleReport({
+      id: Number(b['id']), at: toDate(b['at']), night: Boolean(b['night']),
+      winner: String(b['winner']),
+      input: b['input'] as BattleRow['input'], result: b['result'] as BattleRow['result'],
+    }, 'attacker');
+
+    expect(report.coords?.target?.name).toBe('savunan');
+    expect(report.text).not.toMatch(/yeni-ad/);
   });
 
   /**

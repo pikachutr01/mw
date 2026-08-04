@@ -455,7 +455,7 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
   );
 }
 
-interface Coord { k: number; d: number; s: number }
+interface Coord { k: number; d: number; s: number; name?: string }
 
 /**
  * ⭐ RAPOR GÜZERGÂHI — «kaynak → hedef», iki uç da TIKLANABİLİR (kullanıcı, 2026-08-02).
@@ -466,6 +466,11 @@ interface Coord { k: number; d: number; s: number }
  *
  * ⚠️ Şehir NUMARASI (`s`) rotada yok — Dünya ekranı diyar listesi, şehir değil (§13.16).
  * Koordinatın tamamı yine yazılıyor, yalnız hedef bağlantı diyar düzeyinde.
+ *
+ * ⭐ ŞEHİR ADI koordinatın yanında (kullanıcı, 2026-08-04) ve **düğmenin İÇİNDE**: ad ile
+ * koordinat aynı şeyi işaret ediyor, ikisini ayırıp yalnız birini tıklanabilir yapmak
+ * gereksiz bir ayrım olurdu. Ad `undefined` ise (bu alandan eski raporlar) satır sessizce
+ * eski hâline dönüyor.
  */
 function RouteLine({ origin, target, onNavigate }: {
   origin?: Coord | null; target?: Coord | null; onNavigate?: () => void;
@@ -482,9 +487,11 @@ function RouteLine({ origin, target, onNavigate }: {
     c ? (
       <button type="button" onClick={() => go(c)}
         title="Dünya'da göster"
-        className="tnum rounded-[var(--radius-sm)] px-1 font-semibold text-ink underline
+        className="rounded-[var(--radius-sm)] px-1 font-semibold text-ink underline
           decoration-dotted underline-offset-2 transition-colors hover:bg-raised hover:text-accent">
-        {c.k}:{c.d}:{c.s}
+        <span className="tnum">{c.k}:{c.d}:{c.s}</span>
+        {/* ⚠️ `tnum` yalnız koordinatta: tablo rakamları ada uygulanınca harfler seyreliyor. */}
+        {c.name ? <span className="ml-1 font-normal">{c.name}</span> : null}
       </button>
     ) : <span className="text-muted">—</span>
   );

@@ -17,11 +17,22 @@
 import { sql } from 'drizzle-orm';
 import type { HandlerContext } from './handler-registry.ts';
 
-export interface Coord { k: number; d: number; s: number }
+/**
+ * ⭐ `name` — koordinatın YANINDA şehir adı (kullanıcı, 2026-08-04).
+ *
+ * ⚠️ Dondurmanın gerekçesi burada koordinattan **daha güçlü**: koordinat zaten hiç değişmez,
+ * ad ise oyuncu tarafından her an değiştirilebilir. Kullanıcının cümlesi de bunu söylüyor —
+ * *"o andaki şehir adı"*. Okuma anında `cities`ten çekseydik, üç ay önceki bir saldırı raporu
+ * bugünkü adı gösterir ve oyuncunun hafızasıyla çelişirdi.
+ *
+ * ⚠️ Eski raporlarda bu alan YOK (`undefined`) — gösterim yalnız koordinatı yazar. Geriye
+ * dönük doldurmak zaten imkânsız: o anki adı hiçbir yerde saklamıyorduk.
+ */
+export interface Coord { k: number; d: number; s: number; name?: string }
 export interface ReportRoute { origin: Coord | null; target: Coord | null }
 
 /**
- * `ctx.mission`in kaynak ve hedef şehir koordinatlarını okur.
+ * `ctx.mission`in kaynak ve hedef şehrinin koordinatını ve adını okur.
  *
  * Hedefi olmayan görevler (boş koordinata şehir kurma) için `target` null döner — çağıran
  * tarafta bu normal, gösterim degrade eder.
@@ -36,12 +47,14 @@ export async function routeOf(ctx: HandlerContext): Promise<ReportRoute | null> 
   if (ids.length === 0) return null;
 
   const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
-    SELECT id, k, d, s FROM cities WHERE id IN ${sql.raw(`(${ids.map(Number).join(',')})`)}
+    SELECT id, k, d, s, name FROM cities WHERE id IN ${sql.raw(`(${ids.map(Number).join(',')})`)}
   `);
 
   const byId = new Map<number, Coord>();
   for (const r of rows) {
-    byId.set(Number(r['id']), { k: Number(r['k']), d: Number(r['d']), s: Number(r['s']) });
+    byId.set(Number(r['id']), {
+      k: Number(r['k']), d: Number(r['d']), s: Number(r['s']), name: String(r['name']),
+    });
   }
 
   /**

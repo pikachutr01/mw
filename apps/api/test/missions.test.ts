@@ -503,6 +503,74 @@ describe('casusluk', () => {
   });
 });
 
+/* ═══ RAPOR GÜZERGÂHI ══════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ Kullanıcı (2026-08-02) raporlarda kaynak/hedef KOORDİNATINI, (2026-08-04) yanında da
+ * O ANKİ ŞEHİR ADINI istedi. İkisi de `routeOf` üzerinden **tek yerden** yazılıyor; bu
+ * testler o tekliğin gerçekten tuttuğunu farklı görev tiplerinde ölçüyor.
+ */
+describe('rapor güzergâhı (koordinat + o anki şehir adı)', () => {
+  const routeOf = (body: Record<string, unknown>): Record<string, { name?: string }> =>
+    body['route'] as Record<string, { name?: string }>;
+
+  it('casusluk raporu kaynak ve hedefi ADIYLA taşır', async () => {
+    await giveUnits(home, 'spy_bird', 16);
+    await setTech(me, 'espionage', 5);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 16 }, at,
+    });
+    await runDue(m.missionId);
+
+    const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    expect(routeOf(body)['origin']).toEqual({ k: 1, d: 1, s: 1, name: 'ev' });
+    expect(routeOf(body)['target']).toEqual({ k: 1, d: 1, s: 2, name: 'dusman' });
+  });
+
+  /**
+   * ⚠️ Nakliyenin GÖNDEREN kopyası, `routeOf`un `writeMessage` içinden çağrılmasının
+   * gerekçesiydi: handler'lara tek tek eklenseydi kaçınılmaz olarak unutulacak yer burasıydı.
+   */
+  it('nakliyenin gönderen kopyası da güzergâhı taşır', async () => {
+    await giveUnits(home, 'cargo_wagon', 2);
+    await setResources(home, 10_000, 0);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendTransport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { cargo_wagon: 2 },
+      cargo: { gold: 5000, food: 0 }, at,
+    });
+    await runDue(m.missionId);
+
+    const gonderen = (await messagesOf(me))
+      .find((x) => x['kind'] === 'transport_report' && x['side'] === 'sender')!;
+    const route = routeOf(gonderen['body'] as Record<string, unknown>);
+    expect(route['origin']?.name).toBe('ev');
+    expect(route['target']?.name).toBe('dusman');
+  });
+
+  /**
+   * ⭐ **AD DONUYOR** — koordinattan farklı olarak ad değişebilir, bu yüzden rapor onu okuma
+   * anında `cities`ten çekmiyor. Kullanıcının cümlesi: *"o andaki şehir adı"*.
+   */
+  it('hedef sonradan yeniden adlandırılsa bile rapor eski adı gösterir', async () => {
+    await giveUnits(home, 'spy_bird', 16);
+    await setTech(me, 'espionage', 5);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 16 }, at,
+    });
+    await runDue(m.missionId);
+    await h.db.execute(sql`UPDATE cities SET name = 'bambaska' WHERE id = ${enemy}`);
+
+    const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    expect(routeOf(body)['target']?.name).toBe('dusman');
+  });
+});
+
 /* ═══ ŞEHİR KURMA ══════════════════════════════════════════════════════════ */
 
 describe('şehir kurma', () => {

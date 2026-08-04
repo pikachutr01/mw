@@ -769,10 +769,13 @@ export interface BattleReport {
   turns: number;
   night: boolean;
   at: string;
-  /** Kaynak (saldıran) → Hedef (savunan). Eski kayıtlarda null olabilir. */
+  /**
+   * Kaynak (saldıran) → Hedef (savunan). Eski kayıtlarda null olabilir.
+   * `name` savaş ANINDAKİ şehir adı; bu alandan eski savaşlarda yok (§13.10.1).
+   */
   coords: {
-    origin: { k: number; d: number; s: number } | null;
-    target: { k: number; d: number; s: number } | null;
+    origin: { k: number; d: number; s: number; name?: string } | null;
+    target: { k: number; d: number; s: number; name?: string } | null;
   } | null;
   sections: { key: string; title: string; lines: ReportLine[] }[];
   heroes: {
