@@ -503,7 +503,15 @@ export const playerIps = pgTable('player_ips', {
   ip: text('ip').notNull(),
   /** /24 öbeği — mobil operatör NAT'ında tek IP yetmez, öbek daha anlamlı. */
   ipBlock24: text('ip_block_24'),
+  /**
+   * ⚠️ Bu kolon 0002'den beri vardı ve **hiç doldurulmuyordu**. 2026-08-04'te `AsnService`
+   * (iptoasn.com anlık görüntüsü) devreye girdi.
+   */
   asn: text('asn'),
+  /** AS adı — "mobil operatör NAT'ı mı" sorusunun TAHMİN değil KANIT hâli. */
+  asnName: text('asn_name'),
+  /** ISO 3166-1 alpha-2. Öncelik Cloudflare `CF-IPCountry`, yoksa iptoasn ülke sütunu. */
+  country: text('country'),
   firstSeen: timestamp('first_seen', { withTimezone: true }).notNull().defaultNow(),
   lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
   hits: integer('hits').notNull().default(1),
@@ -516,6 +524,38 @@ export const playerIps = pgTable('player_ips', {
    */
   index('player_ips_by_ip').on(t.ip),
 ]);
+
+/**
+ * ⭐ IP → ASN ARALIK TABLOSU — iptoasn.com anlık görüntüsü (Public Domain, saatlik).
+ *
+ * ⚠️ **İstek başına API yerine yerel tablo, çünkü GİZLİLİK.** Bir geolocation servisi
+ * çağırmak her oyuncunun IP'sini üçüncü tarafa göndermek demekti; §9.1.5 oyunculara
+ * birbirinin IP'sini göstermeyi yasaklarken onu bir satıcıya akıtmak daha büyük ihlal olurdu.
+ *
+ * ⚠️ `numeric(39,0)`: aralıklar CIDR sınırlarına oturmuyor (`inet` + `<<=` veriyi bozardı) ve
+ * IPv6 128 bit — `bigint` bile taşar.
+ */
+export const ipAsnRanges = pgTable('ip_asn_ranges', {
+  family: smallint('family').notNull(),
+  rangeStart: numeric('range_start', { precision: 39, scale: 0 }).notNull(),
+  rangeEnd: numeric('range_end', { precision: 39, scale: 0 }).notNull(),
+  /**
+   * 0 = kayıtsız/duyurulmamış aralık; iptoasn bunları da listeliyor.
+   * ⚠️ `bigint`, `integer` DEĞİL: AS numaraları 32 bit **işaretsiz** (RFC 6793) ve Postgres
+   * `integer` işaretli — gerçek veri kümesindeki AS4230120000 taşırıyordu.
+   */
+  asn: bigint('asn', { mode: 'number' }).notNull(),
+  country: text('country'),
+  description: text('description'),
+}, (t) => [index('ip_asn_ranges_lookup').on(t.family, t.rangeStart)]);
+
+/** Tek satırlık tazelik künyesi — "bu veri ne kadar eski" panelde görünüyor. */
+export const ipAsnMeta = pgTable('ip_asn_meta', {
+  id: smallint('id').primaryKey().default(1),
+  source: text('source').notNull(),
+  rows: integer('rows').notNull().default(0),
+  refreshedAt: timestamp('refreshed_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * ⭐ OYUNCU ENGELLEME — orijinalde VAR ve bizde eksikti.

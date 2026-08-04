@@ -165,6 +165,9 @@ rapor e-postası).
 sekmesi, ağırlıklı çift skoru (cihaz · IP · /24 · kayıt kohortu · sıra sıra oturum),
 her sinyalin yanında **masum açıklaması**, karar kaydı ve gerçek IP zinciri teşhisi.
 §9.1.1 aynen geçerli: **otomatik ceza yok**, çıktı yalnız skorlu rapor.
+⭐ Aynı gün **IP → ASN/ülke künyesi** de girdi (§9.1.2c): iptoasn.com anlık görüntüsü
+sunucuda yerel duruyor (oyuncu IP'si dışarı çıkmıyor), kanıt satırında ağın adı ve ülkesi
+yazıyor. `player_ips.asn` kolonu 0002'den beri boştu.
 
 ---
 

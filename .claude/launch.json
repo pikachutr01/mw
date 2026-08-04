@@ -10,6 +10,16 @@
         "dev"
       ],
       "port": 5173
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@mobilwar/admin",
+        "dev"
+      ],
+      "port": 5174
     }
   ]
 }

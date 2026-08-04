@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { AsnService } from '../abuse/asn.service.ts';
 import {
   INNOCENT_EXPLANATION, LinkService, SIGNAL_LABEL, abuseConfig,
 } from '../abuse/link.service.ts';
@@ -50,9 +51,36 @@ const pairBody = z.object({
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminAbuseController {
   private readonly analyzer: LinkService;
+  private readonly asn: AsnService;
 
   constructor(@Inject(DB) private readonly db: Db) {
     this.analyzer = new LinkService(db);
+    this.asn = new AsnService(db);
+  }
+
+  /* ── ASN veri kümesi ──────────────────────────────────────────────────────── */
+
+  /**
+   * ⭐ IP → ASN/ÜLKE ARALIK TABLOSUNU TAZELE (iptoasn.com, Public Domain).
+   *
+   * ⚠️ **Otomatik değil, elle tetikleniyor.** Açılışta ya da zamanlanmış olarak indirseydik
+   * sunucu her yeniden başlatmada dış bir servise bağımlı olurdu; o servis yavaşlarsa ya da
+   * kaybolursa API'nin kalkışı bunu bekliyor olurdu. Aralık verisi günlerce bayat kalsa bile
+   * hiçbir oyun mekaniği bozulmaz — yalnız künye eskir.
+   *
+   * ⚠️ Yükleme sırasında giriş akışı BLOKLANMIYOR: tazeleme `DELETE`+`INSERT` ile tek
+   * transaction'da yapılıyor, `TRUNCATE` ile değil (gerekçesi `asn.service.ts`te).
+   */
+  @Post('asn/refresh')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async refreshAsn(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const rows = await this.asn.refresh();
+    const filled = await this.asn.backfill();
+    await this.audit(0, req.player!.playerId, req.player!.playerId, {
+      action: 'asn.refresh', rows, backfill: filled,
+    });
+    return { ok: true, rows, backfill: filled, status: await this.asn.status() };
   }
 
   /**
@@ -90,6 +118,8 @@ export class AdminAbuseController {
           .map((k) => [k, { label: SIGNAL_LABEL[k], innocent: INNOCENT_EXPLANATION[k] }]),
       ),
       ipChain: await this.analyzer.ipChainHealth(w),
+      /** ⭐ Künye kaynağının tazeliği — boş sonuçların sebebi bayat/yüklenmemiş tablo olabilir. */
+      asn: await this.asn.status(),
       items: pairs.map((p) => ({
         worldId: p.worldId,
         a: p.a, b: p.b, score: p.score,

@@ -115,6 +115,18 @@ ssh root@31.210.36.185 "ln -sfn /etc/nginx/sites-available/mobilwar.com /etc/ngi
 | Always Use HTTPS | **Açık** (sertifikadan SONRA) | — |
 | Bot Fight Mode | **Kapalı kalsın** | API ve WebSocket istemcilerini kırar |
 | Zero Trust → Access | `admin.mobilwar.com` için uygulama + e-posta kuralı | §1.3 |
+| Network → **IP Geolocation** | **Açık** | `CF-IPCountry` başlığını origin'e gönderir — çoklu hesap künyesindeki ülke alanı (§9.1.2c). Tüm planlarda ücretsiz. ⚠️ Kapalı kalırsa hiçbir şey kırılmaz: ülke iptoasn veri kümesinden türer, yalnız biraz daha kabadır |
+
+### 2.4b ⭐ İlk açılışta bir kez: ASN veri kümesini indir
+Yönetim paneli → **Çoklu hesap** → «ASN / ülke veri kümesi» → **Veriyi indir**.
+
+~712.000 aralık, 15 saniye. Bu olmadan IP'lerin yanında ağ adı görünmez ve «Aynı IP»
+sinyalinin masum açıklaması tahmin olarak kalır — operatör NAT'ı mı yoksa veri merkezi
+(VPN) mi ayırt edilemez.
+
+⚠️ Otomatik değil, bilerek: açılışta indirseydi API her yeniden başlatmada dış bir servise
+bağımlı olurdu. Veri bayatlasa bile hiçbir oyun mekaniği bozulmaz; ayda bir tazelemek yeter.
+⚠️ İndirme sırasında oyuncuların girişi etkilenmez (`DELETE`+`INSERT`, tek transaction).
 
 ### 2.5 GitHub secret'ları (Settings → Secrets and variables → Actions)
 | Secret | Değer |

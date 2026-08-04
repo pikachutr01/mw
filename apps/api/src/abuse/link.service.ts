@@ -48,6 +48,7 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { liveNumber } from '../settings/live.ts';
+import { hostingHint } from './asn.service.ts';
 
 export type SignalKind =
   | 'sameDevice' | 'sameIp' | 'sameIpBlock' | 'registrationCohort' | 'sessionHandoff';
@@ -91,7 +92,9 @@ export const INNOCENT_EXPLANATION: Record<SignalKind, string> = {
     + 'Cihaz kimliği tarayıcı deposu temizlenince de sıfırlanır — yani KAÇINILMASI kolay, '
     + 'yanlışlıkla oluşması da kolay.',
   sameIp: 'Aynı ev, aynı ofis, aynı yurt odası. Mobil operatörlerde binlerce abone tek '
-    + 'IP\'nin arkasında olabilir (CGNAT).',
+    + 'IP\'nin arkasında olabilir (CGNAT). ⭐ Kanıttaki «ağ» alanına bak: operatör adıysa '
+    + 'paylaşım sıradan, veri merkezi adıysa (OVH, Hetzner, DigitalOcean…) muhtemelen VPN '
+    + 'kullanılıyor ve masum açıklama çok daha zayıf.',
   sameIpBlock: 'Aynı aboneliğin dinamik IP\'si, aynı mahalledeki iki abone ya da aynı '
     + 'operatör havuzu. Tam IP eşleşmesinden belirgin şekilde zayıf.',
   registrationCohort: 'Oyuna birlikte başlayan iki arkadaş ya da kardeş tam olarak böyle '
@@ -177,9 +180,20 @@ export class LinkService {
     const exactIp = new Set<string>();
     for (const row of await this.sharedIps(worldId, cfg)) {
       exactIp.add(keyOf(row.a, row.b));
+      /**
+       * ⭐ AS künyesi kanıta giriyor (2026-08-04). Buraya kadar «mobil operatör NAT'ı olabilir»
+       * bir TAHMİNDİ; artık ağın adı yazıyor. Yönetici "TURKCELL-AS" ile "OVH SAS" arasındaki
+       * farkı görmeden doğru kararı veremez: birincisi binlerce aboneyi tek IP'nin arkasına
+       * koyan bir operatör, ikincisi bir veri merkezi — yani muhtemelen VPN.
+       */
       add(row.a, row.b, {
         kind: 'sameIp', score: cfg.weights.sameIp,
-        evidence: { ipSayısı: row.shared, örnek: row.sample },
+        evidence: {
+          ipSayısı: row.shared, örnek: row.sample,
+          ...(row.asnName == null ? {} : { ağ: row.asnName }),
+          ...(row.country == null ? {} : { ülke: row.country }),
+          ...(hostingHint(row.asnName) ? { veriMerkeziOlabilir: true } : {}),
+        },
       });
     }
 
@@ -274,11 +288,12 @@ export class LinkService {
   }
 
   private async sharedIps(worldId: number, cfg: AbuseConfig): Promise<
-    { a: number; b: number; shared: number; sample: string }[]
+    { a: number; b: number; shared: number; sample: string;
+      asnName: string | null; country: string | null }[]
   > {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       WITH ips AS (
-        SELECT i.ip, i.player_id
+        SELECT i.ip, i.player_id, i.asn_name, i.country
           FROM player_ips i
           JOIN players p ON p.id = i.player_id
          WHERE p.world_id = ${worldId}
@@ -290,7 +305,8 @@ export class LinkService {
         HAVING COUNT(DISTINCT player_id) BETWEEN 2 AND ${cfg.maxGroupSize}
       )
       SELECT x.player_id AS a, y.player_id AS b,
-             COUNT(DISTINCT x.ip)::int AS shared, MIN(x.ip) AS sample
+             COUNT(DISTINCT x.ip)::int AS shared, MIN(x.ip) AS sample,
+             MIN(x.asn_name) AS asn_name, MIN(x.country) AS country
         FROM ips x
         JOIN ips y ON y.ip = x.ip AND y.player_id > x.player_id
         JOIN grp g ON g.ip = x.ip
@@ -302,6 +318,8 @@ export class LinkService {
     return rows.map((r) => ({
       a: Number(r['a']), b: Number(r['b']),
       shared: Number(r['shared']), sample: String(r['sample']),
+      asnName: r['asn_name'] == null ? null : String(r['asn_name']),
+      country: r['country'] == null ? null : String(r['country']),
     }));
   }
 

@@ -48,6 +48,7 @@ interface LinksResponse {
     players: number; distinctIps: number; topIp: string | null;
     topIpPlayers: number; suspect: boolean; topIpLocal: boolean;
   };
+  asn: { rows: number; refreshedAt: string; source: string; ageHours: number } | null;
   items: Pair[];
 }
 
@@ -99,6 +100,7 @@ export function AbuseScreen({ worldId, onNeedStepUp }: {
   return (
     <div className="space-y-3">
       <IpChainCard chain={data?.ipChain} />
+      <AsnCard status={data?.asn ?? null} onNeedStepUp={onNeedStepUp} onDone={() => void load()} />
 
       <Panel
         title="Bağlantılı hesaplar"
@@ -208,6 +210,92 @@ function IpChainCard({ chain }: { chain?: LinksResponse['ipChain'] }) {
  * önünde kapatıp kalan metni ayrı bir paragrafa atıyor, yani satır ikiye bölünüyordu.
  * (Konsol da uyarıyordu: *"`<details>` cannot be a descendant of `<p>`"*.)
  */
+/* ═══ ASN veri kümesi ═══════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ IP → AĞ ADI / ÜLKE künyesinin kaynağı: [iptoasn.com](https://iptoasn.com) anlık görüntüsü.
+ *
+ * ⚠️ Bu veri **sunucuda yerel bir tabloda** duruyor, istek başına bir servise sorulmuyor.
+ * Gerekçe fiyat değil gizlilik: bir geolocation API'si çağırmak, her oyuncunun IP'sini
+ * üçüncü bir tarafa göndermek olurdu.
+ *
+ * ⚠️ Tazeleme ELLE: otomatik olsaydı API her açılışta dış bir servise bağımlı hâle gelirdi.
+ * Veri bayat kalsa bile hiçbir oyun mekaniği bozulmaz, yalnız künye eskir.
+ */
+function AsnCard({ status, onNeedStepUp, onDone }: {
+  status: LinksResponse['asn'];
+  onNeedStepUp: () => void;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const refresh = async (): Promise<void> => {
+    setBusy(true); setError(null); setNote(null);
+    try {
+      const r = await api<{ rows: number; backfill: { scanned: number; matched: number } }>(
+        '/api/v1/admin/abuse/asn/refresh', { method: 'POST', body: {} });
+      setNote(`${r.rows.toLocaleString('tr-TR')} aralık yüklendi · `
+        + `${r.backfill.matched}/${r.backfill.scanned} eski IP künye kazandı.`);
+      onDone();
+    } catch (err) {
+      if (needsStepUp(err)) onNeedStepUp(); else setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** ⚠️ 30 günü geçen veri "eski": ASN devirleri seyrek ama olur, ad değişiklikleri daha sık. */
+  const stale = status != null && status.ageHours > 24 * 30;
+
+  return (
+    <Panel title="ASN / ülke veri kümesi" collapsible defaultOpen={status == null}>
+      <div className="space-y-2 px-3 py-2 text-xs">
+        {status == null ? (
+          <Alert tone="warning">
+            <b>Henüz yüklenmedi.</b> IP’lerin yanında ağ adı ve ülke görünmeyecek; «Aynı IP»
+            sinyalinin masum açıklaması <b>tahmin</b> olarak kalır — operatör NAT’ı mı yoksa
+            veri merkezi (VPN) mi, ayırt edilemez. Aşağıdaki düğme veriyi bir kez indirir.
+          </Alert>
+        ) : (
+          <p className="text-muted">
+            <b className="tnum text-ink">{status.rows.toLocaleString('tr-TR')}</b> aralık ·
+            {' '}<span className={stale ? 'text-warning' : ''}>
+              {status.ageHours < 48
+                ? `${status.ageHours} saat önce`
+                : `${Math.round(status.ageHours / 24)} gün önce`} güncellendi
+            </span>
+            {stale ? ' — tazelemeyi düşün.' : ''}
+          </p>
+        )}
+        <p className="text-[11px] text-muted">
+          Kaynak: <code>iptoasn.com</code> (Public Domain, saatlik güncelleniyor, hesap
+          gerektirmiyor). Veri <b>sunucuda yerel</b> duruyor — oyuncu IP’leri hiçbir dış
+          servise gönderilmiyor.
+          <Info label="neden yerel veritabanı">
+            İstek başına çağrılan bir geolocation servisi, her oyuncunun IP’sini üçüncü bir
+            tarafa gönderirdi. Kural kitabımız oyunculara birbirinin IP’sini göstermeyi
+            yasaklıyor; aynı veriyi bir satıcıya akıtmak daha büyük bir ihlal olurdu.
+            Yan kazanç: sıfır gecikme, sıfır kota, çevrimdışı çalışma.
+          </Info>
+        </p>
+        {note ? <Alert tone="success">{note}</Alert> : null}
+        <ErrorBox error={error} />
+        <Button variant="ghost" disabled={busy} onClick={() => void refresh()}>
+          {busy ? 'İndiriliyor…' : status == null ? 'Veriyi indir' : 'Tazele'}
+        </Button>
+        <p className="text-[11px] text-muted">
+          ⚠️ İndirme ~700.000 aralık için <b>15 saniye kadar</b> sürer ve oyuncuların girişini
+          <b> etkilemez</b>: yeni veri tek bir işlemde devreye giriyor, o ana kadar eski veri
+          okunmaya devam ediyor. Tazeleme bittiğinde künyesi eksik eski IP kayıtları da
+          otomatik tamamlanır.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
 function ConfigLine({ config }: { config: LinksResponse['config'] }) {
   return (
     <div className="border-b border-border px-3 py-1.5 text-[11px] text-muted">

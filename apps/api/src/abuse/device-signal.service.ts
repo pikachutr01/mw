@@ -12,6 +12,7 @@
  */
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
+import { AsnService } from './asn.service.ts';
 
 export type Platform = 'web' | 'android' | 'ios' | 'unknown';
 
@@ -29,6 +30,11 @@ export interface DeviceContext {
   appVersion?: string | null;
   timezone?: string | null;
   locale?: string | null;
+  /**
+   * ⭐ Cloudflare `CF-IPCountry` (tüm planlarda ücretsiz). Yoksa `AsnService` kendi veri
+   * kümesinden türetiyor — tek bir panel anahtarına bağımlı kalmamak için.
+   */
+  country?: string | null;
 }
 
 /**
@@ -57,7 +63,11 @@ export function detectPlatform(userAgent: string | null, declared?: string | nul
 }
 
 export class DeviceSignalService {
-  constructor(private readonly db: Db) {}
+  private readonly asn: AsnService;
+
+  constructor(private readonly db: Db) {
+    this.asn = new AsnService(db);
+  }
 
   /**
    * Oturum açılışında/yenilenmesinde çağrılır. Sayaç tablolarını günceller (upsert):
@@ -90,11 +100,37 @@ export class DeviceSignalService {
       `);
     }
     if (ctx.ip) {
+      /**
+       * ⭐ ASN/ülke künyesi kayıt anında çözülüyor (§9.1.2). Arama YEREL bir tabloda —
+       * oyuncunun IP'si sunucudan hiç çıkmıyor (`asn.service.ts` başlığındaki gerekçe).
+       *
+       * ⚠️ Arama BAŞARISIZ OLABİLİR ve olmalı da: aralık tablosu henüz yüklenmemiş olabilir.
+       * O yüzden `try` içinde ve sonucu boş geçiyor — çoklu hesap künyesi uğruna oyuncunun
+       * GİRİŞİNİ düşürmek kabul edilemez bir takas olurdu. Eksik kalan satırları
+       * `AsnService.backfill()` sonradan tamamlıyor.
+       */
+      let asn: string | null = null;
+      let asnName: string | null = null;
+      let country = ctx.country ?? null;
+      try {
+        const info = await this.asn.lookup(ctx.ip);
+        if (info) {
+          asn = String(info.asn);
+          asnName = info.name;
+          country ??= info.country;
+        }
+      } catch { /* künye zenginleştirme girişi bloklamaz */ }
+
       await this.db.execute(sql`
-        INSERT INTO player_ips (player_id, ip, ip_block_24)
-        VALUES (${playerId}, ${ctx.ip}, ${ipBlock(ctx.ip)})
+        INSERT INTO player_ips (player_id, ip, ip_block_24, asn, asn_name, country)
+        VALUES (${playerId}, ${ctx.ip}, ${ipBlock(ctx.ip)}, ${asn}, ${asnName}, ${country})
         ON CONFLICT (player_id, ip)
-        DO UPDATE SET last_seen = now(), hits = player_ips.hits + 1
+        DO UPDATE SET last_seen = now(),
+                      hits     = player_ips.hits + 1,
+                      -- ⚠️ COALESCE: arama bu sefer başarısız olduysa eskisini silme.
+                      asn      = COALESCE(EXCLUDED.asn,      player_ips.asn),
+                      asn_name = COALESCE(EXCLUDED.asn_name, player_ips.asn_name),
+                      country  = COALESCE(EXCLUDED.country,  player_ips.country)
       `);
     }
   }

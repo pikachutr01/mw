@@ -37,6 +37,20 @@ export function extractDeviceContext(req: RequestLike): DeviceContext {
   const forwarded = one(h['x-forwarded-for']);
   const ip = (forwarded?.split(',')[0]?.trim() || req.ip) ?? null;
 
+  /**
+   * ⭐ ÜLKE — Cloudflare'in `CF-IPCountry` başlığı (§9.1.2). **Tüm planlarda ücretsiz** ve
+   * ek bir bağımlılık gerektirmiyor; tek şartı Cloudflare panelinde «IP Geolocation»ın açık
+   * olması.
+   *
+   * ⚠️ Başlık yoksa akış BOZULMUYOR: ülke `AsnService`in kendi veri kümesinden (iptoasn ülke
+   * sütunu) türetiliyor. Tek bir panel anahtarına bağımlı kalmak, o anahtar kapalıyken
+   * kolonun sessizce boş kalması demekti.
+   * ⚠️ `XX` ve `T1` Cloudflare'in "bilinmiyor" ve "Tor çıkış düğümü" işaretleri — ülke kodu
+   * gibi saklamak "XX ülkesi" diye bir şey uydururdu.
+   */
+  const cf = one(h['cf-ipcountry'])?.trim().toUpperCase();
+  const country = cf != null && /^[A-Z]{2}$/.test(cf) && cf !== 'XX' && cf !== 'T1' ? cf : null;
+
   return {
     deviceId: rawDeviceId && UUID_RE.test(rawDeviceId) ? rawDeviceId.toLowerCase() : null,
     ip,
@@ -47,5 +61,6 @@ export function extractDeviceContext(req: RequestLike): DeviceContext {
     appVersion: trim(one(h['x-app-version']), 40),
     timezone: trim(one(h['x-timezone']), 60),
     locale: trim(one(h['x-locale']), 20),
+    country,
   };
 }

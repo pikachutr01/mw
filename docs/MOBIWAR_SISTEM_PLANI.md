@@ -566,6 +566,54 @@ anında görünmeli. Tablodaki satırlar yalnız **kararları** taşıyor (`inno
 banned` + not + kimin verdiği). §9.1.1 aynen geçerli: panelin «Cezalandırıldı» düğmesi bile ceza
 **vermez**, verilmiş bir cezayı kaydeder.
 
+### 9.1.2c ✅ IP → ASN / ÜLKE (2026-08-04, kullanıcı: *"ücretsiz geo location hizmetlerini araştırabilirsin"*)
+
+`player_ips.asn` kolonu 0002'den beri duruyordu ve **hiç doldurulmuyordu**. Doldu.
+
+**Kaynak seçimi — [iptoasn.com](https://iptoasn.com), Public Domain (PDDL v1.0), saatlik,
+hesap/anahtar yok, düz TSV, ülkeyi de taşıyor.**
+
+| Elenen | Gerekçe |
+| :-- | :-- |
+| MaxMind GeoLite2 | hesap + lisans anahtarı + her ortam için imzalı EULA |
+| IPinfo | 2025'te ücretsiz katman 1.000 istek/gün + kredi kartı, üstelik yalnız ülke |
+| ip-api.com | ücretsiz katman **ticari kullanıma kapalı** (premium planlanıyor) |
+| DB-IP Lite | CC-BY atıf yükümlülüğü + yalnız aylık |
+| O-X-L geoip-asn | iyi (BSD-3, günlük) ama MMDB okuyucu bağımlılığı + indirme kotası |
+
+⚠️ **ASIL GEREKÇE FİYAT DEĞİL GİZLİLİK.** İstek başına çağrılan bir geolocation servisi HER
+oyuncunun IP'sini üçüncü bir tarafa gönderirdi. §9.1.5 oyunculara birbirinin IP'sini
+göstermeyi yasaklarken aynı veriyi bir satıcıya akıtmak daha büyük bir ihlal olurdu. Yerel
+tabloyla IP sunucudan hiç çıkmıyor; yan kazanç sıfır gecikme, sıfır kota, çevrimdışı çalışma.
+⭐ Düz TSV olmasının somut kazancı: **yeni npm bağımlılığı yok** (`.mmdb` okuyucu gerekmedi).
+
+**Ülke** ayrıca Cloudflare `CF-IPCountry` başlığından geliyor — tüm planlarda ücretsiz.
+⚠️ Başlık yoksa akış bozulmuyor, ülke iptoasn'ın kendi sütunundan türüyor: tek bir panel
+anahtarına bağımlı kalmak, o anahtar kapalıyken kolonun sessizce boş kalması demekti.
+⚠️ `XX` (bilinmiyor) ve `T1` (Tor çıkışı) ülke sayılmıyor.
+
+**Ölçülenler (gerçek veri, 2026-08-04):** 712.483 aralık · yükleme **14,4 sn** (indirme dahil) ·
+`85.104.12.7 → AS9121 TTNET TR`, `8.8.8.8 → AS15169 GOOGLE US`, `51.75.1.1 → AS16276 OVH FR`.
+
+⚠️ **Gerçek veri iki hatayı yakaladı, sentetik test verisi yakalayamamıştı:**
+1. `asn integer` **taşıyor** — AS numaraları 32 bit *işaretsiz* (RFC 6793), Postgres `integer`
+   işaretli. Veri kümesinde AS4230120000 var. `bigint` oldu.
+2. Toplu ekleme çok satırlı `VALUES` ile **40,6 sn** sürüyordu; her hücre ayrı bağlama
+   parametresi olduğu için 70+ gidiş-dönüş gerekiyordu. `jsonb_array_elements` ile parça başına
+   **tek parametre** → **3,3 sn** (12 kat). 40 sn yalnız yavaş değil riskliydi: yükleme panelden
+   HTTP ile tetikleniyor ve nginx'in varsayılan `proxy_read_timeout` değeri 60 sn.
+
+⚠️ **Tazeleme ELLE** (panelde düğme). Otomatik olsaydı API her açılışta dış bir servise bağımlı
+hâle gelirdi; veri günlerce bayat kalsa bile hiçbir oyun mekaniği bozulmaz.
+⚠️ Yükleme `TRUNCATE` değil **`DELETE`+`INSERT`**, tek transaction: `TRUNCATE` ACCESS EXCLUSIVE
+alıp yükleme boyunca **giriş akışını** bloklardı. `DELETE` ile okuyucular commit'e kadar eski
+veriyi görmeye devam ediyor.
+
+⭐ **Kazanç:** «mobil operatör NAT'ı olabilir» artık TAHMİN değil. Kanıt satırında ağın adı
+yazıyor ve yönetici "TTNET" (ev interneti) ile "OVH SAS" (veri merkezi → muhtemelen VPN)
+arasındaki farkı görüyor. ⚠️ Veri merkezi ipucu bir **sezgisel eşleşme** (AS adında regex) ve
+bilerek **hiçbir skora girmiyor** — yalnız satıra not düşüyor.
+
 ⭐ **Saklama taahhüdü artık uygulanıyor.** §9.1.2 *"90 gün saklanır"* diyordu ama hiçbir iş
 `player_devices`/`player_ips`e dokunmuyordu — taahhüt yazılıydı, uygulaması yoktu. İki temizlik
 görevi eklendi (`ops.deviceSignalDays`, ölçüt `last_seen`).

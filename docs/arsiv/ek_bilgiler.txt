@@ -1,4 +1,4 @@
-Çoklu hesap detaylı kontrol sistemi. Birkaç farklı veri türünü analiz edip multi hesaplara karşı bir kontrol sistemi yazalım. Şüpheli durumları admin panelde gösterelim.
+Çoklu hesap kontrol sistemi — TEKNİK sinyaller yapıldı (panelde «Çoklu hesap» sekmesi: aynı cihaz, aynı IP, aynı /24, kayıt kohortu, sıra sıra oturum, ASN/ülke künyesi). KALAN: davranış sinyalleri — tek yönlü kaynak akışı, kârsız saldırı, savunma tutarsızlığı, sessiz müttefik — ve bunları haftalık tarayan görev + rapor e-postası.
 
 Saldırı, casusluk, nakliye gibi raporlarda hedef şehrin koordinatının yanında o andaki şehir adı da yazılsın
 
@@ -15,3 +15,7 @@ Ayrıca seçenekler kısmına tercihler bölümü açalım. Oyundaki bazı aray�
 Sunucu üzerinde admin panelinden Sıralamayı şimdi güncelle butonuna tıkladım ve sıralama mnauel olarak tetiklendi. Bu işlemi saat 22:51 de yaptım. Oyunda sıralamayı girdiğimde ise güncelleme 19:51 yazıyor. Sanırım bu sıralamaa UTC 0 a göre yapılıyor. Oysaki oyunun hedef kitlesi Türkiye ve Türkiye'de +3 saat dilimi kullanılıyor. Bu zaman farkı sorununu kökten çözmemiz gerek.
 
 Admin panele o anda sunucuda devam eden görevleri listeleyecek bir tablo ekleyelim. Hangi görevin kime ait olduğunu göstersin. Sanırım şu anda bir kullanıcının ayrıntılarına girince onu hareketlerini görüyoruz. Tüm görevleri sunucu taraflı bir pagination tabloda bir arada görmek istiyorum.hangi şehirden hangi şehre gidiyor, bu şehirler kime ait, kalan süresi vs tüm ayrıntıları
+
+Sabah kalktığımda sunucu üzerinde otomatik olarak çalışan sıralamayı kontrol ettim. Oyunda sıralama sayfasında 00:00 yazıyordu. Bir de admin panelden baktığımda ise son sıralamayı 03:00 şeklinde gösteriyor. Aralarında 3 saatlik fark var. Ayrıca gün içinde elle sıralama yaptım. Oyunda 17:16 yazıyor, admin panelinde ise 20:16 yazıyor. Ben sıralamayı gerçekten 17:16 saatinde yaptım. Burada bir tutarsızlık var, bu tutarsızlığı oyun genelinde çözmemiz lazım. db saati, oyun saati her şey Türkiye saatine göre olmalı. Yukarıda yazdığım bir maddenin tekrarı ama yeni gözlem olduğu için yazdım. Tamamlayınca iki maddeyi birden silersin. Ayrıca işi tamamlanmış tüm maddeleri de kaldır yukarıdan.
+
+Mobilde sıralama üzerinden bir kullanıcıya mesaj göndermek için mesaj ikonuna tıkladığımda sohbet penceresi açılıyor ama xxx oyuncusuna mesaj gönder tooltip i sohbet penceresi üzerinde görünmeye devam ediyor.

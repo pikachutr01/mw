@@ -68,11 +68,14 @@ const device = async (playerId: number, deviceId: string): Promise<void> => {
   `);
 };
 
-const ip = async (playerId: number, addr: string, block?: string): Promise<void> => {
+const ip = async (
+  playerId: number, addr: string, block?: string, asnName?: string, country?: string,
+): Promise<void> => {
   await h.db.execute(sql`
-    INSERT INTO player_ips (player_id, ip, ip_block_24)
+    INSERT INTO player_ips (player_id, ip, ip_block_24, asn_name, country)
     VALUES (${playerId}, ${addr},
-            ${block ?? addr.split('.').slice(0, 3).concat('0/24').join('.')})
+            ${block ?? addr.split('.').slice(0, 3).concat('0/24').join('.')},
+            ${asnName ?? null}, ${country ?? null})
   `);
 };
 
@@ -146,6 +149,40 @@ describe('bağlantı analizi — sinyaller', () => {
     const [pair] = await svc.pairs(worldId);   // varsayılan eşik
     expect(pair!.score).toBe(cfg.weights.sameDevice + cfg.weights.sameIp);
     expect(pair!.score).toBeGreaterThanOrEqual(cfg.reportThreshold);
+  });
+
+  /**
+   * ⭐ AS KÜNYESİ KANITA GİRİYOR (2026-08-04). Buraya kadar «mobil operatör NAT'ı olabilir»
+   * bir TAHMİNDİ; artık ağın adı yazıyor. Yönetici "TTNET" ile "OVH SAS" arasındaki farkı
+   * görmeden doğru kararı veremez: birincisi sıradan bir ev interneti, ikincisi bir veri
+   * merkezi — yani muhtemelen VPN ve masum açıklama çok daha zayıf.
+   */
+  it('aynı IP kanıtı ağ adını ve ülkeyi taşır', async () => {
+    const a = await newPlayer('alfa', { createdAt: FAR_APART[0] });
+    const b = await newPlayer('beta', { createdAt: FAR_APART[1] });
+    await ip(a.playerId, '85.104.12.7', undefined, 'TTNET', 'TR');
+    await ip(b.playerId, '85.104.12.7', undefined, 'TTNET', 'TR');
+
+    const [pair] = await svc.pairs(worldId, anyScore);
+    const ev = pair!.signals.find((s) => s.kind === 'sameIp')!.evidence;
+    expect(ev['ağ']).toBe('TTNET');
+    expect(ev['ülke']).toBe('TR');
+    // Ev interneti veri merkezi olarak işaretlenmemeli.
+    expect(ev['veriMerkeziOlabilir']).toBeUndefined();
+  });
+
+  /** ⚠️ İpucu SKOR DEĞİL: aynı desen, yalnız kanıt satırına bir not ekliyor. */
+  it('veri merkezi ağı işaretlenir ama puanı DEĞİŞTİRMEZ', async () => {
+    const a = await newPlayer('alfa', { createdAt: FAR_APART[0] });
+    const b = await newPlayer('beta', { createdAt: FAR_APART[1] });
+    await ip(a.playerId, '51.75.1.1', undefined, 'OVH SAS', 'FR');
+    await ip(b.playerId, '51.75.1.1', undefined, 'OVH SAS', 'FR');
+
+    const [pair] = await svc.pairs(worldId, anyScore);
+    const sig = pair!.signals.find((s) => s.kind === 'sameIp')!;
+    expect(sig.evidence['veriMerkeziOlabilir']).toBe(true);
+    expect(sig.score).toBe(abuseConfig().weights.sameIp);
+    expect(pair!.score).toBe(abuseConfig().weights.sameIp);
   });
 
   /**
