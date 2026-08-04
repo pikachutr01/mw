@@ -996,6 +996,86 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + '— 200 kişilik bir okul ağı tek başına 19.900 satır demek ve rapor kullanılamaz hâle '
       + 'gelirdi.',
   },
+  /* ── Davranış sinyalleri (§9.1.2 B1·B2·B6·B7) ────────────────────────────────
+   *
+   * ⭐ **Asıl güçlü olanlar bunlar.** Teknik izler (cihaz, IP) taklit edilebilir — farklı
+   * tarayıcı profili, VPN, ayrı telefon; bilen biri hepsinden kaçar. Davranıştan kaçamaz,
+   * çünkü davranış çoklu hesabın AMACININ KENDİSİ: kimse kaynak aktarmak için açmadığı bir
+   * hesabı beslemez. Bu yüzden ağırlıkları teknik izlerle yarışır düzeyde.
+   */
+  {
+    key: 'abuse.weightOneWayFlow',
+    label: 'Ağırlık: tek yönlü kaynak akışı',
+    type: 'int', default: 25, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: 'A oyuncusundan B\'ye nakliye var, B\'den A\'ya yok. Besleme hesabının en '
+      + 'doğrudan izi.',
+    note: 'Güçlü bir oyuncunun ittifakındaki acemiyi desteklemesi de böyle görünür ve o, '
+      + 'oyunun teşvik ettiği bir davranış — bu yüzden tek başına eşiği geçmiyor.',
+  },
+  {
+    key: 'abuse.weightAttackFarm',
+    label: 'Ağırlık: kârsız saldırı çiftliği',
+    type: 'int', default: 30, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: 'Aynı çift defalarca savaşıyor ve hep aynı taraf kazanıyor. Tecrübe ve '
+      + 'enkaz üretmek için kurulmuş sahte savaşların izi.',
+  },
+  {
+    key: 'abuse.weightDefenseInconsistency',
+    label: 'Ağırlık: savunma tutarsızlığı',
+    type: 'int', default: 20, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: '⭐ Savunan, BU saldırgana karşı neredeyse hiç birim tutmuyor ama BAŞKA '
+      + 'saldırganlara karşı gerçekten savunuyor.',
+    note: '⚠️ Karşılaştırma kilit nokta. "Savunmasız savunan" tek başına ölçülseydi oyunun en '
+      + 'zayıf — ve en masum — kesimi bu sinyale takılırdı. Oyuncuyu KENDİSİYLE kıyaslamak o '
+      + 'yanlış pozitifi kapatıyor: birine karşı savunup diğerine karşı savunmamak bir TERCİH.',
+  },
+  {
+    key: 'abuse.weightSilentPartners',
+    label: 'Ağırlık: sessiz ortaklar',
+    type: 'int', default: 10, min: 0, max: 200, tag: 'design', unit: 'puan',
+    description: 'Yoğun kaynak alışverişi var ama oyun içinde hiç yazışmamışlar.',
+    note: '⚠️ En zayıf sinyal ve öyle kalmalı: oyun dışı iletişim (WhatsApp, Discord, aynı '
+      + 'evde konuşmak) çok yaygın. ⚠️ Mesaj İÇERİĞİ okunmuyor, yalnız var/yok bakılıyor.',
+  },
+  {
+    key: 'abuse.flowMinResources',
+    label: 'Anlamlı akış eşiği',
+    type: 'int', default: 50_000, min: 0, max: 1_000_000_000, tag: 'design', unit: 'kaynak',
+    description: 'Bir yöndeki toplam nakliye bu miktarı geçmezse "akış" sayılmaz. Küçük '
+      + 'hediyeleri elemek için.',
+  },
+  {
+    key: 'abuse.flowMaxReturnRatio',
+    label: 'Tek yönlülük oranı',
+    type: 'number', default: 0.1, min: 0, max: 1, tag: 'design',
+    description: 'Ters yöndeki akış, ileri yönün bu oranından azsa "tek yönlü" sayılır. '
+      + '0,1 = geri dönen kaynak gidenin %10\'undan az.',
+    note: 'Yalnız orana bakılsaydı 100 altınlık tek bir hediye de tek yönlü sayılırdı; '
+      + 'yalnız miktara bakılsaydı iki yönlü canlı bir ticaret eşiği geçerdi. İkisi birden şart.',
+  },
+  {
+    key: 'abuse.farmMinBattles',
+    label: 'Çiftlik: en az savaş',
+    type: 'int', default: 5, min: 2, max: 500, tag: 'design', unit: 'adet',
+    description: 'Bir çift arasında bu sayıdan az savaş varsa çiftlik şüphesi doğmaz. '
+      + 'Tek bir savaş hiçbir şey söylemez; sinyal tekrar üzerine kurulu.',
+  },
+  {
+    key: 'abuse.farmMinWinRate',
+    label: 'Çiftlik: kazanma oranı',
+    type: 'number', default: 0.9, min: 0.5, max: 1, tag: 'design',
+    description: 'Aynı tarafın kazanma oranı bunu geçerse "hep aynı kişi kazanıyor" sayılır.',
+    note: '1,0 yazmak sinyali kaçırmanın en kolay yolu olurdu: gerçek bir çiftlikte de arada '
+      + 'bir ters sonuç çıkar.',
+  },
+  {
+    key: 'abuse.scanIntervalHours',
+    label: 'Tarama aralığı',
+    type: 'int', default: 168, min: 1, max: 8760, tag: 'design', unit: 'sa',
+    description: '⭐ Davranış taraması kaç saatte bir koşar. Varsayılan haftalık.',
+    note: '⚠️ Tarama ARTIMLI: her koşu bir öncekinin bittiği yerden devam eder, yani aralığı '
+      + 'değiştirmek veri kaybettirmez. Worker kapalı kalsa bile pencere kaymaz.',
+  },
   {
     key: 'abuse.lookbackDays',
     label: 'İnceleme penceresi',

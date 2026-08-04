@@ -19,6 +19,7 @@ import { notificationForOutbox } from '../notify/notify.catalog.ts';
 import { NotifyService } from '../notify/notify.service.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
+import { createAbuseScanHandler, ensureAbuseScanSchedule } from '../abuse/scan.handler.ts';
 import { createRankingSnapshotHandler, ensureRankingSchedule } from '../ranking/ranking.handler.ts';
 import { createVacationEndHandler } from '../vacation/vacation.handler.ts';
 import { eventForOutbox, type RealtimeBus } from '../realtime/realtime.bus.ts';
@@ -69,12 +70,14 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
    *   `transport`/`support`/`spy`/`found_city` → savaş dışı görevler (Faz 2) ✓
    *   `cave_*`          → mağara doldurma/boşaltma + yıkılınca kaçış (Faz 2) ✓
    *   `vacation_end`    → 30 günlük tatil üst sınırı dolunca otomatik çıkış ✓
-   *   sırada: Faz 4 (hero_revive, abuse_scan)
+   *   `abuse_scan`     → çoklu hesap davranış taraması (§9.1.3) ✓
+   *   sırada: Faz 4 (hero_revive)
    */
   const cities = new CityService(db);
   const registry = new HandlerRegistry()
     .register('echo', echoHandler)
     .register('ranking_snapshot', createRankingSnapshotHandler())
+    .register('abuse_scan', createAbuseScanHandler())
     .register('vacation_end', createVacationEndHandler());
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(CAVE_HANDLERS)) registry.register(type, handler);
@@ -194,6 +197,11 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
       void ensureRankingSchedule(db, opts.worldId).catch((err: unknown) => {
         // eslint-disable-next-line no-console
         console.error('[ranking] anlik goruntu zinciri kurulamadi:', err);
+      });
+      // Çoklu hesap taraması aynı desenle: ateşle-unut, tekillik anahtarı kopya üretmiyor.
+      void ensureAbuseScanSchedule(db, opts.worldId).catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error('[abuse] tarama zinciri kurulamadi:', err);
       });
     },
     async stop() {

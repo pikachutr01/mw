@@ -620,7 +620,60 @@ görevi eklendi (`ops.deviceSignalDays`, ölçüt `last_seen`).
 
 Kalan: **davranış sinyalleri (B1, B2, B6, B7) ve haftalık tarama görevi** — §9.1.3.
 
-### 9.1.3 B katmanı — tarama işi
+### 9.1.2d ✅ DAVRANIŞ SİNYALLERİ YAPILDI (2026-08-04)
+
+Teknik izler taklit edilebilir — farklı tarayıcı profili, VPN, ayrı telefon; bilen biri hepsinden
+kaçar. **Davranıştan kaçamaz**, çünkü davranış çoklu hesabın *amacının kendisi*: kimse kaynak
+aktarmak için açmadığı bir hesabı beslemez.
+
+| Sinyal | Varsayılan | Nasıl ölçülüyor |
+| :-- | :-: | :-- |
+| `oneWayResourceFlow` (B1) | 25 | Tamamlanmış nakliyelerin yön toplamı; **taban + oran** birlikte |
+| `attackFarm` (B2) | 30 | Aynı çift ≥5 savaş **ve** aynı taraf ≥%90 kazanmış |
+| `defenseInconsistency` (B6) | 20 | Savunan BU saldırgana karşı ~boş, BAŞKALARINA karşı dolu |
+| `silentPartners` (B7) | 10 | Yoğun akış var, oyun içi DM yok |
+
+⚠️ **Çiftler n² DEĞİL, etkileşimden türüyor.** "Her oyuncu çiftini tara" 1.000 oyunculu bir
+dünyada 499.500 çift demekti. Çiftler gerçekten birbirine bir şey yapmış olanlardan
+(nakliye, savaş) çıkarılıyor.
+
+⚠️ **B6'nın özü karşılaştırmadır.** "Savunmasız savunan" tek başına ölçülseydi oyunun en zayıf —
+ve en masum — kesimi bu sinyale takılırdı. Oyuncuyu **kendisiyle** kıyaslamak o yanlış pozitifi
+kökten kapatıyor: birine karşı savunup diğerine karşı savunmamak bir **tercihtir**, kaynak
+yokluğu değil. Test bunu ayrıca ölçüyor (herkese karşı savunmasız oyuncu yakalanmıyor).
+
+⚠️ **B7 en zayıf sinyal ve öyle kalmalı**: oyun dışı iletişim (WhatsApp, Discord, aynı evde
+konuşmak) çok yaygın. §9.1.5 gereği **mesaj içeriği okunmuyor**, yalnız var/yok.
+
+⭐ **İki kaynak tek listede.** Teknik sinyaller panelde **canlı** hesaplanıyor (ucuz; ağırlık
+değişince etkisi anında görünmeli); davranış sinyalleri `abuse_scan`ın yazdığı satırlardan
+geliyor (pahalı; her panel açılışında koşturmak ekranı dünyanın en yavaş sayfası yapardı).
+İkisi **eşik filtresinden önce** karışıyor: teknik 40 + davranış 30 eşiği geçer, ayrı ayrı
+geçmez — ve yalnız davranış sinyali olan bir çift (cihazını gizlemeyi bilen biri) aksi hâlde
+listede hiç görünmezdi, oysa asıl aranan tip o.
+
+### 9.1.3 B katmanı — tarama işi ✅ YAPILDI (2026-08-04)
+
+`abuse_scan` görev tipi `worker.ts`te kayıtlı ve `ranking_snapshot` gibi **kendini
+zincirliyor**; ayrı bir cron yok. Aralık `abuse.scanIntervalHours` (varsayılan 168).
+
+⚠️ **Pencere `now()`den geriye sabit bir aralık DEĞİL**, artımlı: `window_from` = son başarılı
+taramanın `window_to`'su. Sabit pencere olsaydı worker bir gün kapalı kaldığında o günün verisi
+hiç taranmadan geçerdi — ve bu **sessiz** bir kayıp olurdu, çünkü eksik bir tarama "temiz" ile
+aynı görünür.
+
+⚠️ Tarama **gerçek saatle** yürüyor, oyun saatiyle değil: bakımda oyun saati donduğunda tarama
+penceresinin de donması, bakım süresince olan hiçbir şeyin taranmaması demekti.
+
+⚠️ Aynı çift her koşuda yeni satır AÇMIYOR (`ON CONFLICT … WHERE resolved_at IS NULL`), ama
+**karara bağlanmış satıra dokunulmuyor**: yöneticinin "masum" kararı bir sonraki taramanın onu
+yeniden açmasıyla kaybolmamalı.
+
+⚠️ Panelden elle tetiklenen tarama da **aynı pencereyi ilerletiyor** — ayrı bir "önizleme" kipi
+bilerek yok, olsaydı aynı aralık haftalık koşuda bir kez daha taranır ve aynı çift iki kez
+rapora girerdi.
+
+### 9.1.3b Eski B katmanı planı (referans)
 **Tarama bir GÖREV TİPİDİR** (`abuse_scan`) → Faz 1 omurgasını olduğu gibi kullanır: zamanlanır,
 tekrarlanır, crash'e dayanır, denetlenir, bakımda durur. Ayrı bir cron/altyapı **gerekmez**.
 
@@ -631,7 +684,20 @@ tekrarlanır, crash'e dayanır, denetlenir, bakımda durur. Ayrı bir cron/altya
   Ağırlıklar **veri görüldükten sonra** ayarlanacak (bu yüzden B katmanı Faz 4'te).
 - **Çıktı:** `abuse_signals` satırları + `outbox` konusu **`admin:abuse_report`**.
 
-### 9.1.4 C katmanı — rapor e-postası
+### 9.1.4 C katmanı — rapor e-postası ✅ YAPILDI (2026-08-04)
+
+`outbox` konusu `admin:abuse_report`; motor, görev ve şema değişmedi — outbox deseninin
+kazancı tam olarak bu.
+
+⚠️ **Eşiği geçen çift yoksa posta GÖNDERİLMİYOR.** Haftalık "hiçbir şey bulunamadı" e-postası
+üçüncü haftadan sonra okunmayan bir bildirime dönüşür ve **gerçek raporun da** okunmamasına
+yol açar.
+
+⚠️ Rapor **masum açıklamaları da taşıyor**: onu okuyan kişi çoğu zaman panelin başında
+olmayacak ve tek gördüğü şey bu metin olacak. İçinde ayrıca *"bu bir suçlama listesi
+değildir"* hatırlatması var.
+
+### 9.1.4b Eski C katmanı planı (referans)
 - Faz 2'de: `outbox`'a düşer, geliştirmede **Mailpit**'te görünür (kanal kaydı zaten var).
 - Resend geldiğinde: dispatcher'a tek `sink` eklenir (`admin:abuse_report` → Resend API). **Motor,
   görev, şema hiç değişmez** — outbox deseninin bütün kazancı bu.

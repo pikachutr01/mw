@@ -113,7 +113,13 @@ export const SIGNAL_LABEL: Record<SignalKind, string> = {
 };
 
 export interface PairSignal {
-  kind: SignalKind;
+  /**
+   * ⚠️ `SignalKind` DEĞİL, geniş `string`: bu listeye `abuse_scan`ın ürettiği **davranış**
+   * sinyalleri de karışıyor (`behaviour.service.ts`). Birliği burada dar tutmak, iki modülü
+   * birbirine bağlar ve yeni bir sinyal ailesi eklemeyi tip düzeyinde zorlaştırırdı; etiket ve
+   * masum açıklama sözlükleri zaten sunucudan tek elden gönderiliyor.
+   */
+  kind: string;
   score: number;
   evidence: Record<string, unknown>;
 }
@@ -159,12 +165,24 @@ export class LinkService {
    * canlı hesap yapılıyor ki panel her açıldığında güncel veriyi görsün ve ayar değiştirince
    * etkisi ANINDA gözlensin (ağırlıkları körlemesine ayarlamak istenmiyor).
    */
-  async pairs(worldId: number, opts: { minScore?: number; limit?: number } = {}): Promise<LinkedPair[]> {
+  async pairs(worldId: number, opts: {
+    minScore?: number;
+    limit?: number;
+    /**
+     * ⭐ Dışarıdan gelen sinyaller — **saklanmış davranış sinyalleri** (§9.1.3, `abuse_scan`).
+     *
+     * ⚠️ Eşik filtresinden ÖNCE karışıyorlar, çünkü ikisi bir bütün: teknik 40 + davranış 30
+     * eşiği geçer, ayrı ayrı geçmez. Ayrıca yalnız davranış sinyali olan bir çift (cihazını ve
+     * IP'sini gizlemeyi bilen biri) aksi hâlde listede hiç görünmezdi — oysa asıl aranan tip o.
+     */
+    extra?: Map<string, PairSignal[]>;
+  } = {}): Promise<LinkedPair[]> {
     const cfg = abuseConfig();
     const minScore = opts.minScore ?? cfg.reportThreshold;
     const limit = opts.limit ?? 200;
 
     const found = new Map<string, PairSignal[]>();
+    for (const [key, list] of opts.extra ?? []) found.set(key, [...list]);
     const add = (a: number, b: number, s: PairSignal): void => {
       const list = found.get(keyOf(a, b));
       if (list) list.push(s); else found.set(keyOf(a, b), [s]);

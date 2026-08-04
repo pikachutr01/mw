@@ -19,6 +19,8 @@ import {
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AsnService } from '../abuse/asn.service.ts';
+import { BEHAVIOUR_INNOCENT, BEHAVIOUR_LABEL } from '../abuse/behaviour.service.ts';
+import { AbuseScanService } from '../abuse/scan.service.ts';
 import {
   INNOCENT_EXPLANATION, LinkService, SIGNAL_LABEL, abuseConfig,
 } from '../abuse/link.service.ts';
@@ -56,6 +58,39 @@ export class AdminAbuseController {
   constructor(@Inject(DB) private readonly db: Db) {
     this.analyzer = new LinkService(db);
     this.asn = new AsnService(db);
+  }
+
+  /* ── Davranış taraması ────────────────────────────────────────────────────── */
+
+  /**
+   * ⭐ TARAMAYI ŞİMDİ ÇALIŞTIR. Normalde haftalık `abuse_scan` görevi koşuyor; bu uç aynı
+   * kodu elle tetikliyor.
+   *
+   * ⚠️ Elle koşu da **artımlı pencereyi ilerletiyor** — ayrı bir "önizleme" kipi bilerek yok.
+   * Önizleme olsaydı elle bakılan aralık haftalık koşuda bir kez daha taranır, aynı çift iki
+   * kez rapora girerdi. Tek bir pencere zinciri var ve herkes onu kullanıyor.
+   */
+  @Post('scan')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async scan(
+    @Body() body: unknown, @Req() req: AdminRequest,
+  ): Promise<Record<string, unknown>> {
+    const w = Number((body as { worldId?: unknown })?.worldId ?? 1);
+    if (!Number.isInteger(w) || w < 0) throw new BadRequestException('Geçersiz dünya.');
+    const svc = new AbuseScanService(this.db);
+    const result = await svc.run(w);
+    const emailed = await svc.report(w, result);
+    await this.audit(w, req.player!.playerId, req.player!.playerId, {
+      action: 'abuse.scan.manual',
+      windowFrom: result.from.toISOString(), windowTo: result.to.toISOString(),
+      signals: result.signals, reported: result.reported, emailed,
+    });
+    return {
+      ok: true, emailed,
+      windowFrom: result.from.toISOString(), windowTo: result.to.toISOString(),
+      signals: result.signals, pairs: result.pairs, reported: result.reported,
+    };
   }
 
   /* ── ASN veri kümesi ──────────────────────────────────────────────────────── */
@@ -100,7 +135,16 @@ export class AdminAbuseController {
     if (min != null && !Number.isFinite(min)) throw new BadRequestException('Geçersiz eşik.');
 
     const cfg = abuseConfig();
-    const pairs = await this.analyzer.pairs(w, min == null ? {} : { minScore: min });
+    /**
+     * ⭐ İKİ KAYNAK TEK LİSTEDE: teknik sinyaller **canlı** hesaplanıyor (ucuz, ağırlık
+     * değişince etkisi anında görünmeli), davranış sinyalleri ise son `abuse_scan`ın
+     * yazdığı satırlardan geliyor (pahalı, her panel açılışında koşturulamaz).
+     */
+    const scanner = new AbuseScanService(this.db);
+    const pairs = await this.analyzer.pairs(w, {
+      ...(min == null ? {} : { minScore: min }),
+      extra: await scanner.openBehaviourSignals(w),
+    });
     const resolved = await this.resolutionsFor(pairs.map((p) => [p.a.id, p.b.id]));
 
     return {
@@ -112,14 +156,28 @@ export class AdminAbuseController {
         cohortMinutes: cfg.cohortMinutes,
         handoffMinutes: cfg.handoffMinutes,
       },
-      /** Sinyal sözlüğü sunucudan: etiket ve masum açıklama TEK yerde yaşasın. */
-      signalInfo: Object.fromEntries(
-        (Object.keys(SIGNAL_LABEL) as (keyof typeof SIGNAL_LABEL)[])
-          .map((k) => [k, { label: SIGNAL_LABEL[k], innocent: INNOCENT_EXPLANATION[k] }]),
-      ),
+      /**
+       * Sinyal sözlüğü sunucudan: etiket ve masum açıklama TEK yerde yaşasın.
+       * ⚠️ İki aile birleşiyor — teknik (`link.service`) ve davranış (`behaviour.service`).
+       */
+      signalInfo: {
+        ...Object.fromEntries(
+          (Object.keys(SIGNAL_LABEL) as (keyof typeof SIGNAL_LABEL)[])
+            .map((k) => [k, { label: SIGNAL_LABEL[k], innocent: INNOCENT_EXPLANATION[k] }]),
+        ),
+        ...Object.fromEntries(
+          (Object.keys(BEHAVIOUR_LABEL) as (keyof typeof BEHAVIOUR_LABEL)[])
+            .map((k) => [k, { label: BEHAVIOUR_LABEL[k], innocent: BEHAVIOUR_INNOCENT[k] }]),
+        ),
+      },
       ipChain: await this.analyzer.ipChainHealth(w),
       /** ⭐ Künye kaynağının tazeliği — boş sonuçların sebebi bayat/yüklenmemiş tablo olabilir. */
       asn: await this.asn.status(),
+      /**
+       * ⭐ Son davranış taraması. Boş liste iki farklı şey olabilir — "temiz dünya" ya da
+       * "hiç taranmadı"; ekranın ikisini ayırt edememesi en kötü sonuç olurdu.
+       */
+      scan: await this.lastScan(w),
       items: pairs.map((p) => ({
         worldId: p.worldId,
         a: p.a, b: p.b, score: p.score,
@@ -209,6 +267,25 @@ export class AdminAbuseController {
   }
 
   /* ── Yardımcılar ──────────────────────────────────────────────────────────── */
+
+  /** Son TAMAMLANMIŞ tarama; hiç yoksa `null`. Yarım kalan koşular sayılmıyor. */
+  private async lastScan(worldId: number): Promise<Record<string, unknown> | null> {
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT window_from, window_to, finished_at, signals_found, players_flagged, emailed_at
+        FROM abuse_scan_runs
+       WHERE world_id = ${worldId} AND finished_at IS NOT NULL
+       ORDER BY window_to DESC LIMIT 1
+    `);
+    if (!row) return null;
+    return {
+      windowFrom: toDate(row['window_from']).toISOString(),
+      windowTo: toDate(row['window_to']).toISOString(),
+      finishedAt: toDate(row['finished_at']).toISOString(),
+      signals: Number(row['signals_found']),
+      players: Number(row['players_flagged']),
+      emailed: row['emailed_at'] != null,
+    };
+  }
 
   /** Çift başına EN SON karar. Bir çifte defalarca bakılabilir; ekranda geçerli olan sonuncusu. */
   private async resolutionsFor(pairs: [number, number][]): Promise<

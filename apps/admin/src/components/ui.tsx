@@ -76,6 +76,14 @@ export function Panel({
  * ⚠️ `position: fixed` + ölçülmüş koordinat: `absolute` kalsaydı portal içinde sayfanın sol
  * üstüne yapışırdı. Ölçüm yapılana kadar `visibility: hidden` — yanlış yerde bir kare
  * parlamasın.
+ *
+ * ⛔ **ÇAĞIRANLAR: BUNU BİR `<p>` İÇİNE KOYMAYIN.** Tetikleyici bir `<details>` ve `<details>`
+ * paragraf içinde **geçersiz HTML**. Tarayıcı sessizce düzeltmiyor — `<p>`yi ⓘ'nın önünde
+ * kapatıp kalan metni ayrı bir paragrafa atıyor, yani satır ikiye bölünüyor. Sarmalayıcı
+ * `<div>` ya da `<span>` olmalı.
+ * ⚠️ Bu tuzağa **üç kez** düşüldü (2026-08-04: `ConfigLine`, `AsnCard`, `ScanCard`); üçünde de
+ * konsol uyarmıştı. Uyarı metni "hydration error" dediği için ilgisiz görünüyor, oysa sorun
+ * gerçek ve görünür.
  */
 export function Info({ children, label = 'açıklama' }: { children: ReactNode; label?: string }) {
   const ref = useRef<HTMLDetailsElement>(null);

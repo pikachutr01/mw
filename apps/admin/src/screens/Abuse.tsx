@@ -50,6 +50,10 @@ interface LinksResponse {
     topIpPlayers: number; suspect: boolean; topIpLocal: boolean;
   };
   asn: { rows: number; refreshedAt: string; source: string; ageHours: number } | null;
+  scan: {
+    windowFrom: string; windowTo: string; finishedAt: string;
+    signals: number; players: number; emailed: boolean;
+  } | null;
   items: Pair[];
 }
 
@@ -102,6 +106,10 @@ export function AbuseScreen({ worldId, onNeedStepUp }: {
     <div className="space-y-3">
       <IpChainCard chain={data?.ipChain} />
       <AsnCard status={data?.asn ?? null} onNeedStepUp={onNeedStepUp} onDone={() => void load()} />
+      <ScanCard
+        scan={data?.scan ?? null} worldId={worldId}
+        onNeedStepUp={onNeedStepUp} onDone={() => void load()}
+      />
 
       <Panel
         title="Bağlantılı hesaplar"
@@ -211,6 +219,85 @@ function IpChainCard({ chain }: { chain?: LinksResponse['ipChain'] }) {
  * önünde kapatıp kalan metni ayrı bir paragrafa atıyor, yani satır ikiye bölünüyordu.
  * (Konsol da uyarıyordu: *"`<details>` cannot be a descendant of `<p>`"*.)
  */
+/* ═══ Davranış taraması ═════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ DAVRANIŞ SİNYALLERİ (§9.1.2 B1·B2·B6·B7) — asıl güçlü olanlar.
+ *
+ * Teknik izler (cihaz, IP) taklit edilebilir; bilen biri hepsinden kaçar. Davranıştan
+ * kaçamaz, çünkü davranış çoklu hesabın amacının kendisi.
+ *
+ * ⚠️ Bu sinyaller canlı DEĞİL, haftalık tarama koşusundan geliyor: `missions` ve `battles`
+ * üzerinde toplama yapıyorlar ve her panel açılışında koşturmak bu ekranı dünyanın en yavaş
+ * sayfası yapardı.
+ */
+function ScanCard({ scan, worldId, onNeedStepUp, onDone }: {
+  scan: LinksResponse['scan'];
+  worldId: number;
+  onNeedStepUp: () => void;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const run = async (): Promise<void> => {
+    setBusy(true); setError(null); setNote(null);
+    try {
+      const r = await api<{ signals: number; pairs: number; reported: number; emailed: boolean }>(
+        '/api/v1/admin/abuse/scan', { method: 'POST', body: { worldId } });
+      setNote(`${r.signals} sinyal · ${r.pairs} çift · eşiği geçen ${r.reported}`
+        + `${r.emailed ? ' · rapor postası kuyruğa alındı' : ''}`);
+      onDone();
+    } catch (err) {
+      if (needsStepUp(err)) onNeedStepUp(); else setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel title="Davranış taraması" collapsible defaultOpen={scan == null}>
+      <div className="space-y-2 px-3 py-2 text-xs">
+        {scan == null ? (
+          <Alert tone="warning">
+            <b>Henüz hiç taranmadı.</b> Aşağıdaki liste yalnız <b>teknik</b> izleri
+            (cihaz, IP) gösteriyor. Davranış sinyalleri — tek yönlü kaynak akışı, kârsız
+            saldırı çiftliği, savunma tutarsızlığı, sessiz ortaklar — ancak tarama koştuktan
+            sonra görünür.
+          </Alert>
+        ) : (
+          <p className="text-muted">
+            Son tarama <b className="text-ink">{when(scan.finishedAt)}</b> ·
+            {' '}<b className="tnum text-ink">{scan.signals}</b> sinyal,
+            {' '}<b className="tnum text-ink">{scan.players}</b> oyuncu
+            {scan.emailed ? ' · rapor postası gönderildi' : ''}
+            <br />
+            <span className="text-[11px]">
+              İncelenen aralık: {when(scan.windowFrom)} → {when(scan.windowTo)}
+            </span>
+          </p>
+        )}
+        {note ? <Alert tone="success">{note}</Alert> : null}
+        <ErrorBox error={error} />
+        <Button variant="ghost" disabled={busy} onClick={() => void run()}>
+          {busy ? 'Taranıyor…' : 'Şimdi tara'}
+        </Button>
+        {/* ⚠️ `<div>`, `<p>` DEĞİL — `Info` içeride `<details>` çiziyor (bkz. `ui.tsx`). */}
+        <div className="text-[11px] text-muted">
+          Normalde <b>haftalık</b> koşar (aralık «Ayarlar → Çoklu hesap tespiti»nde).
+          <Info label="pencere nasıl ilerliyor">
+            Tarama ARTIMLI: her koşu bir öncekinin bittiği yerden devam eder, sabit bir
+            «son 7 gün» penceresi kullanmaz. Böylece sunucu kapalı kalsa bile hiçbir aralık
+            taranmadan geçmez. ⚠️ Elle koşu da aynı pencereyi ilerletir — ayrı bir
+            «önizleme» kipi yok, olsaydı aynı çift iki kez rapora girerdi.
+          </Info>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 /* ═══ ASN veri kümesi ═══════════════════════════════════════════════════════ */
 
 /**
@@ -270,7 +357,8 @@ function AsnCard({ status, onNeedStepUp, onDone }: {
             {stale ? ' — tazelemeyi düşün.' : ''}
           </p>
         )}
-        <p className="text-[11px] text-muted">
+        {/* ⚠️ `<div>`, `<p>` DEĞİL — `Info` içeride `<details>` çiziyor (bkz. `ui.tsx`). */}
+        <div className="text-[11px] text-muted">
           Kaynak: <code>iptoasn.com</code> (Public Domain, saatlik güncelleniyor, hesap
           gerektirmiyor). Veri <b>sunucuda yerel</b> duruyor — oyuncu IP’leri hiçbir dış
           servise gönderilmiyor.
@@ -280,7 +368,7 @@ function AsnCard({ status, onNeedStepUp, onDone }: {
             yasaklıyor; aynı veriyi bir satıcıya akıtmak daha büyük bir ihlal olurdu.
             Yan kazanç: sıfır gecikme, sıfır kota, çevrimdışı çalışma.
           </Info>
-        </p>
+        </div>
         {note ? <Alert tone="success">{note}</Alert> : null}
         <ErrorBox error={error} />
         <Button variant="ghost" disabled={busy} onClick={() => void refresh()}>

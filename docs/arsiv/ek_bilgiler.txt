@@ -1,5 +1,3 @@
-Çoklu hesap kontrol sistemi — TEKNİK sinyaller yapıldı (panelde «Çoklu hesap» sekmesi: aynı cihaz, aynı IP, aynı /24, kayıt kohortu, sıra sıra oturum, ASN/ülke künyesi). KALAN: davranış sinyalleri — tek yönlü kaynak akışı, kârsız saldırı, savunma tutarsızlığı, sessiz müttefik — ve bunları haftalık tarayan görev + rapor e-postası.
-
 Saldırı, casusluk, nakliye gibi raporlarda hedef şehrin koordinatının yanında o andaki şehir adı da yazılsın
 
 Kayıt sırasında kullanılan şüpheli e posta durumlarını tespit et, temp mail gibi servislerden alınan garip e postalar ile e posta doğrulama aşaması geçilebilir. Bunların tespitini yapıp banlayabilecek bir admin bölümü

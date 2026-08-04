@@ -216,33 +216,33 @@ describe('⭐ kabul kriteri: sinyaller birikiyor', () => {
    * olmayan genel bir sayım, tabloya dokunan HERHANGİ bir test dosyası yüzünden düşüyordu
    * (nitekim `abuse-link.test.ts` eklenince düştü).
    *
-   * ⭐ Yerine geçen iddia daha güçlü ve KALICI: §9.1.1'in değişmezi. Tablodaki her satır bir
-   * İNSANIN kararıdır — sistemin kendiliğinden yazdığı, kararsız bir satır ASLA olmamalı.
-   * Bu, "tablo boş mu" sorusundan farklı olarak analiz büyüdükçe de doğru kalacak bir kural.
+   * ⚠️ **BU TEST 2026-08-04'te İKİNCİ KEZ DEĞİŞTİ.** Bir ara *"tablodaki her satır bir insanın
+   * kararıdır"* diyordu; o da doğruydu — ta ki `abuse_scan` görevi gelene kadar. Tarama artık
+   * KARARSIZ (açık) sinyal satırları yazıyor ve yazmalı: §9.1.3'ün tasarımı tam olarak bu.
    *
-   * ⚠️ Ölçüt `resolution` + `resolved_at`; **`resolved_by` DEĞİL.** İlk yazımda onu da şart
+   * ⭐ Geriye kalan ve KALICI olan değişmez §9.1.1'in kendisi: **sistem asla `resolution`
+   * yazmaz.** Bir satırda karar varsa onu bir insan koymuştur, ve karar ile karar ANI birlikte
+   * gelir. Bu, analiz büyüdükçe de doğru kalacak tek cümle.
+   *
+   * ⚠️ Ölçüt `resolution` + `resolved_at`; **`resolved_by` DEĞİL.** Bir ara onu da şart
    * koşmuştum ve test düştü: `resolved_by` şemada `ON DELETE SET NULL` — kararı veren yönetici
-   * hesabı silinirse alan boşalır ama KARAR durur. Bu bilinçli bir tasarım (kararı kaybetmemek
-   * için) ve testin onu ihlal olarak görmesi yanlıştı. "Kim verdi" bilgisi kalıcı olarak
-   * `audit_log`ta zaten duruyor.
+   * hesabı silinirse alan boşalır ama KARAR durur. Bilinçli tasarım; "kim verdi" bilgisi kalıcı
+   * olarak `audit_log`ta zaten duruyor.
    */
-  it('⭐ hiçbir sinyal satırı İNSAN KARARI olmadan var olamaz (§9.1.1)', async () => {
-    const orphan = await h.db.execute<{ n: number } & Record<string, unknown>>(sql`
+  it('⭐ karar ile karar ANI birlikte gelir — sistem tek başına karar yazmaz (§9.1.1)', async () => {
+    const incoherent = await h.db.execute<{ n: number } & Record<string, unknown>>(sql`
       SELECT COUNT(*)::int AS n FROM abuse_signals
-       WHERE resolution IS NULL OR resolved_at IS NULL
+       WHERE (resolution IS NULL) <> (resolved_at IS NULL)
     `);
-    expect(Number(orphan[0]!.n)).toBe(0);
+    expect(Number(incoherent[0]!.n)).toBe(0);
   });
 
-  /**
-   * ⚠️ `abuse_scan_runs` HÂLÂ boş: haftalık `abuse_scan` görevi yazılmadı (§9.1.3, Tur 8).
-   * Bu satır o günün çıpası — görev geldiğinde bu test bilerek düşecek ve yerine taramanın
-   * pencere ilerletmesini ölçen bir test gelecek.
+  /*
+   * ⚠️ "Taramanın ürettiği satırlar kararsız doğar" iddiası BURADA DEĞİL,
+   * `abuse-behaviour.test.ts`te — ve olması gereken yer orası. Burada genel bir sayımla
+   * denedim ve düştü: davranış sinyalleri de bir İNSAN tarafından karara bağlanabiliyor
+   * (nitekim o dosyadaki bir test tam olarak bunu yapıyor), yani "kind ≠ pair ve resolution
+   * dolu" satırlar meşru. İddia ancak TEK BİR TARAMANIN çıktısı üzerinde, dünya kapsamında
+   * anlamlı.
    */
-  it('tarama görevi henüz yok — koşu kaydı üretilmiyor', async () => {
-    const runs = await h.db.execute<{ n: number } & Record<string, unknown>>(sql`
-      SELECT COUNT(*)::int AS n FROM abuse_scan_runs
-    `);
-    expect(Number(runs[0]!.n)).toBe(0);
-  });
 });

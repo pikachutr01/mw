@@ -158,16 +158,20 @@ sıralama · bakım modu (donma + perde + mutasyon kilidi) · oturum/cihaz yöne
 
 **Kalan:** veri tabanı tarayıcı + küratörlü aksiyonlar + ham kip (Faz 7) ·
 bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görüntüleme ·
-çoklu hesap **davranış sinyalleri** (§9.1.3 B1/B2/B6/B7 + haftalık `abuse_scan` görevi +
-rapor e-postası).
+`audit_log` görüntüleme.
 
-⭐ **Çoklu hesap TEKNİK sinyalleri 2026-08-04'te girdi** (§9.1.2b): panelde «Çoklu hesap»
-sekmesi, ağırlıklı çift skoru (cihaz · IP · /24 · kayıt kohortu · sıra sıra oturum),
-her sinyalin yanında **masum açıklaması**, karar kaydı ve gerçek IP zinciri teşhisi.
-§9.1.1 aynen geçerli: **otomatik ceza yok**, çıktı yalnız skorlu rapor.
-⭐ Aynı gün **IP → ASN/ülke künyesi** de girdi (§9.1.2c): iptoasn.com anlık görüntüsü
-sunucuda yerel duruyor (oyuncu IP'si dışarı çıkmıyor), kanıt satırında ağın adı ve ülkesi
-yazıyor. `player_ips.asn` kolonu 0002'den beri boştu.
+⭐ **ÇOKLU HESAP TESPİTİ TAMAMLANDI (2026-08-04)** — §9.1 baştan sona:
+- **Teknik sinyaller** (§9.1.2b): cihaz · IP · /24 · kayıt kohortu · sıra sıra oturum.
+- **IP → ASN/ülke künyesi** (§9.1.2c): iptoasn.com anlık görüntüsü **sunucuda yerel**
+  duruyor — oyuncu IP'si hiçbir dış servise gitmiyor. `player_ips.asn` 0002'den beri boştu.
+- **Davranış sinyalleri** (§9.1.2d): tek yönlü kaynak akışı · kârsız saldırı çiftliği ·
+  savunma tutarsızlığı · sessiz ortaklar. Asıl güçlü olanlar: teknik izler taklit edilebilir,
+  davranış edilemez.
+- **Haftalık `abuse_scan` görevi** (§9.1.3) artımlı pencereyle + **rapor e-postası** (§9.1.4).
+- Panelde «Çoklu hesap» sekmesi: skorlu çift listesi, her sinyalin yanında **masum
+  açıklaması**, karar kaydı, gerçek IP zinciri teşhisi ve tarama künyesi.
+
+§9.1.1 aynen geçerli ve her katmanda korundu: **otomatik ceza YOK**, çıktı yalnız skorlu rapor.
 
 ---
 
