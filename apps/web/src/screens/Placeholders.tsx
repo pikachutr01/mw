@@ -10,6 +10,7 @@ import { AccountPanel } from '../components/AccountPanel.tsx';
 import { CityAdminPanel } from '../components/CityAdminPanel.tsx';
 import { DevicesPanel } from '../components/DevicesPanel.tsx';
 import { NotifySettings } from '../components/NotifySettings.tsx';
+import { PrefsPanel } from '../components/PrefsPanel.tsx';
 import { VacationPanel } from '../components/VacationPanel.tsx';
 
 function Soon({ title, lines }: { title: string; lines: string[] }) {
@@ -58,6 +59,10 @@ export function OptionsScreen(): React.ReactElement {
             tatildeyken madde «Tatil Modundan Çık»a dönüşüyor). */}
         <CityAdminPanel />
         <VacationPanel />
+        {/* ⭐ Tercihler (kullanıcı, 2026-08-04) — cihaza özel arayüz anahtarları. Bilerek
+            EN ALTTA: hesap/güvenlik kartlarının önüne geçmemeli, ama «yakında» kartının
+            üstünde çünkü artık gerçek bir işlevi var. */}
+        <PrefsPanel />
       </div>
 
       <Soon title="Yakında" lines={[

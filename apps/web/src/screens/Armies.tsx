@@ -9,13 +9,23 @@
  */
 import { useState } from 'react';
 import { remaining, useTick } from '../lib/hooks.ts';
+import { usePref } from '../lib/prefs.ts';
 import { useMovements, type Movement } from '../lib/queries.ts';
 import { Empty, MissionIcon, Panel } from '../components/ui.tsx';
-import { coordText, MovementModal, titleOf } from '../components/movements.tsx';
+import { coordText, MovementModal, movementTone, titleOf } from '../components/movements.tsx';
 
 export function Armies() {
   const movements = useMovements();
   const [open, setOpen] = useState<Movement | null>(null);
+  /**
+   * ⭐ Liste TERCİHE bağlı (kullanıcı, 2026-08-04): *"aynı bilgiler şehir kale simgelerinin
+   * altına sıralanmış durumda, aynıları bir de tablo olarak gösteriliyor"*.
+   *
+   * ⚠️ Varsayılan AÇIK — tercih eklemek kimsenin ekranını değiştirmemeli.
+   * ⚠️ Kapalıyken sayfa **bomboş kalmıyor**: ne olduğunu ve nereden geri açılacağını söyleyen
+   * bir satır duruyor. Sessizce boşalan bir sayfa, "bozuldu mu" sorusunu doğurur.
+   */
+  const [showTable] = usePref('armiesTable');
   useTick();
 
   const all = movements.data?.movements ?? [];
@@ -23,7 +33,12 @@ export function Armies() {
   return (
     <>
       <Panel title="Ordular" right={all.length > 0 ? `${all.length} hareket` : 'sakin'}>
-        {all.length === 0 ? (
+        {!showTable ? (
+          <p className="px-3 py-4 text-sm text-muted">
+            Hareket listesi <b>Seçenekler → Tercihler</b>’den kapatıldı. Hareketler yukarıdaki
+            şehir şeridinde simgeleriyle duruyor.
+          </p>
+        ) : all.length === 0 ? (
           <Empty>Şehirlerinde herhangi bir hareketlilik yok.</Empty>
         ) : (
           <ul className="divide-y divide-border">
@@ -49,8 +64,8 @@ function MovementRow({
   m, alt, onOpen,
 }: { m: Movement; alt: boolean; onOpen: (m: Movement) => void }) {
   const left = remaining(m.executeAt);
-  const tone = m.direction === 'in' ? 'text-danger'
-    : m.direction === 'own' ? 'text-success' : 'text-warning';
+  // ⚠️ Renk kuralı `movements.tsx`te TEK yerde: şerit ile liste ayrışmamalı.
+  const tone = movementTone(m);
 
   return (
     <li className={alt ? 'bg-row-alt' : ''}>

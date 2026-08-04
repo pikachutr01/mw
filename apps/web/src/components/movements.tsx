@@ -31,6 +31,45 @@ export const TYPE_LABEL: Record<string, string> = {
 export const coordText = (c: Coords | null): string => (c ? `${c.k}:${c.d}:${c.s}` : '—');
 
 /**
+ * ⭐ HAREKETİN RENGİ — tek soruya cevap: **bu bana bir tehdit mi?**
+ * (kullanıcı, 2026-08-04: *"giden destekte turuncu, gelen destekte kırmızı renk görünüyor"*)
+ *
+ * ⚠️ **NE VARDI:** renk yalnız YÖNE bakıyordu — gelen kırmızı, giden turuncu, kendi yeşil.
+ * Bu, "gelen" ile "tehdit"i eşitliyordu ve ikisi aynı şey değil: müttefikin gönderdiği destek
+ * de "gelen"dir, gelen nakliye de. Oyuncu ekranda kırmızı görüp paniğe kapılıyor, sonra
+ * hediyeyle karşılaşıyordu. Tersi daha da kötüydü: kendi saldırısı turuncu yanıyordu.
+ *
+ * Kural artık üç satır:
+ *   • **Bana gelen ve düşmanca** (saldırı, casusluk) → kırmızı
+ *   • **Bana gelen ve dostane** (destek, nakliye, mağaradan kaçış) → turuncu
+ *   • **Benim hareketim** (giden, dönen, şehir içi) → yeşil
+ *
+ * ⚠️ Tür `m.type`ten okunuyor ve o **sunucuda maskelenmiş** hâl: koordinatıma gelen bir
+ * `found_city` bana `attack` olarak görünüyor (§13.6.5 maskesi). Renk de kırmızı çıkıyor —
+ * doğrusu bu, çünkü oyuncunun gördüğü şey bir saldırı ve maske renkte delinmemeli.
+ */
+const HOSTILE_INCOMING = new Set(['attack', 'spy']);
+
+export function movementTone(m: Movement): string {
+  if (m.direction !== 'in') return 'text-success';
+  return HOSTILE_INCOMING.has(m.type) ? 'text-danger' : 'text-warning';
+}
+
+/**
+ * Şerit simgesinin parıltısı — aynı kuralın görsel karşılığı.
+ *
+ * ⚠️ Eskiden parıltı `direction === 'in'` ile veriliyordu ve **kırmızıydı**: müttefikinden
+ * gelen destek, şeritte saldırıyla birebir aynı görünüyordu. Aynı yanlışın ikinci yüzü;
+ * listedeki rengi düzeltip burayı bırakmak, oyuncuya iki farklı hikâye anlatmak olurdu.
+ */
+export function movementGlow(m: Movement): string {
+  if (m.direction !== 'in') return '';
+  return HOSTILE_INCOMING.has(m.type)
+    ? 'drop-shadow-[0_0_5px_var(--mw-color-danger)]'
+    : 'drop-shadow-[0_0_5px_var(--mw-color-warning)]';
+}
+
+/**
  * Hareketin başlığı — **görevin TANIMI**, tek kaynak.
  *
  * Liste önizlemesi, şerit tooltip'i ve detay modalı üçü de buradan besleniyor. Kullanıcı
@@ -87,9 +126,7 @@ export function MovementIcon({
             ⚠️ Kale 2026-08-02'de küçülünce bu da küçüldü — kural "aynı boyut", sabit sayı değil. */}
         <img src={`/assets/missions/${m.icon}.png`} alt={titleOf(m)}
           width={80} height={80}
-          className={`icon-shadow h-8 w-8 object-contain sm:h-14 sm:w-14 ${
-            m.direction === 'in' ? 'drop-shadow-[0_0_5px_var(--mw-color-danger)]' : ''
-          }`} />
+          className={`icon-shadow h-8 w-8 object-contain sm:h-14 sm:w-14 ${movementGlow(m)}`} />
         {/* ⭐ Dönüş rozeti: oyuncu İLK BAKIŞTA giden mi dönen mi ayırt edebilmeli.
             ⚠️ `title` YOK — üst düğmedekiyle aynı gerekçe: fareyi takip eden kendi
             tooltip'imiz varken tarayıcının gecikmeli kutusu da açılıp üstüne biniyordu.

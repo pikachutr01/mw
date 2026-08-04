@@ -1216,6 +1216,25 @@ liste**: `Simülatör · Seçenekler · Yardım · Çıkış Yap` (çıkış ona
 Seçenekler'i açıyordu ve **Yardım mobilde hiç erişilemiyordu**; Simülatör de listeye konmasaydı
 telefonda ekrana giden hiçbir yol kalmazdı.
 
+- ⭐ **TERCİHLER** (kullanıcı, 2026-08-04) — Seçenekler ekranında switch'li arayüz anahtarları.
+  İlki: *Ordular sayfasında hareket listesi* (varsayılan açık).
+  ⚠️ Sunucuda DEĞİL, `localStorage`ta: bunlar oyun ayarı değil **görünüm tercihi**; hiçbirinin
+  sonucu oyun durumunu değiştirmiyor. Bedeli açık ve kabul edilmiş: tercih **cihaz başına**.
+  ⚠️ Ekran `PREFS` listesinden kendini çiziyor — yeni tercih eklemek `prefs.ts`te tek satır
+  (kullanıcı "sonradan başka switch'ler ekleyeceğiz" dedi).
+  ⚠️ Liste kapalıyken sayfa **bomboş kalmıyor**: ne olduğunu ve nereden geri açılacağını
+  söyleyen bir satır duruyor — sessizce boşalan bir sayfa "bozuldu mu" sorusunu doğurur.
+
+- ⭐ **HAREKET RENGİ tek soruya cevap veriyor: «bu bana tehdit mi?»** (kullanıcı, 2026-08-04).
+  Eskiden renk yalnız YÖNE bakıyordu (gelen kırmızı, giden turuncu) ve bu, "gelen" ile
+  "tehdit"i eşitliyordu: müttefikin desteği saldırıyla aynı kırmızıyla yanıyor, oyuncunun kendi
+  saldırısı turuncu görünüyordu. Kural artık: gelen+düşmanca (saldırı, casusluk) **kırmızı** ·
+  gelen+dostane (destek, nakliye, mağaradan kaçış) **turuncu** · kendi hareketim **yeşil**.
+  ⚠️ Şerit simgesinin parıltısı da aynı kaynaktan; ikisinin ayrışması oyuncuya iki farklı
+  hikâye anlatmak olurdu.
+  ⚠️ Koordinata gelen `found_city` sunucuda `attack` olarak maskeleniyor (§13.6.5) ve renk de
+  kırmızı çıkıyor — maske renkte delinmemeli.
+
 - Üstte **kalıcı kaynak çubuğu**: aktif şehir seçici, altın/yemek + saatlik hız, alan kullanımı,
   bekleyen görev/mesaj rozetleri, **tema düğmesi** (gündüz/gece/sistem — §13.13).
 
