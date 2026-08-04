@@ -103,3 +103,30 @@ export function numberToIp(n: IpNumber): string {
   }
   return groups.join(':');
 }
+
+/**
+ * Yerel/özel ağ adresi mi? **İki çağıranı var:**
+ *   • `link.service` — IP zinciri teşhisinin *sebep* ayrımı (dev mi, bozuk vekil mi).
+ *   • `email-risk.service` — kayıt sel sınırının muafiyeti.
+ *
+ * ⚠️ Modül seçimi: `ip-number.ts`, IP ile ilgili saf yardımcıların evi. Bir dönem
+ * `link.service` içindeydi ve `email-risk` oradan almak zorunda kalıyordu — iki servisi
+ * birbirine bağlayan, hiçbir işe yaramayan bir bağımlılık.
+ *
+ * ⚠️ Bu bir güvenlik kontrolü DEĞİL. `link.service`te yönetici mesajının doğru cümleyi
+ * kurması için; `email-risk`te ise şu gerekçeyle: özel bir adres görüyorsak IP zaten kimseyi
+ * temsil etmiyor (geliştirme ya da bozuk ters vekil), ona dayanarak kayıt reddetmek bozuk bir
+ * sinyalle gerçek oyuncuları dışarıda bırakmak olurdu.
+ */
+export function isLocalAddress(ip: string | null): boolean {
+  if (!ip) return false;
+  const v = ip.replace(/^::ffff:/, '').split('%')[0] ?? ip;
+  if (v === '::1' || v === '0.0.0.0' || v === '::') return true;
+  if (/^(fc|fd|fe8|fe9|fea|feb)/i.test(v)) return true;              // ULA + link-local (IPv6)
+  const o = v.split('.').map(Number);
+  if (o.length !== 4 || o.some((n) => !Number.isInteger(n))) return false;
+  return o[0] === 127 || o[0] === 10
+    || (o[0] === 192 && o[1] === 168)
+    || (o[0] === 172 && o[1]! >= 16 && o[1]! <= 31)
+    || (o[0] === 169 && o[1] === 254);
+}

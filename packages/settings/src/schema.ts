@@ -1076,6 +1076,41 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     note: '⚠️ Tarama ARTIMLI: her koşu bir öncekinin bittiği yerden devam eder, yani aralığı '
       + 'değiştirmek veri kaybettirmez. Worker kapalı kalsa bile pencere kaymaz.',
   },
+  /* ── Kayıt kötüye kullanımı (§9.1.7) ─────────────────────────────────────────
+   *
+   * ⚠️ İKİ TEHDİT, İKİ FARKLI CEVAP. Tek kullanımlık e-posta **tespit** ediliyor ama
+   * varsayılanda engellenmiyor (karar yöneticinin, §9.1.1); bot seli ise **doğrudan**
+   * engelleniyor, çünkü orada bekleyecek bir insan yok.
+   */
+  {
+    key: 'abuse.blockDisposableEmail',
+    label: 'Geçici e-posta ile kaydı ENGELLE',
+    type: 'boolean', default: false, tag: 'design',
+    description: '⭐ Açarsan tek kullanımlık e-posta servislerinden kayıt reddedilir. '
+      + 'Kapalıyken kayıt geçer ama hesap panelde «geçici e-posta» olarak işaretlenir.',
+    note: '⚠️ Varsayılan KAPALI, bilerek. Yanlış pozitifin bedeli asimetrik: engellenen '
+      + 'gerçek bir oyuncu geri gelmez ve neden giremediğini de öğrenemez. Liste küratörlü '
+      + 've büyük sağlayıcıları içermiyor, ama hiçbir liste kusursuz değil. Önce panelden '
+      + 'kaç kaydın işaretlendiğine bak, sonra aç.',
+  },
+  {
+    key: 'abuse.signupMaxPerBlock',
+    label: 'Aynı ağdan en fazla kayıt',
+    type: 'int', default: 5, min: 1, max: 100, tag: 'design', unit: 'hesap',
+    description: '⭐ Aynı /24 IP öbeğinden aşağıdaki süre içinde en fazla kaç hesap açılabilir. '
+      + 'Aşılırsa kayıt reddedilir.',
+    note: '⚠️ Bu sınır ENGELLİYOR, yalnız işaretlemiyor: saniyede hesap açan bir betiği '
+      + '"yönetici baksın" diye geçirmek, korumayı hiç yazmamakla aynı şey. '
+      + '⚠️ Cömert tutuldu: aynı ev, okul ya da mobil operatör NAT\'ı ardışık birkaç kayıt '
+      + 'üretebilir. Amaç insanı değil betiği durdurmak — küçültmeden önce panelden gerçek '
+      + 'kayıt yoğunluğuna bak.',
+  },
+  {
+    key: 'abuse.signupWindowMinutes',
+    label: 'Kayıt sayım penceresi',
+    type: 'int', default: 60, min: 1, max: 1440, tag: 'design', unit: 'dk',
+    description: 'Yukarıdaki sayının ölçüldüğü süre. «60 dakikada 5 hesap» gibi düşün.',
+  },
   {
     key: 'abuse.lookbackDays',
     label: 'İnceleme penceresi',

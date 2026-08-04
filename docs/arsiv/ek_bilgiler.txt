@@ -1,9 +1,5 @@
 Saldırı, casusluk, nakliye gibi raporlarda hedef şehrin koordinatının yanında o andaki şehir adı da yazılsın
 
-Kayıt sırasında kullanılan şüpheli e posta durumlarını tespit et, temp mail gibi servislerden alınan garip e postalar ile e posta doğrulama aşaması geçilebilir. Bunların tespitini yapıp banlayabilecek bir admin bölümü
-
-Bot hesap oluşturmayı tespit edip engelleme
-
 Admin panelinden oyunculara sistem mesajı göndermek, özel veya herkese bildirim mesajı iletmek. Bu mesaj Mesajlarda Mesajlar sekmesine düşebilir. Önemli bir bilgi veya güncelleme olursa oyuncuları hızlıca bilgilendirmek amaçlı. Tıpkı raporlar gibi modal üzerinde açılırlar, sistem tarafından gönderilmiş gözükürler. Açılınca okunmuş sayılırlar.
 
 Admin panele o anda sunucuda devam eden görevleri listeleyecek bir tablo ekleyelim. Hangi görevin kime ait olduğunu göstersin. Sanırım şu anda bir kullanıcının ayrıntılarına girince onu hareketlerini görüyoruz. Tüm görevleri sunucu taraflı bir pagination tabloda bir arada görmek istiyorum.hangi şehirden hangi şehre gidiyor, bu şehirler kime ait, kalan süresi vs tüm ayrıntıları

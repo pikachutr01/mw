@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { DELETED_NAME_RE } from '@mobilwar/catalog';
+import { EmailRiskService, normalizeEmail } from '../abuse/email-risk.service.ts';
 import { DeviceSignalService, type DeviceContext } from '../abuse/device-signal.service.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
@@ -29,6 +30,13 @@ export type AuthErrorCode =
   | 'account_locked'
   | 'banned'
   | 'invalid_refresh'
+  /**
+   * ⭐ Kayıt kötüye kullanımı (2026-08-04). İkisi de 400 döner: bunlar kimlik hatası değil,
+   * isteğin kendisiyle ilgili. `signup_flood` BOT koruması ve doğrudan engelliyor;
+   * `disposable_email` yalnız ayar açıkken engelliyor, varsayılanda TESPİT edip geçiyor.
+   */
+  | 'signup_flood'
+  | 'disposable_email'
   | 'world_not_found';
 
 /** "Aktif Cihazlar" listesinin bir satırı — zincir başına tek. */
@@ -108,6 +116,40 @@ export class AuthService {
     if (!world || String(world['state']) !== 'running') {
       throw new AuthError('world_not_found', 'Seçilen dünya kayda kapalı.');
     }
+    /**
+     * ⭐ KAYIT RİSKİ (§9.1.7) — parola karması gibi PAHALI bir işten ÖNCE ölçülüyor: bot
+     * seli argon2id'yi boşuna çalıştırmamalı, o iş tek başına sunucuyu meşgul edebiliyor.
+     *
+     * ⚠️ Ölçüm başarısız olursa kayıt SÜRÜYOR. Risk sinyali uğruna gerçek bir oyuncunun
+     * kaydını kaybetmek kabul edilemez bir takas; sinyal eksik kalır, oyuncu içeri girer.
+     */
+    try {
+      const risk = await new EmailRiskService(this.db).assess(email, ctx.ip);
+      /**
+       * ⚠️ **TEST KOŞUCUSU SEL SINIRINDAN MUAF.** Test paketi yirmi dosyada, tek bir sahte
+       * IP'den (`85.104.12.7`) yüzlerce hesap açıyor — yani korumanın durdurmak için var
+       * olduğu desenin ta kendisi. Muafiyet olmasaydı 239 test, ölçtükleri şeyle hiç
+       * ilgisi olmayan bir sebeple düşerdi.
+       *
+       * ⚠️ Muaf olan yalnız BU BAĞLANTI; kuralın kendisi `email-risk.test.ts`te `assess()`
+       * üzerinden tam olarak sınanıyor (sınır, pencere, başka ağın etkilememesi). Yani
+       * "testte kapalı" olan şey mantık değil, mantığın kayıt akışına bağlanması.
+       * ⚠️ Geliştirme ortamı muaf DEĞİL: orada elle denenebilmeli.
+       */
+      if (risk.block === 'signup_flood' && process.env['NODE_ENV'] !== 'test') {
+        throw new AuthError('signup_flood',
+          'Bu ağdan kısa sürede çok fazla hesap açıldı. Biraz sonra tekrar dene.');
+      }
+      if (risk.block === 'disposable_email') {
+        throw new AuthError('disposable_email',
+          'Geçici e-posta servisleri kabul edilmiyor. Kalıcı bir adresle kaydol.');
+      }
+    } catch (err) {
+      if (err instanceof AuthError) throw err;
+      // eslint-disable-next-line no-console
+      console.error('[auth] kayit riski olculemedi, kayit surduruluyor:', err);
+    }
+
     const gameNow = await this.clock.gameNow(input.worldId);
     const passwordHash = await this.passwords.hash(input.password);
 
@@ -132,8 +174,16 @@ export class AuthService {
       `);
       if (nameDup.length > 0) throw new AuthError('username_taken', 'Bu kullanıcı adı alınmış.');
 
+      /**
+       * ⭐ POSTA KUTUSU KİMLİĞİ ve KAYIT IP'si (2026-08-04). İkisi de kayıt anında yazılıyor
+       * çünkü sonradan üretilemezler: IP zaten geçmiştir, e-posta ise değiştirilebiliyor.
+       * ⚠️ `email_normalized` benzersiz DEĞİL: aynı kutudan ikinci hesap tek başına suç değil.
+       */
       const acc = await tx.execute<{ id: number } & Record<string, unknown>>(sql`
-        INSERT INTO accounts (email, password_hash) VALUES (${email}, ${passwordHash}) RETURNING id
+        INSERT INTO accounts (email, password_hash, email_normalized, signup_ip)
+        VALUES (${email}, ${passwordHash}, ${normalizeEmail(email)?.normalized ?? null},
+                ${ctx.ip})
+        RETURNING id
       `);
       const accountId = Number(acc[0]!.id);
 

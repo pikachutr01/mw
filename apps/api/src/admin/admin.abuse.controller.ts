@@ -19,6 +19,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AsnService } from '../abuse/asn.service.ts';
+import { EmailRiskService } from '../abuse/email-risk.service.ts';
 import { BEHAVIOUR_INNOCENT, BEHAVIOUR_LABEL } from '../abuse/behaviour.service.ts';
 import { AbuseScanService } from '../abuse/scan.service.ts';
 import {
@@ -27,6 +28,7 @@ import {
 import { AuthGuard } from '../auth/auth.guard.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
+import { liveBool, liveNumber } from '../settings/live.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 
 /**
@@ -58,6 +60,108 @@ export class AdminAbuseController {
   constructor(@Inject(DB) private readonly db: Db) {
     this.analyzer = new LinkService(db);
     this.asn = new AsnService(db);
+  }
+
+  /* ── Kayıt riski (§9.1.7) ─────────────────────────────────────────────────── */
+
+  /**
+   * ⭐ ŞÜPHELİ KAYITLAR — üç ayrı soru, tek uç:
+   *   1. Hangi hesaplar **aynı posta kutusuna** bakıyor (nokta/+etiket hilesi)?
+   *   2. Hangileri **tek kullanımlık** e-posta servisinden?
+   *   3. Son günlerde hangi ağdan **yığın kayıt** geldi?
+   *
+   * ⚠️ Üçü de yalnız LİSTE. Ceza «Oyuncular» sekmesindeki künyeden veriliyor — ayrı işlem,
+   * ayrı denetim kaydı (§9.1.1 ile aynı ayrım).
+   */
+  @Get('signups')
+  async signups(@Query('worldId') worldId?: string): Promise<Record<string, unknown>> {
+    const w = Number(worldId ?? 1);
+    const risk = new EmailRiskService(this.db);
+
+    const mailboxes = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT a.email_normalized AS box, COUNT(*)::int AS n,
+             ARRAY_AGG(a.email ORDER BY a.created_at) AS emails,
+             MIN(a.created_at) AS first_at, MAX(a.created_at) AS last_at
+        FROM accounts a
+       WHERE a.email_normalized IS NOT NULL
+       GROUP BY a.email_normalized
+      HAVING COUNT(*) > 1
+       ORDER BY COUNT(*) DESC, MAX(a.created_at) DESC
+       LIMIT 50
+    `);
+
+    const disposable = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT a.id, a.email, a.created_at, a.email_verified_at,
+             p.id AS player_id, p.username
+        FROM accounts a
+        JOIN disposable_domains d ON d.domain = split_part(a.email, '@', 2)
+        LEFT JOIN players p ON p.account_id = a.id AND p.world_id = ${w}
+       ORDER BY a.created_at DESC
+       LIMIT 50
+    `);
+
+    /**
+     * ⚠️ Yığın sorgusu `signup_ip`e bakıyor, `player_ips`e değil: soru "bu hesap NEREDE
+     * DOĞDU", "sonradan nereden girdi" değil. İkisini karıştırmak, aylar sonra seyahat eden
+     * bir oyuncuyu kayıt yığınının parçası gibi gösterirdi.
+     */
+    const bursts = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT split_part(signup_ip, '.', 1) || '.' || split_part(signup_ip, '.', 2)
+             || '.' || split_part(signup_ip, '.', 3) || '.0/24' AS block,
+             COUNT(*)::int AS n, MIN(created_at) AS first_at, MAX(created_at) AS last_at
+        FROM accounts
+       WHERE signup_ip IS NOT NULL AND position(':' in signup_ip) = 0
+         AND created_at >= now() - interval '30 days'
+       GROUP BY 1
+      HAVING COUNT(*) > 1
+       ORDER BY COUNT(*) DESC
+       LIMIT 30
+    `);
+
+    return {
+      list: await risk.status(),
+      config: {
+        blockDisposable: liveBool('abuse', 'blockDisposableEmail', false),
+        maxPerBlock: liveNumber('abuse', 'signupMaxPerBlock', 5),
+        windowMinutes: liveNumber('abuse', 'signupWindowMinutes', 60),
+      },
+      mailboxes: mailboxes.map((r) => ({
+        box: String(r['box']), count: Number(r['n']),
+        emails: (r['emails'] as string[] | null) ?? [],
+        firstAt: toDate(r['first_at']).toISOString(),
+        lastAt: toDate(r['last_at']).toISOString(),
+      })),
+      disposable: disposable.map((r) => ({
+        accountId: Number(r['id']), email: String(r['email']),
+        createdAt: toDate(r['created_at']).toISOString(),
+        verified: r['email_verified_at'] != null,
+        playerId: r['player_id'] == null ? null : Number(r['player_id']),
+        username: r['username'] == null ? null : String(r['username']),
+      })),
+      bursts: bursts.map((r) => ({
+        block: String(r['block']), count: Number(r['n']),
+        firstAt: toDate(r['first_at']).toISOString(),
+        lastAt: toDate(r['last_at']).toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * Tek kullanımlık alan listesini tazele + eski hesapların posta kutusu kimliğini doldur.
+   * ⚠️ Elle tetikleniyor: açılışta indirseydi API her yeniden başlatmada dış bir servise
+   * bağımlı olurdu (`asn/refresh` ile aynı gerekçe).
+   */
+  @Post('signups/refresh')
+  @HttpCode(200)
+  @UseGuards(AdminStepUpGuard)
+  async refreshDisposable(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const risk = new EmailRiskService(this.db);
+    const rows = await risk.refresh();
+    const filled = await risk.backfill();
+    await this.audit(0, req.player!.playerId, req.player!.playerId, {
+      action: 'abuse.disposable.refresh', rows, backfill: filled,
+    });
+    return { ok: true, rows, backfill: filled, list: await risk.status() };
   }
 
   /* ── Davranış taraması ────────────────────────────────────────────────────── */

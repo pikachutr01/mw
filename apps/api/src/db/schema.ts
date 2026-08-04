@@ -88,6 +88,16 @@ export const accounts = pgTable('accounts', {
    * gömseydik rol geri alındığında 15 dakika (token ömrü) boyunca geçerli kalırdı.
    */
   role: text('role').notNull().default('player'),
+  /**
+   * ⭐ Nokta ve `+etiket` temizlenmiş POSTA KUTUSU kimliği (2026-08-04).
+   * `ahmet+1@gmail.com`, `ahmet+2@gmail.com` ve `ah.met@gmail.com` aynı kutudur; üçü de
+   * doğrulama postasını alır ve bugüne kadar üçü de ayrı hesap sayılıyordu.
+   * ⚠️ BENZERSİZ DEĞİL: aynı kutudan ikinci hesap tek başına suç değil (aile, iş hesabı).
+   * Kolonun işi yakalamak değil GÖRÜNÜR KILMAK.
+   */
+  emailNormalized: text('email_normalized'),
+  /** Hesabın DOĞDUĞU andaki IP. `player_ips`ten ayrı: orası oyuncu (dünya) düzeyinde. */
+  signupIp: text('signup_ip'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   failedLogins: smallint('failed_logins').notNull().default(0),
@@ -548,6 +558,22 @@ export const ipAsnRanges = pgTable('ip_asn_ranges', {
   country: text('country'),
   description: text('description'),
 }, (t) => [index('ip_asn_ranges_lookup').on(t.family, t.rangeStart)]);
+
+/**
+ * ⭐ Tek kullanımlık e-posta alanları — CC0 liste anlık görüntüsü (§9.1.7).
+ * ⚠️ 110.000+ alanlık toplu listeler yerine ~8.200 alanlık KÜRATÖRLÜ liste seçildi: bu oyunda
+ * yanlış pozitifin bedeli asimetrik — engellenen gerçek oyuncu geri gelmez.
+ */
+export const disposableDomains = pgTable('disposable_domains', {
+  domain: text('domain').primaryKey(),
+});
+
+export const disposableMeta = pgTable('disposable_meta', {
+  id: smallint('id').primaryKey().default(1),
+  source: text('source').notNull(),
+  rows: integer('rows').notNull().default(0),
+  refreshedAt: timestamp('refreshed_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Tek satırlık tazelik künyesi — "bu veri ne kadar eski" panelde görünüyor. */
 export const ipAsnMeta = pgTable('ip_asn_meta', {

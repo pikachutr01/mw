@@ -128,6 +128,26 @@ sinyalinin masum açıklaması tahmin olarak kalır — operatör NAT'ı mı yok
 bağımlı olurdu. Veri bayatlasa bile hiçbir oyun mekaniği bozulmaz; ayda bir tazelemek yeter.
 ⚠️ İndirme sırasında oyuncuların girişi etkilenmez (`DELETE`+`INSERT`, tek transaction).
 
+### 2.4c ⭐ İlk açılışta bir kez: geçici e-posta listesini indir
+Yönetim paneli → **Kayıtlar** → «Alan listesini indir». ~8.200 alan, 1-2 saniye.
+
+Bu olmadan geçici e-posta tespiti çalışmaz (liste boş kalır). Aynı düğme mevcut hesapların
+**posta kutusu kimliğini** de dolduruyor — `ahmet+1@` ile `ah.met@` aynı kutu olarak görünür
+hâle gelir.
+
+⚠️ **Geçici e-posta varsayılanda ENGELLENMİYOR**, yalnız işaretleniyor. Önce panelde kaç
+kaydın işaretlendiğine bak; gerçek oyuncu yoksa «Ayarlar → Çoklu hesap tespiti →
+Geçici e-posta ile kaydı ENGELLE»yi açabilirsin.
+
+### 2.4d ⚠️ BOT SINIRI ile GERÇEK IP ZİNCİRİ BİRBİRİNE BAĞLI
+Kayıt koruması aynı /24 ağdan saatte 5 hesapla sınırlı (panelden ayarlanır).
+
+⚠️ **Ters vekil zinciri bozulursa tüm oyuncular tek IP gibi görünür** ve bu sınır kayıtları
+tamamen durdurabilir. Kod özel/yerel adresleri muaf tutuyor (bozuk zincirin bir biçimi), ama
+Cloudflare kenar IP'si GENEL bir adrestir ve muaf DEĞİLDİR.
+→ Panelde «Çoklu hesap → Gerçek IP zinciri» kırmızı uyarı veriyorsa **kayıt da risk altında**:
+ya zinciri düzelt ya da sınırı geçici olarak yükselt.
+
 ### 2.5 GitHub secret'ları (Settings → Secrets and variables → Actions)
 | Secret | Değer |
 |---|---|

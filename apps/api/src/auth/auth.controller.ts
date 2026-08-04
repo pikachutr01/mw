@@ -429,7 +429,13 @@ export class AuthController {
          * "parolan yanlış" demeye iterdi. Dünya seçimi forma gelince (2026-08-03) bu ayrım
          * gerçekten görünür oldu.
          */
-        if (err.code === 'world_not_found') {
+        /**
+         * ⚠️ Kayıt kötüye kullanımı kodları da 400: `signup_flood` ve `disposable_email`
+         * kimlik hatası değil, isteğin kendisiyle ilgili. 401 dönseydi istemci "parolan
+         * yanlış" der ve oyuncu neyle karşılaştığını anlamazdı.
+         */
+        if (err.code === 'world_not_found' || err.code === 'signup_flood'
+          || err.code === 'disposable_email') {
           throw new BadRequestException({ code: err.code, message: err.message });
         }
         throw new UnauthorizedException({ code: err.code, message: err.message });

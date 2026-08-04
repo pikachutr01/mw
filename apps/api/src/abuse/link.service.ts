@@ -49,6 +49,7 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { liveNumber } from '../settings/live.ts';
 import { hostingHint } from './asn.service.ts';
+import { isLocalAddress } from './ip-number.ts';
 
 export type SignalKind =
   | 'sameDevice' | 'sameIp' | 'sameIpBlock' | 'registrationCohort' | 'sessionHandoff';
@@ -135,25 +136,6 @@ export interface LinkedPair {
 /** Ham satır → `{a, b}` anahtarı. Çift daima küçük id önce (şema yorumundaki sıralama kuralı). */
 const keyOf = (a: number, b: number): string => `${a}:${b}`;
 
-/**
- * Yerel/özel ağ adresi mi? IP zinciri teşhisinin **sebep** ayrımı için.
- *
- * ⚠️ Bu bir güvenlik kontrolü DEĞİL — yalnız yönetici mesajının doğru cümleyi kurması için.
- * Geliştirmede herkes `127.0.0.1`den gelir ve bu bozuk bir zincir değil, sadece localhost'tur;
- * canlıda ise tek bir GENEL IP'de toplanmak gerçek bir arıza işaretidir.
- */
-function isLocalAddress(ip: string | null): boolean {
-  if (!ip) return false;
-  const v = ip.replace(/^::ffff:/, '').split('%')[0] ?? ip;
-  if (v === '::1' || v === '0.0.0.0' || v === '::') return true;
-  if (/^(fc|fd|fe8|fe9|fea|feb)/i.test(v)) return true;              // ULA + link-local (IPv6)
-  const o = v.split('.').map(Number);
-  if (o.length !== 4 || o.some((n) => !Number.isInteger(n))) return false;
-  return o[0] === 127 || o[0] === 10
-    || (o[0] === 192 && o[1] === 168)
-    || (o[0] === 172 && o[1]! >= 16 && o[1]! <= 31)
-    || (o[0] === 169 && o[1] === 254);
-}
 
 export class LinkService {
   constructor(private readonly db: Db) {}

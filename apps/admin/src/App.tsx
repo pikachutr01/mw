@@ -17,6 +17,7 @@ import { getSession, login, setSession, type AdminSession } from './lib/api.ts';
 import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, Countdown, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
 import { AbuseScreen } from './screens/Abuse.tsx';
+import { SignupsScreen } from './screens/Signups.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
 import { BulkScreen } from './screens/Bulk.tsx';
@@ -43,6 +44,9 @@ const NAV: [string, string][] = [
   // bildirdi), bu ise kimsenin bildirmediği bir deseni arıyor. İkisini birleştirmek, ikinci
   // listenin birincinin altında kaybolması demekti.
   ['/coklu-hesap', 'Çoklu hesap'],
+  // ⭐ «Kayıtlar» AYRI sekme: «Çoklu hesap» oyun İÇİNDEKİ ilişkiye bakıyor, bu ise hesabın
+  // DOĞDUĞU ana. Birleştirseydik iki farklı soru tek listede karışırdı.
+  ['/kayitlar', 'Kayıtlar'],
   ['/veri', 'Veri tabanı'],
   ['/bakim', 'Bakım'],
 ];
@@ -114,6 +118,10 @@ export function App() {
               <Route
                 path="/coklu-hesap"
                 element={<AbuseScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
+              />
+              <Route
+                path="/kayitlar"
+                element={<SignupsScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
               />
               <Route path="/veri" element={<DatabaseScreen onNeedStepUp={openStepUp} />} />
               <Route path="/bakim" element={<HealthScreen onNeedStepUp={openStepUp} />} />

@@ -652,6 +652,54 @@ geliyor (pahalı; her panel açılışında koşturmak ekranı dünyanın en yav
 geçmez — ve yalnız davranış sinyali olan bir çift (cihazını gizlemeyi bilen biri) aksi hâlde
 listede hiç görünmezdi, oysa asıl aranan tip o.
 
+### 9.1.7 ✅ KAYIT KÖTÜYE KULLANIMI (2026-08-04, kullanıcı: geçici e-posta + bot engelleme)
+
+⚠️ **İKİ TEHDİT, İKİ FARKLI CEVAP.** Bu ayrım tasarımın özü:
+- **Geçici e-posta → TESPİT**, varsayılanda engelleme YOK. Kullanıcının kendi cümlesi
+  *"tespitini yapıp **banlayabilecek** bir admin bölümü"*: karar insanın. Ayrıca yanlış
+  pozitifin bedeli asimetrik — engellenen gerçek bir oyuncu geri gelmez ve neden giremediğini
+  de öğrenemez. Sert engel panelde bir anahtar (`abuse.blockDisposableEmail`, varsayılan kapalı).
+- **Bot seli → DOĞRUDAN ENGELLEME.** Orada bekleyecek bir insan yok; saniyede hesap açan bir
+  betiği "yönetici baksın" diye geçirmek, korumayı hiç yazmamakla aynı şey.
+
+#### 9.1.7a ⭐ ASIL AÇIK GEÇİCİ SERVİSLER DEĞİL, POSTA KUTUSU HİLESİ
+
+`ahmet+1@gmail.com`, `ahmet+2@gmail.com` ve `ah.met@gmail.com` **aynı posta kutusudur**: üçü de
+doğrulama postasını alır, üçü de doğrulanır ve `accounts_email_unique` üçünü de farklı hesap
+sayardı. Yani *"e-posta doğrulaması çoklu hesabı zorlaştırır"* varsayımı, **hiçbir geçici
+servise ihtiyaç duymadan** deliniyordu.
+
+`accounts.email_normalized` bu kutuyu görünür kılıyor.
+⚠️ Kolon **BENZERSİZ DEĞİL** — bilerek. Aynı kutudan ikinci hesap tek başına suç değil (aile,
+iş hesabı) ve engellemek mevcut oyuncuları da kırardı. İşi yakalamak değil **görünür kılmak**.
+⚠️ Normalizasyon **kimlik doğrulamada kullanılmıyor**: giriş hâlâ tam adresle. Karıştırsaydık
+`a.b@gmail.com` ile kaydolan biri `ab@gmail.com` ile de girebilirdi — çözdüğümüzden büyük sürpriz.
+⚠️ Nokta temizliği **yalnız Gmail ailesinde**. Çoğu sağlayıcıda `a.b@` ile `ab@` FARKLI
+kişilerdir; genel kural yapmak iki yabancıyı aynı kutuda gösterip yöneticiyi hatalı karara
+sürüklerdi. Test bunu ayrıca çakıyor.
+
+#### 9.1.7b Alan listesi
+
+Kaynak: `disposable-email-domains/disposable-email-domains` — **CC0**, ~8.200 alan, elle
+küratörlü. ⚠️ 110.000+ alanlık **toplu** listeler bilerek elendi: bu oyunda yanlış pozitifin
+bedeli asimetrik ve toplu listeler gerçek sağlayıcıları da içerebiliyor. Seçilen listede
+gmail/hotmail/outlook/yahoo/yandex/icloud/protonmail'in **hiçbiri yok** (2026-08-04'te
+doğrulandı). Kalabalık değil, doğruluk seçildi.
+Ölçüldü: 8.201 alan, **1,3 sn**. Tazeleme elle (ASN listesiyle aynı gerekçe).
+
+#### 9.1.7c Bot koruması
+
+Aynı /24 ağdan `signupWindowMinutes` içinde `signupMaxPerBlock`'tan fazla kayıt → **reddedilir**.
+⚠️ Sınır cömert (60 dk / 5 hesap): aynı ev, okul ya da mobil operatör NAT'ı ardışık birkaç
+kayıt üretebilir. Amaç insanı değil **betiği** durdurmak.
+⚠️ Risk ölçümü parola karmasından **ÖNCE** koşuyor: bot seli argon2id'yi boşuna çalıştırmamalı.
+⚠️ Ölçüm başarısız olursa kayıt **sürüyor** — risk sinyali uğruna gerçek bir oyuncunun kaydını
+kaybetmek kabul edilemez bir takas.
+
+Panel: **«Kayıtlar»** sekmesi — aynı posta kutusu · geçici e-posta · ağ başına yığın kayıt.
+⚠️ «Çoklu hesap» sekmesinden AYRI: o ekran oyun İÇİNDEKİ ilişkiye bakıyor, bu hesabın DOĞDUĞU
+ana. Birleştirseydik iki farklı soru tek listede karışır, hiçbiri düzgün cevaplanmazdı.
+
 ### 9.1.3 B katmanı — tarama işi ✅ YAPILDI (2026-08-04)
 
 `abuse_scan` görev tipi `worker.ts`te kayıtlı ve `ranking_snapshot` gibi **kendini
