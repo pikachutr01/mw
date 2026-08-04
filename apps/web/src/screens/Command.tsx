@@ -26,6 +26,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { api } from '../lib/api.ts';
 import { LEVEL_BASED, MERIT_BY_TIER } from '@mobilwar/catalog';
+import { formatGameHhmm } from '@mobilwar/contracts';
 import {
   useOverview, useRankings, type NamedType, type Overview, type RankingKind,
 } from '../lib/queries.ts';
@@ -511,18 +512,23 @@ function Tabs<T extends string>({
  * oyuncu bina diktiği anda değişiyordu (2026-08-03, kullanıcının bildirdiği hata). Artık iki
  * sayı da anlık görüntüden okunuyor — not tek gerçeği anlatıyor.
  *
- * ⚠️ Saatler **OYUN SAATİ (UTC)** ile yazılır, tarayıcının yerel saatiyle değil. Oyunun bütün
- * zaman kuralları oyun saatinde yaşıyor (gece savaşı 00:00–08:00, sıralama 00/08/16); yerel
- * saate çevirseydik UTC+3'teki oyuncu "sıralama 19:00'da" diye okur ve dokümandaki saatlerle
- * hiçbir zaman eşleşmezdi.
+ * ⚠️ **SAATLER TÜRKİYE SAATİNDE** (kullanıcı, 2026-08-04 — ikinci bildirimi).
+ *
+ * Burada bir dönem `timeZone: 'UTC'` ZORLANIYORDU ve gerekçesi şuydu: "oyunun zaman kuralları
+ * UTC'de yaşıyor, yerele çevirirsek dokümandaki saatlerle eşleşmez". Gerekçe kendi içinde
+ * tutarlıydı ama YANLIŞ tarafı seçmişti: kuralları oyuncunun saatine taşımak yerine ekranı
+ * kuralın saatine taşıyordu. Sonuç, oyuncunun 22:51'de tetiklediği sıralamayı ekranda
+ * **19:51** olarak görmesiydi — ve aynı anı yönetim paneli 22:51 gösteriyordu.
+ *
+ * ⭐ Artık kural çıpaları da (sıralama yuvaları, gece penceresi) Türkiye saatinde; ekran ile
+ * kural aynı sayıyı söylüyor ve oyun ile panel birbiriyle çelişmiyor.
  *
  * ⚠️ **Sadeleştirildi** (kullanıcı, 2026-08-03): başlıkta yalnız son güncelleme var, "sıradaki"
  * kaldırıldı; ipucu da tek cümleye indi. Sıradaki anı yazmak, oyuncunun ihtiyacı olmayan bir
  * takvimi ekranın köşesine sıkıştırmaktı — bilmesi gereken tek şey verinin ne kadar taze olduğu.
  */
 function snapshotNote(r: { takenAt: string | null; nextAt: string }): React.ReactElement {
-  const hhmm = (iso: string): string =>
-    new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  const hhmm = formatGameHhmm;
   return (
     <Tooltip placement="left" label="Puan ve sıralama 8 saatte bir güncellenir.">
       <span className="cursor-help">

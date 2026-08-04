@@ -161,21 +161,31 @@ describe('sahip olunanlardan geriye dönük doldurma', () => {
 });
 
 describe('sıralama anlık görüntüsü', () => {
-  it('anlık görüntü saatleri 00:00 · 08:00 · 16:00', () => {
-    const at = new Date('2026-07-28T09:31:00.000Z');
-    expect(nextSnapshotAt(at).toISOString()).toBe('2026-07-28T16:00:00.000Z');
-    expect(previousSnapshotAt(at).toISOString()).toBe('2026-07-28T08:00:00.000Z');
+  /**
+   * ⭐ **YUVALAR UTC'DEN TÜRKİYE SAATİNE TAŞINDI** (kullanıcı, 2026-08-04, ikinci bildirim:
+   * *"oyunda 00:00 yazıyordu, admin panelde 03:00"*).
+   *
+   * ⚠️ Bu testin eski hâli 00/08/16 **UTC** bekliyordu ve geçiyordu — ama o yuvalar Türkiye'de
+   * 03:00 / 11:00 / 19:00 demekti. Ekrandaki "günde üç kez, 00/08/16" vaadi ile oyuncunun
+   * saatinin tutmamasının sebebi buydu. Artık aynı yuvalar TSİ'de, yani UTC'de 21:00 / 05:00 /
+   * 13:00.
+   */
+  it('anlık görüntü saatleri TSİ 00:00 · 08:00 · 16:00', () => {
+    const at = new Date('2026-07-28T09:31:00.000Z');            // TSİ 12:31
+    expect(nextSnapshotAt(at).toISOString()).toBe('2026-07-28T13:00:00.000Z');     // TSİ 16:00
+    expect(previousSnapshotAt(at).toISOString()).toBe('2026-07-28T05:00:00.000Z'); // TSİ 08:00
 
-    // Tam saat üstünde: "sonraki" bir sonraki dilim, "önceki" o anın kendisi.
-    const onTheHour = new Date('2026-07-28T16:00:00.000Z');
-    expect(nextSnapshotAt(onTheHour).toISOString()).toBe('2026-07-29T00:00:00.000Z');
-    expect(previousSnapshotAt(onTheHour).toISOString()).toBe('2026-07-28T16:00:00.000Z');
+    // Tam yuva üstünde: "sonraki" bir sonraki dilim, "önceki" o anın kendisi.
+    const onTheHour = new Date('2026-07-28T13:00:00.000Z');     // TSİ 16:00
+    expect(nextSnapshotAt(onTheHour).toISOString()).toBe('2026-07-28T21:00:00.000Z'); // ertesi TSİ 00:00
+    expect(previousSnapshotAt(onTheHour).toISOString()).toBe('2026-07-28T13:00:00.000Z');
 
-    // Gece yarısından önce: önceki dilim BİR ÖNCEKİ günün 16:00'sı.
-    expect(previousSnapshotAt(new Date('2026-07-28T00:00:00.000Z')).toISOString())
-      .toBe('2026-07-28T00:00:00.000Z');
-    expect(previousSnapshotAt(new Date('2026-07-27T23:59:00.000Z')).toISOString())
-      .toBe('2026-07-27T16:00:00.000Z');
+    // TSİ gece yarısının hemen öncesi: önceki dilim o günün TSİ 16:00'sı.
+    expect(previousSnapshotAt(new Date('2026-07-28T20:59:00.000Z')).toISOString())
+      .toBe('2026-07-28T13:00:00.000Z');
+    // TSİ gece yarısının kendisi: yeni günün ilk yuvası.
+    expect(previousSnapshotAt(new Date('2026-07-28T21:00:00.000Z')).toISOString())
+      .toBe('2026-07-28T21:00:00.000Z');
   });
 
   it('puana göre sıralar ve ÖNCEKİ sırayı saklar (değişim ondan hesaplanır)', async () => {
@@ -291,9 +301,10 @@ describe('sıralama anlık görüntüsü', () => {
   });
 
   it('bir sonraki görevi yazar ve aynı ana İKİNCİ görev yazılamaz', async () => {
-    const gameNow = new Date('2026-07-28T09:00:00.000Z');
+    const gameNow = new Date('2026-07-28T09:00:00.000Z');       // TSİ 12:00
     const at = await scheduleSnapshot(h.db, worldId, gameNow);
-    expect(at.toISOString()).toBe('2026-07-28T16:00:00.000Z');
+    // Yuvalar TSİ'de: sıradaki 16:00 TSİ = 13:00Z (2026-08-04 değişikliği).
+    expect(at.toISOString()).toBe('2026-07-28T13:00:00.000Z');
     await scheduleSnapshot(h.db, worldId, gameNow);   // tekrar — kopya olmamalı
 
     const rows = await h.db.execute<Record<string, unknown>>(sql`

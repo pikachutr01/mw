@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
+import { formatGameTime } from '@mobilwar/contracts';
 import {
   Alert, Badge, Button, Empty, ErrorBox, Info, Input, Loading, Panel,
 } from '../components/ui.tsx';
@@ -60,7 +61,7 @@ const RESOLUTION_TONE: Record<string, 'success' | 'warning' | 'danger' | 'muted'
   innocent: 'success', watch: 'warning', warned: 'warning', banned: 'danger',
 };
 
-const when = (iso: string): string => new Date(iso).toLocaleString('tr-TR');
+const when = (iso: string): string => formatGameTime(iso);
 
 export function AbuseScreen({ worldId, onNeedStepUp }: {
   worldId: number; onNeedStepUp: () => void;

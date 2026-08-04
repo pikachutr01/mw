@@ -14,30 +14,40 @@
  * gerçek saate bağlı bir cron ise bakımda tetiklenip yanlış ana damga atardı.
  */
 import { sql } from 'drizzle-orm';
+import { zonedDayStart } from '@mobilwar/contracts';
 import type { Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
 
 type Runner = Db | Tx;
 
-/** Oyun saatinde anlık görüntü saatleri (UTC). Doküman/ekran: günde 3 kez. */
+/**
+ * Anlık görüntü saatleri — **oyunun saat diliminde** (Türkiye). Doküman/ekran: günde 3 kez.
+ *
+ * ⚠️ **UTC'DEN TSİ'YE TAŞINDI** (kullanıcı, 2026-08-04, ikinci bildirim). Eskiden gün sınırı
+ * `Date.UTC(...)` ile hesaplanıyordu, yani yuvalar 00/08/16 **UTC**'ye oturuyordu ve Türkiye'de
+ * **03:00 / 11:00 / 19:00** anlamına geliyordu. Ekrandaki "günde üç kez, 00/08/16" vaadi ile
+ * oyuncunun saatinin tutmamasının sebebi buydu.
+ */
 export const SNAPSHOT_HOURS = [0, 8, 16] as const;
 
 export type RankingKind = 'player' | 'alliance' | 'hero';
 
 /** `from`'dan SONRAKİ ilk anlık görüntü anı. Tam saat üstünde ise bir sonrakini verir. */
 export function nextSnapshotAt(from: Date): Date {
-  const midnight = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  const midnight = zonedDayStart(from).getTime();
   for (const h of SNAPSHOT_HOURS) {
     const t = midnight + h * 3_600_000;
     if (t > from.getTime()) return new Date(t);
   }
-  return new Date(midnight + 24 * 3_600_000);
+  // Ertesi günün ilk yuvası — gün uzunluğunu 24 saat VARSAYMADAN, gün başlangıcını tekrar sorarak.
+  return zonedDayStart(new Date(midnight + 36 * 3_600_000));
 }
 
 /** `at`'ten önceki (veya tam ona denk gelen) en son anlık görüntü anı. */
 export function previousSnapshotAt(at: Date): Date {
-  const midnight = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
-  let best = midnight - 8 * 3_600_000;       // bir önceki günün 16:00'sı
+  const midnight = zonedDayStart(at).getTime();
+  let best = zonedDayStart(new Date(midnight - 12 * 3_600_000)).getTime()
+    + SNAPSHOT_HOURS[SNAPSHOT_HOURS.length - 1]! * 3_600_000;   // dünün son yuvası
   for (const h of SNAPSHOT_HOURS) {
     const t = midnight + h * 3_600_000;
     if (t <= at.getTime()) best = t;

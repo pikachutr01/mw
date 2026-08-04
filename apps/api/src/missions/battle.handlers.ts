@@ -24,6 +24,7 @@ import {
   calculateLoot, createRng, DEFAULT_COMBAT_CONFIG, DEFAULT_LOOT_CONFIG, simulate,
   type LootResult, type SimulateInput, type SimulateResult,
 } from '@mobilwar/engine';
+import { NIGHT_FROM_HOUR, NIGHT_TO_HOUR, zonedHour } from '@mobilwar/contracts';
 import { reconcileCaveStore, scheduleCaveEscape, type CaveStoreReconcile } from '../cave/cave.handlers.ts';
 import { toDate } from '../db/client.ts';
 import type { CityService } from '../cities/city.service.ts';
@@ -35,11 +36,25 @@ import type { HandlerContext, MissionHandler, Tx } from './handler-registry.ts';
  * Gece savaşı penceresi — oyunun KENDİ dokümanından:
  * *"Saat 00:00'dan sabah 08:00'a kadar olan zaman gece olarak nitelendirilir."*
  * Oyun saatine göre değerlendirilir (bakımda saat donduğu için pencere de kaymaz).
+ *
+ * ⚠️ **SAATLER ARTIK TÜRKİYE SAATİNDE OKUNUYOR** (kullanıcı, 2026-08-04). Eskiden
+ * `getUTCHours()` ile ölçülüyordu, yani pencere Türkiye'de **03:00-11:00**'e denk geliyordu:
+ * oyuncular sabah 10'da "gece" cezası yiyor, gerçek gece yarısında yemiyordu. Dokümandaki
+ * cümle "saat 00:00'dan 08:00'a" diyor ve o cümleyi okuyan Türkiye'deki oyuncu için artık
+ * gerçekten öyle.
+ *
+ * ⚠️ Bu bir DENGE değişikliğidir: aynı sefer, aynı saatte gönderildiğinde artık farklı
+ * sonuçlanabilir. Bilerek yapıldı — kuralın yazdığı saatle oyuncunun saatinin uyuşmaması
+ * dengeden önce bir doğruluk sorunuydu.
  */
-export const NIGHT_WINDOW = { fromHour: 0, toHour: 8 } as const;
+/**
+ * ⚠️ Sabitler `@mobilwar/contracts`ten: üst şeritteki **gece rozeti** de aynı pencereyi
+ * okuyor. İki kopya olsaydı rozet ile kural ayrışabilir ve oyuncuya yanlış söyleyebilirdi.
+ */
+export const NIGHT_WINDOW = { fromHour: NIGHT_FROM_HOUR, toHour: NIGHT_TO_HOUR } as const;
 
 export function isNightBattle(at: Date, window = NIGHT_WINDOW): boolean {
-  const h = at.getUTCHours();
+  const h = zonedHour(at);
   return h >= window.fromHour && h < window.toHour;
 }
 

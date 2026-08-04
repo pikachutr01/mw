@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
 import { Badge, Button, ErrorBox, Panel } from '../components/ui.tsx';
+import { formatGameTime } from '@mobilwar/contracts';
 
 interface Loop {
   kind: string; workerId: string; worldId: number | null; pid: number | null; role: string | null;
@@ -323,7 +324,7 @@ export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
                   </Badge>
                   {j.oldest ? (
                     <span className="text-[11px] text-muted">
-                      en eskisi {new Date(j.oldest).toLocaleDateString('tr-TR')}
+                      en eskisi {formatGameTime(j.oldest, { withSeconds: false })}
                     </span>
                   ) : null}
                   <span className="ml-auto flex gap-2">

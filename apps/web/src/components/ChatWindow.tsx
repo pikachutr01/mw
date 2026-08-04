@@ -24,6 +24,7 @@ import {
 } from '../lib/queries.ts';
 import { Button, ErrorBox, TextArea } from './ui.tsx';
 import { useConfirm } from './Modal.tsx';
+import { formatGameHhmm } from '@mobilwar/contracts';
 
 export interface ChatTarget {
   channelId: number;
@@ -34,7 +35,7 @@ export interface ChatTarget {
 }
 
 const timeOf = (iso: string): string =>
-  new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  formatGameHhmm(iso);
 
 /** Sunucu hata kodu → oyuncuya gösterilecek metin. */
 function messageForError(err: unknown): string {

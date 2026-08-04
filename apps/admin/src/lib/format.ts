@@ -7,6 +7,7 @@
  */
 
 /** Göreli zaman: «3 dk önce». `null` → «—». */
+import { formatGameTime } from '@mobilwar/contracts';
 export function when(v: string | null | undefined): string {
   if (!v) return '—';
   const ms = Date.now() - new Date(v).getTime();
@@ -46,7 +47,7 @@ export function bytes(n: number): string {
 
 /** Mutlak tarih — göreli zamanın `title` niteliğinde tam değeri için. */
 export const stamp = (v: string | null | undefined): string =>
-  (v ? new Date(v).toLocaleString('tr-TR') : '—');
+  (v ? formatGameTime(v) : '—');
 
 /** Tablo hücresi: uzun değeri keser, nesneyi özetler. */
 export function cell(v: unknown): string {

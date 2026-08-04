@@ -23,6 +23,7 @@ import { useOpenChat } from '../lib/chat-context.tsx';
 import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
+import { formatGameTime } from '@mobilwar/contracts';
 
 /**
  * ⭐ RAPOR TÜR KATALOĞU (kullanıcı, 2026-07-30): her rapor türünün kendi ikonu ve satır
@@ -314,7 +315,7 @@ export function Messages() {
                               row.unread ? 'font-semibold text-ink' : 'text-ink/80'
                             }`}>{c.username}</span>
                             <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
-                              {c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleString('tr-TR') : ''}
+                              {c.lastMessageAt ? formatGameTime(c.lastMessageAt) : ''}
                               {c.unreadCount > 0 ? (
                                 <span className="rounded-full bg-danger px-1.5 text-[10px] leading-4 text-on-accent">
                                   {c.unreadCount}
@@ -352,7 +353,7 @@ export function Messages() {
                             {t.title}
                           </span>
                           <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
-                            {new Date(m.at).toLocaleString('tr-TR')}
+                            {formatGameTime(m.at)}
                             {row.unread ? (
                               <span aria-label="okunmadı"
                                 className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
@@ -429,7 +430,7 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
       footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}>
       <div className="px-3 py-3">
         <div className="mb-2 text-[11px] text-muted">
-          {new Date(m.at).toLocaleString('tr-TR')}
+          {formatGameTime(m.at)}
         </div>
         {/*
           Güzergâh TÜM raporlarda ve tek yerde — gövde tipine göre tekrarlanmıyor.

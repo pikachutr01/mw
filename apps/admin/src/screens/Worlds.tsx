@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from '../components/ui.tsx';
+import { formatGameTime } from '@mobilwar/contracts';
 
 interface World {
   id: number;
@@ -96,7 +97,7 @@ function WorldCard({ world, onChanged, onNeedStepUp }: {
   };
 
   const time = (iso: string | null): string =>
-    (iso ? new Date(iso).toLocaleString('tr-TR') : '—');
+    (iso ? formatGameTime(iso) : '—');
 
   return (
     <Panel
@@ -247,7 +248,7 @@ function MaintenancePanel({ world, onChanged, onNeedStepUp }: {
         )}
         {world.eta ? (
           <span className="self-center text-[11px] text-muted">
-            Tahmini bitiş: {new Date(world.eta).toLocaleString('tr-TR')}
+            Tahmini bitiş: {formatGameTime(world.eta)}
           </span>
         ) : null}
       </div>

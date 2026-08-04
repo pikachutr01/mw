@@ -31,6 +31,19 @@ interface Box {
 const GAP = 8;
 const EDGE = 6;
 
+/**
+ * Cihazın gerçek bir imleci var mı? Dokunmatikte taklit edilen fare olaylarını elemek için.
+ *
+ * ⚠️ Her çağrıda yeniden soruluyor, modül yüklenirken bir kez değil: hem masaüstünde fare
+ * takılıp çıkarılabiliyor hem de bazı tarayıcılar ilk karede `hover: none` bildirip sonra
+ * düzeltiyor. Sorgu ucuz ve sonucu önbelleklemenin kazancı ölçülebilir değil.
+ */
+function canHover(): boolean {
+  return typeof window === 'undefined'
+    || typeof window.matchMedia !== 'function'
+    || window.matchMedia('(hover: hover)').matches;
+}
+
 export function Tooltip({
   label, children, placement = 'bottom', className = '',
 }: {
@@ -91,10 +104,30 @@ export function Tooltip({
       <span
         ref={anchorRef}
         aria-describedby={open ? id : undefined}
-        onMouseEnter={() => setOpen(true)}
+        /**
+         * ⚠️ **DOKUNMATİKTE AÇMA** (kullanıcı, 2026-08-04: *"sohbet penceresi açılıyor ama
+         * «xxx oyuncusuna mesaj gönder» tooltip'i pencerenin üzerinde görünmeye devam
+         * ediyor"*).
+         *
+         * Sebep: tarayıcı, parmakla dokunulduğunda fare olaylarını **taklit ediyor** —
+         * `mouseenter` geliyor ve ipucu açılıyor, ama parmak ekrandan kalktığı için
+         * `mouseleave` HİÇ GELMİYOR. İpucu, üstüne açılan sohbet penceresinin önünde asılı
+         * kalıyordu.
+         *
+         * `hover: hover` sorgusu "gerçek bir imleci olan cihaz" demek. Dokunmatikte ipucu
+         * artık fareyle açılmıyor; klavye (`focus`) yolu duruyor, çünkü asıl erişilebilirlik
+         * ihtiyacı orada. Metin zaten `aria-label`da da var, yani ekran okuyucu kaybetmiyor.
+         */
+        onMouseEnter={() => { if (canHover()) setOpen(true); }}
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
+        /**
+         * ⭐ Tıklamak ipucunu KAPATIR. Kullanıcı zaten eyleme geçti — ipucunun işi bitti.
+         * ⚠️ `pointerdown` DEĞİL `click`: sıra `pointerdown → focus → click` ve `focus`
+         * ipucunu yeniden açıyor. Kapatmayı zincirin sonuna koymak şart.
+         */
+        onClick={() => setOpen(false)}
         className={`inline-flex ${className}`}
       >
         {children}

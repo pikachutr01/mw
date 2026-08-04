@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
 import { Alert, Badge, Button, ErrorBox, Field, Input, Panel } from '../components/ui.tsx';
+import { formatGameTime } from '@mobilwar/contracts';
 
 interface Report {
   id: number;
@@ -49,7 +50,7 @@ const REASON_LABEL: Record<string, string> = {
   spam: 'Spam', abuse: 'Hakaret', scam: 'Dolandırıcılık', cheating: 'Hile', other: 'Diğer',
 };
 
-const when = (iso: string | null): string => (iso ? new Date(iso).toLocaleString('tr-TR') : '—');
+const when = (iso: string | null): string => (iso ? formatGameTime(iso) : '—');
 
 export function ModerationScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
   const [reports, setReports] = useState<Report[] | null>(null);

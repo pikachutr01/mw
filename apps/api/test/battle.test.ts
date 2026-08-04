@@ -948,13 +948,34 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
   });
 });
 
-describe('gece savaşı penceresi (dokümandan: 00:00–08:00)', () => {
-  it('00:00–08:00 arası gece, dışı gündüz', () => {
-    expect(isNightBattle(new Date('2026-07-26T00:00:00Z'))).toBe(true);
-    expect(isNightBattle(new Date('2026-07-26T03:30:00Z'))).toBe(true);
-    expect(isNightBattle(new Date('2026-07-26T07:59:59Z'))).toBe(true);
-    expect(isNightBattle(new Date('2026-07-26T08:00:00Z'))).toBe(false);
-    expect(isNightBattle(new Date('2026-07-26T20:00:00Z'))).toBe(false);
+/**
+ * ⭐ **PENCERE UTC'DEN TÜRKİYE SAATİNE TAŞINDI** (kullanıcı, 2026-08-04).
+ *
+ * ⚠️ Bu testin eski hâli `00:00Z–08:00Z` bekliyordu ve GEÇİYORDU — ama ölçtüğü şey yanlıştı:
+ * o pencere Türkiye'de **03:00–11:00**'e denk geliyordu, yani oyuncular sabah 10'da "gece"
+ * cezası yiyor, gerçek gece yarısında yemiyordu. Dokümanın cümlesi ("saat 00:00'dan 08:00'a")
+ * hedef kitlenin saatiyle okunmalı.
+ *
+ * ⚠️ Bu bir DENGE değişikliğidir ve bilerek yapıldı: aynı sefer aynı saatte gönderildiğinde
+ * artık farklı sonuçlanabilir.
+ */
+describe('gece savaşı penceresi (dokümandan: 00:00–08:00, TÜRKİYE saati)', () => {
+  it('Türkiye saatiyle 00:00–08:00 arası gece', () => {
+    expect(isNightBattle(new Date('2026-07-25T21:00:00Z'))).toBe(true);   // TSİ 00:00
+    expect(isNightBattle(new Date('2026-07-26T00:30:00Z'))).toBe(true);   // TSİ 03:30
+    expect(isNightBattle(new Date('2026-07-26T04:59:59Z'))).toBe(true);   // TSİ 07:59
+    expect(isNightBattle(new Date('2026-07-26T05:00:00Z'))).toBe(false);  // TSİ 08:00
+    expect(isNightBattle(new Date('2026-07-26T17:00:00Z'))).toBe(false);  // TSİ 20:00
+  });
+
+  /** ⚠️ Değişimin somut yüzü: eskiden gece sayılan iki an artık gündüz ve tersi. */
+  it('eski UTC penceresinin kaydırdığı anlar düzeldi', () => {
+    // TSİ 10:59 — eskiden "gece"ydi (07:59Z, UTC penceresinin içinde), artık gündüz.
+    expect(isNightBattle(new Date('2026-07-26T07:59:00Z'))).toBe(false);
+    // TSİ 00:30 — eskiden gündüzdü (21:30Z, UTC penceresinin dışında), artık gece.
+    expect(isNightBattle(new Date('2026-07-25T21:30:00Z'))).toBe(true);
+    // ⚠️ TSİ 23:30 pencerenin DIŞINDA: gece penceresi 00:00'da başlıyor, akşam değil.
+    expect(isNightBattle(new Date('2026-07-26T20:30:00Z'))).toBe(false);
   });
 });
 

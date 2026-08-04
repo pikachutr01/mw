@@ -17,8 +17,9 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
+import { NIGHT_FROM_HOUR, NIGHT_TO_HOUR, zonedHour } from '@mobilwar/contracts';
 import { coords } from '../lib/format.ts';
-import { fmt, useMediaQuery, useTick } from '../lib/hooks.ts';
+import { fmt, gameNow, useMediaQuery, useTick } from '../lib/hooks.ts';
 import { VerifyBanner } from './VerifyBanner.tsx';
 import { NotifyBanner } from './NotifyBanner.tsx';
 import {
@@ -297,10 +298,46 @@ function InfoBar() {
             Tatilde
           </NavLink>
         ) : null}
+        <NightBadge />
         <ConnectionDot />
         <SpeedBadge speed={d?.speed} />
       </div>
     </div>
+  );
+}
+
+/**
+ * ⭐ GECE ROZETİ (kullanıcı, 2026-08-04: *"arayüzde gece olduğuna dair bir görsel düzenleme şık
+ * durabilir … tıklayınca tooltip de gece saatleri içinde olduğunu söyler"*).
+ *
+ * ⚠️ Gece penceresi aynı gün UTC'den **Türkiye saatine** taşındı (§13.22). Bu rozet o
+ * değişikliğin görünür yüzü: eskiden "gece" sabah 10'da bitiyordu ve oyuncunun bunu anlamasının
+ * hiçbir yolu yoktu.
+ *
+ * ⚠️ Pencere `isNightBattle` ile AYNI kaynaktan (`zonedHour`) okunuyor — rozet ile kuralın
+ * ayrışması, oyuncuya yanlış söyleyen bir gösterge demekti.
+ * ⚠️ Ölçüt **oyun saati** (`gameNow`), tarayıcının saati değil: bakımda oyun saati donuyor ve
+ * gece penceresi de onunla birlikte donmalı.
+ */
+function NightBadge() {
+  // Dakikada bir yeter; rozet saniye göstermiyor ve saniyelik tik boşuna render demek.
+  useTick(true);
+  const hour = zonedHour(new Date(gameNow()));
+  if (hour < NIGHT_FROM_HOUR || hour >= NIGHT_TO_HOUR) return null;
+  return (
+    <Tooltip
+      label={`Gece saatleri (${String(NIGHT_FROM_HOUR).padStart(2, '0')}:00–`
+        + `${String(NIGHT_TO_HOUR).padStart(2, '0')}:00). Gece görüşü olmayan ordular `
+        + 'daha zayıf savaşır.'}
+    >
+      <span
+        aria-label="Şu an gece saatleri"
+        className="shrink-0 cursor-help rounded-full border border-info/70 bg-info/10 px-2
+          py-0.5 text-[10px] font-semibold text-info"
+      >
+        🌙 Gece
+      </span>
+    </Tooltip>
   );
 }
 

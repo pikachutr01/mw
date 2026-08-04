@@ -3150,7 +3150,8 @@ harcanmıştı ama artık yok). Yalnız **tek seferlik bakım** aracıdır
 
 ### 13.17.2 Sıra CANLI DEĞİL — günde 3 kez donar
 
-Anlık görüntü saatleri **00:00 · 08:00 · 16:00** (oyun saati, gece savaşı penceresiyle aynı eksen).
+Anlık görüntü saatleri **00:00 · 08:00 · 16:00** — **Türkiye saatiyle** (gece savaşı penceresiyle
+aynı eksen). ⭐ 2026-08-04'te UTC'den TSİ'ye taşındı, gerekçe §13.22.
 
 - `rankings(world_id, kind, subject_id, rank, prev_rank, score, taken_at)` — `kind`: `player` ·
   `alliance` · `hero`. `subject_id` FK **değildir**: işaret ettiği tablo `kind`'a göre değişir.
@@ -3280,6 +3281,59 @@ Panel: `combat.trapPressureScale` (eski `combat.trapPerGroundUnit`), `combat.tra
 `combat.trapGnomeDisarm`, `combat.trapPower`.
 
 ---
+
+## 13.22 ⭐ SAAT DİLİMİ: DEPOLAMA UTC, KURAL ve GÖSTERİM TÜRKİYE SAATİ (2026-08-04)
+
+Kullanıcı aynı sorunu **iki kez** bildirdi. İkinci bildirim kesin: *"Oyunda sıralama sayfasında
+00:00 yazıyordu, admin panelden baktığımda 03:00 gösteriyor. … db saati, oyun saati her şey
+Türkiye saatine göre olmalı."*
+
+### 13.22.1 Teşhis — veritabanı suçsuzdu
+
+`ranking_runs.taken_at` ölçüldü: tam olarak **00:00 / 08:00 / 16:00 UTC**. Depolama doğruydu.
+Çelişki **iki ekranın iki farklı sözleşme kullanmasıydı**:
+
+| Ekran | Ne yapıyordu | Ne gösteriyordu |
+| :-- | :-- | :-- |
+| Oyun (Komuta Merkezi) | `timeZone: 'UTC'` **zorluyordu** | 00:00 |
+| Yönetim paneli | tarayıcının yerel saati | 03:00 |
+
+İkisi de kendi içinde tutarlıydı; ikisi birden aynı anda doğru olamazdı. Kullanıcının ilk
+bildirimindeki *"22:51'de tetikledim, oyunda 19:51 yazıyor"* gözlemi de birebir bu mekanizma.
+
+### 13.22.2 Karar
+
+**Depolama UTC kalır; KURAL ÇIPALARI ve GÖSTERİM oyunun saat dilimine (`Europe/Istanbul`) taşınır.**
+
+⚠️ **Depolamayı yerele çevirmek reddedildi.** Yerel saat saklamak, saat kayması olan bir bölge
+eklendiği gün geri dönüşü olmayan veri bozulmasıdır. `timestamptz` mutlak anı taşır; "hangi
+dilimde gösterilir" bir **sunum** kararıdır ve sunumda çözülür.
+
+⚠️ **Sabit `+3` yerine IANA bölge adı.** Türkiye 2016'dan beri kalıcı UTC+3 ve yaz saati
+uygulamıyor — sabit sayı bugün doğru sonucu verirdi. Bölge adı yine de tercih edildi çünkü tek
+satırlık maliyeti var ve niyeti belgeliyor: yazan şey "3 saat ekle" değil, "oyun Türkiye'de
+geçiyor".
+
+Tek kaynak: `packages/contracts/src/time.ts` — sunucu, oyun istemcisi ve yönetim paneli aynı
+modülden besleniyor. İki kopya, bir gün birinin güncellenip diğerinin unutulması demekti.
+
+### 13.22.3 ⚠️ Bu bir DENGE değişikliğidir
+
+**Gece savaşı penceresi** (00:00–08:00) eskiden UTC saatiyle ölçülüyordu, yani Türkiye'de
+**03:00–11:00**'e denk geliyordu: oyuncular **sabah 10'da gece cezası** yiyor, gerçek gece
+yarısında yemiyordu. Artık gerçekten gece.
+
+Aynı sefer, aynı saatte gönderildiğinde artık farklı sonuçlanabilir. Bilerek yapıldı: kuralın
+yazdığı saatle oyuncunun saatinin uyuşmaması dengeden önce bir **doğruluk** sorunuydu.
+
+**Sıralama yuvaları** da TSİ'ye taşındı: 00/08/16 TSİ = 21:00 / 05:00 / 13:00 UTC.
+
+### 13.22.4 Gösterim tek elden
+
+`formatGameTime` / `formatGameHhmm` her iki uygulamada da tüm tarih alanlarını basıyor.
+⚠️ Tarayıcının yerel saati **bilerek** kullanılmıyor: yurt dışındaki bir oyuncu ya da yönetici
+kuralların yazdığı saatlerden farklı sayılar görseydi destek konuşmaları anlamsızlaşırdı —
+"saldırı 03:00'te iniyor" diyen iki kişinin farklı anları kastetmesi.
 
 ## 13.21 ⭐ SUR ve BÜYÜ KALKANI (2026-07-29 binary analizi)
 

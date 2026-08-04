@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Modal, useConfirm } from './Modal.tsx';
 import { Badge, Button, Panel } from './ui.tsx';
 import { useDevices, useRevokeDevice, useRevokeOtherDevices, type DeviceRow } from '../lib/queries.ts';
+import { formatGameTime } from '@mobilwar/contracts';
 
 const PLATFORM_LABEL: Record<string, string> = {
   web: 'Tarayıcı', android: 'Android', ios: 'iPhone / iPad',
@@ -39,7 +40,7 @@ function describe(d: DeviceRow): string {
   return detail ? `${platform} · ${detail}` : platform;
 }
 
-const when = (iso: string): string => new Date(iso).toLocaleString('tr-TR');
+const when = (iso: string): string => formatGameTime(iso);
 
 /** Tek cihaz satırı — kartta (yalnız bu cihaz) ve modalda (diğerleri) aynı düzen. */
 function DeviceLine({ d, onRevoke, busy }: {
