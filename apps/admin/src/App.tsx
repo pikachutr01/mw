@@ -19,6 +19,7 @@ import { Badge, Button, Countdown, ErrorBox, Field, Input, Panel } from './compo
 import { AbuseScreen } from './screens/Abuse.tsx';
 import { SignupsScreen } from './screens/Signups.tsx';
 import { AnnounceScreen } from './screens/Announce.tsx';
+import { MissionsScreen } from './screens/Missions.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
 import { BulkScreen } from './screens/Bulk.tsx';
@@ -38,6 +39,8 @@ import { WorldsScreen } from './screens/Worlds.tsx';
 const NAV: [string, string][] = [
   ['/oyuncular', 'Oyuncular'],
   ['/dunya', 'Dünya'],
+  // ⭐ «Görevler» Dünya'dan ayrı: orası dünyanın AYARLARI, bu ise o an akan trafik.
+  ['/gorevler', 'Görevler'],
   ['/ayarlar', 'Ayarlar'],
   ['/toplu', 'Toplu işlem'],
   ['/moderasyon', 'Moderasyon'],
@@ -114,6 +117,7 @@ export function App() {
               <Route path="/oyuncular/:playerId" element={<PlayersScreen onNeedStepUp={openStepUp} />} />
               <Route path="/oyuncular/:playerId/:tab" element={<PlayersScreen onNeedStepUp={openStepUp} />} />
               <Route path="/dunya" element={<WorldsScreen onNeedStepUp={openStepUp} />} />
+              <Route path="/gorevler" element={<MissionsScreen worldId={session.worldId} />} />
               <Route
                 path="/ayarlar"
                 element={<SettingsScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
@@ -143,13 +147,19 @@ export function App() {
   );
 }
 
+/**
+ * ⚠️ `flex-wrap` + `basis` — sekme sayısı 11'e çıkınca (2026-08-05: Duyuru ve Görevler)
+ * tek satır dar pencerede TAŞIYOR ve **sayfanın gövdesi yatay kayıyordu**; son sekme
+ * ekran dışında kalıyordu. `flex-1` tek başına yetmiyor çünkü etiketler kelime kelime
+ * sarılıp satır yüksekliğini büyütmekten başka bir şey yapamıyor.
+ */
 function Tabs() {
   return (
-    <div className="flex gap-1">
+    <div className="flex flex-wrap gap-1">
       {NAV.map(([to, label]) => (
         <NavLink
           key={to} to={to}
-          className={({ isActive }) => `flex-1 rounded-[var(--radius-sm)] border px-2 py-1.5
+          className={({ isActive }) => `flex-1 basis-[7.5rem] rounded-[var(--radius-sm)] border px-2 py-1.5
             text-center text-xs ${
     isActive
       ? 'border-strong bg-accent text-on-accent'

@@ -17,6 +17,7 @@ import { sql } from 'drizzle-orm';
 import { SETTINGS, SETTING_GROUPS, applySettings, validatePatch } from '@mobilwar/settings';
 import { simulate } from '@mobilwar/engine';
 import {
+  UNITS_BY_ID,
   buildingCost, buildingTimeSeconds, mergeCatalogConfig, techCost, techTimeSeconds,
 } from '@mobilwar/catalog';
 import { simulateRequest } from '@mobilwar/contracts';
@@ -629,6 +630,152 @@ export class AdminWorldController {
         actor: r['actor'] == null ? null : String(r['actor']),
         createdAt: toDate(r['created_at']).toISOString(),
       })),
+    };
+  }
+
+  /* ── Görevler ─────────────────────────────────────────────────────────────── */
+
+  /**
+   * ⭐ SUNUCUDAKİ TÜM AÇIK GÖREVLER, tek tabloda (kullanıcı, `ek_bilgiler`):
+   * *"Şu anda bir kullanıcının ayrıntılarına girince onun hareketlerini görüyoruz. Tüm
+   * görevleri sunucu taraflı bir pagination tabloda bir arada görmek istiyorum: hangi
+   * şehirden hangi şehre gidiyor, bu şehirler kime ait, kalan süresi vs."*
+   *
+   * ⚠️ **Oyuncu künyesindeki listeden farkı yalnız kapsam değil.** Orada merkez bir oyuncu
+   * var ve satırlar "giden/gelen" diye ona göre bölünüyor; burada merkez YOK, bu yüzden her
+   * satır kendi bağlamını taşımak zorunda — kaynak ve hedef şehrin **sahibi** de yazılıyor.
+   * Sahipsiz bir satırda "kim kime saldırıyor" sorusu cevapsız kalırdı.
+   *
+   * ⚠️ **Sayfalama gerçekten sunucuda**: `LIMIT/OFFSET` + ayrı `COUNT`. İstemciye yüz satır
+   * verip orada dilimlemek "sayfalama" değil görsel bir yanılsama olurdu — posta kutusunda
+   * tam bu hata yaşandı (2026-08-01) ve sunucuya taşınarak düzeltildi.
+   *
+   * ⚠️ Birim/kahraman dökümü **yalnız o sayfanın satırları** için çekiliyor; tüm açık
+   * görevlerinki çekilseydi sayfalamanın çözdüğü sorun geri gelirdi.
+   */
+  @Get('missions')
+  async missions(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const q = (req as unknown as { query?: Record<string, unknown> }).query ?? {};
+    const worldId = Number(q['worldId']);
+    if (!Number.isInteger(worldId) || worldId <= 0) {
+      throw new BadRequestException('worldId gerekli.');
+    }
+    const page = Math.max(0, Number(q['page']) || 0);
+    const pageSize = Math.min(100, Math.max(5, Number(q['pageSize']) || 25));
+    const type = String(q['type'] ?? '').trim();
+    const search = String(q['q'] ?? '').trim().slice(0, 60);
+
+    const typeFilter = type === '' ? sql`` : sql`AND m.type = ${type}`;
+    /**
+     * ⚠️ Arama ÜÇ tarafa birden bakıyor (görev sahibi · kaynak şehir · hedef şehir), çünkü
+     * "bu oyuncuyla ilgili ne oluyor" sorusunun cevabı üçünde de olabilir: saldırıyı o
+     * göndermiş olabilir, hedef onun şehri olabilir, ya da şehri kaynak olarak kullanılıyordur.
+     */
+    const like = `%${search}%`;
+    const searchFilter = search.length < 2 ? sql`` : sql`AND (
+      op.username ILIKE ${like} OR ocp.username ILIKE ${like} OR tcp.username ILIKE ${like}
+      OR oc.name ILIKE ${like} OR tc.name ILIKE ${like})`;
+
+    const from = sql`
+      FROM missions m
+      LEFT JOIN cities oc ON oc.id = m.origin_city_id
+      LEFT JOIN cities tc ON tc.id = m.target_city_id
+      LEFT JOIN players op ON op.id = m.owner_player_id
+      LEFT JOIN players ocp ON ocp.id = oc.player_id
+      LEFT JOIN players tcp ON tcp.id = tc.player_id
+     WHERE m.world_id = ${worldId} AND m.status IN ('scheduled', 'running')
+       ${typeFilter} ${searchFilter}`;
+
+    const [counted, rows, clockRows] = await Promise.all([
+      this.db.execute<Record<string, unknown>>(sql`SELECT COUNT(*)::int AS n ${from}`),
+      this.db.execute<Record<string, unknown>>(sql`
+        SELECT m.id, m.type, m.status, m.execute_at, m.created_at, m.payload,
+               m.target_k, m.target_d, m.target_s,
+               m.owner_player_id, op.username AS owner_name,
+               oc.name AS origin_name, oc.k AS ok, oc.d AS od, oc.s AS os,
+               ocp.username AS origin_owner,
+               tc.name AS target_name, tc.k AS tk, tc.d AS td, tc.s AS ts,
+               tcp.username AS target_owner
+        ${from}
+         ORDER BY m.execute_at, m.id
+         LIMIT ${pageSize} OFFSET ${page * pageSize}
+      `),
+      /**
+       * ⭐ Kalan süre için **oyun saati** dönüyor. İstemci tarayıcı saatiyle hesaplasaydı
+       * duraklatılmış bir dünyada geri sayım yine akar ve tablo yalan söylerdi; dünya saati
+       * ayrıca `clock_offset_ms` kadar kaymış olabilir.
+       */
+      this.db.execute<Record<string, unknown>>(sql`
+        SELECT COALESCE(paused_at, now()) - (clock_offset_ms * interval '1 millisecond') AS game_now
+          FROM worlds WHERE id = ${worldId}
+      `),
+    ]);
+
+    const ids = rows.map((r) => Number(r['id'])).filter((n) => Number.isInteger(n));
+    const unitsBy = new Map<number, string[]>();
+    const heroesBy = new Map<number, string[]>();
+    if (ids.length > 0) {
+      const idArray = sql.raw(`ARRAY[${ids.join(',')}]::bigint[]`);
+      const [mu, mh] = await Promise.all([
+        this.db.execute<Record<string, unknown>>(sql`
+          SELECT mission_id, unit_type, count FROM mission_units WHERE mission_id = ANY(${idArray})
+        `),
+        this.db.execute<Record<string, unknown>>(sql`
+          SELECT mh.mission_id, h.name, h.level FROM mission_heroes mh
+            JOIN heroes h ON h.id = mh.hero_id
+           WHERE mh.mission_id = ANY(${idArray}) ORDER BY h.level DESC, h.name
+        `),
+      ]);
+      for (const r of mu) {
+        const key = Number(r['mission_id']);
+        const name = UNITS_BY_ID[String(r['unit_type'])]?.name.tr ?? String(r['unit_type']);
+        unitsBy.set(key, [...(unitsBy.get(key) ?? []), `${name} ${Number(r['count'])}`]);
+      }
+      for (const r of mh) {
+        const key = Number(r['mission_id']);
+        heroesBy.set(key, [...(heroesBy.get(key) ?? []),
+          `${String(r['name'])} (sv ${Number(r['level'] ?? 0)})`]);
+      }
+    }
+
+    const coord = (k: unknown, d: unknown, s: unknown): string | null =>
+      k == null ? null : `${Number(k)}:${Number(d)}:${Number(s)}`;
+
+    return {
+      total: Number(counted[0]?.['n'] ?? 0),
+      page,
+      pageSize,
+      gameNow: toDate(clockRows[0]!['game_now']).toISOString(),
+      items: rows.map((r) => {
+        const payload = (r['payload'] ?? {}) as Record<string, unknown>;
+        const cargo = (payload['cargo'] ?? payload['loot'] ?? null) as
+          { gold?: number; food?: number } | null;
+        return {
+          id: Number(r['id']),
+          type: String(r['type']),
+          status: String(r['status']),
+          executeAt: toDate(r['execute_at']).toISOString(),
+          createdAt: toDate(r['created_at']).toISOString(),
+          owner: r['owner_name'] == null ? null : String(r['owner_name']),
+          ownerPlayerId: r['owner_player_id'] == null ? null : Number(r['owner_player_id']),
+          origin: r['origin_name'] == null ? null : String(r['origin_name']),
+          originCoord: coord(r['ok'], r['od'], r['os']),
+          originOwner: r['origin_owner'] == null ? null : String(r['origin_owner']),
+          /**
+           * ⚠️ Hedefi ŞEHİR OLMAYAN görevler var (boş koordinata şehir kurma): orada ad ve
+           * sahip yok, koordinat `missions.target_*` kolonlarından geliyor. Yalnız `cities`
+           * JOIN'ine güvenseydik o satırlar hedefsiz görünürdü.
+           */
+          target: r['target_name'] == null ? null : String(r['target_name']),
+          targetCoord: coord(r['tk'], r['td'], r['ts'])
+            ?? coord(r['target_k'], r['target_d'], r['target_s']),
+          targetOwner: r['target_owner'] == null ? null : String(r['target_owner']),
+          units: unitsBy.get(Number(r['id'])) ?? [],
+          heroes: heroesBy.get(Number(r['id'])) ?? [],
+          cargo: cargo && ((cargo.gold ?? 0) > 0 || (cargo.food ?? 0) > 0)
+            ? { gold: cargo.gold ?? 0, food: cargo.food ?? 0 } : null,
+        };
+      }),
     };
   }
 }
