@@ -78,10 +78,35 @@ const revokeAll = async (id: number): Promise<string[]> => {
 const run = (): Promise<{ username: string; razed: number }> =>
   deletes.execute({ accountId, playerId, worldId, revokeAll });
 
+/**
+ * Başkent dışı bir koloni ekler.
+ *
+ * ⚠️ **İstenen yuva DOLUYSA bir sonraki boş yuvaya kayar.** Başkenti `auth.register()`
+ * yerleştiriyor ve yerleşim algoritması TOHUMLU (`hash(world_seed, player_id)`, §13.6.3) —
+ * yani başkent `1:1:3` gibi bir yuvaya pekâlâ düşebilir. Sabit `s` ile kurulduğunda test,
+ * başkentin nereye düştüğüne bağlı olarak `cities_world_coords` ihlaliyle ÇÖKÜYORDU: dünya
+ * kimliği değişince tohum da değişiyor, yani hata dosya sırası her değiştiğinde başka bir
+ * teste sıçrıyor (2026-08-05'te yeni bir test dosyası eklenince tam böyle görüldü).
+ *
+ * ⚠️ Hangi `s` olduğu testlerin hiçbiri için anlamlı değil — istenen tek şey "başkent
+ * OLMAYAN ikinci bir şehir".
+ */
 async function addColony(s: number): Promise<number> {
   const at = await clock.gameNow(worldId);
+  /* ⚠️ Açık `::int` şart: bağlı parametreler tipsiz gelir ve `generate_series` aşırı
+   * yüklemeleri arasında seçim yapılamaz ("function generate_series(unknown, unknown) is not
+   * unique"). ⚠️ Bu not SQL'in İÇİNDE değil — orada ters tırnak şablon dizesini kapatıyor
+   * ve dosya derlenmiyor (`createWorld` aynı uyarıyı taşıyor; yine de aynı tuzağa düşüldü). */
+  const [free] = await h.db.execute<Record<string, unknown>>(sql`
+    SELECT g.s FROM generate_series(${s}::int, ${s + 50}::int) AS g(s)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM cities c
+        WHERE c.world_id = ${worldId} AND c.k = 1 AND c.d = 1 AND c.s = g.s)
+     ORDER BY g.s LIMIT 1
+  `);
+  const slot = Number(free!['s']);
   return cities.create({
-    worldId, playerId, name: `koloni${s}`, k: 1, d: 1, s, isCapital: false, at,
+    worldId, playerId, name: `koloni${slot}`, k: 1, d: 1, s: slot, isCapital: false, at,
   });
 }
 async function addMission(o: {

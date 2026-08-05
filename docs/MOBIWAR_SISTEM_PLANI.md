@@ -2070,6 +2070,39 @@ konmuyor** — JOIN'in verdiği ad *bugünkü* addır ve donmuş addan ayırt ed
 rapor hiç taşımadığı bir bilgiyi taşıyormuş gibi görünürdü. Bu alandan eski raporlar yalnız
 koordinat gösterir.
 
+### 13.10.6 ⭐ SİSTEM MESAJI — yöneticiden oyunculara (kullanıcı, 2026-08-05)
+
+*"Admin panelinden oyunculara sistem mesajı göndermek, özel veya herkese bildirim mesajı
+iletmek… Tıpkı raporlar gibi modal üzerinde açılırlar, sistem tarafından gönderilmiş
+gözükürler. Açılınca okunmuş sayılırlar."*
+
+⚠️ **Yeni tablo yok, yeni ekran yok.** Mesaj mevcut posta kutusuna `kind = 'system'` ile
+düşüyor ve kullanıcının dört şartının üçü bundan **kendiliğinden** karşılanıyor:
+- *Mesajlar sekmesine düşsün* → sekme ayrımı `kind LIKE '%_report'`; `system` rapor değil.
+- *Rapor gibi modalda açılsın* → posta kutusunun modalı zaten o.
+- *Açılınca okunmuş sayılsın* → `read_at` satır başına; mevcut `messages/:id/read` yeter.
+
+⚠️ **Duyuru = oyuncu başına BİR SATIR.** Paylaşılan tek satır + ayrı "kim okudu" tablosu daha
+tutumlu görünür ama okunmuşluk, silme ve sayaçların hepsi satır bazlı çalışıyor; paylaşılan
+satır üçünü de yeniden yazmayı gerektirirdi. Yazım tek `INSERT … SELECT`, yani maliyet oyuncu
+sayısıyla değil tek sorguyla ölçülüyor.
+
+⚠️ **Bildirim için tek outbox satırı yetiyor**: dağıtıcı `playerIds` boş gelince olayı dünya
+odasına yayıyor (`realtime.gateway.dispatch`). Oyuncu başına yazsaydık 10.000 kişilik bir
+dünyada tek duyuru 10.000 outbox satırı üretirdi.
+
+⚠️ **Gönderen adı oyuncuya GÖSTERİLMİYOR** (kullanıcı şartı: "sistem tarafından gönderilmiş
+gözükürler"). Kimin gönderdiği `audit_log`'ta duruyor. Metin ham yazılıyor — Markdown/HTML
+yorumlamak, panelden oyuncu ekranına biçimlendirme enjekte edilebilen bir kanal açardı.
+
+⚠️ **Adım yükseltme zorunlu ve silme ucu YOK**: gönderilen duyuru binlerce posta kutusuna
+düşer, toplanamaz. Panel bunun karşılığında **gönderilenler + okunma sayacı** gösteriyor —
+duyuru yöneticinin kendi kutusuna düşmediği için gönderimin başka geri bildirimi yok.
+
+⚠️ Tatildeki ve korumadaki oyuncular da alır; süzgeç bilerek yok. Duyurunun konusu oyunun
+kendisi (bakım, kural değişikliği) ve tatilden dönenin onu kaçırması, duyuruyu hiç
+göndermemekle aynı sonucu verirdi.
+
 ---
 
 ## 13.11 ⭐ ŞEHİR, YAPI VE ÜRETİM KURALLARI (kullanıcı düzeltmeleri, 2026-07-26)

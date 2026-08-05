@@ -1,5 +1,3 @@
-Admin panelinden oyunculara sistem mesajı göndermek, özel veya herkese bildirim mesajı iletmek. Bu mesaj Mesajlarda Mesajlar sekmesine düşebilir. Önemli bir bilgi veya güncelleme olursa oyuncuları hızlıca bilgilendirmek amaçlı. Tıpkı raporlar gibi modal üzerinde açılırlar, sistem tarafından gönderilmiş gözükürler. Açılınca okunmuş sayılırlar.
-
 Admin panele o anda sunucuda devam eden görevleri listeleyecek bir tablo ekleyelim. Hangi görevin kime ait olduğunu göstersin. Sanırım şu anda bir kullanıcının ayrıntılarına girince onu hareketlerini görüyoruz. Tüm görevleri sunucu taraflı bir pagination tabloda bir arada görmek istiyorum.hangi şehirden hangi şehre gidiyor, bu şehirler kime ait, kalan süresi vs tüm ayrıntıları
 
 Savaş raporunda açık açık Gece savaşı bilgileri yazmasın.  Savaş GECE gerçekleşti — vuruş gücü düştü (Gece Görüşü etkili). gibi bir not da yazmasın. Sadece kazanan veya kaybedeb yazısının yanında ay simgesi olması yeterli, tooltip çıkmasına da gerek yok. Bu mesajı görünce hemen uygulama, ben sana söyleyeceğim.

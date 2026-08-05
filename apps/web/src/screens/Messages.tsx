@@ -528,6 +528,31 @@ function PlainBody({ m, body, onDone }: {
       </div>
     );
   }
+  /**
+   * ⭐ SİSTEM DUYURUSU — yöneticiden gelen bildirim (kullanıcı isteği).
+   *
+   * ⚠️⚠️ **KOŞUL `kind` DEĞİL `text`.** `kind = 'system'` ZATEN kullanımda: ittifaktan
+   * çıkarılma, liderlik devri, mağara girişinin iptali… Bu satırlar gövdelerinde metin
+   * taşımıyor (`{allianceId, reason}` gibi yapısal alanlar taşıyorlar) ve türe bakan bir koşul
+   * hepsini BOŞ bir kutuya çevirirdi. Tarayıcıda görüldü: dev kutusunda "İttifak başvurun
+   * kabul edildi" satırı tam da bu duruma düşüyordu. Metni olan buraya girer, olmayan aşağıdaki
+   * genel gövdeye devam eder.
+   *
+   * ⚠️ Gönderen **yazılmıyor**: kullanıcının şartı *"sistem tarafından gönderilmiş
+   * gözükürler"*. Hangi yöneticinin yazdığı `audit_log`'ta duruyor, oyuncunun ekranında değil —
+   * bir yönetici adının duyuruya iliştirilmesi onu kişisel bir mesaj gibi gösterirdi.
+   *
+   * ⚠️ Metin `whitespace-pre-wrap` ile ham yazılıyor: React zaten kaçırıyor, yani duyuruya
+   * gömülü bir `<script>` metin olarak görünür. Markdown/HTML yorumlamak, panelden oyuncu
+   * ekranına biçimlendirme enjekte edilebilen bir kanal açardı — duyuru için kazancı yok.
+   */
+  if (m.kind === 'system' && typeof b['text'] === 'string' && b['text'].trim() !== '') {
+    return (
+      <div className="rounded-[var(--radius-sm)] border border-border bg-raised px-3 py-2.5">
+        <p className="whitespace-pre-wrap text-sm text-ink">{b['text']}</p>
+      </div>
+    );
+  }
 
   const loot = b['loot'] as { gold: number; food: number } | undefined;
   const cargo = b['cargo'] as { gold: number; food: number } | undefined;

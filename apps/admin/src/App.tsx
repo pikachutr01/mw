@@ -18,6 +18,7 @@ import { fetchMe, stepDown, stepUp, type AdminMe } from './lib/admin.ts';
 import { Badge, Button, Countdown, ErrorBox, Field, Input, Panel } from './components/ui.tsx';
 import { AbuseScreen } from './screens/Abuse.tsx';
 import { SignupsScreen } from './screens/Signups.tsx';
+import { AnnounceScreen } from './screens/Announce.tsx';
 import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
 import { BulkScreen } from './screens/Bulk.tsx';
@@ -40,6 +41,10 @@ const NAV: [string, string][] = [
   ['/ayarlar', 'Ayarlar'],
   ['/toplu', 'Toplu işlem'],
   ['/moderasyon', 'Moderasyon'],
+  // ⭐ «Duyuru» Moderasyon'dan AYRI: orası bir oyuncuya KARŞI yapılan işi topluyor (yasak,
+  // şikâyet), bu ise oyunculara YÖNELİK bilgilendirme. Birleştirmek "herkese duyur"
+  // düğmesini ceza düğmelerinin arasına koymak olurdu.
+  ['/duyuru', 'Duyuru'],
   // ⭐ «Çoklu hesap» Moderasyon'dan AYRI sekme: o ekran gelen ŞİKAYETİ işliyor (birileri
   // bildirdi), bu ise kimsenin bildirmediği bir deseni arıyor. İkisini birleştirmek, ikinci
   // listenin birincinin altında kaybolması demekti.
@@ -115,6 +120,10 @@ export function App() {
               />
               <Route path="/toplu" element={<BulkScreen onNeedStepUp={openStepUp} />} />
               <Route path="/moderasyon" element={<ModerationScreen onNeedStepUp={openStepUp} />} />
+              <Route
+                path="/duyuru"
+                element={<AnnounceScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
+              />
               <Route
                 path="/coklu-hesap"
                 element={<AbuseScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
