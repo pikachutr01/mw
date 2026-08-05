@@ -793,9 +793,16 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
       {/* Sonuç başlığı — orijinal oyunun kalıbı (k.java): "Kazandınız !" / "Kaybettiniz !" */}
       <div className={`display mb-1 text-base font-bold ${r.won ? 'text-success' : 'text-danger'}`}>
         {r.winner === 'draw' ? 'Berabere' : r.won ? 'Kazandınız !' : 'Kaybettiniz !'}
-        <span className="ml-2 text-xs font-normal text-muted">
-          {r.turns} tur{r.night ? ' · gece savaşı' : ''}
-        </span>
+        {/*
+          ⭐ GECE = YALNIZ AY SİMGESİ (kullanıcı, 2026-08-05): *"Sadece kazanan veya kaybeden
+          yazısının yanında ay simgesi olması yeterli, tooltip çıkmasına da gerek yok."*
+          Önceden burada "· gece savaşı", notlarda da "vuruş gücü düştü (Gece Görüşü etkili)"
+          yazıyordu — ikisi de kalktı.
+          ⚠️ `title` bilerek YOK; kullanıcı tooltip de istemiyor. Simge yine de ekran
+          okuyucuya sessiz kalmasın diye `aria-label` taşıyor.
+        */}
+        {r.night ? <span className="ml-1.5" aria-label="gece savaşı">🌙</span> : null}
+        <span className="ml-2 text-xs font-normal text-muted">{r.turns} tur</span>
       </div>
       {/* Diğer raporlarla aynı görünüm ve aynı davranış: tıklanınca Dünya'da açılır. */}
       <RouteLine origin={r.coords?.origin} target={r.coords?.target} onNavigate={onNavigate} />

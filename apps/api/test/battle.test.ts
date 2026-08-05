@@ -965,7 +965,16 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(def.text).toMatch(/Balista: 20 → 4 \(kayıp 16\) \[taban \+3\]/);
   });
 
-  it('gece savaşı raporda belirtilir', () => {
+  /**
+   * ⭐ **KURAL DEĞİŞTİ (kullanıcı, 2026-08-05): gece raporda YAZIYLA anlatılmaz.**
+   * *"Savaş raporunda açık açık gece savaşı bilgileri yazmasın… Sadece kazanan veya kaybeden
+   * yazısının yanında ay simgesi olması yeterli, tooltip çıkmasına da gerek yok."*
+   *
+   * ⚠️ Testin eski hâli `notes` içinde /GECE/ arıyordu. Şimdi ölçtüğü şey ikiye ayrıldı:
+   * (1) o cümle ARTIK YOK, (2) `night` alanı DURUYOR — ekranın ay simgesini çizebilmesi
+   * için gerekli. Alanı da silseydik simge çizilemezdi; kaldırılan yalnız düzyazı.
+   */
+  it('gece savaşı YAZIYLA anlatılmaz ama `night` alanı raporda durur', () => {
     const row: BattleRow = {
       id: 2, at: new Date('2026-07-26T03:00:00Z'), night: true, winner: 'defender',
       input: { attacker: { counts: { dwarf: 100 } }, defender: { counts: { guard: 50 } } },
@@ -977,7 +986,12 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
       },
     };
     const atk = buildBattleReport(row, 'attacker');
-    expect(atk.notes.join(' ')).toMatch(/GECE/);
+    // Gece ne notlarda ne de metin dökümünde geçiyor.
+    expect(atk.notes.join(' ')).not.toMatch(/gece|GECE|Gece Görüşü/);
+    expect(atk.text).not.toMatch(/gece/i);
+    // …ama alan duruyor: ekran ay simgesini buradan çiziyor.
+    expect(atk.night).toBe(true);
+    // Diğer notlar etkilenmedi.
     expect(atk.notes.join(' ')).toMatch(/Ordudan kimse dönmedi/);
     expect(atk.won).toBe(false);
   });

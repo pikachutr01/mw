@@ -256,8 +256,16 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
     }
     : null;
 
+  /**
+   * ⚠️ **GECE NOTU KALDIRILDI** (kullanıcı, 2026-08-05): *"Savaş raporunda açık açık gece
+   * savaşı bilgileri yazmasın… Sadece kazanan veya kaybeden yazısının yanında ay simgesi
+   * olması yeterli."* Eskiden burada *"Savaş GECE gerçekleşti — vuruş gücü düştü (Gece
+   * Görüşü etkili)"* satırı vardı.
+   *
+   * ⚠️ `night` alanı raporda DURUYOR — kaldırılan yalnız cümle. Alan, ekranın ay simgesini
+   * çizmesi için gerekli; ayrıca savaşın determinizm künyesinin bir parçası.
+   */
   const notes: string[] = [];
-  if (battle.night) notes.push('Savaş GECE gerçekleşti — vuruş gücü düştü (Gece Görüşü etkili).');
 
   // ⭐ Savunma tabanı (§13.11.10): "en kötü ihtimalle 4'lük garnizon ayakta kalır" kuralının
   //    gerçekten işlediği raporda GÖRÜNÜR olmalı — yoksa oyuncu sayıları hata sanır.
@@ -393,7 +401,8 @@ function renderText(r: BattleReport): string {
   const outcome = r.winner === 'draw'
     ? 'Savaş berabere bitti'
     : r.won ? 'Kazandınız !' : 'Kaybettiniz !';
-  out.push(`${outcome} — ${r.turns} tur${r.night ? ' (gece savaşı)' : ''}`);
+  // ⚠️ "(gece savaşı)" eki kaldırıldı (kullanıcı, 2026-08-05); ekranda yerini ay simgesi aldı.
+  out.push(`${outcome} — ${r.turns} tur`);
   if (r.coords?.origin || r.coords?.target) {
     // Ad varsa koordinatın yanına parantezle; eski savaşlarda ad yok, satır kısalıyor.
     const c = (x: ReportCoord | null): string =>

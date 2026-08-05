@@ -268,7 +268,22 @@ function heroTakeHit(army: Army, pool: number, P: number, type: 1 | 2 | 3, cfg: 
 
 /* ── Havuzlar ──────────────────────────────────────────────────────────────── */
 
-const alive = (a: Army): number => a.units.reduce((n, e) => n + Math.max(0, e.count), 0);
+/**
+ * ⚠️⚠️ **HAM ADET SAYAN `alive()` KALDIRILDI (2026-08-05).** Motorda "bu ordu hâlâ ayakta mı"
+ * sorusunun İKİ farklı cevabı vardı: tur döngüsü `combatAlive` ile bitiyordu (savaş-dışı
+ * birimleri saymaz), kazanan ise ham adetle belirleniyordu (sayar). Sonuç, kullanıcının
+ * yakaladığı istismar: **1000 casus kuşun beklediği bir şehre 120 cüceyle saldırınca hiç
+ * vuruşma olmuyor** (savunanın savaşçısı yok, döngü 1. turda kopuyor), iki tarafın da kaybı
+ * 0 kalıyor ve aşağıdaki *"eşitlikte savunan"* kuralı SAVUNANI kazanan ilan ediyordu —
+ * saldıran ganimet de alamıyordu. Yani casus kuş (ya da yük arabası, gnom) yığmak şehri
+ * dokunulmaz yapıyordu.
+ *
+ * Ölçüm: boş şehir → saldıran · 1 cüce → saldıran · sur sv3 → saldıran · **1000 casus kuş →
+ * SAVUNAN**. Kırılan tek durum savunanda yalnız savaş-dışı birim bulunmasıydı.
+ *
+ * ⚠️ Düzeltme "kazanan kuralını değiştirmek" değil, **tek tanıma indirmek**: artık her yer
+ * `combatAlive` kullanıyor. İki tanım kaldığı sürece bir dahaki sapma kaçınılmazdı.
+ */
 
 /** Yenik kontrolü: yük/casus/gnom/tuzak SAYILMAZ (binary FUN_004114b0). */
 /**
@@ -750,8 +765,10 @@ export function simulate(
 
   // §4b KAYBEDEN tarafın savaş-dışı birimleri (yük/gnom) orantısal kayıp alır; casus uçarak kaçar.
   {
-    const aliveA = alive(atk);
-    const aliveD = alive(def);
+    // ⚠️ Aşağıdaki kazanan kararıyla AYNI ölçüyü kullanmak zorunda: ayrışırlarsa yanlış
+    // tarafın yük arabası/gnomu ele geçirilir.
+    const aliveA = combatAlive(atk, cfg);
+    const aliveD = combatAlive(def, cfg);
     const provisional = aliveD <= 0 && aliveA <= 0
       ? null
       : aliveD <= 0 ? 'attacker'
@@ -774,12 +791,22 @@ export function simulate(
    * Aksi halde 5 balistalı bir şehir, ordusu tamamen silinmişken "kazanan" ilan edilirdi. */
   const aLM = atk.lossMag;
   const dLM = def.lossMag;
-  const rawAtkAlive = alive(atk);
-  const rawDefAlive = alive(def);
+  /**
+   * ⚠️ **`combatAlive`, ham adet DEĞİL** (2026-08-05, yukarıdaki nota bak): savaş-dışı birim
+   * "ayakta ordu" saymaz. `alive()` ile ölçülürken casus kuş/yük arabası/gnom yığını savunanı
+   * ayakta gösteriyor, iki tarafın da kaybı 0 kaldığı için karar son satırdaki eşitlik
+   * kuralına düşüyor ve savunan kazanıyordu.
+   *
+   * ⚠️ Son satırdaki *"eşitlikte savunan"* kuralı DEĞİŞMEDİ; zaten yanlış olan o değildi.
+   * O kural artık yalnız **iki tarafın da savaşçısı varken** işliyor, yani gerçekten çekişmeli
+   * bir savaşta — konulduğu yer orasıydı.
+   */
+  const atkStanding = combatAlive(atk, cfg);
+  const defStanding = combatAlive(def, cfg);
   let winner: 'attacker' | 'defender' | 'draw';
-  if (rawAtkAlive <= 0 && rawDefAlive <= 0) winner = 'draw';
-  else if (rawDefAlive <= 0) winner = 'attacker';
-  else if (rawAtkAlive <= 0) winner = 'defender';
+  if (atkStanding <= 0 && defStanding <= 0) winner = 'draw';
+  else if (defStanding <= 0) winner = 'attacker';
+  else if (atkStanding <= 0) winner = 'defender';
   else winner = dLM > aLM ? 'attacker' : 'defender';   // eşitlikte savunan
 
   // Onarım + savunma tabanı (görüntülenen ve enkaza giren nihai sayılar).

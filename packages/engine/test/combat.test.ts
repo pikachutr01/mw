@@ -57,3 +57,80 @@ describe('§13.21 Büyü Kalkanı bütünlüğü', () => {
     expect(r.defender.shieldIntegrity).toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * ⭐ SAVAŞ-DIŞI BİRİMLER "AYAKTA ORDU" SAYILMAZ (kullanıcı, 2026-08-05).
+ *
+ * ⚠️ Motorda "bu ordu hâlâ ayakta mı" sorusunun İKİ cevabı vardı: tur döngüsü savaş-dışı
+ * birimleri saymıyordu, kazanan kararı sayıyordu. Sonuç bir İSTİSMARDI: casus kuş yığmak
+ * şehri dokunulmaz yapıyordu — hiç vuruşma olmuyor, iki tarafın da kaybı 0 kalıyor ve
+ * "eşitlikte savunan" kuralı savunanı kazanan ilan ediyordu; saldıran ganimet de alamıyordu.
+ *
+ * ⚠️ Kullanıcı bunu binary simülatörle çapraz doğruladı: *"aynı 120 cüceye karşı 1000 casus
+ * kuş savaşında saldıran kazanıyor, çünkü savunanın bir askeri yok, casus kuş zaten savaşmaz.
+ * Savaşın 1 tur sürüp saldıranın kazanması gerekir."*
+ */
+describe('savaş-dışı birimler savunanı ayakta tutmaz', () => {
+  const attack = (defender: Record<string, number>) => simulate({
+    seed: 'noncombat', night: false,
+    attacker: { counts: { dwarf: 120 } },
+    defender: { counts: defender },
+  });
+
+  it('⭐ 1000 casus kuş: savaş 1 TUR sürer ve SALDIRAN kazanır', () => {
+    const r = attack({ spy_bird: 1000 });
+    expect(r.winner).toBe('attacker');
+    expect(r.turns).toBe(1);
+    // Hiç vuruşma olmadı: kuşlar savaşmaz, saldıranın kaybı da yok.
+    expect(r.attacker.lost).toBe(0);
+    expect(r.defender.lost).toBe(0);
+  });
+
+  /** Yük arabası ve gnom da `NONCOMBAT` — aynı muafiyet onlarda da vardı. */
+  it('yük arabası ve gnom da savunanı kazandırmaz', () => {
+    expect(attack({ cargo_wagon: 500 }).winner).toBe('attacker');
+    expect(attack({ gnome: 500 }).winner).toBe('attacker');
+  });
+
+  /**
+   * ⚠️ **Kıyas grubu — düzeltmenin fazla ileri gitmediğinin kanıtı.** Bunların hepsi ZATEN
+   * saldıranı kazandırıyordu ve öyle kalmalı; kırılan tek durum savunanda yalnız savaş-dışı
+   * birim bulunmasıydı.
+   */
+  it('boş şehir · tek cüce · yalnız sur: davranış DEĞİŞMEDİ (saldıran kazanır)', () => {
+    expect(attack({}).winner).toBe('attacker');
+    expect(attack({ dwarf: 1 }).winner).toBe('attacker');
+    expect(attack({ wall: 3 }).winner).toBe('attacker');
+  });
+
+  /**
+   * ⭐ **Çekişmeli savaş dalı DEĞİŞMEDİ** — regresyon çivisi.
+   *
+   * ⚠️ Bu testin adı bir ara *"eşit kayıpta savunan kazanır"* idi ve bu **yanıltıcıydı**:
+   * eşit ORDULAR eşit `lossMag` üretmiyor (savunanın vuruşuna `counterK` çarpanı biniyor),
+   * dolayısıyla test kendi adının iddia ettiği şeyi ölçmüyordu — tohuma göre saldıran da
+   * kazanabiliyor. Ölçülen gerçek şey şu: iki tarafın da savaşçısı varken sonuç **kayıp
+   * büyüklüğünden** çıkıyor ve bu dal düzeltmeden etkilenmedi. Değer tohuma çivilendi.
+   */
+  it('iki tarafın da savaşçısı varken sonuç kayıp büyüklüğünden çıkar', () => {
+    const r = simulate({
+      seed: 'esit', night: false,
+      attacker: { counts: { dwarf: 100 } },
+      defender: { counts: { dwarf: 100 } },
+    });
+    expect(r.winner).toBe('defender');
+    // Gerçekten vuruşma oldu — "kimse savaşmadı" dalına düşmedi.
+    expect(r.attacker.lost).toBeGreaterThan(0);
+    expect(r.defender.lost).toBeGreaterThan(0);
+  });
+
+  /** ⚠️ Simetri: saldıran da yalnız savaş-dışı birim gönderirse KAZANAMAZ. */
+  it('saldıran yalnız yük arabası gönderirse savunan kazanır', () => {
+    const r = simulate({
+      seed: 'yuk', night: false,
+      attacker: { counts: { cargo_wagon: 50 } },
+      defender: { counts: { dwarf: 10 } },
+    });
+    expect(r.winner).toBe('defender');
+  });
+});
