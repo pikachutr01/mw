@@ -18,7 +18,7 @@ import { AsnService, hostingHint } from '../src/abuse/asn.service.ts';
 import { ipToNumber, numberToIp } from '../src/abuse/ip-number.ts';
 import { extractDeviceContext } from '../src/abuse/device-context.ts';
 import type { DbHandle } from '../src/db/client.ts';
-import { setupTestDb } from './helpers/db.ts';
+import { createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
 
 let h: DbHandle;
 let svc: AsnService;
@@ -202,9 +202,16 @@ describe('geriye dönük doldurma', () => {
       INSERT INTO accounts (email, password_hash)
       VALUES (${`bf-${randomUUID().slice(0, 8)}@t.local`}, 'x') RETURNING id
     `);
-    const [w] = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT id FROM worlds ORDER BY id LIMIT 1
-    `);
+    /**
+     * ⚠️ Burada `SELECT id FROM worlds ORDER BY id LIMIT 1` vardı: bu dosya HİÇ dünya
+     * yaratmıyor, yani **başka bir test dosyasının artığına** güveniyordu. Suite seri
+     * koştuğu sürece görünmüyordu; worker başına ayrı veritabanına geçilince (2026-08-07)
+     * bu dosya kendi worker'ında ilk koştuğunda `worlds` boş kaldı ve test patladı.
+     * Gizli bağımlılık artık yok — dünya burada yaratılıyor.
+     */
+    const worldId = freshWorldId();
+    await createWorld(h, worldId);
+    const w = { id: worldId };
     const [p] = await h.db.execute<Record<string, unknown>>(sql`
       INSERT INTO players (world_id, account_id, username, score)
       VALUES (${Number(w!['id'])}, ${Number(acc!['id'])}, ${`bf_${Date.now()}`}, 0) RETURNING id

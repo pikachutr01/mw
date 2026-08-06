@@ -2,7 +2,9 @@
  * Test veritabanı yardımcıları. GERÇEK Postgres kullanıyoruz — `SKIP LOCKED`, advisory lock ve
  * transaction davranışı taklit edilemez; Faz 1'in tüm garantileri tam olarak bunlara dayanıyor.
  *
- * Test DB'si ayrıdır (`mobilwar_test`), her dosya kendi dünyasını yaratır → paralel çalışabilir.
+ * ⭐ Test DB'si ayrıdır ve **worker başına birer tane** (`mobilwar_test_1`, `_2`, …); her dosya
+ * ayrıca kendi dünyasını yaratır. İkisi birlikte dosyaların paralel koşmasını mümkün kılıyor
+ * (2026-08-07; ayrıntılı gerekçe `TEST_DB` sabitinin başında).
  */
 import { randomUUID } from 'node:crypto';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
@@ -15,18 +17,74 @@ import { ECHO_TABLE_DDL } from '../../src/missions/echo.handler.ts';
 
 const ADMIN_URL = process.env['DATABASE_URL']
   ?? 'postgresql://mobilwar:mobilwar@localhost:5432/mobilwar';
-const TEST_DB = 'mobilwar_test';
+
+/**
+ * ⭐⭐ WORKER BAŞINA AYRI VERİTABANI (2026-08-07) — PARALELLİĞİN ANAHTARI.
+ *
+ * Suite 2026-08-07'ye kadar `fileParallelism: false` ile SERİ koşuyordu (410 sn). Tek bir
+ * paylaşılan `mobilwar_test` veritabanıyla paralellik mümkün değildi ve engel üç katmanlıydı:
+ *
+ *   1. **Dünya kimliği çakışması.** `freshWorldId()` her worker'da 100'den başlıyor; iki
+ *      worker aynı anda 100'ü yaratır ve `createWorld`un `ON CONFLICT DO UPDATE`i
+ *      birbirinin dünyasını sıfırlardı.
+ *   2. **Dünya-kapsamsız `DELETE`ler.** Sekiz dosyada 16 tane var (`DELETE FROM settings`,
+ *      `player_devices`, `ip_asn_ranges`…). Bu tablolarda dünya kolonu yok; bir worker'ın
+ *      temizliği diğerinin az önce yazdığını siler.
+ *   3. **Migration yarışı.** `migrated` bayrağı MODÜL düzeyinde, yani worker BAŞINA. Ortak
+ *      veritabanında her worker aynı şemayı kurmaya çalışırdı.
+ *
+ * Veritabanını worker'a bağlamak üçünü de aynı anda çözüyor — her worker kendi dünyalarına,
+ * kendi ayar tablosuna ve kendi şemasına sahip. ⚠️ Alternatif "çakışan dosyaları seri bırak"
+ * yaklaşımı bunun yerine 8 dosyayı sürekli sıraya sokardı ve yeni bir global `DELETE`
+ * eklendiğinde SESSİZCE bozulurdu; burada izolasyon yapısal.
+ */
+const WORKER_ID = process.env['VITEST_WORKER_ID'] ?? '1';
+const TEST_DB = `mobilwar_test_${WORKER_ID}`;
 const TEST_URL = ADMIN_URL.replace(/\/[^/?]+(\?|$)/, `/${TEST_DB}$1`);
+
+/**
+ * ⭐ Bu worker'ın test veritabanı bağlantı dizesi.
+ *
+ * ⚠️ İkinci bir bağlantı açan testler bunu KULLANMALI, adresi elle yazmamalı.
+ * `realtime.test.ts` elle `/mobilwar_test` yazıyordu ve worker başına veritabanına geçince
+ * sessizce kırıldı: LISTEN/NOTIFY **veritabanı başına** çalışır, yayıncı ile dinleyici ayrı
+ * veritabanlarına düşünce olay hiç gelmedi (2026-08-07'de bu iki test kırmızı yanarak
+ * yakalandı — hatanın kendisi de zaten bunun kanıtı).
+ */
+export function testDbUrl(): string {
+  return TEST_URL;
+}
 
 let migrated = false;
 
-/** Test veritabanını (yoksa) yaratır ve migration'ları bir kez uygular. */
+/**
+ * Test veritabanını (yoksa) yaratır ve migration'ları bir kez uygular.
+ *
+ * ⚠️ `CREATE DATABASE` yeniden denemeli: tüm worker'lar ilk koşuda aynı anda veritabanı
+ * yaratıyor ve Postgres şablon veritabanını kilitliyor ("source database template1 is being
+ * accessed by other users"). Yalnız İLK koşuda görülür — sonrakilerde veritabanları hazır.
+ */
 export async function setupTestDb(): Promise<DbHandle> {
   if (!migrated) {
     const admin = postgres(ADMIN_URL, { max: 1, onnotice: () => {} });
-    const exists = await admin`SELECT 1 FROM pg_database WHERE datname = ${TEST_DB}`;
-    if (exists.length === 0) await admin.unsafe(`CREATE DATABASE ${TEST_DB}`);
-    await admin.end({ timeout: 5 });
+    try {
+      const exists = await admin`SELECT 1 FROM pg_database WHERE datname = ${TEST_DB}`;
+      if (exists.length === 0) {
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await admin.unsafe(`CREATE DATABASE ${TEST_DB}`);
+            break;
+          } catch (err) {
+            // 42P04 = zaten var (başka bir yarış kazandı) → sorun değil, devam.
+            if (String(err).includes('already exists')) break;
+            if (attempt >= 10) throw err;
+            await new Promise((r) => setTimeout(r, 300 + attempt * 200));
+          }
+        }
+      }
+    } finally {
+      await admin.end({ timeout: 5 });
+    }
 
     const h = createDb(TEST_URL, { max: 1 });
     await migrate(h.db, {
@@ -36,7 +94,11 @@ export async function setupTestDb(): Promise<DbHandle> {
     await h.close();
     migrated = true;
   }
-  return createDb(TEST_URL, { max: 8 });
+  /**
+   * ⚠️ Havuz 8'den 5'e indirildi: `max_connections = 100` ve 6 worker × 5 = 30, üstüne
+   * geliştirme sunucusunun kendi havuzu. Testler zaten sıralı `await` kullanıyor, 5 bol.
+   */
+  return createDb(TEST_URL, { max: 5 });
 }
 
 /**

@@ -100,7 +100,10 @@ Hepsi bu projede **gerçekten başımıza geldi**. Yeni oturum bunları okumadan
 
 | Tuzak | Sonucu | Doğrusu |
 |---|---|---|
+| Tam koşuyu `pnpm -r run test` ile yapmak | **Turbo'yu atlar.** Workspace paketleri `dist/`ten import ediliyor; `turbo.json` `test`i `^build`e bağlıyor. `-r` o bağı atlayıp **bayat dist** ile koşar → yerelde 877 test yeşil, CI kırmızı (2026-08-06'da yaşandı: yeni ayar bayat dist'te yoktu, bekçi testi onu hiç görmedi) | **`pnpm test`** (= `turbo run test`). Mecbur kalırsan önce `pnpm -r --filter "./packages/*" run build` |
 | API'de `pnpm dev` | NestJS dekoratörleri Node'un tip-sıyırmasıyla gitmiyor | `pnpm build` → `node dist/main.js` |
+| Testte ikinci bir DB bağlantısını **elle** adreslemek | Test veritabanı **worker başına** (`mobilwar_test_1`, `_2`…). Elle `/mobilwar_test` yazan bağlantı başka bir veritabanına düşer; LISTEN/NOTIFY veritabanı başına çalıştığı için olaylar sessizce hiç gelmez | `testDbUrl()` yardımcısı (`test/helpers/db.ts`) |
+| Testte "zaten bir dünya vardır" varsaymak | `SELECT id FROM worlds LIMIT 1` başka bir dosyanın artığına güvenir. Paralel/izole koşuda o dosya kendi worker'ında ilk çalışınca tablo boştur | Kendi dünyanı yarat: `freshWorldId()` + `createWorld()` |
 | `node dist/main.js` çıplak | `DATABASE_URL tanımsız` | `node --env-file=../../.env dist/main.js` |
 | Worker kapalı (`ROLE=api`) | **Savaşlar hiç çözülmez**, ordular sonsuza kadar yolda | `ROLE=all` (varsayılan) |
 | Ham SQL'de `timestamptz` | postgres.js **dize** döndürüyor → "getTime is not a function" ve sessiz yanlış karşılaştırma | Sınırda `toDate()` |

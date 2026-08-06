@@ -14,7 +14,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type DbHandle } from '../src/db/client.ts';
 import { eventForOutbox, RealtimeBus, type RealtimeEvent } from '../src/realtime/realtime.bus.ts';
-import { setupTestDb } from './helpers/db.ts';
+import { setupTestDb, testDbUrl } from './helpers/db.ts';
 
 let h: DbHandle;
 let bus: RealtimeBus;
@@ -24,11 +24,13 @@ let listener: RealtimeBus;
 
 beforeAll(async () => {
   h = await setupTestDb();
-  listenerHandle = createDb(
-    (process.env['DATABASE_URL'] ?? 'postgresql://mobilwar:mobilwar@localhost:5432/mobilwar')
-      .replace(/\/[^/?]+(\?|$)/, '/mobilwar_test$1'),
-    { max: 2 },
-  );
+  /**
+   * ⚠️ Adres YARDIMCIDAN alınır, elle yazılmaz. Burada `/mobilwar_test` sabiti duruyordu;
+   * test veritabanı worker başına ayrılınca (2026-08-07) dinleyici ile yayıncı ayrı
+   * veritabanlarına düştü ve LISTEN/NOTIFY **veritabanı başına** çalıştığı için hiçbir olay
+   * gelmedi. Aynı worker'ın veritabanı = aynı bildirim uzayı.
+   */
+  listenerHandle = createDb(testDbUrl(), { max: 2 });
   bus = new RealtimeBus(h.sql);
   listener = new RealtimeBus(listenerHandle.sql);
 }, 60_000);
