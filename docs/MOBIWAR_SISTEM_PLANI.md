@@ -3237,6 +3237,34 @@ handler'la ittifak görünümünü tazeler. İttifak SOHBETİ ayrı iş (§13.12
 `players.alliance_id` FK (SET NULL) + `alliance_role` + `(world_id, alliance_id)` indeksi.
 Ayrılma cooldown'u (`cooldownHoursAfterLeave: 0`) düğme olarak hazır, kapalı.
 
+### 13.15b.1 ⭐ SİSTEM BİLDİRİMLERİ (tamamlandı 2026-08-06)
+
+Üyelik ve yönetim olayları posta kutusuna `kind='system'` satırı olarak düşer.
+
+| Olay | Kime gider | Kime GİTMEZ |
+| :-- | :-- | :-- |
+| İttifak dağıtıldı | tüm üyeler | dağıtan lider |
+| Üye ayrıldı | Lider + Konsey | ayrılanın kendisi |
+| Konseye alındı / çıkarıldı | rütbesi değişen üye | — |
+| İttifak adı değişti | tüm üyeler | adı değiştiren lider |
+| Davet kabul edildi / reddedildi | Lider + Konsey | kararı veren davetli |
+| Başvuru kabul edildi / reddedildi | başvuran | — |
+| İttifaktan çıkarıldı · Liderlik devri | hedef üye | — |
+
+⭐ **Kural: eylemi YAPANA yazılmaz.** Kendi tıkladığı düğmenin sonucunu haber vermek gürültü
+olurdu. `leave()` ve `decide()`te bu bedavaya geliyor — bildirim listesi üyelik güncellendikten
+SONRA okunuyor, aktör zaten süzülmüş oluyor.
+
+⚠️ **Dağıtmada ittifak ADI mesaj metnine YAZILIR.** Bildirim `alliances` satırı DELETE
+edildikten sonra yazılıyor; id'den ad çözmenin yolu o noktada kalmıyor.
+
+⚠️⚠️ **METİN ZORUNLU — `body.text`.** `Messages.tsx` sistem gövdesi `kind`e değil **metnin
+varlığına** bakıyor (bilerek: `kind='system'` mağara iptali gibi metinsiz satırlarda da
+kullanılıyor). 2026-08-06'ya kadar ittifak bildirimleri yalnız `{allianceId, reason}` taşıyordu
+ve ekranda **BOŞ KUTU** çiziliyordu — oyuncu sadece başlığı görüyordu. Artık hepsi tek
+yardımcıdan (`AllianceService.notice`) geçiyor ve o yardımcı metni her zaman ekliyor; yapısal
+alanlar da korunuyor. Testte bekçi var: dünyadaki hiçbir `system` satırı metinsiz olamaz.
+
 ## 13.16 ⭐ DÜNYA EKRANI — dolaşma ve şehir menüsü (2026-07-26, oyunun dokümanından)
 
 Kullanıcı sordu: *diyarlar/kıtalar nasıl değiştirilecek, dolu şehre tıklanınca ne açılacak?*

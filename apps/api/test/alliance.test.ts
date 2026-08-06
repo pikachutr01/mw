@@ -324,6 +324,175 @@ describe('metin + toplu mesaj', () => {
   });
 });
 
+/**
+ * ⭐ SİSTEM BİLDİRİMLERİ (kullanıcı, 2026-08-06). İki ayrı boşluk kapatıldı:
+ *   1. Beş aksiyon tamamen SESSİZDİ (dağıtma · rütbe · ayrılma · ad · davet kararı).
+ *   2. Yazılanların gövdesi ekranda BOŞ çiziliyordu — `Messages.tsx` sistem gövdesi `kind`e
+ *      değil `body.text`e bakıyor, ittifak mesajları ise yalnız `{allianceId, reason}` taşıyordu.
+ *
+ * ⚠️ Bu yüzden testlerin çoğu `body.text`i ayrıca doğruluyor: yalnız `subject` bakan bir test,
+ * ekranda boş kutu çizilirken de yeşil kalırdı — düzeltilen hata tam olarak buydu.
+ */
+describe('sistem bildirimleri', () => {
+  /** Bir oyuncunun kutusundaki sistem satırları (konu + metin). */
+  async function systemOf(playerId: number): Promise<{ subject: string; text: string }[]> {
+    return (await messagesOf(playerId))
+      .filter((m) => m['kind'] === 'system')
+      .map((m) => ({
+        subject: String(m['subject']),
+        text: String((m['body'] as Record<string, unknown>)['text'] ?? ''),
+      }));
+  }
+
+  it('⭐ dağıtma TÜM üyelere düşer ve ittifak ADI metinde yaşar', async () => {
+    await foundedAlliance();
+    await service.disband({ worldId, playerId: lider });
+
+    for (const p of [konsey, asker]) {
+      const notices = await systemOf(p);
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.subject).toBe('İttifak dağıtıldı');
+      // ⭐ Kayıt DELETE edildiği için ad sonradan çözülemez; metinde durmak zorunda.
+      expect(notices[0]!.text).toContain('run.dll');
+    }
+  });
+
+  it('dağıtan liderin kendi kutusuna yazılmaz', async () => {
+    await foundedAlliance();
+    await service.disband({ worldId, playerId: lider });
+    expect(await systemOf(lider)).toEqual([]);
+  });
+
+  it('⭐ son üye lider ayrılınca kimseye bildirim gitmez', async () => {
+    await giveCastle(lider, 5);
+    await service.found({ worldId, playerId: lider, name: 'yalniz' });
+    const r = await service.leave({ worldId, playerId: lider });
+    expect(r.disbanded).toBe(true);
+    // Tek "üye" ayrılanın kendisiydi → kendi eylemini haber vermek gürültü olurdu.
+    expect(await systemOf(lider)).toEqual([]);
+  });
+
+  it('ayrılma YÖNETİME bildirilir, ayrılana değil', async () => {
+    await foundedAlliance();
+    await service.leave({ worldId, playerId: asker });
+
+    for (const p of [lider, konsey]) {
+      const notices = await systemOf(p);
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.subject).toBe('Bir üye ittifaktan ayrıldı');
+      expect(notices[0]!.text).toContain('asker');
+    }
+    expect(await systemOf(asker)).toEqual([]);
+  });
+
+  it('⭐ Konsey üyesi ayrılırsa KENDİNE mesaj yazmaz', async () => {
+    await foundedAlliance();
+    await service.leave({ worldId, playerId: konsey });
+    expect(await systemOf(konsey)).toEqual([]);
+    expect(await systemOf(lider)).toHaveLength(1);
+  });
+
+  it('rütbe değişimi hedefe bildirilir (iki yön ayrı metin)', async () => {
+    await foundedAlliance();
+    await service.setCouncil({ worldId, playerId: lider, targetId: asker, council: true });
+    expect((await systemOf(asker))[0]!.subject).toBe('Konseye alındın');
+
+    await service.setCouncil({ worldId, playerId: lider, targetId: asker, council: false });
+    expect((await systemOf(asker))[1]!.subject).toBe('Konseyden çıkarıldın');
+  });
+
+  it('rütbe GERÇEKTEN değişmediyse mesaj yazılmaz', async () => {
+    await foundedAlliance();
+    // Konsey zaten konsey → erken dönüş; "değişti" diyen boş bildirim doğmamalı.
+    await service.setCouncil({ worldId, playerId: lider, targetId: konsey, council: true });
+    expect(await systemOf(konsey)).toEqual([]);
+  });
+
+  it('ad değişimi üyelere ESKİ ve YENİ adla bildirilir; değiştirene yazılmaz', async () => {
+    await foundedAlliance();
+    await service.rename({ worldId, playerId: lider, name: 'yeniad' });
+
+    const notices = await systemOf(konsey);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.text).toContain('run.dll');
+    expect(notices[0]!.text).toContain('yeniad');
+    expect(await systemOf(lider)).toEqual([]);
+  });
+
+  it('⭐ davet KABULÜ yönetime bildirilir, kabul edene değil', async () => {
+    await foundedAlliance();
+    const id = await service.invite({ worldId, playerId: konsey, targetId: disaridan });
+    await service.decide({ worldId, playerId: disaridan, inviteId: id, accept: true });
+
+    for (const p of [lider, konsey]) {
+      const notices = await systemOf(p);
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.subject).toBe('İttifak daveti kabul edildi');
+      expect(notices[0]!.text).toContain('disaridan');
+    }
+    // Kabul düğmesine basan zaten o — kendi eylemi haber edilmez.
+    expect(await systemOf(disaridan)).toEqual([]);
+  });
+
+  it('⭐ davet REDDİ yönetime bildirilir (eskiden tamamen sessizdi)', async () => {
+    await foundedAlliance();
+    const id = await service.invite({ worldId, playerId: konsey, targetId: disaridan });
+    await service.decide({ worldId, playerId: disaridan, inviteId: id, accept: false });
+
+    for (const p of [lider, konsey]) {
+      const notices = await systemOf(p);
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.subject).toBe('İttifak daveti reddedildi');
+      expect(notices[0]!.text).toContain('disaridan');
+    }
+  });
+
+  it('başvuru sonucu metinleri ittifak adını taşır (kabul ve ret)', async () => {
+    const aid = await foundedAlliance();
+    const id1 = await service.apply({ worldId, playerId: disaridan, allianceId: aid });
+    await service.decide({ worldId, playerId: lider, inviteId: id1, accept: false });
+    expect((await systemOf(disaridan))[0]!.text).toContain('run.dll');
+
+    const id2 = await service.apply({ worldId, playerId: disaridan, allianceId: aid });
+    await service.decide({ worldId, playerId: lider, inviteId: id2, accept: true });
+    expect((await systemOf(disaridan))[1]!.text).toContain('run.dll');
+  });
+
+  it('at ve liderlik devri metinleri de dolu', async () => {
+    await foundedAlliance();
+    await service.transfer({ worldId, playerId: lider, targetId: konsey });
+    expect((await systemOf(konsey))[0]!.text).toContain('lider');
+
+    await service.kick({ worldId, playerId: konsey, targetId: asker });
+    expect((await systemOf(asker))[0]!.text).toContain('konsey');
+  });
+
+  /**
+   * ⭐ ASIL BEKÇİ: hiçbir ittifak sistem bildirimi metinsiz olamaz. Tek tek konu kontrolü
+   * yapan testler, ileride eklenen YENİ bir bildirim metinsiz yazılırsa bunu kaçırırdı.
+   */
+  it('⭐ ittifak sistem mesajlarının HEPSİ metin taşır', async () => {
+    const aid = await foundedAlliance();
+    await service.setCouncil({ worldId, playerId: lider, targetId: asker, council: true });
+    await service.rename({ worldId, playerId: lider, name: 'yeniad' });
+    const inv = await service.invite({ worldId, playerId: lider, targetId: disaridan });
+    await service.decide({ worldId, playerId: disaridan, inviteId: inv, accept: true });
+    await service.kick({ worldId, playerId: lider, targetId: disaridan });
+    const app = await service.apply({ worldId, playerId: disaridan, allianceId: aid });
+    await service.decide({ worldId, playerId: lider, inviteId: app, accept: false });
+    await service.disband({ worldId, playerId: lider });
+
+    const all = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT subject, body FROM messages WHERE world_id = ${worldId} AND kind = 'system'
+    `);
+    expect(all.length).toBeGreaterThan(5);
+    const bos = all
+      .filter((m) => String((m['body'] as Record<string, unknown>)['text'] ?? '').trim() === '')
+      .map((m) => String(m['subject']));
+    expect(bos, `metinsiz bildirim: ${bos.join(', ')}`).toEqual([]);
+  });
+});
+
 describe('ittifak sıralaması (snapshot)', () => {
   it('⭐ puan = üyelerin TOPLAMI; prevRank kayması işler; dağıtılan ittifak temizlenir', async () => {
     const aid = await foundedAlliance();

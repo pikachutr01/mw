@@ -136,14 +136,29 @@ export class AllianceService {
           throw new AllianceError('leader_must_transfer',
             'Lider ittifaktan ayrılamaz — önce Liderlik Devri yapmalısın.');
         }
-        await this.disbandInner(tx as never, o.worldId, me.allianceId);
+        await this.disbandInner(tx as never, o.worldId, me.allianceId, o.playerId);
         return { disbanded: true };
       }
 
+      /**
+       * ⭐ Ayrılma bildirimi (kullanıcı, 2026-08-06): yönetim üye kaybını fark etmeliydi.
+       * ⚠️ Yönetim listesi `applyMembership`ten SONRA okunuyor — ayrılan oyuncunun
+       * `alliance_id`si o noktada zaten NULL, yani Konsey üyesi ayrılsa bile kendine mesaj
+       * yazmıyor. Ayrı bir "kendini süz" koşuluna gerek kalmadan doğru oluyor.
+       */
+      const allianceId = me.allianceId;
       await this.applyMembership(tx as never, {
         worldId: o.worldId, playerId: o.playerId, allianceId: null, role: 0,
-        noticeAllianceId: me.allianceId,
+        noticeAllianceId: allianceId,
       });
+      for (const managerId of await this.managerIds(tx as never, allianceId)) {
+        await this.notice(tx as never, {
+          worldId: o.worldId, playerId: managerId,
+          subject: 'Bir üye ittifaktan ayrıldı',
+          text: `${me.username} ittifaktan kendi isteğiyle ayrıldı.`,
+          extra: { allianceId, playerId: o.playerId, reason: 'left' },
+        });
+      }
       return { disbanded: false };
     });
   }
@@ -152,11 +167,23 @@ export class AllianceService {
     await this.db.transaction(async (tx) => {
       const me = await this.lockPlayer(tx as never, o.playerId);
       this.require(me, ROLE.LEADER);
-      await this.disbandInner(tx as never, o.worldId, me.allianceId!);
+      await this.disbandInner(tx as never, o.worldId, me.allianceId!, o.playerId);
     });
   }
 
-  private async disbandInner(tx: Tx, worldId: number, allianceId: number): Promise<void> {
+  private async disbandInner(
+    tx: Tx, worldId: number, allianceId: number, actorId: number,
+  ): Promise<void> {
+    /**
+     * ⭐ AD, SİLMEDEN ÖNCE OKUNUR. Bildirim `alliances` satırı DELETE edildikten sonra
+     * yazılıyor; id'den ad çözmenin yolu o noktada kalmıyor. Mesajda "ittifakın dağıtıldı"
+     * demek yetmez — oyuncu hangi ittifaktan bahsedildiğini bilmeli.
+     */
+    const [row] = await tx.execute<Record<string, unknown>>(sql`
+      SELECT name FROM alliances WHERE id = ${allianceId}
+    `);
+    const name = String(row?.['name'] ?? '');
+
     // Üyeler tek UPDATE ile boşa düşer; bekleyen davet/başvurular iptal olur; kayıt silinir
     // (invites CASCADE ama durumu netlemek için önce iptale çekiyoruz — denetim izi kalsın diye
     // silinen ittifakla birlikte gitmeleri sorun değil).
@@ -169,6 +196,23 @@ export class AllianceService {
        WHERE alliance_id = ${allianceId} AND status = 'pending'
     `);
     await tx.execute(sql`DELETE FROM alliances WHERE id = ${allianceId}`);
+
+    /**
+     * ⭐ Dağıtma bildirimi (kullanıcı, 2026-08-06) — üye ittifağını habersiz kaybediyordu.
+     * ⚠️ **Dağıtanın kendisine yazılmaz.** `leave()` son üye liderle buraya düştüğünde tek
+     * "üye" zaten o kişidir; ona "ittifakın dağıtıldı" demek kendi tıkladığı düğmeyi haber
+     * vermek olurdu. Süzgeç iki çağrı yerini de tek kuralla doğru yapıyor.
+     */
+    for (const m of members) {
+      const memberId = Number(m['id']);
+      if (memberId === actorId) continue;
+      await this.notice(tx, {
+        worldId, playerId: memberId,
+        subject: 'İttifak dağıtıldı',
+        text: `${name} ittifağı lideri tarafından dağıtıldı. Artık bir ittifakta değilsin.`,
+        extra: { allianceId, allianceName: name, reason: 'disbanded' },
+      });
+    }
     await this.emitChanged(tx, worldId, allianceId, members.map((m) => Number(m['id'])));
   }
 
@@ -182,6 +226,11 @@ export class AllianceService {
     await this.db.transaction(async (tx) => {
       const me = await this.lockPlayer(tx as never, o.playerId);
       this.require(me, ROLE.LEADER);
+      // ⚠️ Eski ad UPDATE'ten ÖNCE okunur; mesaj "X artık Y" diyebilsin diye.
+      const [before] = await tx.execute<Record<string, unknown>>(sql`
+        SELECT name FROM alliances WHERE id = ${me.allianceId}
+      `);
+      const oldName = String(before?.['name'] ?? '');
       try {
         await tx.execute(sql`UPDATE alliances SET name = ${name} WHERE id = ${me.allianceId}`);
       } catch (err) {
@@ -189,6 +238,20 @@ export class AllianceService {
           throw new AllianceError('name_taken', 'Bu isimde bir ittifak zaten var.');
         }
         throw err;
+      }
+      // Ad değişimi bildirimi (kullanıcı, 2026-08-06). Adı DEĞİŞTİREN lidere yazılmaz.
+      if (oldName !== name) {
+        const members = await tx.execute<Record<string, unknown>>(sql`
+          SELECT id FROM players WHERE alliance_id = ${me.allianceId} AND id <> ${o.playerId}
+        `);
+        for (const m of members) {
+          await this.notice(tx as never, {
+            worldId: o.worldId, playerId: Number(m['id']),
+            subject: 'İttifak adı değişti',
+            text: `İttifağının adı "${oldName}" iken "${name}" olarak değiştirildi.`,
+            extra: { allianceId: me.allianceId, oldName, newName: name, reason: 'renamed' },
+          });
+        }
       }
       await this.emitChanged(tx as never, o.worldId, me.allianceId!);
     });
@@ -228,10 +291,11 @@ export class AllianceService {
         worldId: o.worldId, playerId: o.targetId, allianceId: null, role: 0,
         noticeAllianceId: me.allianceId!,
       });
-      await this.writeMessage(tx as never, {
-        worldId: o.worldId, playerId: o.targetId, kind: 'system',
+      await this.notice(tx as never, {
+        worldId: o.worldId, playerId: o.targetId,
         subject: 'İttifaktan çıkarıldın',
-        body: { allianceId: me.allianceId, reason: 'kicked' },
+        text: `${me.username} seni ittifaktan çıkardı. Artık bir ittifakta değilsin.`,
+        extra: { allianceId: me.allianceId, reason: 'kicked' },
       });
     });
   }
@@ -247,6 +311,19 @@ export class AllianceService {
       const role = o.council ? ROLE.COUNCIL : ROLE.MEMBER;
       if (target.role === role) return;
       await tx.execute(sql`UPDATE players SET alliance_role = ${role} WHERE id = ${o.targetId}`);
+      /**
+       * ⭐ Rütbe bildirimi (kullanıcı, 2026-08-06). Üye yetkisinin değiştiğini hiçbir yerden
+       * öğrenemiyordu. ⚠️ `target.role === role` erken dönüşü YUKARIDA: rütbe gerçekten
+       * değişmediyse buraya hiç gelinmiyor, yani "değişti" diyen boş mesaj doğmuyor.
+       */
+      await this.notice(tx as never, {
+        worldId: o.worldId, playerId: o.targetId,
+        subject: o.council ? 'Konseye alındın' : 'Konseyden çıkarıldın',
+        text: o.council
+          ? 'İttifak liderin seni Konsey üyeliğine yükseltti. Artık davet gönderebilir, başvuruları sonuçlandırabilir ve ittifak metnini düzenleyebilirsin.'
+          : 'İttifak liderin seni Konsey üyeliğinden çıkardı. Rütben Asker olarak güncellendi.',
+        extra: { allianceId: me.allianceId, role, reason: o.council ? 'promoted' : 'demoted' },
+      });
       await this.emitChanged(tx as never, o.worldId, me.allianceId!, [o.targetId]);
     });
   }
@@ -263,10 +340,11 @@ export class AllianceService {
       await tx.execute(sql`UPDATE players SET alliance_role = ${ROLE.LEADER} WHERE id = ${o.targetId}`);
       await tx.execute(sql`UPDATE players SET alliance_role = ${ROLE.COUNCIL} WHERE id = ${o.playerId}`);
       await tx.execute(sql`UPDATE alliances SET leader_id = ${o.targetId} WHERE id = ${me.allianceId}`);
-      await this.writeMessage(tx as never, {
-        worldId: o.worldId, playerId: o.targetId, kind: 'system',
+      await this.notice(tx as never, {
+        worldId: o.worldId, playerId: o.targetId,
         subject: 'İttifak liderliği sana devredildi',
-        body: { allianceId: me.allianceId },
+        text: `${me.username} ittifak liderliğini sana devretti. Eski lider Konsey üyesi olarak devam ediyor.`,
+        extra: { allianceId: me.allianceId, reason: 'transferred' },
       });
       await this.emitChanged(tx as never, o.worldId, me.allianceId!, [o.playerId, o.targetId]);
     });
@@ -381,6 +459,19 @@ export class AllianceService {
         }
       }
 
+      /**
+       * İttifak adı ve karara konu oyuncunun adı — bildirim metinleri ikisini de kullanıyor.
+       * ⚠️ `invite` yolunda `lockPlayer` HİÇ çağrılmıyor (karar veren zaten davet edilenin
+       * kendisi), o yüzden kullanıcı adı buradan okunuyor; iki dalın da tek kaynağı bu.
+       */
+      const [meta] = await tx.execute<Record<string, unknown>>(sql`
+        SELECT a.name AS alliance_name, p.username AS subject_name
+          FROM alliances a, players p
+         WHERE a.id = ${allianceId} AND p.id = ${subjectId}
+      `);
+      const allianceName = String(meta?.['alliance_name'] ?? '');
+      const subjectName = String(meta?.['subject_name'] ?? '');
+
       if (!o.accept) {
         await tx.execute(sql`
           UPDATE alliance_invites SET status = 'rejected', decided_at = now(), decided_by = ${o.playerId}
@@ -388,10 +479,26 @@ export class AllianceService {
         `);
         // Başvurana sonucu söyle (doküman: "kabul edilmez ise yine cevap olarak ret mesajı gelecektir").
         if (kind === 'application') {
-          await this.writeMessage(tx as never, {
-            worldId: o.worldId, playerId: subjectId, kind: 'system',
-            subject: 'İttifak başvurun reddedildi', body: { allianceId },
+          await this.notice(tx as never, {
+            worldId: o.worldId, playerId: subjectId,
+            subject: 'İttifak başvurun reddedildi',
+            text: `${allianceName} ittifağına yaptığın başvuru reddedildi.`,
+            extra: { allianceId, reason: 'application_rejected' },
           });
+        } else {
+          /**
+           * ⭐ DAVET REDDİ artık YÖNETİME bildiriliyor (kullanıcı, 2026-08-06). Eskiden bu dal
+           * tamamen sessizdi: daveti gönderen konsey üyesi cevabı hiç öğrenemiyor, bekleyen
+           * davet listeden düşünce "gitti mi, reddedildi mi" ayırt edilemiyordu.
+           */
+          for (const managerId of await this.managerIds(tx as never, allianceId)) {
+            await this.notice(tx as never, {
+              worldId: o.worldId, playerId: managerId,
+              subject: 'İttifak daveti reddedildi',
+              text: `${subjectName} gönderdiğiniz ittifak davetini reddetti.`,
+              extra: { allianceId, playerId: subjectId, reason: 'invite_rejected' },
+            });
+          }
         }
         return;
       }
@@ -424,10 +531,27 @@ export class AllianceService {
          WHERE player_id = ${subjectId} AND status = 'pending'
       `);
       if (kind === 'application') {
-        await this.writeMessage(tx as never, {
-          worldId: o.worldId, playerId: subjectId, kind: 'system',
-          subject: 'İttifak başvurun kabul edildi', body: { allianceId },
+        await this.notice(tx as never, {
+          worldId: o.worldId, playerId: subjectId,
+          subject: 'İttifak başvurun kabul edildi',
+          text: `${allianceName} ittifağına katıldın. Rütben Asker olarak başlıyor.`,
+          extra: { allianceId, reason: 'application_accepted' },
         });
+      } else {
+        /**
+         * ⭐ DAVET KABULÜ de yönetime bildiriliyor. ⚠️ Katılana yazılmıyor: kabul düğmesine
+         * basan zaten o — kendi eylemini haber vermek gürültü olurdu (dağıtma/ayrılma/ad
+         * değişiminde uyguladığım "eylemi yapana yazma" kuralının aynısı).
+         * ⚠️ Yeni üye `MEMBER` rolüyle giriyor, `managerIds` (rol ≥ Konsey) onu kapsamıyor.
+         */
+        for (const managerId of await this.managerIds(tx as never, allianceId)) {
+          await this.notice(tx as never, {
+            worldId: o.worldId, playerId: managerId,
+            subject: 'İttifak daveti kabul edildi',
+            text: `${subjectName} ittifak davetini kabul etti ve ittifağa katıldı.`,
+            extra: { allianceId, playerId: subjectId, reason: 'invite_accepted' },
+          });
+        }
       }
       await this.emitChanged(tx as never, o.worldId, allianceId, [subjectId]);
     });
@@ -518,6 +642,37 @@ export class AllianceService {
       VALUES (${o.worldId}, 'message:written',
               ${JSON.stringify({ playerId: o.playerId, kind: o.kind })}::jsonb)
     `);
+  }
+
+  /**
+   * ⭐ İTTİFAK SİSTEM BİLDİRİMİ — `text` ZORUNLU (2026-08-06).
+   *
+   * ⚠️ Buradaki tek kritik nokta `text`: `Messages.tsx`teki sistem gövdesi `kind`e değil
+   * **`body.text`e** bakıyor (bilerek — `kind='system'` mağara iptali gibi metinsiz satırlarda
+   * da kullanılıyor). Metinsiz yazılan ittifak bildirimleri ekranda **BOŞ KUTU** olarak
+   * çiziliyordu; oyuncu yalnız başlığı görüyordu. Bu yardımcıdan geçen her satır metnini
+   * taşır, yani o hata bir daha doğamaz.
+   *
+   * ⚠️ Yapısal alanlar (`allianceId`, `reason`) KORUNUYOR: ekran metni kullanıyor ama
+   * `audit`/ileride filtreleme için makine-okunur alanlar da lazım.
+   */
+  private async notice(tx: Tx, o: {
+    worldId: number; playerId: number; subject: string; text: string;
+    extra?: Record<string, unknown>;
+  }): Promise<void> {
+    await this.writeMessage(tx, {
+      worldId: o.worldId, playerId: o.playerId, kind: 'system',
+      subject: o.subject, body: { ...o.extra, text: o.text },
+    });
+  }
+
+  /** Bir ittifağın yönetimi (Lider + Konsey) — üyelik olaylarının bildirim adresi. */
+  private async managerIds(tx: Tx, allianceId: number): Promise<number[]> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT id FROM players
+       WHERE alliance_id = ${allianceId} AND alliance_role >= ${ROLE.COUNCIL}
+    `);
+    return rows.map((r) => Number(r['id']));
   }
 
   /** İttifağa Mesaj — tüm üyelerin kutusuna (orijinal `itMsj.do`, t=7). Konsey + Lider. */
