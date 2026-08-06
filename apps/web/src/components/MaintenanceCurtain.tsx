@@ -34,15 +34,18 @@ export function MaintenanceCurtain() {
     >
       <div className="w-full max-w-md rounded-[var(--radius-md)] border-2 border-strong
         bg-panel p-5 text-center shadow-2xl">
-        <p className="display text-lg tracking-wide text-ink">BAKIM MODU</p>
+        <p className="display text-lg tracking-wide text-ink">SİSTEM BAKIMI</p>
         <p className="mt-3 text-sm leading-relaxed text-ink">
           {data.notice ?? 'Dünya bakıma alındı. Kısa süre içinde geri döneceğiz.'}
         </p>
-        {/* ⭐ Kullanıcının en çok önem verdiği cümle: hiçbir şey KAYBOLMUYOR. */}
+        {/*
+          ⭐ Söylenmesi gereken tek şey: hiçbir şey KAYBOLMUYOR.
+          ⚠️ Metin sadeleştirildi (kullanıcı, 2026-08-06). Eskiden hangi geri sayımların
+          donduğu tek tek sayılıyordu (yapılar · birimler · araştırmalar · yoldaki ordular);
+          oyuncunun o an merak ettiği şey liste değil, kaybının olmadığı.
+        */}
         <p className="mt-3 text-xs leading-relaxed text-muted">
-          Tüm geri sayımlar donduruldu — yapılar, birimler, araştırmalar ve yoldaki ordular
-          bakım süresince <b>ilerlemiyor</b>. Bakım bitince her şey <b>kaldığı yerden</b>
-          {' '}devam edecek; kimse zaman kaybetmeyecek.
+          Sistem bakım aşamasında. Bittiğinde her şey <b>kaldığı yerden</b> devam edecek.
         </p>
         {left ? (
           <p className="mt-4 rounded-[var(--radius-sm)] border border-border bg-surface px-3 py-2

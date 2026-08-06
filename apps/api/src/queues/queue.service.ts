@@ -151,7 +151,9 @@ export class QueueService {
       if (!budget.fits) {
         throw new QueueError(
           'castle_budget_full',
-          `Kale bütçesi yetmiyor: ${budget.used}/${budget.total}. Kale'yi yükseltin.`,
+          // ⚠️ Metin "bütçe" değil SEBEP söylüyor (kullanıcı, 2026-08-06): oyuncunun elinde
+          // eksik olan şey kaynak değil, Kale seviyesi. Sayı aynı kalıyor.
+          `Kale seviyeniz yetersiz: ${budget.used}/${budget.total}. Kale'yi yükseltin.`,
           budget,
         );
       }

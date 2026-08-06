@@ -6,7 +6,7 @@
  * kalemler burada tek tek adlandırıldı.
  */
 import { Badge, Panel } from '../components/ui.tsx';
-import { AccountPanel } from '../components/AccountPanel.tsx';
+import { AccountPanel, DeleteAccountPanel } from '../components/AccountPanel.tsx';
 import { CityAdminPanel } from '../components/CityAdminPanel.tsx';
 import { DevicesPanel } from '../components/DevicesPanel.tsx';
 import { NotifySettings } from '../components/NotifySettings.tsx';
@@ -68,6 +68,12 @@ export function OptionsScreen(): React.ReactElement {
       <Soon title="Yakında" lines={[
         'Üyelik / premium',
       ]} />
+
+      {/* ⭐ HESABI SİL EN ALTTA (kullanıcı, 2026-08-06). Geri alınamaz tek işlem bu; sayfanın
+          başında, "şifre değiştir"in hemen altında durmak yanlışlıkla tıklanmaya davetiyeydi.
+          ⚠️ Panel eskiden `AccountPanel`in içinden çıkıyordu, yani kodda "en altta" yazmasına
+          rağmen ekranda ikinci sıradaydı. */}
+      <DeleteAccountPanel />
     </div>
   );
 }

@@ -83,8 +83,6 @@ export function AccountPanel(): React.ReactElement {
         {open === 'password' ? <ChangePassword onDone={() => setOpen(null)} /> : null}
         {open === 'email' ? <ChangeEmail onDone={() => setOpen(null)} /> : null}
       </Panel>
-
-      <DeleteAccountPanel verified={info?.emailVerified ?? false} />
     </>
   );
 }
@@ -92,13 +90,23 @@ export function AccountPanel(): React.ReactElement {
 /**
  * ⭐ HESAP SİLME (kullanıcı, 2026-08-01) — **ayrı panel**, Hesap panelinin içinde değil.
  *
- * ⚠️ Bilinçli olarak ayrı ve en altta: geri alınamaz tek işlem bu ve "şifre değiştir"in
- * yanında duran bir düğme olarak yanlışlıkla tıklanmaya davetiye çıkarırdı.
+ * ⚠️ Bilinçli olarak ayrı ve **sayfanın EN ALTINDA**: geri alınamaz tek işlem bu ve "şifre
+ * değiştir"in yanında duran bir düğme olarak yanlışlıkla tıklanmaya davetiye çıkarırdı.
+ *
+ * ⚠️⚠️ **Yorum uzun süre gerçeğe uymuyordu.** "En altta" yazıyordu ama panel `AccountPanel`in
+ * içinden çıktığı için ekranda **ikinci sırada**, diğer kartların ÜSTÜNDE duruyordu
+ * (kullanıcı, 2026-08-06). Artık `OptionsScreen`in en sonunda çiziliyor ve doğrulama bilgisini
+ * kendi okuyor — `useAccount()` zaten paylaşılan bir sorgu (`['account']`), ek istek doğmuyor.
  *
  * ⚠️ Düğme silmez, **bağlantı ister**. Silme, e-postadaki tek kullanımlık bağlantıdan
  * açılan `/hesap-sil` sayfasında onaylanır (Google Play'in istediği akış).
  */
-function DeleteAccountPanel({ verified }: { verified: boolean }): React.ReactElement {
+export function DeleteAccountPanel(): React.ReactElement {
+  const verified = useAccount().data?.emailVerified ?? false;
+  return <DeleteAccountBody verified={verified} />;
+}
+
+function DeleteAccountBody({ verified }: { verified: boolean }): React.ReactElement {
   const [state, setState] = useState<'idle' | 'busy' | 'sent'>('idle');
   const [error, setError] = useState<unknown>(null);
 

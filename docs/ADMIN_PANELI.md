@@ -93,8 +93,8 @@ sessions.elevated_until   adım yükseltmesinin bitiş anı (15 dk)
 | `AdminStepUpGuard` | `elevated_until > now()` | Yıkıcı işlem (silme · sabit kaydetme · ham düzenleme) |
 
 ⚠️ **Rol access token'a GÖMÜLMEZ.** `AdminGuard` her istekte `accounts`tan okur. Token'a
-gömseydik rolü geri aldığımızda token ömrü (15 dk) boyunca geçerli kalırdı — "adminliği aldım"
-dedikten sonra çeyrek saat hâlâ admin. Bedeli `accounts_staff` kısmi indeksi üzerinden tek
+gömseydik rolü geri aldığımızda token ömrü boyunca (bugün varsayılan **12 saat**,
+`session.accessTtlHours`) geçerli kalırdı — "adminliği aldım" dedikten sonra yarım gün hâlâ admin. Bedeli `accounts_staff` kısmi indeksi üzerinden tek
 satır okuması. Testle sabitlendi (`admin.test.ts` → *"rol geri alınınca AYNI oturumda anında
 etkisiz"*).
 
@@ -340,7 +340,7 @@ sahiplik kontrolü tahmin edilemezliğe bırakılmaz (testte).
 ### `last_seen_at` ne anlama geliyor
 
 Zincirin **en son satırının** oluşma anı, yani "token en son ne zaman yenilendi". Her istekte
-güncelleseydik istek başına bir yazma olurdu; yenileme zaten ~15 dakikada bir olduğu için
+güncelleseydik istek başına bir yazma olurdu; yenileme jeton ömrü kadar seyrek olduğu için
 bedava ve yeterince taze.
 
 ### Kapsam dışı (bilinçli)
@@ -938,7 +938,7 @@ hiç kullanılmıyordu). ⚠️ Bilgi **süreç-yerel**: `ROLE=worker` profilind
 
 ⚠️ İki farklı "aktif" var ve panel ikisini de ayrı gösteriyor: **soket** (kesin ama süreç-yerel,
 yalnız "şu an") ve **`players.last_seen_at`** (yalnız giriş ve token yenilemede yazılıyor —
-her istekte değil; yenileme ~15 dk'da bir olduğu için kabaca doğru ama "3 dakika önce
+her istekte değil; yenileme jeton ömrü kadar seyrek olduğu için kaba bir değer, "3 dakika önce
 oynuyordu"yu göstermez).
 
 ### Tek cihazı düşürme

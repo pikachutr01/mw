@@ -59,9 +59,16 @@ export function PlayerSessions({ playerId, name, onNeedStepUp }: {
       <div className="space-y-2 p-3">
         <ErrorBox error={error} />
         {note ? <p className="text-xs text-success">{note}</p> : null}
+        {/*
+          ⚠️ Metin "~15 dakika" diyordu ve bu ARTIK YANLIŞTI: erişim jetonu ömrü 2026-08-03'te
+          15 dakikadan 12 saate çıkarıldı ve panelden ayarlanabilir hâle geldi
+          (`session.accessTtlHours`). Sabit sayı yazmak ayarı ikinci kez, yanlış yerde
+          tanımlamak demek — cümle artık sayı söylemiyor.
+        */}
         <p className="text-[11px] text-muted">
-          Bir satır = bir <b>cihaz</b> (oturum zinciri). Token her ~15 dakikada yenilenip yeni
-          satır açar ama zincir aynı kalır; bu yüzden liste yenilemelerle şişmez.
+          Bir satır = bir <b>cihaz</b> (oturum zinciri). Token ayarlanan ömrü dolunca yenilenip
+          yeni satır açar ama zincir aynı kalır; bu yüzden liste yenilemelerle şişmez.
+          Ömür: <b>Ayarlar → session → Erişim jetonu ömrü</b>.
         </p>
       </div>
 

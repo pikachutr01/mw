@@ -83,7 +83,9 @@ function OutsiderView({ canFound, pending }: {
         </div>
       </Panel>
 
-      <Panel title="İttifak Ara" right="başvurmak için listeden seç">
+      {/* ⚠️ Başlık bandında açıklama YOK (kullanıcı, 2026-08-06): listedeki her satırın
+          sonunda zaten «Başvur» düğmesi duruyor, ne yapılacağını o söylüyor. */}
+      <Panel title="İttifak Ara">
         <div className="space-y-2 p-3">
           <Input value={query} placeholder="İttifak adı ara…"
             onChange={(e) => setQuery(e.target.value)} aria-label="İttifak ara" />

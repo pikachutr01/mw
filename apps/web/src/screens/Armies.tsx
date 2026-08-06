@@ -22,8 +22,11 @@ export function Armies() {
    * altına sıralanmış durumda, aynıları bir de tablo olarak gösteriliyor"*.
    *
    * ⚠️ Varsayılan AÇIK — tercih eklemek kimsenin ekranını değiştirmemeli.
-   * ⚠️ Kapalıyken sayfa **bomboş kalmıyor**: ne olduğunu ve nereden geri açılacağını söyleyen
-   * bir satır duruyor. Sessizce boşalan bir sayfa, "bozuldu mu" sorusunu doğurur.
+   *
+   * ⚠️⚠️ **KAPALIYKEN PANELİN TAMAMI GİDER** (kullanıcı, 2026-08-06). İlk yazımda koşul
+   * `Panel`in İÇİNDEYDİ: başlık, «N hareket» sayacı ve çerçeve kalıyor, yalnız içerik bir
+   * açıklama satırına dönüşüyordu — yani "listeyi gizle" denince ekranda hâlâ bir liste
+   * kutusu duruyordu. Tercihin sözü "gizlensin"; yarısını gizlemek sözü tutmamak.
    */
   const [showTable] = usePref('armiesTable');
   useTick();
@@ -32,27 +35,24 @@ export function Armies() {
 
   return (
     <>
-      <Panel title="Ordular" right={all.length > 0 ? `${all.length} hareket` : 'sakin'}>
-        {!showTable ? (
-          <p className="px-3 py-4 text-sm text-muted">
-            Hareket listesi <b>Seçenekler → Tercihler</b>’den kapatıldı. Hareketler yukarıdaki
-            şehir şeridinde simgeleriyle duruyor.
-          </p>
-        ) : all.length === 0 ? (
-          <Empty>Şehirlerinde herhangi bir hareketlilik yok.</Empty>
-        ) : (
-          <ul className="divide-y divide-border">
-            {all
-              .slice()
-              .sort((a, b) => Date.parse(a.executeAt) - Date.parse(b.executeAt))
-              .map((m, i) => (
-                <MovementRow key={m.key} m={m} alt={i % 2 === 1} onOpen={setOpen} />
-              ))}
-          </ul>
-        )}
-        {/* Alt özet şeridi kaldırıldı (kullanıcı, 2026-07-30): hareketler zaten listede,
-            gelen saldırı/casusluk ayrıca CityStrip pulse'ı ve rozet rengiyle belli. */}
-      </Panel>
+      {showTable ? (
+        <Panel title="Ordular" right={all.length > 0 ? `${all.length} hareket` : 'sakin'}>
+          {all.length === 0 ? (
+            <Empty>Şehirlerinde herhangi bir hareketlilik yok.</Empty>
+          ) : (
+            <ul className="divide-y divide-border">
+              {all
+                .slice()
+                .sort((a, b) => Date.parse(a.executeAt) - Date.parse(b.executeAt))
+                .map((m, i) => (
+                  <MovementRow key={m.key} m={m} alt={i % 2 === 1} onOpen={setOpen} />
+                ))}
+            </ul>
+          )}
+          {/* Alt özet şeridi kaldırıldı (kullanıcı, 2026-07-30): hareketler zaten listede,
+              gelen saldırı/casusluk ayrıca CityStrip pulse'ı ve rozet rengiyle belli. */}
+        </Panel>
+      ) : null}
 
       {open ? <MovementModal m={open} onClose={() => setOpen(null)} /> : null}
     </>

@@ -119,26 +119,6 @@ export function AuthModal({ mode: initialMode = 'login', onClose }: {
             </Field>
           ) : null}
 
-          {/*
-            ⚠️ `forgot` modunda YOK: şifre sıfırlama e-posta üzerinden çalışıyor ve hesap
-            (e-posta) dünya bağımsız — orada dünya sormak yanıltıcı olurdu.
-            ⚠️ Tek dünya varken `disabled`: seçim diye bir şey yok, ama oyuncunun hangi dünyaya
-            girdiğini görmesi ileride ikinci dünya açıldığında alışkanlığı hazırlar.
-          */}
-          {mode !== 'forgot' && worlds.length > 0 ? (
-            <Field label="Dünya">
-              <Select
-                value={activeWorld ?? ''}
-                disabled={worlds.length === 1}
-                onChange={(e) => setWorldId(Number(e.target.value))}
-              >
-                {worlds.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </Select>
-            </Field>
-          ) : null}
-
           {mode !== 'forgot' ? (
             <Field label={mode === 'login'
               ? 'Kullanıcı adı'
@@ -163,6 +143,29 @@ export function AuthModal({ mode: initialMode = 'login', onClose }: {
               <Input type="password" required minLength={8}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 value={password} onChange={(e) => setPassword(e.target.value)} />
+            </Field>
+          ) : null}
+
+          {/*
+            ⭐ Dünya seçimi formun EN ALTINDA (kullanıcı, 2026-08-06). Kimlik alanları (e-posta ·
+            kullanıcı adı · parola) bir arada duruyor; dünya onlardan farklı bir soru ve tek
+            dünya varken zaten pasif — üstte durunca akışı bölüyordu.
+            ⚠️ `forgot` modunda YOK: şifre sıfırlama e-posta üzerinden çalışıyor ve hesap
+            (e-posta) dünya bağımsız — orada dünya sormak yanıltıcı olurdu.
+            ⚠️ Tek dünya varken `disabled`: seçim diye bir şey yok, ama oyuncunun hangi dünyaya
+            girdiğini görmesi ileride ikinci dünya açıldığında alışkanlığı hazırlar.
+          */}
+          {mode !== 'forgot' && worlds.length > 0 ? (
+            <Field label="Dünya">
+              <Select
+                value={activeWorld ?? ''}
+                disabled={worlds.length === 1}
+                onChange={(e) => setWorldId(Number(e.target.value))}
+              >
+                {worlds.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </Select>
             </Field>
           ) : null}
 
