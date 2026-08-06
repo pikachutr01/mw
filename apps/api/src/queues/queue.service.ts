@@ -135,6 +135,20 @@ export class QueueService {
        */
       if (opts.type === 'cave') await this.assertCaveIdle(tx as never, opts.cityId, opts.at);
 
+      /**
+       * ⭐ Kilidin YAPI YÖNÜ (§13.11.5a): o şehirde asker üretimi (kuyruktakiler dahil) varken
+       * Baraka, araştırma varken Akademi yükseltilemez. Karşı yön `enqueueUnits`/`enqueueTech`
+       * içinde. ⚠️ Kilit yalnız `unit` kategorisinde: savunma birimleri Baraka'ya bağlı değil.
+       */
+      if (opts.type === 'barracks') {
+        await this.assertNoOpenQueue(tx as never, opts.cityId, 'unit',
+          'Barakada asker üretimi sürerken Baraka yükseltilemez. Önce üretimin bitmesini bekleyin ya da iptal edin.');
+      }
+      if (opts.type === 'academy') {
+        await this.assertNoOpenQueue(tx as never, opts.cityId, 'tech',
+          'Akademide araştırma sürerken Akademi yükseltilemez. Önce araştırmanın bitmesini bekleyin ya da iptal edin.');
+      }
+
       const max = this.capacity.maxBuildingLevel(opts.type);
       if (target > max) {
         throw new QueueError('max_level', `${opts.type} en fazla ${max}. seviyeye çıkabilir.`);
@@ -205,6 +219,10 @@ export class QueueService {
             { max, have, canOrder: Math.max(0, max - have) });
         }
       }
+
+      // ⭐ Kilidin ÜRETİM YÖNÜ (§13.11.5a): Baraka yükseltilirken bu şehirde asker üretilemez.
+      await this.assertBuildingIdle(tx as never, opts.cityId, 'barracks',
+        'Baraka yükseltilirken asker üretilemez. Önce yükseltmenin bitmesini bekleyin ya da iptal edin.');
 
       /**
        * ⭐ AYNI ANDA **BARAKA SEVİYESİ** KADAR EMİR (kullanıcı kuralı 2026-07-28).
@@ -418,6 +436,10 @@ export class QueueService {
 
       // Bir şehrin akademisinde araştırma varken O ŞEHİRDE ikinci araştırma olmaz…
       await this.assertNoOpenQueue(tx as never, opts.cityId, 'tech');
+
+      // ⭐ Kilidin ARAŞTIRMA YÖNÜ (§13.11.5a): Akademi yükseltilirken bu şehirde araştırma açılamaz.
+      await this.assertBuildingIdle(tx as never, opts.cityId, 'academy',
+        'Akademi yükseltilirken teknik araştırılamaz. Önce yükseltmenin bitmesini bekleyin ya da iptal edin.');
 
       // …ve AYNI TEKNİK iki şehirde aynı anda araştırılamaz (seviye oyuncu-genel, §13.11.5).
       const dup = await tx.execute<Record<string, unknown>>(sql`
@@ -633,16 +655,49 @@ export class QueueService {
     }
   }
 
-  /** Aynı kategoride açık kuyruk varsa reddet (kategori başına tek slot). */
-  private async assertNoOpenQueue(tx: Db, cityId: number, category: QueueCategory): Promise<void> {
+  /**
+   * Aynı kategoride açık kuyruk varsa reddet (kategori başına tek slot).
+   *
+   * `message` verilmezse "aynı türden ikinci iş" metni döner. ⭐ Baraka↔asker /
+   * Akademi↔teknik kilidi (§13.11.5a) bu yardımcıyı **başka bir kategoriyle** çağırıyor;
+   * orada sebep farklı olduğu için metin dışarıdan geliyor.
+   */
+  private async assertNoOpenQueue(
+    tx: Db, cityId: number, category: QueueCategory,
+    message = 'Bu şehirde bu türden bir iş zaten sürüyor.',
+  ): Promise<void> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
       SELECT 1 FROM queues
        WHERE city_id = ${cityId} AND category = ${category}
          AND completed_at IS NULL AND canceled_at IS NULL
     `);
-    if (rows.length > 0) {
-      throw new QueueError('slot_busy', 'Bu şehirde bu türden bir iş zaten sürüyor.');
-    }
+    if (rows.length > 0) throw new QueueError('slot_busy', message);
+  }
+
+  /**
+   * ⭐ BARAKA ↔ ASKER, AKADEMİ ↔ TEKNİK KARŞILIKLI KİLİT (§13.11.5a, kullanıcı 2026-08-06).
+   *
+   * Belirtilen YAPI o şehirde yükseltiliyorsa üretim/araştırma emrini reddeder. Kilidin
+   * gerekçesi mağaranınkiyle (§13.20) aynı sınıftan: **yapının seviyesi işin parametresini
+   * belirliyor.** Baraka seviyesi hem birim süresini (`trainingTimeSeconds`) hem aynı anda
+   * verilebilecek emir sayısını, Akademi seviyesi de araştırma süresini (`techTimeSeconds`)
+   * kuruyor. Yükseltme üretimle paralel akarsa oyuncunun emri verdiği andaki süre ile
+   * yükseltme bitince geçerli olan süre ayrışır; hangisinin doğru olduğu belirsizleşir.
+   *
+   * ⚠️ Kilit ŞEHİR BAŞINA — sorgu `city_id` ile daraltılmış. Oyuncunun diğer şehirlerindeki
+   *    baraka/akademi bundan etkilenmez (kullanıcının açık şartı).
+   * ⚠️ Savunma birimleri KAPSAM DIŞI: `archer_tower`/`ballista` ön-şartı Sur/Kale, Baraka
+   *    değil (`packages/catalog/src/prerequisites.ts`) → `enqueueDefense` bu kilide girmez.
+   */
+  private async assertBuildingIdle(
+    tx: Db, cityId: number, itemType: string, message: string,
+  ): Promise<void> {
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM queues
+       WHERE city_id = ${cityId} AND category = 'building' AND item_type = ${itemType}
+         AND completed_at IS NULL AND canceled_at IS NULL
+    `);
+    if (rows.length > 0) throw new QueueError('slot_busy', message);
   }
 
   /**

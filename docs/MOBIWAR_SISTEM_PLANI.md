@@ -2646,6 +2646,42 @@ seviyeleri toplamıdır; diriltme süresi ise **o şehrin kendi** tapınağına 
   **yalnız Casus Kuş ile kurulamaz** (en az 1 casus-dışı savaşçı şart) · yanında kaynak götürülebilir ·
   varışta yer doluysa ordu **geri döner** (aynı süre) · yeni şehir §13.11.1 başlangıç seviyeleriyle doğar.
 
+### 13.11.5a ⭐ BARAKA ↔ ASKER, AKADEMİ ↔ TEKNİK KARŞILIKLI KİLİT (kullanıcı, 2026-08-06)
+
+**Kural — şehir başına, çift yönlü:**
+
+| O şehirde süren iş | Kapanan kapı |
+|---|---|
+| Baraka yükseltmesi | **asker üretim emri** verilemez |
+| asker üretimi (**sırada bekleyen dahil**) | **Baraka yükseltmesi** verilemez |
+| Akademi yükseltmesi | **teknik araştırma** açılamaz |
+| teknik araştırma | **Akademi yükseltmesi** verilemez |
+
+Yani bir şehirde ya üretim/araştırma olur ya da o binanın yükseltmesi — ikisi bir arada olmaz.
+
+**Gerekçe (Mağara kilidiyle aynı sınıf, §13.20):** yapının seviyesi **işin parametresini
+belirliyor.** Baraka seviyesi hem birim başına süreyi (`trainingTimeSeconds`) hem aynı anda
+verilebilecek emir sayısını, Akademi seviyesi araştırma süresini (`techTimeSeconds`) kuruyor.
+Yükseltme üretimle paralel akarsa oyuncunun emri verdiği andaki süre ile yükseltme bitince
+geçerli olan süre ayrışır ve hangisinin doğru olduğu belirsizleşir.
+
+**Kapsam:**
+- ⚠️ **Şehir başına.** Oyuncunun diğer şehirlerindeki baraka/akademi bundan etkilenmez.
+- ⚠️ **Savunma birimleri kapsam dışı.** `trap`/`archer_tower`/`ballista` ön-şartı Sur ve Kale,
+  Baraka değil (`prerequisites.ts`) → Baraka yükseltmesi savunma üretimini kilitlemez.
+- ⚠️ Alâkasız binalar (Çiftlik, Maden…) hiçbir şeyi kilitlemez; kilit **yalnız** Baraka ve
+  Akademi'ye özgü.
+- İptal ya da bitiş kilidi kendiliğinden çözer (`queues` satırı kapanınca sorgu boş döner).
+
+**Uygulama:** `queue.service.ts` → `assertBuildingIdle` (üretim/araştırma yönü) ve
+`enqueueBuilding` içindeki iki `assertNoOpenQueue` çağrısı (yapı yönü). Hata kodu mevcut
+`slot_busy` → **409**; metin dört yön için ayrı. Arayüzde düğme pasif + sebep yazılı
+(`City.tsx` → `LockNote`), sunucu hatası son savunma hattı.
+
+> ⚠️ §13.11.5 «bir şehrin akademisinde araştırma varken o şehrin Akademi'si yükseltilemez»
+> cümlesini 2026-08-06'ya kadar **yalnız belge** taşıyordu; kod yalnız ikinci bir araştırmayı
+> engelliyordu, Akademi yükseltmesini değil. Bu bölümle kural gerçekten uygulanır oldu.
+
 ### 13.11.6 ⭐ CASUSLUK — KESİŞİM MODELİ (kullanıcı tasarımı, 2026-07-30)
 
 **Bilgi kademesi doküman-birebir** (değişmedi):

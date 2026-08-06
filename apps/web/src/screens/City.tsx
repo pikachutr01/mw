@@ -123,6 +123,17 @@ function VerifyCap({ max, what = 'Yükseltme' }: { max: number; what?: string })
   );
 }
 
+/**
+ * ⭐ BARAKA ↔ ASKER, AKADEMİ ↔ TEKNİK KİLİDİNİN SEBEBİ (§13.11.5a, kullanıcı 2026-08-06).
+ *
+ * Sunucu da reddediyor (`queue.service.ts` → `assertBuildingIdle`); buradaki tek amaç
+ * oyuncunun düğmeye BASTIKTAN sonra değil basmadan önce görmesi — ön-şart ve §verify
+ * uyarılarıyla aynı yer, aynı ton.
+ */
+function LockNote({ text }: { text: string }) {
+  return <div className="mt-0.5 text-[11px] text-warning">{text}</div>;
+}
+
 function CostLine({ gold, food, seconds }: { gold: number; food: number; seconds: number | null }) {
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
@@ -267,6 +278,18 @@ function Buildings({ city }: { city: CityDetail }) {
    * karşılaşmadan bilgilendiriyor (ön-şart düğmesindeki kararın aynısı).
    */
   const caveLocked = cave.repairing || cave.job != null;
+  /**
+   * ⭐ Karşılıklı kilidin YAPI YÖNÜ (§13.11.5a): o şehirde asker üretimi (kuyruktakiler dahil)
+   * varken Baraka, araştırma varken Akademi yükseltilemez. ⚠️ `city.queues` yalnız AÇIK
+   * satırları taşıyor (`openQueues`) → iptal/bitiş kilidi kendiliğinden çözer.
+   */
+  const unitBusy = city.queues.some((q) => q.category === 'unit');
+  const techBusy = city.queues.some((q) => q.category === 'tech');
+  const mutexOf = (id: string): string | null => {
+    if (id === 'barracks' && unitBusy) return 'Asker üretimi sürerken Baraka yükseltilemez.';
+    if (id === 'academy' && techBusy) return 'Araştırma sürerken Akademi yükseltilemez.';
+    return null;
+  };
 
   return (
     <Panel title="Yapılar">
@@ -287,6 +310,7 @@ function Buildings({ city }: { city: CityDetail }) {
             return have < r.level;
           });
           const q = queueFor(city, 'building', b.id);
+          const mutex = mutexOf(b.id);
           return (
             <li key={b.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
               <div className="flex items-center justify-between gap-3">
@@ -308,11 +332,12 @@ function Buildings({ city }: { city: CityDetail }) {
                   <Requirements requirementNames={b.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
                   {capped ? <VerifyCap max={catalog.data!.verify!.maxBuildingLevel} /> : null}
+                  {mutex ? <LockNote text={mutex} /> : null}
                 </div>
                 {/* ⚠️ Ön-şart eksikse düğme PASİF — hata mesajıyla karşılaşmadan görülmeli. */}
                 <Button size="sm"
                   disabled={maxed || capped || busy || !afford || unmet || enqueue.isPending
-                    || (b.id === 'cave' && caveLocked)}
+                    || (b.id === 'cave' && caveLocked) || mutex != null}
                   onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
                   {maxed ? '—' : `sv ${b.level + 1}`}
                 </Button>
@@ -636,6 +661,14 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
   const wallRepairing = kind === 'defense' && city.wallRepair != null
     && Date.parse(city.wallRepair.until) > serverNow();
 
+  /**
+   * ⭐ Karşılıklı kilidin ÜRETİM YÖNÜ (§13.11.5a): bu şehirde Baraka yükseltiliyorsa savaşçı
+   * üretilemez. ⚠️ Yalnız `kind === 'unit'` — savunma birimlerinin ön-şartı Sur/Kale, Baraka
+   * değil, dolayısıyla Baraka yükseltmesi onları HİÇ etkilemez (sunucudaki kararın aynısı).
+   */
+  const barracksUpgrading = kind === 'unit'
+    && city.queues.some((q) => q.category === 'building' && q.itemType === 'barracks');
+
   // Emir sınırı: savaşçıda Baraka, savunma biriminde Sur (savunma birimleri surda yaşar).
   const bandLimit = Math.max(1, kind === 'unit'
     ? (city.buildings['barracks'] ?? 1)
@@ -664,7 +697,13 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
       title={kind === 'unit' ? 'Baraka' : 'Savunma'}
       right={`${queues.length}/${bandLimit} emir`}
     >
-      <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
+      <div className="px-3 pt-2">
+        <ErrorBox error={enqueue.error} />
+        {/* Kilit BÜTÜN satırları kapsıyor → uyarı satır satır tekrarlanmaz, panelin başında. */}
+        {barracksUpgrading ? (
+          <LockNote text="Baraka yükseltiliyor; bitene kadar asker üretilemez." />
+        ) : null}
+      </div>
       <ul className="divide-y divide-border">
         {list.map((u, i) => {
           const n = Number(counts[u.id] ?? '') || 0;
@@ -725,6 +764,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   )}
                   <Button size="sm"
                     disabled={unmet || slotsFull || enqueue.isPending || capped
+                      || barracksUpgrading
                       || (!levelBased && (n <= 0 || !afford)) || (levelBased && !afford)
                       /* ⭐ Onarımdaki Sur yükseltilemez (kullanıcı, 2026-07-30). */
                       || (u.id === 'wall' && wallRepairing)}
@@ -785,6 +825,14 @@ function Techs({ city }: { city: CityDetail }) {
   const enqueue = useEnqueue(cityId);
   const askCancel = useCancelWithConfirm();
   const busyHere = city.queues.some((q) => q.category === 'tech');
+  /**
+   * ⭐ Karşılıklı kilidin ARAŞTIRMA YÖNÜ (§13.11.5a): bu şehirde Akademi yükseltiliyorsa
+   * araştırma açılamaz. ⚠️ `city.queues` bu ŞEHRİN kuyruğu — başka şehrin akademisi
+   * yükseltilirken buradan araştırma açmak serbest (kullanıcının şartı şehir başına).
+   */
+  const academyUpgrading = city.queues.some(
+    (q) => q.category === 'building' && q.itemType === 'academy',
+  );
 
   /** Hangi teknik nerede araştırılıyor — TÜM şehirler (Akademiler ortak). */
   const byTech = new Map<string, TechQueueRow>();
@@ -792,7 +840,13 @@ function Techs({ city }: { city: CityDetail }) {
 
   return (
     <Panel title="Akademi">
-      <div className="px-3 pt-2"><ErrorBox error={enqueue.error} /></div>
+      <div className="px-3 pt-2">
+        <ErrorBox error={enqueue.error} />
+        {/* Kilit BÜTÜN tekniklere işliyor → uyarı satır satır değil, panelin başında. */}
+        {academyUpgrading ? (
+          <LockNote text="Akademi yükseltiliyor; bitene kadar teknik araştırılamaz." />
+        ) : null}
+      </div>
       <ul className="divide-y divide-border">
         {(catalog.data?.techs ?? []).map((t, i) => {
           const afford = city.resources.gold >= t.nextCost.gold && city.resources.food >= t.nextCost.food;
@@ -817,7 +871,8 @@ function Techs({ city }: { city: CityDetail }) {
                   {capped ? <VerifyCap max={caps.maxTechLevel} what="Araştırma" /> : null}
                 </div>
                 <Button size="sm"
-                  disabled={busyHere || !!q || !afford || unmet || enqueue.isPending || capped}
+                  disabled={busyHere || academyUpgrading || !!q || !afford || unmet
+                    || enqueue.isPending || capped}
                   onClick={() => enqueue.mutate({ category: 'tech', type: t.id })}>
                   sv {t.level + 1}
                 </Button>

@@ -482,6 +482,133 @@ describe('teknik araştırma', () => {
   });
 });
 
+/**
+ * ⭐ BARAKA ↔ ASKER, AKADEMİ ↔ TEKNİK KARŞILIKLI KİLİT (§13.11.6, kullanıcı 2026-08-06).
+ *
+ * Kural şehir başına ve ÇİFT YÖNLÜ. Aşağıdaki testler dört yönün dördünü ayrı ayrı ölçüyor;
+ * son üçü kilidin **fazla geniş olmadığını** kanıtlıyor (başka şehir · savunma birimi ·
+ * alâkasız bina) — tek başına "engelledi" testleri kilit her şeyi kapatsa da yeşil kalırdı.
+ */
+describe('Baraka ↔ asker, Akademi ↔ teknik kilidi', () => {
+  beforeEach(async () => {
+    await giveResources(1e12, 1e12);
+    await setTech('blacksmithing', 1);   // Cüce ön-şartı
+  });
+
+  it('Baraka yükseltilirken asker üretilemez', async () => {
+    const at = await clock.gameNow(worldId);
+    await queues.enqueueBuilding({ cityId, playerId, type: 'barracks', at });
+
+    const err = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at })
+      .then(() => null).catch((e: unknown) => e as QueueError);
+    expect(err).toBeInstanceOf(QueueError);
+    expect((err as QueueError).code).toBe('slot_busy');
+    expect((err as QueueError).message).toMatch(/Baraka yükseltilirken asker üretilemez/);
+  });
+
+  it('asker üretimi varken Baraka yükseltilemez', async () => {
+    const at = await clock.gameNow(worldId);
+    await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
+
+    const err = await queues.enqueueBuilding({ cityId, playerId, type: 'barracks', at })
+      .then(() => null).catch((e: unknown) => e as QueueError);
+    expect((err as QueueError).code).toBe('slot_busy');
+    expect((err as QueueError).message).toMatch(/asker üretimi sürerken Baraka yükseltilemez/);
+  });
+
+  /**
+   * ⚠️ Kullanıcının şartında «kuyruk da dahil» geçiyor: üretimi HENÜZ BAŞLAMAMIŞ, sırada
+   * bekleyen bir emir de Baraka'yı kilitlemeli. Öndeki emri elle `completed_at` işaretleyerek
+   * geriye YALNIZ bekleyen emir bırakılıyor — kilidin `position`a bakmadığı böyle ölçülüyor.
+   */
+  it('⭐ sırada BEKLEYEN emir de Baraka\'yı kilitler', async () => {
+    await setLevel('barracks', 2);
+    const at = await clock.gameNow(worldId);
+    const first = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
+    const second = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
+    expect(second.position).toBe(2);
+
+    await h.db.execute(sql`UPDATE queues SET completed_at = now() WHERE id = ${first.id}`);
+
+    await expect(queues.enqueueBuilding({ cityId, playerId, type: 'barracks', at }))
+      .rejects.toThrow(/asker üretimi sürerken Baraka yükseltilemez/);
+  });
+
+  it('Akademi yükseltilirken teknik araştırılamaz', async () => {
+    await setLevel('castle', 3);          // Akademi ön-şartı: Kale 2
+    await setLevel('academy', 1);         // Demircilik ön-şartı: Akademi 1
+    const at = await clock.gameNow(worldId);
+    await queues.enqueueBuilding({ cityId, playerId, type: 'academy', at });
+
+    const err = await queues.enqueueTech({ cityId, playerId, type: 'armor', at })
+      .then(() => null).catch((e: unknown) => e as QueueError);
+    expect((err as QueueError).code).toBe('slot_busy');
+    expect((err as QueueError).message).toMatch(/Akademi yükseltilirken teknik araştırılamaz/);
+  });
+
+  it('teknik araştırılırken Akademi yükseltilemez', async () => {
+    await setLevel('castle', 3);
+    await setLevel('academy', 1);
+    const at = await clock.gameNow(worldId);
+    await queues.enqueueTech({ cityId, playerId, type: 'armor', at });
+
+    const err = await queues.enqueueBuilding({ cityId, playerId, type: 'academy', at })
+      .then(() => null).catch((e: unknown) => e as QueueError);
+    expect((err as QueueError).code).toBe('slot_busy');
+    expect((err as QueueError).message).toMatch(/araştırma sürerken Akademi yükseltilemez/);
+  });
+
+  it('⭐ kilit ŞEHİR BAŞINA — diğer şehir etkilenmez', async () => {
+    const at = await clock.gameNow(worldId);
+    await queues.enqueueBuilding({ cityId, playerId, type: 'barracks', at });
+
+    const city2 = await cities.create({
+      worldId, playerId, name: 'ikinci', k: 5, d: 5, s: 5, isCapital: false, at,
+    });
+    await h.db.execute(sql`UPDATE cities SET gold = 1e9, food = 1e9 WHERE id = ${city2}`);
+
+    // İkinci şehrin barakası boşta → üretim serbest.
+    await expect(queues.enqueueUnits({ cityId: city2, playerId, type: 'dwarf', count: 5, at }))
+      .resolves.toBeTruthy();
+  });
+
+  /**
+   * ⭐ SAVUNMA BİRİMLERİ KAPSAM DIŞI: `trap`/`archer_tower` Baraka'da değil Sur'da üretiliyor
+   * (ön-şart `wall`), dolayısıyla Baraka yükseltmesi onları kilitlememeli.
+   */
+  it('⭐ Baraka yükseltmesi savunma birimini engellemez', async () => {
+    const at = await clock.gameNow(worldId);
+    await h.db.execute(sql`
+      INSERT INTO defenses (city_id, type, count) VALUES (${cityId}, 'wall', 1)
+      ON CONFLICT (city_id, type) DO UPDATE SET count = 1
+    `);
+    await setLevel('wall', 1);            // ön-şart kontrolü buildings'ten okuyor
+    await queues.enqueueBuilding({ cityId, playerId, type: 'barracks', at });
+
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'trap', count: 3, at }))
+      .resolves.toBeTruthy();
+  });
+
+  it('⭐ alâkasız bina (Çiftlik) asker üretimini engellemez', async () => {
+    const at = await clock.gameNow(worldId);
+    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+
+    await expect(queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at }))
+      .resolves.toBeTruthy();
+  });
+
+  it('iptal kilidi çözer', async () => {
+    const at = await clock.gameNow(worldId);
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
+    await expect(queues.enqueueBuilding({ cityId, playerId, type: 'barracks', at })).rejects.toThrow();
+
+    await queues.cancel({ queueId: q.id, playerId, at });
+
+    await expect(queues.enqueueBuilding({ cityId, playerId, type: 'barracks', at }))
+      .resolves.toBeTruthy();
+  });
+});
+
 describe('sahiplik ve idempotency', () => {
   it('başkasının şehrine kuyruk açılamaz', async () => {
     const at = await clock.gameNow(worldId);
