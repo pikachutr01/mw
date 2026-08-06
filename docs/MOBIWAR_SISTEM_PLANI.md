@@ -1506,6 +1506,30 @@ kurup hemen saldırma) hâlâ mümkün ve meşrudur — oyunun ruhu budur. Onu a
   Koloni kurup hemen saldırmak meşru bir hamledir; dengeyi taban süre + başlangıç koruması sağlar.
 - Mevcut kurallar korunur: bir şehre 24 saatte en fazla 3 saldırı; tatil modu koşulları.
 
+### 13.5.4b ⭐ 10 KAT KURALI — puan farkı eşleşmeyi kapatır (kullanıcı, 2026-08-06)
+
+*"Çok güçlü bir oyuncuyla çok zayıf bir oyuncuyu doğrudan karşı karşıya getirmekten
+kaçınmalıyız."* Bir oyuncu, kendisinden **10 kat düşük veya 10 kat yüksek** puanlı birine
+**saldıramaz**; casusluk, nakliye ve destek serbesttir.
+
+- Kıyas: `max(a, b) / min(a, b) >= 10` → engel. **Tam 10 kat da engellidir**: 20 puanlı bir
+  oyuncu 200'e de 201'e de saldıramaz, 199'a saldırabilir. Aşağı yönde de aynı: 20 → 2 engelli.
+- **0 puan 1 gibi işlenir.** Kullanıcının örneği: 0 → 9 serbest, 0 → 10 engelli.
+- Ayar: `combat.attackScoreRatio` (varsayılan **10**, 0 yazmak kuralı kapatır).
+
+⚠️⚠️ **Puan `players.score`tan DEĞİL, son sıralamada DONMUŞ `rankings.score`tan okunur** —
+kullanıcının açık şartı. Gerekçe oynanabilirlik: anlık puan her harcamada oynuyor, oyuncu kime
+saldırabileceğini ancak deneyerek öğrenirdi. Dondurulmuş puan 8 saat sabit ve **ekranda görünen
+değerle aynı**, yani kural tahmin edilebilir.
+
+⚠️ Sıralama satırı olmayan oyuncu **0** sayılır. Yeni oyuncu zaten acemi koruması altında ve
+koruma bitmeden bir sonraki görüntüde listeye giriyor. Yan etki: `ranking_excluded` bir hesabın
+da satırı silindiği için o da 0 görünür.
+
+⚠️ Kontrol `sendAttack` gövdesinde, ortak `march()` yolunda **değil** — casusluk/nakliye/destek
+oradan geçtiği için muafiyet kendiliğinden sağlanıyor. Ortak yola konsaydı istisnayı elle
+işlemek gerekir ve yeni bir görev tipi eklendiğinde unutulurdu.
+
 ### 13.5.5 Örnek cetvel (Haritacılık 0)
 | Rota | D | Cüce (100) | Süvari (140) | Kaos (80) | Casus Kuş (6000) |
 |---|---|---|---|---|---|

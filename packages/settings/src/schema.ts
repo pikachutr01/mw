@@ -450,6 +450,26 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     note: 'Taşıma kapasitesini ETKİLEMEZ — 2026-07-31\'de binary + ölçümle kesinleşti.',
   },
   {
+    /**
+     * ⭐ 10 KAT KURALI (kullanıcı, 2026-08-06).
+     *
+     * ⚠️ `COMBAT_MAP`'e (apps/api/src/settings/combat.ts) EKLENMEZ — motora değil, saldırı
+     * ÖN KOŞULUNA gidiyor. `mission.service.assertScoreRatio` bunu `liveNumber` ile okuyor.
+     * Motor haritasına konsaydı savaş çözümüne sızar ve orada hiçbir anlamı olmazdı.
+     */
+    key: 'combat.attackScoreRatio',
+    label: 'Saldırı puan farkı sınırı',
+    type: 'number', default: 10, min: 0, max: 1000, tag: 'design', unit: '×',
+    description: 'İki oyuncunun SON SIRALAMADA donmuş puanları arasındaki oran bu değere '
+      + 'ulaşırsa saldırı engellenir (çift yönlü). 10 = 20 puanlı bir oyuncu 200 puanlıya da '
+      + '2 puanlıya da saldıramaz. Büyütmek daha geniş bir aralığa izin verir, küçültmek '
+      + 'eşleşmeyi daraltır. 0 yazmak kuralı tamamen kapatır.',
+    note: 'Casusluk · nakliye · destek ETKİLENMEZ — kural yalnız saldırı yolunda. Puan anlık '
+      + '`players.score` değil `rankings.score` (dondurulmuş) üzerinden okunuyor: anlık puan '
+      + 'her harcamada oynadığı için oyuncu kime saldırabileceğini ancak deneyerek öğrenirdi. '
+      + '0 puan 1 gibi işlenir (0 → 9 serbest, 0 → 10 engelli).',
+  },
+  {
     key: 'combat.repairMin',
     label: 'Yapı onarımı — alt sınır',
     type: 'number', default: 0.76, min: 0, max: 1, tag: 'measured',

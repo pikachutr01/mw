@@ -22,6 +22,7 @@ import {
 import { isVerified, UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
+import { liveNumber } from '../settings/live.ts';
 import type { Tx } from './handler-registry.ts';
 
 /** `route()` çıktısı — mesafe + geçiş bayrakları birlikte taşınır. */
@@ -53,6 +54,11 @@ export type MissionErrorCode =
   | 'on_vacation'
   /** ⭐ Hedef oyuncu cezalı ve cezası «saldırıya kapalı» (§oyuncu cezası). */
   | 'target_banned'
+  /**
+   * ⭐ **10 KAT KURALI** (kullanıcı, 2026-08-06): iki taraf arasındaki puan farkı çok büyük.
+   * Çift yönlü — hem güçlünün zayıfı ezmesini hem zayıfın devi taciz etmesini kapatır.
+   */
+  | 'score_gap'
   | 'march_limit'
   | 'hero_unavailable'
   | 'world_mismatch'
@@ -221,6 +227,15 @@ export class MissionService {
       await this.assertVerified(t, opts.playerId, 'attack');
       await this.assertTargetAllowed(t, target.playerId, 'attack', opts.at);
       await this.assertAttackLimit(t, opts.playerId, target.id, opts.at);
+      /**
+       * ⭐ 10 KAT KURALI — **yalnız `sendAttack` gövdesinde.**
+       *
+       * ⚠️ Casusluk · nakliye · destek · şehir kurma ortak `march()` üzerinden gidiyor ve bu
+       * kodu HİÇ GÖRMÜYOR. Yani "casusluk serbest kalsın" şartı için ayrı bir istisna yazmaya
+       * gerek yok; kuralı buraya koymak onu kendiliğinden sağlıyor. Ortak yola koysaydık
+       * istisnayı elle işlemek gerekir ve bir görev tipi eklendiğinde unutulurdu.
+       */
+      await this.assertScoreRatio(t, opts.playerId, target.playerId);
       await this.assertMarchLimit(t, opts.originCityId, opts.playerId);
 
       // ⭐ Saldıran kendi acemi korumasını ANINDA kaybeder (§13.5.4). Saldırı yazılmadan önce
@@ -1040,6 +1055,55 @@ export class MissionService {
         'attack_limit',
         `Bu şehre ${this.rules.attackWindowHours} saatte en fazla ${this.rules.dailyAttackLimit} saldırı yapabilirsiniz.`,
         { used: n, limit: this.rules.dailyAttackLimit },
+      );
+    }
+  }
+
+  /**
+   * ⭐⭐ 10 KAT KURALI (kullanıcı, 2026-08-06).
+   *
+   * *"Bir oyuncu … kendisinden 10 kat düşük veya 10 kat yüksek puanlı bir oyuncuya saldırı
+   * gerçekleştiremez. Casusluk gönderebilir. Tam 10 kat olunca bu kural devreye girer."*
+   *
+   * ⚠️⚠️ **PUAN `players.score`TAN DEĞİL, SON SIRALAMADA DONMUŞ değerden okunuyor** — bu
+   * kullanıcının açık şartı: *"iki tarafın da sıralamaya henüz yansımamış gerçek puanından
+   * değil"*. Sebebi oynanabilirlik: anlık puan her harcamada oynuyor, oyuncu kime
+   * saldırabileceğini ancak deneyerek öğrenirdi. Dondurulmuş puan 8 saat boyunca sabit ve
+   * ekranda görünen değerle **aynı** — kural tahmin edilebilir oluyor.
+   *
+   * ⚠️ **0 puan 1 gibi işleniyor.** Oran hesabı sıfıra bölünemez ve kullanıcının örneği bunu
+   * gerektiriyor: *"0 puanlı bir oyuncu da 10 puanlı bir oyuncuya saldıramasın, 9 puanlı
+   * birine saldırabilsin"* → 10/1 = 10 (engel), 9/1 = 9 (serbest). Kelepçe 0'ı 1 yapınca
+   * örnek birebir tutuyor.
+   *
+   * ⚠️ Sıralama satırı **olmayan** oyuncu 0 sayılır. Kullanıcının gerekçesi: yeni oyuncu zaten
+   * acemi koruması altında ve koruma bitmeden bir sonraki anlık görüntüde 0 puanla listeye
+   * giriyor. ⚠️ Yan etki: `ranking_excluded` bir oyuncunun da satırı silinir, yani panelden
+   * sıralamadan muaf tutulan güçlü bir hesap da 0 görünür ve bu kural onu korur/kısıtlar.
+   *
+   * ⚠️ Karşılaştırma `>=`: kullanıcı *"tam 10 kat olunca bu kural devreye girer"* dedi.
+   * 20 → 200 ENGELLİ, 20 → 199 serbest.
+   */
+  private async assertScoreRatio(tx: Tx, attackerId: number, defenderId: number): Promise<void> {
+    const limit = liveNumber('combat', 'attackScoreRatio', 10);
+    if (limit <= 0) return;                       // 0/negatif = kural kapalı
+
+    const rows = await tx.execute<Record<string, unknown>>(sql`
+      SELECT subject_id, score FROM rankings
+       WHERE kind = 'player' AND subject_id IN (${attackerId}, ${defenderId})
+    `);
+    const frozen = new Map<number, number>();
+    for (const r of rows) frozen.set(Number(r['subject_id']), Number(r['score']));
+
+    // ⚠️ `?? 0` sonra `max(…, 1)`: satırı olmayan da sıfır puanlı da aynı tabana oturuyor.
+    const a = Math.max(1, frozen.get(attackerId) ?? 0);
+    const d = Math.max(1, frozen.get(defenderId) ?? 0);
+    const ratio = Math.max(a, d) / Math.min(a, d);
+    if (ratio >= limit) {
+      throw new MissionError(
+        'score_gap',
+        `Kendinden ${limit} kat güçlü veya ${limit} kat zayıf birine saldıramazsın.`,
+        { attackerScore: frozen.get(attackerId) ?? 0, defenderScore: frozen.get(defenderId) ?? 0, limit },
       );
     }
   }

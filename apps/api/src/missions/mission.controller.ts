@@ -553,6 +553,12 @@ export function missionErrorToHttp(err: unknown): Error {
     case 'email_unverified':
     /** ⭐ §tatil modu — yine aynı aile, bu sefer engel GÖNDERENDE. */
     case 'on_vacation':
+    /**
+     * ⭐ 10 kat kuralı da aynı aile: istek kusursuz, **bu iki oyuncu eşleşemez**.
+     * ⚠️ Buraya eklenmeseydi varsayılan dala düşüp 400 dönerdi — `target_banned` ile tam
+     * bu yaşandı ve canlı ölçümde yakalandı.
+     */
+    case 'score_gap':
       return new ForbiddenException(payload);
     case 'attack_limit':
     case 'march_limit':

@@ -15,7 +15,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { UNITS_BY_ID, wallRepairSeconds } from '@mobilwar/catalog';
 import { distance, ENGINE_VERSION, travelSeconds } from '@mobilwar/engine';
 import { buildBattleReport, type BattleRow } from '../src/battles/battle-report.ts';
@@ -24,7 +24,8 @@ import type { DbHandle } from '../src/db/client.ts';
 import { toDate } from '../src/db/client.ts';
 import { battleHandlers, isNightBattle } from '../src/missions/battle.handlers.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';
-import { MissionController } from '../src/missions/mission.controller.ts';
+import { MissionController, missionErrorToHttp } from '../src/missions/mission.controller.ts';
+import { setLiveSettings } from '../src/settings/live.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
@@ -1591,5 +1592,157 @@ describe('sur yıkımı ve onarımı', () => {
     `);
     const girdi = b2row!['input'] as { defender: { wallIntegrity?: number } };
     expect(girdi.defender.wallIntegrity ?? 1).toBeLessThan(1);
+  });
+});
+
+/* ═══ 10 KAT KURALI ═════════════════════════════════════════════════════════ */
+
+/**
+ * ⭐⭐ 10 KAT KURALI (kullanıcı, 2026-08-06): *"Bir oyuncu … kendisinden 10 kat düşük veya
+ * 10 kat yüksek puanlı bir oyuncuya saldırı gerçekleştiremez. Casusluk gönderebilir. Tam 10
+ * kat olunca bu kural devreye girer."*
+ *
+ * ⚠️ Testler kullanıcının VERDİĞİ ÖRNEKLERİ birebir kullanıyor (20↔200, 20↔2, 0↔10, 0↔9).
+ * Kendi uydurduğum sayılarla ölçseydim kuralın sınırını yanlış yere koyduğumu fark edemezdim —
+ * özellikle `>` mü `>=` mi olduğu tam bu örneklerden çıkıyor.
+ *
+ * ⚠️ Puan `players.score`tan DEĞİL `rankings`ten okunuyor; bu yüzden testler dondurulmuş
+ * satırı doğrudan yazıyor. Anlık puanı değiştirmek kuralı ETKİLEMEMELİ ve bu da ölçülüyor.
+ */
+describe('10 kat kuralı (saldırı puan farkı)', () => {
+  /** Sıralamada donmuş puanı yazar. `rank` kuralı ilgilendirmiyor, sıra için 1'den artıyor. */
+  async function freezeScore(playerId: number, score: number, rank = 1): Promise<void> {
+    await h.db.execute(sql`
+      INSERT INTO rankings (world_id, kind, subject_id, rank, prev_rank, score, taken_at)
+      VALUES (${worldId}, 'player', ${playerId}, ${rank}, NULL, ${score}, now())
+      ON CONFLICT (world_id, kind, subject_id) DO UPDATE SET score = EXCLUDED.score
+    `);
+  }
+
+  /**
+   * ⚠️ Sonucu DÖNDÜRÜYOR. İlk yazımda `Promise<void>` idi ve `resolves.toBeTruthy()` diyen
+   * dört test "expected undefined to be truthy" ile düştü — kural değil, yardımcı hatalıydı.
+   */
+  const attack = async (): Promise<{ missionId: number }> => {
+    await giveUnits(attackCity, 'dwarf', 50);
+    const at = await clock.gameNow(worldId);
+    return missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 50 }, at,
+    });
+  };
+
+  /**
+   * ⚠️ Canlı ayar HER testten sonra sıfırlanıyor. "Ayar 0" testi bir kez düştüğünde
+   * `setLiveSettings({})` satırına hiç ulaşmadı ve `attackScoreRatio: 0` bir sonraki teste
+   * SIZDI — o test de yanlış sebeple düştü. Temizliği testin gövdesine bırakmak, hata
+   * anında çalışmayan bir temizlik demek.
+   */
+  afterEach(() => { setLiveSettings({}); });
+
+  const expectBlocked = async (): Promise<void> => {
+    await expect(attack()).rejects.toMatchObject({ code: 'score_gap' });
+  };
+
+  it('⭐ TAM 10 kat ENGELLİ (20 → 200)', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 200, 2);
+    await expectBlocked();
+  });
+
+  it('10 katın ALTI serbest (20 → 199)', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 199, 2);
+    await expect(attack()).resolves.toBeTruthy();
+  });
+
+  /** ⭐ Kullanıcının ikinci örneği: kural AŞAĞI doğru da işliyor. */
+  it('güçlü oyuncu zayıfa da saldıramaz (20 → 2)', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 2, 2);
+    await expectBlocked();
+  });
+
+  it('simetri: 200 puanlı 20 puanlıya saldıramaz', async () => {
+    await freezeScore(attacker, 200);
+    await freezeScore(defender, 20, 2);
+    await expectBlocked();
+  });
+
+  /**
+   * ⭐ SIFIR İSTİSNASI — kullanıcının açık örneği: *"0 puanlı bir oyuncu da 10 puanlı bir
+   * oyuncuya saldıramasın, 9 puanlı birine saldırabilsin."* Kod 0'ı 1'e kelepçeliyor.
+   */
+  it('0 puan → 10 puana ENGELLİ, 9 puana serbest', async () => {
+    await freezeScore(attacker, 0);
+    await freezeScore(defender, 10, 2);
+    await expectBlocked();
+
+    await freezeScore(defender, 9, 2);
+    await expect(attack()).resolves.toBeTruthy();
+  });
+
+  it('iki taraf da 0 puanken serbest', async () => {
+    await freezeScore(attacker, 0);
+    await freezeScore(defender, 0, 2);
+    await expect(attack()).resolves.toBeTruthy();
+  });
+
+  /**
+   * ⭐⭐ **KURALIN EN ÖNEMLİ ŞARTI**: puan DONDURULMUŞ değerden okunuyor. Anlık `players.score`
+   * kullanılsaydı oyuncu kime saldırabileceğini ancak deneyerek öğrenirdi ve ekranda gördüğü
+   * sayı ile kural ayrışırdı.
+   */
+  it('anlık puan değişse bile kural DONMUŞ puana bakar', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 200, 2);
+    // Anlık puanları eşitle — kural yine de engellemeli, çünkü sıralama satırı değişmedi.
+    await h.db.execute(sql`
+      UPDATE players SET score = 100 WHERE id IN (${attacker}, ${defender})
+    `);
+    await expectBlocked();
+  });
+
+  /**
+   * ⭐ Sıralama satırı OLMAYAN oyuncu 0 sayılır. Kullanıcının gerekçesi: yeni oyuncu zaten
+   * acemi koruması altında ve koruma bitmeden bir sonraki görüntüde listeye giriyor.
+   */
+  it('sıralama satırı olmayan oyuncu 0 puan sayılır', async () => {
+    await freezeScore(defender, 10, 2);        // saldıranın satırı YOK
+    await expectBlocked();
+  });
+
+  /**
+   * ⭐⭐ CASUSLUK MUAF. Kod `sendAttack` gövdesinde; casusluk ortak `march()` üzerinden gidiyor
+   * ve bu satırı hiç görmüyor. Ayrı bir istisna YAZILMADI — bu test onun kanıtı.
+   */
+  it('aynı çiftte CASUSLUK serbest', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 200, 2);
+    await expectBlocked();
+
+    await giveUnits(attackCity, 'spy_bird', 10);
+    const at = await clock.gameNow(worldId);
+    await expect(missions.sendSpy({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 10 }, at,
+    })).resolves.toBeTruthy();
+  });
+
+  /** ⚠️ Ayar 0 = kural kapalı; panelden geri alınabilir olmalı. */
+  it('ayar 0 iken kural hiç çalışmaz', async () => {
+    setLiveSettings({ combat: { attackScoreRatio: 0 } });
+    await freezeScore(attacker, 1);
+    await freezeScore(defender, 100000, 2);
+    await expect(attack()).resolves.toBeTruthy();
+    // Temizlik `afterEach`te — test düşerse burası çalışmazdı.
+  });
+
+  /** Hata 403 döner — "istek bozuk" (400) değil, "bu iki oyuncu eşleşemez". */
+  it('HTTP karşılığı 403', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 200, 2);
+    const err = await attack().catch((e: unknown) => e);
+    expect(missionErrorToHttp(err).constructor.name).toBe('ForbiddenException');
   });
 });
