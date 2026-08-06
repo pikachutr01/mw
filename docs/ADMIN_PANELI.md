@@ -1386,6 +1386,46 @@ matris           9 yapı × 4 eksen, devralınan değerler placeholder olarak do
 
 ---
 
+## Oyuncuyu dünyadan kaldır (`purge-player`, 2026-08-06)
+
+⛔ **Geri alınamaz.** Küratörlü aksiyonlar listesinde, `AdminStepUpGuard` arkasında.
+
+**Hesap silmeden (`AccountDeleteService`) farkı ve NEDEN farklı:**
+
+| | Hesap silme | Dünyadan kaldırma |
+| :-- | :-- | :-- |
+| Kim başlatır | oyuncunun kendisi (mağaza şartı) | yönetici (moderasyon) |
+| Başkent | **KALIR**, adı anonimleşir | **SİLİNİR** |
+| Kahramanlar | başkente taşınır | **silinir** — taşınacak şehir kalmıyor |
+| Kullanıcı adı | `hükümdarN` olur | **korunur** — denetim izi |
+| Hesap | sterilize edilir | dokunulmaz; oyuncuya **kalıcı ceza** |
+
+**Ne yapar:** ittifak bağını koparır (⚠️ **LİDERSE ittifak DAĞITILIR** — lidersiz ittifak
+onarılamaz olurdu, çünkü davet/at/ad/dağıt hepsi lider kapısının arkasında ve kaldırılan lider
+bir daha giriş yapamaz; üyelere §13.15b.1 bildirimi gider) · açık görevleri iptal eder ·
+kahramanları siler · **başkent dahil** tüm şehirleri siler (`buildings`·`units`·`defenses`·
+`cave_units`·`queues` CASCADE ile gider) · puanı sıfırlar · `ranking_excluded` işaretler ·
+kalıcı ceza verir ve oturumları düşürür · `audit_log`a yazar.
+
+⚠️ **`missions` ve `battles` FK'SIZ.** Şehir silinince kendiliğinden temizlenmezler; açık
+görevler elle iptal edilmezse varışta şehri bulamayıp `failed`'a düşer. Oyuncunun kendi
+seferleri kadar **ona gelen** seferler de iptal ediliyor — hedefi yok olmuş bir saldırı da
+boşlukta kalırdı.
+
+⚠️ **`players` satırı SİLİNMEZ**: `cities.player_id` NO ACTION, `battles`/`rankings` ise
+FK'sız referans tutuyor.
+
+⚠️ **Ceza şart, işaret yetmez.** `players.deleted_at` kodda hiçbir yerde OKUNMUYOR — yalnız
+bir işaret. Ceza verilmeseydi kaldırılan oyuncu girişe devam eder ve şehirsiz, bozuk bir
+dünyaya düşerdi.
+
+**İki ayrı onay:** step-up parolası *"bu gerçekten sen misin"*, `confirm` alanı *"doğru
+oyuncuyu mu seçtin"* sorusunu cevaplıyor — yanlış satıra tıklamak parolayla yakalanmıyor.
+Ne kadar şehir/kahraman gideceği oyuncunun **«imparatorluk» ekranında** zaten yazıyor;
+aksiyona ayrı bir önizleme eklenmedi.
+
+---
+
 ## Tasarım notu
 
 Panel oyunun **tasarım jetonlarını** kullanır ama oyunun `index.css`'ini kopyalamaz: oradaki

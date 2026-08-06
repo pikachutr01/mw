@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { AdminActionsController } from '../src/admin/admin.actions.controller.ts';
+import { ADMIN_ACTIONS, AdminActionsController } from '../src/admin/admin.actions.controller.ts';
 import { AdminDbController } from '../src/admin/admin.db.controller.ts';
 import { TABLES_BY_NAME, DB_TABLES } from '../src/admin/db-registry.ts';
 import type { AdminRequest } from '../src/admin/admin.guard.ts';
@@ -43,11 +43,12 @@ beforeAll(async () => {
   h = await setupTestDb();
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
-  actions = new AdminActionsController(h.db, cities, clock);
   dbCtl = new AdminDbController(h.db);
   auth = new AuthService(
     h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock,
   );
+  // ⚠️ `auth` ÖNCE kurulmalı: `purge-player` oturumları düşürmek için onu kullanıyor.
+  actions = new AdminActionsController(h.db, cities, clock, auth);
 }, 60_000);
 
 afterAll(async () => { await h?.close(); });
@@ -365,5 +366,250 @@ describe('tablo kaydı', () => {
     for (const name of ['audit_log', 'battles', 'outbox']) {
       expect(TABLES_BY_NAME[name]?.policy, name).toBe('readonly');
     }
+  });
+});
+
+/* ═══ Oyuncuyu dünyadan kaldır — GERİ ALINAMAZ ══════════════════════════════ */
+
+/**
+ * ⭐ `purge-player` (kullanıcı, 2026-08-06). Hesap silmeden farkı: orası oyuncunun kendi
+ * gizlilik hakkı (başkent KALIR, ad anonimleşir), burası bir moderasyon işlemi — dünyada
+ * hiçbir şey kalmaz ama `players` satırı ve AD korunur (savaş geçmişi delik vermesin).
+ *
+ * ⚠️ Testlerin yarısı "ne SİLİNMEDİĞİNİ" ölçüyor: yalnız silmeyi doğrulayan bir demet,
+ * her şeyi silen bir uygulamada da yeşil kalırdı.
+ */
+describe('oyuncuyu dünyadan kaldır', () => {
+  /** İkinci bir oyuncu — "başkası etkilenmiyor" ve ittifak vakaları için. */
+  async function otherPlayer(name: string): Promise<{ playerId: number; cityId: number }> {
+    const t = randomUUID().slice(0, 8);
+    const r = await auth.register({
+      email: `o-${t}@test.local`, password: 'parola-12345', username: name, worldId,
+    }, { deviceId: randomUUID(), ip: '85.104.12.8', userAgent: 'test', platform: 'web' });
+    await verifyEmail(h, r.playerId);
+    const [c] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM cities WHERE player_id = ${r.playerId}
+    `);
+    return { playerId: r.playerId, cityId: Number(c!['id']) };
+  }
+
+  async function usernameOf(id: number): Promise<string> {
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT username FROM players WHERE id = ${id}
+    `);
+    return String(p!['username']);
+  }
+
+  async function cityCount(pid: number): Promise<number> {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM cities WHERE player_id = ${pid}
+    `);
+    return Number(r!['n']);
+  }
+
+  async function heroCount(pid: number): Promise<number> {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM heroes WHERE player_id = ${pid}
+    `);
+    return Number(r!['n']);
+  }
+
+  async function addHero(pid: number, cid: number): Promise<void> {
+    await h.db.execute(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name)
+      VALUES (${worldId}, ${pid}, ${cid}, 'kahraman')
+    `);
+  }
+
+  async function addMission(o: {
+    owner?: number; origin?: number; target?: number;
+  }): Promise<number> {
+    const [m] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id,
+                            target_city_id, execute_at)
+      VALUES (${worldId}, 'attack', 'scheduled', ${o.owner ?? null}, ${o.origin ?? null},
+              ${o.target ?? null}, now() + interval '1 hour')
+      RETURNING id
+    `);
+    return Number(m!['id']);
+  }
+
+  async function statusOf(id: number): Promise<string> {
+    const [m] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT status FROM missions WHERE id = ${id}
+    `);
+    return String(m!['status']);
+  }
+
+  /** Yöneticinin kendisi başka biri — "kendini kaldıramaz" kapısı devrede olmasın. */
+  const admin = (): AdminRequest => ({
+    player: { accountId: 1, playerId: -1, worldId, sessionId: '' }, headers: {},
+  } as unknown as AdminRequest);
+
+  it('⭐ başkent DAHİL tüm şehirleri, kahramanları ve açık görevleri kaldırır', async () => {
+    await h.db.execute(sql`
+      INSERT INTO cities (world_id, player_id, name, k, d, s, is_capital)
+      VALUES (${worldId}, ${playerId}, 'koloni', 9, 9, 9, false)
+    `);
+    await addHero(playerId, cityId);
+    const mine = await addMission({ owner: playerId, origin: cityId });
+
+    const res = await actions.purgePlayer(
+      { playerId, confirm: await usernameOf(playerId) }, admin(),
+    );
+
+    expect(res['cities']).toBe(2);       // ⭐ başkent de gitti (hesap silmede KALIYOR)
+    expect(res['heroes']).toBe(1);
+    expect(await cityCount(playerId)).toBe(0);
+    expect(await heroCount(playerId)).toBe(0);
+    expect(await statusOf(mine)).toBe('canceled');
+  });
+
+  it('⭐ oyuncu satırı ve ADI SİLİNMEZ; işaretlenir ve kalıcı cezalanır', async () => {
+    const before = await usernameOf(playerId);
+    await actions.purgePlayer({ playerId, confirm: before }, admin());
+
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT username, deleted_at, banned_at, ban_until, score, score_base, ranking_excluded
+        FROM players WHERE id = ${playerId}
+    `);
+    expect(p, 'oyuncu satırı silinmemeli').toBeTruthy();
+    // ⚠️ Ad KORUNUYOR: hesap silmenin aksine bu gizlilik işlemi değil, denetim izi.
+    expect(String(p!['username'])).toBe(before);
+    expect(p!['deleted_at']).not.toBeNull();
+    expect(p!['banned_at']).not.toBeNull();
+    expect(p!['ban_until'], 'ceza KALICI olmalı').toBeNull();
+    expect(Number(p!['score'])).toBe(0);
+    expect(Number(p!['score_base'])).toBe(0);
+    expect(p!['ranking_excluded']).toBe(true);
+  });
+
+  it('⭐ ONAY EŞLEŞMEZSE hiçbir şey silinmez', async () => {
+    await addHero(playerId, cityId);
+    await expect(actions.purgePlayer({ playerId, confirm: 'yanlis-ad' }, admin()))
+      .rejects.toThrow(/Onay eşleşmedi/);
+
+    // Kritik: reddin YAN ETKİSİ olmamalı.
+    expect(await cityCount(playerId)).toBe(1);
+    expect(await heroCount(playerId)).toBe(1);
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT banned_at FROM players WHERE id = ${playerId}
+    `);
+    expect(p!['banned_at']).toBeNull();
+  });
+
+  it('yönetici kendini kaldıramaz', async () => {
+    await expect(actions.purgePlayer(
+      { playerId, confirm: await usernameOf(playerId) }, req(),
+    )).rejects.toThrow(/Kendini/);
+  });
+
+  it('⭐ BAŞKA oyuncunun şehri ve görevi ETKİLENMEZ', async () => {
+    const other = await otherPlayer(`o_${randomUUID().slice(0, 6)}`);
+    const theirs = await addMission({ owner: other.playerId, origin: other.cityId });
+
+    await actions.purgePlayer({ playerId, confirm: await usernameOf(playerId) }, admin());
+
+    expect(await cityCount(other.playerId)).toBe(1);
+    expect(await statusOf(theirs)).toBe('scheduled');
+  });
+
+  it('⭐ kaldırılana GELEN saldırı da iptal edilir (hedefi yok oldu)', async () => {
+    const other = await otherPlayer(`g_${randomUUID().slice(0, 6)}`);
+    const incoming = await addMission({
+      owner: other.playerId, origin: other.cityId, target: cityId,
+    });
+
+    await actions.purgePlayer({ playerId, confirm: await usernameOf(playerId) }, admin());
+
+    // ⚠️ `missions` FK'sız: elle iptal edilmezse varışta şehri bulamayıp `failed`'a düşerdi.
+    expect(await statusOf(incoming)).toBe('canceled');
+  });
+
+  it('ittifak ÜYESİ kaldırılınca ittifak yaşar, yönetime mesaj gider', async () => {
+    const lider = await otherPlayer(`l_${randomUUID().slice(0, 6)}`);
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO alliances (world_id, name, leader_id)
+      VALUES (${worldId}, ${`it${worldId}`}, ${lider.playerId}) RETURNING id
+    `);
+    const aid = Number(a!['id']);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${aid}, alliance_role = 3 WHERE id = ${lider.playerId}
+    `);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${aid}, alliance_role = 1 WHERE id = ${playerId}
+    `);
+
+    const res = await actions.purgePlayer(
+      { playerId, confirm: await usernameOf(playerId) }, admin(),
+    );
+    expect(res['allianceDisbanded']).toBe(false);
+    expect(await h.db.execute(sql`SELECT 1 FROM alliances WHERE id = ${aid}`)).toHaveLength(1);
+
+    const [msg] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT subject, body FROM messages
+       WHERE player_id = ${lider.playerId} AND kind = 'system' ORDER BY id DESC LIMIT 1
+    `);
+    expect(String(msg!['subject'])).toBe('Bir üye dünyadan kaldırıldı');
+    expect(String((msg!['body'] as Record<string, unknown>)['text'])).not.toBe('');
+  });
+
+  /**
+   * ⭐ LİDER kaldırılınca ittifak DAĞITILIR. Alternatif "lideri sessizce çıkar" ittifağı
+   * onarılamaz hâle getirirdi: davet/at/ad/dağıt hepsi lider kapısının arkasında ve
+   * kaldırılan lider kalıcı cezalı olduğu için bir daha giriş yapıp devredemez.
+   */
+  it('⭐ ittifak LİDERİ kaldırılınca ittifak dağıtılır ve üyeler haberdar edilir', async () => {
+    const uye = await otherPlayer(`u_${randomUUID().slice(0, 6)}`);
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO alliances (world_id, name, leader_id)
+      VALUES (${worldId}, ${`ld${worldId}`}, ${playerId}) RETURNING id
+    `);
+    const aid = Number(a!['id']);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${aid}, alliance_role = 3 WHERE id = ${playerId}
+    `);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${aid}, alliance_role = 1 WHERE id = ${uye.playerId}
+    `);
+
+    const res = await actions.purgePlayer(
+      { playerId, confirm: await usernameOf(playerId) }, admin(),
+    );
+    expect(res['allianceDisbanded']).toBe(true);
+    expect(await h.db.execute(sql`SELECT 1 FROM alliances WHERE id = ${aid}`)).toHaveLength(0);
+
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT alliance_id FROM players WHERE id = ${uye.playerId}
+    `);
+    expect(p!['alliance_id']).toBeNull();
+
+    const [msg] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT subject FROM messages
+       WHERE player_id = ${uye.playerId} AND kind = 'system' ORDER BY id DESC LIMIT 1
+    `);
+    expect(String(msg!['subject'])).toBe('İttifak dağıtıldı');
+  });
+
+  /**
+   * ⚠️ Panelin formu SUNUCUDAKİ kayıttan üretiliyor (`/admin/db/tables` → `ADMIN_ACTIONS`).
+   * `confirm` alanı kayıttan düşerse panel onu hiç sormaz ve yönetici tek tıkla — üstelik
+   * anlamsız bir hata mesajıyla — geri alınamaz aksiyona çarpar.
+   */
+  it('panel kaydında onay alanı var', () => {
+    const spec = ADMIN_ACTIONS.find((a) => a.id === 'purge-player');
+    expect(spec, 'purge-player kayıtlı değil').toBeTruthy();
+    expect(spec!.fields.map((f) => f.key)).toContain('confirm');
+  });
+
+  it('denetim kaydı yazılır', async () => {
+    await actions.purgePlayer({ playerId, confirm: await usernameOf(playerId) }, admin());
+    const [log] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT action, after FROM audit_log
+       WHERE entity = 'player' AND entity_id = ${playerId}
+         AND action = 'admin.action.purge_player'
+    `);
+    expect(log, 'denetim kaydı yok').toBeTruthy();
+    expect(Number((log!['after'] as Record<string, unknown>)['cities'])).toBe(1);
   });
 });

@@ -557,6 +557,49 @@ export class AllianceService {
     });
   }
 
+  /**
+   * ⭐ YÖNETİCİ MÜDAHALESİ — oyuncu dünyadan kaldırılırken ittifak bağını koparır
+   * (`admin.actions.controller.ts` → `purge-player`, 2026-08-06).
+   *
+   * ⚠️ **LİDERSE İTTİFAK DAĞITILIR.** Alternatif "lideri sessizce çıkar" olurdu ve ittifağı
+   * ONARILAMAZ hâle getirirdi: davet · at · ad · dağıt aksiyonlarının HEPSİ `require(LEADER)`
+   * kapısının arkasında; kaldırılan lider de kalıcı cezalı olduğu için bir daha giriş yapıp
+   * devredemez. Yani ittifak sonsuza kadar dondururdu. Dağıtma acı ama dürüst — üyeler
+   * §13.15b.1 bildirimiyle haberdar oluyor.
+   *
+   * ⚠️ Çağıranın transaction'ını alıyor: ittifak dağıtılıp asıl kaldırma sonra patlarsa
+   * masum bir ittifak boşuna dağılmış olurdu.
+   */
+  async detachForPurge(tx: Tx, worldId: number, playerId: number): Promise<{
+    disbanded: boolean; allianceId: number | null;
+  }> {
+    const [p] = await tx.execute<Record<string, unknown>>(sql`
+      SELECT username, alliance_id, alliance_role FROM players WHERE id = ${playerId}
+    `);
+    const allianceId = p?.['alliance_id'] == null ? null : Number(p['alliance_id']);
+    if (allianceId == null) return { disbanded: false, allianceId: null };
+
+    if (Number(p!['alliance_role'] ?? 0) === ROLE.LEADER) {
+      await this.disbandInner(tx, worldId, allianceId, playerId);
+      return { disbanded: true, allianceId };
+    }
+
+    await tx.execute(sql`
+      UPDATE players SET alliance_id = NULL, alliance_role = NULL WHERE id = ${playerId}
+    `);
+    // Yönetim bilgilendirilir — ayrılmayla aynı adres, farklı sebep.
+    for (const managerId of await this.managerIds(tx, allianceId)) {
+      await this.notice(tx, {
+        worldId, playerId: managerId,
+        subject: 'Bir üye dünyadan kaldırıldı',
+        text: `${String(p!['username'])} yönetici kararıyla dünyadan kaldırıldı ve ittifaktan çıktı.`,
+        extra: { allianceId, playerId, reason: 'purged' },
+      });
+    }
+    await this.emitChanged(tx, worldId, allianceId, [playerId]);
+    return { disbanded: false, allianceId };
+  }
+
   /* ── Ortak yardımcılar ────────────────────────────────────────────────────── */
 
   private async lockPlayer(tx: Tx, playerId: number): Promise<{

@@ -24,10 +24,13 @@ import {
 import { sql } from 'drizzle-orm';
 import { LEVEL_BASED, NAME_MAX, NAME_MIN, UNITS_BY_ID, TECHS_BY_ID, pickHeroName } from '@mobilwar/catalog';
 import { z } from 'zod';
+import { AllianceService } from '../alliance/alliance.service.ts';
 import { AuthGuard } from '../auth/auth.guard.ts';
+import { AuthService } from '../auth/auth.service.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
+import { getGateway } from '../realtime/gateway-registry.ts';
 import { recomputeScoreBaseFromHoldings } from '../scoring/score.service.ts';
 import { endVacation } from '../vacation/vacation.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
@@ -92,6 +95,16 @@ const rankingExemptBody = z.object({
 
 const moveCityBody = z.object({ cityId, toPlayerId: z.number().int().positive() });
 
+/**
+ * ⚠️ `confirm` — yöneticinin oyuncu adını ELLE yazması. Step-up parolası "bu gerçekten sen
+ * misin" sorusunu cevaplıyor, bu alan "doğru oyuncuyu mu seçtin" sorusunu: geri alınamaz
+ * aksiyonda ikisi ayrı sorular ve yanlış satıra tıklamak parolayla yakalanmıyor.
+ */
+const purgePlayerBody = z.object({
+  playerId: z.number().int().positive(),
+  confirm: z.string().trim().min(1).max(40),
+});
+
 @Controller('api/v1/admin/actions')
 @UseGuards(AuthGuard, AdminGuard, AdminStepUpGuard)
 export class AdminActionsController {
@@ -99,6 +112,8 @@ export class AdminActionsController {
     @Inject(DB) private readonly db: Db,
     private readonly cities: CityService,
     private readonly clock: GameClockService,
+    /** ⭐ Yalnız `purge-player` için: kaldırılan oyuncunun oturumları düşürülüyor. */
+    private readonly auth: AuthService,
   ) {}
 
   /* ── Ordu ─────────────────────────────────────────────────────────────────── */
@@ -560,6 +575,105 @@ export class AdminActionsController {
     return { ok: true, from: city.playerId, to: d.toPlayerId };
   }
 
+  /**
+   * ⭐ OYUNCUYU DÜNYADAN TAMAMEN KALDIR (kullanıcı, 2026-08-06) — GERİ ALINAMAZ.
+   *
+   * Hesap silmeden (`AccountDeleteService`) farkı: orası oyuncunun KENDİ hakkı ve bir gizlilik
+   * işlemi — başkent KALIR, ad anonimleşir. Burası bir MODERASYON işlemi: dünyada hiçbir şey
+   * kalmaz. Bu fark üç kararı birden değiştiriyor:
+   *
+   *   • **Kahramanlar TAŞINMAZ, SİLİNİR.** Hesap silmede kahramanlar hayatta kalan başkente
+   *     taşınıyordu (`heroes.city_id` şehre `ON DELETE SET NULL`). Burada hayatta kalan şehir
+   *     YOK; taşınacak yer olmadığı için silmek tek doğru seçenek. ⚠️ `heroes.player_id`
+   *     CASCADE ama `players` satırı silinmediği için kendiliğinden gitmezler.
+   *   • **Ad ANONİMLEŞTİRİLMEZ.** Gizlilik talebi değil; adı silmek savaş geçmişindeki
+   *     denetim izini yönetici için okunmaz hâle getirirdi.
+   *   • **KALICI CEZA + oturum düşürme.** ⚠️ `players.deleted_at` hiçbir yerde OKUNMUYOR —
+   *     yalnız bir işaret. Ceza vermeseydik kaldırılan oyuncu girişe devam eder ve şehirsiz,
+   *     bozuk bir dünyaya düşerdi.
+   *
+   * ⚠️ **`players` satırı SİLİNMEZ**: `cities.player_id` NO ACTION, `battles`/`rankings` ise
+   * FK'sız referans tutuyor. Satırı yok etmek savaş geçmişinde ve komşuların raporlarında
+   * delik açardı (hesap silmedeki kararın aynısı).
+   *
+   * ⚠️ **`missions` ve `battles` FK'SIZ** — şehir silinince kendiliğinden temizlenmezler.
+   * Açık görevler elle iptal edilmezse varışta şehri bulamayıp `failed`'a düşer ve panelde
+   * kalıcı çöp bırakırlar. Oyuncunun kendi görevleri KADAR ona gelen görevler de iptal
+   * ediliyor: hedefi yok olmuş bir saldırı da boşlukta kalırdı.
+   */
+  @Post('purge-player')
+  @HttpCode(200)
+  async purgePlayer(@Body() body: unknown, @Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const d = parse(purgePlayerBody, body);
+    const [p] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT world_id, account_id, username FROM players WHERE id = ${d.playerId}
+    `);
+    if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
+    const worldId = Number(p['world_id']);
+    const username = String(p['username']);
+
+    // ⛔ Kendini kaldırma — ceza aksiyonundaki kapının aynısı.
+    if (d.playerId === req.player!.playerId) {
+      throw new BadRequestException('Kendini dünyadan kaldıramazsın.');
+    }
+    if (d.confirm !== username) {
+      throw new BadRequestException(
+        `Onay eşleşmedi. Kaldırmak için oyuncu adını birebir yaz: ${username}`,
+      );
+    }
+
+    const alliances = new AllianceService(this.db);
+    const summary = await this.db.transaction(async (tx) => {
+      const detach = await alliances.detachForPurge(tx as never, worldId, d.playerId);
+
+      // Açık görevler: oyuncunun kendi seferleri + şehirlerine gelenler.
+      const canceled = await tx.execute<Record<string, unknown>>(sql`
+        UPDATE missions SET status = 'canceled', finished_at = now()
+         WHERE status IN ('scheduled', 'running')
+           AND (owner_player_id = ${d.playerId}
+                OR origin_city_id IN (SELECT id FROM cities WHERE player_id = ${d.playerId})
+                OR target_city_id IN (SELECT id FROM cities WHERE player_id = ${d.playerId}))
+        RETURNING id
+      `);
+
+      const heroes = await tx.execute<Record<string, unknown>>(sql`
+        DELETE FROM heroes WHERE player_id = ${d.playerId} RETURNING id
+      `);
+      // Şehirler: buildings · units · defenses · cave_units · queues CASCADE ile gider.
+      const cities = await tx.execute<Record<string, unknown>>(sql`
+        DELETE FROM cities WHERE player_id = ${d.playerId} RETURNING id
+      `);
+
+      /**
+       * Puan TÜREV (`floor(score_base/1000)`) — elle yazmak yerine sıfırlanıyor: elde hiçbir
+       * şey kalmadı. ⚠️ `ranking_excluded` de işaretleniyor, yoksa boşaltılmış oyuncu bir
+       * sonraki anlık görüntüde 0 puanla listede durmaya devam ederdi.
+       */
+      await tx.execute(sql`
+        UPDATE players
+           SET score_base = 0, score = 0, ranking_excluded = true, deleted_at = now(),
+               banned_at = now(), ban_until = NULL, ban_mode = 'open',
+               ban_reason = ${`Dünyadan kaldırıldı (yönetici #${req.player!.playerId})`},
+               banned_by = ${req.player!.playerId}
+         WHERE id = ${d.playerId}
+      `);
+
+      return {
+        cities: cities.length, heroes: heroes.length,
+        missions: canceled.length, allianceDisbanded: detach.disbanded,
+      };
+    });
+
+    // ⚠️ Oturum düşürme transaction DIŞINDA: soket kapatma DB işlemi değil, geri alınamaz.
+    const sessions = await this.auth.revokeAllIds(Number(p['account_id']));
+    const sockets = getGateway()?.revokeSessions(sessions) ?? 0;
+
+    await this.audit(worldId, req, 'admin.action.purge_player', 'player', d.playerId, {
+      username, ...summary, revokedSessions: sessions.length, closedSockets: sockets,
+    });
+    return { ok: true, username, ...summary, revokedSessions: sessions.length };
+  }
+
   /* ── Yardımcılar ──────────────────────────────────────────────────────────── */
 
   private async city(id: number): Promise<{ worldId: number; playerId: number; name: string }> {
@@ -728,6 +842,20 @@ export const ADMIN_ACTIONS = [
     fields: [
       { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
       { key: 'toPlayerId', label: 'Yeni sahip', type: 'playerPicker', required: true },
+    ],
+  },
+  {
+    id: 'purge-player', label: '⛔ Oyuncuyu dünyadan kaldır',
+    description: '⛔ GERİ ALINAMAZ. Oyuncunun BAŞKENT DAHİL tüm şehirleri, kahramanları ve '
+      + 'açık orduları yok edilir; puanı sıfırlanır ve sıralamadan çıkarılır. Hesaba KALICI '
+      + 'ceza verilir ve oturumları düşürülür (aksi hâlde şehirsiz bir dünyaya giriş yapardı). '
+      + '⚠️ İttifak LİDERİYSE ittifak DAĞITILIR — lidersiz bir ittifak bir daha yönetilemezdi; '
+      + 'üyelere sistem mesajı gider. ⚠️ Oyuncu kaydı ve adı SİLİNMEZ: savaş geçmişi ve '
+      + 'sıralama referansları delik vermesin diye. Ne kadar şehir/kahraman gideceğini görmek '
+      + 'için önce oyuncunun «imparatorluk» ekranına bak. Onay için oyuncu adını birebir yaz.',
+    fields: [
+      { key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true },
+      { key: 'confirm', label: 'Onay için oyuncu adını yaz', type: 'text', required: true },
     ],
   },
 ] as const;
