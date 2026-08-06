@@ -96,6 +96,25 @@ export const NOT_TUNABLE = [
   'engineVersion',
 ] as const;
 
+/**
+ * ⭐ `combat.*` önekli olup motora BİLEREK gitmeyen ayarlar — savaş ÖN KOŞULLARI.
+ *
+ * `MAPPED_KEYS` testi "combat/hero/capture/loot önekli her ayar motora bağlanmalı" diyor ve
+ * bu kural doğru: bir ayarı eşlemeye eklemeyi unutmak, panelde görünen ama hiçbir şeyi
+ * değiştirmeyen sessiz bir ayar üretir. Ama savaşın bazı kuralları motorda değil savaş
+ * **başlamadan önce** işliyor — koşul tutmazsa görev hiç kurulmaz ve motor çağrılmaz.
+ * Bunlar operatörün gözünde savaş ayarıdır (panelde orada arar), o yüzden anahtarları da
+ * `combat.` önekli kalıyor.
+ *
+ * ⚠️ Liste ELLE ve GEREKÇELİ tutuluyor: yeni bir MOTOR ayarı eklenip eşlemesi unutulursa
+ * test yine kırmızı yanar. Muafiyet ancak buraya bilerek bir satır yazılınca doğar.
+ */
+export const NOT_ENGINE_BOUND: readonly string[] = [
+  // ⛔ `combat.attackScoreRatio` — 10 kat kuralı (§13.5.4b). `sendAttack` ön koşulu:
+  //    oran aşılırsa saldırı görevi hiç yazılmaz. Motorun bundan haberi olmaması DOĞRU.
+  'combat.attackScoreRatio',
+];
+
 function pick(values: Values, key: string): number | boolean | undefined {
   const [group, leaf] = key.split('.') as [string, string];
   return values[group]?.[leaf];

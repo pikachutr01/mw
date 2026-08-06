@@ -12,7 +12,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SETTINGS, applySettings } from '@mobilwar/settings';
 import { DEFAULT_COMBAT_CONFIG, mergeCombatConfig, simulate } from '@mobilwar/engine';
 import type { DbHandle } from '../src/db/client.ts';
-import { MAPPED_KEYS, combatOverrides, lootOverrides } from '../src/settings/combat.ts';
+import { MAPPED_KEYS, NOT_ENGINE_BOUND, combatOverrides, lootOverrides } from '../src/settings/combat.ts';
 import { SettingsService } from '../src/settings/settings.service.ts';
 import { createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
 
@@ -83,8 +83,26 @@ describe('varsayılan davranış', () => {
     const engineKeys = SETTINGS
       .map((d) => d.key)
       .filter((k) => /^(combat|hero|capture|loot)\./.test(k));
-    const missing = engineKeys.filter((k) => !MAPPED_KEYS.includes(k));
+    const missing = engineKeys.filter(
+      (k) => !MAPPED_KEYS.includes(k) && !NOT_ENGINE_BOUND.includes(k),
+    );
     expect(missing, `eşlemesi olmayan ayar: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  /**
+   * ⚠️ Muafiyet listesinin KENDİSİNİ bekçiye bağlar. Aksi hâlde bir gün ayar silinir ya da
+   * anahtarı değişir, satır burada öksüz kalır ve muafiyet sessizce genişler — asıl testin
+   * yakalaması gereken durumu maskeleyebilir.
+   */
+  it('motora bağlanmayan ayarların hepsi gerçekten şemada var', () => {
+    const keys = new Set(SETTINGS.map((d) => d.key));
+    const hayalet = NOT_ENGINE_BOUND.filter((k) => !keys.has(k));
+    expect(hayalet, `şemada olmayan muafiyet: ${hayalet.join(', ')}`).toEqual([]);
+  });
+
+  /** Bir anahtar hem eşlemede hem muafiyet listesinde olamaz — niyet belirsizleşir. */
+  it('muafiyet ile eşleme çakışmıyor', () => {
+    expect(NOT_ENGINE_BOUND.filter((k) => MAPPED_KEYS.includes(k))).toEqual([]);
   });
 
   it('eşlemede şemada olmayan anahtar YOK (ters yön)', () => {
