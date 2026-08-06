@@ -31,19 +31,6 @@ interface Box {
 const GAP = 8;
 const EDGE = 6;
 
-/**
- * Cihazın gerçek bir imleci var mı? Dokunmatikte taklit edilen fare olaylarını elemek için.
- *
- * ⚠️ Her çağrıda yeniden soruluyor, modül yüklenirken bir kez değil: hem masaüstünde fare
- * takılıp çıkarılabiliyor hem de bazı tarayıcılar ilk karede `hover: none` bildirip sonra
- * düzeltiyor. Sorgu ucuz ve sonucu önbelleklemenin kazancı ölçülebilir değil.
- */
-function canHover(): boolean {
-  return typeof window === 'undefined'
-    || typeof window.matchMedia !== 'function'
-    || window.matchMedia('(hover: hover)').matches;
-}
-
 export function Tooltip({
   label, children, placement = 'bottom', className = '',
 }: {
@@ -105,20 +92,21 @@ export function Tooltip({
         ref={anchorRef}
         aria-describedby={open ? id : undefined}
         /**
-         * ⚠️ **DOKUNMATİKTE AÇMA** (kullanıcı, 2026-08-04: *"sohbet penceresi açılıyor ama
-         * «xxx oyuncusuna mesaj gönder» tooltip'i pencerenin üzerinde görünmeye devam
-         * ediyor"*).
+         * ⚠️⚠️ **DOKUNMATİK KAPISI GERİ ALINDI (kullanıcı, 2026-08-06).**
          *
-         * Sebep: tarayıcı, parmakla dokunulduğunda fare olaylarını **taklit ediyor** —
-         * `mouseenter` geliyor ve ipucu açılıyor, ama parmak ekrandan kalktığı için
-         * `mouseleave` HİÇ GELMİYOR. İpucu, üstüne açılan sohbet penceresinin önünde asılı
-         * kalıyordu.
+         * 2026-08-04'te buraya `if (canHover())` konmuştu: sıralama tablosundaki mesaj
+         * düğmesine dokununca ipucu, üstüne açılan sohbet penceresinin önünde asılı kalıyordu
+         * (dokunmatikte `mouseenter` taklit ediliyor ama `mouseleave` hiç gelmiyor).
          *
-         * `hover: hover` sorgusu "gerçek bir imleci olan cihaz" demek. Dokunmatikte ipucu
-         * artık fareyle açılmıyor; klavye (`focus`) yolu duruyor, çünkü asıl erişilebilirlik
-         * ihtiyacı orada. Metin zaten `aria-label`da da var, yani ekran okuyucu kaybetmiyor.
+         * Çare doğru soruna bakmıyordu: **tüm ipuçlarını mobilde kör etti**. Kullanıcı:
+         * *"Artık mobil ekranlarda tooltip hiç gözükmüyor gibi bir şey. Önceki gibi olsun."*
+         *
+         * Asıl sebep o düğmelerdi ve onlar aynı turda sıralama tablosundan kaldırıldı
+         * (aksiyonlar artık satır modalında). Sebep gidince çareye de gerek kalmadı.
+         * ⚠️ Aşağıdaki `onClick`-kapat DURUYOR: asılı kalma ihtimaline karşı ucuz bir emniyet
+         * ve zaten doğru davranış (tıkladıysan ipucunun işi bitti).
          */
-        onMouseEnter={() => { if (canHover()) setOpen(true); }}
+        onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}

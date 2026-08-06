@@ -28,13 +28,15 @@ import { api } from '../lib/api.ts';
 import { LEVEL_BASED, MERIT_BY_TIER } from '@mobilwar/catalog';
 import { formatGameHhmm } from '@mobilwar/contracts';
 import {
-  useOverview, useRankings, type NamedType, type Overview, type RankingKind,
+  useOverview, useRankings,
+  type NamedType, type Overview, type RankingKind, type RankingRow,
 } from '../lib/queries.ts';
 import { coords } from '../lib/format.ts';
 import { fmt } from '../lib/hooks.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
+import { Modal } from '../components/Modal.tsx';
 import { MeritBadge, meritRemaining } from '../components/MeritBadge.tsx';
 import { AllianceScreen } from './Alliance.tsx';
 import { SearchScreen } from './Search.tsx';
@@ -293,7 +295,10 @@ function Rankings(): React.ReactElement {
   const d = q.data;
 
   const pick = (k: RankingKind): void => { setKind(k); setPage(1); };
-  const cols = kind === 'hero' ? 5 : 6;
+  // ⚠️ Aksiyon sütunu kalkınca sayı da düştü (hero 5→4, diğerleri 6→5); `colSpan` bununla
+  // hizalanmazsa "kayıt yok" satırı tabloyu dar gösterir.
+  const cols = kind === 'hero' ? 4 : 5;
+  const [picked, setPicked] = useState<RankingRow | null>(null);
 
   return (
     <div className="space-y-2">
@@ -334,9 +339,9 @@ function Rankings(): React.ReactElement {
                         <Th className="w-16 text-center">Üye</Th></>
                       : <><Th className="w-24 text-right">Puan</Th><Th className="w-16 text-center">Değişim</Th>
                         <Th className="w-28">İttifak</Th></>}
-                  {/* ⚠️ `w-10` (40px) İKİ 32px'lik ikonu taşımıyordu; flex kutusu ikisini de
-                      ~10px'e EZİYORDU (ölçüldü). Genişlik iki ikon + boşluğu almalı. */}
-                  <Th className="w-24 text-center"> </Th>
+                  {/* ⭐ AKSİYON SÜTUNU KALKTI (kullanıcı, 2026-08-06). İki simge dar ekranda
+                      tablonun beşte birini yiyordu ve dokunmatikte ipucu balonu açık kalıyordu.
+                      Aksiyonlar artık satıra tıklanınca açılan modalda. */}
                 </tr>
               </thead>
               <tbody>
@@ -347,14 +352,22 @@ function Rankings(): React.ReactElement {
                       <Td><Skeleton w="8rem" /></Td>
                       <Td><Skeleton w="4rem" /></Td>
                       <Td><Skeleton w="2rem" /></Td>
-                      <Td><Skeleton w="3rem" /></Td>
-                      <Td><Skeleton w="1rem" /></Td>
+                      {/* ⚠️ İskelet sütun sayısı gerçek satırla aynı olmalı; aksi hâlde yükleme
+                          bitince tablo genişliği zıplıyor. Aksiyon sütunu kalkınca bu da düştü. */}
+                      {kind === 'hero' ? null : <Td><Skeleton w="3rem" /></Td>}
                     </tr>
                   ))
                   : d.rows.map((r, i) => (
+                    /**
+                     * ⭐ SATIRIN KENDİSİ TIKLANABİLİR (kullanıcı, 2026-08-06).
+                     * ⚠️ İttifak sekmesinde `playerId` YOK (satır bir ittifağı gösteriyor,
+                     * oyuncuyu değil) → orada tıklama pasif kalmalı, yoksa boş bir modal açardı.
+                     */
                     <tr key={r.id}
+                      onClick={r.playerId == null ? undefined : () => setPicked(r)}
                       className={`h-8 border-b border-border ${i % 2 === 1 ? 'bg-row-alt' : ''} ${
-                        r.isMine ? 'text-accent' : 'text-ink'}`}>
+                        r.isMine ? 'text-accent' : 'text-ink'} ${
+                        r.playerId == null ? '' : 'cursor-pointer hover:bg-raised'}`}>
                       <Td className="tnum text-center font-semibold">{fmt(r.rank)}</Td>
                       <Td className="max-w-[12rem] truncate">
                         {r.name}
@@ -381,18 +394,6 @@ function Rankings(): React.ReactElement {
                             : <Td className="max-w-[7rem] truncate text-muted">{r.alliance ?? '-'}</Td>}
                         </>
                       )}
-                      <Td className="text-center">
-                        {kind === 'alliance' ? null : (
-                          <span className="flex items-center justify-center gap-1">
-                            <MessageButton name={kind === 'hero' ? r.owner ?? r.name : r.name}
-                              playerId={r.playerId ?? null} disabled={r.isMine} />
-                            {/* ⭐ "Dünyada Bul" orijinalde YALNIZ sıralama satırında vardı
-                                (g.java:2040, ekran 106) — arama sonucunda yoktu, çünkü arama
-                                koordinatı zaten getiriyor. Aynı yere kondu. */}
-                            <FindInWorldButton playerId={r.playerId ?? null} />
-                          </span>
-                        )}
-                      </Td>
                     </tr>
                   ))}
                 {d && !d.unavailable && d.rows.length === 0 ? (
@@ -407,80 +408,89 @@ function Rankings(): React.ReactElement {
           </div>
         )}
       </Panel>
+
+      {picked ? (
+        <RankingRowModal row={picked} kind={kind} onClose={() => setPicked(null)} />
+      ) : null}
     </div>
   );
 }
 
 /**
- * Satır sonundaki mesaj düğmesi — orijinalde sıralama satırının menüsünde **Mesaj** vardı
- * (`g.java` case 106: *Mesaj · Dünyada Bul · İttifağa Davet*).
+ * ⭐ SIRALAMA SATIRI MODALI (kullanıcı, 2026-08-06): *"Sıralamada bir oyuncunun üzerine
+ * tıklanınca modal açılsın ve Mesaj gönder ve Dünyada bul seçenekleri açılan bu modalın
+ * üzerinde gözüksün."*
  *
- * ⭐ 2026-07-31'de ETKİNLEŞTİ: tıklayınca sohbet penceresi açılır.
- * ⚠️ Kahraman sekmesinde satırın `id`'si HEROID'dir; bu yüzden sahibinin `playerId`'si
- * sunucudan ayrıca geliyor — o olmadan yanlış kişiye sohbet açılırdı.
+ * ⚠️ Aksiyonlar neden satırdan modala taşındı: iki 32px'lik simge dar ekranda tablonun beşte
+ * birini yiyordu ve dokunmatikte ipucu balonu düğmenin üstünde asılı kalıyordu (2026-08-04'te
+ * `Tooltip`e eklenen dokunmatik kapısı bu yüzden geldi ve **mobilde tüm ipuçlarını kör etti**).
+ * Sütun kalkınca sebep de kalktı; ipucu davranışı aynı turda eski hâline döndürüldü.
+ *
+ * ⚠️ Kahraman sekmesinde satırın adı KAHRAMANIN adı, mesaj ise **sahibine** gider — bu yüzden
+ * modalda iki ad birden gösteriliyor, yoksa oyuncu kime yazdığını bilemezdi.
  */
-function MessageButton({ name, playerId, disabled }: {
-  name: string; playerId: number | null; disabled: boolean;
-}) {
+function RankingRowModal({ row, kind, onClose }: {
+  row: RankingRow; kind: RankingKind; onClose: () => void;
+}): React.ReactElement {
   const openChat = useOpenChat();
-  if (disabled || playerId == null) return <span className="text-muted">—</span>;
-  return (
-    <Tooltip label={`${name} oyuncusuna mesaj`}>
-      <button type="button" aria-label={`${name} oyuncusuna mesaj`}
-        onClick={() => openChat(playerId, name)}
-        className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
-        {/* ⭐ 26 → 32px (kullanıcı): sıralama tablosunun son sütunundaki iki simge çok küçük
-            kalıyordu; dokunmatikte de 26px hedef alanı sınırın altındaydı.
-            ⚠️ `shrink-0` OLMADAN `w-8` HİÇBİR ŞEY İFADE ETMİYOR: bu ikonlar bir flex kutusunda
-            ve sütun dar olduğunda flex onları yatayda eziyor. 2026-08-03'te ölçüldü —
-            32 yazıyordu, ekranda **10px** çiziliyordu ve `object-contain` yüksekliği
-            koruduğu için ikon "minicik" görünüyordu. Aynı desen `CityHub.tsx`te de var. */}
-        <img src="/assets/menu/mesaj.png" alt="" aria-hidden width={32} height={32}
-          className="icon-shadow h-8 w-8 shrink-0 object-contain" />
-      </button>
-    </Tooltip>
-  );
-}
-
-/**
- * ⭐ DÜNYADA BUL (`grDny.do?o=`, orijinal ekran 141 — `g.java:725-730`).
- *
- * Oyuncunun **başkentinin** koordinatını arama ucundan alıp `/world/:k/:d`'ye gider.
- * Ayrı bir uç yazılmadı: `command/search` zaten oyuncu adından başkent koordinatı veriyor
- * ve gizlilik kuralı (§13.16.5 "yalnız başkent") orada tek yerde duruyor.
- *
- * ⚠️ Sunucu ADLA değil kimlikle çalışsın diye arama ucuna ad gönderiliyor ve dönen satırlar
- * arasından `playerId` eşleşeni seçiliyor — aynı önekli iki oyuncu varsa yanlış kişiye
- * gidilmesin.
- */
-function FindInWorldButton({ playerId }: { playerId: number | null }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  if (playerId == null) return null;
+  const playerId = row.playerId ?? null;
+  const playerName = kind === 'hero' ? row.owner ?? row.name : row.name;
 
-  const go = async (): Promise<void> => {
+  const findInWorld = async (): Promise<void> => {
+    if (playerId == null) return;
     setBusy(true);
     try {
       const res = await api<{ items: { playerId: number; k: number; d: number }[] }>(
         `/api/v1/command/search?kind=player&byId=${playerId}`);
       const hit = res.items.find((x) => x.playerId === playerId);
-      if (hit) navigate(`/world/${hit.k}/${hit.d}`);
+      // ⚠️ Modal ÖNCE kapanıyor: altındaki ekran değişirken modal açık kalsaydı oyuncu
+      // gittiği yeri görmezdi (rapor güzergâhındaki `RouteLine` ile aynı gerekçe).
+      if (hit) { onClose(); navigate(`/world/${hit.k}/${hit.d}`); }
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Tooltip label="Dünyada Bul">
-      <button type="button" aria-label="Dünyada Bul" disabled={busy}
-        onClick={() => void go()}
-        className="inline-flex cursor-pointer items-center transition-[filter] hover:brightness-125">
-        {/* Mesaj düğmesiyle aynı boy — ikisi yan yana duruyor, ayrı boy göze batıyordu.
-            `shrink-0` gerekçesi `MessageButton`ta. */}
-        <img src="/assets/menu/dunya.png" alt="" aria-hidden width={32} height={32}
-          className="icon-shadow h-8 w-8 shrink-0 object-contain" />
-      </button>
-    </Tooltip>
+    <Modal title={row.name} onClose={onClose} width="sm"
+      footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}>
+      <div className="space-y-3 p-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+          <span>Sıra <b className="tnum text-ink">{fmt(row.rank)}</b></span>
+          {kind === 'hero' ? (
+            <>
+              <span>Seviye <b className="tnum text-ink">{fmt(row.level ?? 0)}</b></span>
+              <span>Sahibi <b className="text-ink">{row.owner}</b></span>
+            </>
+          ) : (
+            <>
+              <span>Puan <b className="tnum text-ink">{fmt(row.score ?? 0)}</b></span>
+              {row.alliance ? <span>İttifak <b className="text-ink">{row.alliance}</b></span> : null}
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {/* ⚠️ Kendine mesaj gönderilemez; düğmeyi gizlemek yerine sebebini yazmak daha az
+              şaşırtıcı — düğmenin "kaybolması" hata gibi görünüyordu. */}
+          {row.isMine ? (
+            <p className="text-xs text-muted">Bu sensin.</p>
+          ) : (
+            <Button onClick={() => { onClose(); openChat(playerId!, playerName); }}>
+              Mesaj gönder
+            </Button>
+          )}
+          {/* ⭐ "Dünyada Bul" orijinalde YALNIZ sıralama satırının menüsündeydi
+              (`g.java:2040`, ekran 106) — arama sonucunda yoktu, çünkü arama koordinatı
+              zaten getiriyor. Aynı yerde kaldı, yalnız kabuğu değişti. */}
+          <Button variant="ghost" disabled={busy} onClick={() => void findInWorld()}>
+            {busy ? 'Aranıyor…' : 'Dünyada bul'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
