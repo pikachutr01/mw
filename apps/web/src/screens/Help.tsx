@@ -175,6 +175,13 @@ export function HelpScreen(): React.ReactElement {
           ) : null}
         </Panel>
       ))}
+
+      {/* ⭐ SÜRÜM DAMGASI (kullanıcı, 2026-08-06). Yardım sayfasının en altı: oyuncunun
+          "bir sorun var" derken bakacağı yer burası ve bir destek mesajına yapıştıracağı
+          tek satır bu. ⚠️ `select-all` bilinçli — tek tıkla kopyalanabilsin. */}
+      <p className="select-all pb-1 text-center text-[11px] text-muted">
+        v{__APP_VERSION__} · {__APP_COMMIT__}
+      </p>
     </div>
   );
 }

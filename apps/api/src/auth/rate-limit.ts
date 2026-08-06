@@ -24,12 +24,23 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service.ts';
 
-/** Sınırlanan yollar ve hangi kovaya düştükleri. Liste **tam** — burada olmayan sınırlanmaz. */
-const LIMITED: ReadonlyArray<{ path: string; bucket: 'simulate' | 'auth' }> = [
+/**
+ * Sınırlanan yollar ve hangi kovaya düştükleri. Liste **tam** — burada olmayan sınırlanmaz.
+ * ⚠️ `export`: testler listenin kendisini bekçiye bağlıyor (yeni bir uç eklenirken oyun içi
+ * trafiğin yanlışlıkla sınırlanmadığı da ölçülüyor).
+ */
+export const LIMITED: ReadonlyArray<{ path: string; bucket: 'simulate' | 'auth' }> = [
   { path: '/api/v1/simulate', bucket: 'simulate' },
   { path: '/api/v1/auth/login', bucket: 'auth' },
   { path: '/api/v1/auth/register', bucket: 'auth' },
   { path: '/api/v1/auth/forgot-password', bucket: 'auth' },
+  /**
+   * ⭐ 2026-08-06'da eklendi. ⚠️ Gerekçe KABA KUVVET DEĞİL: jeton 256 bit, tahmin edilemez.
+   * Asıl mesele **CPU**: her istek jeton biçimi doğru olduğu sürece bir argon2id hash'i
+   * çalıştırıyor (`resetPassword` → `passwords.hash`). Uydurma jetonla saniyede yüzlerce
+   * istek atmak sunucuyu bedavaya yorardı — `simulate` ucundaki gerekçenin aynısı.
+   */
+  { path: '/api/v1/auth/reset-password', bucket: 'auth' },
 ];
 
 interface Counter { count: number; resetAt: number }

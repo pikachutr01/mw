@@ -204,6 +204,20 @@ kod → commit ──push──►  [CI ci.yml]  typecheck · test · tokens:che
 | **Sağlık kontrolü + otomatik geri alma** | 30 sn içinde `/healthz` cevap vermezse symlink eski sürüme döner. ⚠️ **Göç geri alınmaz** — bu yüzden her göç bir önceki sürümün de çalışabileceği şekilde yazılmalı |
 | **Ayrı `migrate.mjs`** | `drizzle-kit` bir devDependency; üretim paketinde yok. `drizzle-orm`un koşucusu aynı `_journal.json` sırasını ve aynı `__drizzle_migrations` tablosunu kullanıyor — çift uygulama olmaz |
 | **Dağıtım paketi ASLA yerel Windows'ta üretilmez** | `@node-rs/argon2` platforma özel ikili yükler; paket Linux runner'da derlenmeli |
+| **Web derlemesi GIT DEPOSUNDA koşmalı** | Sürüm damgası (aşağı bak) SHA'yı `git rev-parse` ile derleme anında okuyor. Runner `actions/checkout` kullandığı için bu sağlanıyor; git'siz bir ortamda derleme **kırılmaz**, damga `dev`e düşer |
+
+### Sürüm damgası (2026-08-06)
+
+Yardım sayfasının en altında `v0.1.0 · a1b2c3d` satırı: **sürüm** kök `package.json`dan,
+**SHA** derleme anında `git rev-parse --short HEAD`ten. İkisi de `apps/web/vite.config.ts`
+içinde `define` ile gömülüyor — çalışma zamanı değişkeni değil, kaynağa yazılan düz metin.
+
+- **Sürümü bumplamak elle**: kök `package.json` → `"version"`. Değişikliğin büyüklüğüne göre
+  majör.minör.yama. Tek kaynak; başka hiçbir yere kopyalanmıyor (test bunu bekçiye bağlıyor).
+- ⚠️ **Damga derleme anında donuyor.** Sunucuda `pm2 reload` sürümü değiştirmez — yeni damga
+  ancak yeni bir web derlemesiyle gelir. Canlıda gördüğün SHA, o paketi üreten commit'tir.
+- Oyuncudan hata raporu alırken bu satırı istemek en ucuz teşhis: hangi paketi çalıştırdığı
+  tek bakışta belli olur (`select-all` ile tek tıkta kopyalanıyor).
 
 ### Elle müdahale gereken durumlar
 ```bash

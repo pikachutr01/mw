@@ -1,6 +1,36 @@
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwind from '@tailwindcss/vite';
+
+/**
+ * ⭐ SÜRÜM DAMGASI (kullanıcı kararı, 2026-08-06): **kökte tek dosya + kısa git SHA**.
+ *
+ * Sürüm kök `package.json`da elle bumplanıyor (tek kaynak); SHA derleme anında okunuyor.
+ * İkisi birlikte "hangi kod canlıda" sorusunu tek bakışta cevaplıyor — sürüm insan için
+ * (büyüklük), SHA makine için (tam olarak hangi commit).
+ *
+ * ⚠️ **İkisi de PATLAMAMALI.** Derleme git deposu olmayan bir yerde (Docker `COPY`, indirilmiş
+ * tarball, CI'ın shallow checkout'u) koşabilir; `git` çağrısı orada hata verir. Kırılmış bir
+ * derleme, eksik bir sürüm etiketinden çok daha pahalı → `try/catch` ve `'dev'` yedeği.
+ */
+function readVersion(): string {
+  try {
+    return String(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version ?? 'dev');
+  } catch {
+    return 'dev';
+  }
+}
+
+function readCommit(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim() || 'dev';
+  } catch {
+    return 'dev';
+  }
+}
 
 /**
  * Geliştirmede API'ye **proxy** ile gidiyoruz (`/api` → :3002).
@@ -46,6 +76,14 @@ const proxy = {
 
 export default defineConfig({
   plugins: [react(), tailwind()],
+  /**
+   * ⚠️ `JSON.stringify` ŞART: `define` ham metin YERİNE KOYUYOR, değer geçirmiyor.
+   * Tırnaksız yazılsaydı `0.1.0` kaynağa çıplak girer ve sözdizimi hatası olurdu.
+   */
+  define: {
+    __APP_VERSION__: JSON.stringify(readVersion()),
+    __APP_COMMIT__: JSON.stringify(readCommit()),
+  },
   server: { port: 5173, proxy },
   /**
    * ⚠️ **`preview` kendi proxy'sini ister** — `server.proxy`yi devralmaz. Bu blok olmadan

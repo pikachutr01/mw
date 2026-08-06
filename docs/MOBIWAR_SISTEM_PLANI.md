@@ -806,6 +806,23 @@ aynı felsefe). Arayüz de *"gönderdik"* değil ***"kayıtlıysa gönderdik"***
 **Sıfırlama TÜM oturumları düşürür** — `AuthService.revokeAll` bugüne kadar yazılmış ama hiç
 çağrılmamıştı; yeri burasıydı. Aynısı parola değiştirmede de geçerli.
 
+**K6 — Üç kenar durumu (2026-08-06).** Akış zaten çalışıyordu (uç → jeton → mail → sayfa →
+oturumlar düşer); kapatılanlar kenarlardı:
+
+- ⭐ **`reset-password` de hız sınırında.** ⚠️ Gerekçe kaba kuvvet DEĞİL — jeton 256 bit.
+  Asıl mesele **CPU**: her istek bir argon2id hash'i çalıştırıyor, uydurma jetonla saniyede
+  yüzlerce istek sunucuyu bedavaya yorardı (`simulate` ucundaki gerekçenin aynısı).
+  `forgot-password` zaten sınırlıydı; ikisi de `auth` kovasında.
+- ⭐ **Arayüz artık SÜRE YAZMIYOR.** *"Bağlantı 1 saat geçerli"* sabit yazılmıştı ama gerçek
+  ömür canlı bir ayar (`mail.resetTtlMinutes`) — panelden değiştirildiği anda ekran yalan
+  söylüyordu. Sayıyı sunucudan çekmek `GET /worlds` ucunu genişletmeyi gerektirirdi; o uç
+  bilerek fakir (kimlik doğrulamadan önce bilgi vermiyor). Oyuncunun ihtiyacı olan bilgi süre
+  değil "acele et ve bir kez kullan".
+- ⭐ **Doğrulanmamış adres için ipucu.** Sunucu o hesaba sıfırlama göndermiyor ve bunu
+  **sessizce** yapıyor (K5 gereği doğru). Ama oyuncu hiç gelmeyen bir postayı bekliyordu.
+  Onay ekranına kimlik sızdırmayan bir satır eklendi: *kimin* doğrulanmadığını söylemiyor,
+  yalnız ihtimali ve çıkış yolunu hatırlatıyor.
+
 **Limitler** (`mail.limits.ts`, env ile): doğrulama 24 sa · sıfırlama **60 dk** (bu bağlantı
 hesabı ele geçirmeye yeter, pencere dar olmalı) · cooldown 60 sn · hesap başına günde 10 ·
 IP başına günde 30. Yeni bağımlılık yok, `chat.service.ts` gibi **DB sayımlı**.

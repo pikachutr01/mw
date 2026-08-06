@@ -5,9 +5,38 @@
  * yanlış yapılabilecek şey pencere mantığı ve anahtar ayrımı.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { __resetRateLimit, clientIp, hit } from '../src/auth/rate-limit.ts';
+import { LIMITED, __resetRateLimit, clientIp, hit } from '../src/auth/rate-limit.ts';
 
 const W = 60_000;
+
+/**
+ * ⭐ SINIRLANAN YOLLAR LİSTESİ (2026-08-06'da `reset-password` eklendi).
+ *
+ * ⚠️ Liste bilerek DAR: sınır IP başına ve aynı IP'yi paylaşan iki oyuncu birbirini
+ * kilitleyebilir. Bu yüzden burada iki yönlü bekçi var — sınırlanması GEREKEN uçlar listede
+ * olmalı, oyun içi trafik ise ASLA olmamalı.
+ */
+describe('sınırlanan yollar', () => {
+  it('⭐ parola kurtarmanın İKİ ucu da sınırlı', () => {
+    const paths = LIMITED.map((r) => r.path);
+    // `forgot-password` posta kotasını, `reset-password` argon2id CPU'sunu koruyor.
+    expect(paths).toContain('/api/v1/auth/forgot-password');
+    expect(paths).toContain('/api/v1/auth/reset-password');
+  });
+
+  it('⚠️ oyun içi trafik sınırlı DEĞİL', () => {
+    for (const r of LIMITED) {
+      expect(r.path.startsWith('/api/v1/auth/') || r.path === '/api/v1/simulate', r.path)
+        .toBe(true);
+    }
+  });
+
+  it('kimlik uçlarının hepsi `auth` kovasında (simülatör tükenince giriş kilitlenmesin)', () => {
+    for (const r of LIMITED) {
+      expect(r.bucket, r.path).toBe(r.path === '/api/v1/simulate' ? 'simulate' : 'auth');
+    }
+  });
+});
 
 describe('hız sınırı sayacı', () => {
   beforeEach(() => { __resetRateLimit(); });

@@ -91,8 +91,21 @@ export function AuthModal({ mode: initialMode = 'login', onClose }: {
             Bu adres kayıtlıysa şifre sıfırlama bağlantısını gönderdik. Gelen kutunu
             (ve gereksiz/spam klasörünü) kontrol et.
           </p>
+          {/* ⚠️ SÜRE YAZILMIYOR (2026-08-06). Burada "1 saat" sabit yazıyordu ama gerçek ömür
+              canlı bir ayar (`mail.resetTtlMinutes`) — panelden değiştirildiği anda ekran yalan
+              söylüyordu. Sayıyı sunucudan çekmek için `GET /worlds` ucunu genişletmek
+              gerekirdi; o uç ise bilerek fakir (kimlik doğrulamadan önce bilgi vermiyor).
+              Oyuncunun burada ihtiyacı olan bilgi süre değil "acele et ve bir kez kullan". */}
           <p className="text-xs text-muted">
-            Bağlantı 1 saat geçerli ve yalnız bir kez kullanılabilir.
+            Bağlantının süresi sınırlı ve yalnız bir kez kullanılabilir.
+          </p>
+          {/* ⭐ Sunucu, adresi DOĞRULANMAMIŞ hesaba sıfırlama göndermiyor (`requestReset`) ve
+              bunu sessizce yapıyor — sayım sızdırmamak için doğru karar. Ama oyuncu o zaman
+              hiç gelmeyen bir postayı bekliyordu. Bu satır, kimlik sızdırmadan çıkış yolunu
+              gösteriyor: kimin doğrulanmadığını söylemiyor, sadece ihtimali hatırlatıyor. */}
+          <p className="text-xs text-muted">
+            Posta gelmediyse: adresini hiç doğrulamadıysan önce kayıt sırasında gönderilen
+            doğrulama bağlantısını kullanman gerekir.
           </p>
           <Button className="w-full" onClick={() => go('login')}>Girişe dön</Button>
         </div>

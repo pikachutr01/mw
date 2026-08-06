@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { AuthController } from '../src/auth/auth.controller.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { EmailError, EmailTokenService } from '../src/mail/email-token.service.ts';
 import { mailLimits } from '../src/mail/mail.limits.ts';
@@ -330,5 +331,82 @@ describe('mail:send teslimi', () => {
     expect(Number(row!['attempts'])).toBe(1);
     expect(row!['dispatched_at']).toBeNull();     // ← şifre sıfırlama maili kaybolmaz
     expect(String(row!['last_error'])).toContain('503');
+  });
+});
+
+/* ── Uçların kendisi ──────────────────────────────────────────────────────────── */
+
+/**
+ * ⭐ DENETLEYİCİ KATMANI (2026-08-06). Yukarıdaki her şey servisi DOĞRUDAN çağırıyor; iki
+ * ucun kendisi — zod ayrıştırma, sessiz 204 sözleşmesi ve `revokeAll`ın gerçekten bağlanmış
+ * olması — hiç koşulmuyordu.
+ *
+ * ⚠️ Nest'i ayağa kaldırmıyoruz: projede HTTP seviyesinde test altyapısı yok ve iki vaka için
+ * kurmak orantısız. Denetleyici sınıfı doğrudan kuruluyor — `admin-actions.test.ts` ile aynı
+ * desen. Kapsanmayan tek şey Nest'in yönlendirme/guard katmanı; hız sınırı zaten
+ * `rate-limit.test.ts`te ayrı ölçülüyor.
+ */
+describe('şifre sıfırlama uçları', () => {
+  let ctl: AuthController;
+  const revokedByController: number[] = [];
+
+  beforeEach(() => {
+    revokedByController.length = 0;
+    const auth = {
+      revokeAllIds: async (id: number): Promise<string[]> => {
+        revokedByController.push(id);
+        return ['oturum-1', 'oturum-2'];
+      },
+    };
+    ctl = new AuthController(
+      auth as never, {} as never, h.db as never,
+    );
+  });
+
+  const ipReq = { headers: {}, socket: { remoteAddress: '1.2.3.4' } } as never;
+
+  it('⭐ `forgot-password` var olmayan adreste de SESSİZCE geçer (sayım sızdırmaz)', async () => {
+    await expect(ctl.forgotPassword({ email: 'yok@test.local' }, ipReq)).resolves.toBeUndefined();
+    // ⚠️ Kritik: hiç mail yazılmamalı — "sessizce başarılı" gerçekten sessiz olmalı.
+    expect(await mailRowCount()).toBe(0);
+  });
+
+  it('⭐ biçimi bozuk gövde bile SIZDIRMAZ (hata değil, sessiz dönüş)', async () => {
+    await expect(ctl.forgotPassword({ email: 'eposta-degil' }, ipReq)).resolves.toBeUndefined();
+    await expect(ctl.forgotPassword({}, ipReq)).resolves.toBeUndefined();
+    expect(await mailRowCount()).toBe(0);
+  });
+
+  it('doğrulanmış adreste uç gerçekten mail yazar', async () => {
+    const acc = await makeAccount({ verified: true });
+    await ctl.forgotPassword({ email: acc.email }, ipReq);
+    expect(await mailRowCount()).toBe(1);
+  });
+
+  it('⭐ `reset-password` parolayı değiştirir ve OTURUMLARI DÜŞÜRÜR', async () => {
+    const acc = await makeAccount({ verified: true });
+    await ctl.forgotPassword({ email: acc.email }, ipReq);
+    const token = await lastToken();
+
+    await expect(ctl.resetPassword({ token, password: 'yepyeni-parola' }))
+      .resolves.toBeUndefined();               // 204: gövde YOK
+
+    // ⭐ Asıl ölçüm: denetleyicinin `revokeAll` bağlantısı gerçekten koşuyor mu.
+    expect(revokedByController).toEqual([acc.accountId]);
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT password_hash FROM accounts WHERE id = ${acc.accountId}
+    `);
+    expect(String(a!['password_hash'])).not.toBe('test-hash');
+  });
+
+  it('geçersiz jeton 400 döner ve oturum DÜŞÜRMEZ', async () => {
+    await expect(ctl.resetPassword({ token: 'uydurma-jeton-123', password: 'yeterince-uzun' }))
+      .rejects.toThrow();
+    expect(revokedByController).toEqual([]);
+  });
+
+  it('biçimi bozuk gövde 400 (zod) — burada sessizlik YOK, jeton sızdırılacak bilgi değil', async () => {
+    await expect(ctl.resetPassword({ token: 'kisa', password: 'yeterince-uzun' })).rejects.toThrow();
+    await expect(ctl.resetPassword({ token: 'a'.repeat(40), password: 'kisa' })).rejects.toThrow();
   });
 });
