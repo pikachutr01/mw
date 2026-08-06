@@ -47,6 +47,17 @@ export interface SchedulerOptions {
    * olmayan profiller etkilenmez.
    */
   heartbeat?: Heartbeat | null;
+  /**
+   * ⭐ BEKÇİ (2026-08-05) — her turun SONUNDA çağrılır, kendi kendini seyreltmesi beklenir.
+   *
+   * ⚠️ Var olma sebebi canlıda öğrenildi: `ranking_snapshot` zinciri çalışma sırasında koptu
+   * ve sistem bunu **hiçbir yerden** fark etmedi; kurtulmanın tek yolu worker'ı yeniden
+   * başlatmaktı ve sıralama 15 saat dondu. Kendi kendini onaran bir kontrol, açılışa bağlı
+   * bir kurulumdan çok daha dayanıklı.
+   *
+   * ⚠️ Hatası YUTULUR ve tura yansımaz: bekçi, koruduğu döngüyü asla düşürmemeli.
+   */
+  watchdog?: (worldId: number) => Promise<void>;
 }
 
 export interface TickResult {
@@ -61,8 +72,9 @@ export interface TickResult {
 
 export class SchedulerService {
   private readonly repo: MissionRepository;
-  private readonly opts: Required<Omit<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat'>>
-    & Pick<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat'>;
+  private readonly opts:
+    Required<Omit<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat' | 'watchdog'>>
+    & Pick<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat' | 'watchdog'>;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopped = false;
@@ -85,6 +97,7 @@ export class SchedulerService {
       onError: options.onError,
       engineFor: options.engineFor,
       heartbeat: options.heartbeat,
+      watchdog: options.watchdog,
     };
   }
 
@@ -138,6 +151,15 @@ export class SchedulerService {
         if (outcome === 'dead') result.dead++;
         else result.retried++;
       }
+    }
+    /**
+     * ⚠️ Bekçi görevlerden SONRA ve `try` içinde: kuyruğu geciktirmemeli ve hatası turu
+     * düşürmemeli. Seyreltme bekçinin kendi içinde (scheduler saniyede bir koşuyor).
+     */
+    try {
+      await this.opts.watchdog?.(this.opts.worldId);
+    } catch (err) {
+      this.opts.onError?.(err, null);
     }
     await this.beat(result);
     return result;

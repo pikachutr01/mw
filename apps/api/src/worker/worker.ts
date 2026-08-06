@@ -20,7 +20,9 @@ import { NotifyService } from '../notify/notify.service.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
 import { createAbuseScanHandler, ensureAbuseScanSchedule } from '../abuse/scan.handler.ts';
-import { createRankingSnapshotHandler, ensureRankingSchedule } from '../ranking/ranking.handler.ts';
+import {
+  createRankingSnapshotHandler, createRankingWatchdog, ensureRankingSchedule,
+} from '../ranking/ranking.handler.ts';
 import { createVacationEndHandler } from '../vacation/vacation.handler.ts';
 import { eventForOutbox, type RealtimeBus } from '../realtime/realtime.bus.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
@@ -93,6 +95,11 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
      * bir sink'te bloke olurken scheduler'ın nabzı "worker sağlıklı" demeye devam ederdi.
      */
     heartbeat: new Heartbeat(db, 'scheduler', { workerId, worldId: opts.worldId }),
+    /**
+     * ⭐ Zincir bekçisi (2026-08-05). Açılıştaki `ensureRankingSchedule` yetmiyor: zincir
+     * çalışma sırasında koparsa yeniden başlatmaya kadar ölü kalıyor — canlıda 15 saat sürdü.
+     */
+    watchdog: createRankingWatchdog(db),
     onError: (err, mission) => {
       // eslint-disable-next-line no-console
       console.error(`[scheduler] görev ${mission?.id ?? '-'} (${mission?.type ?? '-'}) hata:`, err);

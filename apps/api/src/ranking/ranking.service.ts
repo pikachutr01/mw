@@ -191,6 +191,13 @@ export async function lastSnapshotAt(runner: Runner, worldId: number): Promise<D
  *
  * Tekillik anahtarı **anlık görüntü anıdır** (`ranking:<iso>`) → worker kaç kez yeniden başlarsa
  * başlasın aynı ana ikinci bir görev yazılamaz.
+ *
+ * ⚠️⚠️ **`gameNow` YERİNE `ctx.at` GEÇMEK ZİNCİRİ ÖLDÜRÜR — canlıda yaşandı (2026-08-05).**
+ * Çağıran, elindeki görevin VADESİNDEN önceki bir an verirse `nextSnapshotAt` **o görevin
+ * kendi yuvasını** döndürür, anahtar çakışır, `DO NOTHING` çalışır ve **hiç yeni görev
+ * yazılmaz**. Bu fonksiyon "bundan sonrasını kur" demektir; parametre her zaman zincirin
+ * ilerlemesini istediğin ANDAN sonrası olmalı. Aynı yuvayı yeniden denemek için
+ * `requeueSnapshot` var.
  */
 export async function scheduleSnapshot(
   runner: Runner, worldId: number, gameNow: Date,
@@ -203,4 +210,50 @@ export async function scheduleSnapshot(
     ON CONFLICT (world_id, idempotency_key) DO NOTHING
   `);
   return at;
+}
+
+/** Aynı yuvayı yeniden denemenin üst sınırı — sonsuz döngüye karşı. */
+export const MAX_SNAPSHOT_RETRY = 3;
+
+/**
+ * ⭐ AYNI YUVAYI YENİDEN KUYRUĞA AL (2026-08-05).
+ *
+ * İleri-vade emniyeti bir görevi atladığında o dönemin görüntüsü **kaybolmamalı**: görev
+ * vadesi değişmeden geri konuyor, yalnız tekillik anahtarına deneme eki geliyor
+ * (`ranking:<iso>#retry1`). Böylece 16:00'ın görüntüsü yine 16:00 damgasıyla alınır.
+ *
+ * ⚠️ Anahtara ek koymak ŞART: eski anahtar atlanan görevin üzerinde duruyor ve `DO NOTHING`
+ * yeni satırı sessizce yutardı — zincirin ölme sebebi tam olarak buydu.
+ *
+ * @returns yeni satır yazıldıysa `true`; deneme hakkı bittiyse `false`
+ */
+export async function requeueSnapshot(
+  runner: Runner, worldId: number, dueAt: Date, attempt: number,
+): Promise<boolean> {
+  if (attempt > MAX_SNAPSHOT_RETRY) return false;
+  const iso = dueAt.toISOString();
+  await runner.execute(sql`
+    INSERT INTO missions (world_id, type, status, execute_at, payload, idempotency_key)
+    VALUES (${worldId}, 'ranking_snapshot', 'scheduled', ${iso}::timestamptz,
+            ${JSON.stringify({ retryOf: iso, attempt })}::jsonb,
+            ${`ranking:${iso}#retry${attempt}`})
+    ON CONFLICT (world_id, idempotency_key) DO NOTHING
+  `);
+  return true;
+}
+
+/**
+ * ⭐ ZİNCİR BEKÇİSİ (2026-08-05) — "bu dünyada bekleyen anlık görüntü görevi var mı?"
+ *
+ * ⚠️ Bu sorunun sorulması gerektiğini canlı öğretti: zincir koptuğunda sistem bunu **hiçbir
+ * yerden** fark etmiyordu. `ensureRankingSchedule` yalnız worker açılışında koşuyor, yani
+ * kopma bir sonraki yeniden başlatmaya kadar sürüyor — canlıda 15 saat sürdü.
+ */
+export async function hasPendingSnapshot(runner: Runner, worldId: number): Promise<boolean> {
+  const rows = await runner.execute<Record<string, unknown>>(sql`
+    SELECT 1 FROM missions
+     WHERE world_id = ${worldId} AND type = 'ranking_snapshot' AND status = 'scheduled'
+     LIMIT 1
+  `);
+  return rows.length > 0;
 }
