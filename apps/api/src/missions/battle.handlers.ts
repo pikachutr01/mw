@@ -1227,12 +1227,23 @@ async function writeBattleReports(ctx: HandlerContext, o: {
   });
 
   // Bildirim (push/WS) outbox üzerinden — savaşla AYNI transaction'da (§1).
+  /**
+   * ⭐ `route` 2026-08-07'de eklendi (kullanıcı): saldıranın bildirimi HANGİ şehre vurduğunu,
+   * savunanınki saldırının NEREDEN geldiğini yazıyor. Öncesinde iki taraf da yalnız
+   * "Rapor mesaj kutunda." görüyordu.
+   *
+   * ⚠️ Savaş yolunda `loadCityOwner` yalnız `player_id` okuyor — ad ve koordinat bu akışta
+   * hiçbir yerde yüklü değil. `routeOf` ise `writeMessage`in içinde zaten çalışıyor;
+   * burada ikinci kez çağrılıyor (görev başına tek satırlık sorgu, `report-route.ts`
+   * dosya başındaki maliyet notuyla aynı gerekçe).
+   */
   await ctx.emit('battle:resolved', {
     battleId: o.battleId,
     attackerPlayerId: o.attackerPlayerId,
     defenderPlayerId: o.defenderPlayerId,
     winner: o.result.winner,
     cityId: o.targetCityId,
+    route: (await routeOf(ctx)) ?? null,
     at: ctx.at.toISOString(),
   });
 }
@@ -1255,7 +1266,13 @@ async function writeMessage(ctx: HandlerContext, o: {
             ${o.subject}, ${JSON.stringify(body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
   `);
   // Mesaj yazımı ve haberi aynı yerde — bkz. `mission.handlers.ts` içindeki ikizi.
-  await ctx.emit('message:written', { playerId: o.playerId, kind: o.kind });
+  // ⚠️ `side`/`route` burada METİN ÜRETMİYOR (katalog `battle_report`u atlıyor; savaşın
+  //    bildirimi `battle:resolved`tan geliyor) ama iki `writeMessage` birbirinin AYNASI
+  //    kalmalı: ayrışırlarsa yeni bir rapor tipi hangi ikize eklendiğine göre farklı
+  //    davranır ve fark ancak canlıda görülür.
+  await ctx.emit('message:written', {
+    playerId: o.playerId, kind: o.kind, side: o.side, route: route ?? null,
+  });
 }
 
 function readLootPayload(payload: Record<string, unknown>): { gold: number; food: number } {

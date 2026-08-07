@@ -10,8 +10,26 @@
  * projenin "sefer süresi önizlemesi motorun AYNI travel.ts'ini çağırır" kuralının aynısı.
  *
  * ⚠️ Bir outbox satırı BİRDEN ÇOK bildirim üretebilir ve metinleri FARKLI olabilir: savaş
- * bittiğinde saldıran "Saldırın başarılı" görürken savunan "Şehrin saldırıya uğradı" görür.
+ * bittiğinde saldıran "Savaşı kazandın" görürken savunan "Savunmayı kaybettin" görür.
  * Bu yüzden dönüş tipi dizi.
+ *
+ * ══ 2026-08-07 · BİLDİRİM DÜZENİ (kullanıcı) ═══════════════════════════════════════════
+ *
+ * Kullanıcı canlı ortamdan bir kilit ekranı görüntüsü gönderdi:
+ * *«Casus kuş geliyor! · 1:4:1'den · 100 Casus Kuş · birazdan»*. İki kural buradan çıktı:
+ *
+ * 1️⃣ **BİLDİRİM DETAY TAŞIMAZ.** Başlık *ne olduğunu*, gövde *hangi şehir + koordinat*
+ *    olduğunu söyler; başka hiçbir şey. Birim dökümü Ordular ekranında zaten var, göreli
+ *    süre ("birazdan", "15 dk sonra") bildirim okunduğunda çoktan yanlış, *"Rapor mesaj
+ *    kutunda."* gibi dolgu cümleleri de hiçbir bilgi vermiyor. Bu yüzden `inWords()`
+ *    yardımcısı **komple silindi** — kullanılmayan bir yardımcıyı bırakmak, bir sonraki
+ *    bildirim tipinde kuralın sessizce delinmesi demekti.
+ *
+ * 2️⃣ **KALKIŞ UYARISI PUSH ATMAZ** (`push: false`). Saldırı/casusluk *başlatıldığı anda*
+ *    hedefin telefonunu titretmek oyunun en temel gerilimini — **ani saldırı** — yok
+ *    ediyordu. Savunan çevrimiçiyse toast'ı yine görür (uygulama zaten açık), çevrimdışıysa
+ *    hiçbir şey gitmez ve orduyu varışta öğrenir. Sonuç bildirimi (kazandın/kaybettin)
+ *    varışta push olarak gider — haber değeri orada.
  */
 import { UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID } from '@mobilwar/catalog';
 
@@ -31,6 +49,15 @@ export interface Notification {
    * üç mesaj gelince bildirim merkezinde üç satır değil, güncellenen tek satır olur.
    */
   tag: string;
+  /**
+   * ⭐ `false` → çevrimdışı oyuncuya **PUSH GİTMEZ**, yalnız çevrimiçiyken toast görünür
+   * (kullanıcı 2026-08-07; gerekçe dosya başındaki 2️⃣).
+   *
+   * ⚠️ Varsayılan `true`: yeni bir bildirim tipi eklenirken alan unutulursa push AÇIK kalır.
+   * Ters varsayılan, sessizce kaybolan bildirimler üretirdi — hata olarak fark edilmesi çok
+   * daha zor bir durum.
+   */
+  push?: boolean;
 }
 
 /* ── Küçük yardımcılar ──────────────────────────────────────────────────────── */
@@ -45,29 +72,28 @@ const n = (v: unknown): number | null => {
 
 const tr = (x: number): string => x.toLocaleString('tr-TR');
 
-/** `{k,d,s}` → `1:45:7`. Eksikse boş dize (metin "bilinmeyen yerden" demez, o kısmı atlar). */
-const coords = (v: unknown): string => {
-  const c = v as { k?: unknown; d?: unknown; s?: unknown } | null | undefined;
+/**
+ * ⭐ BİLDİRİM GÖVDESİNİN TAMAMI: `{k,d,s,name?}` → `Çığlıktepe (1:45:7)`.
+ *
+ * Ad yoksa (boş koordinata şehir kurma — orası kimsenin değil) yalnız `3:7:2` yazılır;
+ * koordinat da eksikse boş dize döner ve çağıran yedek cümlesine düşer.
+ *
+ * ⚠️ Adı **outbox yükünden** alıyoruz, okuma anında `cities`ten değil: raporlardaki `route`un
+ * dondurulmasıyla aynı ilke (`report-route.ts`). Şehir sonradan yeniden adlandırılırsa
+ * bildirim yine olayın olduğu andaki adı gösterir.
+ */
+const place = (v: unknown): string => {
+  const c = v as { k?: unknown; d?: unknown; s?: unknown; name?: unknown } | null | undefined;
   if (c?.k == null || c.d == null || c.s == null) return '';
-  return `${Number(c.k)}:${Number(c.d)}:${Number(c.s)}`;
+  const at = `${Number(c.k)}:${Number(c.d)}:${Number(c.s)}`;
+  const name = c.name == null ? '' : String(c.name).trim();
+  return name === '' ? at : `${name} (${at})`;
 };
 
-/**
- * "23 dk sonra" / "2 sa 5 dk sonra".
- *
- * ⚠️ Mutlak saat BİLEREK yazılmıyor: oyunun tüm zaman kuralları UTC ve ekranda "(oyun saati)"
- * etiketiyle gösteriliyor (BASLANGIC tuzak tablosu). Bir bildirim gövdesine o etiketi her
- * seferinde sığdırmak yerine göreli süre hem kısa hem yanlış anlaşılamaz.
- */
-const inWords = (iso: unknown, now: Date): string => {
-  const t = iso == null ? NaN : Date.parse(String(iso));
-  if (!Number.isFinite(t)) return '';
-  const mins = Math.round((t - now.getTime()) / 60_000);
-  if (mins <= 0) return 'birazdan';
-  if (mins < 60) return `${mins} dk sonra`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m === 0 ? `${h} sa sonra` : `${h} sa ${m} dk sonra`;
+/** `{origin, target}` güzergâhının bir ucu → yer dizesi. Güzergâh yoksa boş dize. */
+const placeOf = (route: unknown, end: 'origin' | 'target'): string => {
+  const r = route as { origin?: unknown; target?: unknown } | null | undefined;
+  return r == null ? '' : place(r[end]);
 };
 
 /** `{cuce: 3000, elf: 20}` → `3.000 Cüce · 20 Elf`; uzunsa "ve N tür daha". */
@@ -93,18 +119,48 @@ const note = (o: Notification): Notification => ({
 });
 
 /**
- * Mesaj kutusuna düşen satır türlerinin Türkçe adı (`Messages.tsx`'teki `REPORT_TYPE` ile
- * aynı diller). `battle_report` BİLEREK yok — savaşın bildirimi `battle:resolved` üzerinden
- * çok daha zengin (kim kazandı) üretiliyor; ikisi de üretse oyuncu aynı savaş için İKİ
- * bildirim alırdı.
+ * ⭐ MESAJ KUTUSUNA DÜŞEN SATIRLARIN BİLDİRİMİ — `kind` · `side` · `outcome` üçlüsüne göre.
+ *
+ * Arama sırası: `kind:side:outcome` → `kind:side` → `kind`. Kullanıcının *"bu bildirim
+ * türleri ileride genişletilebilir olsun"* şartının karşılığı bu tablo: yeni bir rapor tipi
+ * ya da yeni bir taraf eklemek tek satır yazmak demek, katalogda yeni `case` açmak değil.
+ *
+ * `place` gövdeye güzergâhın **hangi ucunun** yazılacağını söyler:
+ *  • casusluğu GÖNDEREN hedefi merak eder (`target`), casuslanan ise saldırganı (`origin`);
+ *  • nakliyeyi ALAN nereden geldiğini merak eder (`origin`), gönderen nereye vardığını (`target`).
+ * `body` yazılıysa güzergâh hiç okunmaz (ittifak satırlarında `route` zaten yok).
+ *
+ * ⚠️ `battle_report` BİLEREK yok — savaşın bildirimi `battle:resolved` üzerinden çok daha
+ * zengin (kim kazandı) üretiliyor; ikisi de üretse oyuncu aynı savaş için İKİ bildirim alırdı.
+ *
+ * ⚠️ Casusluk önleme bildiriminde saldıranın şehir ADI yeni bir sızıntı DEĞİL: `writeMessage`
+ * (`mission.handlers.ts`) `route`u **her** rapora koşulsuz yazıyor, yani savunan o adı bugün
+ * de raporun güzergâh satırında görüyor.
  */
-const MESSAGE_KINDS: Readonly<Record<string, { title: string; body: string }>> = {
-  spy_report: { title: 'Casusluk raporu', body: 'Rapor mesaj kutunda.' },
-  transport_report: { title: 'Nakliye raporu', body: 'Rapor mesaj kutunda.' },
-  support_report: { title: 'Destek raporu', body: 'Rapor mesaj kutunda.' },
-  found_city_report: { title: 'Şehir kurma raporu', body: 'Rapor mesaj kutunda.' },
+const REPORT_TEXT: Readonly<Record<string, {
+  title: string;
+  place?: 'origin' | 'target';
+  body?: string;
+  category?: NotifyCategory;
+}>> = {
+  /* ⚠️ Casusluk `attack` kategorisinde: Seçenekler'deki tek anahtar ("Savaş ve casusluk")
+     hem gelen uyarıyı hem sonucu yönetiyor (kullanıcı kararı 2026-08-07). */
+  'spy_report:spy': { title: 'Casusluk raporu', place: 'target', category: 'attack' },
+  'spy_report:target': { title: 'Casusluk önleme raporu', place: 'origin', category: 'attack' },
+
+  'transport_report:receiver': { title: 'Nakliye ulaştı', place: 'origin' },
+  'transport_report:sender': { title: 'Nakliyen ulaştı', place: 'target' },
+  'support_report:receiver': { title: 'Destek ulaştı', place: 'origin' },
+
+  /* Aynı `kind`+`side`, iki farklı sonuç → `outcome` basamağının var olma sebebi. */
+  'found_city_report:owner:ok': { title: 'Yeni şehir kuruldu', place: 'target' },
+  'found_city_report:owner:fail': { title: 'Şehir kurulamadı', place: 'target' },
+
+  /* Güzergâhsız satırlar — gövdeleri dolgu değil, oyuncuya YAPILACAK İŞİ söylüyor. */
   alliance_invite: { title: 'İttifak daveti', body: 'Mesaj kutunda Kabul / Red ile bekliyor.' },
-  alliance_application: { title: 'İttifak başvurusu', body: 'Mesaj kutunda Kabul / Red ile bekliyor.' },
+  alliance_application: {
+    title: 'İttifak başvurusu', body: 'Mesaj kutunda Kabul / Red ile bekliyor.',
+  },
   alliance_message: { title: 'İttifak mesajı', body: 'İttifakından yeni bir duyuru var.' },
   system: { title: 'Bildirim', body: 'Mesaj kutunda yeni bir kayıt var.' },
 };
@@ -115,52 +171,65 @@ export function notificationForOutbox(
   topic: string,
   payload: Record<string, unknown>,
   worldId: number | null,
-  now: Date = new Date(),
 ): Notification[] {
   switch (topic) {
     /**
-     * ⭐ EN KRİTİK BİLDİRİM. Oyuncu uygulamada değilken bunu kaçırırsa şehrini kaybeder;
-     * push'un varlık sebebi tam olarak bu satır. Birim dökümü payload'da 2026-07-31'den beri
-     * duruyor ("gelen ordu tam görünürlük" turu) — burada nihayet kullanılıyor.
+     * ⭐ KALKIŞ UYARISI — **push YOK** (`push: false`, gerekçe dosya başındaki 2️⃣).
+     *
+     * ⚠️ Yükte `units`, `heroCount` ve `arrivesAt` hâlâ duruyor ama METNE GİRMİYOR: gövde
+     * yalnız savunanın hangi şehrinin hedef olduğunu yazar. Alanları yükten silmedik —
+     * `realtime.bus.ts` aynı satırı okuyor ve outbox yükünü daraltmak sessiz bir kırılma
+     * riski; katalogun onları okumaması yeterli.
      */
     case 'city:incoming_attack': {
       const to = n(payload['defenderPlayerId']);
       if (to == null) return [];
-      const from = coords(payload['originCoordinates']);
-      const units = unitList(payload['units']);
-      const heroes = n(payload['heroCount']);
-      const when = inWords(payload['arrivesAt'], now);
-      const parts = [
-        from === '' ? '' : `${from}'den`,
-        units,
-        heroes == null ? '' : `⚔ ${heroes} kahraman`,
-        when,
-      ].filter((x) => x !== '');
       return [note({
         playerId: to, worldId, category: 'attack',
         title: 'Saldırı geliyor!',
-        body: parts.join(' · '),
+        // Yedek cümle: dağıtım sırasında yoldaki ESKİ satırlarda `targetCity` yok.
+        body: place(payload['targetCity']) || 'Şehrine bir ordu yaklaşıyor.',
         url: '/armies',
         tag: `attack:${n(payload['missionId']) ?? to}`,
+        push: false,
       })];
     }
 
     case 'city:incoming_spy': {
       const to = n(payload['defenderPlayerId']);
       if (to == null) return [];
-      const from = coords(payload['originCoordinates']);
-      const birds = n(payload['birds']);
-      const parts = [
-        from === '' ? '' : `${from}'den`,
-        birds == null ? '' : `${tr(birds)} Casus Kuş`,
-        inWords(payload['arrivesAt'], now),
-      ].filter((x) => x !== '');
       return [note({
         playerId: to, worldId, category: 'attack',
         title: 'Casus kuş geliyor!',
-        body: parts.join(' · '),
+        body: place(payload['targetCity']) || 'Şehrine casus kuş yaklaşıyor.',
         url: '/armies',
         tag: `spy:${n(payload['missionId']) ?? to}`,
+        push: false,
+      })];
+    }
+
+    /**
+     * ⭐ NAKLİYE KALKIŞI — kalkışta haber veren **tek** sefer tipi (kullanıcı 2026-08-07).
+     *
+     * Gerekçe kullanıcının kendi cümlesi: *"bunlar oyuncu için olumlu bilgiler"* — gelen mal
+     * kimseyi gafil avlamıyor, dolayısıyla saldırıdaki push kısıtı burada anlamsız.
+     *
+     * ⚠️ Kapı TİP değil **ALICI** üzerinden: kendi şehrine nakliyede (`targetPlayerId ===
+     * ownerPlayerId`) bildirim üretilmez — kimse kendi eylemini kendinden duymamalı
+     * (`chat:dm`in "yalnız alıcıya" kuralının ikizi). Destek bugün yalnız kendi şehrine
+     * gidebildiği için (`requireOwnTarget`) bu kural onu kendiliğinden eliyor; müttefik
+     * desteği geldiğinde ise ayrıca kod yazmadan çalışmaya başlayacak.
+     */
+    case 'mission:sent': {
+      if (String(payload['type'] ?? '') !== 'transport') return [];
+      const to = n(payload['targetPlayerId']);
+      if (to == null || to === n(payload['ownerPlayerId'])) return [];
+      return [note({
+        playerId: to, worldId, category: 'report',
+        title: 'Sana nakliye yolda',
+        body: place(payload['originCity']),
+        url: '/armies',
+        tag: `transport:${n(payload['missionId']) ?? to}`,
       })];
     }
 
@@ -185,32 +254,38 @@ export function notificationForOutbox(
 
     /**
      * ⭐ İKİ ALICI, İKİ FARKLI METİN — dönüş tipinin dizi olmasının sebebi bu dal.
-     * `winner` motorun `'attacker' | 'defender' | 'draw'` değeri (`engine/combat.ts:658`).
+     * `winner` motorun `'attacker' | 'defender' | 'draw'` değeri (`engine/combat.ts`).
+     *
+     * ⭐ **SALDIRININ ASIL BİLDİRİMİ BURASI** (kullanıcı 2026-08-07): kalkışta susan sistem
+     * varışta konuşur. Başlık kazanan/kaybeden, gövde ise güzergâhın oyuncuyu ilgilendiren
+     * ucu — saldıran *"hangi şehre vurdum"*, savunan *"saldırı nereden geldi"* okur.
+     *
+     * ⚠️ Kategori `report` değil **`attack`**: oyuncu savaş sonuçlarını nakliye/ittifak
+     * bildirimlerinden ayrı kapatabilsin (Seçenekler'deki "Savaş ve casusluk" anahtarı).
      */
     case 'battle:resolved': {
       const winner = String(payload['winner'] ?? '');
       const attacker = n(payload['attackerPlayerId']);
       const defender = n(payload['defenderPlayerId']);
       const battleId = n(payload['battleId']);
+      const route = payload['route'];
       const tag = `battle:${battleId ?? 0}`;
       const out: Notification[] = [];
       if (attacker != null) {
         out.push(note({
-          playerId: attacker, worldId, category: 'report',
-          title: 'Savaş bitti',
-          body: winner === 'attacker' ? 'Saldırın başarılı oldu. Rapor mesaj kutunda.'
-            : winner === 'defender' ? 'Saldırın püskürtüldü. Rapor mesaj kutunda.'
-              : 'Savaş berabere bitti. Rapor mesaj kutunda.',
+          playerId: attacker, worldId, category: 'attack',
+          title: winner === 'attacker' ? 'Savaşı kazandın'
+            : winner === 'defender' ? 'Savaşı kaybettin' : 'Savaş berabere bitti',
+          body: placeOf(route, 'target'),
           url: '/messages', tag,
         }));
       }
       if (defender != null) {
         out.push(note({
-          playerId: defender, worldId, category: 'report',
-          title: 'Şehrin saldırıya uğradı',
-          body: winner === 'defender' ? 'Saldırıyı püskürttün. Rapor mesaj kutunda.'
-            : winner === 'attacker' ? 'Savunma çöktü. Rapor mesaj kutunda.'
-              : 'Savaş berabere bitti. Rapor mesaj kutunda.',
+          playerId: defender, worldId, category: 'attack',
+          title: winner === 'defender' ? 'Saldırıyı püskürttün'
+            : winner === 'attacker' ? 'Savunmayı kaybettin' : 'Savaş berabere bitti',
+          body: placeOf(route, 'origin'),
           url: '/messages', tag,
         }));
       }
@@ -221,7 +296,7 @@ export function notificationForOutbox(
      * ⭐ ASKERÎ ÜNVAN (§ünvanlar) — rozetin kazanıldığını söyleyen TEK anlık haber.
      *
      * ⚠️ Ayrı bir `tag` kullanılıyor (`merit:<tier>`), savaşınkiyle aynı değil: aynı savaş
-     * hem "Savaş bitti" hem "Başkomutan oldun" üretiyor ve ikisi aynı etikete düşseydi
+     * hem "Savaşı kazandın" hem "Başkomutan oldun" üretiyor ve ikisi aynı etikete düşseydi
      * biri ötekini ezerdi (`renotify: true` ile aynı etiket tek bildirim demek).
      *
      * ⚠️ **Terfi olmayan yenilemede bildirim YOK.** Aynı ünvanı tekrar hak eden oyuncuya her
@@ -234,8 +309,29 @@ export function notificationForOutbox(
       return [note({
         playerId: to, worldId, category: 'report',
         title: `${name} oldun`,
-        body: 'Savaşta verdiğin zarar askerî rütbe kazandırdı. İttifak sayfasında görünüyor.',
+        // Başlık unvanı zaten yazıyor; gövde tek cümlede ne olduğunu söyler (§sadelik).
+        body: 'Askerî rütben yükseldi.',
         url: '/command', tag: `merit:${String(payload['tier'] ?? '')}`,
+      })];
+    }
+
+    /**
+     * ⭐ MAĞARADAN DÖNÜŞ (kullanıcı 2026-08-07) — mağarası yıkılan oyuncunun içerideki
+     * ordusu şehre vardığında haber verilir. Öncesinde `cave.handlers.ts` yalnız
+     * `city:changed` yazıyordu, yani ordu sessizce garnizona ekleniyordu.
+     *
+     * ⚠️ Kendi ordunun NORMAL dönüşü hâlâ bildirim üretmez (`city:army_returned`, aşağıdaki
+     * varsayılan dal): oyuncu onu zaten bekliyor. Mağara dönüşü farklı — oyuncu o seferi
+     * kendi başlatmadı, savaş başlattı.
+     */
+    case 'cave:returned': {
+      const to = n(payload['playerId']);
+      if (to == null) return [];
+      return [note({
+        playerId: to, worldId, category: 'report',
+        title: 'Ordun mağaradan döndü',
+        body: place(payload['city']),
+        url: '/barracks', tag: `cave:${n(payload['cityId']) ?? to}`,
       })];
     }
 
@@ -272,17 +368,27 @@ export function notificationForOutbox(
       }));
     }
 
-    /** Mesaj kutusuna düşen diğer satırlar. Savaş raporu yukarıda ele alındı → burada atlanır. */
+    /**
+     * Mesaj kutusuna düşen satırlar — metin `REPORT_TEXT` tablosundan çözülür.
+     * Savaş raporu orada bilerek yok (bildirimi `battle:resolved` üretti) → burada atlanır.
+     */
     case 'message:written': {
       const to = n(payload['playerId']);
       const kind = String(payload['kind'] ?? '');
       if (to == null || kind === 'battle_report') return [];
-      const t = MESSAGE_KINDS[kind];
+      const side = payload['side'] == null ? '' : String(payload['side']);
+      const outcome = payload['outcome'] == null ? '' : String(payload['outcome']);
+      const t = REPORT_TEXT[`${kind}:${side}:${outcome}`]
+        ?? REPORT_TEXT[`${kind}:${side}`]
+        ?? REPORT_TEXT[kind];
       if (!t) return [];
       return [note({
-        playerId: to, worldId, category: 'report',
-        title: t.title, body: t.body,
-        url: '/messages', tag: `msg:${kind}:${to}`,
+        playerId: to, worldId,
+        category: t.category ?? 'report',
+        title: t.title,
+        body: t.body ?? placeOf(payload['route'], t.place ?? 'target'),
+        url: '/messages',
+        tag: `msg:${kind}:${to}`,
       })];
     }
 
@@ -314,6 +420,10 @@ export function notificationForOutbox(
      * ⚠️ `city:defense_finished` İKİ AYRI ŞEKİL taşır (`queue.handlers.ts`): savunma birimi
      * bandı `{produced}` yazar, Sur/Büyü Kalkanı yükseltmesi ise `{type, level}` yazar.
      * İkisi de buradan geçiyor; ayrım `produced`ın varlığında.
+     *
+     * ⚠️ Üretim gövdeleri **döküm taşımaya devam ediyor** ("120 Cüce · 30 Elf hazır.") ve bu
+     * 1️⃣ kuralına aykırı değil: kullanıcı *"hangi tekniğin seviyesi, hangi yapının kaç
+     * seviyeye çıktığı yazılabilir"* dedi. Kaldırılan şey KARŞI TARAFIN ordusunun dökümüydü.
      */
     case 'city:units_finished':
     case 'city:defense_finished': {
@@ -346,6 +456,8 @@ export function notificationForOutbox(
      * `city:founded` · `alliance:changed` · `ranking:updated` · `echo:done`.
      * ⚠️ Kendi ordunun dönüşü için bildirim BİLEREK yok — oyuncu onu zaten bekliyor ve
      * her seferde bildirim atmak `production`dan bile gürültülü olurdu.
+     * ⚠️ `mission:sent` artık bu listede DEĞİL: nakliyenin alıcısına kalkış bildirimi
+     * üretiyor (yukarıdaki dal), diğer tiplerde yine sessiz.
      */
     default:
       return [];

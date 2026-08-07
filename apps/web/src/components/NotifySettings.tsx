@@ -16,7 +16,14 @@ import {
 import { Badge, Button, Panel } from './ui.tsx';
 
 const CATEGORIES: readonly (readonly [string, string, string])[] = [
-  ['attack', 'Gelen saldırı ve casusluk', 'Şehrine ordu ya da casus kuş yola çıktığında.'],
+  /* ⭐ 2026-08-07 (kullanıcı): anahtar artık yalnız "gelen uyarı"yı değil savaş ve casusluk
+     SONUÇLARINI da yönetiyor — `battle:resolved` ve `spy_report` bildirimleri `report`
+     kategorisinden buraya taşındı. Etiket bu yüzden genişletildi; anahtarın kendisi
+     (`attack`) DEĞİŞMEDİ, yoksa hesaplardaki mevcut tercihler anlamsızlaşırdı.
+     ⚠️ Gelen saldırı/casusluk uyarısı artık yalnız oyun AÇIKKEN görünür (kapalıyken push
+     atılmıyor, ani saldırı gölgelenmesin); ipucu bunu açıkça söylüyor. */
+  ['attack', 'Savaş ve casusluk',
+    'Oyun açıkken gelen saldırı uyarısı; savaş ve casusluk sonuçlandığında sonuç bildirimi.'],
   ['dm', 'Özel mesaj', 'Bir oyuncu sana mesaj yazdığında.'],
   ['report', 'Raporlar ve ittifak', 'Savaş bitince, rapor düşünce, davet gelince.'],
   ['production', 'Üretim ve inşaat', 'Bina, birim ya da araştırma tamamlandığında.'],

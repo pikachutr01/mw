@@ -12,6 +12,7 @@
 import { sql } from 'drizzle-orm';
 import { caveTransferSeconds, unitsArea } from '@mobilwar/catalog';
 import type { HandlerContext, MissionHandler, Tx } from '../missions/handler-registry.ts';
+import { routeOf } from '../missions/report-route.ts';
 import { addCaveUnits, addCityUnits, drainCave, takeUnits } from './cave.service.ts';
 
 /** Görevin taşıdığı birlikler. */
@@ -79,6 +80,19 @@ const returnHandler: MissionHandler = async (ctx) => {
 
   await ctx.emit('city:changed', {
     cityId, playerId: ctx.mission.ownerPlayerId, reason: 'cave_collapsed_return',
+  });
+  /**
+   * ⭐ BİLDİRİM (kullanıcı 2026-08-07): buraya kadar dönüş yalnız ekranı tazeliyordu, ordu
+   * sessizce garnizona ekleniyordu. Kendi ordunun NORMAL dönüşünde bildirim yok — oyuncu onu
+   * zaten bekliyor — ama bu seferi oyuncu başlatmadı, mağarasını yıkan saldırı başlattı.
+   *
+   * ⚠️ `city:changed` bildirim üretmiyor (yüksek hacimli, `notify.catalog.ts` varsayılan
+   * dalı); haber ayrı bir konu üzerinden gidiyor. `routeOf` burada kaynak = hedef = aynı
+   * şehir olduğu için tek satır okur.
+   */
+  const route = await routeOf(ctx);
+  await ctx.emit('cave:returned', {
+    playerId: ctx.mission.ownerPlayerId, cityId, city: route?.target ?? null,
   });
   await ctx.audit({
     action: 'cave.returned', entity: 'city', entityId: cityId,

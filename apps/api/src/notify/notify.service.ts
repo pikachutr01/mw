@@ -128,6 +128,17 @@ export class NotifyService {
       return;
     }
 
+    /**
+     * ⭐ KALKIŞ UYARISI ÇEVRİMDIŞIYA GİTMEZ (kullanıcı 2026-08-07). Saldırı/casusluk yola
+     * çıktığı anda telefonu titretmek "ani saldırı"yı öldürüyordu; savunan orduyu artık
+     * varışta öğreniyor (sonuç bildirimi push olarak gidiyor).
+     *
+     * ⚠️ Kapı toast dalının **ALTINDA**: çevrimiçi oyuncu uyarıyı görmeye devam etmeli —
+     * kullanıcının şartı "zaten çevrimiçiyse görebilir" idi. Üste taşınırsa iki kanal da
+     * susar ve uyarı tamamen kaybolur.
+     */
+    if (note.push === false) return;
+
     if (!this.shouldPush(note)) return;
     await this.push(note);
   }

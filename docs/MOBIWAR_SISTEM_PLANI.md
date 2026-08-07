@@ -352,7 +352,7 @@ bu *"insana ne yazacağız"* der. Türkçe metin **tek yerde** üretilir; aynı 
 push'ta görünür. İki yerde üretilseydi kaçınılmaz olarak ayrışırdı (aynı gerekçe: sefer süresi
 önizlemesi motorun AYNI `travel.ts`'ini çağırıyor).
 ⚠️ Dönüş tipi **dizi**: bir outbox satırı birden çok alıcıya, FARKLI metinlerle gidebilir —
-savaş bitince saldıran *"Saldırın başarılı oldu"*, savunan *"Savunma çöktü"* görür.
+savaş bitince saldıran *"Savaşı kazandın"*, savunan *"Savunmayı kaybettin"* görür.
 
 **K2 — Tek dallanma noktası.** `NotifyService.deliver()` içinde tek `if`: kategori tercihi →
 `isOnline(playerId)` → çevrimiçiyse `notify:show` WS olayı, değilse `push_subscriptions` +
@@ -375,12 +375,59 @@ başarısız HTTP isteği bırakırdı.
 taşır. Gerekçe: bu bir oyun durumu değil, o an üretilmiş bir mesaj — hiç yeniden okunmadığı
 için DB ile ayrışamaz. Sınır zorunlu (`title ≤ 60`, `body ≤ 120`). `INVALIDATES`'e GİRMEZ.
 
-**Kategoriler** (dördü de varsayılan AÇIK, kullanıcı kararı): `attack` (gelen saldırı/casusluk,
-birim dökümüyle) · `dm` · `report` (savaş + mesaj kutusu) · `production`.
+**Kategoriler** (hepsi varsayılan AÇIK, kullanıcı kararı): `attack` (gelen saldırı/casusluk
+uyarısı **+ savaş ve casusluk sonuçları**) · `dm` · `report` (nakliye/destek/kuruluş/ittifak) ·
+`production` · `mention`.
 ⚠️ `message:written`'da `battle_report` **atlanır** — savaşın bildirimi `battle:resolved`'dan
 çok daha zengin; ikisi de üretse oyuncu aynı savaş için iki bildirim alırdı.
 ⚠️ `production` push'u oyuncu başına **10 dk** birleştirilir (`NOTIFY_PRODUCTION_COALESCE_SECONDS`);
 toast birleştirilmez — uygulama açıkken her bitiş görünmeli, kilitli telefona beş bildirim düşmemeli.
+
+#### 7.2c ⭐ BİLDİRİM DÜZENİ — sadelik + zamanlama (kullanıcı, 2026-08-07)
+
+Kullanıcı canlıdan bir kilit ekranı görüntüsü gönderdi: *«Casus kuş geliyor! · 1:4:1'den ·
+100 Casus Kuş · birazdan»*. İki kural buradan çıktı ve **K1'in tekelini pekiştirdi**.
+
+**D1 — KALKIŞ UYARISI PUSH ATMAZ** (`Notification.push: false`). Saldırı/casusluk görevi
+*başlatıldığı anda* hedefin telefonunu titretmek oyunun en temel gerilimini — **ani saldırı** —
+yok ediyordu. Savunan çevrimiçiyse toast'ı yine görür (uygulama zaten açık, saklanacak bir şey
+yok); çevrimdışıysa hiçbir şey gitmez ve orduyu **varışta** öğrenir.
+⚠️ Kapı `deliverOne`da toast dalının **ALTINDA** — üste taşınırsa uyarı iki kanalda birden susar.
+⚠️ Varsayılan `true`: alanı unutan yeni bir bildirim tipi push atmaya devam eder. Ters
+varsayılan, sessizce kaybolan bildirimler üretirdi (fark edilmesi çok daha zor bir hata).
+
+**D2 — BİLDİRİM DETAY TAŞIMAZ.** Başlık *ne olduğunu*, gövde *hangi şehir + koordinat*
+(`Çığlıktepe (1:45:7)`) söyler; başka hiçbir şey. Kaldırılanlar: karşı ordunun birim dökümü
+(Ordular ekranında zaten var), göreli süre (bildirim okunduğunda çoktan yanlış — `inWords()`
+yardımcısı **silindi**), *"Rapor mesaj kutunda."* gibi dolgu cümleleri.
+⚠️ Üretim bildirimleri dökümü **korudu** ("Baraka seviye 7 hazır."): kural karşı tarafın
+ordusunu gizlemekle ilgiliydi, oyuncunun kendi kuyruğuyla değil.
+
+**D3 — Zamanlama tablosu.**
+
+| Olay | Ne zaman | Push? |
+| :-- | :-- | :-- |
+| Gelen saldırı / casusluk uyarısı | kalkışta | ❌ (yalnız toast) |
+| Savaş sonucu — iki tarafa ayrı metin | varışta | ✅ |
+| Casusluk raporu ↔ Casusluk önleme raporu | varışta | ✅ |
+| Nakliye — **alıcıya** | kalkışta **ve** varışta | ✅ |
+| Destek · şehir kurma | varışta | ✅ |
+| Mağaradan dönüş (`cave:returned`) | varışta | ✅ |
+
+⚠️ Nakliye kalkış kapısı **tip değil ALICI** üzerinden (`targetPlayerId !== ownerPlayerId`):
+kimse kendi eylemini kendinden duymamalı. Destek bugün yalnız kendi şehrine gidiyor
+(`requireOwnTarget`), yani kural onu kendiliğinden eliyor — müttefik desteği geldiğinde ise
+ayrıca kod yazmadan çalışacak.
+
+**D4 — `REPORT_TEXT` tablosu** (`kind:side:outcome` → `kind:side` → `kind`). Kullanıcının
+*"ileride genişletilebilir olsun"* şartının karşılığı: yeni bir rapor tipi ya da yeni bir taraf
+eklemek **tek satır**, katalogda yeni `case` değil. `place` alanı gövdeye güzergâhın hangi
+ucunun yazılacağını söyler — casusluğu gönderen hedefi merak eder, casuslanan saldırganı.
+⚠️ Öncesinde yük yalnız `{playerId, kind}` idi; nakliyenin gönderen ve alıcı kopyası bu yüzden
+**aynı** metni alıyordu. `side` · `route` · `outcome` 2026-08-07'de eklendi.
+⚠️ Şehir adı **outbox yükünden** okunuyor, okuma anında `cities`ten değil — raporlardaki
+`route`un dondurulmasıyla aynı ilke: şehir yeniden adlandırılsa da bildirim olayın anındaki adı
+gösterir.
 
 **Toast** (`components/Toaster.tsx`): sağdan kayarak girer, 6 sn durur, sağa kayarak çıkar;
 mobilde alt gezinti barının üstünde, aynı yön. `z-50` (alt bar 20 < sohbet 30 < modal 40 <

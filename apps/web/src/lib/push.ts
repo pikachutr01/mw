@@ -61,9 +61,13 @@ async function registration(): Promise<ServiceWorkerRegistration> {
 }
 
 export async function getPushStatus(): Promise<PushStatus> {
-  /* Sunucuya ulaşılamadığında da anahtarlar makul görünsün — varsayılanlar sunucuyla aynı. */
+  /* Sunucuya ulaşılamadığında da anahtarlar makul görünsün — varsayılanlar sunucuyla aynı
+     (`notify.limits.ts` `NOTIFY_DEFAULTS`). ⚠️ `mention` 2026-08-07'ye kadar burada EKSİKTİ:
+     sunucuda eklenmiş ama bu yedek güncellenmemişti. Sonucu görünmezdi (panel `!== false`
+     baktığı için `undefined` yine işaretli çiziliyordu), yine de iki listenin ayrışması
+     yorumu yalana çevirmişti. */
   const empty: Record<string, boolean> = {
-    attack: true, dm: true, report: true, production: true,
+    attack: true, dm: true, report: true, production: true, mention: true,
   };
   if (!supported()) return { state: 'unsupported', prefs: empty };
 

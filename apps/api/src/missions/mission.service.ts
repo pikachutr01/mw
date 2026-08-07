@@ -119,12 +119,19 @@ export interface AttackMission {
   executeAt: Date;
 }
 
+/**
+ * ⚠️ `name` yalnız BİLDİRİM metni için okunuyor (2026-08-07): bildirim gövdesi
+ * *"Çığlıktepe (1:45:7)"* diyor, çıplak koordinat değil. Kalkış anındaki adı outbox
+ * yüküne yazmak, raporlardaki `route`un donmasıyla aynı ilke — şehir sonradan
+ * yeniden adlandırılırsa bildirim yine olayın olduğu andaki adı gösterir.
+ */
 interface OriginRow {
   worldId: number;
   playerId: number;
   k: number;
   d: number;
   s: number;
+  name: string;
 }
 
 interface TargetRow {
@@ -133,6 +140,7 @@ interface TargetRow {
   k: number;
   d: number;
   s: number;
+  name: string;
 }
 
 /** Sefere çıkan her görevin ortak sonucu. */
@@ -292,10 +300,14 @@ export class MissionService {
 
       /**
        * ⭐ Hedef oyuncu GÖRÜR: varış saati + kaynak şehir + **birleşim** (kullanıcı 2026-07-31;
-       * eskiden birim dökümü bilerek dışarıda bırakılıyordu). Döküm payload'da duruyor ki
-       * gelecekteki push bildirimi "3.000 Cüce yaklaşıyor" diyebilsin.
+       * eskiden birim dökümü bilerek dışarıda bırakılıyordu).
        * ⚠️ WS olayının kendisi bunu TAŞIMAZ (`realtime.bus.ts` yalnız kimlik yayar; büyük
        * yük NOTIFY sınırına takılıp olayı sessizce düşürürdü) — istemci listeyi tazeler.
+       *
+       * ⚠️ `units` · `heroCount` · `arrivesAt` artık BİLDİRİM METNİNDE KULLANILMIYOR
+       * (kullanıcı 2026-08-07: *"bildirimler detay içermesin"*). Yükte duruyorlar çünkü
+       * Ordular ekranı ve gelecekteki tüketiciler için kayıt değeri var; katalogun onları
+       * okumaması yeter. Alan SİLİNMEZ — outbox satırını daraltmak sessiz bir kırılma riski.
        */
       await t.execute(sql`
         INSERT INTO outbox (world_id, topic, payload)
@@ -305,6 +317,8 @@ export class MissionService {
                   defenderPlayerId: target.playerId,
                   targetCityId: target.id,
                   originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
+                  /** ⭐ Bildirim gövdesi: savunanın HANGİ şehrine geliyor (ad + koordinat). */
+                  targetCity: { k: target.k, d: target.d, s: target.s, name: target.name },
                   arrivesAt: executeAt.toISOString(),
                   units,
                   heroCount: heroIds.length,
@@ -853,6 +867,8 @@ export class MissionService {
 
       let targetId: number | null = null;
       let targetPlayerId: number | null = null;
+      /** Bildirim gövdesi için hedefin adı + koordinatı; boş koordinata kuruluşta `null`. */
+      let targetPlace: { k: number; d: number; s: number; name: string } | null = null;
       if (o.targetMustBeEmpty) {
         const occupied = await t.execute<Record<string, unknown>>(sql`
           SELECT id FROM cities
@@ -865,6 +881,7 @@ export class MissionService {
         const target = await this.loadTarget(t, o.worldId, o.target);
         targetId = target.id;
         targetPlayerId = target.playerId;
+        targetPlace = { k: target.k, d: target.d, s: target.s, name: target.name };
         if (target.id === o.originCityId) {
           throw new MissionError('same_city', 'Kaynak ve hedef aynı şehir.');
         }
@@ -968,12 +985,21 @@ export class MissionService {
                   originCityId: o.originCityId,
                   targetCityId: targetId,
                   type: o.type,
+                  /**
+                   * ⭐ Bildirim gövdesi için kaynak şehir (kullanıcı 2026-08-07): başka bir
+                   * oyuncuya nakliye yola çıkınca ALICI kalkışta haber alıyor ve gövdede
+                   * "nereden" yazıyor. Katalog tek metin kaynağı olduğu için adı buradan
+                   * almak zorunda — `mission:sent` yükünde şehir kimliğinden başka bir şey yoktu.
+                   */
+                  originCity: { k: origin.k, d: origin.d, s: origin.s, name: origin.name },
                 })}::jsonb)
       `);
 
       // ⭐ CASUSLUK GİDİŞİ HEDEFTE GÖRÜNÜR (kullanıcı, §13.11.6): kırmızı kuş simgesi. Kaç kuş
       //    geldiği de GÖRÜNÜR (kullanıcı 2026-07-31; eskiden gizliydi) — savunan kuş sayısını
       //    varıştan önce bilir ve karşı kuş üretip üretmeyeceğine karar verebilir.
+      // ⚠️ `birds` ve `arrivesAt` ekranda kalıyor ama BİLDİRİM METNİNDE artık yok
+      //    (2026-08-07) — gerekçe `sendAttack`taki ikizinde.
       if (o.type === 'spy' && targetPlayerId != null && targetId != null) {
         await t.execute(sql`
           INSERT INTO outbox (world_id, topic, payload)
@@ -981,6 +1007,7 @@ export class MissionService {
                   ${JSON.stringify({
                     missionId, defenderPlayerId: targetPlayerId, targetCityId: targetId,
                     originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
+                    targetCity: targetPlace,
                     arrivesAt: executeAt.toISOString(),
                     birds: units['spy_bird'] ?? 0,
                   })}::jsonb)
@@ -1032,7 +1059,7 @@ export class MissionService {
 
   private async loadOrigin(tx: Tx, cityId: number, playerId: number, worldId: number): Promise<OriginRow> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
-      SELECT world_id, player_id, k, d, s FROM cities WHERE id = ${cityId}
+      SELECT world_id, player_id, k, d, s, name FROM cities WHERE id = ${cityId}
     `);
     const c = rows[0];
     if (!c) throw new MissionError('city_not_found', 'Şehir bulunamadı.');
@@ -1043,20 +1070,20 @@ export class MissionService {
     }
     return {
       worldId, playerId,
-      k: Number(c['k']), d: Number(c['d']), s: Number(c['s']),
+      k: Number(c['k']), d: Number(c['d']), s: Number(c['s']), name: String(c['name']),
     };
   }
 
   private async loadTarget(tx: Tx, worldId: number, at: { k: number; d: number; s: number }): Promise<TargetRow> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
-      SELECT id, player_id, k, d, s FROM cities
+      SELECT id, player_id, k, d, s, name FROM cities
        WHERE world_id = ${worldId} AND k = ${at.k} AND d = ${at.d} AND s = ${at.s}
     `);
     const c = rows[0];
     if (!c) throw new MissionError('target_not_found', 'Bu koordinatta şehir yok.');
     return {
       id: Number(c['id']), playerId: Number(c['player_id']),
-      k: Number(c['k']), d: Number(c['d']), s: Number(c['s']),
+      k: Number(c['k']), d: Number(c['d']), s: Number(c['s']), name: String(c['name']),
     };
   }
 

@@ -385,7 +385,7 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
 
     if (taken || owned >= limit) {
       await writeMessage(ctx, {
-        playerId, kind: 'found_city_report', side: 'owner',
+        playerId, kind: 'found_city_report', side: 'owner', outcome: 'fail',
         subject: taken ? 'Şehir kurulamadı — yer dolu' : 'Şehir kurulamadı — şehir limiti',
         body: {
           coordinates: coords,
@@ -446,7 +446,7 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
     await ctx.tx.execute(sql`DELETE FROM mission_heroes WHERE mission_id = ${ctx.mission.id}`);
 
     await writeMessage(ctx, {
-      playerId, kind: 'found_city_report', side: 'owner',
+      playerId, kind: 'found_city_report', side: 'owner', outcome: 'ok',
       subject: `Yeni şehir kuruldu: ${name}`,
       /* ⚠️ `heroes` ve `cargo` eskiden yazılmıyordu; istemci ikisini de çizmeye hazırdı
          (`Messages.tsx` `PlainBody`) ama alanlar hep boş geliyordu. */
@@ -620,6 +620,13 @@ async function techLevel(tx: Tx, playerId: number, type: string): Promise<number
  */
 async function writeMessage(ctx: HandlerContext, o: {
   playerId: number; kind: string; side: string; subject: string; body: Record<string, unknown>;
+  /**
+   * ⭐ Aynı `kind`+`side` çiftinin İKİ farklı sonucu olabildiği tek yer: şehir kurma
+   * hem başarıyla hem "yer dolu / limit" ile biter ve bildirim başlığı farklı olmalı
+   * ("Yeni şehir kuruldu" ↔ "Şehir kurulamadı"). Ayırt edici kimlik `subject` OLAMAZ:
+   * metin katalogun tekelinde, handler'lar bildirim dizesi üretmez.
+   */
+  outcome?: 'ok' | 'fail';
 }): Promise<void> {
   /**
    * ⭐ GÜZERGÂH HER RAPORDA (kullanıcı, 2026-08-02): kaynak → hedef koordinatı gövdeye
@@ -635,7 +642,18 @@ async function writeMessage(ctx: HandlerContext, o: {
     VALUES (${ctx.worldId}, ${o.playerId}, ${o.kind}, ${o.side}, NULL, ${ctx.mission.id},
             ${o.subject}, ${JSON.stringify(body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
   `);
-  await ctx.emit('message:written', { playerId: o.playerId, kind: o.kind });
+  /**
+   * ⭐ `side` · `route` · `outcome` yüke 2026-08-07'de eklendi (kullanıcı: bildirimler
+   * "hangi şehir, hangi koordinat" desin). Öncesinde yük yalnız `{playerId, kind}` idi ve
+   * katalog bu yüzden nakliyenin GÖNDEREN ile ALICI kopyasına aynı metni yazıyordu —
+   * ikisi de "Nakliye raporu · Rapor mesaj kutunda." görüyordu.
+   *
+   * ⚠️ `route` zaten yukarıda hesaplanmış durumda (rapor gövdesine yazılıyor); ek sorgu yok.
+   */
+  await ctx.emit('message:written', {
+    playerId: o.playerId, kind: o.kind, side: o.side, route: route ?? null,
+    ...(o.outcome ? { outcome: o.outcome } : {}),
+  });
 }
 
 function countsOf(rows: Record<string, unknown>[], field = 'count'): Record<string, number> {
