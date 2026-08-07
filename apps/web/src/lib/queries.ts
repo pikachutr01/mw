@@ -288,6 +288,11 @@ export interface WorldSlot {
     rank: number | null;
     /** İttifak adı (ittifaksızsa null). */
     alliance: string | null;
+    /**
+     * ⭐ Benimle AYNI ittifakta mı (kendi şehirlerim hariç — sunucu `isOwn` olanları eler).
+     * ⚠️ İsteğe bağlı: eski bir API sürümüne bakan istemci `undefined` görür ve rozet çizilmez.
+     */
+    isAlly?: boolean;
     /** Davet butonu için: hedef zaten bir ittifakta mı? */
     hasAlliance?: boolean;
     protection: 'beginner' | 'vacation' | null;

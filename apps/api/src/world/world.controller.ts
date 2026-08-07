@@ -82,11 +82,23 @@ export class WorldController {
      * Anlık görüntü henüz alınmamışsa (yeni dünyanın ilk dakikaları) `null` döner ve ekran `-`
      * yazar — tahmini bir sıra uydurmaktan iyidir.
      * `alliance` = oyuncunun ittifak adı (LEFT JOIN — ittifaksızsa null).
+     *
+     * ⭐ `is_ally` = **bu satır benimle AYNI ittifakta mı** (kullanıcı 2026-08-07: listede
+     * müttefikler ilk bakışta ayırt edilebilsin).
+     *
+     * ⚠️ Karar **sunucuda ve KİMLİK üzerinden** veriliyor, istemcide ittifak ADI karşılaştırarak
+     * değil. Ad bir gösterim ayrıntısı: yeniden adlandırılabiliyor ve iki ekranın (`/world` ile
+     * `/overview`) adı aynı anda tazelemesi garanti değil — bir yeniden adlandırmadan sonra
+     * müttefikler bir süre yabancı görünürdü. Kimlik karşılaştırması bu yarışı hiç açmıyor.
+     * ⚠️ İlişkisiz alt sorgu → planlayıcı bir kez çalıştırır (InitPlan), satır başına değil.
      */
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT c.id, c.name, c.s, c.is_capital,
              p.id AS player_id, p.username, p.score, p.protected_until, p.vacation_until,
-             r.rank, a.name AS alliance_name, p.alliance_id
+             r.rank, a.name AS alliance_name, p.alliance_id,
+             (p.alliance_id IS NOT NULL
+               AND p.alliance_id = (SELECT alliance_id FROM players WHERE id = ${player.playerId}))
+               AS is_ally
         FROM cities c
         JOIN players p ON p.id = c.player_id
         LEFT JOIN rankings r
@@ -108,6 +120,7 @@ export class WorldController {
       }
       const protectedUntil = r['protected_until'] == null ? null : toDate(r['protected_until']);
       const vacationUntil = r['vacation_until'] == null ? null : toDate(r['vacation_until']);
+      const isOwn = Number(r['player_id']) === player.playerId;
       slots.push({
         s,
         city: {
@@ -117,7 +130,14 @@ export class WorldController {
           username: String(r['username']),
           score: Number(r['score']),
           isCapital: Boolean(r['is_capital']),
-          isOwn: Number(r['player_id']) === player.playerId,
+          isOwn,
+          /**
+           * ⚠️ **Kendi şehrim müttefik SAYILMAZ.** Kullanıcı "aynı ittifaktaki *diğer* üyeler"
+           * dedi; kendi satırlarım zaten `isOwn` ile hem renkli hem kenarlıklı. Rozeti oraya da
+           * basmak "müttefik" işaretini gürültüye çevirirdi — bir listede kendi şehirlerim
+           * çoğunlukla en kalabalık grup.
+           */
+          isAlly: !isOwn && Boolean(r['is_ally']),
           rank: r['rank'] == null ? null : Number(r['rank']),
           alliance: r['alliance_name'] == null ? null : String(r['alliance_name']),
           /** Davet butonu için: hedef zaten bir ittifakta mı? (adı olmasa bile kimliği yeter) */

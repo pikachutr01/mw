@@ -10,12 +10,16 @@
  *
  * **Mobilde Görev sütunu gizlenir** (sığmıyor): satıra tıklamak seçenek listesini açar.
  *
+ * ⭐ **Müttefik rozeti** (kullanıcı 2026-08-07): aynı ittifaktan oyuncunun adının yanında ittifak
+ * simgesi çıkar. Kararı sunucu veriyor (`slot.city.isAlly`) — bkz. `world.controller.ts`.
+ *
  * ⚠️ **Gizlilik (§13.16.5):** liste asker ve kaynak GÖSTERMEZ — bunu öğrenmenin yolu casusluktur.
  */
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
+import { AllyBadge } from '../components/AllyBadge.tsx';
 import { BoundedAmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
 import { TargetModal } from './world-modal.tsx';
 
@@ -171,8 +175,20 @@ export function World() {
                     <Td className="max-w-[9rem] truncate font-medium">
                       {c ? `${cityLabel(c.name)}${c.isCapital ? ' ★' : ''}` : <span className="text-muted">—</span>}
                     </Td>
-                    <Td className="max-w-[8rem] truncate">
-                      {c ? c.username : <span className="text-muted">—</span>}
+                    {/*
+                      ⭐ MÜTTEFİK ROZETİ (kullanıcı 2026-08-07) — adın YANINDA, İttifak sütununda
+                      değil: o sütun mobilde gizli ve asıl "saldırayım mı" kararı orada veriliyor.
+                      ⚠️ `truncate` artık iç `span`de: flex kabında bir öge varsayılan
+                      `min-width:auto` yüzünden içeriğinin altına inemez → `min-w-0` olmadan uzun
+                      ad kısalmaz, rozeti hücreden dışarı iterdi.
+                    */}
+                    <Td className="max-w-[8rem]">
+                      {c ? (
+                        <span className="flex items-center gap-1">
+                          <span className="min-w-0 truncate">{c.username}</span>
+                          {c.isAlly ? <AllyBadge /> : null}
+                        </span>
+                      ) : <span className="text-muted">—</span>}
                     </Td>
                     <Td className="hidden max-w-[8rem] truncate text-muted sm:table-cell">
                       {c?.alliance ?? '—'}
