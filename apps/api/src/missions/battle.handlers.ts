@@ -371,16 +371,21 @@ export function createAttackHandler(cities: CityService): MissionHandler {
     }));
     /**
      * ⚠️ Savaş raporu güzergâhı `routeOf`tan GEÇMİYOR: o, mesaj gövdesine yazıyor, bu ise
-     * `battles.result`e. İki yol da aynı alanları taşımak zorunda — `name` (2026-08-04) buraya
-     * da eklendi, yoksa saldırı raporu tek başına adsız kalırdı.
+     * `battles.result`e. İki yol da aynı alanları taşımak zorunda — `name` (2026-08-04) ve
+     * `owner` (2026-08-07) buraya da eklendi, yoksa saldırı raporu tek başına adsız kalırdı.
      */
     const coordRows = await ctx.tx.execute<Record<string, unknown>>(sql`
-      SELECT id, k, d, s, name FROM cities WHERE id IN (${originCityId}, ${targetCityId})
+      SELECT c.id, c.k, c.d, c.s, c.name, p.username
+        FROM cities c JOIN players p ON p.id = c.player_id
+       WHERE c.id IN (${originCityId}, ${targetCityId})
     `);
-    const coordOf = (cid: number): { k: number; d: number; s: number; name: string } | null => {
+    const coordOf = (cid: number): Record<string, unknown> | null => {
       const r = coordRows.find((x: Record<string, unknown>) => Number(x['id']) === cid);
       return r
-        ? { k: Number(r['k']), d: Number(r['d']), s: Number(r['s']), name: String(r['name']) }
+        ? {
+          k: Number(r['k']), d: Number(r['d']), s: Number(r['s']),
+          name: String(r['name']), owner: String(r['username']),
+        }
         : null;
     };
     await ctx.tx.execute(sql`

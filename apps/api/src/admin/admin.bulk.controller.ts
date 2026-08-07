@@ -42,7 +42,13 @@ const target = z.object({
   activeSinceDays: z.number().int().min(1).max(3650).optional(),
   /** Filtreye giren ama BU işlemden muaf tutulacak oyuncular. */
   exclude: z.array(z.number().int().positive()).max(500).default([]),
-  /** Verilirse filtre yok sayılır ve YALNIZ bu oyuncular hedeflenir. */
+  /**
+   * Verilirse filtre yok sayılır ve YALNIZ bu oyuncular hedeflenir.
+   *
+   * ⚠️ **Boş dizi «hiç kimse» demektir**, "filtreye dön" değil (2026-08-07). Panelin elle
+   * seçim kipi hedef seçilmeden de istek atabilir; eski davranışta `only: []` sessizce filtre
+   * moduna düşüyor ve **dünyadaki herkesi** hedefliyordu. Ayrım `undefined` ile `[]` arasında.
+   */
   only: z.array(z.number().int().positive()).max(500).optional(),
 });
 
@@ -195,7 +201,9 @@ export class AdminBulkController {
   /** Filtreyi oyuncu + şehir listesine çevirir. Kuru koşu da bunu kullanıyor. */
   private async resolve(t: z.output<typeof target>): Promise<Victim[]> {
     const conds: SQL[] = [sql`p.world_id = ${t.worldId}`];
-    if (t.only && t.only.length > 0) {
+    // ⚠️ `!= null`, `length > 0` DEĞİL: boş liste hiçbir satırla eşleşmeli (bkz. `only` notu).
+    //    `idArray([])` → `ARRAY[NULL]::bigint[]`, `= ANY` onunla hiçbir şey döndürmez.
+    if (t.only != null) {
       conds.push(sql`p.id = ANY(${sql.raw(idArray(t.only))})`);
     } else {
       if (t.allianceId != null) conds.push(sql`p.alliance_id = ${t.allianceId}`);

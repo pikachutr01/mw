@@ -617,14 +617,17 @@ describe('casusluk', () => {
 
 /**
  * ⭐ Kullanıcı (2026-08-02) raporlarda kaynak/hedef KOORDİNATINI, (2026-08-04) yanında da
- * O ANKİ ŞEHİR ADINI istedi. İkisi de `routeOf` üzerinden **tek yerden** yazılıyor; bu
- * testler o tekliğin gerçekten tuttuğunu farklı görev tiplerinde ölçüyor.
+ * O ANKİ ŞEHİR ADINI, (2026-08-07) ayrıca **OYUNCU ADINI** istedi. Üçü de `routeOf` üzerinden
+ * **tek yerden** yazılıyor; bu testler o tekliğin farklı görev tiplerinde tuttuğunu ölçüyor.
+ *
+ * ⚠️ Ekranda artık `owner` yazıyor, `name` değil — ama ikisi de gövdede DURUYOR: `name`
+ * silinseydi bu alandan eski raporların güzergâhı adsız kalırdı (`Messages.tsx` `RouteLine`).
  */
-describe('rapor güzergâhı (koordinat + o anki şehir adı)', () => {
-  const routeOf = (body: Record<string, unknown>): Record<string, { name?: string }> =>
-    body['route'] as Record<string, { name?: string }>;
+describe('rapor güzergâhı (koordinat + o anki şehir ve oyuncu adı)', () => {
+  const routeOf = (body: Record<string, unknown>): Record<string, { name?: string; owner?: string }> =>
+    body['route'] as Record<string, { name?: string; owner?: string }>;
 
-  it('casusluk raporu kaynak ve hedefi ADIYLA taşır', async () => {
+  it('casusluk raporu kaynak ve hedefi ŞEHİR ve OYUNCU adıyla taşır', async () => {
     await giveUnits(home, 'spy_bird', 16);
     await setTech(me, 'espionage', 5);
     const at = await clock.gameNow(worldId);
@@ -635,8 +638,13 @@ describe('rapor güzergâhı (koordinat + o anki şehir adı)', () => {
     await runDue(m.missionId);
 
     const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
-    expect(routeOf(body)['origin']).toEqual({ k: 1, d: 1, s: 1, name: 'ev' });
-    expect(routeOf(body)['target']).toEqual({ k: 1, d: 1, s: 2, name: 'dusman' });
+    const origin = routeOf(body)['origin']!;
+    const target = routeOf(body)['target']!;
+    expect(origin).toMatchObject({ k: 1, d: 1, s: 1, name: 'ev' });
+    expect(target).toMatchObject({ k: 1, d: 1, s: 2, name: 'dusman' });
+    // ⭐ Kullanıcı adları `beforeEach`te rastgele son ek alıyor → önek üzerinden ölçülüyor.
+    expect(origin.owner).toMatch(/^me-/);
+    expect(target.owner).toMatch(/^rival-/);
   });
 
   /**

@@ -28,7 +28,19 @@ import type { HandlerContext } from './handler-registry.ts';
  * ⚠️ Eski raporlarda bu alan YOK (`undefined`) — gösterim yalnız koordinatı yazar. Geriye
  * dönük doldurmak zaten imkânsız: o anki adı hiçbir yerde saklamıyorduk.
  */
-export interface Coord { k: number; d: number; s: number; name?: string }
+/**
+ * ⭐ `owner` — koordinatın yanında **oyuncunun kullanıcı adı** (kullanıcı, 2026-08-07).
+ *
+ * Ekranda artık şehir adı değil bu yazıyor. Gerekçe kullanıcının: raporu okuyan kişi
+ * "hangi şehir" değil **"kim"** sorusunun cevabını arıyor; şehir adları da kolayca
+ * değiştirilebildiği için kimliği taşımıyorlar.
+ *
+ * ⚠️ `name` alanı KALDIRILMADI: eski raporlarda yalnız o var ve ekran `owner` yoksa ona
+ * düşüyor. Silmek, bugüne kadar yazılmış her raporun güzergâhını adsız bırakırdı.
+ * ⚠️ İkisi de olayın anına DONMUŞ (dosya başındaki gerekçe): kullanıcı adı da değiştirilebilir
+ * ve okuma anında çözülseydi üç ay önceki bir rapor bugünkü adı gösterirdi.
+ */
+export interface Coord { k: number; d: number; s: number; name?: string; owner?: string }
 export interface ReportRoute { origin: Coord | null; target: Coord | null }
 
 /**
@@ -68,14 +80,19 @@ export async function routeOf(ctx: HandlerContext): Promise<ReportRoute | null> 
   const ids = [originId, targetId].filter((x): x is number => typeof x === 'number');
   if (ids.length === 0) return coordTarget ? { origin: null, target: coordTarget } : null;
 
+  // ⚠️ `players` JOIN'i yalnız kullanıcı adı için — şehrin sahibi olmayan bir satır yok
+  //    (`cities.player_id` NOT NULL), o yüzden INNER JOIN güvenli.
   const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
-    SELECT id, k, d, s, name FROM cities WHERE id IN ${sql.raw(`(${ids.map(Number).join(',')})`)}
+    SELECT c.id, c.k, c.d, c.s, c.name, p.username
+      FROM cities c JOIN players p ON p.id = c.player_id
+     WHERE c.id IN ${sql.raw(`(${ids.map(Number).join(',')})`)}
   `);
 
   const byId = new Map<number, Coord>();
   for (const r of rows) {
     byId.set(Number(r['id']), {
-      k: Number(r['k']), d: Number(r['d']), s: Number(r['s']), name: String(r['name']),
+      k: Number(r['k']), d: Number(r['d']), s: Number(r['s']),
+      name: String(r['name']), owner: String(r['username']),
     });
   }
 

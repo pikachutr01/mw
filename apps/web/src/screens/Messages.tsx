@@ -23,9 +23,9 @@ import { useOpenChat } from '../lib/chat-context.tsx';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { HERO_SKILLS } from '../lib/hero-skills.ts';
 import {
-  intelIsTransferable, sideFromCity, sideFromIntel, writeSimPrefill, type SpyHero,
+  intelIsTransferable, sideFromCity, sideFromIntel, writeSimPrefill, WARRIORS, type SpyHero,
 } from '../lib/sim-prefill.ts';
-import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
+import { Button, CatalogIcon, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
 import { formatGameTime } from '@mobilwar/contracts';
@@ -500,7 +500,7 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
   );
 }
 
-interface Coord { k: number; d: number; s: number; name?: string }
+interface Coord { k: number; d: number; s: number; name?: string; owner?: string }
 
 /**
  * ⭐ RAPOR GÜZERGÂHI — «kaynak → hedef», iki uç da TIKLANABİLİR (kullanıcı, 2026-08-02).
@@ -512,10 +512,16 @@ interface Coord { k: number; d: number; s: number; name?: string }
  * ⚠️ Şehir NUMARASI (`s`) rotada yok — Dünya ekranı diyar listesi, şehir değil (§13.16).
  * Koordinatın tamamı yine yazılıyor, yalnız hedef bağlantı diyar düzeyinde.
  *
- * ⭐ ŞEHİR ADI koordinatın yanında (kullanıcı, 2026-08-04) ve **düğmenin İÇİNDE**: ad ile
+ * ⭐ OYUNCU ADI koordinatın yanında (kullanıcı, 2026-08-07) ve **düğmenin İÇİNDE**: ad ile
  * koordinat aynı şeyi işaret ediyor, ikisini ayırıp yalnız birini tıklanabilir yapmak
- * gereksiz bir ayrım olurdu. Ad `undefined` ise (bu alandan eski raporlar) satır sessizce
- * eski hâline dönüyor.
+ * gereksiz bir ayrım olurdu.
+ *
+ * ⚠️ **Şehir adının yerini aldı.** 2026-08-04'ten 08-07'ye kadar burada `name` (şehir adı)
+ * yazıyordu; kullanıcı raporu okuyan kişinin *"hangi şehir"* değil **"kim"** sorusunu
+ * sorduğunu söyledi. Şehir adı sunucu tarafında `route.name` olarak hâlâ donduruluyor ve
+ * `owner` YOKSA (o tarihten eski raporlar) ekran ona düşüyor — geçmiş raporlar adsız kalmıyor.
+ * ⚠️ İkisi de olayın anına donmuş; boş koordinata şehir kurmada ikisi de yok, satır yalnız
+ * koordinatı yazıyor.
  */
 function RouteLine({ origin, target, onNavigate }: {
   origin?: Coord | null; target?: Coord | null; onNavigate?: () => void;
@@ -536,7 +542,8 @@ function RouteLine({ origin, target, onNavigate }: {
           decoration-dotted underline-offset-2 transition-colors hover:bg-raised hover:text-accent">
         <span className="tnum">{c.k}:{c.d}:{c.s}</span>
         {/* ⚠️ `tnum` yalnız koordinatta: tablo rakamları ada uygulanınca harfler seyreliyor. */}
-        {c.name ? <span className="ml-1 font-normal">{c.name}</span> : null}
+        {c.owner ?? c.name
+          ? <span className="ml-1 font-normal">{c.owner ?? c.name}</span> : null}
       </button>
     ) : <span className="text-muted">—</span>
   );
@@ -613,7 +620,7 @@ function PlainBody({ m, body, onDone }: {
       {units && Object.keys(units).length > 0 ? (
         <div>
           <div className="mb-1 text-xs font-semibold text-muted uppercase">Birlikler</div>
-          <div className="text-ink">{describeUnits(units, fmt)}</div>
+          <UnitChips units={units} />
         </div>
       ) : null}
       {/* ⭐ Kahramanlar (kullanıcı, 2026-08-03): rapor yalnız birimleri yazıyordu — «9 casus
@@ -622,10 +629,26 @@ function PlainBody({ m, body, onDone }: {
       {Array.isArray(b['heroes']) && (b['heroes'] as string[]).length > 0 ? (
         <div>
           <div className="mb-1 text-xs font-semibold text-muted uppercase">Kahraman</div>
-          <div className="text-accent">{(b['heroes'] as string[]).join(' · ')}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {(b['heroes'] as string[]).map((name, i) => (
+              <span key={i} className="flex items-center gap-1.5 rounded-[var(--radius-sm)]
+                border border-border bg-raised px-1.5 py-1">
+                <img src="/assets/hero/kahraman.png" alt="Kahraman" width={28} height={28}
+                  className="icon-shadow shrink-0 object-contain" />
+                <span className="truncate text-xs text-accent">{name}</span>
+              </span>
+            ))}
+          </div>
         </div>
       ) : null}
-      {carried && (carried.gold > 0 || carried.food > 0) ? (
+      {/*
+        ⭐ TAŞINAN KAYNAK HEP YAZILIR (kullanıcı, 2026-08-07) — sıfır olsa bile.
+        Eskiden koşul `gold > 0 || food > 0` idi ve kaynak götürmeyen bir destek raporunda satır
+        HİÇ çıkmıyordu: oyuncu "kaynak da göndermiş miydim?" sorusuna raporda cevap bulamıyordu.
+        ⚠️ Koşul artık ALANIN VARLIĞI: `cargo`/`loot` taşımayan gövdeler (ittifak daveti,
+        sistem duyurusu) yine hiçbir şey çizmiyor — "0 altın 0 yemek" onlarda anlamsız olurdu.
+      */}
+      {carried ? (
         <div className="flex items-center gap-2 text-ink">
           <span>{m.kind === 'return_report' ? 'Getirilen:' : 'Taşınan:'}</span>
           <Res kind="gold" value={fmt(carried.gold)} size={14} />
@@ -798,9 +821,10 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
       {/*
         ⭐ KAHRAMANLAR (§13.11.6, kullanıcı 2026-08-07) — iki kademeye yayılıyor:
         `armyCounts`ta her kahramanın seviyesi ve dört yeteneği, bir alt kademede yalnız SAYI.
-        ⚠️ `heroCount === 0` de bir haber ("kahraman yok") — bu yüzden `typeof` ile bakılıyor,
-           doğruluk kontrolüyle değil; `0` sessizce düşerdi.
-        ⚠️ Eski raporlarda bu anahtarlar yok → hiçbir şey çizilmez, göç gerekmiyor.
+        ⚠️ **Kahraman YOKSA bölüm hiç çizilmiyor** (kullanıcı, 2026-08-07): kısa bir süre
+           «Kahraman yok» yazılıyordu, kullanıcı raporu kalabalıklaştırdığı için kaldırttı.
+           Bu, casusluk raporunun genel kuralına da uyuyor — eksik bölüm boş kutu değil, YOK.
+        ⚠️ Eski raporlarda bu anahtarlar hiç yok → yine hiçbir şey çizilmez, göç gerekmiyor.
       */}
       {heroes && heroes.length > 0 ? (
         <Section title="Kahramanlar">
@@ -819,10 +843,8 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
             ))}
           </div>
         </Section>
-      ) : typeof heroCount === 'number' ? (
-        <Section title="Kahramanlar">
-          {heroCount > 0 ? `${fmt(heroCount)} kahraman` : 'Kahraman yok'}
-        </Section>
+      ) : typeof heroCount === 'number' && heroCount > 0 ? (
+        <Section title="Kahramanlar">{fmt(heroCount)} kahraman</Section>
       ) : null}
 
       {structures ? (
@@ -854,6 +876,41 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
           yükselt. Kuş sayısı ikinin kuvvetiyle sayılır: 8 kuş = +3 seviye, 16 kuş = +4.
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * ⭐ BİRİM KARTLARI (kullanıcı, 2026-08-07) — rapor gövdesinde «Cüce 120 · Elf 30» yerine
+ * her birim kendi görseliyle bir kart.
+ *
+ * Kullanıcının şikâyeti destek raporundaydı: noktayla ayrılmış düz metin, oyunun her yerinde
+ * görseliyle görünen birimleri raporda anonim bir listeye çeviriyordu.
+ *
+ * ⚠️ **Sıra katalogtan** (`WARRIORS` → `WARRIOR_ORDER`), `Object.entries`in rastgele sırası
+ * değil: Baraka ve Ordular ekranı da aynı sırayı kullanıyor, rapor onlardan ayrışmamalı.
+ * Katalogda olmayan bir id (eski kayıt) sona düşer, gizlenmez.
+ * ⚠️ `flex-wrap` + `min-w-0`+`truncate`: dar telefonda kartlar alt satıra iniyor, uzun bir ad
+ * kartı taşırmıyor. Sabit sütunlu bir ızgara 320 px'te taşardı.
+ */
+function UnitChips({ units }: { units: Record<string, number> }) {
+  const order = new Map(WARRIORS.map((u, i) => [u.id as string, i]));
+  const rows = Object.entries(units)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => (order.get(a[0]) ?? 999) - (order.get(b[0]) ?? 999));
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {rows.map(([id, n]) => (
+        <span key={id} className="flex items-center gap-1.5 rounded-[var(--radius-sm)]
+          border border-border bg-raised px-1.5 py-1">
+          <CatalogIcon kind="units" id={id} size={28} alt={nameOf(id)} />
+          <span className="min-w-0">
+            <span className="block truncate text-[11px] leading-tight text-muted">{nameOf(id)}</span>
+            <span className="tnum block text-xs leading-tight font-semibold text-ink">{fmt(n)}</span>
+          </span>
+        </span>
+      ))}
     </div>
   );
 }

@@ -163,6 +163,24 @@ describe('hedef seçimi', () => {
     expect(await unitsOf(c.cityId)).toEqual({ dwarf: 7 });
   });
 
+  /**
+   * ⭐⭐ BOŞ `only` = HİÇ KİMSE (kullanıcı arayüzü, 2026-08-07).
+   *
+   * Panelin «Elle seç» kipi hedef seçilmeden de istek atabiliyor. Eski koşul
+   * (`only && only.length > 0`) boş diziyi sessizce FİLTRE moduna düşürüyordu — yani "kimseye
+   * verme" isteği **dünyadaki herkese** uygulanırdı. Bu turun en tehlikeli tek satırı.
+   */
+  it('⭐ only: [] hiç kimseyi hedeflemez (filtreye DÜŞMEZ)', async () => {
+    const out = await bulk.run('units', {
+      target: target({ only: [] }), units: { dwarf: 5 }, confirm: true,
+    }, req()) as Record<string, unknown>;
+    expect(out['players']).toBe(0);
+    expect(out['cities']).toBe(0);
+    expect(await unitsOf(a.cityId)).toEqual({});
+    expect(await unitsOf(b.cityId)).toEqual({});
+    expect(await unitsOf(c.cityId)).toEqual({});
+  });
+
   it('aktiflik filtresi son görülmeye bakıyor', async () => {
     await h.db.execute(sql`
       UPDATE players SET last_seen_at = now() - interval '40 days' WHERE id = ${b.playerId}

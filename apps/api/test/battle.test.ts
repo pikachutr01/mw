@@ -861,9 +861,13 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(atk.sections[0]!.key).toBe('myArmy');
     expect(def.sections.some((s) => s.key === 'enemyArmy')).toBe(true);
     expect(def.sections.some((s) => s.key === 'defenderStructs')).toBe(true);
-    // ⭐ Zenginleştirme: koordinatlar VE o anki şehir adları savaş anında satıra işlendi.
-    expect(atk.coords?.target).toEqual({ k: 1, d: 1, s: 2, name: 'savunan' });
-    expect(atk.coords?.origin).toEqual({ k: 1, d: 1, s: 1, name: 'saldiran' });
+    // ⭐ Zenginleştirme: koordinatlar, o anki şehir adları VE oyuncu adları (2026-08-07)
+    //    savaş anında satıra işlendi. `owner` ekranda `name`in yerini aldı ama ikisi de
+    //    gövdede duruyor — `name` silinseydi eski raporlar adsız kalırdı.
+    expect(atk.coords?.target).toMatchObject({ k: 1, d: 1, s: 2, name: 'savunan' });
+    expect(atk.coords?.origin).toMatchObject({ k: 1, d: 1, s: 1, name: 'saldiran' });
+    expect(atk.coords?.target?.owner).toMatch(/^def-/);
+    expect(atk.coords?.origin?.owner).toMatch(/^atk-/);
     // Metin dökümünde de ad koordinatın yanında (kullanıcı, 2026-08-04).
     expect(atk.text).toMatch(/Kaynak: 1:1:1 \(saldiran\) → Hedef: 1:1:2 \(savunan\)/);
   });

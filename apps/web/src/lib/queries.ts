@@ -771,11 +771,12 @@ export interface BattleReport {
   at: string;
   /**
    * Kaynak (saldıran) → Hedef (savunan). Eski kayıtlarda null olabilir.
-   * `name` savaş ANINDAKİ şehir adı; bu alandan eski savaşlarda yok (§13.10.1).
+   * `name` savaş ANINDAKİ şehir adı, `owner` o anki oyuncu adı; ikisi de eski savaşlarda
+   * yok (§13.10.1). Ekran `owner` varsa onu yazar (kullanıcı, 2026-08-07).
    */
   coords: {
-    origin: { k: number; d: number; s: number; name?: string } | null;
-    target: { k: number; d: number; s: number; name?: string } | null;
+    origin: { k: number; d: number; s: number; name?: string; owner?: string } | null;
+    target: { k: number; d: number; s: number; name?: string; owner?: string } | null;
   } | null;
   sections: { key: string; title: string; lines: ReportLine[] }[];
   heroes: {
