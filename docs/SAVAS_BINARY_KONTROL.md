@@ -29,7 +29,60 @@ koşturup sonuçları karşılaştıralım; ayrışan satır varsa motorda düze
 
 ---
 
-## ⚠️ Üç şüpheli satır (8, 10, 11) — düzeltilmedi, ÖNCE ölçüm istiyorum
+## ✅ 2026-08-07 — KÖK NEDEN BULUNDU VE DÜZELTİLDİ
+
+**Tek satırlık hata, üç şüpheli satırın ikisini + canlı bir hatayı birden açıklıyor.**
+
+`combatAlive` (`packages/engine/src/combat.ts`) "bu ordu hâlâ ayakta mı" sorusunu yanıtlarken
+`NONCOMBAT`i süzüyordu ama **`LEVEL_BASED`i süzmüyordu**. Sur · Büyü Kalkanı · Tapınak girdide
+ADET değil **SEVİYE** taşıyor (`Sur 8` = sekizinci seviye sur) ve savaşta seviyeleri hiç
+düşmüyor — dolayısıyla **seviye, canlı birim adedi gibi davranıyordu**: ordusu olmayan ama
+Sur 8'i olan şehir "8 birim ayakta" görünüyor, savaş 5 tur boşa dönüyor, kimse kayıp vermiyor
+ve karar *"eşitlikte savunan"* kuralına düşüyordu.
+
+⚠️ Bu, 2026-08-05'te düzeltilen "1000 casus kuş" hatasının **ikizi**: o zaman savaş-dışı
+BİRİMLER şehri ayakta tutuyordu, burada seviye taşıyan YAPILAR tutuyordu. Katalogdaki
+`LEVEL_BASED` yorumu zaten *"hayatta kalan birim toplamına KATILMAZLAR"* diyordu ve raporun
+`alive` sayacı (`combat.ts:852`) bunu doğru uyguluyordu — sapan tek yer `combatAlive`di.
+
+**Canlı doğrulama** (kullanıcı raporu): 132 Yük Arabası + 2 Ejderha, savunanın şehrinde hiç
+ordu yok, yalnız Sur 8 → eskiden **saldıran 5 tur sonra 0 kayıpla KAYBEDİYOR** ve sur %31'e
+iniyordu. Düzeltmeden sonra: **saldıran kazanır · 1 tur · iki taraf da 0 kayıp · sur %100.**
+
+| # | Eski motor | Yeni motor | Binary | Durum |
+|---|---|---|---|---|
+| 7 | SALDIRAN · 5 tur | SALDIRAN · **1 tur** · sur %100 | SALDIRAN · 1 tur · sur %100 | ✅ oturdu |
+| 8 | ⚠️ SAVUNAN · 5 tur | **SALDIRAN** · 1 tur · kalkan %100 | SALDIRAN · 1 tur · kalkan %100 | ✅ oturdu |
+| 10 | ⚠️ SAVUNAN · 5 tur | **SALDIRAN** · 1 tur | SALDIRAN · 1 tur | ✅ oturdu |
+| 11 | SAVUNAN · 5 tur | SAVUNAN · 5 tur (değişmedi) | SAVUNAN · 5 tur | ✅ zaten doğruymuş |
+
+⭐ **11 numara şüpheli DEĞİLMİŞ**: Şaman `NO_POOL` ama gerçek bir savaşçı, binary de savunanı
+kazandırıyor. Yeterli şaman gerçekten dokunulmazlık sağlıyor — motor bunu doğru uyguluyordu.
+
+Kalıcı bekçi testleri `packages/engine/test/reference.test.ts` sonunda (7·8·10 + canlı senaryo
++ iki karşı kontrol: Sur ordusu olan savunanda hâlâ hem koruyor hem yıpranıyor).
+
+### ⏳ Hâlâ ayrışan satırlar — AYRI bir aile, dokunulmadı
+
+Bunlar "kim kazandı" değil **"kayıp nasıl sayılıyor"** sorusu; kök neden farklı ve ölçüm
+gerektiriyor. Motor bu satırlarda kazananı ve tur sayısını doğru veriyor, yalnız kayıp
+dökümü tutmuyor:
+
+| # | Motor | Binary | Fark |
+|---|---|---|---|
+| 3 | savunan 0 kayıp | savunan **4 gnom** kaybeder | Gnom `NO_ROUND_LOSS`; binary 1. turda az sayıda gnom kırıyor |
+| 4 | savunan 1 kayıp | savunan **1001** kaybeder | Savunanın ordusu kırılınca kuşlar da gidiyor; motorda kuş kaçıyor |
+| 14 | savunan 0 kayıp | savunan **1000 kuş** + ~10 okçu kulesi | Aynı aile + kule kaybı |
+| 6 | BERABERE | savunan (binary'de berabere yok) | Kullanıcı notu: *"diğer bilgiler doğru"* — gösterim farkı |
+
+⚠️ 4 ve 14'ün ortak deseni: **savaş gerçekten olduğunda** kaybeden tarafın savaş-dışı birimleri
+yok oluyor; hiç vuruşma olmayan 1 numarada ise kuşlar sağ kalıyor (*"(doğru)"* diye
+işaretlenmiş). Motordaki `SETTLE_ON_LOSS`/`NO_ROUND_LOSS` ayrımı bunu tam karşılamıyor.
+Düzeltmeden önce binary'de **"kuşlar ne zaman ölür"** sorusunun ayrı ölçülmesi gerekiyor.
+
+---
+
+## ⚠️ Üç şüpheli satır (8, 10, 11) — ✅ 8 ve 10 DÜZELTİLDİ, 11 zaten doğruymuş (yukarı bak)
 
 Bunlar 1 numaralı hatanın **aynı ailesinden** ama farklı birimlerle. Kullanıcının talimatı
 "doğrudan düzeltme, bana rapor ver" olduğu için bilerek dokunulmadı.

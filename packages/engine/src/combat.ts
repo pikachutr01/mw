@@ -290,10 +290,34 @@ function heroTakeHit(army: Army, pool: number, P: number, type: 1 | 2 | 3, cfg: 
  * ⭐ Yaşayan kahraman orduyu AYAKTA TUTAR — `FUN_00411db4` üç listeye bakar: savaşçılar,
  * **kahramanlar** (durum > 0) ve yapılar. Motor kahramanı saymayınca son savaşçı ölür ölmez
  * savaş erken bitiyordu; ölçüm 5 tur derken motor 3 tur veriyordu (Tur 2 X grubu).
+ *
+ * ⚠️⚠️ **`LEVEL_BASED` YAPILAR SAYILMAZ (2026-08-07).** Sur · Büyü Kalkanı · Tapınak girdide
+ * ADET değil **SEVİYE** taşıyor (`Sur 8` = sekizinci seviye sur, sekiz sur değil) ve savaşta
+ * seviyeleri hiç düşmüyor. Burada sayıldıkları için **seviye, canlı birim adedi gibi
+ * davranıyordu**: ordusu olmayan ama Sur 8'i olan şehir "8 birim ayakta" görünüyor, savaş
+ * 5 tur boşa dönüyor, kimse kayıp vermiyor ve karar *"eşitlikte savunan"* kuralına düşüyordu.
+ *
+ * Canlı örnek (kullanıcı raporu, 2026-08-07): **132 Yük Arabası + 2 Ejderha**, savunanın
+ * şehrinde **hiç ordu yok**, yalnız Sur 8 — saldıran 5 tur sonra 0 kayıpla **KAYBETTİ** ve
+ * sur bütünlüğü %31'e indi. Doğrusu: savunanda savaşacak kimse yok → savaş 1 turda biter,
+ * saldıran kazanır, sur hiç yıpranmaz.
+ *
+ * ⚠️ Bu, 2026-08-05'te düzeltilen "1000 casus kuş" hatasının **ikizi**: o zaman savaş-dışı
+ * BİRİMLER şehri ayakta tutuyordu, burada seviye taşıyan YAPILAR tutuyordu. Katalogdaki
+ * `LEVEL_BASED` yorumu zaten *"hayatta kalan birim toplamına KATILMAZLAR"* diyordu ve
+ * raporun `alive` sayacı (aşağıda) onu doğru uyguluyordu — sapan tek yer burasıydı.
+ *
+ * ⚠️ Sur'un savaştaki ROLÜ değişmiyor: savunanın ordusu varsa Sur yine güç havuzuna giriyor,
+ * mitigasyon uyguluyor ve yıpranıyor (`PASSIVE_STRUCTS` mekanizması). Değişen tek şey,
+ * "ortada savaşacak kimse var mı" sorusuna verdiği cevap.
  */
 const combatAlive = (a: Army, cfg: CombatConfig): number =>
   a.units.reduce(
-    (n, e) => (NONCOMBAT.has(e.id) || e.count <= cfg.combatThreshold ? n : n + Math.max(0, e.count)),
+    (n, e) => (
+      NONCOMBAT.has(e.id) || LEVEL_BASED.has(e.id) || e.count <= cfg.combatThreshold
+        ? n
+        : n + Math.max(0, e.count)
+    ),
     0,
   ) + a.heroes.reduce((n, h) => (h.durum > 0 ? n + 1 : n), 0);
 
