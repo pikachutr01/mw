@@ -153,7 +153,9 @@ async function bootstrap(): Promise<void> {
     // İttifak uçları çevrimiçi rozeti + oda senkronu için aynı instance'a buradan ulaşır.
     setGateway(gateway);
 
-    BOOT.info({ port, role }, `api hazır → http://localhost:${port}/healthz · ws /ws`);
+    // ⚠️ `role` BURAYA YAZILMAZ: `logger.base` onu zaten her satıra koyuyor. İkisini birden
+    // vermek JSON'da yinelenen anahtar üretiyordu (`jq` sonuncuyu alır — sessiz ama pasaklı).
+    BOOT.info({ port }, `api hazır → http://localhost:${port}/healthz · ws /ws`);
   }
 
   // Graceful shutdown: çalışan görev turu bitene kadar bekle → yarım iş kalmaz.
