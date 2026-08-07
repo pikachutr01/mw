@@ -116,7 +116,13 @@ export class MissionController {
         : d.type === 'transport' ? await this.missions.sendTransport({ ...base, cargo })
           : d.type === 'support' ? await this.missions.sendSupport({ ...base, cargo })
             : d.type === 'spy' ? await this.missions.sendSpy(base)
-              : await this.missions.sendFoundCity(base);
+            /**
+             * ⚠️ `cargo` 2026-08-07'ye kadar buraya GEÇMİYORDU: yukarıda hesaplanıyor,
+             * nakliye ve desteğe veriliyor, şehir kurmada sessizce düşüyordu. Zod isteği
+             * kabul ettiği için oyuncu hata da almıyordu — kaynak yüklüyor, hiçbir şey
+             * taşınmıyordu.
+             */
+              : await this.missions.sendFoundCity({ ...base, cargo });
 
       return {
         missionId: m.missionId,
@@ -391,8 +397,15 @@ export class MissionController {
       const mine = Boolean(r['origin_is_mine']);
       const coordsMine = Boolean(r['target_coords_mine']);
       const targetMine = Boolean(r['target_is_mine']) || coordsMine;
+      /**
+       * ⚠️ Şehir kurma DÖNÜŞÜNDE `origin_city_id` NULL olmak zorunda: dönüşün kaynağı, şehir
+       * kurulamayan BOŞ koordinat ve kolon `cities.id`'ye FK. Bu yüzden koordinat payload'a
+       * yazılıyor (`scheduleReturn` → `originCoords`) ve JOIN boş dönünce oradan okunuyor.
+       * Aksi hâlde Ordular listesinde dönüşün kaynağı boş görünüyordu.
+       */
       const origin = r['ok'] == null
-        ? null : { k: Number(r['ok']), d: Number(r['od']), s: Number(r['os']) };
+        ? ((payload['originCoords'] as { k: number; d: number; s: number } | undefined) ?? null)
+        : { k: Number(r['ok']), d: Number(r['od']), s: Number(r['os']) };
       const target = r['tk'] == null
         ? (r['target_k'] == null
           ? null : { k: Number(r['target_k']), d: Number(r['target_d']), s: Number(r['target_s']) })
@@ -454,7 +467,19 @@ export class MissionController {
         const icon = type === 'return' ? (OUT_ICON[returnOf] ?? 'attack') : IN_ICON[shownType];
         if (icon) {
           movements.push({
-            ...base, key: `${r['id']}-in`,
+            ...base,
+            /**
+             * ⚠️⚠️ MASKENİN KARGO DELİĞİ (2026-08-07). Şehir kurmaya kaynak taşıma eklenince
+             * bu satır maskeyi **delmeye başladı**: `base.cargo` koşulsuz dolduruluyor ve
+             * gerçek bir saldırının payload'ında `cargo` HİÇ olmuyor (yukarıdaki `cargo`
+             * yorumuna bak). Yani koordinatı kapan oyuncu «Gelen saldırı · Taşınan: 50.000
+             * altın» satırını görseydi hem bunun bir saldırı OLMADIĞINI anlardı hem de
+             * rakibin kaç kaynak taşıdığını öğrenirdi.
+             * ⚠️ `units` ve `heroes` maskelenmiyor — içerik bilerek açık (kullanıcı
+             * 2026-07-31), gizli olan yalnız görevin TÜRÜ. Kargo türü ele verdiği için istisna.
+             */
+            ...(coordsMine ? { cargo: null } : {}),
+            key: `${r['id']}-in`,
             type: shownType,
             // Kendi ordumun dönüşü "gelen tehdit" değil; yön `own` ile ayrılıyor.
             direction: type === 'return' ? 'own' : 'in',

@@ -34,17 +34,39 @@ export interface ReportRoute { origin: Coord | null; target: Coord | null }
 /**
  * `ctx.mission`in kaynak ve hedef şehrinin koordinatını ve adını okur.
  *
- * Hedefi olmayan görevler (boş koordinata şehir kurma) için `target` null döner — çağıran
- * tarafta bu normal, gösterim degrade eder.
+ * ⭐ Hedefin ŞEHRİ olmayan görevlerde (boş koordinata şehir kurma) koordinat **görev
+ * satırından** okunur ve `name`siz döner: orası kimseye ait olmadığı için yazılacak bir ad
+ * yok, ama koordinat yazılabilir ve yazılmalı.
+ *
+ * ⚠️ Eskiden bu durumda `target` komple `null` dönüyordu ve şehir kurma raporunda güzergâh
+ * *"1:2:1 Çığlıktepe → —"* diye görünüyordu: oyuncu şehri NEREYE kurduğunu güzergâh
+ * satırından okuyamıyordu.
  */
 export async function routeOf(ctx: HandlerContext): Promise<ReportRoute | null> {
   const originId = ctx.mission.originCityId;
   const targetId = ctx.mission.targetCityId;
 
+  /**
+   * Hedef bir şehir değilse koordinatı görev satırından al. `MissionRow` bu kolonları
+   * taşımıyor (yalnız şehir kimliklerini taşıyor), o yüzden ayrı okunuyor — yalnız hedef
+   * şehri OLMAYAN görevlerde çalışan, görev başına tek satırlık bir sorgu.
+   */
+  let coordTarget: Coord | null = null;
+  if (targetId == null) {
+    const [row] = await ctx.tx.execute<Record<string, unknown>>(sql`
+      SELECT target_k, target_d, target_s FROM missions WHERE id = ${ctx.mission.id}
+    `);
+    if (row && row['target_k'] != null) {
+      coordTarget = {
+        k: Number(row['target_k']), d: Number(row['target_d']), s: Number(row['target_s']),
+      };
+    }
+  }
+
   // ⚠️ Sayıya çevrilmiş id'ler doğrudan gömülüyor: `IN` listesi parametrelenemiyor ve
   // ikisi de `bigint` kolonundan geldiği için dize enjeksiyonu mümkün değil.
   const ids = [originId, targetId].filter((x): x is number => typeof x === 'number');
-  if (ids.length === 0) return null;
+  if (ids.length === 0) return coordTarget ? { origin: null, target: coordTarget } : null;
 
   const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
     SELECT id, k, d, s, name FROM cities WHERE id IN ${sql.raw(`(${ids.map(Number).join(',')})`)}
@@ -57,13 +79,9 @@ export async function routeOf(ctx: HandlerContext): Promise<ReportRoute | null> 
     });
   }
 
-  /**
-   * ⚠️ Hedefi şehir OLMAYAN görevlerde (boş koordinata şehir kurma) `target` null kalır —
-   * `MissionRow` hedef koordinatı taşımıyor, yalnız şehir kimliklerini taşıyor. Gösterim
-   * bunu degrade ediyor: tek yön yazılır.
-   */
   const origin = originId != null ? (byId.get(originId) ?? null) : null;
-  const target = targetId != null ? (byId.get(targetId) ?? null) : null;
+  /** Şehir varsa adıyla, yoksa (boş koordinat) yukarıda görev satırından okunan adsız koordinat. */
+  const target = targetId != null ? (byId.get(targetId) ?? null) : coordTarget;
   if (!origin && !target) return null;
   return { origin, target };
 }

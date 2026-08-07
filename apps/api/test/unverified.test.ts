@@ -153,7 +153,11 @@ describe('seferler', () => {
     await setTech(me, 'colonization', 3);
     await expect(missions.sendFoundCity({
       originCityId: myCity, playerId: me, worldId,
-      target: { k: 1, d: 1, s: 40 }, units: { dwarf: 10 }, at: await now(),
+      /* ⚠️ Koordinat 2026-08-07'de `s: 40` → `s: 7` yapıldı: diyar başına 10 şehir yeri var
+         (`WORLD_SHAPE`), yani 40 hiç var olmayan bir yerdi. Sefer yolu bunu denetlemediği
+         için test yıllarca geçerli görünüyordu; `assertWithinWorld` eklenince ortaya çıktı.
+         Testin ölçtüğü şey doğrulama kısıtı, koordinat değil. */
+      target: { k: 1, d: 1, s: 7 }, units: { dwarf: 10 }, at: await now(),
     })).rejects.toMatchObject({ code: 'email_unverified' });
   });
 
@@ -168,7 +172,8 @@ describe('seferler', () => {
     await giveUnits(myCity, 'dwarf', 50);
     await expect(missions.sendFoundCity({
       originCityId: myCity, playerId: me, worldId,
-      target: { k: 1, d: 1, s: 41 }, units: { dwarf: 10 }, at: await now(),
+      /* ⚠️ `s: 41` → `s: 8`; gerekçesi bir üstteki testte. */
+      target: { k: 1, d: 1, s: 8 }, units: { dwarf: 10 }, at: await now(),
     })).rejects.toMatchObject({ code: 'email_unverified' });
   });
 

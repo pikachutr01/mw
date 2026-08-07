@@ -635,11 +635,13 @@ describe('şehir kurma', () => {
    */
   it('⭐ YARIŞ: koordinatı kapan oyuncu yoldaki görevi GELEN SALDIRI olarak görür', async () => {
     await setTech(me, 'colonization', 6);
-    await giveUnits(home, 'dwarf', 20);
+    await giveUnits(home, 'dwarf', 20);                 // 20 × 10 = 200 taşıma kapasitesi
+    await setResources(home, 5_000, 0);
     const at = await clock.gameNow(worldId);
     const m = await missions.sendFoundCity({
       originCityId: home, playerId: me, worldId,
-      target: { k: 1, d: 1, s: 8 }, units: { dwarf: 20 }, at,
+      // ⚠️ Kargo BİLEREK dolu: maskenin kargo deliğini ölçen tek şey bu (aşağıdaki assertion).
+      target: { k: 1, d: 1, s: 8 }, units: { dwarf: 20 }, cargo: { gold: 200, food: 0 }, at,
     });
     await cities.create({
       worldId, playerId: rival, name: 'kapkac', k: 1, d: 1, s: 8, isCapital: false, at,
@@ -653,6 +655,12 @@ describe('şehir kurma', () => {
     expect(incoming!['type']).toBe('attack');           // maskeli: kuruluş seferi olduğu belli olmaz
     expect(incoming!['icon']).toBe('attack_in');
     expect(incoming!['units']).toEqual({ dwarf: 20 });  // ⭐ içerik AÇIK (2026-07-31)
+    /**
+     * ⚠️⚠️ KARGO MASKELİ (2026-08-07). Şehir kurmaya kaynak taşıma eklenince bu satır maskeyi
+     * DELİYORDU: gerçek bir saldırının payload'ında `cargo` hiç olmaz, dolayısıyla "Taşınan:
+     * 50.000 altın" hem görevin tipini ele verir hem rakibe kaynak istihbaratı sızdırırdı.
+     */
+    expect(incoming!['cargo']).toBeNull();
     expect(incoming!['origin']).toEqual({ k: 1, d: 1, s: 1 });
     expect(incoming!['originPlayer']).not.toBeNull();
     expect(Number(incoming!['cityId'])).toBeGreaterThan(0);   // çıpa: rakibin yeni şehri
@@ -663,6 +671,8 @@ describe('şehir kurma', () => {
       .find((x) => x['direction'] === 'out')!;
     expect(out['type']).toBe('found_city');
     expect(out['units']).toEqual({ dwarf: 20 });
+    // Kendi bacağımda kargo GÖRÜNÜR — maske yalnız karşı tarafa uygulanıyor.
+    expect(out['cargo']).toEqual({ gold: 200, food: 0 });
 
     // Üçüncü oyuncu hiçbir bacak görmez.
     const third = await createPlayer(h, worldId, 'ucuncu');
@@ -721,6 +731,253 @@ describe('şehir kurma', () => {
       originCityId: home, playerId: me, worldId,
       target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
     })).rejects.toThrow(/zaten bir şehir var/i);
+  });
+});
+
+/* ═══ ŞEHİR KURMA — KARGO · KUŞ · YALNIZ KAHRAMAN (2026-08-07) ═════════════ */
+
+describe('şehir kurma: kargo, casus kuş, yalnız kahraman', () => {
+  /** Yeni şehri koordinatından bulur (kuruluş görevin ürettiği tek satır). */
+  async function foundedAt(k: number, d: number, s: number): Promise<number | null> {
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM cities WHERE world_id = ${worldId} AND k = ${k} AND d = ${d} AND s = ${s}
+    `);
+    return rows[0] ? Number(rows[0]['id']) : null;
+  }
+
+  async function giveHero(playerId: number, cityId: number, name = 'Kahraman'): Promise<number> {
+    const r = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level, status)
+      VALUES (${worldId}, ${playerId}, ${cityId}, ${name}, 3, 'alive')
+      RETURNING id
+    `);
+    return Number(r[0]!['id']);
+  }
+
+  /**
+   * ⭐⭐ ANA HATA (2026-08-07): kargo `sendFoundCity`'ye hiç geçmiyordu, sessizce yutuluyordu.
+   *
+   * ⚠️ Bu testin asıl işi ÇİFT SAYIMI yakalamak: yeni şehirde 8.000 yerine 16.000 çıkarsa
+   * `cities.create(startingResources)` yanında fazladan bir `cities.add` çağrılmış demektir
+   * ve bu bedava kaynak basma açığıdır.
+   */
+  it('⭐ kargo kalkışta düşer, YENİ ŞEHRİN kesesine yazılır (çift sayım YOK)', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'cargo_wagon', 3);            // 3 × 5.000 = 15.000 kapasite
+    await setResources(home, 10_000, 5_000);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: { cargo_wagon: 3 },
+      cargo: { gold: 8_000, food: 2_000 }, at,
+    });
+
+    // Kalkışta düştü mü?
+    const afterSend = await resourcesOf(home);
+    expect(afterSend.gold).toBeLessThan(2_100);
+    expect(afterSend.food).toBeLessThan(3_100);
+
+    await runDue(m.missionId);
+
+    const newCityId = await foundedAt(1, 1, 7);
+    expect(newCityId).not.toBeNull();
+    const purse = await resourcesOf(newCityId!);
+    expect(purse.gold).toBe(8_000);                     // ⚠️ 16.000 olursa çift sayım var
+    expect(purse.food).toBe(2_000);
+    expect((await unitsOf(newCityId!))['cargo_wagon']).toBe(3);
+    expect(await openReturn()).toBeNull();
+  });
+
+  it('⭐ yer dolarsa KARGO da orduyla geri döner', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'cargo_wagon', 2);
+    await setResources(home, 10_000, 0);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 8 }, units: { cargo_wagon: 2 },
+      cargo: { gold: 6_000, food: 0 }, at,
+    });
+    // Ordu yoldayken rakip yeri kapıyor.
+    await cities.create({
+      worldId, playerId: rival, name: 'kapkac', k: 1, d: 1, s: 8, isCapital: false, at,
+    });
+    await runDue(m.missionId);
+
+    const ret = await openReturn();
+    expect(ret).not.toBeNull();
+    // ⚠️ Eskiden burada sabit {0,0} vardı → taşınan kaynak SESSİZCE yok oluyordu.
+    expect(ret!.payload['loot']).toEqual({ gold: 6_000, food: 0 });
+    // Dönüşün kaynak koordinatı payload'da (origin_city_id FK olduğu için boş kalıyor).
+    expect(ret!.payload['originCoords']).toEqual({ k: 1, d: 1, s: 8 });
+
+    await runDue(ret!.id);
+    expect((await resourcesOf(home)).gold).toBeGreaterThan(9_900);
+  });
+
+  it('⭐ KAHRAMAN TEK BAŞINA şehir kurar (hız 200, garnizon boş)', async () => {
+    await setTech(me, 'colonization', 6);
+    const heroId = await giveHero(me, home, 'Yalnız');
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: {}, heroIds: [heroId], at,
+    });
+    expect(m.speed).toBe(200);                          // HERO_SPEED
+    await runDue(m.missionId);
+
+    const newCityId = await foundedAt(1, 1, 7);
+    expect(newCityId).not.toBeNull();
+    expect(await unitsOf(newCityId!)).toEqual({});      // garnizonsuz ama kuruldu
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT city_id FROM heroes WHERE id = ${heroId}
+    `);
+    expect(Number(hero!['city_id'])).toBe(newCityId);
+  });
+
+  /**
+   * ⭐ Kullanıcı kararı (2026-08-07): kuş şehir kurabilir ve hızı KIRPILMAZ.
+   * ⚠️ Denge sonucu bilerek kabul edildi: 6000 hız, normal ordunun ~60 katı.
+   */
+  it('⭐ CASUS KUŞ TEK BAŞINA şehir kurar, hız 6000', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'spy_bird', 1);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: { spy_bird: 1 }, at,
+    });
+    expect(m.speed).toBe(6000);
+    await runDue(m.missionId);
+
+    const newCityId = await foundedAt(1, 1, 7);
+    expect(newCityId).not.toBeNull();
+    expect((await unitsOf(newCityId!))['spy_bird']).toBe(1);
+  });
+
+  it('kargo ordunun taşıma kapasitesini aşamaz', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'dwarf', 10);                 // 10 × 10 = 100 kapasite
+    await setResources(home, 50_000, 0);
+    const at = await clock.gameNow(worldId);
+    await expect(missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: { dwarf: 10 },
+      cargo: { gold: 5_000, food: 0 }, at,
+    })).rejects.toMatchObject({ code: 'carry_capacity' });
+  });
+
+  it('yalnız kahraman kaynak TAŞIYAMAZ ve sebebi anlaşılır', async () => {
+    await setTech(me, 'colonization', 6);
+    const heroId = await giveHero(me, home);
+    await setResources(home, 10_000, 0);
+    const at = await clock.gameNow(worldId);
+    await expect(missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: {}, heroIds: [heroId],
+      cargo: { gold: 100, food: 0 }, at,
+    })).rejects.toThrow(/taşıyabilecek birim yok/i);
+  });
+
+  it('ordu da kahraman da yoksa sefer gönderilemez', async () => {
+    await setTech(me, 'colonization', 6);
+    const at = await clock.gameNow(worldId);
+    await expect(missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: {}, at,
+    })).rejects.toMatchObject({ code: 'no_units' });
+  });
+
+  /**
+   * ⭐ Harita dışı koordinat (2026-08-07). `WORLD_SHAPE` sefer yolunda HİÇ okunmuyordu:
+   * `cities_world_coords` "aynı yere iki şehir"i engeller, "olmayan yere şehir"i değil.
+   */
+  it('⭐ harita DIŞI koordinata şehir kurulamaz', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'dwarf', 5);
+    const at = await clock.gameNow(worldId);
+    const send = (target: { k: number; d: number; s: number }): Promise<unknown> =>
+      missions.sendFoundCity({
+        originCityId: home, playerId: me, worldId, target, units: { dwarf: 5 }, at,
+      });
+
+    for (const bad of [
+      { k: 0, d: 1, s: 1 },        // 1-indeksli, 0 yok
+      { k: 11, d: 1, s: 1 },       // 10 kıta
+      { k: 1, d: 9999, s: 1 },     // 500 diyar
+      { k: 1, d: 1, s: 11 },       // 10 şehir yeri
+    ]) {
+      await expect(send(bad)).rejects.toMatchObject({ code: 'out_of_world' });
+    }
+  });
+
+  it('rapor kahramanları ve taşınan kaynağı yazar', async () => {
+    await setTech(me, 'colonization', 6);
+    await giveUnits(home, 'cargo_wagon', 1);
+    await giveHero(me, home, 'Bilge');
+    await setResources(home, 5_000, 0);
+    const at = await clock.gameNow(worldId);
+    const heroes = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM heroes WHERE player_id = ${me} AND city_id = ${home}
+    `);
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: { cargo_wagon: 1 },
+      heroIds: [Number(heroes[0]!['id'])], cargo: { gold: 3_000, food: 0 }, at,
+    });
+    await runDue(m.missionId);
+
+    const msg = (await messagesOf(me)).find((x) => x['kind'] === 'found_city_report')!;
+    const body = msg['body'] as Record<string, unknown>;
+    expect(body['heroes']).toEqual(['Bilge']);
+    expect(body['cargo']).toEqual({ gold: 3_000, food: 0 });
+    expect(body['units']).toEqual({ cargo_wagon: 1 });
+  });
+});
+
+/* ═══ İPTALDE KARGO İADESİ (2026-08-07) ════════════════════════════════════ */
+
+describe('iptal: kargo iadesi', () => {
+  /**
+   * ⭐⭐ Kalkışta `trySpend` ile düşen kaynak, iptalin açtığı dönüş görevinde `loot: {0,0}`
+   * yazıldığı için **yok oluyordu**. `transport`, `support` ve `found_city` üçünü de vuruyordu.
+   *
+   * ⚠️ Mevcut «nakliye» testindeki `loot` `{0,0}` beklentisi NORMAL VARIŞ senaryosu — o doğru
+   * ve değişmemeli (ordu boş döner). Burada ölçülen şey İPTAL yolu.
+   */
+  it('⭐ nakliye iptal edilince taşınan kaynak GERİ DÖNER', async () => {
+    await giveUnits(home, 'cargo_wagon', 3);
+    await setResources(home, 10_000, 0);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendTransport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { cargo_wagon: 3 },
+      cargo: { gold: 8_000, food: 0 }, at,
+    });
+    expect((await resourcesOf(home)).gold).toBeLessThan(2_100);
+
+    await missions.cancelMission({ missionId: m.missionId, playerId: me, worldId, at });
+    const ret = await openReturn();
+    expect(ret!.payload['loot']).toEqual({ gold: 8_000, food: 0 });
+    expect(ret!.payload['canceled']).toBe(true);
+
+    await runDue(ret!.id);
+    expect((await resourcesOf(home)).gold).toBeGreaterThan(9_900);
+  });
+
+  it('saldırı iptalinde davranış DEĞİŞMEZ (payload\'da kargo yok)', async () => {
+    await giveUnits(home, 'dwarf', 10);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,   // rakibin başkenti
+    });
+    await missions.cancelMission({ missionId: m.missionId, playerId: me, worldId, at });
+    expect((await openReturn())!.payload['loot']).toEqual({ gold: 0, food: 0 });
   });
 });
 

@@ -13,6 +13,7 @@ import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { EmailTokenService } from '../mail/email-token.service.ts';
 import type { GameClockService } from '../world/game-clock.service.ts';
+import { PLACEMENT_LOCK } from '../world/placement-lock.ts';
 import { PlacementService } from '../world/placement.service.ts';
 import { PasswordService } from './password.service.ts';
 import { hashRefreshToken, type TokenPair, type TokenService } from './token.service.ts';
@@ -62,12 +63,6 @@ export interface AuthResult extends TokenPair {
   username: string;
   sessionId: string;
 }
-
-/**
- * Yerleşim kilidinin ad alanı (`pg_advisory_xact_lock(klass, worldId)`).
- * ⚠️ Sabit bir sayı: aynı dünyaya iki kayıt aynı anda gelirse ikisi de aynı kilidi ister.
- */
-const PLACEMENT_LOCK = 4713;
 
 /** Yanlış parola denemesi bu sayıyı aşarsa hesap kısa süre kilitlenir (kaba kuvvet freni). */
 const MAX_FAILED_LOGINS = 10;

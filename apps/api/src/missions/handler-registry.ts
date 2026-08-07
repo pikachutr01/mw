@@ -37,6 +37,16 @@ export interface HandlerContext {
   /** Hedef şehri seri hâle getirir: aynı şehre düşen görevler çakışmaz. */
   lockCity(cityId: number): Promise<void>;
   /**
+   * ⭐ Dünyanın BOŞ koordinatlarını seri hâle getirir (`world/placement-lock.ts`).
+   *
+   * Kayıt yerleşimi ile şehir kurma varışı **aynı** kilidi ister → aynı yere iki şehir
+   * yazılması yapısal olarak imkânsız. Gerekçesi ve `lockCity` ile neden çakışmadığı
+   * `placement-lock.ts` başlığında.
+   *
+   * ⚠️ Kilit sırası: `lockPlacement()` **DAİMA** `lockCity()`'den önce — tersi döngü üretir.
+   */
+  lockPlacement(): Promise<void>;
+  /**
    * ⭐ DÜNYA BAZLI MOTOR AYARLARI (§admin Faz 4). **Yoksa motor varsayılanı kullanılır** ve
    * sonuç bit-bit eskisiyle aynı olur — bu yüzden isteğe bağlı.
    *

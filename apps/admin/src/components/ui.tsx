@@ -209,6 +209,13 @@ export function Pagination({ page, pageSize, total, onPage }: {
   page: number; pageSize: number; total: number; onPage: (p: number) => void;
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  /**
+   * ⚠️ Yazarken tutulan TASLAK — kutu `value={page + 1}` ile doğrudan sayıya bağlıydı ve
+   * `onChange` anında kelepçeliyordu (`Math.max(1, … || 1)`). Sonuç: alan hiçbir zaman boş
+   * kalamıyor, `12`yi silip `40` yazmak için önce metni SEÇMEK gerekiyordu. Oyuncu tarafındaki
+   * Diyar kutusunda da aynı hata vardı (`apps/web` → `BoundedAmountInput`).
+   */
+  const [draft, setDraft] = useState<string | null>(null);
   if (total <= pageSize) return null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border
@@ -222,11 +229,23 @@ export function Pagination({ page, pageSize, total, onPage }: {
         <Button variant="ghost" disabled={page === 0} onClick={() => onPage(0)}>«</Button>
         <Button variant="ghost" disabled={page === 0} onClick={() => onPage(page - 1)}>‹</Button>
         <input
-          type="number" min={1} max={pages} value={page + 1}
+          type="number" min={1} max={pages} value={draft ?? String(page + 1)}
           onChange={(e) => {
-            const p = Math.min(pages, Math.max(1, Number(e.target.value) || 1)) - 1;
-            onPage(p);
+            const raw = e.target.value;
+            setDraft(raw);
+            // Yalnız TAM ve aralıkta bir sayı sayfayı değiştirir; boş/yarım metin taslakta kalır.
+            const n = Number(raw);
+            if (raw.trim() !== '' && Number.isFinite(n) && n >= 1 && n <= pages) onPage(n - 1);
           }}
+          // Odak çıkışında taslak temizlenir; aralık dışı yazıldıysa kelepçelenip işlenir.
+          onBlur={() => {
+            const n = Number(draft);
+            if (draft != null && draft.trim() !== '' && Number.isFinite(n)) {
+              onPage(Math.min(pages, Math.max(1, Math.trunc(n))) - 1);
+            }
+            setDraft(null);
+          }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           className="tnum w-14 rounded-[var(--radius-sm)] border border-border bg-bg px-1 py-1
             text-center text-ink outline-none focus:border-accent"
         />

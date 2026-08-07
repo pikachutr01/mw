@@ -23,7 +23,7 @@ import { route, travelSeconds } from '@mobilwar/engine';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCatalog, useCity } from '../lib/queries.ts';
 import { formatDuration } from '../lib/hooks.ts';
-import { Button, Empty, Panel } from '../components/ui.tsx';
+import { BoundedAmountInput, Button, Empty, Panel } from '../components/ui.tsx';
 
 /* ═══ Giriş sayfası — konu indeksi ══════════════════════════════════════════ */
 
@@ -297,17 +297,14 @@ export function TravelHelpScreen(): React.ReactElement {
               {(['k', 'd', 's'] as Axis[]).map((axis) => (
                 <label key={axis} className="flex items-center gap-1 text-xs text-muted">
                   {axis === 'k' ? 'Kıta' : axis === 'd' ? 'Diyar' : 'Şehir'}
-                  <input
-                    type="number" min={1} max={AXIS_MAX[axis]}
+                  {/* ⚠️ Ham `<input>` DEĞİL: alt sınır yüzünden alan silinemiyordu — Dünya
+                      ekranındaki Diyar kutusuyla birebir aynı hata (bkz. `ui.tsx`). */}
+                  <BoundedAmountInput
+                    min={1} max={AXIS_MAX[axis]}
                     value={effectiveTarget[axis]}
-                    onChange={(e) => {
-                      const n = Math.min(
-                        AXIS_MAX[axis], Math.max(1, Math.trunc(Number(e.target.value) || 1)),
-                      );
-                      setTarget({ ...effectiveTarget, [axis]: n });
-                    }}
-                    className="tnum w-16 rounded-[var(--radius-sm)] border border-border bg-raised
-                      px-1.5 py-1 text-right text-sm text-ink"
+                    onCommit={(n) => setTarget({ ...effectiveTarget, [axis]: n })}
+                    style={{ width: '4rem' }}
+                    className="text-right"
                   />
                 </label>
               ))}

@@ -37,7 +37,8 @@ const MISSION_INFO: Record<string, { title: string; hint: string; icon: string }
   spy: { title: 'Casusluk', icon: 'spy_out', hint: 'Casus kuşlarla bilgi topla.' },
   transport: { title: 'Nakliye', icon: 'transport_out', hint: 'Altın ve yemek gönder.' },
   support: { title: 'Destek', icon: 'support_out', hint: 'Birlikleri kalıcı olarak taşı.' },
-  found_city: { title: 'Şehir Kur', icon: 'found_city', hint: 'Buraya yeni bir şehir kur.' },
+  found_city: { title: 'Şehir Kur', icon: 'found_city',
+    hint: 'Buraya yeni bir şehir kur; yanında kaynak da götürebilirsin.' },
   teleport: { title: 'Teleport', icon: 'teleport', hint: 'Anlık transfer, kaynak taşınmaz.' },
 };
 
@@ -226,9 +227,26 @@ const FORM_RULES: Record<string, { units: 'warriors' | 'spy' | 'all' | 'none'; c
   spy: { units: 'spy', cargo: false },
   transport: { units: 'warriors', cargo: true },
   support: { units: 'all', cargo: true },
-  found_city: { units: 'warriors', cargo: false },
+  /**
+   * ⭐ ŞEHİR KURMA (kullanıcı, 2026-08-07): `warriors` → `all` ve `cargo` açıldı.
+   * ⚠️ `all` casus kuşu da listeye sokuyor — kuş artık şehir kurmaya katılabiliyor ve TEK
+   *    BAŞINA gidebiliyor (sunucuda `allowSpyBird`).
+   * ⚠️ `cargo: true` kapasite sayacını ve altın/yemek kutularını açıyor. Kod zaten yazılıydı;
+   *    kapalı olan tek şey bu bayraktı — üstelik Yük Arabası listede seçilebildiği için
+   *    oyuncu kaynak taşıyacağını sanıp hiçbir şey taşıyamıyordu.
+   */
+  found_city: { units: 'all', cargo: true },
   teleport: { units: 'all', cargo: false },
 };
+
+/**
+ * ⭐ ORDUSUZ GİDİLEBİLEN GÖREVLER (kullanıcı, 2026-08-07): kahraman **tek başına** şehir
+ * kurabilir. Sunucudaki karşılığı `march({ allowEmptyArmy: true })`.
+ *
+ * ⚠️ Saldırı burada YOK: `sendAttack` ortak yoldan geçmiyor ve boş orduyu reddediyor —
+ * listeye eklenseydi form açılır, sunucu `no_units` ile geri çevirirdi.
+ */
+const ARMY_OPTIONAL = new Set(['found_city']);
 
 /**
  * ⭐ KAHRAMAN GÖNDERİLEBİLEN GÖREVLER (kullanıcı, 2026-08-03).
@@ -319,9 +337,15 @@ function MissionForm({
   const mapCfg = city.data?.map;
   const leg = origin ? route(origin, target, mapCfg) : null;
   const D = leg?.distance ?? 0;
-  // ⚠️ Kahraman sayısı da geçiliyor: kahraman orduyu yavaşlatabilir (`travel.ts` `armySpeed`).
-  //    Geçmezsek "9 kuş + 1 kahraman" önizlemesi 52 sn yazar, sunucu ise 26 dk hesaplar.
-  const speed = hasUnits ? armySpeed(units, HERO_MISSIONS.has(type) ? heroIds.length : 0) : null;
+  /**
+   * ⚠️ Kahraman sayısı da geçiliyor: kahraman orduyu yavaşlatabilir (`travel.ts` `armySpeed`).
+   * Geçmezsek "9 kuş + 1 kahraman" önizlemesi 52 sn yazar, sunucu ise 26 dk hesaplar.
+   *
+   * ⚠️ `hasUnits` kapısı 2026-08-07'de KALKTI: kahraman tek başına şehir kurabiliyor ve
+   * `armySpeed({}, 1)` zaten `HERO_SPEED`i (200) döndürüyor. Ordu da kahraman da yoksa
+   * fonksiyon kendiliğinden `null` veriyor, ayrı bir dala gerek yok.
+   */
+  const speed = armySpeed(units, HERO_MISSIONS.has(type) ? heroIds.length : 0);
   const cartography = city.data?.techs['cartography'] ?? 0;
   // Dünya hız çarpanı sunucu hesabıyla AYNI olmalı — yoksa gösterilen süre hızlı dünyada
   // çarpan katı kadar yanlış çıkar.
@@ -352,10 +376,17 @@ function MissionForm({
   // ⭐ Sunucu bu görevi kapattıysa form gönderilemez (acemi koruması, teleport bekleme süresi…).
   const blocked = option != null && !option.enabled;
 
-  // Nakliyede kargo ZORUNLU (boş nakliyenin anlamı yok), destekte isteğe bağlı.
+  /**
+   * ⭐ Şehir kurmada ordu İSTEĞE BAĞLI: yalnız kahraman da gidebilir (kullanıcı, 2026-08-07).
+   * ⚠️ İkisi de yoksa gönderilemez — sunucu da aynı kuralı `no_units` ile uyguluyor.
+   */
+  const hasCrew = hasUnits
+    || (ARMY_OPTIONAL.has(type) && HERO_MISSIONS.has(type) && heroIds.length > 0);
+
+  // Nakliyede kargo ZORUNLU (boş nakliyenin anlamı yok), destek ve şehir kurmada isteğe bağlı.
   const canSend = cityId != null
     && !blocked
-    && hasUnits
+    && hasCrew
     && (!rule.cargo || (cargoFits && affordCargo))
     && (type !== 'transport' || cargoTotal > 0)
     && !send.isPending;
@@ -423,7 +454,9 @@ function MissionForm({
             <Empty>
               {rule.units === 'spy'
                 ? 'Şehrinde Casus Kuş yok. Önce Baraka\'dan üret.'
-                : 'Şehrinde savaşçı yok. Önce Baraka\'dan üret.'}
+                : ARMY_OPTIONAL.has(type)
+                  ? 'Şehrinde savaşçı yok — kahraman tek başına da şehir kurabilir.'
+                  : 'Şehrinde savaşçı yok. Önce Baraka\'dan üret.'}
             </Empty>
           ) : null}
         </>
@@ -461,7 +494,13 @@ function MissionForm({
               </label>
               {!affordCargo ? (
                 <span className="pb-1 text-[11px] text-danger">Şehrinin kaynağı yetmiyor.</span>
-              ) : type === 'support' ? (
+              ) : capacity === 0 && cargoTotal > 0 ? (
+                /* ⚠️ Sunucunun `carry_capacity` reddini forma TAŞIMADAN söylüyoruz: yalnız
+                   kahraman ya da yalnız kuş seçildiğinde kapasite 0 ve sebebi görünmüyordu. */
+                <span className="pb-1 text-[11px] text-danger">
+                  Seçtiğin orduda kaynak taşıyabilecek birim yok — Yük Arabası ekle.
+                </span>
+              ) : type === 'support' || type === 'found_city' ? (
                 <span className="pb-1 text-[11px] text-muted">Kaynak göndermek isteğe bağlı.</span>
               ) : null}
             </div>

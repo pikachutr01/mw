@@ -12,6 +12,7 @@ import type { Db } from '../db/client.ts';
 import { auditLog, outbox } from '../db/schema.ts';
 import type { Heartbeat } from '../worker/heartbeat.ts';
 import type { GameClockService } from '../world/game-clock.service.ts';
+import { PLACEMENT_LOCK } from '../world/placement-lock.ts';
 import type { HandlerContext, HandlerRegistry, Tx } from './handler-registry.ts';
 import { MissionRepository, type MissionRow } from './mission.repository.ts';
 
@@ -210,6 +211,14 @@ export class SchedulerService {
         lockCity: async (cityId) => {
           // Aynı şehre aynı anda düşen görevler seri hâle gelir (§1 sıra kuralı).
           await tx.execute(sql`SELECT pg_advisory_xact_lock(${cityId}::bigint)`);
+        },
+        lockPlacement: async () => {
+          /**
+           * Dünyanın boş koordinatlarını seri hâle getirir — **kayıt yerleşimiyle aynı
+           * kilit** (`auth.service.ts`). Gerekçesi `world/placement-lock.ts` başlığında.
+           * ⚠️ `(int,int)` biçimi `lockCity`'nin `bigint` uzayından ayrıdır, çakışmaz.
+           */
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(${PLACEMENT_LOCK}, ${mission.worldId})`);
         },
       };
 

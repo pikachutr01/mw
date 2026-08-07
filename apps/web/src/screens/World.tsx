@@ -16,7 +16,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
-import { AmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
+import { BoundedAmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
 import { TargetModal } from './world-modal.tsx';
 
 /**
@@ -98,8 +98,8 @@ export function World() {
           </select>
           <span className="ml-1 shrink-0 text-[11px] text-muted">Diyar</span>
           <Button size="sm" variant="ghost" onClick={() => setD(Math.max(1, d - 1))}>−</Button>
-          <AmountInput min={1} max={500} value={d}
-            onChange={(e) => setD(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} />
+          {/* ⚠️ `AmountInput` DEĞİL: alan alt sınır yüzünden silinemiyordu (bkz. ui.tsx). */}
+          <BoundedAmountInput min={1} max={500} value={d} onCommit={setD} aria-label="Diyar" />
           <Button size="sm" variant="ghost" onClick={() => setD(Math.min(500, d + 1))}>+</Button>
           {home ? (
             <Button size="sm" variant="ghost" className="ml-auto px-1.5 py-0.5"

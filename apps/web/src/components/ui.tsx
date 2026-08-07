@@ -361,6 +361,68 @@ export function AmountInput(props: React.InputHTMLAttributes<HTMLInputElement>) 
   );
 }
 
+/**
+ * ⭐ SINIRLI SAYI KUTUSU — alt sınırı olan alanlar **silinebilir** kalsın (kullanıcı, 2026-08-07).
+ *
+ * ## Düzelttiği hata
+ *
+ * Alt sınırı olan sayı kutuları `value={sayı}` + `onChange`ta anında kelepçe (`Math.max(1, …)`)
+ * deseniyle yazılmıştı. Oyuncu Diyar kutusundaki `1`i silmek isteyince alan bir an boşalıyor,
+ * `Number('')` → `0` → `|| 1` ile **anında 1'e geri sıçrıyordu**: yani alan hiçbir zaman boş
+ * kalamıyor, `23` yazmak için önce metni SEÇMEK gerekiyordu. Kullanıcının tarifi: *"1 yazısı
+ * minimum değer olduğu için silinemiyor"*.
+ *
+ * ## Çözüm
+ *
+ * Kutu yazarken **taslak bir dize** tutuyor (`draft`); dışarıdaki sayısal durum yalnız
+ * **geçerli** bir değer yazıldığında güncelleniyor. Böylece alan boş ya da yarım (`"2"`)
+ * kalabiliyor ama dışarı hiçbir zaman geçersiz bir sayı sızmıyor.
+ *
+ * ⚠️ Odak çıkınca taslak **temizleniyor**: yarım bırakılan metin kutuda asılı kalmasın.
+ * Aralık dışı bir sayı yazıldıysa (`999` / max 500) odak çıkışında **kelepçelenip
+ * işleniyor** — sessizce eski değere dönmek, oyuncunun yazdığını yok saymak olurdu.
+ * ⚠️ `Enter` de odak çıkışıyla aynı işi görüyor; kutu genelde bir form içinde değil.
+ */
+export function BoundedAmountInput({ value, min, max, onCommit, ...rest }: {
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (n: number) => void;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'min' | 'max' | 'onChange'>) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const clamp = (n: number): number => Math.min(max, Math.max(min, Math.trunc(n)));
+
+  const settle = (): void => {
+    if (draft != null && draft.trim() !== '') {
+      const n = Number(draft);
+      if (Number.isFinite(n)) onCommit(clamp(n));
+    }
+    setDraft(null);
+  };
+
+  return (
+    <AmountInput
+      {...rest}
+      type="number"
+      min={min}
+      max={max}
+      value={draft ?? String(value)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        // Yalnız TAM ve aralıkta bir sayı dışarı çıkar; boş/yarım metin taslakta kalır.
+        const n = Number(raw);
+        if (raw.trim() !== '' && Number.isFinite(n) && n >= min && n <= max) {
+          onCommit(Math.trunc(n));
+        }
+      }}
+      onBlur={settle}
+      onKeyDown={(e) => { if (e.key === 'Enter') settle(); }}
+    />
+  );
+}
+
 /** Hata kutusu — sunucunun alan hatası mesajını AYNEN gösterir (kodlar i18n'e hazır). */
 export function ErrorBox({ error }: { error: unknown }) {
   if (!error) return null;

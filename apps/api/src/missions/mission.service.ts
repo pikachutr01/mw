@@ -23,6 +23,8 @@ import { isVerified, UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unveri
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { liveNumber } from '../settings/live.ts';
+import { WORLD_SHAPE } from '../world/world-shape.ts';
+import { hasCargo, normalizeCargo, readResources, type Cargo } from './cargo.ts';
 import type { Tx } from './handler-registry.ts';
 
 /** `route()` çıktısı — mesafe + geçiş bayrakları birlikte taşınır. */
@@ -72,6 +74,8 @@ export type MissionErrorCode =
   | 'no_cargo'
   | 'spy_needs_birds'
   | 'city_limit'
+  /** Hedef koordinat haritanın dışında (`WORLD_SHAPE`) — yalnız şehir kurmada denetleniyor. */
+  | 'out_of_world'
   | 'teleport_missing'
   | 'teleport_cooldown'
   /** §verify — e-postası doğrulanmamış hesap bu seferi yapamaz (403). */
@@ -434,12 +438,40 @@ export class MissionService {
    * ⚠️ Şehir yeri **kalkışta** boş olsa bile varışta dolu olabilir — asıl kontrol handler'da, varış
    * anında yapılır. Buradaki kontrol yalnız oyuncuyu boşuna göndermemek için.
    */
-  async sendFoundCity(opts: SendOpts): Promise<MarchResult> {
+  async sendFoundCity(opts: SendOpts & { cargo?: Cargo }): Promise<MarchResult> {
+    const cargo = normalizeCargo(opts.cargo ?? { gold: 0, food: 0 });
+    /**
+     * ⚠️ Harita sınırı kontrolü EN BAŞTA, transaction açılmadan: en ucuz ret önce.
+     * Gerekçesi `assertWithinWorld` başlığında.
+     */
+    assertWithinWorld(opts.target);
     return this.march({
       ...opts,
       type: 'found_city',
       targetMustBeEmpty: true,
-      before: async (t) => {
+      /**
+       * ⭐ CASUS KUŞ ŞEHİR KURABİLİR ve TEK BAŞINA gidebilir (kullanıcı, 2026-08-07).
+       *
+       * ⚠️ Bunun dengeye etkisi büyük ve **bilerek kabul edildi**: kuşun hızı 6000, en hızlı
+       * savaşçı 160 ve süre hızla ters orantılı (`travel.ts` `×100/hız`) → tek kuş komşu
+       * diyara ~40 saniyede varır, normal ordu ~40 dakikada. Yani kuş, kolonileşmenin
+       * zamanlama maliyetini pratikte sıfırlıyor. Hız kırpma seçeneği kullanıcıya sunuldu ve
+       * REDDEDİLDİ; `travel.ts`'e bu yüzden hiç dokunulmadı.
+       * ⚠️ Kuşun `carry` değeri 0 → tek kuş kaynak taşıyamaz (kapasite kapısı zaten söyler).
+       */
+      allowSpyBird: true,
+      /**
+       * ⭐ KAHRAMAN TEK BAŞINA ŞEHİR KURABİLİR (kullanıcı, 2026-08-07). Yeni şehir garnizonsuz
+       * doğar — savunmasız ama kurulur; kahraman varışta tapınağa yerleşir.
+       */
+      allowEmptyArmy: true,
+      /**
+       * ⚠️ `cargo` boş olsa bile payload'a YAZILIR (`sendSupport` ile aynı desen): varış
+       * handler'ı ve iptal yolu alanı koşulsuz okuyor, `undefined` ile `{0,0}` ayrımı
+       * yapmak zorunda kalmasınlar.
+       */
+      payloadExtra: { cargo },
+      before: async (t, ctx) => {
         const rows = await t.execute<Record<string, unknown>>(sql`
           SELECT
             (SELECT COUNT(*)::int FROM cities WHERE player_id = ${opts.playerId}) AS owned,
@@ -462,6 +494,32 @@ export class MissionService {
             + 'Sömürgecilik tekniğinin her üç kademesi bir şehir daha açar.',
             { owned, pending, limit, colonization },
           );
+        }
+
+        /**
+         * ⭐ KURULUŞ KARGOSU (kullanıcı, 2026-08-07) — `sendTransport`/`sendSupport` deseni.
+         *
+         * ⚠️ **2026-08-07'ye kadar bu blok HİÇ YOKTU ve kargo sessizce yutuluyordu:**
+         * controller `cargo`yu hesaplıyor ama `sendFoundCity`ye geçirmiyordu, imzada alan da
+         * yoktu. Zod isteği kabul ettiği için oyuncu hata bile almıyordu. En sinsi tarafı,
+         * Yük Arabası'nın (taşıma 5000) kuruluş listesinde seçilebilir olmasıydı: oyuncu
+         * "kapasitesi var, demek ki taşıyacak" diye ekliyor, hiçbir şey taşınmıyor ve
+         * hiçbir uyarı da çıkmıyordu.
+         *
+         * ⚠️ `assertCarryCapacity` YALNIZ kargo varken çağrılıyor — yoksa yalnız-kahraman
+         * seferi (kapasite 0) sebepsizce reddedilirdi.
+         * ⚠️ Kaynak yola çıkarken düşer; yoldaki mal kimsenin değildir (nakliyeyle aynı ilke).
+         * Varışta yeni şehrin kesesine yazılır, kuruluş başarısız olursa orduyla geri döner.
+         */
+        if (hasCargo(cargo)) {
+          this.assertCarryCapacity(ctx.units, cargo);
+          await this.cities.materialize(opts.originCityId, opts.at, t as never);
+          const ok = await this.cities.trySpend(opts.originCityId, cargo, opts.at, t as never);
+          if (!ok) {
+            throw new MissionError(
+              'insufficient_resources', 'Şehrin kaynağı şehir kurma seferi için yetmiyor.',
+            );
+          }
         }
       },
     });
@@ -618,6 +676,19 @@ export class MissionService {
       }
 
       const payload = (m['payload'] ?? {}) as Record<string, unknown>;
+      /**
+       * ⭐ İPTALDE KARGO GERİ GELİR (kullanıcı, 2026-08-07).
+       *
+       * ⚠️ Burada eskiden sabit `{gold:0, food:0}` vardı ve kalkışta şehirden DÜŞEN kaynak
+       * iptalde **yok oluyordu** — `transport`, `support` ve (kargo eklendikten sonra)
+       * `found_city` üçünde de. İptal bir zaman cezası olmalı, kaynak imha makinesi değil.
+       *
+       * ⚠️ `attack`/`spy` payload'ında `cargo` alanı YOK → `{0,0}` döner, davranışları
+       * bit-bit aynı kalır.
+       * ⚠️ Çift sayım yok: iptal edilen görev `canceled` oluyor ve handler'ı HİÇ çalışmıyor,
+       * yani kargo hedefe/yeni şehre de yazılmıyor. Tek kredilendiren dönüş bacağı.
+       */
+      const canceledCargo = readResources(payload['cargo']);
       const travelSeconds = Math.max(1, Number(payload['travelSeconds'] ?? 0));
       const departedAt = payload['departedAt'] != null
         ? toDate(payload['departedAt'])
@@ -642,7 +713,7 @@ export class MissionService {
                 ${targetCityId}, ${originCityId},
                 ${executeAt.toISOString()}::timestamptz,
                 ${JSON.stringify({
-                  loot: { gold: 0, food: 0 },
+                  loot: canceledCargo,
                   travelSeconds: returnSeconds,
                   fromMissionId: opts.missionId,
                   // ⭐ Dönüşün ASLI: simge ve rapor metni buna bakar (casusluk dönüşü kuş simgesi
@@ -724,14 +795,35 @@ export class MissionService {
     forbidOwnTarget?: boolean;
     /** Hedef BOŞ şehir olmalı (şehir kurma). */
     targetMustBeEmpty?: boolean;
-    /** Casus Kuş'a izin ver — casusluk ve **destek** (2026-08-03; gerekçe `sendSupport`ta). */
+    /**
+     * Casus Kuş'a izin ver — casusluk, **destek** (2026-08-03; gerekçe `sendSupport`ta) ve
+     * **şehir kurma** (2026-08-07, kullanıcı kararı; gerekçe `sendFoundCity`ta).
+     */
     allowSpyBird?: boolean;
+    /**
+     * ⭐ Ordu BOŞ olabilir — yalnız kahraman(lar) gidebilir (şehir kurma, kullanıcı 2026-08-07).
+     * ⚠️ Kahramansız boş ordu yine reddedilir: bayrak "birlik şart değil" der, "kimse gitmesin
+     *    de olur" demez.
+     */
+    allowEmptyArmy?: boolean;
     payloadExtra?: Record<string, unknown>;
     before?: (t: Tx, ctx: { units: Record<string, number> }) => Promise<void>;
   }): Promise<MarchResult> {
     const units = normalizeUnits(o.units);
+    /**
+     * ⚠️ `heroIds` artık boşluk kontrolünden de ÖNCE okunuyor: ordunun boş olup olamayacağı
+     * kararı kahraman sayısına bağlı (aşağı). Hız hesabı için de zaten gerekiyordu.
+     */
+    const heroIds = [...new Set(o.heroIds ?? [])];
     if (Object.keys(units).length === 0) {
-      throw new MissionError('no_units', 'Göreve en az bir birim göndermelisiniz.');
+      if (!o.allowEmptyArmy) {
+        throw new MissionError('no_units', 'Göreve en az bir birim göndermelisiniz.');
+      }
+      if (heroIds.length === 0) {
+        throw new MissionError(
+          'no_units', 'Sefere en az bir birim ya da bir kahraman göndermelisiniz.',
+        );
+      }
     }
     for (const id of Object.keys(units)) {
       const def = UNITS_BY_ID[id];
@@ -747,8 +839,11 @@ export class MissionService {
         );
       }
     }
-    // ⚠️ `heroIds` hız hesabından ÖNCE: kahraman orduyu yavaşlatabilir (bkz. `sendAttack`).
-    const heroIds = [...new Set(o.heroIds ?? [])];
+    /**
+     * ⚠️ Kahraman sayısı hesaba GİRİYOR: kahraman orduyu yavaşlatabilir (bkz. `sendAttack`).
+     * Boş orduda `armySpeed({}, 1)` `HERO_SPEED`i (200) döndürüyor — yalnız-kahraman seferi
+     * bu sayede kendiliğinden doğru hızda yürüyor, ayrı bir dala gerek yok.
+     */
     const speed = armySpeed(units, heroIds.length);
     if (speed == null) throw new MissionError('unit_cannot_march', 'Bu ordu sefere çıkamaz.');
 
@@ -916,9 +1011,18 @@ export class MissionService {
     for (const [id, n] of Object.entries(units)) capacity += (UNITS_BY_ID[id]?.carry ?? 0) * n;
     const total = cargo.gold + cargo.food;
     if (total > capacity) {
+      /**
+       * ⚠️ Kapasite SIFIR ayrı bir cümleyi hak ediyor: *"Ordunun taşıma kapasitesi 0"* oyuncuya
+       * hiçbir şey öğretmiyor ve ordu hiç yokken (yalnız kahraman gönderirken) tuhaf duruyor.
+       * Sebep her iki hâlde de aynı: seçilen birimlerin `carry` değeri yok.
+       * ⚠️ Hata KODU `carry_capacity` olarak KALIYOR — istemci koda bakıyor, metne değil.
+       */
       throw new MissionError(
         'carry_capacity',
-        `Ordunun taşıma kapasitesi ${capacity}; ${total} kaynak taşıyamaz.`,
+        capacity === 0
+          ? 'Bu orduda kaynak taşıyabilecek birim yok. Kaynak göndermek için Yük Arabası gibi '
+            + 'taşıma kapasitesi olan bir birim ekleyin.'
+          : `Ordunun taşıma kapasitesi ${capacity}; ${total} kaynak taşıyamaz.`,
         { capacity, requested: total },
       );
     }
@@ -1291,9 +1395,33 @@ export interface SendOpts {
   idempotencyKey?: string;
 }
 
-function normalizeCargo(cargo: { gold: number; food: number }): { gold: number; food: number } {
-  const n = (v: number): number => Math.max(0, Math.trunc(Number(v) || 0));
-  return { gold: n(cargo.gold), food: n(cargo.food) };
+/**
+ * ⭐ HARİTA DIŞI KOORDİNAT KAPISI (2026-08-07).
+ *
+ * ⚠️ Sözleşme yalnız `min(1)`e bakıyordu ve `WORLD_SHAPE` sefer yolunda **hiç okunmuyordu**:
+ * `1:9999:3` gibi bir hedefe gerçek bir şehir kurulabiliyordu. `route()` böyle bir mesafeyi
+ * sessizce hesaplıyor (süre 24 saat tavanına yapışıyor) ve görev tamamlanıyordu.
+ * `cities_world_coords` benzersizliği de bunu yakalamaz — o "aynı yere iki şehir"i engeller,
+ * "olmayan yere şehir"i değil.
+ *
+ * ⚠️ **YALNIZ ŞEHİR KURMADA çağrılıyor.** Diğer görev tiplerinde hedefin bir `cities` satırı
+ * olması zaten geçerliliğin kanıtı; buraya genel bir kapı koysaydık, geçmişte hatalı
+ * yerleştirilmiş bir şehir bir anda **hedeflenemez** hâle gelirdi.
+ */
+function assertWithinWorld(c: { k: number; d: number; s: number }): void {
+  const inRange = (v: number, max: number): boolean =>
+    Number.isInteger(v) && v >= 1 && v <= max;
+  const ok = inRange(c.k, WORLD_SHAPE.continents)
+    && inRange(c.d, WORLD_SHAPE.districtsPerContinent)
+    && inRange(c.s, WORLD_SHAPE.citiesPerDistrict);
+  if (!ok) {
+    throw new MissionError(
+      'out_of_world',
+      `Bu koordinat haritada yok. Geçerli aralık 1:1:1 – ${WORLD_SHAPE.continents}:`
+      + `${WORLD_SHAPE.districtsPerContinent}:${WORLD_SHAPE.citiesPerDistrict}.`,
+      { target: c },
+    );
+  }
 }
 
 /** Adedi 0 veya negatif olan girdileri atar, tam sayıya indirir. */

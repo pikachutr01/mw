@@ -8,6 +8,7 @@
  * CASUSLUK · ŞEHİR KURMA başlıkları).
  */
 import { sql } from 'drizzle-orm';
+import { hasCargo, readResources, type Cargo } from './cargo.ts';
 import { routeOf } from './report-route.ts';
 import {
   BUILDINGS_BY_ID, clampName, colonyName, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor,
@@ -118,12 +119,7 @@ export function createSupportHandler(cities: CityService): MissionHandler {
      * rapor gövdesi ondan sonra yazılıyor. Kullanıcı 2026-08-03'te tam bu eksiği bildirdi —
      * *"destek raporunda Birlikler altında sadece 9 casus kuş yazıyor, kahramana dair bilgi yok"*.
      */
-    const heroRows = await ctx.tx.execute<Record<string, unknown>>(sql`
-      SELECT h.name FROM mission_heroes mh JOIN heroes h ON h.id = mh.hero_id
-       WHERE mh.mission_id = ${ctx.mission.id}
-       ORDER BY h.level DESC, h.name
-    `);
-    const heroNames = heroRows.map((r: Record<string, unknown>) => String(r['name']));
+    const heroNames = await loadMissionHeroNames(ctx.tx, ctx.mission.id);
 
     await ctx.tx.execute(sql`
       UPDATE heroes SET city_id = ${targetCityId}
@@ -352,7 +348,29 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
     // Hedef BOŞ şehir olduğu için `target_city_id` yok; koordinat görev satırında duruyor.
     const coords = await loadTargetCoords(ctx.tx, ctx.mission.id);
     if (!coords) throw new Error('found_city: hedef koordinat yok');
+
+    /**
+     * ⭐⭐ YERLEŞİM KİLİDİ — **kontrolden ÖNCE** (2026-08-07).
+     *
+     * ⚠️ Bu handler 2026-08-07'ye kadar kilitsizdi: «burada şehir var mı» diye bakıp sonra
+     * `INSERT` ediyordu ve arada bir oku-yaz penceresi vardı. Aynı koordinata eşzamanlı iki
+     * varışta (ya da bir varış + bir kayıt yerleşimi) `cities_world_coords` benzersizliği
+     * ihlal ediliyor, görev `failed` olup 5 denemede `dead`e düşüyordu — o noktada birlikler
+     * şehirden çoktan düşmüş ve dönüş görevi hiç yazılmamış oluyordu, yani **ordu kalıcı
+     * kaybolurdu**. Kargo eklendikten sonra aynı yoldan kaynak da kaybolacaktı.
+     *
+     * ⚠️ Kayıt yerleşimiyle **aynı** kilit (`world/placement-lock.ts`) → iki yol seri hâle
+     * geliyor. Kilit sırası kuralı: yerleşim önce, şehir sonra.
+     */
+    await ctx.lockPlacement();
+
     const units = await loadMissionUnits(ctx.tx, ctx.mission.id);
+    const cargo = readResources(ctx.mission.payload['cargo']);
+    /**
+     * ⚠️ Kahraman adları `mission_heroes` BOŞALMADAN önce okunuyor — hem başarı yolu (satırı
+     * siler) hem `scheduleReturn` (satırı dönüş görevine taşır) tabloyu boşaltıyor.
+     */
+    const heroNames = await loadMissionHeroNames(ctx.tx, ctx.mission.id);
 
     const check = await ctx.tx.execute<Record<string, unknown>>(sql`
       SELECT
@@ -369,10 +387,23 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
       await writeMessage(ctx, {
         playerId, kind: 'found_city_report', side: 'owner',
         subject: taken ? 'Şehir kurulamadı — yer dolu' : 'Şehir kurulamadı — şehir limiti',
-        body: { coordinates: coords, reason: taken ? 'slot_taken' : 'city_limit', at: ctx.at.toISOString() },
+        body: {
+          coordinates: coords,
+          reason: taken ? 'slot_taken' : 'city_limit',
+          /* ⚠️ `units`/`heroes`/`cargo` eskiden BAŞARISIZLIK raporunda hiç yoktu: oyuncu
+             ordusunun geri döndüğünü biliyor ama HANGİ ordu olduğunu göremiyordu. */
+          units, heroes: heroNames, cargo,
+          at: ctx.at.toISOString(),
+        },
       });
+      /**
+       * ⭐ KARGO ORDUYLA GERİ DÖNER — `scheduleReturn` onu dönüş görevinin `loot`u olarak
+       * yazıyor, `createReturnHandler` da varışta `cities.add` ile kasaya ekliyor.
+       * ⚠️ Eskiden burada sabit `{gold:0, food:0}` vardı; kargo eklenince o sabit taşınan
+       * kaynağı sessizce **yok ederdi**.
+       */
       await scheduleReturn(ctx, {
-        homeCityId: originCityId, units, cargo: { gold: 0, food: 0 }, returnOf: 'found_city',
+        homeCityId: originCityId, units, cargo, returnOf: 'found_city', fromCoords: coords,
       });
       return;
     }
@@ -385,6 +416,19 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
       k: coords.k, d: coords.d, s: coords.s,
       isCapital: false,
       at: ctx.at,
+      /**
+       * ⭐ TAŞINAN KAYNAK YENİ ŞEHRİN KESESİ OLUR (kullanıcı, 2026-08-07).
+       *
+       * ⚠️⚠️ Bu satırdan SONRA `cities.add(cityId, cargo)` **YAZMA** — `create` keseyi zaten
+       * bu değerle dolduruyor; ikisi birlikte kargoyu **ikiye katlar** ve bedava kaynak basma
+       * açığı olur. `missions.test.ts`teki "kargo yeni şehrin kesesine yazılır" testi tam da
+       * bu sayıyı kilitliyor.
+       * ⚠️ Kargo boşken `{0,0}` ve bu zaten `COLONY_STARTING_RESOURCES` ile birebir aynı →
+       * koşulsuz geçmek güvenli, `if` sarmalayıcısına gerek yok.
+       * ⚠️ "Kur → keseyi al → terk et" açığı DOĞMUYOR: kaynak oyuncunun kendi şehrinden
+       * düşülmüş, şehir terk edilirse yok oluyor → net kayıp.
+       */
+      startingResources: cargo,
     }, ctx.tx as never);
 
     // Şehri kuran ordu yeni şehrin garnizonu olur (dönüş görevi YOK).
@@ -404,7 +448,9 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
     await writeMessage(ctx, {
       playerId, kind: 'found_city_report', side: 'owner',
       subject: `Yeni şehir kuruldu: ${name}`,
-      body: { cityId, name, coordinates: coords, units, at: ctx.at.toISOString() },
+      /* ⚠️ `heroes` ve `cargo` eskiden yazılmıyordu; istemci ikisini de çizmeye hazırdı
+         (`Messages.tsx` `PlainBody`) ama alanlar hep boş geliyordu. */
+      body: { cityId, name, coordinates: coords, units, heroes: heroNames, cargo, at: ctx.at.toISOString() },
     });
     await ctx.emit('city:founded', { cityId, playerId, coordinates: coords });
     await ctx.audit({
@@ -457,8 +503,15 @@ async function nextColonyName(tx: Tx, playerId: number): Promise<string> {
 async function scheduleReturn(ctx: HandlerContext, o: {
   homeCityId: number;
   units: Record<string, number>;
-  cargo: { gold: number; food: number };
+  cargo: Cargo;
   returnOf: string;
+  /**
+   * ⚠️ Dönüşün NEREDEN geldiği — yalnız şehir kurma dönüşünde gerekiyor. `origin_city_id`
+   * kolonu `cities.id`'ye FK ve kuruluş başarısız olduğunda o koordinatta şehir YOK, yani
+   * kaynak oraya yazılamıyor. Koordinat bu yüzden payload'a düşüyor; Ordular listesi JOIN
+   * boş dönünce oradan okuyor (`mission.controller.ts` `origin`).
+   */
+  fromCoords?: { k: number; d: number; s: number };
 }): Promise<number | null> {
   const anyUnit = Object.values(o.units).some((n) => n > 0);
   const heroes = await ctx.tx.execute<Record<string, unknown>>(sql`
@@ -482,6 +535,7 @@ async function scheduleReturn(ctx: HandlerContext, o: {
             ${JSON.stringify({
               loot: o.cargo, travelSeconds: travel,
               fromMissionId: ctx.mission.id, returnOf: o.returnOf,
+              ...(o.fromCoords ? { originCoords: o.fromCoords } : {}),
             })}::jsonb,
             ${`return:${ctx.mission.id}`})
     RETURNING id
@@ -507,6 +561,23 @@ async function loadMissionUnits(tx: Tx, missionId: number): Promise<Record<strin
   const out: Record<string, number> = {};
   for (const r of rows) out[String(r['unit_type'])] = Number(r['count']);
   return out;
+}
+
+/**
+ * Sefere katılan kahramanların adları.
+ *
+ * ⚠️ **`mission_heroes` boşaltılmadan ÖNCE** çağrılmalı: hem varış (kahramanı şehre yazıp
+ * satırı siliyor) hem `scheduleReturn` (satırı dönüş görevine taşıyor) tabloyu boşaltıyor ve
+ * rapor gövdesi ikisinden de SONRA yazılıyor. Kullanıcı 2026-08-03'te destek raporunda tam
+ * bu eksiği bildirmişti; şehir kurma raporunda da aynı boşluk vardı.
+ */
+async function loadMissionHeroNames(tx: Tx, missionId: number): Promise<string[]> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT h.name FROM mission_heroes mh JOIN heroes h ON h.id = mh.hero_id
+     WHERE mh.mission_id = ${missionId}
+     ORDER BY h.level DESC, h.name
+  `);
+  return rows.map((r: Record<string, unknown>) => String(r['name']));
 }
 
 async function loadCityOwner(
@@ -565,12 +636,6 @@ async function writeMessage(ctx: HandlerContext, o: {
             ${o.subject}, ${JSON.stringify(body)}::jsonb, ${ctx.at.toISOString()}::timestamptz)
   `);
   await ctx.emit('message:written', { playerId: o.playerId, kind: o.kind });
-}
-
-function readResources(v: unknown): { gold: number; food: number } {
-  if (!v || typeof v !== 'object') return { gold: 0, food: 0 };
-  const r = v as Record<string, unknown>;
-  return { gold: Math.max(0, Number(r['gold'] ?? 0)), food: Math.max(0, Number(r['food'] ?? 0)) };
 }
 
 function countsOf(rows: Record<string, unknown>[], field = 'count'): Record<string, number> {
