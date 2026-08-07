@@ -13,7 +13,7 @@
  * ========================================================================== */
 import {
   FLYING, NONCOMBAT, NO_POOL, NO_ROUND_LOSS, OUT_OF_BATTLE, PASSIVE_STRUCTS, SETTLE_ON_LOSS,
-  LEVEL_BASED, TECHS_BY_ID, TECH_BY_UNIT, UNITS, UNITS_BY_ID, catalogHash,
+  LEVEL_BASED, SETTLE_ON_LOSS_DEFENDER, TECHS_BY_ID, TECH_BY_UNIT, UNITS, UNITS_BY_ID, catalogHash,
   type TechLevels, type UnitDef,
 } from '@mobilwar/catalog';
 import { type CombatConfig, type DeepPartial, DEFAULT_COMBAT_CONFIG, mergeCombatConfig } from './config.ts';
@@ -803,8 +803,22 @@ export function simulate(
       const lm = loser.lossMag;
       const wm = (loser === def ? atk : def).lossMag;
       const frac = lm + wm > 0 ? lm / (lm + wm) : 0;
+      /**
+       * ⭐ CASUS KUŞ da bu kuraldan geçiyor — ama **yalnız savunan tarafta** (2026-08-07).
+       *
+       * ⚠️ Eskiden kuş hiçbir tarafta ölmüyordu ("uçarak kaçar"). Binary ölçümü bunu çürüttü:
+       * savunan düştüğünde kuşlar da yük arabasıyla **birebir aynı `frac` oranıyla** gidiyor
+       * (A2/A4/E2 → %100 · A6 → %50 · A3 → ~%83 · A1 savaş hiç olmadığı için %0). Yani ayrı
+       * bir formül yok, kuş yanlış listedeymiş.
+       * ⚠️ Saldıran tarafta kuş yine dokunulmaz: kuş normal saldırıya zaten katılamıyor
+       * (yalnız casusluk/destek/şehir kurma), o hâl ancak simülatörde doğuyor ve binary
+       * orada kuşu etkisiz sayıyor. Gerekçenin tamamı `SETTLE_ON_LOSS_DEFENDER` başlığında.
+       */
+      const settled = loser === def
+        ? [...SETTLE_ON_LOSS, ...SETTLE_ON_LOSS_DEFENDER]
+        : SETTLE_ON_LOSS;
       for (const e of loser.units) {
-        if (SETTLE_ON_LOSS.includes(e.id)) {
+        if (settled.includes(e.id)) {
           e.count = Math.max(0, e.count - Math.round(e.count0 * frac));
         }
       }

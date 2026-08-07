@@ -146,22 +146,78 @@ varsayımı ya doğrular ya çürütür.
 |---|---|---|---|---|---|---|---|
 | A1 | Cüce 120 | Casus Kuş 1000 | **SALDIRAN** | 1 | — | — | *(satır 1: kuşlar sağ ✅)* |
 | A2 | Cüce 120 | Cüce 1 + Casus Kuş 1000 | **SALDIRAN** | 3 | — | Cüce −1 | *(satır 4: 1001 ölü ❌)* |
-| A3 | Cüce 120 | Cüce 50 + Casus Kuş 1000 | **SALDIRAN** | 4 | Cüce −11 | Cüce −50 |  |
-| A4 | Cüce 2000 | Cüce 50 + Casus Kuş 1000 | **SALDIRAN** | 3 | — | Cüce −50 |  |
-| **A5** | Cüce 20 | Cüce 500 + Casus Kuş 1000 | **SAVUNAN** | 3 | Cüce −20 | — |  |
-| **A6** | Cüce 100 + Casus Kuş 500 | Cüce 100 + Casus Kuş 500 | **SALDIRAN** | 5 | Cüce −63 | Cüce −63 |  |
-| **B1** | Cüce 120 + Casus Kuş 1000 | Cüce 1 | **SALDIRAN** | 3 | — | Cüce −1 |  |
-| B2 | Cüce 20 + Casus Kuş 1000 | Cüce 500 | **SAVUNAN** | 3 | Cüce −20 | — |  |
-| C1 | Cüce 120 | Cüce 1 + Yük Arabası 500 | **SALDIRAN** | 3 | — | Cüce −1, Yük −500 |  |
-| C2 | Cüce 20 + Yük Arabası 500 | Cüce 500 | **SAVUNAN** | 3 | Cüce −20, Yük −500 | — |  |
-| **C3** | Cüce 100 + Yük Arabası 300 | Cüce 100 + Yük Arabası 300 | **SALDIRAN** | 5 | Cüce −63 | Cüce −63, Yük −150 |  |
+| A3 | Cüce 120 | Cüce 50 + Casus Kuş 1000 | **SALDIRAN** | 4 | Cüce −11 | Cüce −50 | saldıran kazanır, saldıran 10 kaybder, savunanda sadece 175 kuş kalır. 4 tur (tüm senayolarda ölen kuşlar da ganimet üretir)  |
+| A4 | Cüce 2000 | Cüce 50 + Casus Kuş 1000 | **SALDIRAN** | 3 | — | Cüce −50 | saldıran kazanır, saldıran 0 kaybeder, savunan 1050 kaybeder, 3 tur  |
+| **A5** | Cüce 20 | Cüce 500 + Casus Kuş 1000 | **SAVUNAN** | 3 | Cüce −20 | — |savunan kazanır, saldıran 20 kaybeder, savunan 0 kaybeder, 3 tur |
+| **A6** | Cüce 100 + Casus Kuş 500 | Cüce 100 + Casus Kuş 500 | **SALDIRAN** | 5 | Cüce −63 | Cüce −63 | Bu senaryo karışık. Bazen saldıran bazen de savunan kazanıyor. saldıranın kazandığı durumda: saldıran 62 kaybeder (hepsi cüce), savunan 312 kaybeder (62 cüce, 250 kuş), 5 tur. Savunanın kazandığı durumda: saldıran 62 kaybeder (yine hepsi cüce), savunan 62 kaybeder (hepsi cüce), 5 tur. Genel oyun mekaniği olarak casus kuşlar saldıran tarafta zaten olmaz, casus kuşlar saldırı durumunda etkisiz olmaları gerekir  |
+| **B1** | Cüce 120 + Casus Kuş 1000 | Cüce 1 | **SALDIRAN** | 3 | — | Cüce −1 | saldıran kazanır, saldıran 0 kaybeder, savunan 1 kaybeder, 3 tur  |
+| B2 | Cüce 20 + Casus Kuş 1000 | Cüce 500 | **SAVUNAN** | 3 | Cüce −20 | — |savunan kazanır, saldıran 20 kaybeder (hepsi cüce), savunan 0 kaybeder, 3 tur  |
+| C1 | Cüce 120 | Cüce 1 + Yük Arabası 500 | **SALDIRAN** | 3 | — | Cüce −1, Yük −500 |saldıran kazanır, saldıran 0 kaybder, savunan 501 kaybeder (ölen yük arabaları da ganimet oluşturur), 3 tur  |
+| C2 | Cüce 20 + Yük Arabası 500 | Cüce 500 | **SAVUNAN** | 3 | Cüce −20, Yük −500 | — |savunan kazanır, saldıran 520 kaybeder, savunan 0 kaybeder, 3 tur  |
+| **C3** | Cüce 100 + Yük Arabası 300 | Cüce 100 + Yük Arabası 300 | **SALDIRAN** | 5 | Cüce −63 | Cüce −63, Yük −150 |bazen savunan bazen saldıran kazanır. saldıranın kazandığı durumda: saldıran 62 kaybeder (hepsi cüce), savunan 212 kaybeder (62 cüce, 150 araba), 5 tur. Savunanın kazandığı durumda:  saldıran 212 kaybeder (62 cüce, 150 araba), savunan 62 kaybeder (hepsi cüce), 5 tur |
 | D1 | Cüce 120 | Gnom 500 | **SALDIRAN** | 1 | — | — | *(satır 3: 4 gnom ölü ❌)* |
-| D2 | Cüce 240 | Gnom 500 | **SALDIRAN** | 1 | — | — |  |
-| D3 | Cüce 120 | Gnom 50 | **SALDIRAN** | 1 | — | — |  |
-| D4 | Gnom 500 | Cüce 120 | **SAVUNAN** | 1 | — | — |  |
-| D5 | Cüce 120 + Gnom 100 | Cüce 120 | **SALDIRAN** | 5 | Cüce −75 | Cüce −75 |  |
-| E1 | Cüce 3000 | Okçu Kulesi 50 | **SALDIRAN** | 3 | — | Okçu Kulesi −10 |  |
+| D2 | Cüce 240 | Gnom 500 | **SALDIRAN** | 1 | — | — |saldıran kazanır, saldıran 0 kaybeder, savunan 32 kaybeder, 1 tur  |
+| D3 | Cüce 120 | Gnom 50 | **SALDIRAN** | 1 | — | — | saldıran kazanır, saldıran 0 kaybeder, savunan 25 kaybeder, 1 tur |
+| D4 | Gnom 500 | Cüce 120 | **SAVUNAN** | 1 | — | — |savunan kazanır, aldıran ve savunan 0 kaybeder, 1 tur, ganimet çıkmaz  |
+| D5 | Cüce 120 + Gnom 100 | Cüce 120 | **SALDIRAN** | 5 | Cüce −75 | Cüce −75 |bazen saldıran bazen savunan kazanır, iki durumda da iki taraf ta 75 cüce kaybeder, 5 tur |
+| E1 | Cüce 3000 | Okçu Kulesi 50 | **SALDIRAN** | 3 | — | Okçu Kulesi −10 |saldıran kazanır, saldıran 0 kaybeder, avunan 0 kaybeder (çünkü savunanda asker yok), 38-41 arası okçu kulesi kalır, 3 tur  |
 | E2 | Cüce 3000 | Casus Kuş 1000 + Okçu Kulesi 50 | **SALDIRAN** | 3 | — | Okçu Kulesi −10 | *(satır 14: +1000 kuş ölü ❌)* |
+
+## ✅ SONUÇ (2026-08-07, ölçüm geldikten sonra)
+
+**13/13 satır oturdu.** Ayrı bir formül yokmuş — kuş yalnız **yanlış listedeymiş**.
+
+### Bulunan kural
+
+| Birim | Saldıranda | Savunanda |
+|---|---|---|
+| **Yük Arabası** | kaybedince orantısal gider | kaybedince orantısal gider |
+| **Casus Kuş** | **hiç ölmez** | kaybedince **aynı orantısal kuralla** gider |
+| **Gnom** | **hiç ölmez** *(D5 ölçümü)* | *(ölçülmedi — kuş/araba ailesiyle aynı varsayıldı)* |
+
+Oran, motorda zaten var olan `frac = kaybedenKaybı / (kaybedenKaybı + kazananKaybı)`:
+A2/A4/E2 → %100 · **A6 → %50** · A3 → ~%83 · A1 → %0 (savaş hiç olmadı).
+A3'te motor 826, binary 825 kuş öldürüyor — fark 1, yuvarlama.
+
+⭐ **Asimetrinin sebebi oyunun kendi kuralı:** kuş normal bir saldırıya zaten katılamıyor
+(`mission.service.ts` yalnız casusluk · destek · şehir kurma). Saldıran tarafta kuş bulunması
+ancak **simülatörde** mümkün ve binary orada kuşu etkisiz sayıyor — kullanıcının ifadesiyle
+*"casus kuşlar saldırı durumunda etkisiz olmaları gerekir"*.
+
+### Düzeltmeler
+- `SETTLE_ON_LOSS` → yalnız `cargo_wagon` (gnom çıkarıldı, D5).
+- Yeni `SETTLE_ON_LOSS_DEFENDER` = `spy_bird` + `gnome` — §4b'de yalnız kaybeden SAVUNANA eklenir.
+- Bekçi testleri `packages/engine/test/reference.test.ts` (A1·A2·A5·A6·B2·C2·C3·D5).
+
+### ⏳ TEK AÇIK KALAN: Tur 1'de savunan gnomu (D1·D2·D3)
+
+| Ölçüm | Saldıran | Savunan gnom | Ölen |
+|---|---|---|---|
+| D1 | Cüce 120 | 500 | **4** |
+| D2 | Cüce 240 | 500 | **32** |
+| D3 | Cüce 120 | 50 | **25** |
+
+Bunlar **1 turda** oluyor, yani vuruşma döngüsü hiç dönmeden → bir **Tur 1 mekanizması**.
+Settle kuralı bunu açıklayamaz (kimse kayıp vermediği için `frac = 0`).
+
+⚠️ Genel bir "Tur 1 hasar turu" da DEĞİL: satır 2'de (`Cüce 120 → Yük Arabası 500`) hiç yük
+arabası ölmüyor, yani mekanizma **gnoma özel**.
+
+**Ghidra izi (2026-08-07):** ana döngü `FUN_0040dcb4` → Tur 1 = **`FUN_0040e794`**. Bu fonksiyon
+tuzak salvosundan (`(rand%25+75) × tuzak / 100`, sonda) **ÖNCE üç ayrı `FUN_0040e0c4` (hasar
+çekirdeği) çağrısı** yapıyor; sonuçları `param_1+0x10` ve `+0x18`e yazıyor. Motorda karşılığı
+`turn1GnomeSkirmish` — **yazılı ama `cfg.turn1GnomeSkirmish: false` ile kapalı** ve yönü
+saldıran-gnomu → savunan (ölçüm ise tersini söylüyor: D4'te saldıranın 500 gnomu hiçbir şey
+yapmıyor). Listeleri yürüten `FUN_00410f90` / `FUN_00411608` iterator'larının hangi birim
+indeksine oturduğunu çözmek ayrı bir tur işi.
+
+**Pratik etkisi düşük:** yalnız "savunmada YALNIZ gnom var" hâlinde ve 500 gnomun 4'ü
+mertebesinde. Kapatmak istersen iki yol var — (a) ayrı bir Ghidra turu, (b) şu üç ölçüm:
+`Cüce 480 → Gnom 500` · `Cüce 120 → Gnom 500 + Cüce 1` · `Cüce 120 → Gnom 500 + Yük 500`
+(ilki ölçeklemeyi, ikincisi "gerçek savaş varken de oluyor mu"yu, üçüncüsü "yalnız gnom mu
+hedef"i ayırır).
+
+---
 
 ## Her blok neyi ayırt ediyor
 

@@ -104,8 +104,37 @@ export const NO_ROUND_LOSS: ReadonlySet<string> = new Set(['cargo_wagon', 'spy_b
 /** P paydasına (güç havuzuna) girmeyen birimler — savaşmıyorlar, hasarı seyreltmemeliler. */
 export const OUT_OF_BATTLE: ReadonlySet<string> = new Set(['cargo_wagon', 'spy_bird', 'gnome']);
 
-/** Ordu bozulunca ele geçirilenler (Casus Kuş uçarak kaçar → listede yok). */
-export const SETTLE_ON_LOSS: readonly string[] = ['cargo_wagon', 'gnome'];
+/**
+ * Ordu bozulunca ele geçirilenler — **her iki tarafta da** (kayıp oranıyla orantısal).
+ *
+ * ⚠️ Gnom 2026-08-07'de buradan ÇIKARILDI: ölçüm D5'te saldıranın 100 gnomu, saldıran
+ * kaybettiği hâlde binary'de **hiç ölmüyor**; motor ise %50'sini alıyordu. Yük Arabası ise
+ * iki tarafta da ölçüldü (C2: saldıran 20 cüce + 500 araba kaybediyor) → listede kalıyor.
+ */
+export const SETTLE_ON_LOSS: readonly string[] = ['cargo_wagon'];
+
+/**
+ * ⭐ YALNIZ SAVUNAN TARAFTA kayıp veren savaş-dışı birimler (2026-08-07 ölçümü).
+ *
+ * Casus Kuş savunanda kaybedilince yük arabasıyla **aynı orantısal kuralla** gidiyor
+ * (ölçüm: A2/A4/E2 → %100 · A6 → %50 · A3 → ~%83 · A1 → %0), ama **saldıran tarafta hiç
+ * ölmüyor** (B2 ve A6'nın savunan-kazandığı hâli: saldıran yalnız savaşçılarını kaybediyor).
+ *
+ * ⚠️ Asimetri oyunun kendi kuralından geliyor: **kuş normal bir saldırıya zaten katılamaz**
+ * (`mission.service.ts` yalnız casusluk · destek · şehir kurmaya izin veriyor). Yani saldıran
+ * tarafta kuş bulunması ancak SİMÜLATÖRDE mümkün ve binary orada kuşu etkisiz sayıyor —
+ * kullanıcının ifadesiyle *"casus kuşlar saldırı durumunda etkisiz olmaları gerekir"*.
+ *
+ * ⚠️ Eskiden kuş **hiçbir tarafta** ölmüyordu ("uçarak kaçar" varsayımı). Ölçüm bunu çürüttü:
+ * 1000 kuşlu bir şehir düştüğünde binary 1000 kuşu da kaybettiriyor ve **ölen kuşlar ganimet
+ * üretiyor**. Varsayım yalnız SALDIRAN taraf için doğruymuş.
+ *
+ * ⚠️ **Gnom da burada** (saldıran tarafından çıkarılma gerekçesi `SETTLE_ON_LOSS`ta) — ama
+ * savunan tarafı HENÜZ ÖLÇÜLMEDİ. *"Gerçek bir savaşta savunan kaybederken gnomu ne oluyor"*
+ * senaryosu binary'de koşulmadı; kuş/araba ailesiyle tutarlı olsun diye buraya kondu.
+ * Ölçüm gelince doğrulanmalı.
+ */
+export const SETTLE_ON_LOSS_DEFENDER: readonly string[] = ['spy_bird', 'gnome'];
 
 /** "Yenik" kontrolünde sayılmayan birimler (binary FUN_004114b0). */
 export const NONCOMBAT: ReadonlySet<string> = new Set(['cargo_wagon', 'spy_bird', 'gnome', 'trap']);

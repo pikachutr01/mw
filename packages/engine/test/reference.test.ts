@@ -203,3 +203,62 @@ describe('savunanda yalnız seviye-taşıyan yapı var (binary satır 7·8·10)'
     expect(r.turns).toBe(5);
   });
 });
+
+/**
+ * ⭐ SAVAŞ-DIŞI BİRİM KAYBI — `docs/SAVAS_BINARY_KONTROL.md` A/B/C/E blokları (2026-08-07).
+ *
+ * ⚠️ Casus Kuş eskiden **hiçbir tarafta** ölmüyordu ("uçarak kaçar"). Binary ölçümü çürüttü:
+ * savunan düştüğünde kuşlar yük arabasıyla **birebir aynı orantısal kuralla** gidiyor. Ayrı
+ * bir formül yoktu, kuş yalnız yanlış listedeydi.
+ * ⚠️ Saldıran tarafta kuş hâlâ dokunulmaz — kuş normal saldırıya zaten katılamıyor, o hâl
+ * ancak simülatörde doğuyor ve binary orada kuşu etkisiz sayıyor.
+ */
+describe('savaş-dışı birim kaybı (binary A/B/C/E blokları)', () => {
+  const f = (a: Record<string, number>, d: Record<string, number>, seed: string) =>
+    simulate({ seed, attacker: { counts: a }, defender: { counts: d } });
+
+  it('A2: savunan tamamen düşünce kuşların HEPSİ gider', () => {
+    const r = f({ dwarf: 120 }, { dwarf: 1, spy_bird: 1000 }, 'bin-A2');
+    expect(r.winner).toBe('attacker');
+    expect(r.defender.counts['spy_bird']).toBe(0);
+  });
+
+  it('A1: savaş HİÇ olmazsa kuşlar sağ kalır', () => {
+    const r = f({ dwarf: 120 }, { spy_bird: 1000 }, 'bin-A1');
+    expect(r.turns).toBe(1);
+    expect(r.defender.counts['spy_bird']).toBe(1000);
+  });
+
+  it('A5: savunan KAZANIRSA kuşları hiç eksilmez', () => {
+    const r = f({ dwarf: 20 }, { dwarf: 500, spy_bird: 1000 }, 'bin-A5');
+    expect(r.winner).toBe('defender');
+    expect(r.defender.counts['spy_bird']).toBe(1000);
+  });
+
+  it('A6: kayıp ORANTISAL — çekişmeli savaşta kuşun yarısı gider', () => {
+    const r = f({ dwarf: 100, spy_bird: 500 }, { dwarf: 100, spy_bird: 500 }, 'bin-A6');
+    expect(r.winner).toBe('attacker');
+    expect(r.defender.counts['spy_bird']).toBe(250);
+    // ⚠️ SALDIRANIN kuşu hiç ölmez — asimetri bilinçli.
+    expect(r.attacker.counts['spy_bird']).toBe(500);
+  });
+
+  it('B2: saldıran kaybetse bile kuşları ölmez', () => {
+    const r = f({ dwarf: 20, spy_bird: 1000 }, { dwarf: 500 }, 'bin-B2');
+    expect(r.winner).toBe('defender');
+    expect(r.attacker.counts['spy_bird']).toBe(1000);
+  });
+
+  it('C2/C3: yük arabası İKİ tarafta da orantısal gider', () => {
+    const kaybeden = f({ dwarf: 20, cargo_wagon: 500 }, { dwarf: 500 }, 'bin-C2');
+    expect(kaybeden.attacker.counts['cargo_wagon']).toBe(0);       // frac = 1
+    const cekisme = f({ dwarf: 100, cargo_wagon: 300 }, { dwarf: 100, cargo_wagon: 300 }, 'bin-C3');
+    expect(cekisme.defender.counts['cargo_wagon']).toBe(150);      // frac = 0.5
+  });
+
+  it('⭐ D5: saldıran kaybetse bile GNOMLARI ölmez', () => {
+    const r = f({ dwarf: 120, gnome: 100 }, { dwarf: 120 }, 'd5-d');
+    expect(r.winner).toBe('defender');
+    expect(r.attacker.counts['gnome']).toBe(100);
+  });
+});
