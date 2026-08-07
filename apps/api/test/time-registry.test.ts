@@ -140,3 +140,52 @@ describe('yüklemler çalıştırılabilir', () => {
     }
   });
 });
+
+/**
+ * ⭐⭐ EMEKLİ SÜTUN BEKÇİSİ — `worlds.clock_offset_ms`.
+ *
+ * Sütun 0043'te emekli oldu (daima 0, hiçbir formülde geçmiyor) ama **düşürülmedi**:
+ * expand-contract gereği göç koşarken eski kod hâlâ çalışıyor ve onu okuyor. Düşürme bir
+ * SONRAKİ dağıtımın işi.
+ *
+ * ⚠️⚠️ Tam da bu ara dönem tehlikeli: sütun hâlâ var, yani onu okuyan kod **çalışmaya devam
+ * ediyor** ve ne derleyici ne test kırılıyor. 2026-08-08'de yapılan taramada gerçekten iki
+ * kalıntı bulundu — `admin.world.controller` onu SELECT ediyor ama kullanmıyordu,
+ * `ranking.handler` teşhis kaydına yazıyordu. İkisi de ham SQL, ikisi de tip denetiminin
+ * göremeyeceği yerde. Düşürme günü geldiğinde biri panelin dünyalar sekmesini, diğeri **her
+ * sıralama anlık görüntüsünü** patlatacaktı.
+ *
+ * Bu test o ara dönemin bekçisi: kaynak kodda emekli sütunun adı geçmesin. Düşürme göçü
+ * yazıldığında bu testin kendisi de silinebilir — o noktada Postgres zaten zorluyor olacak.
+ */
+describe('emekli sütun sızıntısı', () => {
+  it('kaynak kodda clock_offset_ms okuyan kalmadı', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+
+    const hits: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      for (const e of await readdir(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) { await walk(p); continue; }
+        if (!e.name.endsWith('.ts')) continue;
+        const src = await readFile(p, 'utf8');
+        src.split('\n').forEach((line, i) => {
+          if (!/clock_offset_ms|clockOffsetMs/.test(line)) return;
+          /**
+           * ⚠️ Yorumlar MUAF — sütunun neden emekli olduğunu anlatan metinler kalmalı; asıl
+           * değerleri o. Aranan şey **çalışan kod**.
+           */
+          const t = line.trim();
+          if (t.startsWith('*') || t.startsWith('//') || t.startsWith('/*')) return;
+          // `schema.ts`teki tanım kalıyor: sütun hâlâ var ve şema onu tarif etmeli.
+          if (p.endsWith('schema.ts')) return;
+          hits.push(`${p}:${i + 1}: ${t.slice(0, 100)}`);
+        });
+      }
+    };
+    await walk(new URL('../src', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+
+    expect(hits, `emekli sütun hâlâ okunuyor:\n${hits.join('\n')}`).toEqual([]);
+  });
+});

@@ -106,10 +106,20 @@ export class AdminWorldController {
 
   /* ── Dünyalar ─────────────────────────────────────────────────────────────── */
 
+  /**
+   * ⚠️⚠️ **`clock_offset_ms` BU SORGUDAN ÇIKARILDI (0043 sonrası temizlik).**
+   *
+   * Sütun 0043'te emekli oldu (daima 0) ve payload'dan da kaldırılmıştı — ama SELECT listesinde
+   * unutulmuştu: okunuyor, hiçbir yere yazılmıyordu. Zararsız görünen bu artık aslında bir
+   * **mayın**: sütunu düşüren göç koştuğu anda bu sorgu çalışma zamanında patlar ve panelin
+   * dünyalar sekmesi 500 döner — üstelik tip denetimi bunu YAKALAYAMAZ, çünkü ham SQL.
+   *
+   * Emeklilikten düşürmeye giden yolun kuralı: **önce okumayı bırak, sonra düşür.**
+   */
   @Get('worlds')
   async worlds(): Promise<Record<string, unknown>> {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT w.id, w.name, w.state, w.clock_offset_ms, w.paused_at, w.started_at,
+      SELECT w.id, w.name, w.state, w.paused_at, w.started_at,
              w.maintenance_notice, w.maintenance_eta,
              w.speed_multiplier, w.resource_multiplier, w.training_multiplier,
              w.construction_multiplier,

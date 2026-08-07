@@ -36,20 +36,29 @@ async function gameNowOf(tx: Tx, worldId: number): Promise<Date> {
 /**
  * Saatin iki ucunu birden okur: veritabanı ve süreç.
  *
- * ⚠️ Yalnız teşhis için. `claimDue` vadeyi SQL'de kıyaslıyor (`mission.repository.ts:69`),
- * yani bir görevin erken alınabilmesi için ya `now()` ya `clock_offset_ms` ya da `paused_at`
- * beklenmedik bir değer taşımalı. Hangisi olduğunu ancak üçünü de aynı anda kaydedince
- * öğrenebiliriz — 2026-08-03 ve 2026-08-05 olaylarında elimizde bu veri yoktu.
+ * ⚠️ Yalnız teşhis için. `claimDue` vadeyi SQL'de kıyaslıyor (`mission.repository.ts`), yani bir
+ * görevin erken alınabilmesi için ya `now()` ya da `paused_at` beklenmedik bir değer taşımalı.
+ * Hangisi olduğunu ancak ikisini de aynı anda kaydedince öğrenebiliriz — 2026-08-03 ve
+ * 2026-08-05 olaylarında elimizde bu veri yoktu.
+ *
+ * ⚠️⚠️ **`clock_offset_ms` BURADAN ÇIKARILDI (0043 sonrası temizlik).** Üçüncü bir şüpheli
+ * olarak yazılmıştı ve o zaman haklıydı: oyun saati formülünün parçasıydı. Tek zaman çizgisinde
+ * artık hiçbir formülde geçmiyor ve daima 0 — yani **bilgi taşımayan** bir alan. Teşhis
+ * kaydında bilgi taşımayan bir sayı tutmak zararsız değil: okuyanı olmayan bir şüpheliye
+ * baktırır. Ayrıca sütunu düşüren göç koştuğunda bu sorgu **her sıralama görüntüsünde** patlar
+ * ve zincir kopar (ham SQL, tip denetimi yakalayamaz).
+ *
+ * ⭐ `processNow` KORUNUYOR: 2026-08-03'te süreç saatinin sıçradığından şüphelenildi ve onu
+ * DB saatiyle yan yana koyabilmek hâlâ tek doğrulama yolu.
  */
 async function clockDiagnostics(tx: Tx, worldId: number): Promise<Record<string, unknown>> {
   const [row] = await tx.execute<Record<string, unknown>>(sql`
-    SELECT now() AS db_now, paused_at, clock_offset_ms FROM worlds WHERE id = ${worldId}
+    SELECT now() AS db_now, paused_at FROM worlds WHERE id = ${worldId}
   `);
   return {
     dbNow: row?.['db_now'] == null ? null : toDate(row['db_now']).toISOString(),
     processNow: new Date().toISOString(),
     pausedAt: row?.['paused_at'] == null ? null : toDate(row['paused_at']).toISOString(),
-    clockOffsetMs: row?.['clock_offset_ms'] == null ? null : Number(row['clock_offset_ms']),
   };
 }
 
