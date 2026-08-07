@@ -16,13 +16,15 @@ import {
 } from './ranking.service.ts';
 
 /**
- * Görev transaction'ının içinden oyun saati. `GameClockService.dbGameNow` ile aynı ifade
- * ama `Tx` üzerinde çalışıyor — servis `Db` istiyor ve görev bağlamında elimizde `Tx` var.
+ * Görev transaction'ının içinden oyun saati. `GameClockService.read()` ile aynı ifade ama `Tx`
+ * üzerinde çalışıyor — servis `Db` istiyor, görev bağlamında elimizde `Tx` var.
+ *
+ * ⚠️ 0043'ten sonra formül `COALESCE(paused_at, now())`e indi (tek zaman çizgisi). `paused_at`
+ * kelepçesi KORUNUYOR: bakımda saat donmazsa ileri-vade emniyeti (`:62` civarı) yanlış karar verir.
  */
 async function gameNowOf(tx: Tx, worldId: number): Promise<Date> {
   const [row] = await tx.execute<Record<string, unknown>>(sql`
-    SELECT (COALESCE(paused_at, now()) - (clock_offset_ms * interval '1 millisecond')) AS at
-      FROM worlds WHERE id = ${worldId}
+    SELECT COALESCE(paused_at, now()) AS at FROM worlds WHERE id = ${worldId}
   `);
   if (!row) throw new Error(`Dünya bulunamadı: ${worldId}`);
   return toDate(row['at']);

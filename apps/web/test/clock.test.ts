@@ -12,8 +12,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  formatClock, formatDuration, formatLongDuration,
-  gameNow, noteServerTime, remaining, remainingClock, remainingLong, serverNow,
+  formatClock, formatDuration, formatLongDuration, gameNow, noteMaintenance,
+  noteServerTime, remaining, remainingClock, remainingLong, serverNow,
 } from '../src/lib/hooks.ts';
 
 /** Sabit bir "tarayıcı şimdisi" — sapma ölçümü ancak böyle deterministik olur. */
@@ -40,43 +40,98 @@ describe('saat çıpaları', () => {
   });
 
   /**
-   * ⭐ Oyun saati gerçek saatin GERİSİNDE (canlıda 196,5 sn). Geri sayımı çizilen her mutlak
-   * damga o ölçekte tutuluyor.
+   * ⭐⭐ TEK ZAMAN ÇİZGİSİ (0043) — dünya çalışıyorken oyun saati ile gerçek saat AYNI.
+   *
+   * ⚠️ Eskiden aralarında kalıcı bir fark vardı (dünyanın toplam duraklama süresi, canlıda
+   * 196,5 sn) ve bu fark iki kez canlı hataya yol açtı. Artık fark yalnız bakımda oluşuyor.
    */
-  it('gameNow, sunucunun bildirdiği oyun saatini izler', () => {
-    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW - 196_563));
-    expect(gameNow()).toBe(BROWSER_NOW - 196_563);
-    expect(serverNow() - gameNow()).toBe(196_563);
+  it('dünya çalışıyorken gameNow == serverNow', () => {
+    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW));
+    expect(gameNow()).toBe(serverNow());
   });
 
-  /** `gameNow` göndermeyen uçlar offset'i BOZMAMALI, yalnız güncellememeli. */
-  it('yalnız serverNow gönderen yanıt oyun çıpasını bozmaz', () => {
-    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW - 196_563));
+  /** Bakımda sunucunun `gameNow`u donmuş `paused_at`i taşır → istemci de donar. */
+  it('bakımda gameNow DONAR (sunucunun bildirdiği ana çakılır)', () => {
+    const pausedAt = BROWSER_NOW - 10 * 60_000;
+    noteServerTime(iso(BROWSER_NOW), iso(pausedAt));
+    expect(gameNow()).toBe(pausedAt);
+
+    // Gerçek zaman aksa bile oyun saati kıpırdamaz.
+    vi.setSystemTime(BROWSER_NOW + 30_000);
+    expect(serverNow()).toBe(BROWSER_NOW + 30_000);
+    expect(gameNow()).toBe(pausedAt);
+  });
+
+  /** ⚠️ Ağ gecikmesi bakım sanılmamalı — eşiğin altındaki fark gürültüdür. */
+  it('küçük fark bakım SAYILMAZ (eşik altı gürültü)', () => {
+    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW - 300));
+    expect(gameNow()).toBe(serverNow());
+  });
+
+  /**
+   * ⭐ `noteMaintenance` — WS olayı geldiği anda donar, sunucunun bir sonraki yanıtı
+   * beklenmez. Bakım bitince de çözer.
+   */
+  it('noteMaintenance anında dondurur ve çözer', () => {
+    const pausedAt = BROWSER_NOW - 5_000;
+    noteMaintenance(true, iso(pausedAt));
+    expect(gameNow()).toBe(pausedAt);
+
+    noteMaintenance(false, null);
+    expect(gameNow()).toBe(serverNow());
+  });
+
+  it('damgasız bakım bildirimi yine de dondurur (akmaya devam etmekten iyi)', () => {
+    noteMaintenance(true, null);
+    const donmus = gameNow();
+    vi.setSystemTime(BROWSER_NOW + 10_000);
+    expect(gameNow()).toBe(donmus);
+  });
+
+  /** `gameNow` göndermeyen uçlar bakım durumunu BOZMAMALI, yalnız güncellememeli. */
+  it('yalnız serverNow gönderen yanıt bakım çıpasını bozmaz', () => {
+    const pausedAt = BROWSER_NOW - 60_000;
+    noteServerTime(iso(BROWSER_NOW), iso(pausedAt));
     noteServerTime(iso(BROWSER_NOW));               // gameNow yok
-    expect(serverNow() - gameNow()).toBe(196_563);
+    expect(gameNow()).toBe(pausedAt);
   });
 
   it('bozuk damga çıpayı bozmaz', () => {
-    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW - 5_000));
+    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW));
     noteServerTime('bu bir tarih değil', 'bu da değil');
-    expect(serverNow() - gameNow()).toBe(5_000);
+    expect(gameNow()).toBe(serverNow());
   });
 });
 
 describe('remaining — varsayılan çıpa OYUN saati', () => {
   /**
-   * ⭐⭐ 2026-08-02 HATASININ BEKÇİSİ. Casusluk 120 sn sürüyor; oyun saati 196,5 sn geride
-   * olduğu için varış anı gerçek saatle bakıldığında HEP geçmişte kalıyor ve geri sayım
-   * yerine sürekli «varıyor» yazıyordu. Hata görev SÜRESİ kısaldıkça görünür oluyor — uzun
-   * seferlerde yutuluyordu, bu yüzden aylarca fark edilmedi.
+   * ⭐⭐ 2026-08-02 HATASININ BEKÇİSİ — artık YAPISAL olarak imkânsız.
+   *
+   * Casusluk 120 sn sürüyor. Eski modelde oyun saati gerçek saatin 196,5 sn gerisindeydi, yani
+   * varış anı gerçek saatle bakıldığında HEP geçmişte kalıyor ve geri sayım yerine sürekli
+   * «varıyor» yazıyordu. Hata görev SÜRESİ kısaldıkça görünür oluyordu — uzun seferlerde
+   * yutuluyordu, bu yüzden aylarca fark edilmedi.
+   *
+   * ⭐ Tek zaman çizgisinde iki çıpa AYNI değeri veriyor: yanlış çıpa seçmek artık bir hataya
+   * yol açamıyor. Test bunu kanıtlıyor — ve `gameNow` ile `serverNow` bir gün yeniden ayrışırsa
+   * (yalnız bakımda ayrışmalı) burada görünür.
    */
-  it('kısa görev (120 sn) oyun saatiyle doğru sayar, gerçek saatle "bitmiş" görünür', () => {
-    const offset = 196_563;
-    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW - offset));
-    const varis = iso(gameNow() + 120_000);          // oyun saatinde 2 dakika sonra
+  it('kısa görev (120 sn) doğru sayar — iki çıpa da aynı sonucu verir', () => {
+    noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW));
+    const varis = iso(gameNow() + 120_000);
 
-    expect(remaining(varis)).toBe('2 dk 00 sn');     // ⭐ doğru çıpa
-    expect(remaining(varis, serverNow())).toBeNull(); // ⛔ yanlış çıpa: "bitmiş" görünüyor
+    expect(remaining(varis)).toBe('2 dk 00 sn');
+    expect(remaining(varis, serverNow())).toBe('2 dk 00 sn');
+  });
+
+  /** ⚠️ Ama BAKIMDA ayrışıyorlar — ve geri sayım donmuş saatten çizilmeli. */
+  it('bakımda geri sayım DONMUŞ saatten çizilir', () => {
+    const pausedAt = BROWSER_NOW - 10 * 60_000;
+    noteServerTime(iso(BROWSER_NOW), iso(pausedAt));
+    const varis = iso(pausedAt + 120_000);           // duraklama anından 2 dk sonrası
+
+    expect(remaining(varis)).toBe('2 dk 00 sn');     // ⭐ donmuş: iş ilerlemiyor
+    expect(remaining(varis, serverNow())).toBeNull(); // ⛔ gerçek saat: "bitmiş" sanır
   });
 
   it('bitmiş süre null döner', () => {

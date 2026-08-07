@@ -704,9 +704,27 @@ export class MissionService {
        */
       const canceledCargo = readResources(payload['cargo']);
       const travelSeconds = Math.max(1, Number(payload['travelSeconds'] ?? 0));
-      const departedAt = payload['departedAt'] != null
-        ? toDate(payload['departedAt'])
-        : toDate(m['created_at']);
+
+      /**
+       * ⭐⭐ KALKIŞ ANI **TÜRETİLİYOR**, `payload.departedAt`ten OKUNMUYOR (2026-08-07).
+       *
+       * İnşa gereği `execute_at = departedAt + travelSeconds` (bkz. `march()` ve saldırı yolu),
+       * dolayısıyla `departedAt = execute_at − travelSeconds`. Aynı bilgi, tek kaynaktan.
+       *
+       * ⚠️ İki sebep:
+       *  1. **Tek zaman çizgisi.** Bakımdan çıkarken `execute_at` kaydırılıyor ama JSONB'nin
+       *     içindeki `departedAt` kaydırılmazdı → bakımdan hemen sonra iptal edilen kısa bir
+       *     sefer **tam yol** dönüş süresi alırdı. JSONB'yi de kaydırmak mümkündü ama kayıt
+       *     defterine giren her JSONB alanı bir daha kimsenin bakmayacağı bir kırılganlıktır;
+       *     `information_schema` bekçisi onu göremez.
+       *  2. **Zaten latent bir hata vardı:** `departedAt` yoksa `created_at`e düşülüyordu ve o
+       *     GERÇEK zamanda yazılıyor — eski satırlarda `elapsed` dünyanın duraklama toplamı
+       *     kadar şişikti.
+       *
+       * `payload.departedAt` bilgi olarak kalıyor (raporlama/hata ayıklama), ama **hiçbir kural
+       * onu okumuyor** → kayıt defterine hiç girmiyor.
+       */
+      const departedAt = new Date(toDate(m['execute_at']).getTime() - travelSeconds * 1000);
 
       // Gidilen yol = geçen süre; dönüş de o kadar sürer. Toplam yol süresini aşamaz.
       const elapsed = Math.round((opts.at.getTime() - departedAt.getTime()) / 1000);

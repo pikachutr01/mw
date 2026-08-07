@@ -99,9 +99,12 @@ export async function endVacation(tx: Runner, playerId: number, at: Date): Promi
     UPDATE cities SET resources_at = ${stamp}::timestamptz
      WHERE player_id = ${playerId} AND resources_at < ${stamp}::timestamptz
   `);
+  // ⚠️ `vacation_mission_id` de temizleniyor: bayrak üçlüsü birlikte yaşayıp birlikte ölmeli,
+  // yoksa bir sonraki girişte eski görev kimliği hâlâ eşleşir görünürdü.
   await tx.execute(sql`
     UPDATE players
-       SET vacation_until = NULL, vacation_since = NULL, vacation_ended_at = ${stamp}::timestamptz
+       SET vacation_until = NULL, vacation_since = NULL, vacation_mission_id = NULL,
+           vacation_ended_at = ${stamp}::timestamptz
      WHERE id = ${playerId} AND vacation_until IS NOT NULL
   `);
   return true;
@@ -249,14 +252,34 @@ export class VacationService {
        * unutmak aynı hatayı sessizce geri getirir. Yük karşılaştırması unutulamaz: görev
        * kendi kimliğini taşıyor.
        */
-      await t.execute(sql`
+      const inserted = await t.execute<Record<string, unknown>>(sql`
         INSERT INTO missions (world_id, type, status, execute_at, payload, idempotency_key)
         VALUES (${Number(p['world_id'])}, 'vacation_end', 'scheduled',
                 ${until.toISOString()}::timestamptz,
                 ${JSON.stringify({ playerId, since: at.toISOString() })}::jsonb,
                 ${`vacation_end:${playerId}:${at.toISOString()}`})
         ON CONFLICT (world_id, idempotency_key) DO NOTHING
+        RETURNING id
       `);
+
+      /**
+       * ⭐⭐ KİMLİK ZAMANDAN AYRILDI (2026-08-07) — `vacation_mission_id`.
+       *
+       * Handler eskiden `payload.since` ile `players.vacation_since`i **ISO dize eşitliğiyle**
+       * karşılaştırıyordu. Tek zaman çizgisinde `vacation_since` bakımda kaydırılıyor ama
+       * JSONB'nin içindeki `since` kaydırılmıyor → karşılaştırma tutmaz, handler **sessizce
+       * `return` eder** ve oyuncunun otomatik tatil çıkışı **hiç olmaz**. Geri bildirimsiz,
+       * aylar sonra fark edilecek bir arıza.
+       *
+       * Görev kimliği zamandan bağımsız: kaydırma onu etkilemiyor, ayrıca ISO biçim eşitliği
+       * kırılganlığı da ölüyor. `payload.since` eski satırlarla uyum için duruyor.
+       */
+      if (inserted[0]?.['id'] != null) {
+        await t.execute(sql`
+          UPDATE players SET vacation_mission_id = ${Number(inserted[0]['id'])}
+           WHERE id = ${playerId}
+        `);
+      }
 
       return this.status(playerId, at, t);
     });

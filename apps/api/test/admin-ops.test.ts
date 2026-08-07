@@ -254,26 +254,45 @@ describe('kuyruk sağlığı', () => {
     expect(new OutboxDispatcher(h.db).maxAttempts).toBe(OUTBOX_MAX_ATTEMPTS);
   });
 
-  it('görev gecikmesi OYUN saatiyle ölçülür, gerçek saatle DEĞİL', async () => {
-    // Görev 3 saat önceye kurulu; dünyanın saati 2 saat geride (uzun bir bakım yaşamış).
+  /**
+   * ⭐⭐ BAKIMDA GECİKME DONAR — ve burada **gerçek bir hata yakalandı** (2026-08-07).
+   *
+   * Bu SQL'de `COALESCE(paused_at, …)` **eksikti**: hemen üstündeki yorum *"bakımdaki her dünya
+   * saatlerce gecikmiş görünmesin"* diyordu ama kod tam olarak onu yapıyordu. Aynı metrik
+   * `mission.repository.ts`te doğru hesaplanıyordu → iki yerde iki farklı sonuç, ve operatör
+   * panele en çok baktığı anda (bakım sırasında) sahte bir kuyruk birikimi görüyordu.
+   *
+   * Eski test bunu göremezdi çünkü yalnız `clock_offset_ms` senaryosunu kuruyordu, `paused_at`i
+   * hiç denemiyordu. Bu sürüm doğrudan bakım senaryosunu kuruyor.
+   */
+  it('görev gecikmesi bakımda DONAR (sahte alarm üretmez)', async () => {
     await h.db.execute(sql`
       INSERT INTO missions (world_id, type, status, execute_at)
       VALUES (${worldId}, 'echo', 'scheduled', now() - interval '3 hours')
     `);
+
+    // Çalışan dünyada gecikme gerçek: ~3 saat.
+    const calisan = await ops.health(req()) as { worlds: Record<string, unknown>[] };
+    const wRun = calisan.worlds.find((x) => Number(x['worldId']) === worldId)!;
+    expect(Number(wRun['scheduled'])).toBe(1);
+    expect(Number(wRun['lagS'])).toBeGreaterThan(10_000);
+
+    // Bakıma alıp duraklama anını 5 saat geriye çek: gerçek zamanda 5 saat daha geçmiş olsa
+    // bile gecikme, duraklama ANINDAKİ değerde donmalı (5 saat eklenmemeli).
     await h.db.execute(sql`
-      UPDATE worlds SET clock_offset_ms = ${2 * 3600 * 1000} WHERE id = ${worldId}
+      UPDATE worlds SET state = 'maintenance', paused_at = now() - interval '5 hours'
+       WHERE id = ${worldId}
     `);
-    const out = await ops.health(req()) as { worlds: Record<string, unknown>[] };
-    const w = out.worlds.find((x) => Number(x['worldId']) === worldId)!;
-    expect(Number(w['scheduled'])).toBe(1);
+    const bakimda = await ops.health(req()) as { worlds: Record<string, unknown>[] };
+    const wPaused = bakimda.worlds.find((x) => Number(x['worldId']) === worldId)!;
+
     /**
-     * ⭐ Gerçek saatle ölçseydik 3 saat (10800 sn) "gecikme" görünürdü ve panel var olmayan
-     * bir arıza gösterirdi. Oyun saati 2 saat geride olduğu için gerçek gecikme 1 saat —
-     * worker da tam olarak bu saate bakıyor.
+     * Vade 3 saat önce, donmuş saat 5 saat önce → görevin vadesi HENÜZ gelmemiş.
+     * ⚠️ Controller negatif gecikmeyi `Math.max(0, …)` ile kırpıyor (`:187`), o yüzden
+     * beklenen 0. Asıl kanıt bu: bozuk sürümde bu sayı **gerçek zamanla büyümeye devam
+     * ederdi** (8 saat ve artan), şimdi donuyor.
      */
-    const lag = Number(w['lagS']);
-    expect(lag).toBeGreaterThan(3400);
-    expect(lag).toBeLessThan(3800);
+    expect(Number(wPaused['lagS'])).toBe(0);
   });
 
   it('bağlantı havuzu sunucu tarafını raporluyor', async () => {

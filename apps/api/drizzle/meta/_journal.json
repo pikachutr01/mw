@@ -302,6 +302,13 @@
       "when": 1786147200000,
       "tag": "0042_alliance_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1786233600000,
+      "tag": "0043_single_timeline",
+      "breakpoints": true
     }
   ]
 }

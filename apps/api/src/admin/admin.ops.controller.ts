@@ -113,8 +113,17 @@ export class AdminOpsController {
     `);
 
     /**
-     * Görev kuyruğu. ⚠️ Gecikme OYUN saatiyle ölçülüyor (`worlds.clock_offset_ms`) — gerçek
-     * saatle ölçseydik bakımdaki her dünya "saatlerce gecikmiş" görünürdü.
+     * Görev kuyruğu.
+     *
+     * ⚠️⚠️ **BURADA BOZUK BİR KOPYA VARDI (2026-08-07'de düzeltildi).** İfade
+     * `now() - clock_offset_ms` yazıyordu — `COALESCE(paused_at, …)` **eksikti**. Hemen
+     * üstündeki yorum *"bakımdaki her dünya saatlerce gecikmiş görünmesin"* diyordu ama kod
+     * tam olarak onu yapıyordu: bakım sırasında gecikme gerçek zamanla büyümeye devam ediyor
+     * ve operatör panele en çok baktığı anda sahte bir kuyruk birikimi görüyordu. Aynı metrik
+     * `mission.repository.ts`te doğru hesaplanıyordu → iki yerde iki farklı sonuç.
+     *
+     * Ders: bu ifadenin beş kopyası vardı ve dördü doğruydu. Tek zaman çizgisiyle formül
+     * `COALESCE(paused_at, now())`e indi; bakımda DONMASI hâlâ şart.
      */
     const missions = await this.db.execute<Record<string, unknown>>(sql`
       SELECT w.id AS world_id, w.name, w.state,
@@ -122,11 +131,11 @@ export class AdminOpsController {
              COUNT(*) FILTER (WHERE m.status = 'running')::int   AS running,
              COUNT(*) FILTER (WHERE m.status = 'failed')::int    AS failed,
              EXTRACT(EPOCH FROM (
-               (now() - (w.clock_offset_ms * interval '1 millisecond'))
+               COALESCE(w.paused_at, now())
                - MIN(m.execute_at) FILTER (WHERE m.status = 'scheduled')
              ))::int AS lag_s
         FROM worlds w LEFT JOIN missions m ON m.world_id = w.id
-       GROUP BY w.id, w.name, w.state, w.clock_offset_ms
+       GROUP BY w.id, w.name, w.state, w.paused_at
        ORDER BY w.id
     `);
 

@@ -59,14 +59,18 @@ export interface ClaimOptions {
  * zaten veritabanında; `now()` de öyle olsun. Böylece süreç saati ne okursa okusun vade
  * kayamaz — ve çok süreçli dağıtımda süreçler arası kayma sorunu da doğmaz.
  *
- * Aynı ifade `admin.ops.controller.ts`te gecikme ölçmek için zaten kullanılıyordu; kuyruk
- * onu kullanmıyordu. Tek yerde durması için burada.
+ * ⭐⭐ **0043'TEN SONRA İFADE SADELEŞTİ: `COALESCE(w.paused_at, now())`.**
  *
- * ⚠️ `COALESCE(paused_at, now())`: bakımda oyun saati DONAR (`game-clock.service.ts`).
- * Scheduler bakımda zaten erken dönüyor, ama formülün burada da eksiksiz olması şart —
- * `lagMs` bakım sırasında da çağrılabilir ve `now()` kullansaydı gecikme sonsuza büyürdü.
+ * `clock_offset_ms` çıkarması kalktı çünkü tek zaman çizgisinde oyun saati = gerçek saat
+ * (`world/game-clock.service.ts`). Kural DEĞİŞMEDİ, yalnız formül kısaldı: kıyaslamanın iki
+ * tarafı da hâlâ veritabanının saatinden geliyor ve yukarıdaki hata sınıfı hâlâ kapalı.
+ *
+ * ⚠️ `COALESCE(paused_at, …)` KORUNUYOR: bakımda saat DONAR. Scheduler bakımda zaten erken
+ * dönüyor ve `claimDue` ayrıca `w.paused_at IS NULL` arıyor, ama `dueStats` bakım sırasında da
+ * çağrılabiliyor — çıplak `now()` yazsaydık bakım boyunca gecikme sonsuza büyür ve panel
+ * bakımdaki her dünyayı "arızalı" gösterirdi.
  */
-const GAME_NOW_SQL = sql`(COALESCE(w.paused_at, now()) - (w.clock_offset_ms * interval '1 millisecond'))`;
+const GAME_NOW_SQL = sql`COALESCE(w.paused_at, now())`;
 
 export class MissionRepository {
   constructor(private readonly db: Db) {}

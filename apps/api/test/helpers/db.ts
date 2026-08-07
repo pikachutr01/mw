@@ -118,11 +118,16 @@ export async function setupTestDb(): Promise<DbHandle> {
  *      SQL'e taşınınca bu sefer bu taraf yanlış saate bağlanmış oldu.
  *
  * Artık iki taraf da Postgres'ten geliyor ve VM saat kayması bu testleri hiç etkilemiyor.
+ *
+ * ⭐ **0043'te bu tuzak yapısal olarak kapandı:** `dbGameNow()` ayrı bir metot olmaktan çıktı,
+ * çünkü `gameNow()` ARTIK ZATEN veritabanının saatinden okuyor (`game-clock.service.ts`).
+ * Yani "yanlış saatten okuma" seçeneği kodda kalmadı — yukarıdaki iki kırılmanın da kaynağı
+ * olan seçim noktası yok edildi.
  */
 export async function dueAt(
   clock: GameClockService, worldId: number, msAgo = 1000,
 ): Promise<string> {
-  const gameNow = await clock.dbGameNow(worldId);
+  const gameNow = await clock.gameNow(worldId);
   return new Date(gameNow.getTime() - msAgo).toISOString();
 }
 
@@ -147,6 +152,10 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
   await h.db.execute(sql`DELETE FROM missions WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM outbox WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM audit_log WHERE world_id = ${worldId}`);
+  /* ⚠️ Dünya kimlikleri her koşuda 100'den başlıyor, yani satırlar YENİDEN KULLANILIYOR.
+     Kaydırma defteri temizlenmezse önceki koşudan kalan satırlar "kaç kez kaydırıldı"
+     sayan testleri kırar (ikinci koşuda 2 görünür). */
+  await h.db.execute(sql`DELETE FROM time_shifts WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM echo_effects WHERE world_id = ${worldId}`);
   // Dünya kimlikleri her koşuda 100'den başlıyor → önceki koşunun oyuncuları temizlenmeli,
   // yoksa username/email tekilliği ikinci koşuda çakışır. (cities → players sırası önemli.)

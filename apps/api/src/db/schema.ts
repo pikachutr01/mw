@@ -135,6 +135,16 @@ export const players = pgTable('players', {
   vacationUntil: timestamp('vacation_until', { withTimezone: true }),
   vacationSince: timestamp('vacation_since', { withTimezone: true }),
   vacationEndedAt: timestamp('vacation_ended_at', { withTimezone: true }),
+  /**
+   * ⭐ Bu tatili bitirecek `vacation_end` görevinin kimliği (0043).
+   *
+   * ⚠️ Handler eskiden "bu görev BU tatile mi ait?" sorusunu `payload.since` ile
+   * `vacation_since`i ISO dize olarak karşılaştırarak cevaplıyordu. Tek zaman çizgisinde
+   * `vacation_since` bakımda kaydırılıyor, JSONB'deki kopya kaydırılmıyor → eşitlik tutmaz,
+   * handler sessizce no-op'a düşer ve oyuncu **sonsuza kadar tatilde kalır**. Kimlik
+   * kaymaya duyarsız; `endVacation()` diğer tatil alanlarıyla birlikte temizliyor.
+   */
+  vacationMissionId: bigint('vacation_mission_id', { mode: 'number' }),
   /** İttifak üyeliği (§13.15b). FK döngüsel olduğu için tembel referans (alliances aşağıda). */
   allianceId: bigint('alliance_id', { mode: 'number' })
     .references((): AnyPgColumn => alliances.id, { onDelete: 'set null' }),
@@ -902,6 +912,47 @@ export const workerHeartbeats = pgTable('worker_heartbeats', {
   /** Son turun özeti (claimed/done/lagMs · dispatched/failed/skipped) — panelde "ne yapıyor". */
   detail: jsonb('detail').notNull().default({}),
 }, (t) => [primaryKey({ columns: [t.kind, t.workerId] })]);
+
+/**
+ * ⭐⭐ ZAMAN KAYDIRMA DEFTERİ (0043, tek zaman çizgisi).
+ *
+ * Bakımdan çıkarken bekleyen vadeler duraklama süresi kadar ileri kaydırılıyor
+ * (`world/time-shift.ts` · kapsam `world/time-registry.ts`). Her kaydırma buraya bir satır
+ * bırakır — hem denetim izi hem **idempotans anahtarı**.
+ *
+ * ⚠️ `audit_log` yerine ayrı tablo, çünkü kaydırmanın tekilliği tipli bir `UNIQUE` kısıtına
+ * yaslanmak zorunda (`time_shifts_world_pause`): kaydırma çok ifadeli, uygulama katmanındaki
+ * "iki kez çağrılmasın" kontrolü tek başına yetmez. `audit_log` ise serbest biçimli ve
+ * ekleme-yalnız. Bakım ayrıca oraya da `admin.world.resume` satırı yazmaya devam ediyor —
+ * biri yönetim izi, diğeri veri dönüşümü defteri.
+ *
+ * ⚠️ `rowsByTable` boş bırakılmaz: bir tablonun sayısının aniden 0'a düşmesi, kayıt defterindeki
+ * yüklemin bozulduğunun tek göstergesi. İki bakımı yan yana koyup bakmak yeter.
+ */
+export const timeShifts = pgTable('time_shifts', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull().references(() => worlds.id),
+  /** `migration` (0043) · `maintenance` (normal bakım çıkışı) · `manual` (elle telafi). */
+  kind: text('kind').notNull(),
+  /** Duraklamanın başı. Göçte NULL — kısmî tekillik indeksi bu yüzden `WHERE ... IS NOT NULL`. */
+  pausedAt: timestamp('paused_at', { withTimezone: true }),
+  resumedAt: timestamp('resumed_at', { withTimezone: true }).notNull().defaultNow(),
+  shiftMs: bigint('shift_ms', { mode: 'number' }).notNull(),
+  /** Bariyerde görülen `running` görev sayısı — 0 olmalı. */
+  drainRunning: integer('drain_running'),
+  /** `heartbeat` (nabız duraklamayı onayladı) · `forced` · `migration`. */
+  drainProof: text('drain_proof'),
+  forced: boolean('forced').notNull().default(false),
+  actorId: bigint('actor_id', { mode: 'number' }),
+  rowsByTable: jsonb('rows_by_table').notNull().default({}),
+  /** Kaydırma anındaki kayıt defterinin parmak izi — "o gün hangi sütunlar kayıyordu". */
+  registryHash: text('registry_hash'),
+  outcome: text('outcome').notNull().default('applied'),
+}, (t) => [
+  uniqueIndex('time_shifts_world_pause').on(t.worldId, t.pausedAt)
+    .where(sql`${t.pausedAt} IS NOT NULL`),
+  index('time_shifts_world_at').on(t.worldId, t.resumedAt),
+]);
 
 /** Kaynak/asker değiştiren HER işlem before/after ile buraya yazılır (§8). */
 export const auditLog = pgTable('audit_log', {

@@ -13,13 +13,40 @@
  * bulanık da olsa görebilsin. Bakım "oyunun kapandığı" değil "dondurulduğu" an; ekranı
  * karartmak bunu yanlış anlatırdı.
  */
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { useWorldState } from '../lib/queries.ts';
-import { remaining, serverNow, useTick } from '../lib/hooks.ts';
+import { noteMaintenance, remaining, serverNow, useTick } from '../lib/hooks.ts';
 
 export function MaintenanceCurtain() {
   const { data } = useWorldState();
+  const qc = useQueryClient();
+  const wasPaused = useRef(false);
   // Geri sayım GERÇEK zamandan çizilir: bakımda oyun saati donuk (bkz. `maintenance_eta`).
   useTick(Boolean(data?.paused && data.eta));
+
+  /**
+   * ⭐⭐ BAKIM SAATİNİN TEK BAĞLANMA NOKTASI — ve bakımdan çıkışta ÖNBELLEK TAZELEME.
+   *
+   * ⚠️ Perde `data.paused` false iken erken `return null` yapıyor ama **bu effect yine koşar**:
+   * bileşen her zaman mount, yalnız çizimi boş. Geçişi görebilmemizin sebebi bu.
+   *
+   * (1) `noteMaintenance` — bakımda `gameNow()` donar, dolayısıyla ekrandaki HER geri sayım
+   *     tek noktadan durur. Bunsuz sunucunun saati donarken istemcininki akmaya devam eder ve
+   *     sayaçlar her tazelemede **geriye sıçrar** (kullanıcının şikâyet ettiği davranış).
+   *
+   * (2) ⭐ Bakım BİTİNCE `invalidateQueries()` — **pazarlıksız**. Tek zaman çizgisinde bakımdan
+   *     çıkış bekleyen tüm vadeleri ileri kaydırıyor (`time-shift.ts`); önbellekteki
+   *     `finish_at`/`execute_at` değerleri ise kaydırma ÖNCESİNDEN kalma. Tazelemeseydik
+   *     geri sayımlar bakım süresi kadar eksik, hatta "bitmiş" görünürdü — yani düzeltmeye
+   *     çalıştığımız sıçramanın aynısı, ters yönde.
+   */
+  useEffect(() => {
+    const paused = Boolean(data?.paused);
+    noteMaintenance(paused, data?.pausedAt ?? null);
+    if (wasPaused.current && !paused) void qc.invalidateQueries();
+    wasPaused.current = paused;
+  }, [data?.paused, data?.pausedAt, qc]);
 
   if (!data?.paused) return null;
   // ⚠️ `serverNow()` — ham `Date.now()` DEĞİL. `eta` gerçek zamanda doğru seçilmiş ama tarayıcı

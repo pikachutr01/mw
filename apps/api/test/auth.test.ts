@@ -386,12 +386,18 @@ describe('⭐ tembel kaynak birikimi (§3)', () => {
 
   it('bakımda kaynak BİRİKMEZ (oyun saati donuyor)', async () => {
     const cityId = await freshCity();
-    const realStart = new Date();
-    await cities.snapshot(cityId, await clock.gameNow(worldId, realStart));
+    await cities.snapshot(cityId, await clock.gameNow(worldId));
 
-    await clock.pause(worldId, realStart);
-    // Gerçek zamanda 5 saat geçti ama dünya bakımda.
-    const bakimda = await clock.gameNow(worldId, new Date(realStart.getTime() + 5 * 3_600_000));
+    await clock.pause(worldId);
+    /**
+     * ⚠️ 0043'ten sonra `realNow` enjekte edilemiyor (saat DB'den geliyor). "5 saat geçti"yi
+     * taklit etmenin yolu `paused_at`i geriye almak: oyun saati donuk olduğu için gerçek
+     * zamanda ne kadar geçtiği zaten önemsiz — ölçülen tam olarak bu.
+     */
+    await h.db.execute(sql`
+      UPDATE worlds SET paused_at = paused_at - interval '5 hours' WHERE id = ${worldId}
+    `);
+    const bakimda = await clock.gameNow(worldId);
     const snap = await cities.snapshot(cityId, bakimda);
 
     expect(snap!.gold).toBe(STARTING_RESOURCES.gold);

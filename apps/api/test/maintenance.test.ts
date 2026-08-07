@@ -21,6 +21,7 @@ import type { DbHandle } from '../src/db/client.ts';
 import { QueueService } from '../src/queues/queue.service.ts';
 import { eventForOutbox } from '../src/realtime/realtime.bus.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
+import { DrainNotReadyError } from '../src/world/time-shift.ts';
 import { MaintenanceInterceptor } from '../src/world/maintenance.interceptor.ts';
 import { WorldStateService } from '../src/world/world-state.service.ts';
 import { createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
@@ -109,55 +110,63 @@ describe('donma ve kaldığı yerden devam', () => {
    * bakımda donar ve çıkışta `clock_offset_ms`e duraklama eklendiği için tam kaldığı yerden
    * devam eder. Bu testin ölçtüğü şey ikisinin FARKININ korunması.
    */
+  /**
+   * ⭐⭐ ASIL ÖLÇÜM — kullanıcının cümlesi: *"her şey aniden donar ve bakım bitiminde kaldığı
+   * yerden devam eder"*.
+   *
+   * ⚠️ **Yöntem 0043'te değişti (tek zaman çizgisi).** Eskiden `realNow` enjekte ediliyordu;
+   * artık saat DB'den geliyor ve enjekte edilemiyor — bilerek, çünkü süreç saatiyle DB saatinin
+   * ayrışması canlıda iki kez hataya yol açtı. Uzun bir bakımı taklit etmenin yeni yolu
+   * **`paused_at`i geriye almak**: `resume` kaydırmayı `now() − paused_at` ile hesapladığı için
+   * bu, 10 dakika beklemekle bit-bit aynı kod yolunu koşturuyor.
+   *
+   * ⚠️ Değişmez artık şu: kuyruğun kalan süresi bakım BOYUNCA ve bakımdan SONRA aynı. Bunu
+   * sağlayan mekanizma da değişti — `clock_offset_ms` birikimi değil, `finish_at`in kendisinin
+   * kayması (`time-registry.ts`).
+   */
   it('kuyruğun KALAN süresi duraklama boyunca değişmiyor (tam sayı ms)', async () => {
     const t0 = await clock.gameNow(worldId);
     const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at: t0 });
     const finishAt = q.finishAt.getTime();
 
-    /**
-     * ⚠️ Duraklama gerçek zamanı ENJEKTE EDİLİYOR (`realNow`), `setTimeout` ile beklenmiyor:
-     * 10 dakika beklemek testi 10 dakika sürdürürdü, 50 ms beklemek ise ölçtüğü şeyi
-     * (uzun bir bakım) ölçmezdi. Saat servisinin zaten enjekte edilebilir olması bu yüzden.
-     */
-    const pauseAt = new Date();
-    const resumeAt = new Date(pauseAt.getTime() + 10 * 60_000);   // 10 dakikalık bakım
+    await clock.pause(worldId);
+    // 10 dakikalık bir bakımı taklit et: duraklama anını geriye al.
+    await h.db.execute(sql`
+      UPDATE worlds SET paused_at = paused_at - interval '10 minutes' WHERE id = ${worldId}
+    `);
+
+    // Bakım SIRASINDA oyun saati donuk → kalan süre gerçek zamandan bağımsız.
+    const during = (await clock.gameNow(worldId)).getTime();
+    const remainingDuring = finishAt - during;
+    expect(remainingDuring).toBeGreaterThan(0);
+
+    const shift = await clock.resume(worldId);
+    expect(shift.shiftMs).toBeGreaterThanOrEqual(10 * 60_000);
+    // ⭐ Kuyruk gerçekten kaydırıldı — kayıt defteri kapsamının kanıtı.
+    expect(shift.rowsByTable['queues.finish_at']).toBe(1);
+
+    const [after] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT finish_at, now() AS at FROM queues WHERE id = ${q.id}
+    `);
+    const remainingAfter = new Date(String(after!['finish_at'])).getTime()
+      - new Date(String(after!['at'])).getTime();
 
     /**
-     * ⚠️ "Önce"ki kalan süre **duraklama anında** ölçülüyor, duraklamadan biraz önce değil.
-     * İlk yazımda `clock.gameNow(worldId)` ile ölçülüyordu; aradaki DB gidiş-dönüşü kadar
-     * (2 ms) gerçek zaman akıyor ve test 2 ms sapma gösteriyordu. Sapma dondurmanın değil
-     * ÖLÇÜMÜN hatasıydı: iki farklı anı karşılaştırıyordu. Aynı `realNow` ile ölçmek
-     * dondurmayı yalıtıyor.
+     * ⚠️ Tolerans 1 sn: kaydırma miktarı `now()` ile hesaplanıyor ve ölçüm sorgusu ayrı bir
+     * gidiş-dönüş. Eskisi 1 ms idi çünkü her iki taraf da AYNI enjekte edilmiş `realNow`u
+     * kullanıyordu; artık iki gerçek an karşılaştırılıyor. Ölçülen davranış (kalan sürenin
+     * korunması) dakika mertebesinde, tolerans onu gizlemiyor.
      */
-    const remainingBefore = finishAt - (await clock.gameNow(worldId, pauseAt)).getTime();
-    expect(remainingBefore).toBeGreaterThan(0);
-
-    await clock.pause(worldId, pauseAt);
-
-    // Bakım SIRASINDA: oyun saati donmuş → 10 dakika sonra bile kalan süre aynı.
-    const midGameNow = (await clock.gameNow(worldId, resumeAt)).getTime();
-    expect(finishAt - midGameNow).toBe(remainingBefore);
-
-    await clock.resume(worldId, resumeAt);
-
-    const afterGameNow = (await clock.gameNow(worldId, resumeAt)).getTime();
-    const remainingAfter = finishAt - afterGameNow;
-
-    /**
-     * ⚠️ 1 ms tolerans: `clock_offset_ms` Postgres'te `EXTRACT(EPOCH …) * 1000` ile
-     * hesaplanıp `bigint`e yuvarlanıyor. Toleransı 0 yazsaydık test, ölçtüğü davranıştan
-     * bağımsız olarak yuvarlama yüzünden ara sıra kırılırdı.
-     */
-    expect(Math.abs(remainingAfter - remainingBefore)).toBeLessThanOrEqual(1);
-    // Ve gerçek zaman 10 dakika ilerlemiş olmasına rağmen iş bitmemiş olmalı.
+    expect(Math.abs(remainingAfter - remainingDuring)).toBeLessThan(1_000);
     expect(remainingAfter).toBeGreaterThan(0);
   });
 
   it('oyun saati bakımda DONAR, gerçek saat ilerlese bile', async () => {
-    const pauseAt = new Date();
-    await clock.pause(worldId, pauseAt);
-    const a = await clock.gameNow(worldId, new Date(pauseAt.getTime() + 1_000));
-    const b = await clock.gameNow(worldId, new Date(pauseAt.getTime() + 3_600_000));
+    await clock.pause(worldId);
+    const a = await clock.gameNow(worldId);
+    await new Promise((r) => setTimeout(r, 60));
+    const b = await clock.gameNow(worldId);
+    // Gerçek saat 60 ms ilerledi ama oyun saati `paused_at`te donuk.
     expect(a.getTime()).toBe(b.getTime());
   });
 
@@ -174,13 +183,50 @@ describe('donma ve kaldığı yerden devam', () => {
     await restarted.stop();
   });
 
-  it('iki kez `resume` çağrılsa bile duraklama offset\'e İKİ KEZ eklenmez', async () => {
-    const pauseAt = new Date();
-    const resumeAt = new Date(pauseAt.getTime() + 60_000);
-    await clock.pause(worldId, pauseAt);
-    const first = await clock.resume(worldId, resumeAt);
-    const second = await clock.resume(worldId, new Date(resumeAt.getTime() + 60_000));
-    expect(second.clockOffsetMs).toBe(first.clockOffsetMs);
+  /**
+   * ⭐ İKİ KEZ «devam ettir» — kaydırma İKİ KEZ uygulanmaz.
+   *
+   * ⚠️ 0043'te bu riskin ağırlığı arttı: eskiden ikinci çağrı yalnız offset'i şişirirdi, artık
+   * **tüm vadeleri ikinci kez kaydırırdı** ve geri alınamazdı. İki katmanlı koruma var:
+   * `SELECT … FOR UPDATE` + `time_shifts_world_pause` tekilliği. Burada davranış ölçülüyor.
+   */
+  it('iki kez `resume` çağrılsa bile kaydırma İKİ KEZ uygulanmaz', async () => {
+    await clock.pause(worldId);
+    await h.db.execute(sql`
+      UPDATE worlds SET paused_at = paused_at - interval '5 minutes' WHERE id = ${worldId}
+    `);
+    const first = await clock.resume(worldId);
+    const second = await clock.resume(worldId);
+
+    expect(first.outcome).toBe('applied');
+    expect(second.outcome).toBe('noop');       // dünya zaten çalışıyor → sessiz no-op
+    expect(second.shiftMs).toBe(0);
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM time_shifts
+       WHERE world_id = ${worldId} AND kind = 'maintenance'
+    `);
+    expect(Number(rows[0]!['n'])).toBe(1);
+  });
+
+  /**
+   * ⭐⭐ DRENAJ BARİYERİ — uçuşta iş varken kaydırma YAPILMAZ.
+   *
+   * Uçuştaki bir handler kaydırmadan SONRA commit ederse **kaymamış** bir vade yazar ve o
+   * görev bakım süresi kadar erken ateşlenir. `claimDue` `status='running'`i ayrı bir
+   * transaction'da commit ettiği için uçuştaki iş her zaman sayılabilir.
+   */
+  it('uçuşta görev varken resume reddedilir (409 → DrainNotReadyError)', async () => {
+    await h.db.execute(sql`
+      INSERT INTO missions (world_id, type, status, execute_at, locked_by, locked_at)
+      VALUES (${worldId}, 'echo', 'running', now(), 'test-worker', now())
+    `);
+    await clock.pause(worldId);
+
+    await expect(clock.resume(worldId)).rejects.toThrow(DrainNotReadyError);
+
+    // Dünya HÂLÂ bakımda olmalı — reddedilen bir resume yarı iş bırakmamalı.
+    expect((await clock.read(worldId)).paused).toBe(true);
   });
 });
 

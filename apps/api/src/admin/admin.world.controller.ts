@@ -10,8 +10,8 @@
  * Panel ikisini tek ekranda gösterir; sunucu ikisini ayrı tutar.
  */
 import {
-  BadRequestException, Body, Controller, Get, HttpCode, Inject, NotFoundException, Param,
-  Post, Put, Req, UseGuards,
+  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject,
+  NotFoundException, Param, Post, Put, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { SETTINGS, SETTING_GROUPS, applySettings, validatePatch } from '@mobilwar/settings';
@@ -33,6 +33,7 @@ import { combatOverrides } from '../settings/combat.ts';
 import { SettingsError, SettingsService } from '../settings/settings.service.ts';
 import { toSimulateInput } from '../simulate/simulate.controller.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
+import { DrainNotReadyError, type ShiftOutcome } from '../world/time-shift.ts';
 import { WorldStateService } from '../world/world-state.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 
@@ -126,11 +127,13 @@ export class AdminWorldController {
           state: String(r['state']),
           paused: pausedAt !== null,
           pausedAt: pausedAt?.toISOString() ?? null,
-          // Oyun saati — bakımda DONAR (`gameNow = pausedAt − offset`).
-          gameNow: this.clock.gameNowFrom({
-            clockOffsetMs: Number(r['clock_offset_ms']), pausedAt,
-          }).toISOString(),
-          clockOffsetMs: Number(r['clock_offset_ms']),
+          /**
+           * Oyun saati — tek zaman çizgisinde `now()`, bakımda DONMUŞ `pausedAt`.
+           * ⚠️ `clockOffsetMs` alanı KALDIRILDI (0043): sütun emekli, daima 0. Panelde
+           * «toplam duraklama» göstergesi de bu yüzden gitti — artık böyle bir birikim yok,
+           * duraklama süresi vadelere kaydırma olarak yansıyor (`time_shifts`).
+           */
+          gameNow: this.clock.gameNowFrom({ pausedAt }).toISOString(),
           notice: r['maintenance_notice'] == null ? null : String(r['maintenance_notice']),
           eta: r['maintenance_eta'] == null ? null : toDate(r['maintenance_eta']).toISOString(),
           startedAt: toDate(r['started_at']).toISOString(),
@@ -293,27 +296,62 @@ export class AdminWorldController {
   }
 
   /**
-   * ⭐ BAKIMDAN ÇIKAR — donmuş süre `clock_offset_ms`e eklenir, oyun **kaldığı yerden** devam
-   * eder: bir kuyruğun kalan süresi bakımdan önceki değerin AYNISIDIR (bkz. `maintenance.test.ts`).
+   * ⭐⭐ BAKIMDAN ÇIKAR — bekleyen TÜM vadeler duraklama süresi kadar ileri kaydırılır
+   * (`time-shift.ts`). Oyun kaldığı yerden devam eder: bir kuyruğun kalan süresi bakımdan
+   * önceki değerin AYNISIDIR (bkz. `maintenance.test.ts`) — ama artık bunu bir `clock_offset_ms`
+   * birikimi değil, vadelerin kendisinin kayması sağlıyor (0043, tek zaman çizgisi).
+   *
+   * ⚠️ **409 DÖNEBİLİR.** Uçuşta hâlâ bir handler varsa ya da worker duraklamayı henüz
+   * onaylamadıysa kaydırma yapılmaz: o handler kaydırmadan sonra commit ederse **kaymamış**
+   * bir vade yazar ve o görev duraklama süresi kadar erken ateşlenir. Panel sayıyı gösterip
+   * birkaç saniye sonra tekrar dener (nabız 5 sn'de bir atıyor).
    */
   @Post('worlds/:id/resume')
   @HttpCode(200)
   @UseGuards(AdminStepUpGuard)
   async resume(
-    @Param('id') id: string, @Req() req: AdminRequest,
+    @Param('id') id: string, @Body() body: unknown, @Req() req: AdminRequest,
   ): Promise<Record<string, unknown>> {
     const worldId = Number(id);
     if (!this.worldState.get(worldId)) throw new NotFoundException('Dünya bulunamadı.');
+    const force = (body as { force?: unknown } | null)?.force === true;
 
-    const clock = await this.clock.resume(worldId);
+    let shift: ShiftOutcome;
+    try {
+      shift = await this.clock.resume(worldId, { actorId: req.player!.accountId, force });
+    } catch (err) {
+      if (err instanceof DrainNotReadyError) {
+        throw new ConflictException({
+          code: 'drain_not_ready',
+          message: err.message,
+          running: err.running,
+          heartbeatSeen: err.heartbeatSeen,
+        });
+      }
+      throw err;
+    }
+
     await this.worldState.clearNotice(worldId);
-    await this.announce(worldId, req.player!.playerId, 'admin.world.resume', { paused: false });
+    await this.announce(worldId, req.player!.playerId, 'admin.world.resume', {
+      paused: false, shiftMs: shift.shiftMs, rowsByTable: shift.rowsByTable,
+    });
 
+    const clock = await this.clock.read(worldId);
     return {
       ok: true, paused: false,
       gameNow: clock.gameNow.toISOString(),
-      clockOffsetMs: clock.clockOffsetMs,
+      // ⭐ Panel bunu gösteriyor: hiçbir tablonun 0 olmaması kayıt defterinin sağlam olduğunun kanıtı.
+      shiftMs: shift.shiftMs,
+      rowsByTable: shift.rowsByTable,
+      outcome: shift.outcome,
+      forced: shift.drainProof === 'forced',
     };
+  }
+
+  /** Bakım panelinin «devam ettir» düğmesini ne zaman açacağını bilmesi için. */
+  @Get('worlds/:id/drain')
+  async drain(@Param('id') id: string): Promise<Record<string, unknown>> {
+    return this.clock.drain(Number(id)) as unknown as Record<string, unknown>;
   }
 
   /** Bakım devam ederken metni/tahmini güncelle (perde anında yenilenir). */
@@ -702,12 +740,10 @@ export class AdminWorldController {
       `),
       /**
        * ⭐ Kalan süre için **oyun saati** dönüyor. İstemci tarayıcı saatiyle hesaplasaydı
-       * duraklatılmış bir dünyada geri sayım yine akar ve tablo yalan söylerdi; dünya saati
-       * ayrıca `clock_offset_ms` kadar kaymış olabilir.
+       * duraklatılmış bir dünyada geri sayım yine akar ve tablo yalan söylerdi.
        */
       this.db.execute<Record<string, unknown>>(sql`
-        SELECT COALESCE(paused_at, now()) - (clock_offset_ms * interval '1 millisecond') AS game_now
-          FROM worlds WHERE id = ${worldId}
+        SELECT COALESCE(paused_at, now()) AS game_now FROM worlds WHERE id = ${worldId}
       `),
     ]);
 

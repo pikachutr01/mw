@@ -31,11 +31,25 @@ export function createVacationEndHandler(): MissionHandler {
      * Eski görevlerde `since` yok (bu koruma sonradan geldi) → o durumda eski davranış:
      * hâlâ tatildeyse bitir.
      */
-    if (payload.since != null) {
-      const [p] = await ctx.tx.execute<Record<string, unknown>>(sql`
-        SELECT vacation_since FROM players WHERE id = ${playerId}
-      `);
-      const since = p?.['vacation_since'] == null ? null : new Date(String(p['vacation_since'])).toISOString();
+    const [own] = await ctx.tx.execute<Record<string, unknown>>(sql`
+      SELECT vacation_mission_id, vacation_since FROM players WHERE id = ${playerId}
+    `);
+
+    if (own?.['vacation_mission_id'] != null) {
+      /**
+       * ⭐⭐ KİMLİK KARŞILAŞTIRMASI — zamandan bağımsız (2026-08-07).
+       *
+       * ⚠️ Eskiden burada `payload.since` ile `vacation_since` **ISO dize eşitliği**
+       * karşılaştırılıyordu ve bu, tek zaman çizgisinde sessiz bir arıza olurdu: bakımda
+       * `vacation_since` kaydırılıyor, JSONB'deki `since` kaydırılmıyor → eşitlik tutmaz,
+       * handler no-op'a düşer ve oyuncu **sonsuza kadar tatilde kalır**. Görev kimliği
+       * kaymaya duyarsız.
+       */
+      if (Number(own['vacation_mission_id']) !== ctx.mission.id) return;
+    } else if (payload.since != null) {
+      // Geriye dönük: kimlik sütunu doldurulmadan önce yazılmış görevler.
+      const since = own?.['vacation_since'] == null
+        ? null : new Date(String(own['vacation_since'])).toISOString();
       if (since !== new Date(payload.since).toISOString()) return;
     }
 

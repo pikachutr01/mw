@@ -95,7 +95,7 @@ describe('görev alma ve uygulama', () => {
    * saatinden geliyor → sürecin saati ne derse desin vade kayamaz.
    */
   it('⭐ vade veritabanının saatiyle ölçülür: sürecin saati ileri gitse bile erken alınmaz', async () => {
-    const dbNow = await clock.dbGameNow(worldId);
+    const dbNow = await clock.gameNow(worldId);
     const future = await enqueue(h, {
       worldId, executeAt: new Date(dbNow.getTime() + 8 * 3_600_000), label: 'sekiz-saat-sonra',
     });
@@ -108,17 +108,24 @@ describe('görev alma ve uygulama', () => {
       maxAttempts: 3, retryBackoffMs: 0, batchSize: 50,
     });
 
-    // Saatin gerçekten kaydığını doğrula — yoksa test hiçbir şey kanıtlamazdı.
-    const kayik = (await kayikSaat.read(worldId)).gameNow.getTime() - dbNow.getTime();
-    expect(kayik).toBeGreaterThan(11 * 3_600_000);
+    /**
+     * ⭐⭐ 0043'TEN SONRA İDDİA GÜÇLENDİ.
+     *
+     * Eskiden `gameNow` sürecin saatinden türüyordu; test "saat kaydı ama scheduler ona
+     * BAKMIYOR" diyordu. Artık `read()` saati doğrudan veritabanından okuyor, yani kayık bir
+     * süreç saati oyun saatini **etkileyemiyor bile**. Ölçülen şey: 12 saat ileri okuyan bir
+     * süreçte bile dünyanın saati oynamıyor. Tehlike polislenmiyor, kaynağı yok edildi.
+     */
+    const kayik = Math.abs((await kayikSaat.read(worldId)).gameNow.getTime() - dbNow.getTime());
+    expect(kayik).toBeLessThan(5_000);
 
     const r = await s.tick();
     expect(r.claimed).toBe(0);                                  // eski kod 1 alırdı
     expect((await missionRow(h, future)).status).toBe('scheduled');
 
-    // Dünyanın saatini gerçekten ileri al (negatif offset) → aynı görev artık alınmalı.
+    // Vadeyi gerçekten geçmişe al → aynı görev artık alınmalı.
     await h.db.execute(sql`
-      UPDATE worlds SET clock_offset_ms = ${-9 * 3_600_000} WHERE id = ${worldId}
+      UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${future}
     `);
     expect((await scheduler().tick()).done).toBe(1);
     expect((await missionRow(h, future)).status).toBe('done');
@@ -228,51 +235,75 @@ describe('⭐ bakım modu (çıkış kriteri)', () => {
     expect(await echoEffects(h, worldId)).toHaveLength(0);
   });
 
+  /**
+   * ⭐⭐ ÇIKIŞ KRİTERİ: *"Bakıma al → 1 saat bekle → aç → geri sayımlar 1 saat ötelenmiş."*
+   *
+   * ⚠️ Mekanizma 0043'te değişti: eskiden oyun saati geride bırakılıyordu (`clock_offset_ms`),
+   * artık **vadelerin kendisi ileri kaydırılıyor**. Ölçülen davranış aynı, kanıt farklı:
+   * görevin `execute_at`i bakım süresi kadar ileri gitmiş olmalı.
+   */
   it('bakım süresi oyun saatine YANSIMAZ → geri sayımlar bakım kadar ötelenir', async () => {
-    const realStart = new Date('2026-07-26T10:00:00.000Z');
-    const oneHourLater = new Date('2026-07-26T11:00:00.000Z');
+    const due = new Date(Date.now() + 30 * 60_000);            // 30 dk sonra vadeli
+    const id = await enqueue(h, { worldId, executeAt: due, label: 'otelenecek' });
 
-    // Bakıma al (gerçek zaman 10:00) → oyun saati donar.
-    await clock.pause(worldId, realStart);
-    const paused = await clock.read(worldId, realStart);
-    expect(paused.gameNow.getTime()).toBe(realStart.getTime());
+    await clock.pause(worldId);
+    // 1 saatlik bakımı taklit et.
+    await h.db.execute(sql`
+      UPDATE worlds SET paused_at = paused_at - interval '1 hour' WHERE id = ${worldId}
+    `);
 
-    // 1 saat sonra hâlâ bakımda: oyun saati AYNI kalmalı.
-    const stillPaused = await clock.read(worldId, oneHourLater);
-    expect(stillPaused.gameNow.getTime()).toBe(realStart.getTime());
+    // Bakımda oyun saati donuk.
+    const paused = await clock.read(worldId);
+    expect(paused.paused).toBe(true);
+    expect(paused.gameNow.getTime()).toBe(paused.pausedAt!.getTime());
 
-    // Bakımdan çık (gerçek zaman 11:00): offset += 1 saat.
-    await clock.resume(worldId, oneHourLater);
-    const resumed = await clock.read(worldId, oneHourLater);
-    expect(resumed.paused).toBe(false);
-    expect(resumed.clockOffsetMs).toBe(3_600_000);
-    // Oyun saati bakımın BAŞLADIĞI andan devam ediyor → tüm vadeler 1 saat ötelendi.
-    expect(resumed.gameNow.getTime()).toBe(realStart.getTime());
+    const shift = await clock.resume(worldId);
+    expect(shift.shiftMs).toBeGreaterThanOrEqual(3_600_000);
+    expect(shift.rowsByTable['missions.execute_at']).toBe(1);
+
+    // ⭐ Vade 1 saat ötelendi → kalan süre yine ~30 dakika.
+    const kalan = (await missionRow(h, id)).executeAt.getTime() - Date.now();
+    expect(kalan).toBeGreaterThan(29 * 60_000);
+    expect((await clock.read(worldId)).paused).toBe(false);
   });
 
   it('bakım sırasında vadesi gelen görev, bakımdan sonra oyun saatine göre işlenir', async () => {
-    const realStart = new Date(Date.now() - 3_600_000);       // 1 saat önce bakıma alındı
-    const gameDue = new Date(realStart.getTime() + 600_000);   // bakımdan 10 dk SONRAsına vadeli
-    const id = await enqueue(h, { worldId, executeAt: gameDue, label: 'bakim-sonrasi' });
+    // Bakım başladıktan 10 dk SONRAsına vadeli → bakım boyunca ateşlenmemeli.
+    const id = await enqueue(h, {
+      worldId, executeAt: new Date(Date.now() + 600_000), label: 'bakim-sonrasi',
+    });
 
-    await clock.pause(worldId, realStart);
+    await clock.pause(worldId);
     expect((await scheduler().tick()).skippedPaused).toBe(true);
-    await clock.resume(worldId, new Date());
+    await h.db.execute(sql`
+      UPDATE worlds SET paused_at = paused_at - interval '1 hour' WHERE id = ${worldId}
+    `);
+    await clock.resume(worldId);
 
-    // Oyun saati bakımın başladığı ana geri döndü → görev HÂLÂ vadesi gelmemiş olmalı.
+    // Vade de 1 saat kaydığı için görev HÂLÂ vadesi gelmemiş olmalı.
     const afterResume = await scheduler().tick();
     expect(afterResume.claimed).toBe(0);
     expect((await missionRow(h, id)).status).toBe('scheduled');
   });
 
-  it('resume iki kez çağrılsa da süre iki kez eklenmez (idempotent)', async () => {
-    const t0 = new Date(Date.now() - 60_000);
-    await clock.pause(worldId, t0);
-    const now = new Date();
-    await clock.resume(worldId, now);
-    const first = (await clock.read(worldId)).clockOffsetMs;
-    await clock.resume(worldId, new Date(now.getTime() + 60_000));
-    expect((await clock.read(worldId)).clockOffsetMs).toBe(first);
+  /**
+   * ⚠️ 0043'te bu testin ağırlığı arttı: eskiden ikinci `resume` yalnız offset'i şişirirdi,
+   * artık **tüm vadeleri ikinci kez kaydırırdı** ve geri alınamazdı.
+   */
+  it('resume iki kez çağrılsa da kaydırma iki kez uygulanmaz (idempotent)', async () => {
+    const due = new Date(Date.now() + 30 * 60_000);
+    const id = await enqueue(h, { worldId, executeAt: due, label: 'tek-kaydirma' });
+
+    await clock.pause(worldId);
+    await h.db.execute(sql`
+      UPDATE worlds SET paused_at = paused_at - interval '1 hour' WHERE id = ${worldId}
+    `);
+    await clock.resume(worldId);
+    const ilk = (await missionRow(h, id)).executeAt.getTime();
+
+    const second = await clock.resume(worldId);
+    expect(second.outcome).toBe('noop');
+    expect((await missionRow(h, id)).executeAt.getTime()).toBe(ilk);
   });
 });
 

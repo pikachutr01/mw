@@ -118,17 +118,16 @@ async function returnMission(): Promise<Record<string, unknown> | undefined> {
   `);
   return rows[0];
 }
-/** Görevi `execute_at` anına kadar oyun saatini ileri sararak çalıştırır. */
+/**
+ * Görevin vadesini geçmişe alıp çalıştırır.
+ *
+ * ⚠️ Eskiden bunun için dünyanın saati `clock_offset_ms` ile ileri sarılıyordu. Tek zaman
+ * çizgisinde (0043) öyle bir kolon yok: oyun saati = `now()`. Vadeyi geriye almak aynı işi
+ * yapıyor ve **daha dar** — yalnız hedef görevi etkiliyor, dünyadaki her şeyi değil.
+ */
 async function runDue(missionId: number): Promise<void> {
-  const rows = await h.db.execute<Record<string, unknown>>(sql`
-    SELECT execute_at FROM missions WHERE id = ${missionId}
-  `);
-  const due = toDate(rows[0]!['execute_at']);
-  // Oyun saati = gerçek saat − offset. Offset'i geriye alarak oyun saatini ileri sarıyoruz.
-  const nowReal = new Date();
   await h.db.execute(sql`
-    UPDATE worlds SET clock_offset_ms = ${nowReal.getTime() - due.getTime() - 1000}
-     WHERE id = ${worldId}
+    UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${missionId}
   `);
   await scheduler().tick();
 }

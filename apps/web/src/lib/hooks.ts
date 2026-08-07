@@ -52,36 +52,60 @@ export function useMediaQuery(query: string): boolean {
 }
 
 /**
- * ⭐ İKİ AYRI SAAT — karıştırmak 2026-08-02'de canlıda bir hataya yol açtı.
+ * ⭐⭐ İKİ SAAT — ama artık aralarında **kalıcı fark yok** (0043, tek zaman çizgisi).
  *
- *   `serverNow()` — sunucunun **gerçek** saati. Yalnız gerçek zamanda tutulan değerler için
- *                   (bakım perdesinin `maintenance_eta`'sı) ve süre FARKI hesapları için.
- *   `gameNow()`   — **oyun saati** = gerçek saat − dünyanın toplam duraklama süresi.
- *                   `execute_at`, `finish_at`, `resources_at` — yani ekranda geri sayımı
- *                   çizilen HER mutlak damga bu ölçekte tutulur (`game-clock.service.ts`).
+ *   `serverNow()` — sunucunun gerçek saati (tarayıcı saati + ölçülen sapma).
+ *   `gameNow()`   — oyunun akan zamanı. Dünya çalışıyorken **`serverNow()` ile aynı**;
+ *                   yalnız bakımda `paused_at`te DONAR.
  *
- * ⚠️ Hata şuydu: geri sayımlar oyun saatindeki damgaları GERÇEK saatle karşılaştırıyordu.
- * Fark, dünyanın duraklama toplamı kadardır (canlıda 202 sn). Uzun görevlerde bu fark
- * yutuluyor ve hiç fark edilmiyordu; ama **casusluk 120 sn sürdüğü için varış anı hep
- * "geçmiş" çıkıyordu** → geri sayım yerine sürekli «varıyor» yazıyordu. Yani hata görev
- * SÜRESİ kısaldıkça görünür oluyordu — en sinsi türden.
+ * ⚠️ Eskiden `gameNow = serverNow − dünyanın toplam duraklama süresi` idi (canlıda 196,5 sn)
+ * ve bu fark iki kez canlı hataya yol açtı: **casusluk 120 sn sürdüğü için varış anı hep
+ * "geçmiş" çıkıyor**, geri sayım yerine sürekli «varıyor» yazıyordu (2026-08-02); asker
+ * üretim sayacı da aynı sebeple kalıcı «sipariş tamamlandı» gösteriyordu (2026-08-07).
+ * Hata görev SÜRESİ kısaldıkça görünür oluyordu — en sinsi türden.
  *
- * Her iki çıpa da her yanıtta tazeleniyor; `gameNow` alanını göndermeyen uçlar offset'i
- * bozmaz, yalnız güncellemez (şehir detayı her ekranda çalışıyor ve ikisini de gönderiyor).
+ * Sunucu tarafındaki `clock_offset_ms` kaldırıldı; bakım artık saati geri bırakmıyor,
+ * **vadeleri ileri kaydırıyor**. Dolayısıyla kalan tek hata kaynağı `clockSkewMs` ve o da
+ * biriken bir sabit değil, her yanıtta **ölçülen** bir değer.
+ *
+ * ⭐ `gameNow()` fonksiyonu KORUNDU (silinmedi): `remaining()`/`remainingClock()` ve onları
+ * çağıran onlarca bileşen tek satır bile değişmeden doğru çalışmaya devam ediyor, ve
+ * **bakımda donma tek noktadan** geliyor.
  */
 let clockSkewMs = 0;
-let gameOffsetMs = 0;
+/** Dünya bakımdaysa donmuş an; değilse `null`. Geri sayımlar bakımda buna çakılır. */
+let pausedAtMs: number | null = null;
+
+/**
+ * ⚠️ Bakım eşiği: tek zaman çizgisinde `gameNow` ile `serverNow` arasında **duraklama dışında**
+ * meşru bir fark yok. 2 sn, ağ gecikmesi ve sorgu süresi için pay — altındaki fark gürültüdür.
+ */
+const PAUSE_THRESHOLD_MS = 2_000;
 
 export function noteServerTime(serverNow: string | undefined, gameNow?: string): void {
-  if (serverNow) {
-    const t = Date.parse(serverNow);
-    if (Number.isFinite(t)) clockSkewMs = t - Date.now();
-  }
-  if (serverNow && gameNow) {
-    const s = Date.parse(serverNow);
+  if (!serverNow) return;
+  const s = Date.parse(serverNow);
+  if (!Number.isFinite(s)) return;
+  clockSkewMs = s - Date.now();
+
+  if (gameNow) {
     const g = Date.parse(gameNow);
-    if (Number.isFinite(s) && Number.isFinite(g)) gameOffsetMs = g - s;
+    // Sunucu bakımdaysa `gameNow` donmuş `paused_at`i taşır → belirgin biçimde geride kalır.
+    if (Number.isFinite(g)) pausedAtMs = s - g > PAUSE_THRESHOLD_MS ? g : null;
   }
+}
+
+/**
+ * ⭐ Bakım durumunu DOĞRUDAN bildirir — `world:maintenance` olayı ve `/world/state` için.
+ *
+ * ⚠️ `noteServerTime`in eşik sezgisinden daha kesin: perde açılır açılmaz geri sayımlar
+ * donsun diye WS olayı geldiği anda çağrılıyor, sunucunun bir sonraki yanıtı beklenmiyor.
+ */
+export function noteMaintenance(paused: boolean, pausedAt?: string | null): void {
+  if (!paused) { pausedAtMs = null; return; }
+  const t = pausedAt ? Date.parse(pausedAt) : NaN;
+  // Damga yoksa "şimdi"ye donduruyoruz: yanlış an, ama akmaya devam etmekten iyi.
+  pausedAtMs = Number.isFinite(t) ? t : serverNow();
 }
 
 /** Sunucunun gerçek saati (tarayıcı saati + ölçülen sapma). */
@@ -89,9 +113,9 @@ export function serverNow(): number {
   return Date.now() + clockSkewMs;
 }
 
-/** Oyun saati — geri sayımların TAMAMI bunu kullanmalı. */
+/** Oyun saati — geri sayımların TAMAMI bunu kullanmalı. Bakımda DONAR. */
 export function gameNow(): number {
-  return serverNow() + gameOffsetMs;
+  return pausedAtMs ?? serverNow();
 }
 
 /**
