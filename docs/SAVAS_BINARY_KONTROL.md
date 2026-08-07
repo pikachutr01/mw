@@ -189,33 +189,69 @@ ancak **simülatörde** mümkün ve binary orada kuşu etkisiz sayıyor — kull
 - Yeni `SETTLE_ON_LOSS_DEFENDER` = `spy_bird` + `gnome` — §4b'de yalnız kaybeden SAVUNANA eklenir.
 - Bekçi testleri `packages/engine/test/reference.test.ts` (A1·A2·A5·A6·B2·C2·C3·D5).
 
-### ⏳ TEK AÇIK KALAN: Tur 1'de savunan gnomu (D1·D2·D3)
+### ⏳ TEK AÇIK KALAN: Tur 1'de savunan gnomu (D1·D2·D3 + F1·F2·F3)
 
-| Ölçüm | Saldıran | Savunan gnom | Ölen |
+| Ölçüm | Saldıran | Savunan | Ölen gnom |
 |---|---|---|---|
-| D1 | Cüce 120 | 500 | **4** |
-| D2 | Cüce 240 | 500 | **32** |
-| D3 | Cüce 120 | 50 | **25** |
+| D1 | Cüce 120 | Gnom 500 | **4** |
+| D2 | Cüce 240 | Gnom 500 | **32** |
+| D3 | Cüce 120 | Gnom 50 | **25** |
+| F1 | Cüce 480 | Gnom 500 | **87** |
+| F2 | Cüce 120 | Gnom 500 + **Cüce 1** | **4** (savaş 3 tur sürdü, savunan kaybetti) |
+| F3 | Cüce 120 | Gnom 500 + **Yük 500** | **4** (+ 500 yük arabası) |
 
-Bunlar **1 turda** oluyor, yani vuruşma döngüsü hiç dönmeden → bir **Tur 1 mekanizması**.
-Settle kuralı bunu açıklayamaz (kimse kayıp vermediği için `frac = 0`).
+#### ⭐ ÜÇ ÇIKARIM
 
-⚠️ Genel bir "Tur 1 hasar turu" da DEĞİL: satır 2'de (`Cüce 120 → Yük Arabası 500`) hiç yük
-arabası ölmüyor, yani mekanizma **gnoma özel**.
+**1. Gnom kaybı savaşın sonucundan TAMAMEN BAĞIMSIZ.** F2'de savunan gerçek bir 3 turluk
+savaşı kaybediyor, F3'te savunanda 500 yük arabası var — ikisinde de **yine tam 4 gnom**,
+yani D1'in birebir aynı sayısı. Sonuç yalnız *(saldıran gücü, gnom sayısı)* ikilisine bağlı.
+→ **Gnom "ele geçirilen" birim DEĞİL.** `SETTLE_ON_LOSS_DEFENDER`a konmuştu, F2 çürüttü ve
+geri alındı (2026-08-07).
 
-**Ghidra izi (2026-08-07):** ana döngü `FUN_0040dcb4` → Tur 1 = **`FUN_0040e794`**. Bu fonksiyon
-tuzak salvosundan (`(rand%25+75) × tuzak / 100`, sonda) **ÖNCE üç ayrı `FUN_0040e0c4` (hasar
-çekirdeği) çağrısı** yapıyor; sonuçları `param_1+0x10` ve `+0x18`e yazıyor. Motorda karşılığı
-`turn1GnomeSkirmish` — **yazılı ama `cfg.turn1GnomeSkirmish: false` ile kapalı** ve yönü
-saldıran-gnomu → savunan (ölçüm ise tersini söylüyor: D4'te saldıranın 500 gnomu hiçbir şey
-yapmıyor). Listeleri yürüten `FUN_00410f90` / `FUN_00411608` iterator'larının hangi birim
-indeksine oturduğunu çözmek ayrı bir tur işi.
+**2. F3'ün yük arabaları zincirleme açıklanıyor — settle kuralımız DOĞRU.**
+Satır 2'de (`Cüce 120 → Yük 500`) hiç araba ölmüyor, F3'te 500'ü birden ölüyor. Tek fark
+gnomların varlığı: **4 gnom ölünce savunanın kaybı sıfır olmaktan çıkıyor**, dolayısıyla
+`frac = kaybedenKaybı/(kaybedenKaybı+kazananKaybı) = 1` oluyor ve arabalar ele geçiriliyor.
+→ Yani F3, ayrı bir hata değil; **gnom mekanizması eklendiği an kendiliğinden düzelecek.**
+Bugün motorda arabalar ölmüyor çünkü gnomlar ölmüyor.
 
-**Pratik etkisi düşük:** yalnız "savunmada YALNIZ gnom var" hâlinde ve 500 gnomun 4'ü
-mertebesinde. Kapatmak istersen iki yol var — (a) ayrı bir Ghidra turu, (b) şu üç ölçüm:
-`Cüce 480 → Gnom 500` · `Cüce 120 → Gnom 500 + Cüce 1` · `Cüce 120 → Gnom 500 + Yük 500`
-(ilki ölçeklemeyi, ikincisi "gerçek savaş varken de oluyor mu"yu, üçüncüsü "yalnız gnom mu
-hedef"i ayırır).
+**3. Formülün ŞEKLİ çözüldü — dört ölçüm ±1 içinde tek bir doğruya oturuyor:**
+
+```
+ölen gnom = A × saldıranAdedi − B × gnomAdedi        (A = 0,23333 · B = 0,048 — CÜCE için)
+
+  Cüce 120 vs Gnom 500 →  4,00   (gerçek 4)
+  Cüce 240 vs Gnom 500 → 32,00   (gerçek 32)
+  Cüce 480 vs Gnom 500 → 88,00   (gerçek 87)
+  Cüce 120 vs Gnom  50 → 25,60   (gerçek 25)
+```
+
+Bu tam olarak standart hasar çekirdeğinin şekli: `(saldırı havuzu − mitigasyon) / hedefCanı`.
+Mekanizma motorda **zaten yazılı** (`turn1GnomeSkirmish` → `dealTargeted(atk, def, 2, 'gnome')`
+= saldıranın havuzu savunanın gnomlarını vuruyor) ama `cfg.turn1GnomeSkirmish: false` ile
+**kapalı**. Açık denendi: 500 gnomun **500'ünü birden** öldürüyor, yani havuz/mitigasyon
+katsayıları tutmuyor.
+
+**Ghidra izi:** ana döngü `FUN_0040dcb4` → Tur 1 = `FUN_0040e794`; bu fonksiyon tuzak
+salvosundan ÖNCE üç ayrı `FUN_0040e0c4` (hasar çekirdeği) çağrısı yapıyor.
+
+#### 🔵 KAPATMAK İÇİN GEREKEN: 3 ölçüm daha
+
+`A` katsayısının hangi stata bağlı olduğu bilinmiyor — **dört ölçümün dördü de Cüce ile**.
+Aşağıdaki üç satır bunu tek seferde ayırır (hepsi **Gnom 500'e karşı, 120 birim**):
+
+| Ölçüm | Saldıran | Neyi ayırt eder |
+|---|---|---|
+| G1 | **Süvari 120** | hp 300 · pAtk 40 · alan 52 · tip 2 — Cüce'ye göre oranlar 5 / 4 / 5,8: üçü de farklı |
+| G2 | **Mancınık 120** | **pAtk = 0** · hp 1500 · alan 240 · **tip 1** — pAtk'a bağlıysa sonuç **0** çıkar |
+| G3 | **Elf 120** | tip 1, hp 80 · alan 12 — G2 ile birlikte "tip 1 hiç katılıyor mu"yu ayırır |
+
+⚠️ Cüce'de `hp/alan = 60/9` ve Elf'te `80/12` **aynı orana** düşüyor, bu yüzden Elf tek başına
+hp ile alanı ayıramaz — G1 (Süvari) ve G2 (Mancınık) şart. G2 ayrıca "tip 1 birimler bu
+Tur 1 fazına giriyor mu" sorusunu da cevaplıyor.
+
+Bu üç sayı gelince formül tamamlanır, `turn1GnomeSkirmish` doğru katsayılarla açılır ve
+D1·D2·D3·F1·F2·F3 satırlarının **hepsi birden** kapanır.
 
 ---
 

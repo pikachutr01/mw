@@ -129,12 +129,13 @@ export const SETTLE_ON_LOSS: readonly string[] = ['cargo_wagon'];
  * 1000 kuşlu bir şehir düştüğünde binary 1000 kuşu da kaybettiriyor ve **ölen kuşlar ganimet
  * üretiyor**. Varsayım yalnız SALDIRAN taraf için doğruymuş.
  *
- * ⚠️ **Gnom da burada** (saldıran tarafından çıkarılma gerekçesi `SETTLE_ON_LOSS`ta) — ama
- * savunan tarafı HENÜZ ÖLÇÜLMEDİ. *"Gerçek bir savaşta savunan kaybederken gnomu ne oluyor"*
- * senaryosu binary'de koşulmadı; kuş/araba ailesiyle tutarlı olsun diye buraya kondu.
- * Ölçüm gelince doğrulanmalı.
+ * ⚠️ **GNOM BURADA DEĞİL** — bir ara konmuştu, ölçüm F2 çürüttü: `Cüce 120 → Gnom 500 + Cüce 1`
+ * savaşında savunan gerçekten kaybediyor (3 tur) ama yalnız **4 gnom** ölüyor; bu da
+ * D1'in (`Cüce 120 → Gnom 500`, savaş hiç olmuyor) birebir aynı sayısı. Yani gnom kaybı
+ * savaşın sonucundan tamamen BAĞIMSIZ — ele geçirme yok, ayrı bir Tur 1 mekanizması var
+ * (`docs/SAVAS_BINARY_KONTROL.md`, "Tur 1'de savunan gnomu").
  */
-export const SETTLE_ON_LOSS_DEFENDER: readonly string[] = ['spy_bird', 'gnome'];
+export const SETTLE_ON_LOSS_DEFENDER: readonly string[] = ['spy_bird'];
 
 /** "Yenik" kontrolünde sayılmayan birimler (binary FUN_004114b0). */
 export const NONCOMBAT: ReadonlySet<string> = new Set(['cargo_wagon', 'spy_bird', 'gnome', 'trap']);
