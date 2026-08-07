@@ -14,7 +14,7 @@
  * karartmak bunu yanlış anlatırdı.
  */
 import { useWorldState } from '../lib/queries.ts';
-import { remaining, useTick } from '../lib/hooks.ts';
+import { remaining, serverNow, useTick } from '../lib/hooks.ts';
 
 export function MaintenanceCurtain() {
   const { data } = useWorldState();
@@ -22,7 +22,9 @@ export function MaintenanceCurtain() {
   useTick(Boolean(data?.paused && data.eta));
 
   if (!data?.paused) return null;
-  const left = data.eta ? remaining(data.eta, Date.now()) : null;
+  // ⚠️ `serverNow()` — ham `Date.now()` DEĞİL. `eta` gerçek zamanda doğru seçilmiş ama tarayıcı
+  // saati sapmışsa (bu yüzden `clockSkewMs` ölçülüyor) perde yanlış bir kalan süre gösteriyordu.
+  const left = data.eta ? remaining(data.eta, serverNow()) : null;
 
   return (
     <div

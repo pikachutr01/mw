@@ -22,6 +22,7 @@
  * 4. **YAZAMAYAN OKUYABİLİR.** Susturulmuş, yeni katılmış, sohbet yasaklı ya da e-postasını
  *    doğrulamamış üye geçmişi görür. Aksi hâlde ceza "sohbetten silinmek" olurdu.
  */
+import { formatGameTime } from '@mobilwar/contracts';
 import { sql } from 'drizzle-orm';
 import { assertCanModerate, AllianceError, ROLE } from '../alliance/alliance.service.ts';
 import { toDate, type Db } from '../db/client.ts';
@@ -152,8 +153,10 @@ export class AllianceChatService {
 
   /** Susturma metni — hem hata mesajı hem açılış paketindeki şerit aynı cümleyi kullansın. */
   private muteText(until: Date | null, reason: string | null): string {
+    // ⚠️ TZ açık verilmeli — `toLocaleString` sürecin `TZ`'sini (canlıda UTC) kullanır ve
+    // oyuncuya 3 saat yanlış saat gösterirdi. Bkz. `chat.guards.ts` aynı düzeltme.
     const when = until
-      ? `${until.toLocaleString('tr-TR')} tarihine kadar`
+      ? `${formatGameTime(until)} tarihine kadar`
       : 'süresiz olarak';
     return `İttifak sohbetinde ${when} susturuldun.${reason ? ` Sebep: ${reason}` : ''}`;
   }

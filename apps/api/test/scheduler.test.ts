@@ -354,3 +354,93 @@ describe('metrikler (§8)', () => {
     expect(next?.getTime()).toBe(soon.getTime());
   });
 });
+
+/* ═══ 2026-08-06 OLAYININ BEKÇİLERİ ═══════════════════════════════════════════
+ *
+ * O gün 24 görev saatlerce kuyrukta bekledi ve hiçbir gösterge bunu söylemedi. Aşağıdaki
+ * üç test, aynı arızanın bir daha SESSİZ kalmasını engelliyor.
+ */
+describe('⭐ kuyruk körlüğü (2026-08-06)', () => {
+  /**
+   * ⭐⭐ Olayın birebir yeniden üretimi. Başka bir transaction bir görev satırını tutuyor;
+   * `SKIP LOCKED` onu atlıyor. Eskiden bu durum `claimed = 0` ile "iş yoktu"dan ayırt
+   * EDİLEMİYORDU — 9 saat böyle kaçtı.
+   */
+  it('kilitli satır atlanınca skippedLocked yanar (claimed=0 "iş yoktu" DEMEK DEĞİL)', async () => {
+    const id = await enqueue(h, { worldId, executeAt: ago(5_000), label: 'kilitli' });
+
+    // Satırı başka bir transaction'da tut ve tur boyunca bırakma.
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    const holder = h.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM missions WHERE id = ${id} FOR UPDATE`);
+      await held;
+    });
+    // Kilidin gerçekten alındığından emin ol.
+    await new Promise((r) => setTimeout(r, 150));
+
+    const r = await scheduler().tick();
+
+    expect(r.claimed).toBe(0);          // eskiden elimizdeki TEK sayı buydu
+    expect(r.due).toBe(1);              // ⭐ iş VARDI
+    expect(r.skippedLocked).toBe(1);    // ⭐ ve atlandı — arıza artık görünür
+    expect((await missionRow(h, id)).status).toBe('scheduled');
+
+    release();
+    await holder;
+  });
+
+  it('normal turda skippedLocked sıfır (sahte alarm üretmiyor)', async () => {
+    await enqueue(h, { worldId, executeAt: ago(5_000) });
+    const r = await scheduler().tick();
+    expect(r.claimed).toBe(1);
+    expect(r.skippedLocked).toBe(0);
+  });
+
+  /** `due > batchSize` iken fazlası ATLANMADI, sıraya kaldı — alarm yanmamalı. */
+  it('parti sınırını aşan iş atlanmış sayılmaz', async () => {
+    for (let i = 0; i < 3; i += 1) await enqueue(h, { worldId, executeAt: ago(5_000) });
+    const r = await scheduler({ batchSize: 2 }).tick();
+    expect(r.due).toBe(3);
+    expect(r.claimed).toBe(2);
+    expect(r.skippedLocked).toBe(0);
+  });
+
+  /** `reapStale`in kör noktası: satır `running` değil `scheduled` takıldığında. */
+  it('uzun süredir bekleyen scheduled görev stuck olarak sayılır', async () => {
+    await enqueue(h, { worldId, executeAt: ago(600_000) });   // 10 dk gecikmiş
+    await enqueue(h, { worldId, executeAt: ago(2_000) });     // taze
+    const repo = new MissionRepository(h.db);
+    const stats = await repo.dueStats(worldId, 300_000);      // eşik 5 dk
+    expect(stats.due).toBe(2);
+    expect(stats.stuck).toBe(1);
+  });
+});
+
+describe('⭐ bakım yüklemi claimDue içinde (Faz 2 ön koşulu)', () => {
+  /**
+   * ⭐ Bakım kontrolü artık `scheduler.service.ts`teki `if (world.paused)` erken çıkışına
+   * DEĞİL, SQL yüklemine dayanıyor. Uygulama katmanı atlansa bile görev alınmamalı —
+   * çünkü Faz 2'de `resume` vadeleri toplu kaydıracak ve o transaction ile araya girecek
+   * bir `claimDue` kaydırma öncesi/sonrası karışımı üretirdi.
+   */
+  it('dünya duraklıyken repo KATMANI bile görev almaz', async () => {
+    await enqueue(h, { worldId, executeAt: ago(10_000) });
+    await clock.pause(worldId);
+
+    // Doğrudan depoya iniyoruz: scheduler'ın erken çıkışını bilerek atlıyoruz.
+    const claimed = await new MissionRepository(h.db)
+      .claimDue({ worldId, limit: 50, workerId: 'test-worker' });
+
+    expect(claimed).toHaveLength(0);
+  });
+
+  it('bakımda dueStats de sıfır döner (sahte gecikme alarmı üretmez)', async () => {
+    await enqueue(h, { worldId, executeAt: ago(600_000) });
+    await clock.pause(worldId);
+
+    const stats = await new MissionRepository(h.db).dueStats(worldId, 300_000);
+    expect(stats.due).toBe(0);
+    expect(stats.lagMs).toBe(0);
+  });
+});

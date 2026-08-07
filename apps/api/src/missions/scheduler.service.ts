@@ -33,6 +33,17 @@ export interface SchedulerOptions {
   batchSize?: number;
   /** Bu süredir `running` kalan kilit crash sayılır ve kurtarılır. */
   staleLockMs?: number;
+  /**
+   * Vadesi bu kadar geçtiği hâlde hâlâ `scheduled` duran görev "takılmış" sayılır (yalnız
+   * ÖLÇÜM, kurtarma değil — `TickResult.stuck`). Varsayılan 5 dk: normal gecikme saniyeler
+   * mertebesinde, 5 dakika ancak gerçek bir arızada görülür.
+   */
+  stuckAfterMs?: number;
+  /**
+   * Bir tur bu süreyi aşarsa gürültülü loglanır; **iki katını** aşarsa tur "asılmış" kabul
+   * edilir ve döngü kilidi zorla açılır (`start()`). Varsayılan 30 sn.
+   */
+  tickTimeoutMs?: number;
   maxAttempts?: number;
   retryBackoffMs?: number;
   onError?: (err: unknown, mission: MissionRow | null) => void;
@@ -69,6 +80,24 @@ export interface TickResult {
   reaped: number;
   skippedPaused: boolean;
   lagMs: number;
+  /** Vadesi gelmiş ve alınabilir durumdaki görev sayısı (kilitliler dâhil). */
+  due: number;
+  /**
+   * ⭐ **Vadesi geldiği hâlde ALINAMAYAN görev sayısı** = `min(due, batchSize) − claimed`.
+   *
+   * ⚠️ Sıfırdan büyükse `SKIP LOCKED` birilerinin tuttuğu satırları atlıyor demektir —
+   * 2026-08-06'da 24 görevi saatlerce görünmez kılan durumun **tek doğrudan göstergesi**.
+   * O gün elimizde yalnız `claimed` vardı ve `claimed = 0`, "iş yoktu" ile "iş vardı ama
+   * alamadım"ı ayırt edemiyordu.
+   */
+  skippedLocked: number;
+  /**
+   * `stuckAfterMs`ten uzun süredir bekleyen görev sayısı. `reapStale`in kör noktası:
+   * o yalnız `running` satırları kurtarıyor, 2026-08-06'da satırlar `scheduled` takıldı.
+   * Burada yalnız **ölçülüyor** — kilitli bir satırı zorla almak `SKIP LOCKED`'ın var oluş
+   * sebebini (çift işleme) delerdi. Faz 3'te alarma bağlanacak.
+   */
+  stuck: number;
 }
 
 export class SchedulerService {
@@ -79,6 +108,12 @@ export class SchedulerService {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopped = false;
+  /** Süren turun başlangıcı — asılı tur tespiti için (`noteStalledTick`). */
+  private runStartedAt = 0;
+  /** Her tura artan sayaç: zorla açılmış bir turun geç `finally`'si yenisini kesmesin. */
+  private runGeneration = 0;
+  /** Bir sonraki "tur asıldı" uyarısının eşiği (katlanarak büyür, log fırtınası olmasın). */
+  private nextStallWarnMs = 0;
 
   constructor(
     private readonly db: Db,
@@ -93,6 +128,8 @@ export class SchedulerService {
       pollIntervalMs: options.pollIntervalMs ?? 1000,
       batchSize: options.batchSize ?? 50,
       staleLockMs: options.staleLockMs ?? 60_000,
+      stuckAfterMs: options.stuckAfterMs ?? 300_000,
+      tickTimeoutMs: options.tickTimeoutMs ?? 30_000,
       maxAttempts: options.maxAttempts ?? 5,
       retryBackoffMs: options.retryBackoffMs ?? 5_000,
       onError: options.onError,
@@ -106,6 +143,7 @@ export class SchedulerService {
   async tick(): Promise<TickResult> {
     const result: TickResult = {
       claimed: 0, done: 0, retried: 0, dead: 0, reaped: 0, skippedPaused: false, lagMs: 0,
+      due: 0, skippedLocked: 0, stuck: 0,
     };
 
     /**
@@ -128,7 +166,11 @@ export class SchedulerService {
     }
 
     result.reaped = await this.repo.reapStale(this.opts.worldId, this.opts.staleLockMs);
-    result.lagMs = await this.repo.lagMs(this.opts.worldId);
+
+    const dueStats = await this.repo.dueStats(this.opts.worldId, this.opts.stuckAfterMs);
+    result.lagMs = dueStats.lagMs;
+    result.due = dueStats.due;
+    result.stuck = dueStats.stuck;
 
     const claimed = await this.repo.claimDue({
       worldId: this.opts.worldId,
@@ -136,6 +178,19 @@ export class SchedulerService {
       workerId: this.opts.workerId,
     });
     result.claimed = claimed.length;
+
+    /**
+     * ⭐ ATLANAN SATIR SAYISI — bir çıkarma işlemi, ek sorgu yok.
+     *
+     * `due` sayımı ile `claimDue` arasında bir yarış var (arada yeni görev vadesi gelebilir,
+     * başka bir worker satır alabilir) → sonuç **kısa süreli sahte pozitif** verebilir. Bu
+     * yüzden burada alarm ÜRETİLMİYOR, yalnız sayı kaydediliyor; kalıcı bir sorun ancak
+     * ardışık turlarda sıfırdan büyük kalırsa anlaşılır (Faz 3'te eşik oradan bakacak).
+     *
+     * ⚠️ `min(due, batchSize)`: `due` limitten büyükse fazlası **atlanmadı, sıraya kaldı** —
+     * onu atlanmış saymak her kalabalık turda sahte alarm üretirdi.
+     */
+    result.skippedLocked = Math.max(0, Math.min(result.due, this.opts.batchSize) - result.claimed);
 
     for (const mission of claimed) {
       try {
@@ -172,6 +227,8 @@ export class SchedulerService {
       claimed: result.claimed, done: result.done, retried: result.retried,
       dead: result.dead, reaped: result.reaped,
       lagMs: result.lagMs, paused: result.skippedPaused,
+      // ⭐ 2026-08-06 olayının göstergeleri — panelde bunlara bakılacak.
+      due: result.due, skippedLocked: result.skippedLocked, stuck: result.stuck,
       pollIntervalMs: this.opts.pollIntervalMs,
     });
   }
@@ -276,23 +333,69 @@ export class SchedulerService {
     });
   }
 
-  /** Sürekli döngü. `ROLE=all` profilinde API süreciyle aynı yerde çalışır. */
+  /**
+   * Sürekli döngü. `ROLE=all` profilinde API süreciyle aynı yerde çalışır.
+   *
+   * ⚠️⚠️ **`if (this.running) return` TEK BAŞINA ÖLÜMCÜLDÜ (2026-08-07'de kapatıldı).**
+   *
+   * Yeniden girişi engelliyor — bu doğru — ama bir tur **asla çözülmezse** (kopmuş ama TCP
+   * keepalive'ı henüz dolmamış bir DB bağlantısında asılı kalan sorgu; canlıda `tcp_keepalives_idle`
+   * **7200 sn**) bayrak sonsuza kadar `true` kalır ve her zamanlayıcı ateşlemesi **sessizce**
+   * geri döner. Ne log, ne hata, ne nabız değişimi — kuyruk durur ve hiçbir yerden anlaşılmaz.
+   *
+   * Çare iki katmanlı:
+   *  1. **Görünürlük:** tur `tickTimeoutMs`ı aşarsa her ateşlemede değil, **büyüyen aralıklarla**
+   *     loglanır (log fırtınası kuyruğu kurtarmıyor, yalnız diski dolduruyor).
+   *  2. **Kurtarma:** iki katı aşılırsa bayrak zorla açılır. ⚠️ Asılı tur **iptal edilmiyor** —
+   *     JS'te bir promise'i dışarıdan iptal etmenin yolu yok. Ama yeni tura izin vermek zararsız:
+   *     `claimDue` `FOR UPDATE SKIP LOCKED` kullanıyor, yani asılı tur bir satır tutuyorsa yeni
+   *     tur onu zaten atlar ve **çift işleme olmaz**. Asılı tur sonunda çözülürse `finally`
+   *     bayrağı bir kez daha kapatır; `runGeneration` sayacı onun geç gelen `finally`'sinin
+   *     yeni turu iptal etmesini engelliyor.
+   */
   start(): void {
     if (this.timer) return;
     this.stopped = false;
     const loop = async (): Promise<void> => {
-      if (this.stopped || this.running) return;
+      if (this.stopped) return;
+      if (this.running) {
+        this.noteStalledTick();
+        return;
+      }
       this.running = true;
+      this.runStartedAt = Date.now();
+      const generation = ++this.runGeneration;
       try {
         await this.tick();
       } catch (err) {
         this.opts.onError?.(err, null);
       } finally {
-        this.running = false;
+        // Zorla açılmış bir turun geç gelen `finally`'si, ondan sonra başlayan turu kesmesin.
+        if (this.runGeneration === generation) this.running = false;
       }
     };
     this.timer = setInterval(() => void loop(), this.opts.pollIntervalMs);
     void loop();
+  }
+
+  /** Süren tur uzadı: önce uyar, sonra kilidi zorla aç. Uyarı aralığı katlanarak büyür. */
+  private noteStalledTick(): void {
+    const elapsed = Date.now() - this.runStartedAt;
+    if (elapsed < this.opts.tickTimeoutMs) return;
+
+    if (elapsed >= this.nextStallWarnMs) {
+      this.nextStallWarnMs = Math.max(elapsed * 2, this.opts.tickTimeoutMs * 2);
+      this.opts.onError?.(
+        new Error(`[scheduler] tur ${Math.round(elapsed / 1000)} sn'dir bitmedi — kuyruk DURMUŞ olabilir`),
+        null,
+      );
+    }
+
+    if (elapsed >= this.opts.tickTimeoutMs * 2) {
+      this.runGeneration++;          // asılı turun `finally`'sini etkisizleştir
+      this.running = false;          // yeni tura izin ver (SKIP LOCKED çift işlemeyi önlüyor)
+      this.nextStallWarnMs = this.opts.tickTimeoutMs;
+    }
   }
 
   /** Graceful stop: çalışan tur bitene kadar bekler. */

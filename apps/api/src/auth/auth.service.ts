@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { DELETED_NAME_RE } from '@mobilwar/catalog';
+import { formatGameTime } from '@mobilwar/contracts';
 import { EmailRiskService, normalizeEmail } from '../abuse/email-risk.service.ts';
 import { DeviceSignalService, type DeviceContext } from '../abuse/device-signal.service.ts';
 import { CityService } from '../cities/city.service.ts';
@@ -273,7 +274,9 @@ export class AuthService {
      */
     const banUntil = row['ban_until'] ? toDate(row['ban_until']) : null;
     if (row['banned_at'] && (banUntil == null || banUntil > new Date())) {
-      const until = banUntil ? ` (${banUntil.toLocaleString('tr-TR')} tarihine kadar)` : '';
+      // ⚠️ TZ açık: `toLocaleString` sürecin `TZ`'sini (canlıda UTC) kullanıyordu ve giriş
+      // ekranındaki ceza bitişi 3 saat geriden görünüyordu. Bkz. `chat.guards.ts`.
+      const until = banUntil ? ` (${formatGameTime(banUntil)} tarihine kadar)` : '';
       const why = row['ban_reason'] ? ` Sebep: ${String(row['ban_reason'])}` : '';
       throw new AuthError('banned', `Bu hesap cezalı${until}.${why}`);
     }

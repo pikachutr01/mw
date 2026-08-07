@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api.ts';
-import { remaining, remainingLong, useTick } from '../lib/hooks.ts';
+import { gameNow, remaining, remainingLong, useTick } from '../lib/hooks.ts';
 import { useVacation } from '../lib/queries.ts';
 import { useConfirm } from './Modal.tsx';
 import { Button, ErrorBox, Panel, Skeleton } from './ui.tsx';
@@ -67,7 +67,10 @@ export function VacationPanel(): React.ReactElement {
        otomatik çıkış günlerle. Aynı biçimi kullansaydık üstteki `719 sa 56 dk 17 sn` diye
        çıkardı — okunmuyor ve saniyesi boş yere titriyordu. */
     const kalanKilit = remaining(d.canLeaveAt);       // null ⇒ 48 saat doldu
-    const kalanOtomatik = remainingLong(d.until);
+    /* ⚠️ Çıpa AÇIKÇA `gameNow()`: `remainingLong` varsayılanı `serverNow()` ve `d.until`
+       oyun saatinde yazılıyor (`vacation.service.ts`). Gün ölçeğinde fark görünmüyordu ama
+       aynı panelin bir satır üstü oyun saatinde — iki ölçek yan yana duramaz. */
+    const kalanOtomatik = remainingLong(d.until, gameNow());
 
     const cik = async (): Promise<void> => {
       const ok = await confirm({

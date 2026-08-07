@@ -81,6 +81,20 @@ export class MissionRepository {
    * ⚠️ `FOR UPDATE` yalnız `missions` satırlarını kilitler (`OF m`): `worlds` JOIN'i sırf
    * oyun saatini okumak için var ve dünya satırını kilitlemek tüm kuyruğu tek satıra seri
    * hâle getirirdi.
+   *
+   * ⭐⭐ **`w.paused_at IS NULL` YÜKLEMİ — bakım kararı da veriye yapıştırıldı (2026-08-07).**
+   *
+   * Bakım kontrolü `scheduler.service.ts`'te de var ama orası `clock.read()` ile **ayrı bir
+   * sorguda, ayrı bir anda** bakıyor: `read()` ile `claimDue()` arasında `pause()` commit ederse
+   * tur devam eder ve görev alır. Bugün bu zararsız (vadesi gerçekten gelmiş bir görev), ama
+   * bakımdan çıkışta vadeler toplu kaydırılmaya başlayınca **kaydırma öncesi/sonrası karışımı**
+   * üretirdi — geri alınamaz bir hata sınıfı.
+   *
+   * Yüklem SQL'e konunca ara durum kalmıyor: `claimDue` ya `paused_at`'in dolu olduğu anı görür
+   * (alt sorgu sıfır satır, hiçbir satıra kilit bile denemez) ya da boşaldığı anı görür. Bu,
+   * 2026-08-03'te oyun saati için öğrenilen dersin aynısı: **kıyaslama verinin yanında yapılır.**
+   * Uygulama katmanındaki kontrol ucuz bir erken çıkış olarak kalıyor — ama doğruluk artık ondan
+   * gelmiyor.
    */
   async claimDue(opts: ClaimOptions): Promise<MissionRow[]> {
     const rows = await this.db.execute<MissionRowRaw>(sql`
@@ -93,6 +107,7 @@ export class MissionRepository {
              SELECT m2.id FROM missions m2
                JOIN worlds w ON w.id = m2.world_id
               WHERE m2.world_id = ${opts.worldId}
+                AND w.paused_at IS NULL
                 AND m2.status = 'scheduled'
                 AND m2.execute_at <= ${GAME_NOW_SQL}
               ORDER BY m2.execute_at, m2.id
@@ -176,15 +191,49 @@ export class MissionRepository {
     return toDateOrNull(rows[0]?.execute_at);
   }
 
-  /** SLO metriği: görev gecikmesi = gameNow − execute_at (§8, p95 < 2 sn hedefi). */
-  async lagMs(worldId: number): Promise<number> {
-    const rows = await this.db.execute<{ lag: number } & Record<string, unknown>>(sql`
-      SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (${GAME_NOW_SQL} - m.execute_at)) * 1000), 0)::bigint AS lag
+  /**
+   * ⭐ VADESİ GELMİŞ İŞİN KÜNYESİ — tek sorgu, üç sayı (2026-08-07'de `lagMs`ten büyüdü).
+   *
+   *   `lagMs`  — SLO metriği: en eski bekleyen görevin gecikmesi (§8, p95 < 2 sn hedefi)
+   *   `due`    — vadesi gelmiş **ve** alınabilir durumdaki görev sayısı
+   *   `stuck`  — bunlardan `stuckAfterMs`ten uzun süredir bekleyenler
+   *
+   * ⚠️⚠️ **`due` NEDEN VAR — 2026-08-06 olayının kör noktası tam olarak buydu.**
+   *
+   * O gün 24 görev saatlerce kuyrukta bekledi ve **hiçbir gösterge bunu söylemedi**. Sebep:
+   * `claimDue`'daki `SKIP LOCKED`, terk edilmiş bir transaction'ın tuttuğu satırları sessizce
+   * atlıyordu. Scheduler ölmemişti — daha YENİ görevler zamanında koşarken daha ESKİLERİ
+   * bekliyordu. Ama tur sonucunda yalnız `claimed` vardı ve `claimed = 0`, "iş yoktu" ile
+   * "iş vardı ama alamadım"ı **ayırt edemiyordu**.
+   *
+   * `due` ile `claimed` arasındaki fark o ayrımı veriyor: `skippedLocked = min(due, limit) − claimed`
+   * (`scheduler.service.ts`). Sıfırdan büyükse birileri satırlarımızı tutuyor demektir.
+   *
+   * ⚠️ Bu sorgu `claimDue` ile **aynı yüklemleri** kullanmak zorunda (`paused_at`, `status`,
+   * `execute_at`) — yoksa fark anlamını yitirir ve sahte alarm üretir.
+   */
+  async dueStats(worldId: number, stuckAfterMs: number): Promise<{ lagMs: number; due: number; stuck: number }> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (${GAME_NOW_SQL} - m.execute_at)) * 1000), 0)::bigint AS lag,
+             COUNT(*)::int AS due,
+             COUNT(*) FILTER (
+               WHERE m.execute_at <= ${GAME_NOW_SQL} - (${stuckAfterMs}::bigint * interval '1 millisecond')
+             )::int AS stuck
         FROM missions m JOIN worlds w ON w.id = m.world_id
-       WHERE m.world_id = ${worldId} AND m.status = 'scheduled'
+       WHERE m.world_id = ${worldId} AND w.paused_at IS NULL AND m.status = 'scheduled'
          AND m.execute_at <= ${GAME_NOW_SQL}
     `);
-    return Number(rows[0]?.lag ?? 0);
+    const r = rows[0];
+    return {
+      lagMs: Number(r?.['lag'] ?? 0),
+      due: Number(r?.['due'] ?? 0),
+      stuck: Number(r?.['stuck'] ?? 0),
+    };
+  }
+
+  /** Geriye dönük uyumluluk — yalnız gecikmeyi isteyen çağıranlar için. */
+  async lagMs(worldId: number): Promise<number> {
+    return (await this.dueStats(worldId, 0)).lagMs;
   }
 
   async countByStatus(worldId: number): Promise<Record<string, number>> {

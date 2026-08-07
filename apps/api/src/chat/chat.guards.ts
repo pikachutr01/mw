@@ -14,6 +14,7 @@
  * ⚠️ Bu dosya bir REFACTOR ürünü: davranış **birebir** korunmalı. Kabul ölçütü
  * `apps/api/test/chat.test.ts`in tek satır değişmeden yeşil kalması.
  */
+import { formatGameTime } from '@mobilwar/contracts';
 import { sql } from 'drizzle-orm';
 import {
   isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
@@ -62,8 +63,14 @@ export async function activeBan(tx: Tx, worldId: number, playerId: number): Prom
 export async function assertNotBanned(tx: Tx, worldId: number, playerId: number): Promise<void> {
   const ban = await activeBan(tx, worldId, playerId);
   if (!ban) return;
+  /**
+   * ⚠️ `toLocaleString('tr-TR')` DEĞİL — o, biçimi Türkçe yapar ama **saat dilimini SÜRECİN
+   * `TZ`'sine bırakır** ve sunucu UTC'de koşuyor. Oyuncu «19:51'e kadar» görürken yönetim
+   * paneli aynı anı «22:51» gösteriyordu: 3 saatlik, açıklaması olmayan bir çelişki.
+   * `formatGameTime` zaman dilimini açıkça `Europe/Istanbul` veriyor (`packages/contracts`).
+   */
   const until = ban.until
-    ? `${ban.until.toLocaleString('tr-TR')} tarihine kadar`
+    ? `${formatGameTime(ban.until)} tarihine kadar`
     : 'süresiz olarak';
   const reason = ban.reason ? ` Sebep: ${ban.reason}` : '';
   throw new ChatError(

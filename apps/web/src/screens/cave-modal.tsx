@@ -16,7 +16,7 @@ import { useState } from 'react';
 import { UNITS_BY_ID, WARRIOR_ORDER, caveTransferSeconds } from '@mobilwar/catalog';
 import type { CaveState, CityDetail } from '../lib/queries.ts';
 import { useCancelCaveJob, useCaveJob } from '../lib/queries.ts';
-import { fmt, formatDuration, remaining } from '../lib/hooks.ts';
+import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
 import { nameOf } from '../lib/names.ts';
 import { Modal } from '../components/Modal.tsx';
 import { AmountInput, Button, CatalogIcon, Empty, ErrorBox } from '../components/ui.tsx';
@@ -30,6 +30,14 @@ export function CaveModal({
   const [picked, setPicked] = useState<Record<string, string>>({});
   const job = useCaveJob(city.id);
   const cancel = useCancelCaveJob(city.id);
+
+  /**
+   * ⚠️ Aşağıda iki geri sayım çiziliyor (onarım ve süren iş) ama saniyelik tetik YOKTU:
+   * modal açıkken sayaçlar donuk kalıyor, yalnız üst sorgu tazelendiğinde (60 sn / 5 dk)
+   * sıçrıyordu. Tetik yalnız gösterilecek bir şey varken çalışır — boş modalde zamanlayıcı
+   * açmanın anlamı yok.
+   */
+  useTick(cave.repairing || cave.job != null);
 
   // Kaynak liste sekmeye göre değişir: doldururken BARAKA, boşaltırken MAĞARA.
   const source = tab === 'store' ? city.units : cave.units;

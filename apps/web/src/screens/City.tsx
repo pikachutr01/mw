@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { caveRepairSeconds, wallCurrentIntegrity } from '@mobilwar/catalog';
 import { nameOf } from '../lib/names.ts';
-import { fmt, formatDuration, remaining, serverNow, useTick } from '../lib/hooks.ts';
+import { fmt, formatDuration, gameNow, remaining, useTick } from '../lib/hooks.ts';
 import {
   useCancelCaveJob, useCancelQueue, useCatalog, useCity, useEnqueue, useMoveQueue,
   type CatalogUnit, type CityDetail, type QueueRow, type TechQueueRow,
@@ -163,7 +163,13 @@ function ProgressRow({
 }) {
   const start = Date.parse(startedAt);
   const end = Date.parse(finishAt);
-  const pct = Math.min(100, Math.max(0, ((serverNow() - start) / Math.max(1, end - start)) * 100));
+  /**
+   * ⚠️ `gameNow()` — `serverNow()` DEĞİL. `startedAt`/`finishAt` OYUN saatinde tutuluyor
+   * (`queue.service.ts`), dolayısıyla çubuk da o ölçekte hesaplanmalı. Eskiden burada
+   * `serverNow()` vardı: **çubuk gerçek saatte, hemen yanındaki yazı oyun saatinde** koşuyordu
+   * ve kısa kuyruklarda çubuk %100'e vardığında yazı hâlâ süre gösteriyordu.
+   */
+  const pct = Math.min(100, Math.max(0, ((gameNow() - start) / Math.max(1, end - start)) * 100));
   return (
     <div className="mt-1.5 border-t border-border pt-1.5">
       <div className="mb-1 flex items-center gap-2 text-[11px]">
@@ -191,7 +197,13 @@ function ProgressRow({
  */
 function WallRepairRow({ repair }: { repair: { integrity: number; from: string | null; until: string } }) {
   useTick();
-  const now = new Date(serverNow());
+  /**
+   * ⚠️⚠️ `gameNow()` ŞART. `repair.from`/`repair.until` oyun saatinde yazılıyor
+   * (`battle.handlers.ts`); `serverNow()` ile okumak bütünlüğü dünyanın toplam duraklama
+   * süresi kadar İLERİDEN gösteriyordu. Ve bu sayı süs değil: hemen yanında *"saldırı gelirse
+   * bu oranla savaşır"* yazıyor — yani oyuncu savaş kararını yanlış sayıya bakarak veriyordu.
+   */
+  const now = new Date(gameNow());
   const current = wallCurrentIntegrity(
     repair.integrity, repair.from ? new Date(repair.from) : null, new Date(repair.until), now,
   );
@@ -500,7 +512,15 @@ function ProductionPanel({
   art?: 'units' | 'defenses';
 }) {
   const [collapsed, setCollapsed] = useCollapsed();
-  const now = serverNow();
+  /**
+   * ⚠️⚠️ `gameNow()` — burada `serverNow()` vardı ve **canlıda görünen bir hataydı**.
+   * `q.startedAt` oyun saatinde; `unitProgress` üretilen adedi `(now − start) / perUnit` ile
+   * sayıyor. Gerçek saatle okununca her sayaç dünyanın toplam duraklama süresi kadar ileri
+   * gidiyordu (canlıda ~196 sn) → `perUnitSeconds` bundan küçük olan birimlerde bant
+   * **kalıcı olarak "sipariş tamamlandı"** gösteriyor, üstelik `useProductionSync` sunucuyla
+   * çelişen bir sayı görüp boşuna tazeleme tetikliyordu.
+   */
+  const now = gameNow();
 
   // Süren emirlerin toplam üretimi — değiştiği anda (kısılmış) tazeleme tetikler.
   const progress = new Map<number, UnitProgress | null>();
@@ -600,7 +620,9 @@ const remaining_ = (iso: string): string => remaining(iso) ?? 'birazdan';
 function UnitTicker({ start, end, finished, noun = 'asker' }: {
   start: number; end: number; finished: boolean; noun?: string;
 }) {
-  const now = serverNow();
+  // ⚠️ `start`/`end` `unitProgress`ten geliyor, o da oyun saatindeki `startedAt`ten türüyor →
+  // burada da OYUN saati. `serverNow()` ile okunduğunda sayaç hep sıfır çıkıyordu.
+  const now = gameNow();
   const pct = finished ? 100 : Math.min(100, Math.max(0, ((now - start) / Math.max(1, end - start)) * 100));
   const left = Math.max(0, (end - now) / 1000);
   // Yeni pencerenin ilk saniyesinde çubuk geri sarmasın diye geçiş kapatılır.
@@ -658,8 +680,10 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
     .sort((a, b) => (a.position ?? 1) - (b.position ?? 1));
 
   // Sur onarımı sürüyor mu? (sv butonu kilidi + satır içi gösterge)
+  // ⚠️ `gameNow()`: `until` oyun saatinde. `serverNow()` ile kilit erken açılıyor, oyuncu
+  // «sv.» düğmesine basıyor ve sunucu reddediyordu — istemci ile sunucu aynı fikirde olmalı.
   const wallRepairing = kind === 'defense' && city.wallRepair != null
-    && Date.parse(city.wallRepair.until) > serverNow();
+    && Date.parse(city.wallRepair.until) > gameNow();
 
   /**
    * ⭐ Karşılıklı kilidin ÜRETİM YÖNÜ (§13.11.5a): bu şehirde Baraka yükseltiliyorsa savaşçı
