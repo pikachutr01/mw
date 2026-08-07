@@ -174,7 +174,7 @@ export interface CombatConfig {
   /** Tur programı: hangi turda hangi faz türleri devrede. Tur 1 = skirmish (genel vuruşma yok). */
   turnSchedule: Readonly<Record<number, readonly (1 | 2 | 3)[]>>;
 
-  /** Binary'nin Tur1 gnom-skirmish'i (emekli; yalnız arşiv/karşılaştırma için). */
+  /** ⭐ Binary'nin Tur 1 gnom çarpışması — 2026-08-07'de ölçülüp AÇILDI (combat.ts başlığı). */
   turn1GnomeSkirmish: boolean;
 
   /** Savunanda faz-tipi filtresi (ÇÜRÜTÜLDÜ — menzilli birim yer birimini vurabilir). */
@@ -226,7 +226,8 @@ export const DEFAULT_COMBAT_CONFIG: CombatConfig = {
   heroXpShare: { winner: 2 / 3, loser: 1 / 3 },
   night: { base: 0.7 },
   turnSchedule: { 1: [], 2: [1, 3], 3: [1, 2, 3], 4: [1, 2, 3], 5: [1, 2, 3] },
-  turn1GnomeSkirmish: false,
+  /** ⭐ 2026-08-07: 8 binary ölçümüyle çözüldü, AÇILDI (gerekçe `turn1GnomeSkirmish` başlığında). */
+  turn1GnomeSkirmish: true,
   defenderTypeFilter: false,
   combatThreshold: 0,
   debrisRate: 0.3,

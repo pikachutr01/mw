@@ -1474,6 +1474,15 @@ describe('sur yıkımı ve onarımı', () => {
   it('tam yıkım: üretim iptal, "1 ünite eksik" iade, bilgi YALNIZ savunanın raporunda', async () => {
     await setWallLevel(1);
     await giveUnits(attackCity, 'dwarf', 6000);
+    /**
+     * ⚠️ Savunana GARNİZON şart (2026-08-07). Bu test eskiden savunanı bomboş bırakıyordu ve
+     * yalnız Sur 1 ile geçiyordu — çünkü motor sur SEVİYESİNİ canlı birim sayıyordu, savaş
+     * 5 tur boşa dönüyor ve sur o turlarda yıkılıyordu. O sayım hatalıydı ve düzeltildi
+     * (`combatAlive` artık `LEVEL_BASED` yapıları saymıyor; binary de aynısını yapıyor:
+     * savunanda savaşacak kimse yoksa savaş 1 turda biter ve **sur hiç yıpranmaz**).
+     * Testin ölçtüğü şey sur YIKIMI olduğu için kuruluma gerçek bir savunan konuyor.
+     */
+    await giveUnits(defendCity, 'dwarf', 20);
     const at = await clock.gameNow(worldId);
     const kasa0 = await resourcesOf(defendCity);
 
@@ -1548,6 +1557,8 @@ describe('sur yıkımı ve onarımı', () => {
   it('çifte saldırı: ikinci savaş ilkinin iadesini kasada, surunu hasarlı bulur', async () => {
     await setWallLevel(1);
     await giveUnits(attackCity, 'dwarf', 12_000);
+    /* ⚠️ Garnizon şart — gerekçe bir üstteki testte (sur tek başına savaşı sürdüremez). */
+    await giveUnits(defendCity, 'dwarf', 20);
     const at = await clock.gameNow(worldId);
     await h.db.execute(sql`
       INSERT INTO queues (world_id, city_id, player_id, category, item_type, count, done,

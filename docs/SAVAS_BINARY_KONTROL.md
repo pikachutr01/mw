@@ -235,6 +235,53 @@ katsayıları tutmuyor.
 **Ghidra izi:** ana döngü `FUN_0040dcb4` → Tur 1 = `FUN_0040e794`; bu fonksiyon tuzak
 salvosundan ÖNCE üç ayrı `FUN_0040e0c4` (hasar çekirdeği) çağrısı yapıyor.
 
+#### ✅ ÇÖZÜLDÜ (2026-08-07, G bloğu geldikten sonra) — 11/11 birebir
+
+Üç ölçüm formülü tek seferde açtı:
+
+| Ölçüm | Saldıran | Sonuç |
+|---|---|---|
+| G1 | **Süvari 120** | 115 gnom |
+| G2 | **Mancınık 120** | **0 gnom** · ama saldıran **20 mancınık** kaybediyor |
+| G3 | **Elf 120** | **0 gnom** |
+
+**Formül — iki yön, tek kural:**
+
+```
+öldürülen = ⌊ (Σ_{tip2} kaynak.hp × adet  −  hedef.pDef × hedefAdedi) / hedef.mDef ⌋
+
+  1) savunanın GNOMLARI      →  saldıranın MANCINIKLARI   (gnom sabotajcı rolü)
+  2) saldıranın tip-2 ORDUSU →  savunanın GNOMLARI
+```
+
+| Ölçüm | Hesap | Binary |
+|---|---|---|
+| Cüce 120 | ⌊(7.200−6.000)/260⌋ = **4** | 4 |
+| Cüce 240 | ⌊(14.400−6.000)/260⌋ = **32** | 32 |
+| Cüce 480 | ⌊(28.800−6.000)/260⌋ = **87** | 87 |
+| Cüce 120 / 50 gnom | ⌊(7.200−600)/260⌋ = **25** | 25 |
+| Süvari 120 | ⌊(36.000−6.000)/260⌋ = **115** | 115 |
+| Elf · Mancınık (tip 1) | havuza girmez → **0** | 0 |
+| gnom → mancınık | ⌊(100.000−14.400)/4.160⌋ = **20** | 20 |
+
+⭐ **TİP 2 ŞARTI ölçümden geldi:** Elf ve Mancınık tip 1 → hiç gnom öldürmüyor; Cüce ve Süvari
+tip 2 → öldürüyor. Varsayım değil, G2/G3'ün doğrudan sonucu.
+
+⭐ **AŞAĞI YUVARLAMA ŞART.** Motorun ortak `applyLoss`'u kesirli bırakıp sonda yuvarlıyor;
+binary öldürüleni `floor`luyor. Üç ölçüm (4,61 · 87,69 · 20,58) tam da kesirli kısmı ≥ 0,5
+olduğu için **1 fazla** çıkıyordu. `applyLoss`a DOKUNULMADI — 53 altın Sur/Kalkan testi ve
+referans savaş ona sabitlenmiş; Tur 1 kendi tam sayılı hesabını yapıyor (`gnomeStrike`).
+
+⭐ **YÖN ASİMETRİK, o da ölçülmüş:** saldıranın gnomları hiç ölmüyor (D4 · D5).
+
+⭐ **F3 zincirleme düzeldi:** 4 gnom ölünce savunanın kaybı sıfır olmaktan çıkıyor → `frac = 1`
+→ 500 yük arabası ele geçiriliyor. Gnomsuz aynı kurulumda (satır 2) arabalar sağ kalıyor.
+Tahmin edildiği gibi ayrı bir düzeltme gerekmedi.
+
+`cfg.turn1GnomeSkirmish` **açıldı**; bekçi testleri `packages/engine/test/reference.test.ts`.
+
+<details><summary>Eski istek (kapandı)</summary>
+
 #### 🔵 KAPATMAK İÇİN GEREKEN: 3 ölçüm daha
 
 `A` katsayısının hangi stata bağlı olduğu bilinmiyor — **dört ölçümün dördü de Cüce ile**.
@@ -252,6 +299,8 @@ Tur 1 fazına giriyor mu" sorusunu da cevaplıyor.
 
 Bu üç sayı gelince formül tamamlanır, `turn1GnomeSkirmish` doğru katsayılarla açılır ve
 D1·D2·D3·F1·F2·F3 satırlarının **hepsi birden** kapanır.
+
+</details>
 
 ---
 

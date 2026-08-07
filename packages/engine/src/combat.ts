@@ -526,11 +526,81 @@ function dealTargeted(
   def.lossMag += applyLoss(target, net);
 }
 
-/** §2d Binary'nin Tur1 gnom skirmish'i — EMEKLİ (config ile açılır). */
-function turn1GnomeSkirmish(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): void {
+/**
+ * ⭐⭐ §2d TUR 1 GNOM ÇARPIŞMASI — 8 binary ölçümüyle ÇÖZÜLDÜ (2026-08-07).
+ *
+ * Tuzak salvosuyla aynı aileden: **tur döngüsünden ÖNCE, koşulsuz, tek atışlık**. İki yön var
+ * ve ikisi de aynı formülü kullanıyor:
+ *
+ * ```
+ *   öldürülen = ⌊ (Σ_{tip2} kaynak.hp × adet  −  hedef.pDef × hedefAdedi) / hedef.mDef ⌋
+ *
+ *   1) savunanın GNOMLARI  →  saldıranın MANCINIKLARI   (gnom sabotajcı rolü)
+ *   2) saldıranın tip-2 ORDUSU  →  savunanın GNOMLARI
+ * ```
+ *
+ * ── Ölçümler (`docs/SAVAS_BINARY_KONTROL.md`) — 8/8 birebir ────────────────────────────
+ * | saldıran | savunan | binary | formül |
+ * |---|---|---|---|
+ * | Cüce 120 | Gnom 500 | 4 | ⌊(7.200−6.000)/260⌋ = 4 |
+ * | Cüce 240 | Gnom 500 | 32 | ⌊(14.400−6.000)/260⌋ = 32 |
+ * | Cüce 480 | Gnom 500 | 87 | ⌊(28.800−6.000)/260⌋ = 87 |
+ * | Cüce 120 | Gnom 50 | 25 | ⌊(7.200−600)/260⌋ = 25 |
+ * | Süvari 120 | Gnom 500 | 115 | ⌊(36.000−6.000)/260⌋ = 115 |
+ * | Elf 120 | Gnom 500 | **0** | tip 1 → havuza girmez |
+ * | Mancınık 120 | Gnom 500 | **0** | tip 1 → havuza girmez |
+ * | Mancınık 120 | Gnom 500 | **20 mancınık** | ⌊(100.000−14.400)/4.160⌋ = 20 |
+ *
+ * ⚠️ **TİP 2 ŞARTI ölçümden geliyor:** Elf ve Mancınık (tip 1) hiç gnom öldürmüyor, Cüce ve
+ * Süvari (tip 2) öldürüyor. `combatPool(_, 2, …)` bunu zaten uyguluyor.
+ *
+ * ⚠️ **AŞAĞI YUVARLAMA ŞART.** Ortak `applyLoss` kesirli sayı bırakıp sonda yuvarlıyor; binary
+ * ise öldürüleni `floor`luyor. Üç ölçüm (Cüce 120 → 4,61 · Cüce 480 → 87,69 · mancınık 20,58)
+ * tam da kesirli kısmı ≥ 0,5 olduğu için motorda **1 fazla** çıkıyordu. `applyLoss`a
+ * dokunulmadı — 53 altın Sur/Kalkan testi ve referans savaş ona sabitlenmiş durumda; yuvarlama
+ * farkı yalnız bu Tur 1 fazına ait.
+ *
+ * ⚠️ **YÖN ASİMETRİK ve bu da ölçülmüş:** saldıranın gnomları HİÇ ölmüyor (D4: 500 gnomla
+ * saldırı → 0 kayıp · D5: 5 turluk gerçek savaşta saldıran kaybetse bile gnomu duruyor).
+ * Bu yüzden yalnız SAVUNANIN gnomları hedef.
+ *
+ * ⚠️ Gnom kaybı savaşın sonucundan **bağımsız**: F2'de savunan 3 turluk savaşı kaybediyor,
+ * yine tam 4 gnom ölüyor. Gnom hiçbir "ele geçirme" listesinde DEĞİL (`SETTLE_ON_LOSS`).
+ * Buna karşılık bu kayıp `lossMag`e yazıldığı için F3'teki yük arabaları doğru şekilde ele
+ * geçiriliyor (4 gnom ölünce savunanın kaybı sıfır olmaktan çıkıyor → `frac = 1`).
+ */
+function turn1GnomeSkirmish(atk: Army, def: Army, _rng: Rng, cfg: CombatConfig): void {
   // Sıra binary'deki gibi: önce savunan gnom mancınığı vurur, sonra gnom yok olur.
-  dealTargeted(def, atk, 2, 'mangonel', rng, cfg, { poolUnitId: 'gnome', shield: false });
-  dealTargeted(atk, def, 2, 'gnome', rng, cfg, { shield: true });
+  gnomeStrike(def, atk, 'mangonel', cfg);
+  gnomeStrike(atk, def, 'gnome', cfg);
+}
+
+/**
+ * Tek atışlık, TAM SAYILI vuruş. Kaynak havuzu: `sourceUnitId` verilirse yalnız o birim
+ * (gnom sabotajı), verilmezse ordunun tip-2 havuzu.
+ */
+function gnomeStrike(from: Army, to: Army, targetId: string, cfg: CombatConfig): void {
+  const target = to.units.find((e) => e.id === targetId);
+  if (!target || target.count <= 0) return;
+
+  let pool: number;
+  if (targetId === 'mangonel') {
+    // Sabotajı YALNIZ gnomlar yapar — ordunun geri kalanı bu faza girmez.
+    const g = from.units.find((e) => e.id === 'gnome');
+    if (!g || g.count <= 0) return;
+    pool = g.stats.poolHp * g.count;
+  } else {
+    pool = combatPool(from, 2, true, 0, cfg);
+  }
+
+  const net = pool - target.stats.pDef * target.count;
+  if (net <= 0) return;
+  const mDef = target.stats.mDef > 0 ? target.stats.mDef : 1;
+  const kill = Math.min(target.count, Math.floor(net / mDef));
+  if (kill <= 0) return;
+
+  target.count -= kill;
+  to.lossMag += kill * mDef;
 }
 
 /**

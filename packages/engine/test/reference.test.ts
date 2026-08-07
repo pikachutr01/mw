@@ -262,3 +262,58 @@ describe('savaş-dışı birim kaybı (binary A/B/C/E blokları)', () => {
     expect(r.attacker.counts['gnome']).toBe(100);
   });
 });
+
+/**
+ * ⭐⭐ TUR 1 GNOM ÇARPIŞMASI — 8 binary ölçümüyle çözüldü (2026-08-07).
+ * Formül ve gerekçesi `combat.ts` → `turn1GnomeSkirmish` başlığında.
+ */
+describe('Tur 1 gnom çarpışması (binary D·F·G blokları)', () => {
+  const f = (a: Record<string, number>, d: Record<string, number>, seed: string) =>
+    simulate({ seed, attacker: { counts: a }, defender: { counts: d } });
+  const gnomKaybi = (d: Record<string, number>, r: ReturnType<typeof simulate>): number =>
+    (d['gnome'] ?? 0) - (r.defender.counts['gnome'] ?? 0);
+
+  it.each([
+    ['Cüce 120', { dwarf: 120 }, { gnome: 500 }, 4],
+    ['Cüce 240', { dwarf: 240 }, { gnome: 500 }, 32],
+    ['Cüce 480', { dwarf: 480 }, { gnome: 500 }, 87],
+    ['Cüce 120 / 50 gnom', { dwarf: 120 }, { gnome: 50 }, 25],
+    ['Süvari 120', { cavalry: 120 }, { gnome: 500 }, 115],
+    /* ⚠️ TİP 1 birimler bu faza girmez — ölçüm bunu söylüyor, varsayım değil. */
+    ['Elf 120 (tip 1)', { elf: 120 }, { gnome: 500 }, 0],
+    ['Mancınık 120 (tip 1)', { mangonel: 120 }, { gnome: 500 }, 0],
+  ])('%s → %i gnom', (_ad, a, d, beklenen) => {
+    expect(gnomKaybi(d, f(a, d, 'gnome-t1'))).toBe(beklenen);
+  });
+
+  it('⭐ savunanın gnomları saldıranın MANCINIKLARINI sabote eder', () => {
+    const r = f({ mangonel: 120 }, { gnome: 500 }, 'gnome-sabotage');
+    expect(120 - (r.attacker.counts['mangonel'] ?? 0)).toBe(20);
+  });
+
+  it('⚠️ SALDIRANIN gnomları hiç ölmez (yön asimetrik)', () => {
+    const r = f({ gnome: 500 }, { dwarf: 120 }, 'gnome-attacker');
+    expect(r.attacker.counts['gnome']).toBe(500);
+  });
+
+  it('gnom kaybı savaşın SONUCUNDAN bağımsız (F2: savunan 3 turda kaybediyor)', () => {
+    const d = { gnome: 500, dwarf: 1 };
+    const r = f({ dwarf: 120 }, d, 'bin-F2');
+    expect(r.turns).toBe(3);
+    expect(gnomKaybi(d, r)).toBe(4);              // savaş hiç olmayan D1 ile AYNI sayı
+  });
+
+  /**
+   * ⭐ ZİNCİR: gnom ölünce savunanın kaybı sıfır olmaktan çıkıyor → `frac = 1` → yük
+   * arabaları ele geçiriliyor. Gnomsuz aynı kurulumda (satır 2) arabalar sağ kalıyor.
+   */
+  it('F3: 4 gnom ölünce yük arabaları da ele geçirilir', () => {
+    const d = { gnome: 500, cargo_wagon: 500 };
+    const r = f({ dwarf: 120 }, d, 'bin-F3');
+    expect(gnomKaybi(d, r)).toBe(4);
+    expect(r.defender.counts['cargo_wagon']).toBe(0);
+    // Karşı kontrol: gnom YOKSA arabalar sağ kalır (savunanın hiç kaybı olmuyor).
+    const gnomsuz = f({ dwarf: 120 }, { cargo_wagon: 500 }, 'bin-2');
+    expect(gnomsuz.defender.counts['cargo_wagon']).toBe(500);
+  });
+});
