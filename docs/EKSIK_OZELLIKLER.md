@@ -243,6 +243,13 @@ bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görünt
   bir alarm, bir süre sonra bakılmadan kapatılan bir alarma dönüşür.
 - **Ölü görevi yeniden kuyruğa alma ucu yok** — `mission_dead` alarmı geliyor, satır panelde
   görünüyor ama `failed` → `scheduled` geçişi elle SQL gerektiriyor.
+- **Admin panelinde tarayıcı saati sapması düzeltilmiyor** — plan `Missions.tsx`teki `fetchedAt`
+  çıpasını ortak bir yardımcıya çıkarmayı istiyordu; **yapılmadı ve bu bilinçli.** 2026-08-08
+  taramasında ölçüldü: paneldeki bütün `Date.now()` kullanımları **gerçek-zaman** damgalarına ait
+  (`sessions.elevated_until`, moderasyon/oturum kayıtları) — yani oyun/gerçek saat karışması
+  **yok**, doğru saat kullanılıyor. Kalan tek eksik tarayıcı saati sapması ve etkisi
+  *"3 dk önce"* gibi bir ifadenin biraz kayması. Tek kullanıcılı bir yönetim panelinde bu,
+  kod karmaşasına değmiyor. ⚠️ Panele bir GERİ SAYIM eklenirse karar değişir.
 - **Postalar ve sohbet otomatik temizliğe DAHİL DEĞİL** (`ops-jobs.ts` → `auto: false`). Gecelik
   koşu yalnız altyapı tablolarını ve gizlilik taahhüdü olanları süpürüyor; oyuncunun kendi
   okuduğu geçmişte bir insanın kuru koşuyu görmesi gerekiyor. İstenirse tek satırlık bayrak

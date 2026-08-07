@@ -16,6 +16,14 @@
  * ⚠️ **Silme kuralları DEĞİŞMEDİ.** Bu handler `CLEANUP_JOBS`taki aynı yüklemleri, aynı
  * `cleanupBatch` tavanıyla koşuyor — yöneticinin elle yaptığı işin aynısı. Değişen tek şey
  * TETİKLEYİCİ. Yeni bir silme yetkisi doğmuyor.
+ *
+ * ⚠️ **TRANSACTION TAVANI — bilinen sınır.** Handler scheduler'ın sözleşmesi gereği TEK
+ * transaction'da koşuyor ve otomatik işlerin hepsi onun içinde. Üst sınır
+ * `auto iş sayısı × cleanupBatch` satır (bugün 9 × 20.000). Mevcut ölçekte (23 oyuncu, en büyük
+ * aday `outbox` ~3.300 satır) koşu saniyenin altında bitiyor, dolayısıyla sorun değil — ama
+ * tablolar büyürse bu **uzun bir açık transaction**a dönüşür ve kendi `idle_in_tx` alarmımızı
+ * tetikler, vacuum'u geciktirir. O gün geldiğinde çözüm `cleanupBatch`i küçültmek: gecelik
+ * koşu ertesi gece kaldığı yerden devam ediyor, hiçbir şey kaybolmuyor.
  */
 import { sql } from 'drizzle-orm';
 import { CLEANUP_JOBS, type CleanupJob, type OpsRetention } from '../admin/ops-jobs.ts';

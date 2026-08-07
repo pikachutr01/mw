@@ -219,6 +219,38 @@ içinde `define` ile gömülüyor — çalışma zamanı değişkeni değil, kay
 - Oyuncudan hata raporu alırken bu satırı istemek en ucuz teşhis: hangi paketi çalıştırdığı
   tek bakışta belli olur (`select-all` ile tek tıkta kopyalanıyor).
 
+### ⏱️ Zaman mimarisi dağıtımı — canlıdan ÖLÇÜLEN başlangıç durumu (2026-08-08)
+
+Aşağıdakiler tahmin değil, sunucuda çalıştırılan sorguların çıktısı. Göç sonrası doğrulama
+adımının beklenen değerleri bunlar.
+
+| Ölçüm | Değer | Anlamı |
+|---|---|---|
+| `worlds.clock_offset_ms` | **196 563** (≈196,5 sn) | Göç bu kadar kaydıracak; `time_shifts` satırındaki `shift_ms` **buna eşit** çıkmalı |
+| Takılmış görev | **0** | Kuyruk şu an sağlıklı; 06.08 olayı tekrarlamadı |
+| Açık transaction | **yok** | Kök neden şu an aktif değil |
+| `statement_timeout` / `idle_in_transaction` / `lock_timeout` | **hepsi 0** | Faz 1 bunları getirecek — ölçüldü: uygulama bağlantısında `30s / 2min / 10s` |
+| `max_connections` | **40** | Havuz (süreç başına 10) bolca altında |
+| Ölü mektup | **2** | ⚠️ aşağı bak |
+
+⚠️⚠️ **DAĞITIM ÖNCESİ TEK ELLE İŞ — iki ölü mektup.** `outbox` id 1 ve 2, 02.08'deki Resend
+`invalid_idempotent_request` olayının artığı (veritabanı sıfırlanmış, Resend anahtarları
+görmüştü). Sebep **zaten düzeltildi** (`outbox-<id>-<createdAt>` anahtarı, `worker.ts`).
+Ama Faz 3'ün `outbox_dead` eşiği **0** olduğu için dağıtımın ilk dakikasında bir alarm açar ve
+e-posta gönderir — beş gün önce çözülmüş bir sorun için. **Dağıtım gününde yanlış alarm almak,
+alarmın okunmamasını öğretir**; bu, alarm sisteminin üretebileceği en kötü sonuç.
+
+Doğru işlem satırları silmek DEĞİL (kendi kuralımız: *"teslim edilmemiş satır bir arıza
+kanıtıdır"*), **kapatmak**:
+
+```sql
+-- Bilinçli operatör işlemi: teslim edilemeyeceği KANITLANMIŞ iki satırı kapat + izini bırak.
+UPDATE outbox SET dispatched_at = now() WHERE id IN (1, 2) AND dispatched_at IS NULL;
+INSERT INTO audit_log (world_id, action, entity, after)
+VALUES (NULL, 'ops.outbox.acknowledge', 'outbox',
+        '{"ids":[1,2],"reason":"2026-08-02 Resend idempotency olayi; anahtar duzeltildi, mail artik gonderilemez"}'::jsonb);
+```
+
 ### Sunucuda BİR KEZ yapılacaklar (Faz 3 — kod değil, dağıtım ayarı)
 
 ⚠️ Bu iki adım koda yazılamaz; sunucuda elle yapılır ve **yapılmazsa Faz 3'ün yarısı sessizce
