@@ -15,11 +15,16 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
-  useAllianceDecide, useBattle, useChatConversations, useClearConversation, useDeleteMessages,
-  useMarkRead, useMessageBody, useMessages,
+  useAllianceDecide, useBattle, useChatConversations, useCity, useClearConversation,
+  useDeleteMessages, useMarkRead, useMessageBody, useMessages, useTemple,
   type ChatConversation, type MessageRow, type ReportHeroLine,
 } from '../lib/queries.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
+import { useActiveCity } from '../lib/city-context.tsx';
+import { HERO_SKILLS } from '../lib/hero-skills.ts';
+import {
+  intelIsTransferable, sideFromCity, sideFromIntel, writeSimPrefill, type SpyHero,
+} from '../lib/sim-prefill.ts';
 import { Button, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
@@ -425,9 +430,49 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
   const body = detail.data?.body ?? null;
   const route = (body?.['route'] ?? null) as { origin?: Coord; target?: Coord } | null;
 
+  /**
+   * ⭐ SİMÜLATÖRE AKTAR (kullanıcı, 2026-08-07) — casusluk raporuna özel.
+   *
+   * Rakibin öğrenilen verisi SAVUNAN sütununa, oyuncunun kendi aktif şehri SALDIRAN sütununa
+   * yazılır; iki taraf da tek tıkla dolar. Kendi tarafı olmadan aktarım yarım kalırdı —
+   * kullanıcının şartı açıkça ikisini birden istiyor.
+   *
+   * ⚠️ Düğme neden gövdede değil FOOTER'da: bu bir **ekran değiştiren** eylem, raporun içeriği
+   * değil. İttifak Kabul/Red düğmeleri gövdede çünkü raporun konusuyla ilgili — ayrım bu.
+   * ⚠️ `Modal` footer'ı `justify-end gap-2`, yani bu düğme «Kapat»ın SOLUNA düşüyor.
+   */
+  const nav = useNavigate();
+  const { cityId } = useActiveCity();
+  const cityQ = useCity(cityId);
+  const templeQ = useTemple(cityId);
+  const intel = (body?.['intel'] ?? null) as Record<string, unknown> | null;
+  const canTransfer = m.kind === 'spy_report' && m.side !== 'target'
+    && intel != null && intelIsTransferable(intel);
+
+  const toSimulator = (): void => {
+    if (!intel) return;
+    writeSimPrefill({
+      v: 1,
+      defender: sideFromIntel(intel),
+      ...(cityQ.data && templeQ.data
+        ? { attacker: sideFromCity(cityQ.data, templeQ.data, 'attacker') }
+        : {}),
+    });
+    // ⚠️ ÖNCE KAPAT, SONRA GİT — oyuncu nereye düştüğünü görsün (`Command.tsx`'te yazılı kural).
+    onClose();
+    nav('/simulate');
+  };
+
   return (
     <Modal title={m.subject} onClose={onClose} width="lg"
-      footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}>
+      footer={(
+        <>
+          {canTransfer ? (
+            <Button size="sm" onClick={toSimulator}>Simülatöre Aktar</Button>
+          ) : null}
+          <Button variant="ghost" onClick={onClose}>Kapat</Button>
+        </>
+      )}>
       <div className="px-3 py-3">
         <div className="mb-2 text-[11px] text-muted">
           {formatGameTime(m.at)}
@@ -646,13 +691,18 @@ function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
   const shot = Number(body['birdsShot'] ?? 0);
   const blocked = Number(body['birdsBlocked'] ?? 0);
   const leaked = body['leakedLevel'] as string | null | undefined;
+  /**
+   * ⚠️ Bu etiketler `gatherIntel`in kademeleriyle AYNI ŞEYİ anlatmak zorunda: kapsam büyüyüp
+   * etiket olduğu yerde kalırsa savunan "ne sızdı" sorusuna yanlış cevap alır. Kahraman ve
+   * Teleport 2026-08-07'de eklendi ve buraya da yazıldı.
+   */
   const LEAK_LABEL: Record<string, string> = {
     resources: 'kaynak miktarı',
     economy: 'kaynak + Maden/Çiftlik seviyesi',
     armyTotals: '+ toplam savaşçı ve savunma sayısı',
-    armyTypes: '+ birim tipleri',
-    armyCounts: '+ savaşçıların tek tek sayıları',
-    full: 'TAM RAPOR (teknikler + Kale/Sur/Kalkan/Mağara seviyesi dahil)',
+    armyTypes: '+ birim tipleri ve kahraman sayısı',
+    armyCounts: '+ savaşçıların tek tek sayıları, kahramanların seviye ve yetenekleri',
+    full: 'TAM RAPOR (teknikler + Kale/Sur/Kalkan/Mağara/Teleport seviyesi dahil)',
   };
   return (
     <div className="space-y-2 text-sm">
@@ -685,6 +735,8 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
   const dTypes = intel['defenseTypes'] as string[] | undefined;
   const techs = intel['techs'] as Record<string, number> | undefined;
   const structures = intel['structures'] as Record<string, number> | undefined;
+  const heroes = intel['heroes'] as SpyHero[] | undefined;
+  const heroCount = intel['heroCount'] as number | undefined;
   const lost = Number(body['birdsLost'] ?? 0);
   const sent = Number(body['birdsSent'] ?? 0);
 
@@ -743,6 +795,36 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
         <Section title="Savunma tipleri">{dTypes.map(nameOf).join(' · ')}</Section>
       ) : null}
 
+      {/*
+        ⭐ KAHRAMANLAR (§13.11.6, kullanıcı 2026-08-07) — iki kademeye yayılıyor:
+        `armyCounts`ta her kahramanın seviyesi ve dört yeteneği, bir alt kademede yalnız SAYI.
+        ⚠️ `heroCount === 0` de bir haber ("kahraman yok") — bu yüzden `typeof` ile bakılıyor,
+           doğruluk kontrolüyle değil; `0` sessizce düşerdi.
+        ⚠️ Eski raporlarda bu anahtarlar yok → hiçbir şey çizilmez, göç gerekmiyor.
+      */}
+      {heroes && heroes.length > 0 ? (
+        <Section title="Kahramanlar">
+          <div className="space-y-1">
+            {heroes.map((h, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-medium">{h.name}</span>
+                <span className="text-xs text-muted">Seviye {h.level}</span>
+                {HERO_SKILLS.map((s) => (
+                  <span key={s.key} className="flex items-center gap-1" title={s.label}>
+                    <img src={`/assets/hero/${s.icon}.png`} alt={s.label} width={16} height={16} />
+                    <span className="text-xs tnum">{h.skills?.[s.key] ?? 0}</span>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : typeof heroCount === 'number' ? (
+        <Section title="Kahramanlar">
+          {heroCount > 0 ? `${fmt(heroCount)} kahraman` : 'Kahraman yok'}
+        </Section>
+      ) : null}
+
       {structures ? (
         <Section title="Yapılar">
           <span className="tnum">
@@ -751,6 +833,11 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
             {/* ⚠️ Yalnız SEVİYE. Mağaranın içindeki askerler casusa GÖRÜNMEZ — mağaranın
                 bütün varlık sebebi orduyu saklamak (`mission.handlers.ts` gatherIntel). */}
             {' '}Mağara {structures['cave'] ?? 0}
+            {/* ⚠️ Teleport 0 iken YAZILMAZ: ön şartı Kale 12 + Mimar Okulu 12 + Büyücülük 12,
+                yani oyuncuların ezici çoğunluğunda yok ve her rapora «Teleport 0» eklemek
+                gürültü olurdu. Diğerleri koşulsuz yazılıyor — onlar herkeste var. */}
+            {Number(structures['teleport'] ?? 0) > 0
+              ? <> · Teleport {structures['teleport']}</> : null}
           </span>
         </Section>
       ) : null}

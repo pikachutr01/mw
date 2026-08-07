@@ -13,16 +13,18 @@
  * ⚠️ **Kalan sütunu asıl çıktıdır.** Kullanıcı: *"Her savaşçıdan ayrı ayrı kaç tane kaldığını
  * göremiyoruz."* Motor `SideResult.counts` ile bunu zaten döndürüyordu, ekran basmıyordu.
  */
-import { useState } from 'react';
-import {
-  TECHS, TECH_ORDER, UNITS, WARRIOR_ORDER, DEFENSE_ORDER, orderBy,
-} from '@mobilwar/catalog';
+import { useEffect, useState } from 'react';
 import { HERO_POINTS_PER_LEVEL } from '@mobilwar/contracts';
 import { api } from '../lib/api.ts';
-import { fmt } from '../lib/hooks.ts';
+import { fmt, useSession } from '../lib/hooks.ts';
+import { useActiveCity } from '../lib/city-context.tsx';
+import { useCity, useTemple } from '../lib/queries.ts';
+import {
+  COMBAT_TECHS, DEFENDER_ONLY_TECH, DEFENSES, WARRIORS,
+  readSimPrefill, sideFromCity, type Side, type SidePrefill,
+} from '../lib/sim-prefill.ts';
 import { AmountInput, Button, CatalogIcon, ErrorBox, Panel } from '../components/ui.tsx';
 
-type Side = 'attacker' | 'defender';
 type Counts = Record<string, string>;
 /** Kahraman satırı — dördü yetenek, biri seviye. Metin tutulur, gönderirken sayıya çevrilir. */
 interface HeroRow { level: string; fAtk: string; fDef: string; mAtk: string; mDef: string }
@@ -49,21 +51,12 @@ interface SimResult {
   attackerCarryCapacity: number;
 }
 
-const WARRIORS = orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER);
 /**
- * ⚠️ Sur ve Büyü Kalkanı burada SEVİYE taşır (adet değil) — `LEVEL_BASED` kuralı simülatörde de
- * geçerli. Tapınak listede YOK: savaş yapısı değil, ayrı bir alanda kahraman ihtimalini besliyor.
+ * ⚠️ Alan listeleri (`WARRIORS` · `DEFENSES` · `COMBAT_TECHS` · `DEFENDER_ONLY_TECH`)
+ * 2026-08-07'de `lib/sim-prefill.ts`'e taşındı: casusluk raporundan gelen aktarım da aynı
+ * listelere yazıyor ve iki kopya kaçınılmaz olarak ayrışırdı (özellikle Tapınak filtresi —
+ * gerekçesi orada).
  */
-const DEFENSES = orderBy(UNITS.filter((u) => u.kind === 'defense' && u.id !== 'temple'), DEFENSE_ORDER);
-/** Savaş statına dokunan teknikler; `stat: null` olanlar (Casusluk, Haritacılık…) savaşa girmez. */
-const COMBAT_TECHS = orderBy(TECHS.filter((t) => t.stat !== null), TECH_ORDER);
-/**
- * ⚠️ Taş Ustalığı yalnız SAVUNMA yapılarını ölçekliyor (`techs.ts:52` — Okçu Kulesi, Mangonel,
- * Balista, Sur). Saldıranda yazılabilir olsaydı hiçbir etkisi olmayan bir kutu olurdu; binary
- * araç da o hücreyi çizgiyle geçiyor.
- */
-const DEFENDER_ONLY_TECH = new Set(['masonry']);
-
 const LEVEL_BASED = new Set(['wall', 'magic_shield']);
 
 const num = (s: string | undefined): number => Math.max(0, Number(s) || 0);
@@ -168,6 +161,58 @@ export function Simulate(): React.ReactElement {
 
   /** Kayıt yalnız ilk çizimde okunur; sonrasında `run()` kendi güncelliyor. */
   const [hasLast, setHasLast] = useState(() => readLast() != null);
+
+  /**
+   * ⭐ AKTİF ŞEHİRDEN DOLDURMA (kullanıcı, 2026-08-07) — yalnız giriş yapmış oyuncuda.
+   *
+   * ⚠️ Misafir ağacında güvenli: `ActiveCityProvider` orada mount EDİLMİYOR (`App.tsx`), yani
+   * `useActiveCity()` varsayılan `{ cityId: null }` döndürüyor ve iki sorgu da `enabled: false`
+   * oluyor — tek bir istek gitmiyor, 401 üretilmiyor. `QueryClientProvider` oturum dalının
+   * ÜSTÜNDE olduğu için hook'ları çağırmak da sorun değil.
+   */
+  const session = useSession();
+  const { cityId } = useActiveCity();
+  const cityQ = useCity(cityId);
+  const templeQ = useTemple(cityId);
+  const canFill = session != null && cityQ.data != null && templeQ.data != null;
+
+  /**
+   * Bir sütunun alanlarını yazar. **Yalnız gelen alanlar** değişir: casusluk raporunda rakibin
+   * Tapınak toplamı bilinmiyor, o alan `undefined` geliyor ve formdaki değer korunuyor.
+   */
+  const applySide = (side: Side, p: SidePrefill): void => {
+    const { counts: c, tech: t, heroes: h, temple: tp, heroCount: hc, vision: v } = p;
+    if (c) setCounts((prev) => ({ ...prev, [side]: c }));
+    if (t) setTech((prev) => ({ ...prev, [side]: t }));
+    if (h) setHeroes((prev) => ({ ...prev, [side]: h }));
+    if (tp != null) setTemple((prev) => ({ ...prev, [side]: tp }));
+    if (hc != null) setHeroCount((prev) => ({ ...prev, [side]: hc }));
+    if (v != null) setVision((prev) => ({ ...prev, [side]: v }));
+  };
+
+  /**
+   * ⚠️ Yalnız İLGİLİ sütun ezilir, karşı sütun olduğu gibi kalır. Böylece casusluk aktarımından
+   * sonra «Saldıran olarak doldur»a basmak rakibin verisini silmiyor.
+   */
+  const fillFromCity = (side: Side): void => {
+    if (!cityQ.data || !templeQ.data) return;
+    applySide(side, sideFromCity(cityQ.data, templeQ.data, side));
+  };
+
+  /**
+   * ⭐ CASUSLUK RAPORUNDAN GELEN DEVİR (§13.11.6). `readSimPrefill` okurken **siliyor** → sayfa
+   * yenilendiğinde blok tekrar uygulanmaz.
+   * ⚠️ Savaş kendiliğinden ÇEVRİLMEZ; «Son savaşı yükle»den farkı bu. Orada oyuncu bilerek aynı
+   * savaşı tekrar istiyor, burada ise gece savaşı / tekrar sayısı gibi ayarları gözden geçirmek
+   * isteyebilir.
+   */
+  useEffect(() => {
+    const p = readSimPrefill();
+    if (!p) return;
+    if (p.attacker) applySide('attacker', p.attacker);
+    if (p.defender) applySide('defender', p.defender);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const atkCounts = toCounts(counts.attacker);
   const defCounts = toCounts(counts.defender);
@@ -425,6 +470,26 @@ export function Simulate(): React.ReactElement {
               Son savaşı yükle
             </Button>
           ) : null}
+          {/*
+            ⭐ İKİ AYRI DÜĞME (kullanıcı kararı 2026-08-07): savunma yapıları ve Taş Ustalığı
+            YALNIZ savunan sütununda çizildiği için "bana saldırırlarsa ne olur" senaryosu ancak
+            ayrı bir savunan doldurmasıyla kurulabiliyor. Tek düğme olsaydı Sur/Büyü Kalkanı ve
+            savunma üniteleri hiçbir zaman otomatik dolmazdı.
+            ⚠️ Misafirde ve şehir verisi gelmemişken HİÇ çizilmiyor — «Son savaşı yükle»nin
+            aynı kuralı (pasif bir düğme "burada bir şey eksik" der).
+          */}
+          {canFill ? (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => fillFromCity('attacker')}
+                title="Aktif şehrindeki ordu, teknik ve kahramanları saldıran sütununa yazar">
+                Saldıran olarak doldur
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => fillFromCity('defender')}
+                title="Aktif şehrini savunma yapıları ve Taş Ustalığı ile birlikte savunan sütununa yazar">
+                Savunan olarak doldur
+              </Button>
+            </>
+          ) : null}
           <Button variant="ghost" size="sm" onClick={clearAll}>Temizle</Button>
           {!ready ? <span className="text-xs text-muted">İki tarafa da en az bir birim yaz.</span> : null}
         </div>
@@ -459,7 +524,7 @@ export function Simulate(): React.ReactElement {
 function UnitTable({
   units, counts, ranCounts, onCount, view, bothSides,
 }: {
-  units: typeof UNITS[number][];
+  units: typeof WARRIORS;
   counts: Record<Side, Counts>;
   /**
    * ⚠️ Sonucu ÜRETEN girdi — kutulardaki canlı değerlerden AYRI (2026-08-03). "Kalan" sütunu

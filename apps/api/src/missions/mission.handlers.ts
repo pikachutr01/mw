@@ -301,6 +301,49 @@ async function gatherIntel(
     }
   }
 
+  /**
+   * ⭐ KAHRAMAN İSTİHBARATI (kullanıcı, 2026-08-07) — iki kademeye yayılıyor:
+   *   • `armyTypes` (fark 2) → yalnız **kaç kahraman** var.
+   *   • `armyCounts` (fark 3) → her kahramanın **adı, seviyesi ve dört yetenek puanı**.
+   *
+   * ⚠️ Gizlilik çizgisi bilerek aşılıyor, gerekçesi kullanıcının: kahraman **adı, seviyesi ve
+   * XP'si zaten herkese açık** (`command.controller.ts` → `GET /rankings?kind=hero`). Yetenek
+   * puanları ise bugün hiçbir yerde görünmüyor; bu yüzden üst kademenin ödülü oluyorlar.
+   * Ayrıca sıralama günde üç kez yenileniyor (8 saate kadar bayat), casusluk ise CANLI —
+   * kademenin gerçek değeri bu.
+   *
+   * ⚠️ **Yalnız `alive`** (kullanıcı kararı): ölü ya da diriltilen kahraman savaşa katılamaz,
+   * saymak "bu şehir beni ne karşılar" sorusuna yanlış cevap verirdi. Rapor doğrudan
+   * simülatöre aktarılabildiği için yanlış sayı yanlış savaşa dönüşürdü.
+   *
+   * ⚠️ **Seferdeki kahraman kendiliğinden gizli**: görevdeyken `heroes.city_id` NULL
+   * (`schema.ts`), yani bu sorgu onu hiç görmez. Mağaranın orduyu gizlemesiyle aynı sonuç,
+   * ayrıca kod yazmaya gerek yok.
+   *
+   * ⚠️ Tek sorgu iki kademeyi besliyor; `heroes_city` indeksi zaten var.
+   * ⚠️ `heroCount` **0 olsa da yazılır**: "kahraman yok" da bir istihbarat ve ekran
+   * `undefined` (bilmiyoruz) ile `0` (yok) ayrımını çiziyor.
+   */
+  if (at >= 3) {
+    const hs = await tx.execute<Record<string, unknown>>(sql`
+      SELECT name, level, f_atk, f_def, m_atk, m_def
+        FROM heroes
+       WHERE city_id = ${cityId} AND status = 'alive'
+       ORDER BY level DESC, id
+    `);
+    out['heroCount'] = hs.length;
+    if (at >= 4) {
+      out['heroes'] = hs.map((h: Record<string, unknown>) => ({
+        name: String(h['name']),
+        level: Number(h['level']),
+        skills: {
+          fAtk: Number(h['f_atk']), fDef: Number(h['f_def']),
+          mAtk: Number(h['m_atk']), mDef: Number(h['m_def']),
+        },
+      }));
+    }
+  }
+
   if (at >= 5) {
     const techs = await tx.execute<Record<string, unknown>>(sql`
       SELECT type, level FROM techs WHERE player_id = ${playerId}
@@ -326,6 +369,17 @@ async function gatherIntel(
        * mağara orada sıradan bir bina satırı (`cave.service.ts` de aynı yerden okuyor).
        */
       cave: levels['cave'] ?? 0,
+      /**
+       * ⭐ TELEPORT SEVİYESİ (kullanıcı, 2026-08-07) — en üst kademenin son parçası.
+       *
+       * Teleport rakibin ordunu bir anda başka bir kıtaya taşıyabilmesi demek; "bu oyuncu
+       * bana ne kadar hızlı ulaşır" sorusunun cevabı ve casusun en pahalı kademesinde
+       * bilinmesi makul. Ön şartı Kale 12 + Mimar Okulu 12 + Büyücülük 12 olduğu için
+       * oyuncuların ezici çoğunluğunda 0 — ekran o durumda satırı hiç yazmıyor.
+       *
+       * Ek sorgu yok: mağarayla aynı `levels` kaydından okunuyor.
+       */
+      teleport: levels['teleport'] ?? 0,
     };
   }
   return out;

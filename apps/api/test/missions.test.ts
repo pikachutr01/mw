@@ -90,6 +90,21 @@ async function giveDefenses(cityId: number, type: string, count: number): Promis
     ON CONFLICT (city_id, type) DO UPDATE SET count = ${count}
   `);
 }
+/**
+ * Kahraman ekler. `cityId: null` → SEFERDE (kayıtta şehir bağı kopuk) — casus onu göremez,
+ * çünkü `gatherIntel` `WHERE city_id = ?` ile arıyor.
+ */
+async function giveHero(playerId: number, cityId: number | null, o: {
+  name: string; level?: number;
+  fAtk?: number; fDef?: number; mAtk?: number; mDef?: number;
+  status?: string;
+}): Promise<void> {
+  await h.db.execute(sql`
+    INSERT INTO heroes (world_id, player_id, city_id, name, level, f_atk, f_def, m_atk, m_def, status)
+    VALUES (${worldId}, ${playerId}, ${cityId}, ${o.name}, ${o.level ?? 0},
+            ${o.fAtk ?? 0}, ${o.fDef ?? 0}, ${o.mAtk ?? 0}, ${o.mDef ?? 0}, ${o.status ?? 'alive'})
+  `);
+}
 async function setTech(playerId: number, type: string, level: number): Promise<void> {
   await h.db.execute(sql`
     INSERT INTO techs (player_id, type, level) VALUES (${playerId}, ${type}, ${level})
@@ -300,6 +315,7 @@ describe('casusluk', () => {
     await setResources(enemy, 5555, 4444);
     await setBuilding(enemy, 'mine', 8);
     await setBuilding(enemy, 'cave', 6);
+    await setBuilding(enemy, 'teleport', 2);
     const at = await clock.gameNow(worldId);
 
     const m = await missions.sendSpy({
@@ -322,6 +338,9 @@ describe('casusluk', () => {
     expect((intel['structures'] as Record<string, number>)['wall']).toBe(3);
     // ⭐ Mağara SEVİYESİ en üst kademede görünür (kullanıcı, 2026-08-02).
     expect((intel['structures'] as Record<string, number>)['cave']).toBe(6);
+    // ⭐ Teleport SEVİYESİ de en üst kademede (kullanıcı, 2026-08-07): "bu oyuncu bana ne
+    //    kadar hızlı ulaşır" sorusunun cevabı.
+    expect((intel['structures'] as Record<string, number>)['teleport']).toBe(2);
   });
 
   it('⚠️ mağaranın İÇİNDEKİ askerler TAM raporda bile sızmaz', async () => {
@@ -346,6 +365,97 @@ describe('casusluk', () => {
     // …ama içerideki 40 cüce raporun HİÇBİR yerinde geçmez: yalnız meydandaki 60 sayılır.
     expect((intel['warriors'] as Record<string, number>)['dwarf']).toBe(60);
     expect(JSON.stringify(intel)).not.toContain('caveUnits');
+  });
+
+  /* ── Kahraman istihbaratı (kullanıcı, 2026-08-07) ─────────────────────────────
+   *
+   * Kademe eşlemesi (`spyEffectiveDiff` = benim + log2(kuş) − onun; ikisi de 0 ⇒ kuş sayısı
+   * doğrudan farkı verir): 4 kuş = fark 2 = `armyTypes` · 8 kuş = fark 3 = `armyCounts`.
+   * Rakipte kule/elf/kuş olmadığı için engelleme yok, `infoBirds` gönderilenin tamamı.
+   */
+  async function spyOn(birds: number): Promise<Record<string, unknown>> {
+    await giveUnits(home, 'spy_bird', birds);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: birds }, at,
+    });
+    await runDue(m.missionId);
+    return (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+  }
+
+  /**
+   * ⭐ Kullanıcının şartı: *"Fark 2'de şehirde sadece kahraman olduğunun bilgisi verilsin.
+   * Birden fazla ise kaç tane ise o kadar."* Seviye ve yetenek bir üst kademenin ödülü —
+   * bu test o çizginin bekçisi.
+   */
+  it('⭐ fark 2: yalnız kahraman SAYISI sızar, seviye ve yetenek sızmaz', async () => {
+    await giveHero(rival, enemy, { name: 'Kayra', level: 9, fAtk: 7 });
+    await giveHero(rival, enemy, { name: 'Bora', level: 4 });
+
+    const body = await spyOn(4);
+    expect(body['level']).toBe('armyTypes');
+    const intel = body['intel'] as Record<string, unknown>;
+    expect(intel['heroCount']).toBe(2);
+    expect(intel['heroes']).toBeUndefined();
+    // Adı ve seviyesi raporun HİÇBİR yerinde geçmemeli.
+    expect(JSON.stringify(intel)).not.toContain('Kayra');
+  });
+
+  it('⭐ fark 3: her kahramanın seviyesi ve dört yeteneği gelir', async () => {
+    await giveHero(rival, enemy, { name: 'Kayra', level: 9, fAtk: 7, fDef: 5, mAtk: 3, mDef: 2 });
+
+    const body = await spyOn(8);
+    expect(body['level']).toBe('armyCounts');
+    const intel = body['intel'] as Record<string, unknown>;
+    expect(intel['heroCount']).toBe(1);
+    expect(intel['heroes']).toEqual([
+      { name: 'Kayra', level: 9, skills: { fAtk: 7, fDef: 5, mAtk: 3, mDef: 2 } },
+    ]);
+  });
+
+  /**
+   * ⭐ Kullanıcı kararı: ölü/diriltilen kahraman savaşa katılamaz. Rapor doğrudan simülatöre
+   * aktarılabildiği için yanlış sayı yanlış savaşa dönüşürdü.
+   */
+  it('⭐ ölü ve diriltilen kahraman ne sayılır ne listelenir', async () => {
+    await giveHero(rival, enemy, { name: 'Diri', level: 5 });
+    await giveHero(rival, enemy, { name: 'Olu', level: 12, status: 'dead' });
+    await giveHero(rival, enemy, { name: 'Dirilen', level: 8, status: 'reviving' });
+
+    const intel = (await spyOn(8))['intel'] as Record<string, unknown>;
+    expect(intel['heroCount']).toBe(1);
+    expect(intel['heroes']).toHaveLength(1);
+    expect(JSON.stringify(intel)).not.toContain('Olu');
+    expect(JSON.stringify(intel)).not.toContain('Dirilen');
+  });
+
+  /**
+   * ⭐ Seferdeki kahraman kendiliğinden gizli: görevdeyken `heroes.city_id` NULL, sorgu onu
+   * hiç görmüyor. Mağaranın orduyu gizlemesiyle aynı sonuç — ayrıca kod yazılmadı.
+   */
+  it('⭐ seferdeki kahraman (city_id NULL) raporda görünmez', async () => {
+    await giveHero(rival, enemy, { name: 'Evde', level: 5 });
+    await giveHero(rival, null, { name: 'Yolda', level: 20 });
+
+    const intel = (await spyOn(8))['intel'] as Record<string, unknown>;
+    expect(intel['heroCount']).toBe(1);
+    expect(JSON.stringify(intel)).not.toContain('Yolda');
+  });
+
+  it('fark 1 ve altında kahraman anahtarı HİÇ yok', async () => {
+    await giveHero(rival, enemy, { name: 'Kayra', level: 9 });
+
+    const body = await spyOn(2);                 // log2(2) = +1 → armyTotals
+    expect(body['level']).toBe('armyTotals');
+    const intel = body['intel'] as Record<string, unknown>;
+    expect(intel['heroCount']).toBeUndefined();
+    expect(intel['heroes']).toBeUndefined();
+  });
+
+  it('kahramanı olmayan şehirde sayı SIFIR yazılır (bilgi yokluğuyla karışmasın)', async () => {
+    const intel = (await spyOn(4))['intel'] as Record<string, unknown>;
+    expect(intel['heroCount']).toBe(0);
   });
 
   it('düşük farkta YALNIZ kaynak bilgisi gelir', async () => {

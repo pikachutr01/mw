@@ -2803,6 +2803,59 @@ Gönderenin raporunda `birdsLost`/`birdsBlocked`/`level`/`intel`.
 **TAM KAYIP:** tüm kuşlar vurulursa dönüş görevi oluşmaz (§13.11.7'nin ikizi). Savunma tabanı
 (§13.11.10, min 4 kule) sayesinde kule üretmiş şehrin vurma şansı hiçbir zaman sıfırlanmaz.
 
+#### 13.11.6a ⭐ KAHRAMAN VE TELEPORT İSTİHBARATI (kullanıcı, 2026-08-07)
+
+Kademe tablosu üç satır büyüdü. Doküman kademeleriyle (`teknik_ve_yapi_dokumantasyonu.md`)
+hizalı — kullanıcı eklemeleri fark numaralarına tek tek bağladı:
+
+| Fark | Kademe | Eklenen |
+| :-- | :-- | :-- |
+| 2 | `armyTypes` | **`heroCount`** — şehirde kaç kahraman var, başka hiçbir şey |
+| 3 | `armyCounts` | **`heroes[]`** — her kahramanın adı, seviyesi ve dört yetenek puanı |
+| ≥ 4 | `full` | **`structures.teleport`** |
+
+**Gizlilik gerekçesi (kullanıcının):** kahraman **adı, seviyesi ve XP'si zaten herkese açık** —
+`GET /rankings?kind=hero` onları listeliyor. Yetenek puanları ise bugüne kadar hiçbir yerde
+görünmüyordu; bu yüzden bir üst kademenin ödülü oldular. Sıralama günde üç kez yenileniyor
+(8 saate kadar bayat), casusluk ise **canlı** — kademenin gerçek değeri bu fark.
+
+⚠️ **Yalnız `alive`**: ölü ya da diriltilen kahraman savaşa katılamaz. Rapor doğrudan
+simülatöre aktarılabildiği (§13.11.6b) için yanlış sayı yanlış savaşa dönüşürdü.
+⚠️ **Seferdeki kahraman kendiliğinden gizli**: görevdeyken `heroes.city_id` NULL, sorgu onu hiç
+görmez. Mağaranın orduyu gizlemesiyle aynı sonuç, ayrıca kod yazılmadı.
+⚠️ **`heroCount` 0 olsa da yazılır**: "kahraman yok" da bir istihbarat; ekran `undefined`
+(bilmiyoruz) ile `0` (yok) ayrımını çiziyor.
+⚠️ Tek sorgu iki kademeyi besliyor; Teleport ise ek sorgu istemiyor (`levels` zaten tüm
+`buildings` satırlarını okuyor). Ekranda Teleport **0 iken yazılmaz** — ön şartı Kale 12 +
+Mimar Okulu 12 + Büyücülük 12, yani oyuncuların çoğunda yok.
+⚠️ Savunanın "ne sızdı" etiketi (`LEAK_LABEL`, `Messages.tsx`) da güncellendi: kapsam büyüyüp
+etiket olduğu yerde kalsaydı savunan yanlış bilgilendirilmiş olurdu.
+
+#### 13.11.6b ⭐ SİMÜLATÖR KÖPRÜSÜ (kullanıcı, 2026-08-07)
+
+Simülatör bugüne kadar tamamen elle dolduruluyordu. İki tek-tık köprü eklendi; ortak kod
+`apps/web/src/lib/sim-prefill.ts`'te (alan listeleri + devir bloğu + saf eşleyiciler).
+
+- **`/simulate` → «Saldıran olarak doldur» · «Savunan olarak doldur».** Aktif şehrin ordusu,
+  teknikleri, kahramanları, Tapınak toplamı; savunan sürümünde ayrıca Sur/Büyü Kalkanı
+  **seviyesi**, savunma üniteleri ve Taş Ustalığı. Misafirde düğmeler **hiç çizilmez**.
+  ⚠️ **İki düğme, tek değil**: savunma yapıları ve Taş Ustalığı yalnız savunan sütununda
+  çiziliyor, yani "bana saldırırlarsa" senaryosu ancak ayrı bir savunan doldurmasıyla kurulur.
+  ⚠️ Ordu **yalnız şehirdekiler** (kullanıcı kararı) — mağara ve seferdekiler ayrı havuzlar.
+- **Casusluk raporu modalı → «Simülatöre Aktar».** Rakibin öğrenilen verisi savunana, oyuncunun
+  kendi aktif şehri saldırana yazılır. Görünme koşulu **fark ≥ 2**; altındaki kademelerde
+  düşman ordusu hakkında tek bir sayı bile yok.
+  ⚠️ **Fark 2'de kahraman satırı yazılmaz, yalnız sayı yazılır.** Seviye ve yetenekler
+  bilinmiyor; beş tane sıfır seviye satır uydurmak simülatöre yalan veri basmak olurdu.
+
+⚠️⚠️ **Tapınak tuzağı:** şehrin `defenses` kaydında Tapınak SEVİYESİ de var ama simülatörün
+savunma tablosu onu dışlıyor. Filtresiz aktarım `counts`a `temple` anahtarı yazar ve motora
+**birim adedi** olarak gider — ekranda görünmeyen, sonucu bozan bir sayı. Süzgeç
+`sim-prefill.ts`'te tek yerde.
+⚠️ Devir `sessionStorage['mw-sim-prefill']` üzerinden, **okurken silinen** sürümlü bir blok.
+`navigate(path, { state })` kullanılmadı: projede o desenin tek örneği yok ve `Simulate.tsx`
+hiç router import etmiyor. İstihbarat bloğu da sorgu parametresine sığmaz.
+
 ### 13.11.7 Tam kayıp = dönüş yok (tüm görev tipleri)
 Veritabanı ve handler bunu destekler: savaş/casusluk sonrası hayatta kalan birim **yoksa**
 `type='return'` görevi **oluşturulmaz**; ganimet de yoktur. Rapor "ordudan kimse dönmedi" der.

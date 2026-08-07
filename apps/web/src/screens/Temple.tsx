@@ -19,15 +19,21 @@ import {
   type HeroRow, type HeroSkills, type TempleView,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
+import { HERO_SKILLS } from '../lib/hero-skills.ts';
 import { Badge, Button, Empty, ErrorBox, Input, Panel, Res, SectionTitle } from '../components/ui.tsx';
 import { useConfirm } from '../components/Modal.tsx';
 
-const SKILLS: { key: keyof HeroSkills; icon: string; label: string; hint: string }[] = [
-  { key: 'fAtk', icon: 'fiz_sal', label: 'Fiziksel Saldırı', hint: 'Yakın dövüş fazında ordunun vuruş gücüne eklenir.' },
-  { key: 'fDef', icon: 'fiz_sav', label: 'Fiziksel Savunma', hint: 'Kahramanın fiziksel dayanıklılığını ve ordunun savunma payını artırır.' },
-  { key: 'mAtk', icon: 'buy_sal', label: 'Büyü Saldırı', hint: 'BÜYÜ fazında ordunun vuruş gücüne eklenir — büyü ağırlıklı ordularda belirleyici.' },
-  { key: 'mDef', icon: 'buy_sav', label: 'Büyü Savunma', hint: 'Gelen büyü hasarına karşı kahramanın direncini artırır.' },
-];
+/**
+ * ⚠️ Anahtar · etiket · simge `lib/hero-skills.ts`'ten geliyor (casusluk raporu da aynı
+ * dörtlüyü çiziyor). İpuçları burada kalıyor: "puanı nereye harcayayım" sorusu Tapınak'a özgü.
+ */
+const HINTS: Record<keyof HeroSkills, string> = {
+  fAtk: 'Yakın dövüş fazında ordunun vuruş gücüne eklenir.',
+  fDef: 'Kahramanın fiziksel dayanıklılığını ve ordunun savunma payını artırır.',
+  mAtk: 'BÜYÜ fazında ordunun vuruş gücüne eklenir — büyü ağırlıklı ordularda belirleyici.',
+  mDef: 'Gelen büyü hasarına karşı kahramanın direncini artırır.',
+};
+const SKILLS = HERO_SKILLS.map((s) => ({ ...s, hint: HINTS[s.key] }));
 
 /**
  * ⭐ TEK ETİKET (kullanıcı, 2026-08-01): savaşta ölen kahraman — ordusu sağ kalsa da kalmasa da
