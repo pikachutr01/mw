@@ -145,6 +145,18 @@ export const players = pgTable('players', {
    */
   allianceRole: smallint('alliance_role'),
   /**
+   * ⭐ İTTİFAĞA KATILMA ANI — ittifak sohbetindeki acemi kısıtının ölçütü (§13.15c).
+   *
+   * ⚠️ `created_at` bu iş için KULLANILAMAZ: o DÜNYAYA katılma anı. Aylardır oynayan bir
+   * oyuncu yeni bir ittifağa girip anında bağırabilirdi — kısıt tam da bunu engelliyor.
+   *
+   * ⚠️ Ayrılma/atılma/dağıtmada **NULL'a çekilir**: geri katılan süreyi YENİDEN bekler.
+   * Aksi hâlde "çık-gir" kısıtın kaçış yolu olurdu. Bunu yazan DÖRT kod yolu var
+   * (`applyMembership`, `decide()`, `disbandInner`, `detachForPurge`) — biri unutulursa
+   * servis fail-closed davranıp o oyuncuyu yazdırmaz, yani hata sessiz kalmaz.
+   */
+  allianceJoinedAt: timestamp('alliance_joined_at', { withTimezone: true }),
+  /**
    * ⭐ SIRALAMA MUAFİYETİ (kullanıcı, 2026-08-03) — yönetici/servis hesaplarını vitrinden gizler.
    *
    * ⚠️ İki ayrı bayrak, bilerek: "listede görünmesin ama ittifakının puanına katkısı sayılsın"
@@ -916,13 +928,25 @@ export const chatChannels = pgTable('chat_channels', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   worldId: smallint('world_id').notNull().references(() => worlds.id),
   kind: text('kind').notNull(), // global | alliance | dm
-  allianceId: bigint('alliance_id', { mode: 'number' }), // FK Faz 4'te
+  /**
+   * ⭐⭐ CASCADE = «İTTİFAK DAĞITILIRSA SOHBET MESAJLARI KALICI SİLİNİR» ŞARTININ TAMAMI.
+   *
+   * Zincir: `alliances` DELETE → bu satır DELETE → `chat_messages` DELETE (o FK'de de cascade).
+   *
+   * ⚠️ `disbandInner()` içinde ELLE silme YOK ve olmamalı: unutulabilen bir adım, dağıtılmış
+   * ittifağın sohbetini sunucuda bırakırdı. Kural veritabanında duruyor.
+   */
+  allianceId: bigint('alliance_id', { mode: 'number' })
+    .references((): AnyPgColumn => alliances.id, { onDelete: 'cascade' }),
   dmKey: text('dm_key'), // least(a,b):greatest(a,b)
   slowModeS: smallint('slow_mode_s').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('chat_channels_world_dm').on(t.worldId, t.dmKey),
   index('chat_channels_world_kind').on(t.worldId, t.kind),
+  /** Bir ittifağın TEK kanalı olur. Kısmî: DM satırlarında `alliance_id` NULL, onlar muaf. */
+  uniqueIndex('chat_channels_world_alliance').on(t.worldId, t.allianceId)
+    .where(sql`${t.allianceId} IS NOT NULL`),
 ]);
 
 export const chatParticipants = pgTable('chat_participants', {
@@ -943,6 +967,12 @@ export const chatParticipants = pgTable('chat_participants', {
    * `chat_messages` satırlarına hiç dokunulmaz, iki tarafın da görünür penceresi boşalır.
    */
   clearedBeforeMessageId: bigint('cleared_before_message_id', { mode: 'number' }).notNull().default(0),
+  /**
+   * ⚠️ **İTTİFAK SOHBETİNDE KULLANILMIYOR** — orası `alliance_chat_mutes`. Sebep: burada
+   * NULL = «susturulmamış» (varsayılan), yani **KALICI susturma temsil edilemez**. Ayrı
+   * tabloda satırın VARLIĞI susturmadır, `until IS NULL` ise kalıcı — belirsizlik yok.
+   * Ayrıca kim/neden/ne zaman denetim izi bir kolona sığmazdı.
+   */
   mutedUntil: timestamp('muted_until', { withTimezone: true }),
   notify: boolean('notify').notNull().default(true),
   joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
@@ -960,6 +990,16 @@ export const chatMessages = pgTable('chat_messages', {
   senderId: bigint('sender_id', { mode: 'number' }), // null = sistem duyurusu
   body: text('body').notNull(), // düz metin, ≤500 karakter (sunucu doğrular)
   clientMsgId: uuid('client_msg_id'), // idempotency
+  /**
+   * ⭐ ÇÖZÜLMÜŞ MENTION ARALIKLARI: `[{id, at, len}]` — `at` gövdedeki başlangıç, `len` `@`
+   * DÂHİL uzunluk. DM kanallarında daima boş. **İstemci parse etmez, yalnız diler.**
+   *
+   * ⚠️ Neden ham `@ad` yetmez: kullanıcı adında BOŞLUK serbest (`name-rules.ts`) →
+   * `"@Eru Ilúvatar merhaba"` metninde adın nerede bittiği metinden çözülemez.
+   * ⚠️ Neden yalnız `[playerId]` yetmez: ad DEĞİŞİRSE eski mesajdaki metin eski adı gösterir,
+   * id'den çözülen yeni adla eşleşmez → kalın yazılacak aralık bulunamazdı.
+   */
+  mentions: jsonb('mentions').notNull().default(sql`'[]'::jsonb`),
   isPinned: boolean('is_pinned').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -980,6 +1020,46 @@ export const chatBans = pgTable('chat_bans', {
   createdBy: bigint('created_by', { mode: 'number' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('chat_bans_player').on(t.playerId, t.until)]);
+
+/**
+ * ⭐ İTTİFAK SOHBETİ SUSTURMALARI (§13.15c) — `chatBans`ın İTTİFAK ÖLÇEĞİNDEKİ ikizi.
+ *
+ * Farkı yetkide: küresel sohbet yasağını YÖNETİCİ verir, bunu **ittifak yönetimi** (Lider +
+ * Konsey) verir ve yalnız o ittifağın sohbetinde geçerlidir.
+ *
+ * ⚠️ **Satırın VARLIĞI susturmadır**, `until IS NULL` ise KALICI. `chat_participants.muted_until`
+ * kullanılamazdı: orada NULL «susturulmamış» demek olurdu ve kalıcı susturma temsil edilemezdi.
+ *
+ * ⚠️ **Kaldırma = DELETE DEĞİL, `revoked_at` işaretlemesi.** Moderasyon geçmişi kalıcı olmalı
+ * (`chat_bans`'ın "süresi geçmiş satır SİLİNMEZ" kuralıyla aynı gerekçe): *"lider beni haksız
+ * yere susturdu"* tartışmasının tek nesnel kaydı bu satır.
+ *
+ * ⚠️ Susturma **ittifağa** bağlı: üye ayrılıp geri katılırsa ceza DEVAM EDER (kaçış yolu yok),
+ * ama BAŞKA bir ittifağa katılırsa orada susturulmamıştır — ceza o topluluğa aitti.
+ */
+export const allianceChatMutes = pgTable('alliance_chat_mutes', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull(),
+  allianceId: bigint('alliance_id', { mode: 'number' }).notNull()
+    .references(() => alliances.id, { onDelete: 'cascade' }),
+  playerId: bigint('player_id', { mode: 'number' }).notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  /** NULL = KALICI (lider/konsey kaldırana kadar). Dolu = o ana kadar. */
+  until: timestamp('until', { withTimezone: true }),
+  reason: text('reason'),
+  createdBy: bigint('created_by', { mode: 'number' }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokedBy: bigint('revoked_by', { mode: 'number' }),
+}, (t) => [
+  /**
+   * ⚠️ Aynı oyuncuya ikinci bir AKTİF satır olamaz. Koşul `revoked_at IS NULL` — SÜRESİ
+   * GEÇMİŞ ama iptal edilmemiş satır da kısıtın İÇİNDE. Bu yüzden servis, yeniden
+   * susturmadan önce süresi geçmiş satırı da iptale çekmek ZORUNDA.
+   */
+  uniqueIndex('alliance_chat_mutes_one_active').on(t.allianceId, t.playerId)
+    .where(sql`${t.revokedAt} IS NULL`),
+]);
 
 /**
  * ⭐ ŞİKAYET KAYDI (§13.12.4) — yalnız KAYIT üretir, otomatik ceza YOK (§9.1.1 değişmezi).

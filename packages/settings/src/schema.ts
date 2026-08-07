@@ -17,6 +17,15 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     description: 'Özel mesajlaşmanın akış ve kötüye kullanım sınırları (§13.12.4).',
   },
   {
+    id: 'allianceChat',
+    label: 'İttifak sohbeti',
+    description: '⭐ İttifak üyelerinin ortak grup sohbeti (§13.15c). Sınırlar özel mesajdan AYRI: '
+      + 'kova burada KANAL başına sayılır, yani hareketli bir ittifak sohbeti oyuncunun özel '
+      + 'mesaj hakkını yemez (ve tersi de olmaz). ⚠️ Tek tek üyeyi susturmak bu ayarların '
+      + 'DIŞINDA: onu ittifak lideri ve konsey üyeleri verir, panel değil. Buradaki sayılar '
+      + 'herkese aynı şekilde uygulanan akış kurallarıdır.',
+  },
+  {
     id: 'notify',
     label: 'Bildirim',
     description: 'Toast ve push davranışı; metin sınırları ve ölü abonelik temizliği (§7.2).',
@@ -230,6 +239,83 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     env: 'CHAT_PAGE_SIZE',
     description: 'Sohbet penceresi bir seferde kaç eski mesaj çeker. Büyütmek geçmişi daha çok gösterir '
       + 'ama her açılışı yavaşlatır.',
+  },
+
+  /* ── İttifak sohbeti ─────────────────────────────────────────────────────── */
+  {
+    key: 'allianceChat.enabled',
+    label: 'İttifak sohbeti açık',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'İttifak sohbetini tamamen açar veya kapatır. Kapatınca kimse yeni mesaj yazamaz ama '
+      + 'eski mesajlar okunmaya devam eder. Kötüye kullanım dalgasında acil vana olarak düşün.',
+    note: 'Kapatmak sohbeti SİLMEZ; yalnız yazmayı durdurur. Tek tek üyeyi susturmak ittifak '
+      + 'liderinin/konseyinin işi, panelin değil.',
+  },
+  {
+    key: 'allianceChat.burst',
+    label: 'Kova: pencere başına mesaj',
+    type: 'int', default: 8, min: 1, max: 100, tag: 'design', unit: 'adet',
+    description: 'Bir üyenin kısa bir süre içinde sohbete atabileceği en fazla mesaj. Büyütürsen spam '
+      + 'kolaylaşır; küçültürsen hararetli bir tartışmada normal üye de engellenir.',
+    note: 'Özel mesajın kovasından AYRI sayılır ve yalnız ittifak kanalını kapsar. Ortak olsaydı '
+      + 'hareketli bir ittifak sohbeti oyuncunun özel mesaj hakkını yer, tersine bir spamcı da '
+      + 'ittifakta yazarak özel mesaj kotasını temizlerdi.',
+  },
+  {
+    key: 'allianceChat.perSeconds',
+    label: 'Kova penceresi',
+    type: 'int', default: 10, min: 1, max: 600, tag: 'design', unit: 'sn',
+    description: 'Yukarıdaki sayının ölçüldüğü süre. «8 mesaj / 10 saniye» gibi düşün. Büyütmek sınırı '
+      + 'gevşetir, küçültmek sertleştirir.',
+  },
+  {
+    key: 'allianceChat.duplicateSeconds',
+    label: 'Aynı metin bekleme süresi',
+    type: 'int', default: 20, min: 0, max: 600, tag: 'design', unit: 'sn',
+    description: 'Aynı metni sohbete tekrar göndermek için beklenecek süre. 0 yazarsan bu kontrol kapanır.',
+  },
+  {
+    key: 'allianceChat.slowModeSeconds',
+    label: 'Yavaş mod',
+    type: 'int', default: 0, min: 0, max: 600, tag: 'design', unit: 'sn',
+    description: 'Bir üyenin iki mesajı arasında geçmesi gereken en az süre. 0 = kapalı. Kovadan farkı: '
+      + 'kova ani patlamayı frenler, bu ise sürekli akışı yavaşlatır.',
+    note: 'Kalabalık ittifaklarda sohbetin okunamaz hâle gelmesini engellemek için var. '
+      + 'Varsayılan 0: kural, ihtiyaç görülmeden açılmamalı.',
+  },
+  {
+    key: 'allianceChat.newMemberHours',
+    label: 'Yeni üye kısıtı',
+    type: 'int', default: 2, min: 0, max: 168, tag: 'design', unit: 'sa',
+    description: 'İttifağa yeni katılan üyenin sohbete yazamayacağı süre. Bu sürede sohbeti OKUYABİLİR, '
+      + 'yalnız yazamaz. Casus ya da atıl hesapların ittifağa girip anında bağırmasını engeller.',
+    note: 'Ölçüt `players.alliance_joined_at` — hesabın ya da dünyanın yaşı değil, İTTİFAĞA katılma '
+      + 'anı. İttifaktan ayrılıp geri katılan süreyi YENİDEN bekler; aksi hâlde «çık-gir» bu '
+      + 'kısıtın kaçış yolu olurdu.',
+  },
+  {
+    key: 'allianceChat.pageSize',
+    label: 'Geçmiş sayfa boyutu',
+    type: 'int', default: 30, min: 5, max: 100, tag: 'design', unit: 'adet',
+    description: 'Sohbet bir seferde kaç eski mesaj çeker. Büyütmek geçmişi daha çok gösterir ama '
+      + 'her açılışı yavaşlatır.',
+  },
+  {
+    key: 'allianceChat.maxMentions',
+    label: 'Mesaj başına bahsetme',
+    type: 'int', default: 5, min: 0, max: 20, tag: 'design', unit: 'adet',
+    description: 'Tek mesajda en fazla kaç üyeden @ ile bahsedilebilir. Tavanı aşanlar ne kalın yazılır '
+      + 'ne de bildirim üretir. 0 yazarsan bahsetme özelliği tamamen kapanır.',
+    note: 'Tavan bir spam kapısı: tek mesajla tüm ittifağa bildirim yağdırmak engelleniyor. Aşan '
+      + 'bahsetme hem görsel vurgudan hem bildirimden birlikte düşer — kalın yazılıp bildirim '
+      + 'gitmemesi «bahsedildim ama haber gelmedi» şaşkınlığı üretirdi.',
+  },
+  {
+    key: 'allianceChat.rosterMax',
+    label: 'Sohbette listelenen üye',
+    type: 'int', default: 300, min: 20, max: 2000, tag: 'design', unit: 'adet',
+    description: 'Sohbet açılırken en fazla kaç üye çekilir. Bu liste hem çevrimiçi noktalarını hem @ '
+      + 'önerilerini besler. Aşan ittifaklarda öneriler kısalır ama adı tam yazınca yine çalışır.',
   },
 
   /* ── Bildirim ────────────────────────────────────────────────────────────── */

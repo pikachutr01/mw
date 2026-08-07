@@ -21,6 +21,7 @@ import { OptionalAuthGuard } from './auth/optional-auth.guard.ts';
 import { AuthService } from './auth/auth.service.ts';
 import { TokenService } from './auth/token.service.ts';
 import { BattleController } from './battles/battle.controller.ts';
+import { AllianceChatController } from './chat/alliance-chat.controller.ts';
 import { ChatController } from './chat/chat.controller.ts';
 import { CityController } from './cities/city.controller.ts';
 import { HeroController } from './heroes/hero.controller.ts';
@@ -51,12 +52,13 @@ export { DB } from './db/tokens.ts';
  * bağımlı değil (saf sınıflar), böylece testlerde Nest'i ayağa kaldırmadan doğrudan kullanılıyor.
  *
  * Faz 2'nin kalanı: Genel Sohbet (WS) ve web ekranları. **Özel mesajlaşma (DM) 2026-07-31'de
- * girdi** (`ChatController`); genel/ittifak kanalları aynı `chat_*` altyapısını kullanacak.
+ * girdi** (`ChatController`), **İttifak Sohbeti 2026-08-07'de** (`AllianceChatController`);
+ * ikisi de aynı `chat_*` altyapısını kullanıyor. Geriye yalnız Genel Sohbet kaldı.
  */
 @Module({
   controllers: [
     HealthController, SimulateController, AuthController, CityController,
-    AllianceController, ChatController,
+    AllianceController, ChatController, AllianceChatController,
     HeroController,
     MissionController, BattleController, WorldController, WorldsPublicController, CommandController,
     NotifyController,

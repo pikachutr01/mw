@@ -12,7 +12,8 @@
  * Konsey yalnız Asker'i atabilir; Lider + Konseye Al/Çıkar + Liderliği Devret. Onay metinleri
  * orijinal kalıpla: "… Emin misiniz!" (ünlem).
  */
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { fmt } from '../lib/hooks.ts';
 import {
   useAlliance, useAllianceApply, useAllianceBroadcast, useAllianceDisband, useAllianceFound,
@@ -23,6 +24,7 @@ import {
   Badge, Button, Empty, ErrorBox, Input, Panel, Skeleton, Td, TextArea, Th,
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
+import { AllianceChatSheet } from '../components/AllianceChatSheet.tsx';
 import { MERIT_ROW_CLASS, MeritBadge } from '../components/MeritBadge.tsx';
 
 /** Rütbe adları — ekran görüntüsündeki yazımla ("Konsey Üyesi"; istemci içi string "Konsey"). */
@@ -146,8 +148,27 @@ function MemberView({ a, page, setPage }: {
   const leave = useAllianceLeave();
   const disband = useAllianceDisband();
   const [panel, setPanel] = useState<'none' | 'text' | 'message' | 'rename'>('none');
+  const [chatOpen, setChatOpen] = useState(false);
   const isLeader = alliance.myRole === 3;
   const isCouncil = alliance.myRole >= 2;
+
+  /**
+   * ⭐ DERİN BAĞLANTI `/command/alliance?chat=1` (§13.15c) — bahsedilme bildirimi buraya
+   * düşüyor; `Messages.tsx`teki `?dm=` deseninin ikizi.
+   *
+   * ⚠️ Parametre **temizleniyor**: kalsaydı oyuncu sheet'i kapattığında adres hâlâ `chat=1`
+   * derdi ve bir sonraki render onu tekrar açardı.
+   */
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('chat') !== '1') return;
+    setChatOpen(true);
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('chat');
+      return next;
+    }, { replace: true });
+  }, [params, setParams]);
 
   return (
     <div className="space-y-3">
@@ -164,6 +185,8 @@ function MemberView({ a, page, setPage }: {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+          {/* ⭐ Rol koşulu YOK — Asker de sohbete girer (yazma hakkı sunucuda kararlaşıyor). */}
+          <Button onClick={() => setChatOpen(true)}>İttifak Sohbeti</Button>
           {isCouncil ? (
             <>
               <Button variant="ghost" onClick={() => setPanel(panel === 'text' ? 'none' : 'text')}>
@@ -203,8 +226,14 @@ function MemberView({ a, page, setPage }: {
         </div>
 
         {panel === 'text' ? <TextEditor initial={alliance.text} onClose={() => setPanel('none')} /> : null}
-        {panel === 'message' ? <BroadcastBox onClose={() => setPanel('none')} /> : null}
+        {panel === 'message' ? (
+          <BroadcastBox memberCount={alliance.memberCount} onClose={() => setPanel('none')} />
+        ) : null}
         {panel === 'rename' ? <RenameBox onClose={() => setPanel('none')} /> : null}
+        {/* ⚠️ Sheet EKRANA bağlı, `Shell`e değil (DM penceresinin aksine): başka sayfaya
+            geçilince unmount olur → WS odası terk edilir, sorgular durur. Kullanıcı şartı
+            "kapalıyken kaynak harcamasın" böyle YAPISAL olarak sağlanıyor. */}
+        {chatOpen ? <AllianceChatSheet onClose={() => setChatOpen(false)} /> : null}
       </Panel>
 
       <Panel title="Üyeler" right={`${fmt(alliance.memberCount)} üye`}>
@@ -327,53 +356,111 @@ function MemberLine({ m, index, myRole, alt }: {
 
 /* ── Küçük paneller ──────────────────────────────────────────────────────────── */
 
+/** Metin kutularının ortak üst sınırı — sunucudaki `alliance.service.ts` sınırıyla aynı. */
+const TEXT_MAX = 500;
+
+/**
+ * Modal başındaki açıklama şeridi — "bu yazıyı kim görecek" sorusunun cevabı.
+ *
+ * İkisi de geri alınamaz bir yayına çıkıyor (metni herkes görür, mesaj kutulardan silinemez);
+ * bunu onay diyaloğuna bırakmak GEÇ oluyordu: oyuncu metni yazdıktan SONRA öğreniyordu.
+ */
+function ModalNote({ icon, children }: { icon: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-[var(--radius-sm)] border border-border
+      bg-raised px-2.5 py-2 text-xs leading-relaxed text-muted">
+      <span aria-hidden className="shrink-0 text-sm leading-none">{icon}</span>
+      <span className="min-w-0">{children}</span>
+    </div>
+  );
+}
+
+/**
+ * Karakter sayacı. Son 50 karakterde renk değişir: sınıra dayanan oyuncu kutunun sessizce
+ * yazmayı bıraktığını (`maxLength` fazlasını yutuyor) başka türlü fark etmiyor.
+ */
+function CharCount({ value }: { value: string }) {
+  const near = value.length > TEXT_MAX - 50;
+  return (
+    <div className={`text-right text-[11px] tnum ${near ? 'text-danger' : 'text-muted'}`}>
+      {value.length}/{TEXT_MAX}
+    </div>
+  );
+}
+
+/** İki metin kutusunun ortak biçimi: sürüklenerek boyutlandırılmaz, odakta çerçevesi belirginleşir. */
+const FIELD_CLASS = 'resize-none leading-relaxed focus:border-strong focus:outline-none';
+
 function TextEditor({ initial, onClose }: { initial: string; onClose: () => void }) {
   const [text, setText] = useState(initial);
   const save = useAllianceText();
   const confirm = useConfirm();
+  // Değişiklik yokken kaydetmek boş bir onay + boş bir istek demek; düğme kapalı kalsın.
+  const unchanged = text.trim() === initial.trim();
+
   return (
-    <Modal title="İttifak Metni" onClose={onClose} width="md">
-      <div className="space-y-2">
-        <TextArea
-          value={text} maxLength={500} rows={6}
-          onChange={(e) => setText(e.target.value)}
-          aria-label="İttifak metni"
-        />
-        <div className="text-right text-[11px] text-muted tnum">{text.length}/500</div>
-        <ErrorBox error={save.error} />
-        <div className="flex justify-end gap-2">
+    <Modal title="İttifak Metni" onClose={onClose} width="md"
+      footer={
+        <>
           <Button variant="ghost" onClick={onClose}>Vazgeç</Button>
-          <Button disabled={save.isPending} onClick={() => {
+          <Button disabled={unchanged || save.isPending} onClick={() => {
             void confirm({ title: 'İttifak Metni', body: 'İttifak metni değiştirilecek. Emin misiniz!' })
               .then((ok) => { if (ok) save.mutate({ text }, { onSuccess: onClose }); });
-          }}>Kaydet</Button>
-        </div>
+          }}>{save.isPending ? 'Kaydediliyor…' : 'Kaydet'}</Button>
+        </>
+      }>
+      <div className="space-y-2.5 px-3 py-3">
+        <ModalNote icon="📜">
+          İttifak metni <b className="text-ink">ittifak sayfasının en üstünde</b> durur;
+          üyeler ve ittifağı inceleyen herkes görür.
+        </ModalNote>
+        <TextArea
+          value={text} maxLength={TEXT_MAX} rows={7}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="İttifağın tanıtımı, kuralları, buluşma saatleri…"
+          aria-label="İttifak metni"
+          className={FIELD_CLASS}
+        />
+        <CharCount value={text} />
+        <ErrorBox error={save.error} />
       </div>
     </Modal>
   );
 }
 
-function BroadcastBox({ onClose }: { onClose: () => void }) {
+function BroadcastBox({ memberCount, onClose }: { memberCount: number; onClose: () => void }) {
   const [text, setText] = useState('');
   const send = useAllianceBroadcast();
   const confirm = useConfirm();
+  const empty = text.trim().length === 0;
+
   return (
-    <Modal title="İttifağa Mesaj" onClose={onClose} width="md">
-      <div className="space-y-2">
-        <p className="text-xs text-muted">Mesaj TÜM üyelerin posta kutusuna gönderilir.</p>
-        <TextArea
-          value={text} maxLength={500} rows={4}
-          onChange={(e) => setText(e.target.value)}
-          aria-label="İttifak mesajı"
-        />
-        <ErrorBox error={send.error} />
-        <div className="flex justify-end gap-2">
+    <Modal title="İttifağa Mesaj" onClose={onClose} width="md"
+      footer={
+        <>
           <Button variant="ghost" onClick={onClose}>Vazgeç</Button>
-          <Button disabled={text.trim().length === 0 || send.isPending} onClick={() => {
+          <Button disabled={empty || send.isPending} onClick={() => {
             void confirm({ title: 'İttifağa Mesaj', body: 'Mesaj gönderilecek. Emin misiniz!' })
               .then((ok) => { if (ok) send.mutate({ text }, { onSuccess: onClose }); });
-          }}>Gönder</Button>
-        </div>
+          }}>{send.isPending ? 'Gönderiliyor…' : 'Gönder'}</Button>
+        </>
+      }>
+      <div className="space-y-2.5 px-3 py-3">
+        {/* ⚠️ Alıcı sayısı GÖNDERENİ DE kapsıyor (sunucu `alliance_id` eşleşen herkese yazıyor) —
+            "5 üyeye" deyip 6 satır yazmak sayıyı yanlış gösterirdi. */}
+        <ModalNote icon="✉">
+          Mesaj <b className="text-ink">{fmt(memberCount)} üyenin</b> posta kutusuna ayrı ayrı
+          düşer ve <b className="text-ink">geri alınamaz</b>.
+        </ModalNote>
+        <TextArea
+          value={text} maxLength={TEXT_MAX} rows={6}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Üyelere iletmek istediğin duyuru…"
+          aria-label="İttifak mesajı"
+          className={FIELD_CLASS}
+        />
+        <CharCount value={text} />
+        <ErrorBox error={send.error} />
       </div>
     </Modal>
   );

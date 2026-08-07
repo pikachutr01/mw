@@ -82,7 +82,18 @@ const INVALIDATES: Record<string, string[]> = {
   'world:maintenance': ['world-state', 'world'],
   /* ⭐ İTTİFAK (2026-07-30): üyelik/metin/ad/dağıtma — ittifak ekranı + sağ panel + ittifak
    * sütunlarını taşıyan görünümler tazelenir. */
-  'alliance:changed': ['alliance', 'alliances', 'overview', 'world', 'rankings'],
+  'alliance:changed': ['alliance', 'alliances', 'overview', 'world', 'rankings',
+    /* ⭐ Susturma/üyelik değişimi sohbet sheet'inin yazma hakkını ve üye listesini etkiler. */
+    'alliance-chat'],
+  /**
+   * ⭐ İTTİFAK SOHBETİ (§13.15c) — olay **KANAL ODASINDAN** geliyor.
+   *
+   * ⚠️ Sheet kapalıyken odaya katılmıyoruz (`alliance:chat:close`), dolayısıyla bu satır
+   * kapalıyken HİÇ tetiklenmez — kullanıcı şartı "kapalıyken tam sessizlik" böyle sağlanıyor.
+   * ⚠️ `alliance-chat` (üye listesi) BİLEREK tazelenmiyor: her mesajda roster çekmek
+   * gereksiz trafik olurdu; liste zaten `alliance:changed` ile güncelleniyor.
+   */
+  'chat:alliance': ['alliance-chat-history'],
   /* ⭐ ÖZEL MESAJ (2026-07-31): sohbet listesi + açık pencerenin geçmişi tazelenir. Olay gövde
    * taşımaz; balon metni tazelenen geçmişten gelir (tek doğru kaynak sunucu). */
   'chat:message': ['chat', 'chat-history'],
@@ -122,6 +133,27 @@ export function sendTyping(channelId: number): void {
   socket?.emit('chat:typing', { channelId });
 }
 
+/* ── İttifak sohbeti (§13.15c) ───────────────────────────────────────────────
+ *
+ * ⚠️ **AYRI değişken, DM'inkiyle paylaşılmıyor.** Sunucu tarafında da ayrı slot var
+ * (`socket.data.allianceChatChannelId`): DM penceresi ve ittifak sheet'i aynı anda açık
+ * olabilir, ortak bir slot biri diğerini odadan atardı.
+ *
+ * ⚠️ Mesaj olayı BU odadan geliyor (DM'de kişisel odadan geliyordu). Sheet kapanınca oda
+ * terk ediliyor ve o andan itibaren hiçbir şey gelmiyor — "kapalıyken tam sessizlik"
+ * bir bayrağa değil oda üyeliğine, yani yapıya bağlı. */
+let openAllianceChannelId: number | null = null;
+
+export function openAllianceChat(channelId: number): void {
+  openAllianceChannelId = channelId;
+  socket?.emit('alliance:chat:open', { channelId });
+}
+
+export function closeAllianceChat(): void {
+  openAllianceChannelId = null;
+  socket?.emit('alliance:chat:close');
+}
+
 export function connectRealtime(queryClient: QueryClient): () => void {
   const start = (): void => {
     const session = getSession();
@@ -155,6 +187,11 @@ export function connectRealtime(queryClient: QueryClient): () => void {
        * `connectionStateRecovery` çalışır) → açık sohbet varsa odaya yeniden katıl, yoksa
        * "yazıyor…" sessizce ölür. */
       if (openChatChannelId != null) socket?.emit('chat:open', { channelId: openChatChannelId });
+      /* ⚠️ İttifak sohbeti de yeniden katılmalı — bu satır olmadan bağlantı kopup dönünce
+       * sheet açık görünür ama mesajlar SESSİZCE gelmez (DM'de aynı hata bir kez yapıldı). */
+      if (openAllianceChannelId != null) {
+        socket?.emit('alliance:chat:open', { channelId: openAllianceChannelId });
+      }
     });
     socket.on('disconnect', () => setState('offline'));
     socket.on('connect_error', () => setState('offline'));
@@ -221,6 +258,8 @@ export function connectRealtime(queryClient: QueryClient): () => void {
       presenceTimer = setTimeout(() => {
         presenceTimer = null;
         void queryClient.invalidateQueries({ queryKey: ['alliance'] });
+        /* Sohbet sheet'indeki çevrimiçi noktaları da aynı kaynaktan besleniyor. */
+        void queryClient.invalidateQueries({ queryKey: ['alliance-chat'] });
       }, 2000);
     });
 

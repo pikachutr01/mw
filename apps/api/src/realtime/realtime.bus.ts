@@ -27,6 +27,16 @@ export interface RealtimeEvent {
   playerIds: number[];
   /** Dolu ise olay AYRICA ittifak odasına da gider (`w{w}:a{id}`) — üyeler listeyi tazeler. */
   allianceId?: number | null;
+  /**
+   * ⭐⭐ Dolu ise olay **YALNIZ** o sohbet kanalının odasına gider (`w{w}:chat:{id}`) —
+   * `playerIds` ve `allianceId` YOK SAYILIR (§13.15c).
+   *
+   * İttifak sohbeti mesajları bu yolu kullanıyor. İttifak odasına yayınlasaydık sheet'i
+   * kapalı olan her üye olayı alır ve sorgu tazelerdi; kullanıcı şartı ise "kapalıyken
+   * tam sessizlik". Kanal odasına **yalnız sheet açıkken** katılınıyor, dolayısıyla
+   * sessizlik bir bayrağa değil oda üyeliğine, yani yapıya bağlı.
+   */
+  chatChannelId?: number | null;
   /** Yalnız KİMLİK bilgisi — veri değil (yukarıdaki kural). */
   ref?: Record<string, number | string | null>;
 }
@@ -271,6 +281,29 @@ export function eventForOutbox(
       return {
         topic: 'chat:message', worldId,
         playerIds: players(num(payload['senderId']), num(payload['recipientId'])),
+        ref: { channelId: num(payload['channelId']), messageId: num(payload['messageId']) },
+      };
+
+    /**
+     * ⭐ İTTİFAK SOHBETİ (§13.15c) — DM'in aksine olay **KANAL ODASINA** gidiyor.
+     *
+     * ⚠️⚠️ **`playerIds` BİLEREK BOŞ.** Normalde boş `playerIds` "dünya geneli yayın" demek
+     * (`dispatch`); burada onu `chatChannelId` dalı önlüyor ve o dal `dispatch()`in EN
+     * BAŞINDA `return`'le bitmek zorunda. Sıra bozulursa ittifak sohbeti TÜM DÜNYAYA sızar —
+     * tasarımın tek gerçek felaket riski, `realtime.test.ts` bunu ayrıca doğruluyor.
+     *
+     * ⚠️ `allianceId` de KONMUYOR: ittifak odasına düşseydi sheet'i kapalı üyeler de olayı
+     * alırdı ve "kapalıyken tam sessizlik" şartı delinirdi.
+     *
+     * ⚠️ Olay GÖVDE TAŞIMAZ (kural: haber taşır, veri değil). Mention aralıkları DB'de;
+     * outbox payload'ındaki `mentions` yalnız BİLDİRİM katmanı için (`notify.catalog.ts`) ve
+     * WS olayına hiç girmiyor — kimin anıldığı odadaki herkese sızmamalı.
+     */
+    case 'chat:alliance':
+      return {
+        topic: 'chat:alliance', worldId,
+        playerIds: [],
+        chatChannelId: num(payload['channelId']),
         ref: { channelId: num(payload['channelId']), messageId: num(payload['messageId']) },
       };
 

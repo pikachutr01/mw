@@ -44,6 +44,7 @@ const ICON: Record<string, string> = {
   dm: '✉',
   report: '📜',
   production: '⚒',
+  mention: '@',
 };
 
 export function NotifyProvider({ children }: { children: ReactNode }) {

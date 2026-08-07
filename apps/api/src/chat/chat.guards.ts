@@ -1,0 +1,222 @@
+/**
+ * ⭐ SOHBET MUHAFIZLARI — DM ile İTTİFAK SOHBETİNİN PAYLAŞTIĞI kurallar (§13.12, §13.15c).
+ *
+ * `ChatService.send()` doğduğunda tek sohbet türü vardı ve bütün adımlar tek metodun içindeydi.
+ * İttifak sohbeti gelince adımların çoğunun **DM'e özgü olmadığı** görüldü: sohbet yasağı,
+ * e-posta doğrulaması, idempotency, kova ve mükerrer kontrolü her sohbet türü için aynı.
+ * Burası o ortak katman; iki servis de buradan geçer.
+ *
+ * ⚠️ **ADIM SIRASI KURALLARI BU DOSYADA DEĞİL, ÇAĞIRANDA.** Kontrollerin hangi sırayla
+ * koşacağı bir hatadan öğrenilmiş bilgidir (bkz. `chat.service.ts` `send()` yorumları) ve
+ * sıra sohbet türüne göre değişebiliyor. Buradaki fonksiyonlar tek tek "hayır" diyebilen
+ * bağımsız kapılar; sırayı kuran çağıran servistir.
+ *
+ * ⚠️ Bu dosya bir REFACTOR ürünü: davranış **birebir** korunmalı. Kabul ölçütü
+ * `apps/api/test/chat.test.ts`in tek satır değişmeden yeşil kalması.
+ */
+import { sql } from 'drizzle-orm';
+import {
+  isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
+} from '../auth/unverified.ts';
+import type { Db } from '../db/client.ts';
+
+export type Tx = Pick<Db, 'execute'>;
+
+export class ChatError extends Error {
+  constructor(readonly code: string, message: string, readonly retryAfterSeconds?: number) {
+    super(message);
+  }
+}
+
+/* ── Sohbet yasağı (küresel, yöneticiden) ─────────────────────────────────── */
+
+/**
+ * ⭐ Oyuncunun AKTİF sohbet yasağı (yoksa `null`).
+ *
+ * ⚠️ `until IS NULL` = **süresiz** yasak, `until > now()` süreli. Süresi geçmiş satır
+ * SİLİNMEZ — moderasyon geçmişi kalıcı olmalı; yalnız etkisiz sayılır.
+ */
+export async function activeBan(tx: Tx, worldId: number, playerId: number): Promise<{
+  scope: string; until: Date | null; reason: string | null;
+} | null> {
+  const [row] = await tx.execute<Record<string, unknown>>(sql`
+    SELECT scope, until, reason FROM chat_bans
+     WHERE world_id = ${worldId} AND player_id = ${playerId}
+       AND (until IS NULL OR until > now())
+     ORDER BY until IS NULL DESC, until DESC
+     LIMIT 1
+  `);
+  if (!row) return null;
+  return {
+    scope: String(row['scope']),
+    until: row['until'] == null ? null : new Date(String(row['until'])),
+    reason: row['reason'] == null ? null : String(row['reason']),
+  };
+}
+
+/**
+ * Yasaklıysa fırlatır. ⚠️ Mesaj **kimseye** gönderilemez (kullanıcı kararı) ama oyuncu
+ * **okumaya devam eder**: kendisine yazılanı görebilmeli, yoksa ceza "sohbetten silinmek"
+ * olurdu. Aynı kural ittifak sohbetinde de geçerli.
+ */
+export async function assertNotBanned(tx: Tx, worldId: number, playerId: number): Promise<void> {
+  const ban = await activeBan(tx, worldId, playerId);
+  if (!ban) return;
+  const until = ban.until
+    ? `${ban.until.toLocaleString('tr-TR')} tarihine kadar`
+    : 'süresiz olarak';
+  const reason = ban.reason ? ` Sebep: ${ban.reason}` : '';
+  throw new ChatError(
+    'chat_banned',
+    `Sohbet yasağın var — ${until} mesaj gönderemezsin.${reason}`,
+    ban.until ? Math.max(1, Math.ceil((ban.until.getTime() - Date.now()) / 1000)) : undefined,
+  );
+}
+
+/** §verify — DOĞRULANMAMIŞ hesap mesaj YAZAMAZ (okumak serbest). */
+export async function assertVerifiedToChat(tx: Tx, playerId: number): Promise<void> {
+  if (!unverifiedLimits().enabled) return;
+  if (await isVerified(tx as never, playerId)) return;
+  throw new ChatError(UNVERIFIED_CODE, UNVERIFIED_MESSAGE.chat);
+}
+
+/* ── Idempotency ──────────────────────────────────────────────────────────── */
+
+export interface StoredMessage {
+  id: number;
+  body: string;
+  createdAt: Date;
+}
+
+/**
+ * ⭐ YENİDEN DENEME mi? — `client_msg_id` zaten yazılmışsa bu bir AĞ TEKRARIDIR.
+ *
+ * ⚠️ Çağıran bunu **her şeyden önce** sormalı ve satır bulunursa hiçbir limite bakmadan
+ * döndürmeli: aksi hâlde bağlantısı kopan istemci aynı mesajı yeniden yolladığında
+ * "aynı mesajı az önce gönderdin" reddi alır ve mesaj GÖNDERİLMİŞ olmasına rağmen
+ * kaybolmuş görünür. (`chat.test.ts` bu hatayı bir kez yakaladı.)
+ */
+export async function findRetry(
+  tx: Tx, channelId: number, clientMsgId: string,
+): Promise<StoredMessage | null> {
+  const [row] = await tx.execute<Record<string, unknown>>(sql`
+    SELECT id, created_at, body FROM chat_messages
+     WHERE channel_id = ${channelId} AND client_msg_id = ${clientMsgId}::uuid
+  `);
+  if (!row) return null;
+  return {
+    id: Number(row['id']),
+    body: String(row['body']),
+    createdAt: new Date(String(row['created_at'])),
+  };
+}
+
+/* ── Kova + mükerrer ──────────────────────────────────────────────────────── */
+
+export interface FlowLimits {
+  /** `perSeconds` içinde en fazla `burst` mesaj. */
+  burst: number;
+  perSeconds: number;
+  /** Aynı metnin tekrar gönderilemeyeceği süre. 0 → kontrol kapalı. */
+  duplicateSeconds: number;
+  /** İki mesaj arasındaki asgarî süre. 0 → kapalı. Yalnız ittifak sohbetinde kullanılıyor. */
+  slowModeSeconds?: number;
+}
+
+/**
+ * Kova · mükerrer mesaj · yavaş mod — **tek sorguda**.
+ *
+ * ⚠️⚠️ **`scope` NEDEN VAR — İKİ KOVA BİRBİRİNİ YEMEMELİ.**
+ *
+ * DM kovası `sender_id` üzerinden oyuncunun **bütün DM kanallarını** sayar (`'dm'`), ittifak
+ * kovası ise yalnız o kanalı (`'channel'`). Ortak olsalardı iki yönlü bir sızıntı olurdu:
+ * hareketli bir ittifak sohbeti oyuncunun özel mesaj hakkını yerdi **ve** bir DM spamcısı
+ * ittifakta yazarak kotasını temizlerdi.
+ *
+ * ⚠️ `'dm'` kapsamının `kind = 'dm'` süzgeci ŞART. Bir süre süzgeçsizdi (`sender_id` + zaman)
+ * ve ittifak sohbetine yazılan her mesaj DM kovasını da dolduruyordu — yalıtım tek yönlü
+ * kalmıştı. `alliance-chat.test.ts`teki "kova KANAL BAŞINA" testi bunu yakaladı.
+ *
+ * ⚠️ `body` **kırpılmış** gelmeli — mükerrer karşılaştırması DB'ye yazılan dizeyle aynı
+ * olmalı, yoksa "aynı mesaj" hiç yakalanmaz.
+ */
+export async function assertFlowOk(tx: Tx, o: {
+  playerId: number;
+  channelId: number;
+  body: string;
+  scope: 'dm' | 'channel';
+  limits: FlowLimits;
+}): Promise<void> {
+  const { limits } = o;
+  /**
+   * Kova kapsamı. `'channel'` tek kanalı sayar; `'dm'` oyuncunun TÜM DM kanallarını sayar
+   * ama ittifak/genel kanallarını **saymaz** (yukarıdaki iki yönlü yalıtım).
+   */
+  const bucketScope = o.scope === 'channel'
+    ? sql`AND channel_id = ${o.channelId}`
+    : sql`AND EXISTS (SELECT 1 FROM chat_channels c
+                       WHERE c.id = chat_messages.channel_id AND c.kind = 'dm')`;
+
+  const [row] = await tx.execute<Record<string, unknown>>(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM chat_messages
+        WHERE sender_id = ${o.playerId} ${bucketScope}
+          AND created_at > now() - (${limits.perSeconds} || ' seconds')::interval) AS recent,
+      (SELECT COUNT(*)::int FROM chat_messages
+        WHERE sender_id = ${o.playerId} AND channel_id = ${o.channelId} AND body = ${o.body}
+          AND created_at > now() - (${limits.duplicateSeconds} || ' seconds')::interval) AS dup,
+      (SELECT EXTRACT(EPOCH FROM (now() - MAX(created_at)))::int FROM chat_messages
+        WHERE sender_id = ${o.playerId} AND channel_id = ${o.channelId}) AS since_last
+  `);
+
+  if (Number(row?.['recent'] ?? 0) >= limits.burst) {
+    throw new ChatError('rate_limited', 'Çok hızlı yazıyorsun, biraz bekle.', limits.perSeconds);
+  }
+  if (limits.duplicateSeconds > 0 && Number(row?.['dup'] ?? 0) > 0) {
+    throw new ChatError('duplicate_message', 'Aynı mesajı az önce gönderdin.', limits.duplicateSeconds);
+  }
+
+  /**
+   * ⭐ YAVAŞ MOD — kovadan farkı: kova ANİ patlamayı, bu SÜREKLİ akışı frenler.
+   * ⚠️ `since_last` NULL ise (ilk mesaj) kontrol atlanır; `Number(null)` 0 verir ve ilk
+   * mesajı reddederdi, o yüzden açıkça null kontrolü yapılıyor.
+   */
+  const slow = limits.slowModeSeconds ?? 0;
+  const sinceLast = row?.['since_last'];
+  if (slow > 0 && sinceLast != null && Number(sinceLast) < slow) {
+    const wait = slow - Number(sinceLast);
+    throw new ChatError('slow_mode', `Yavaş mod açık — ${wait} saniye sonra tekrar yazabilirsin.`, wait);
+  }
+}
+
+/* ── Yazma ────────────────────────────────────────────────────────────────── */
+
+/**
+ * Mesaj satırını yazar. `client_msg_id` idempotency: yeniden denemede çift satır oluşmaz;
+ * çakışırsa var olan satır okunup döndürülür (yarış koruması).
+ */
+export async function insertMessage(tx: Tx, o: {
+  channelId: number; worldId: number; senderId: number; body: string; clientMsgId: string;
+  mentions?: unknown;
+}): Promise<StoredMessage> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    INSERT INTO chat_messages (channel_id, world_id, sender_id, body, client_msg_id, mentions)
+    VALUES (${o.channelId}, ${o.worldId}, ${o.senderId}, ${o.body}, ${o.clientMsgId}::uuid,
+            ${JSON.stringify(o.mentions ?? [])}::jsonb)
+    ON CONFLICT (channel_id, client_msg_id) DO NOTHING
+    RETURNING id, created_at
+  `);
+  let row = rows[0];
+  if (!row) {
+    const [again] = await tx.execute<Record<string, unknown>>(sql`
+      SELECT id, created_at FROM chat_messages
+       WHERE channel_id = ${o.channelId} AND client_msg_id = ${o.clientMsgId}::uuid
+    `);
+    row = again;
+  }
+  return {
+    id: Number(row!['id']),
+    body: o.body,
+    createdAt: new Date(String(row!['created_at'])),
+  };
+}

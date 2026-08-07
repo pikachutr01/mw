@@ -239,6 +239,39 @@ export function notificationForOutbox(
       })];
     }
 
+    /**
+     * ⭐ İTTİFAK SOHBETİNDE BAHSEDİLME (§13.15c, kullanıcı şartı).
+     *
+     * ⚠️ **Yalnız `@` ile ANILANA gider.** Sıradan bir ittifak mesajı HİÇBİR bildirim
+     * üretmez — kullanıcının "kapalıyken tam sessizlik" şartının bildirim tarafındaki
+     * karşılığı bu. Kalabalık bir ittifakta her mesaja bildirim atmak kategoriyi kapattırırdı.
+     *
+     * ⚠️ Metinler kullanıcının verdiği şekilde SABİT: başlık «İttifak sohbeti», gövde
+     * «Sohbette sizden bahsedildi.» Gönderenin adı BİLEREK yok (tarif böyle).
+     *
+     * ⚠️ `mentions` yükü **gönderen SÜZÜLMÜŞ** hâlde geliyor (`mentionRecipients`, serviste):
+     * kimse kendi bahsetmesinin bildirimini almamalı — `chat:dm`in "yalnız alıcıya" kuralının
+     * ikizi. Katalog saf bir eşleyici kalsın diye süzgeç burada DEĞİL.
+     *
+     * ⚠️ `tag` KANAL başına: art arda üç bahsetme, bildirim merkezinde üç satır değil
+     * güncellenen tek satır olur (`renotify: true` sözleşmesi).
+     */
+    case 'chat:alliance': {
+      const ids = Array.isArray(payload['mentions'])
+        ? [...new Set((payload['mentions'] as unknown[]).map((x) => Number(x)))]
+          .filter((x) => Number.isInteger(x) && x > 0)
+        : [];
+      const channelId = n(payload['channelId']);
+      return ids.map((to) => note({
+        playerId: to, worldId, category: 'mention',
+        title: 'İttifak sohbeti',
+        body: 'Sohbette sizden bahsedildi.',
+        /* Derin bağlantı: İttifak sekmesi açılır ve sohbet kendiliğinden açılır (§13.15c). */
+        url: '/command/alliance?chat=1',
+        tag: `mention:${channelId ?? to}`,
+      }));
+    }
+
     /** Mesaj kutusuna düşen diğer satırlar. Savaş raporu yukarıda ele alındı → burada atlanır. */
     case 'message:written': {
       const to = n(payload['playerId']);

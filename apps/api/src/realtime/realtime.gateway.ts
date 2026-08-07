@@ -172,6 +172,17 @@ export class RealtimeGateway {
       void this.onChatOpen(socket, p, gate, raw, ack);
     });
     socket.on('chat:close', () => this.leaveChat(socket, p));
+
+    /* ── İTTİFAK SOHBETİ (§13.15c) — AYRI olay çifti, AYRI slot ────────────────
+     *
+     * ⚠️ `chat:open`/`chat:close` YENİDEN KULLANILAMAZDI: `socket.data.chatChannelId` TEK
+     * değer tutuyor ve `onChatOpen` önce eski kanaldan çıkıyor. DM penceresi ve ittifak
+     * sheet'i aynı anda açık olabilir — ortak slot biri diğerini odadan atardı. Ayrıca
+     * yetki sorgusu da farklı: ittifakta katılımcı satırı yok, üyelik `players`tan geliyor. */
+    socket.on('alliance:chat:open', (raw: unknown, ack?: (r: unknown) => void) => {
+      void this.onAllianceChatOpen(socket, p, gate, raw, ack);
+    });
+    socket.on('alliance:chat:close', () => this.leaveAllianceChat(socket, p));
     socket.on('chat:typing', (raw: unknown) => {
       if (!gate.allow()) return;
       const channelId = Number((raw as { channelId?: unknown })?.channelId ?? 0);
@@ -258,6 +269,44 @@ export class RealtimeGateway {
   }
 
   /**
+   * İttifak sohbeti sheet'i açıldı: kanal odasına katıl (§13.15c).
+   *
+   * ⚠️ **Mesajın kendisi bu odadan akıyor** — DM'in aksine. DM'de mesaj iki tarafın kişisel
+   * odasına gider ki pencere kapalıyken de rozet düşsün; ittifak sohbetinde rozet YOK
+   * (kullanıcı kararı: kapalıyken tam sessizlik), dolayısıyla oda dışına çıkacak bir şey de yok.
+   *
+   * ⚠️ Yetki HER açılışta yeniden doğrulanır: soket ömrü uzun, üyelik değişir. Katılımcı
+   * satırına değil `players.alliance_id`ye bakıyor — ittifak kanalının tek doğruluk kaynağı o.
+   */
+  private async onAllianceChatOpen(
+    socket: Socket, p: SocketPlayer, gate: EventGate, raw: unknown, ack?: (r: unknown) => void,
+  ): Promise<void> {
+    if (!gate.allow()) return;
+    const channelId = Number((raw as { channelId?: unknown })?.channelId ?? 0);
+    if (!Number.isInteger(channelId) || channelId <= 0) { ack?.({ ok: false }); return; }
+
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM chat_channels c
+        JOIN players pl ON pl.alliance_id = c.alliance_id
+       WHERE c.id = ${channelId} AND c.world_id = ${p.worldId} AND c.kind = 'alliance'
+         AND pl.id = ${p.playerId}
+    `);
+    if (rows.length === 0) { ack?.({ ok: false }); return; }
+
+    this.leaveAllianceChat(socket, p);
+    await socket.join(room.chat(p.worldId, channelId));
+    socket.data.allianceChatChannelId = channelId;
+    ack?.({ ok: true });
+  }
+
+  /** ⚠️ DM slotuna DOKUNMAZ — iki sohbet aynı anda açık kalabilmeli. */
+  private leaveAllianceChat(socket: Socket, p: SocketPlayer): void {
+    const open = socket.data.allianceChatChannelId as number | undefined;
+    if (open) void socket.leave(room.chat(p.worldId, open));
+    socket.data.allianceChatChannelId = undefined;
+  }
+
+  /**
    * Çevrimiçi sayacı. Aynı oyuncunun iki sekmesi varsa biri kapanınca "çevrimdışı" DENMEZ —
    * sayaç sıfıra inince denir.
    *
@@ -316,6 +365,17 @@ export class RealtimeGateway {
       const oldAlliance = p.allianceId;
       if (oldAlliance === allianceId) continue;
 
+      /**
+       * ⚠️⚠️ **GİZLİLİK KAPISI (§13.15c).** Atılan/ayrılan üyenin İTTİFAK SOHBETİ odası da
+       * kapatılmalı. Yalnız ittifak odasından düşürmek YETMİYOR: sheet'i açık kalan eski üye,
+       * REST'ten mesaj okuyamasa bile "şu an konuşuluyor" olayını almaya devam ederdi ve her
+       * olayda bir tazeleme isteği atıp 403 alırdı — yani ittifağın hâlâ yazıştığını görürdü.
+       *
+       * ⚠️ Yeni ittifağa geçişte de çalışıyor (koşul `oldAlliance !== allianceId`): eski
+       * kanalın odasında kalmak yeni ittifaka geçmiş bir üyeye eskisini dinletirdi.
+       */
+      this.leaveAllianceChat(socket, p);
+
       if (oldAlliance != null) {
         void socket.leave(room.alliance(p.worldId, oldAlliance));
         this.io.to(room.alliance(p.worldId, oldAlliance))
@@ -366,6 +426,23 @@ export class RealtimeGateway {
   private dispatch(event: RealtimeEvent): void {
     if (!this.io || event.worldId == null) return;
     const body = { topic: event.topic, ref: event.ref ?? {} };
+
+    /**
+     * ⭐⭐ SOHBET KANALI ODASI — **BU DAL EN ÖNDE VE `return` İLE BİTMEK ZORUNDA.**
+     *
+     * İttifak sohbeti olayları `playerIds: []` ile geliyor (bilerek: alıcı listesi oda
+     * üyeliğinden çıkıyor). Aşağıdaki `if (event.playerIds.length === 0)` dalı ise **DÜNYA
+     * GENELİ** yayın yapıyor. Bu dal düşerse ya da `return`ü kaybederse ittifağın özel
+     * sohbeti tüm dünyaya yayınlanır — tasarımın tek gerçek felaket riski.
+     *
+     * ⚠️ Odaya YALNIZ sheet açıkken katılınıyor (`alliance:chat:open`), yani kapalı olan
+     * üyeye hiçbir şey gitmiyor. "Kapalıyken tam sessizlik" şartı bir bayrağa değil oda
+     * üyeliğine dayanıyor.
+     */
+    if (event.chatChannelId != null) {
+      this.io.to(room.chat(event.worldId, event.chatChannelId)).emit(event.topic, body);
+      return;
+    }
 
     // ⭐ İttifak odası: üyeler tek yayında; playerIds ayrıca bireysel gider (oda dışı kalanlar).
     if (event.allianceId != null) {

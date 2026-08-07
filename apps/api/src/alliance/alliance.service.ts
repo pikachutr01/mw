@@ -56,6 +56,51 @@ export interface MemberRow {
   worldRank: number | null;
 }
 
+/** `assertCanModerate`in ihtiyacı olan asgarî künye — iki servis de bunu kendi sorgusundan üretir. */
+export interface ModerationSubject {
+  playerId: number;
+  allianceId: number | null;
+  role: number;
+}
+
+/**
+ * ⭐ ÜYE ÜZERİNDE MODERASYON YETKİSİ — «At» ve «Sustur» **AYNI** matrise bakar (kullanıcı kararı).
+ *
+ * | Yapan | Hedef Asker | Hedef Konsey | Hedef Lider | Kendisi |
+ * |---|---|---|---|---|
+ * | Asker  | ✗ | ✗ | ✗ | ✗ |
+ * | Konsey | ✓ | ✗ | ✗ | ✗ |
+ * | Lider  | ✓ | ✓ | ✗ | ✗ |
+ *
+ * ⚠️ **SAF fonksiyon, DB'ye gitmiyor** — `AllianceChatService`in `AllianceService`e bağımlı
+ * olmaması için. İki taraf da kilitli satırlarını kendi okur, yalnız kararı buraya sorar.
+ *
+ * ⚠️ Matris iki yerde ayrı yazılsaydı biri güncellenip diğeri unutulurdu; tek yerde olması
+ * "atabildiğim üyeyi susturabilirim de" beklentisini yapısal olarak garanti ediyor.
+ */
+export function assertCanModerate(
+  me: ModerationSubject, target: ModerationSubject, verb: 'kick' | 'mute',
+): void {
+  const noun = verb === 'kick' ? 'atabilir' : 'susturabilir';
+  if (target.allianceId !== me.allianceId) {
+    throw new AllianceError('not_same_alliance', 'Oyuncu ittifağında değil.');
+  }
+  if (target.playerId === me.playerId) {
+    throw new AllianceError(
+      verb === 'kick' ? 'cannot_kick_self' : 'mute_self',
+      verb === 'kick'
+        ? 'Kendini atamazsın — İttifaktan Ayrıl kullan.'
+        : 'Kendini susturamazsın.',
+    );
+  }
+  if (me.role !== ROLE.LEADER && target.role >= ROLE.COUNCIL) {
+    throw new AllianceError('hierarchy', `Konsey yalnız Asker rütbesindeki üyeleri ${noun}.`);
+  }
+  if (target.role === ROLE.LEADER) {
+    throw new AllianceError('hierarchy', verb === 'kick' ? 'Lider atılamaz.' : 'Lider susturulamaz.');
+  }
+}
+
 export class AllianceService {
   constructor(private readonly db: Db) {}
 
@@ -188,13 +233,26 @@ export class AllianceService {
     // (invites CASCADE ama durumu netlemek için önce iptale çekiyoruz — denetim izi kalsın diye
     // silinen ittifakla birlikte gitmeleri sorun değil).
     const members = await tx.execute<Record<string, unknown>>(sql`
-      UPDATE players SET alliance_id = NULL, alliance_role = NULL
+      UPDATE players SET alliance_id = NULL, alliance_role = NULL, alliance_joined_at = NULL
        WHERE alliance_id = ${allianceId} RETURNING id
     `);
     await tx.execute(sql`
       UPDATE alliance_invites SET status = 'canceled', decided_at = now()
        WHERE alliance_id = ${allianceId} AND status = 'pending'
     `);
+    /**
+     * ⭐⭐ BU SATIR SOHBETİ DE SİLİYOR — ve bu KASITLI (§13.15c, kullanıcı şartı:
+     * *"İttifak dağıtılırsa ittifak sohbeti mesajları da kalıcı olarak silinir"*).
+     *
+     * Zincir: `alliances` DELETE → `chat_channels` (alliance_id FK, cascade) →
+     * `chat_messages` (channel_id FK, cascade) + `alliance_chat_mutes` (cascade).
+     *
+     * ⚠️ **Buraya elle `DELETE FROM chat_messages` YAZMA.** Kural veritabanında duruyor;
+     * ikinci bir kopyası bir gün güncellenmeyi unutulan bir adım olurdu. Sohbetin gerçekten
+     * gittiğini `alliance-chat.test.ts` doğruluyor.
+     * ⚠️ `chat_reports` KALIR (FK'siz + `body_snapshot` taşıyor) — doğrusu bu: şikayet kaydı
+     * şikayet ettiği kanaldan uzun yaşamalı.
+     */
     await tx.execute(sql`DELETE FROM alliances WHERE id = ${allianceId}`);
 
     /**
@@ -280,12 +338,7 @@ export class AllianceService {
       const me = await this.lockPlayer(tx as never, o.playerId);
       this.require(me, ROLE.COUNCIL);
       const target = await this.lockPlayer(tx as never, o.targetId);
-      if (target.allianceId !== me.allianceId) throw new AllianceError('not_same_alliance', 'Oyuncu ittifağında değil.');
-      if (o.targetId === o.playerId) throw new AllianceError('cannot_kick_self', 'Kendini atamazsın — İttifaktan Ayrıl kullan.');
-      if (me.role !== ROLE.LEADER && target.role >= ROLE.COUNCIL) {
-        throw new AllianceError('hierarchy', 'Konsey yalnız Asker rütbesindeki üyeleri atabilir.');
-      }
-      if (target.role === ROLE.LEADER) throw new AllianceError('hierarchy', 'Lider atılamaz.');
+      assertCanModerate(me, target, 'kick');
 
       await this.applyMembership(tx as never, {
         worldId: o.worldId, playerId: o.targetId, allianceId: null, role: 0,
@@ -511,7 +564,8 @@ export class AllianceService {
 
       // ── KABUL ── üyelik yarış koruması: oyuncu hâlâ ittifaksızsa tek UPDATE tutturur.
       const joined = await tx.execute<Record<string, unknown>>(sql`
-        UPDATE players SET alliance_id = ${allianceId}, alliance_role = ${ROLE.MEMBER}
+        UPDATE players SET alliance_id = ${allianceId}, alliance_role = ${ROLE.MEMBER},
+               alliance_joined_at = now()
          WHERE id = ${subjectId} AND alliance_id IS NULL RETURNING id
       `);
       if (joined.length === 0) {
@@ -585,7 +639,8 @@ export class AllianceService {
     }
 
     await tx.execute(sql`
-      UPDATE players SET alliance_id = NULL, alliance_role = NULL WHERE id = ${playerId}
+      UPDATE players SET alliance_id = NULL, alliance_role = NULL, alliance_joined_at = NULL
+       WHERE id = ${playerId}
     `);
     // Yönetim bilgilendirilir — ayrılmayla aynı adres, farklı sebep.
     for (const managerId of await this.managerIds(tx, allianceId)) {
@@ -652,9 +707,17 @@ export class AllianceService {
      * "başvuru onaylanınca da katılamaz" maddesi boşluğu yakaladı.)
      */
     if (o.allianceId != null) await this.assertVerifiedToJoin(tx, o.playerId);
+    /**
+     * ⚠️ `alliance_joined_at` — ittifak sohbetindeki acemi kısıtının ölçütü (§13.15c).
+     * Katılırken damgalanır, AYRILIRKEN NULL'a çekilir: geri katılan süreyi yeniden bekler,
+     * yoksa "çık-gir" kısıtın kaçış yolu olurdu.
+     * ⚠️ Bu, kolonu yazan DÖRT noktadan biri — `decide()` buradan GEÇMİYOR, kendi UPDATE'ini
+     * yazıyor ve orada da ayrıca damgalanmak zorunda.
+     */
     await tx.execute(sql`
       UPDATE players SET alliance_id = ${o.allianceId},
-             alliance_role = ${o.allianceId == null ? null : o.role}
+             alliance_role = ${o.allianceId == null ? null : o.role},
+             alliance_joined_at = ${o.allianceId == null ? null : sql`now()`}
        WHERE id = ${o.playerId}
     `);
     await this.emitChanged(tx, o.worldId, o.allianceId ?? o.noticeAllianceId ?? null, [o.playerId]);

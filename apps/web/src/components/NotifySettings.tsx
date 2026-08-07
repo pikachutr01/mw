@@ -20,6 +20,9 @@ const CATEGORIES: readonly (readonly [string, string, string])[] = [
   ['dm', 'Özel mesaj', 'Bir oyuncu sana mesaj yazdığında.'],
   ['report', 'Raporlar ve ittifak', 'Savaş bitince, rapor düşünce, davet gelince.'],
   ['production', 'Üretim ve inşaat', 'Bina, birim ya da araştırma tamamlandığında.'],
+  /* ⭐ §13.15c — YALNIZ bahsedilince gelir; sıradan ittifak sohbeti mesajı bildirim üretmez. */
+  ['mention', 'İttifak sohbetinde bahsedilme',
+    'Bir ittifak arkadaşın sohbette @ ile senden bahsettiğinde.'],
 ];
 
 const STATE_TEXT: Record<PushState, string> = {

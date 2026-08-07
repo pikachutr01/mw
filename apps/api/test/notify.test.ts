@@ -346,13 +346,18 @@ describe('NotifyService.prefs', () => {
     `);
     const accountId = Number(row!['account_id']);
 
+    /**
+     * ⚠️ Liste `NOTIFY_DEFAULTS` ile birebir olmak ZORUNDA — bu bir bekçi testi: yeni bir
+     * kategori eklenince burası kırmızı yanar ve `NotifySettings.tsx`teki anahtarı da
+     * eklemeyi hatırlatır. (`mention` 2026-08-07'de tam olarak böyle yakalandı.)
+     */
     expect(await service.prefs(accountId)).toEqual({
-      attack: true, dm: true, report: true, production: true,
+      attack: true, dm: true, report: true, production: true, mention: true,
     });
 
     await service.setPrefs(accountId, { production: false });
     expect(await service.prefs(accountId)).toEqual({
-      attack: true, dm: true, report: true, production: false,
+      attack: true, dm: true, report: true, production: false, mention: true,
     });
 
     await service.setPrefs(accountId, { dm: false });

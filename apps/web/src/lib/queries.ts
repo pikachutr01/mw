@@ -1336,6 +1336,102 @@ export function useClearConversation() {
   });
 }
 
+/* ═══ İttifak sohbeti (§13.15c) ═════════════════════════════════════════════════ */
+
+export interface AllianceChatMember {
+  playerId: number;
+  username: string;
+  role: number;
+  online: boolean;
+  muted: boolean;
+  mutedUntil: string | null;
+}
+
+export interface AllianceChatMessage {
+  id: number;
+  senderId: number | null;
+  /** null = dünyadan kaldırılmış oyuncu; ekran «kaldırılmış oyuncu» yazar. */
+  senderName: string | null;
+  body: string;
+  mentions: { id: number; at: number; len: number }[];
+  createdAt: string;
+  /** İyimser balon: sunucu onayı gelene kadar soluk çizilir. */
+  pending?: boolean;
+}
+
+export interface AllianceChatOpen {
+  channelId: number;
+  allianceId: number;
+  myRole: number;
+  canWrite: boolean;
+  reason: 'disabled' | 'unverified' | 'banned' | 'muted' | 'too_new' | null;
+  blockedUntil: string | null;
+  blockedText: string | null;
+  members: AllianceChatMember[];
+  truncated: boolean;
+}
+
+/**
+ * Açılış paketi — kanal + yazma hakkı + üye listesi tek çağrıda.
+ *
+ * ⚠️ **`enabled` KAPALIYKEN HİÇ İSTEK GİTMEZ** (kullanıcı şartı: sheet kapalıyken tam
+ * sessizlik). Bu yüzden `refetchInterval: useSafetyNet()` de KONMADI: açıkken WS zaten
+ * anlık, kapalıyken hiçbir şey dönmemeli. Emniyet ağı olarak pencereye dönünce tazeleme yeter.
+ */
+export const useAllianceChat = (enabled: boolean): UseQueryResult<AllianceChatOpen> => {
+  const authed = useAuthed();
+  return useQuery({
+    queryKey: ['alliance-chat'],
+    queryFn: () => get<AllianceChatOpen>('/api/v1/alliance/chat'),
+    enabled: enabled && authed,
+  });
+};
+
+/** Geçmiş — keyset sayfalama; `before` bir sonraki sayfanın imleci (en eski görünen id). */
+export const useAllianceChatHistory = (
+  channelId: number | null,
+): UseInfiniteQueryResult<{ pages: { items: AllianceChatMessage[]; hasMore: boolean }[] }, Error> =>
+  useInfiniteQuery({
+    queryKey: ['alliance-chat-history', channelId],
+    enabled: channelId != null,
+    initialPageParam: null as number | null,
+    queryFn: ({ pageParam }) => get<{ items: AllianceChatMessage[]; hasMore: boolean }>(
+      `/api/v1/alliance/chat/messages${pageParam ? `?before=${pageParam}` : ''}`,
+    ),
+    getNextPageParam: (last) => (last.hasMore && last.items.length > 0
+      ? last.items[last.items.length - 1]!.id
+      : undefined),
+  });
+
+export function useSendAllianceChatMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { body: string; clientMsgId: string }) =>
+      api<AllianceChatMessage>('/api/v1/alliance/chat/messages', { method: 'POST', body: v }),
+    onSettled: () => { void qc.invalidateQueries({ queryKey: ['alliance-chat-history'] }); },
+  });
+}
+
+/** Susturma / kaldırma — ikisi de üye listesini ve yazma hakkını tazeler. */
+export function useAllianceChatMute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { playerId: number; minutes: number | null; reason?: string }) =>
+      api('/api/v1/alliance/chat/mutes', { method: 'POST', body: v }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['alliance-chat'] }); },
+  });
+}
+
+export function useAllianceChatUnmute() {
+  const qc = useQueryClient();
+  return useMutation({
+    // ⚠️ Gövdesiz DELETE — `api.ts` bu durumda `content-type` GÖNDERMİYOR (Fastify 400 verirdi).
+    mutationFn: (playerId: number) =>
+      api(`/api/v1/alliance/chat/mutes/${playerId}`, { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['alliance-chat'] }); },
+  });
+}
+
 export function useBlockPlayer() {
   const qc = useQueryClient();
   return useMutation({

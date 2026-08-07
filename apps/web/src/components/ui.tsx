@@ -320,7 +320,12 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
  * Çok satırlı metin kutusu — ittifak metni, toplu mesaj ve sohbet yazma alanı aynı görünümü
  * paylaşsın diye tek yerde (üç ekran aynı sınıf dizisini kopyalıyordu).
  */
-export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+/**
+ * ⚠️ `ComponentPropsWithRef` — `ref` bir prop olarak geçebilsin diye (React 19'da `forwardRef`
+ * gereksiz, ama TS tipinin `ref`i kabul etmesi gerekiyor). İttifak sohbeti composer'ı imleç
+ * konumunu yönetmek için `setSelectionRange` çağırıyor.
+ */
+export function TextArea(props: React.ComponentPropsWithRef<'textarea'>) {
   return (
     <textarea
       {...props}

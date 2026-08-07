@@ -15,20 +15,24 @@ const num = (name: string, fallback: number): number => {
 };
 
 /** Bildirim kategorileri — oyuncu her birini ayrı kapatabilir (`accounts.notify_prefs`). */
-export const NOTIFY_CATEGORIES = ['attack', 'dm', 'report', 'production'] as const;
+export const NOTIFY_CATEGORIES = ['attack', 'dm', 'report', 'production', 'mention'] as const;
 export type NotifyCategory = (typeof NOTIFY_CATEGORIES)[number];
 
 /**
- * Varsayılanlar — **dördü de AÇIK** (kullanıcı kararı 2026-07-31).
+ * Varsayılanlar — **hepsi AÇIK** (kullanıcı kararı 2026-07-31).
  *
  * `accounts.notify_prefs`'te anahtar YOKSA buraya bakılır; `false` yazılıysa kapalıdır. Bu
- * yüzden ileride yeni bir kategori eklenince eski satırlara dokunmak gerekmez.
+ * yüzden ileride yeni bir kategori eklenince eski satırlara dokunmak gerekmez —
+ * ⭐ `mention` 2026-08-07'de tam olarak böyle eklendi: **göç yazılmadı**, mevcut hesaplarda
+ * kendiliğinden açık geldi.
  */
 export const NOTIFY_DEFAULTS: Readonly<Record<NotifyCategory, boolean>> = {
   attack: true,
   dm: true,
   report: true,
   production: true,
+  /** İttifak sohbetinde `@` ile anılma (§13.15c). Oyuncu Seçenekler'den ayrıca kapatabilir. */
+  mention: true,
 };
 
 /**

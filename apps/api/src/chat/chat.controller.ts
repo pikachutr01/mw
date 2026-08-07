@@ -35,7 +35,19 @@ export function toHttp(err: unknown): Error {
    * demek olurdu ve yanlış olurdu.
    */
   // §verify de aynı sınıfta: sebebiyle birlikte açıkça söylenen bir karar → 403.
-  if (err.code === 'chat_banned' || err.code === UNVERIFIED_CODE) {
+  /**
+   * ⭐ İTTİFAK SOHBETİ (§13.15c) — hepsi `chat_banned` ile AYNI sınıfta: oyuncuya sebebiyle
+   * birlikte **açıkça söylenen** kararlar, saklanacak bir şey yok.
+   *
+   * ⚠️ `alliance_muted` neden 429 DEĞİL: 429 "çok hızlısın, birazdan dene" der ve yanlış
+   * olurdu — susturma bir hız sınırı değil, bir moderasyon kararı.
+   */
+  if (
+    err.code === 'chat_banned' || err.code === UNVERIFIED_CODE
+    || err.code === 'not_alliance_member' || err.code === 'alliance_muted'
+    || err.code === 'alliance_new_member_restricted' || err.code === 'alliance_chat_disabled'
+    || err.code === 'mute_hierarchy' || err.code === 'forbidden'
+  ) {
     return new ForbiddenException(body);
   }
   if (err.code === 'wrong_world' || err.code === 'conversation_not_found') {
@@ -43,7 +55,8 @@ export function toHttp(err: unknown): Error {
   }
   /* ⚠️ `blocked` de 429 DEĞİL 400 döner: 4xx ayrımından engel varlığı çıkarılamasın diye
    * "iletilemedi" ile aynı sınıfta kalır (kullanıcı: sebep doğrulanmasın). */
-  if (err.code === 'rate_limited' || err.code === 'duplicate_message') {
+  /* `slow_mode` de bu ailede: "biraz bekle" diyen, süreyle çözülen kısıtlar. */
+  if (err.code === 'rate_limited' || err.code === 'duplicate_message' || err.code === 'slow_mode') {
     return new HttpException(body, HttpStatus.TOO_MANY_REQUESTS);
   }
   return new BadRequestException(body);

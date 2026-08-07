@@ -17,19 +17,19 @@
  *     biliyor, ona yalan söylemeye gerek yok. Engel dışında hiçbir oyun kısıtı doğurmaz.
  */
 import { sql } from 'drizzle-orm';
-import {
-  isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
-} from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';
 import { chatLimits } from './chat.limits.ts';
+import {
+  assertFlowOk, assertNotBanned, assertVerifiedToChat, findRetry, insertMessage,
+  ChatError, type Tx,
+} from './chat.guards.ts';
 
-type Tx = Pick<Db, 'execute'>;
-
-export class ChatError extends Error {
-  constructor(readonly code: string, message: string, readonly retryAfterSeconds?: number) {
-    super(message);
-  }
-}
+/**
+ * ⚠️ Yeniden dışa aktarılıyor: `chat.controller.ts` ve testler `ChatError`ı buradan import
+ * ediyor. Sınıfın kendisi `chat.guards.ts`e taşındı (ittifak sohbeti de kullanıyor) ama
+ * bu kapı açık kalmalı — kapatmak beş dosyayı sebepsizce değiştirmek olurdu.
+ */
+export { ChatError } from './chat.guards.ts';
 
 export interface ConversationRow {
   channelId: number;
@@ -82,7 +82,7 @@ export class ChatService {
        * karşı tarafın listesinde boş bir konuşma açabilir ve bu tek başına bir taciz aracı
        * olurdu (bildirim düşmese bile ad görünür).
        */
-      await this.assertNotBanned(tx, o.worldId, o.playerId);
+      await assertNotBanned(tx, o.worldId, o.playerId);
       const [existing] = await tx.execute<Record<string, unknown>>(sql`
         SELECT id FROM chat_channels WHERE world_id = ${o.worldId} AND dm_key = ${key}
       `);
@@ -112,55 +112,6 @@ export class ChatService {
     });
   }
 
-  /* ── Sohbet banı (§admin Faz 6) ───────────────────────────────────────────── */
-
-  /**
-   * ⭐ Oyuncunun AKTİF sohbet banı (yoksa `null`).
-   *
-   * ⚠️ `chat_bans` tablosu 2026-07-31'e kadar **tamamen ölüydü**: satır yazılabiliyordu ama
-   * `chat.service`te tek satır kontrol yoktu, yani banlı oyuncu mesaj yazmaya devam ediyordu.
-   * Faz 6'da canlandırıldı.
-   *
-   * ⚠️ `until IS NULL` = **süresiz** ban. `until > now()` süreli. Süresi geçmiş satır
-   * SİLİNMEZ — moderasyon geçmişi kalıcı olmalı; yalnız etkisiz sayılır.
-   */
-  private async activeBan(tx: Tx, worldId: number, playerId: number): Promise<{
-    scope: string; until: Date | null; reason: string | null;
-  } | null> {
-    const [row] = await tx.execute<Record<string, unknown>>(sql`
-      SELECT scope, until, reason FROM chat_bans
-       WHERE world_id = ${worldId} AND player_id = ${playerId}
-         AND (until IS NULL OR until > now())
-       ORDER BY until IS NULL DESC, until DESC
-       LIMIT 1
-    `);
-    if (!row) return null;
-    return {
-      scope: String(row['scope']),
-      until: row['until'] == null ? null : new Date(String(row['until'])),
-      reason: row['reason'] == null ? null : String(row['reason']),
-    };
-  }
-
-  /**
-   * Banlıysa fırlatır. ⚠️ Mesaj **kimseye** gönderilemez (kullanıcı kararı: *"bir oyuncu chat
-   * banı alırsa kimseye mesaj yazamayacak"*) ama **okumaya devam eder**: kendisine yazılanı
-   * görebilmeli, yoksa ceza "sohbetten silinmek" olurdu.
-   */
-  private async assertNotBanned(tx: Tx, worldId: number, playerId: number): Promise<void> {
-    const ban = await this.activeBan(tx, worldId, playerId);
-    if (!ban) return;
-    const until = ban.until
-      ? `${ban.until.toLocaleString('tr-TR')} tarihine kadar`
-      : 'süresiz olarak';
-    const reason = ban.reason ? ` Sebep: ${ban.reason}` : '';
-    throw new ChatError(
-      'chat_banned',
-      `Sohbet yasağın var — ${until} mesaj gönderemezsin.${reason}`,
-      ban.until ? Math.max(1, Math.ceil((ban.until.getTime() - Date.now()) / 1000)) : undefined,
-    );
-  }
-
   /* ── Mesaj gönderme ───────────────────────────────────────────────────────── */
 
   async send(o: {
@@ -183,17 +134,14 @@ export class ChatService {
        * istemci aynı mesajı yeniden yolladığında "aynı mesajı az önce gönderdin" reddi alır
        * ve mesaj gönderilmiş olmasına rağmen kaybolmuş görünürdü (test bunu yakaladı).
        */
-      const [retry] = await tx.execute<Record<string, unknown>>(sql`
-        SELECT id, created_at, body FROM chat_messages
-         WHERE channel_id = ${o.channelId} AND client_msg_id = ${o.clientMsgId}::uuid
-      `);
+      const retry = await findRetry(tx, o.channelId, o.clientMsgId);
       if (retry) {
         return {
-          id: Number(retry['id']),
+          id: retry.id,
           channelId: o.channelId,
           senderId: o.playerId,
-          body: String(retry['body']),
-          createdAt: new Date(String(retry['created_at'])).toISOString(),
+          body: retry.body,
+          createdAt: retry.createdAt.toISOString(),
         };
       }
 
@@ -204,9 +152,7 @@ export class ChatService {
        * ⚠️ Sohbet yasağıyla aynı sırada — yeniden deneme kontrolünden SONRA: ağ tekrarı
        * yüzünden zaten yazılmış bir mesaj "gönderilemedi" görünmemeli.
        */
-      if (unverifiedLimits().enabled && !(await isVerified(tx as never, o.playerId))) {
-        throw new ChatError(UNVERIFIED_CODE, UNVERIFIED_MESSAGE.chat);
-      }
+      await assertVerifiedToChat(tx, o.playerId);
 
       /**
        * ⭐ SOHBET YASAĞI (§admin Faz 6) — yeniden deneme kontrolünden SONRA, engelden ÖNCE.
@@ -215,7 +161,7 @@ export class ChatService {
        * tekrarı "yasaklısın" hatası almamalı — o mesaj zaten yazıldı, istemci yalnız
        * cevabını kaçırdı.
        */
-      await this.assertNotBanned(tx, o.worldId, o.playerId);
+      await assertNotBanned(tx, o.worldId, o.playerId);
 
       /* 1) ENGEL — iki yön iki farklı sonuç (yukarıdaki değişmez 3). */
       const blocks = await tx.execute<Record<string, unknown>>(sql`
@@ -234,39 +180,24 @@ export class ChatService {
       /* 2) ACEMİ KISITI — yalnız YENİ konuşma başlatırken; karşı taraf yazmışsa cevap serbest. */
       if (chatLimits().newPlayerHours > 0) await this.assertNotTooNew(tx, o.playerId, o.channelId);
 
-      /* 3) KOVA + MÜKERRER — ikisi de aynı sorgudan çıkar (tek tur). */
-      const [limits] = await tx.execute<Record<string, unknown>>(sql`
-        SELECT
-          (SELECT COUNT(*)::int FROM chat_messages
-            WHERE sender_id = ${o.playerId}
-              AND created_at > now() - (${chatLimits().perSeconds} || ' seconds')::interval) AS recent,
-          (SELECT COUNT(*)::int FROM chat_messages
-            WHERE sender_id = ${o.playerId} AND channel_id = ${o.channelId} AND body = ${body}
-              AND created_at > now() - (${chatLimits().duplicateSeconds} || ' seconds')::interval) AS dup
-      `);
-      if (Number(limits?.['recent'] ?? 0) >= chatLimits().burst) {
-        throw new ChatError('rate_limited', 'Çok hızlı yazıyorsun, biraz bekle.', chatLimits().perSeconds);
-      }
-      if (Number(limits?.['dup'] ?? 0) > 0) {
-        throw new ChatError('duplicate_message', 'Aynı mesajı az önce gönderdin.', chatLimits().duplicateSeconds);
-      }
+      /* 3) KOVA + MÜKERRER — ikisi de aynı sorgudan çıkar (tek tur).
+       * ⚠️ Kapsam `'dm'`: oyuncunun TÜM DM kanallarını sayar ama ittifak sohbetini SAYMAZ.
+       *    İki kovanın birbirini yememesi gerekiyor — gerekçe `chat.guards.ts`te. */
+      await assertFlowOk(tx, {
+        playerId: o.playerId, channelId: o.channelId, body, scope: 'dm',
+        limits: {
+          burst: chatLimits().burst,
+          perSeconds: chatLimits().perSeconds,
+          duplicateSeconds: chatLimits().duplicateSeconds,
+        },
+      });
 
       /* 4) YAZ — `client_msg_id` idempotency: yeniden denemede çift satır oluşmaz. */
-      const rows = await tx.execute<Record<string, unknown>>(sql`
-        INSERT INTO chat_messages (channel_id, world_id, sender_id, body, client_msg_id)
-        VALUES (${o.channelId}, ${o.worldId}, ${o.playerId}, ${body}, ${o.clientMsgId}::uuid)
-        ON CONFLICT (channel_id, client_msg_id) DO NOTHING
-        RETURNING id, created_at
-      `);
-      let row = rows[0];
-      if (!row) {
-        const [again] = await tx.execute<Record<string, unknown>>(sql`
-          SELECT id, created_at FROM chat_messages
-           WHERE channel_id = ${o.channelId} AND client_msg_id = ${o.clientMsgId}::uuid
-        `);
-        row = again;
-      }
-      const id = Number(row!['id']);
+      const written = await insertMessage(tx, {
+        channelId: o.channelId, worldId: o.worldId, senderId: o.playerId,
+        body, clientMsgId: o.clientMsgId,
+      });
+      const id = written.id;
 
       /* Gönderen kendi mesajını okumuş sayılır — kendi yazdığı rozet üretmesin. */
       await tx.execute(sql`
@@ -298,7 +229,7 @@ export class ChatService {
         channelId: o.channelId,
         senderId: o.playerId,
         body,
-        createdAt: new Date(String(row!['created_at'])).toISOString(),
+        createdAt: written.createdAt.toISOString(),
       };
     });
   }

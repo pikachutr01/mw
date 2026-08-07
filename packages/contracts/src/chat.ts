@@ -90,6 +90,55 @@ export const sendChatRequest = z.object({
   clientMsgId: z.string().uuid(),
 });
 
+/* ── İTTİFAK SOHBETİ (§13.15c) ────────────────────────────────────────────────
+ *
+ * ⚠️ Hiçbir istek `channelId` TAŞIMAZ — sunucu onu oyuncunun kendi `alliance_id`'sinden
+ * çözüyor. Dünya yalıtımının (yukarı) ittifak ölçeğindeki karşılığı: "başka ittifağın
+ * kanalına yaz" saldırısı şema düzeyinde imkânsız.
+ */
+
+/**
+ * ⭐ ÇÖZÜLMÜŞ MENTION ARALIĞI — sunucu üretir, istemci **yalnız diler, parse etmez**.
+ * `at` gövdedeki başlangıç, `len` `@` DÂHİL uzunluk. Kullanıcı adında boşluk serbest olduğu
+ * için aralığı metinden çözmek imkânsız; ayrımı üye listesini gören sunucu yapıyor.
+ */
+export const chatMention = z.object({
+  id: playerId,
+  at: z.number().int().nonnegative(),
+  len: z.number().int().positive(),
+});
+export type ChatMention = z.infer<typeof chatMention>;
+
+export const allianceChatMessage = z.object({
+  id: z.number().int().positive(),
+  senderId: playerId.nullable(),
+  /** null = dünyadan kaldırılmış oyuncu; ekran «kaldırılmış oyuncu» yazar (ham id ASLA görünmez). */
+  senderName: z.string().nullable(),
+  body: z.string(),
+  mentions: z.array(chatMention).default([]),
+  createdAt: z.string().datetime(),
+});
+export type AllianceChatMessage = z.infer<typeof allianceChatMessage>;
+
+export const allianceChatSendRequest = z.object({
+  body: z.string().trim().min(1).max(500),
+  clientMsgId: z.string().uuid(),
+});
+
+/**
+ * Susturma isteği.
+ *
+ * ⚠️ `minutes` **`.optional()` DEĞİL, zorunlu + `.nullable()`**: `null` = KALICI susturma.
+ * İsteğe bağlı olsaydı alanı unutmak en ağır cezayı kazara verirdi — en yıkıcı seçenek
+ * her zaman açıkça yazılmalı.
+ * ⚠️ Üst sınır 43.200 dakika (30 gün): daha uzunu için kalıcı susturma var.
+ */
+export const allianceChatMuteRequest = z.object({
+  playerId,
+  minutes: z.number().int().positive().max(43_200).nullable(),
+  reason: z.string().trim().max(200).optional(),
+});
+
 /** Şikayet: mesaj bazlı (messageId dolu) ya da oyuncu bazlı (null). */
 export const chatReportRequest = z.object({
   channelId: chatChannelId,
@@ -123,6 +172,26 @@ export const chatErrorCode = z.enum([
   'conversation_not_found',
   /** Kendine mesaj gönderilemez. */
   'self_message',
+
+  /* ── İttifak sohbeti (§13.15c) ───────────────────────────────────────────
+   * ⚠️ İstemci hata metinlerini BU kodlardan üretiyor; enum'a eklenmeyen bir kod
+   * `default` dalına düşer ve ham sunucu mesajı sızabilir. */
+  /** Oyuncu bir ittifakta değil → sohbete hiç erişemez. */
+  'not_alliance_member',
+  /** Lider/konsey tarafından susturuldu (süreli ya da kalıcı). */
+  'alliance_muted',
+  /** İttifağa katılalı `allianceChat.newMemberHours` olmadı — okuyabilir, yazamaz. */
+  'alliance_new_member_restricted',
+  /** Özellik panelden kapatıldı (acil vana). */
+  'alliance_chat_disabled',
+  /** Yetki matrisi reddetti: Konsey yalnız Asker'i susturabilir, Lider susturulamaz. */
+  'mute_hierarchy',
+  /** Kendini susturmaya çalıştı. */
+  'mute_self',
+  /** Susturma kaldırılmak istendi ama aktif susturma yok. */
+  'not_muted',
+  /** İşlem için Konsey ya da Lider olmak gerekiyor. */
+  'forbidden',
 ]);
 export type ChatErrorCode = z.infer<typeof chatErrorCode>;
 
