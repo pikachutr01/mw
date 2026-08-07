@@ -61,7 +61,10 @@
 >   kuyruk fotoğrafı) · `mission_errors` (ekleme-yalnız hata geçmişi) · `missions.lag_ms` /
 >   `duration_ms` / `completed_by` · `ops_events` (**açılıp kapanan** eşik olayı + e-posta,
 >   tekrarlamıyor) · `/healthz?deep=1` · bakımda outbox durur (e-posta hariç) · `pino` +
->   istek `traceId` → `audit_log.trace_id` · `audit_log` indeksleri · `missions` temizlik görevi.
+>   istek `traceId` → `audit_log.trace_id` · `audit_log` indeksleri ·
+>   ⭐ **gecelik otomatik temizlik** (`ops_cleanup` zinciri, 04:00 UTC): saklama süreleri bugüne
+>   kadar **yalnız yönetici tıklayınca** uygulanıyordu, yani pratikte hiç — §9.1.2'nin *"çoklu
+>   hesap izleri 90 gün saklanır"* taahhüdünün kodu yoktu. Postalar ve sohbet bilerek dışarıda.
 >
 > ⚠️ **Üçü de HENÜZ CANLIYA ÇIKMADI** — kullanıcı kararı: tek bir dağıtımla birlikte. Yayın
 > öncesi prosedür `YAYINA_ALMA.md` ve `0043_single_timeline.sql` başlığında; ⛔ **adım 6'da sapma

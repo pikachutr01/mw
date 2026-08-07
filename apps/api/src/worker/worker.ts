@@ -19,6 +19,8 @@ import { log } from '../common/logger.ts';
 import { MAIL } from '../mail/mail.limits.ts';
 import { notificationForOutbox } from '../notify/notify.catalog.ts';
 import { NotifyService } from '../notify/notify.service.ts';
+import { retentionOf } from '../admin/ops-jobs.ts';
+import { createCleanupHandler, ensureCleanupSchedule } from '../ops/cleanup.handler.ts';
 import { OpsMonitor } from '../ops/ops-monitor.ts';
 import type { OpsThresholds } from '../ops/ops-rules.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
@@ -95,6 +97,15 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
   });
 
   /**
+   * ⭐ SAKLAMA SÜRELERİ (Faz 3) — panelden okunur, her koşuda TAZE.
+   *
+   * ⚠️ Ayar servisi yoksa (testler, sade profiller) varsayılanlara düşülüyor. Bu güvenli çünkü
+   * varsayılanlar şema varsayılanlarının **birebir aynısı** (`retentionOf`, tek kaynak).
+   */
+  const retentionFor = (worldId: number) =>
+    retentionOf(opts.settings?.group?.(worldId, 'ops') ?? {});
+
+  /**
    * Görev tipleri (§1: "hepsi aynı çatı").
    *   `echo`            → omurgayı ölçen sahte tip (Faz 1)
    *   `*_finish`        → kuyruk bitişleri (Faz 2) ✓
@@ -110,7 +121,9 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
     .register('echo', echoHandler)
     .register('ranking_snapshot', createRankingSnapshotHandler())
     .register('abuse_scan', createAbuseScanHandler())
-    .register('vacation_end', createVacationEndHandler());
+    .register('vacation_end', createVacationEndHandler())
+    /** ⭐ Faz 3: gecelik saklama süresi uygulaması. Zincir kendi kendini yazıyor. */
+    .register('ops_cleanup', createCleanupHandler(retentionFor));
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(CAVE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
@@ -286,6 +299,16 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
       void ensureAbuseScanSchedule(db, opts.worldId).catch((err: unknown) => {
         SCHED_LOG.error({ err }, 'istismar tarama zinciri kurulamadi');
       });
+      /**
+       * ⭐ Gecelik temizlik zinciri (Faz 3). Aynı ateşle-unut deseni.
+       * ⚠️ Ana anahtar (`ops.autoCleanup`) kapalı olsa bile zincir KURULUYOR — handler kapalıyken
+       * hiçbir şey silmiyor ama bir sonrakini yazmaya devam ediyor. Böylece ayar panelden
+       * açıldığında worker'ı yeniden başlatmaya gerek kalmıyor.
+       */
+      void ensureCleanupSchedule(db, opts.worldId, retentionFor(opts.worldId).autoCleanupHour)
+        .catch((err: unknown) => {
+          SCHED_LOG.error({ err }, 'gecelik temizlik zinciri kurulamadi');
+        });
     },
     async stop() {
       await Promise.all([scheduler.stop(), dispatcher.stop()]);

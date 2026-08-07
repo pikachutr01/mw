@@ -37,12 +37,30 @@ export interface OpsRetention {
   schedulerSampleDays: number;
   /** ⭐ Faz 3 — TAMAMLANMIŞ görevler. Oyunun en çok satır üreten tablosu. */
   missionDoneDays: number;
+  /** ⭐ Faz 3 — gecelik otomatik temizlik ana anahtarı. */
+  autoCleanup: boolean;
+  /** Otomatik temizliğin koşacağı UTC saati (düşük trafik penceresi). */
+  autoCleanupHour: number;
 }
 
 export interface CleanupJob {
   id: string;
   label: string;
   table: string;
+  /**
+   * ⭐⭐ **GECELİK OTOMATİK KOŞUYA GİRER Mİ** (Faz 3).
+   *
+   * ⚠️ Bu bayrak eklenene kadar saklama süreleri **yalnız yönetici düğmeye bastığında**
+   * uygulanıyordu — yani pratikte hiç. İki somut sonucu vardı:
+   *   • §9.1.2'nin *"çoklu hesap izleri 90 gün saklanır, gizlilik metninde açıkça yazılır"*
+   *     taahhüdü **yazılıydı ama uygulanmıyordu**. Kimse tıklamazsa iz sonsuza kadar duruyordu.
+   *   • `scheduler_samples` (Faz 3) dakikada bir satır yazıyor; dizginlenmezse tek başına
+   *     yılda ~525 bin satır.
+   *
+   * ⚠️ `false` işaretlenen bir iş **yanlış** demek değil — «bir insanın kuru koşuyu görmesi
+   * gereken» demek. Ölçüt: silinen satır bir OYUNCUNUN kendi geçmişi mi?
+   */
+  auto: boolean;
   /** Gerçek zaman kolonu — "kalan en eski satır" bununla raporlanır. */
   timeColumn: string;
   /** Bu görevin sildiği satırın ne olduğu ve neden güvenli olduğu. */
@@ -59,9 +77,46 @@ function daysAgo(n: number): SQL {
   return sql`now() - (${n} * interval '1 day')`;
 }
 
+/**
+ * ⭐ `ops` ayar grubunu tipli `OpsRetention`a çevirir — **TEK KAYNAK**.
+ *
+ * ⚠️ Bu fonksiyon var olmadan önce varsayılanlar yalnız `admin.ops.controller.ts`teydi. Faz 3'te
+ * gecelik otomatik temizlik eklenince aynı listenin İKİNCİ bir kopyası gerekiyordu ve bu, tam da
+ * bu projenin defalarca ısırıldığı hata sınıfı: `GAME_NOW_SQL`in beş kopyası vardı ve biri
+ * bozuktu. Panelde görünen saklama süresi ile gecelik işin uyguladığı süre ayrışsaydı, fark
+ * ancak veri kaybolduktan sonra anlaşılırdı.
+ */
+export function retentionOf(g: Readonly<Record<string, unknown>>): OpsRetention {
+  const n = (k: string, d: number): number => {
+    const v = Number(g[k]);
+    return Number.isFinite(v) ? v : d;
+  };
+  return {
+    messagesReadDays: n('messagesReadDays', 60),
+    messagesAnyDays: n('messagesAnyDays', 365),
+    chatDays: n('chatDays', 30),
+    outboxDays: n('outboxDays', 7),
+    emailTokenDays: n('emailTokenDays', 7),
+    pushDeadDays: n('pushDeadDays', 30),
+    pushFailThreshold: n('pushFailThreshold', 5),
+    rankingRunDays: n('rankingRunDays', 90),
+    sessionDays: n('sessionDays', 90),
+    deviceSignalDays: n('deviceSignalDays', 90),
+    cleanupBatch: n('cleanupBatch', 20_000),
+    staleHeartbeatS: n('staleHeartbeatS', 30),
+    schedulerSampleDays: n('schedulerSampleDays', 30),
+    missionDoneDays: n('missionDoneDays', 60),
+    // ⚠️ `!== false`: ayar satırı hiç yoksa AÇIK. Saklama taahhüdünün varsayılanı «uygulanır»
+    // olmalı — varsayılanı kapalı yapmak, taahhüdü yine kimsenin tıklamasına bağlardı.
+    autoCleanup: g['autoCleanup'] !== false,
+    autoCleanupHour: Math.min(Math.max(n('autoCleanupHour', 4), 0), 23),
+  };
+}
+
 export const CLEANUP_JOBS: readonly CleanupJob[] = [
   {
     id: 'messages',
+    auto: false,
     label: 'Eski postalar',
     table: 'messages',
     timeColumn: 'created_at',
@@ -77,6 +132,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
   },
   {
     id: 'chat',
+    auto: false,
     label: 'Eski sohbet mesajları',
     table: 'chat_messages',
     timeColumn: 'created_at',
@@ -87,6 +143,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
   },
   {
     id: 'outbox',
+    auto: true,
     label: 'Teslim edilmiş outbox satırları',
     table: 'outbox',
     timeColumn: 'created_at',
@@ -98,6 +155,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
   },
   {
     id: 'email_tokens',
+    auto: true,
     label: 'Kullanılmış / süresi geçmiş e-posta jetonları',
     table: 'email_tokens',
     timeColumn: 'created_at',
@@ -111,6 +169,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
   },
   {
     id: 'push',
+    auto: true,
     label: 'Ölü push abonelikleri',
     table: 'push_subscriptions',
     timeColumn: 'created_at',
@@ -124,6 +183,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
   },
   {
     id: 'ranking_runs',
+    auto: true,
     label: 'Eski sıralama koşuları',
     table: 'ranking_runs',
     timeColumn: 'created_at',
@@ -137,6 +197,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
   },
   {
     id: 'sessions',
+    auto: true,
     label: 'Ölü oturumlar',
     table: 'sessions',
     timeColumn: 'created_at',
@@ -162,6 +223,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
    */
   {
     id: 'player_ips',
+    auto: true,
     label: 'Eski IP izleri',
     table: 'player_ips',
     timeColumn: 'last_seen',
@@ -172,6 +234,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
   },
   {
     id: 'player_devices',
+    auto: true,
     label: 'Eski cihaz izleri',
     table: 'player_devices',
     timeColumn: 'last_seen',
@@ -200,6 +263,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
    */
   {
     id: 'missions',
+    auto: true,
     label: 'Tamamlanmış görevler',
     table: 'missions',
     timeColumn: 'finished_at',
@@ -218,6 +282,7 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
    */
   {
     id: 'scheduler_samples',
+    auto: true,
     label: 'Kuyruk sağlığı ölçümleri',
     table: 'scheduler_samples',
     timeColumn: 'at',

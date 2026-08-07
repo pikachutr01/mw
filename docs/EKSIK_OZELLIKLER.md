@@ -243,6 +243,10 @@ bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görünt
   bir alarm, bir süre sonra bakılmadan kapatılan bir alarma dönüşür.
 - **Ölü görevi yeniden kuyruğa alma ucu yok** — `mission_dead` alarmı geliyor, satır panelde
   görünüyor ama `failed` → `scheduled` geçişi elle SQL gerektiriyor.
+- **Postalar ve sohbet otomatik temizliğe DAHİL DEĞİL** (`ops-jobs.ts` → `auto: false`). Gecelik
+  koşu yalnız altyapı tablolarını ve gizlilik taahhüdü olanları süpürüyor; oyuncunun kendi
+  okuduğu geçmişte bir insanın kuru koşuyu görmesi gerekiyor. İstenirse tek satırlık bayrak
+  değişikliği — ama önce panelde o iki işin kuru koşusuna bakılmalı.
 
 ---
 

@@ -1568,6 +1568,36 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'kalır: oyuncunun "ben bunu iptal etmiştim" itirazının tek dayanağı o satır.',
   },
 
+  /**
+   * ⭐⭐ GECELİK OTOMATİK TEMİZLİK (Faz 3) — saklama sürelerini GERÇEKTEN uygulayan anahtar.
+   *
+   * ⚠️ Bu ikisi eklenene kadar yukarıdaki bütün «saklama süresi» ayarları **dekoratifti**:
+   * `CLEANUP_JOBS` yalnız yönetici panelde düğmeye bastığında koşuyordu, yani pratikte hiç.
+   * §9.1.2'nin *"çoklu hesap izleri 90 gün saklanır, gizlilik metninde açıkça yazılır"*
+   * taahhüdünün kodu yoktu.
+   */
+  {
+    key: 'ops.autoCleanup',
+    label: 'Gecelik otomatik temizlik',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'Açıkken saklama süreleri her gece kendiliğinden uygulanır. Kapatmak yukarıdaki '
+      + 'bütün gün sayılarını **etkisiz** kılar: tablolar sınırsız büyür ve gizlilik taahhüdü '
+      + 'yalnız birinin elle tıklamasına kalır.',
+    note: '⚠️ Otomatik koşuya yalnız `auto` işaretli işler girer (`ops-jobs.ts`). Oyuncunun '
+      + 'kendi okuduğu geçmiş — **postalar ve sohbet** — bilerek DIŞARIDA: onlarda bir insanın '
+      + 'kuru koşuyu görmesi gerekiyor. Silme kuralları elle koşuyla BİREBİR aynı, değişen tek '
+      + 'şey tetikleyici; her koşu `audit_log`a yazılıyor (`ops.cleanup.auto`).',
+  },
+  {
+    key: 'ops.autoCleanupHour',
+    label: 'Temizlik saati (UTC)',
+    type: 'int', default: 4, min: 0, max: 23, tag: 'design', unit: 'saat',
+    description: 'Gecelik temizliğin koşacağı UTC saati. Varsayılan 04:00 UTC = 07:00 Türkiye — '
+      + 'günün en düşük trafikli penceresi.',
+    note: '⚠️ **UTC**, oyun saati değil: saklama bir depolama kuralıdır ve bakımda donmamalı. '
+      + 'Aynı ayrım `ops-jobs.ts` başlığında da yazılı.',
+  },
+
   /* ── Operasyon alarmı (Faz 3) ────────────────────────────────────────────────
    *
    * ⚠️ Eşikleri KÜÇÜLTMEK daha güvenli değil: yanlış alarm, alarmın okunmamasına yol açar ve

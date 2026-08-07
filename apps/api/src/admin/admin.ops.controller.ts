@@ -26,7 +26,9 @@ import { RULES_BY_KIND } from '../ops/ops-rules.ts';
 import { OUTBOX_MAX_ATTEMPTS } from '../outbox/outbox.dispatcher.ts';
 import { SettingsService } from '../settings/settings.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
-import { CLEANUP_JOBS, JOBS_BY_ID, type CleanupJob, type OpsRetention } from './ops-jobs.ts';
+import {
+  CLEANUP_JOBS, JOBS_BY_ID, retentionOf, type CleanupJob, type OpsRetention,
+} from './ops-jobs.ts';
 import { currentTraceId } from '../common/request-context.ts';
 
 const runBody = z.object({
@@ -54,25 +56,13 @@ export class AdminOpsController {
     private readonly settings: SettingsService,
   ) {}
 
-  /** `ops` grubunu tipli okur. Bellek-içi anlık görüntüden → 0 sorgu. */
+  /**
+   * `ops` grubunu tipli okur. Bellek-içi anlık görüntüden → 0 sorgu.
+   * ⚠️ Varsayılanlar **burada değil** `ops-jobs.ts` → `retentionOf`ta: gecelik otomatik temizlik
+   * de aynı listeyi okuyor ve iki kopya ayrışırsa fark ancak veri kaybolduktan sonra anlaşılır.
+   */
   private retention(worldId: number): OpsRetention {
-    const g = this.settings.group(worldId, 'ops') as Record<string, number>;
-    return {
-      messagesReadDays: g['messagesReadDays'] ?? 60,
-      messagesAnyDays: g['messagesAnyDays'] ?? 365,
-      chatDays: g['chatDays'] ?? 30,
-      outboxDays: g['outboxDays'] ?? 7,
-      emailTokenDays: g['emailTokenDays'] ?? 7,
-      pushDeadDays: g['pushDeadDays'] ?? 30,
-      pushFailThreshold: g['pushFailThreshold'] ?? 5,
-      rankingRunDays: g['rankingRunDays'] ?? 90,
-      sessionDays: g['sessionDays'] ?? 90,
-      deviceSignalDays: g['deviceSignalDays'] ?? 90,
-      cleanupBatch: g['cleanupBatch'] ?? 20_000,
-      staleHeartbeatS: g['staleHeartbeatS'] ?? 30,
-      schedulerSampleDays: g['schedulerSampleDays'] ?? 30,
-      missionDoneDays: g['missionDoneDays'] ?? 60,
-    };
+    return retentionOf(this.settings.group(worldId, 'ops'));
   }
 
   /**
