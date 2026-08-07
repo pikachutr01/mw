@@ -25,6 +25,16 @@
 --    "süresi geçmişleri kaydırmayalım" gibi bir ayıklama kanıtı bozar ve geçmiş kayıtlarla
 --    yeni kayıtları farklı ölçeklere düşürürdü.
 
+-- ⚠️⚠️ **SIRA PAZARLIKSIZ: DURAKLAT → GÖÇ → YENİ KOD.** Yerel provada bu sıra bozuldu ve
+--    sonucu ölçüldü: yeni kod göçmemiş bir veritabanına bağlanınca `gameNow()` GERÇEK zamanı
+--    döndürüyor ama saklı vadeler hâlâ ESKİ oyun saatinde. O aralıkta yazılan her damga
+--    (`cities.resources_at`) `clock_offset_ms` kadar geleceğe kaçıyor.
+--    Zarar sınırlı ve kendiliğinden düzeliyor (`city.service.ts` `resources_at < at` koşulu
+--    yüzünden o satırlara hiç dokunmuyor → negatif kaynak ÜRETİLMİYOR, üretim yalnız gerçek
+--    zaman yetişene kadar duruyor), ama ölçülmesi gereken bir pencere.
+--    ⭐ `ops/surum-yayinla.sh` sırası zaten *göç → symlink → reload*, yani üretimde yeni kod
+--    ancak göçten SONRA başlıyor. **API'yi elle yeni derlemeye almayın.**
+
 -- ── 0) EMNİYET: KAYDIRACAK ŞEY VARSA dünya duraklı olmalı ───────────────────
 -- Çalışan bir dünyada kaydırma yapmak scheduler'la yarışır: kaydırma yarısındayken alınan bir
 -- görev kaydırma öncesi/sonrası karışımı üretir ve bu geri alınamaz. `migrate.mjs` hatayı görüp
