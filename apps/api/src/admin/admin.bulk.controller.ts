@@ -24,6 +24,7 @@ import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 /**
  * ⚠️ Güvenlik freni. 500'den fazla oyuncuya tek istekte dokunmak bir yönetim aracının işi
@@ -189,11 +190,11 @@ export class AdminBulkController {
     const changed = await this.apply(op as Op, d as never, victims);
 
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after, trace_id)
       VALUES (${d.target.worldId}, ${req.player!.playerId}, ${`admin.bulk.${op}`}, 'world',
               ${d.target.worldId},
               ${JSON.stringify({ target: d.target, payload: stripTarget(d) })}::jsonb,
-              ${JSON.stringify({ players: victims.length, cities: cityCount, changed })}::jsonb)
+              ${JSON.stringify({ players: victims.length, cities: cityCount, changed })}::jsonb, ${currentTraceId()})
     `);
     return { ...preview, ran: true, changed };
   }

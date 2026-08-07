@@ -14,6 +14,9 @@ import {
   hasPendingSnapshot, lastSnapshotAt, previousSnapshotAt, requeueSnapshot, scheduleSnapshot,
   takeSnapshot,
 } from './ranking.service.ts';
+import { log } from '../common/logger.ts';
+
+const RANK_LOG = log('ranking');
 
 /**
  * Görev transaction'ının içinden oyun saati. `GameClockService.read()` ile aynı ifade ama `Tx`
@@ -67,9 +70,9 @@ export function createRankingSnapshotHandler(): MissionHandler {
   return async (ctx) => {
     const gameNow = await gameNowOf(ctx.tx, ctx.worldId);
     if (ctx.at.getTime() - gameNow.getTime() > MAX_ILERI_VADE_MS) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `[ranking] görev vadesi gelecekte (${ctx.at.toISOString()} > ${gameNow.toISOString()}) — atlandı`,
+      RANK_LOG.error(
+        { executeAt: ctx.at.toISOString(), gameNow: gameNow.toISOString(), worldId: ctx.worldId },
+        'görev vadesi gelecekte — atlandı',
       );
 
       /**
@@ -174,8 +177,7 @@ export function createRankingWatchdog(db: Db, minIntervalMs = 900_000): (worldId
     if (now - lastCheck < minIntervalMs) return;
     lastCheck = now;
     if (await hasPendingSnapshot(db, worldId)) return;
-    // eslint-disable-next-line no-console
-    console.error('[ranking] bekleyen anlık görüntü görevi yok — zincir yeniden kuruluyor');
+    RANK_LOG.error({ worldId }, 'bekleyen anlık görüntü görevi yok — zincir yeniden kuruluyor');
     await ensureRankingSchedule(db, worldId);
   };
 }

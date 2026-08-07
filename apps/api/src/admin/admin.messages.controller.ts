@@ -29,6 +29,7 @@ import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 /**
  * ⚠️ Uzunluk sınırları **gösterime** göre: konu posta kutusu listesinde tek satır, gövde
@@ -129,12 +130,12 @@ export class AdminMessagesController {
     `);
 
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${d.worldId}, ${req.player!.playerId}, 'system_message.send', 'message',
               ${d.playerId ?? 0},
               ${JSON.stringify({
     scope: d.scope, sent, subject: d.subject, target: playerName, chars: d.text.length,
-  })}::jsonb)
+  })}::jsonb, ${currentTraceId()})
     `);
 
     return { ok: true, sent, scope: d.scope, target: playerName };

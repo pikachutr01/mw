@@ -3,6 +3,8 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { Server as HttpServer } from 'node:http';
 import { AppModule } from './app.module.ts';
+import { log } from './common/logger.ts';
+import { newTraceId, runWithContext } from './common/request-context.ts';
 import { TokenService } from './auth/token.service.ts';
 import { PresenceService } from './auth/presence.service.ts';
 import { createDb } from './db/client.ts';
@@ -25,6 +27,8 @@ import { createWorker, type Worker } from './worker/worker.ts';
  * bölündüğünde de kod değişmeden çalışır (worker NOTIFY eder, api LISTEN eder). Redis zorunlu
  * değil; küçük sunucu profilinde ikinci bir altyapı bağımlılığı istemiyoruz.
  */
+const BOOT = log('boot');
+
 async function bootstrap(): Promise<void> {
   const role = process.env['ROLE'] ?? 'all';
   const runApi = role === 'all' || role === 'api';
@@ -50,6 +54,32 @@ async function bootstrap(): Promise<void> {
     ? await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter())
     : null;
   app?.enableShutdownHooks();
+
+  /**
+   * ⭐⭐ İSTEK BAĞLAMI (Faz 3) — her isteğe bir `traceId`, en erken noktada.
+   *
+   * ⚠️ `onRequest` **en erken kanca**: guard'lardan, interceptor'lardan ve hata filtresinden
+   * önce koşuyor. Daha geç bir noktaya koysaydık (ör. bir interceptor), guard'ın attığı 401/503
+   * gibi hatalar bağlamın DIŞINDA kalır ve tam da hata anında iz kimliği kaybolurdu.
+   *
+   * ⚠️ `done` kancasını `runWithContext`in İÇİNDEN çağırmak şart: `AsyncLocalStorage.run`
+   * bağlamı yalnız verilen fonksiyonun (ve ondan doğan asenkron zincirin) içinde tutuyor.
+   * Dışarıda çağırsaydık bağlam anında kapanır ve hiçbir şey görmezdi.
+   */
+  app?.getHttpAdapter().getInstance().addHook(
+    'onRequest',
+    (req: { headers: Record<string, unknown>; method?: string; url?: string },
+      _reply: unknown, done: () => void) => {
+      runWithContext(
+        {
+          traceId: newTraceId(req.headers['x-request-id']),
+          method: req.method,
+          url: req.url,
+        },
+        done,
+      );
+    },
+  );
 
   /**
    * ⭐ AYARLAR — açılışta bir kez yüklenir, sonra **bellekten** okunur (§admin Faz 1).
@@ -80,11 +110,10 @@ async function bootstrap(): Promise<void> {
      * `ROLE=all`; aşağıdaki uyarı bu tuzağı sessiz bırakmamak için.
      */
     if (role === 'worker' && pushEnabled()) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[mobilwar] UYARI: ROLE=worker ile push açık. Bu süreç oyuncuların çevrimiçi olup '
-        + 'olmadığını GÖREMEZ (gateway kaydı yalnız API sürecinde dolu) → WS bağlıyken de push '
-        + 'gider. Tek süreçli profil için ROLE=all kullan.',
+      BOOT.warn(
+        'ROLE=worker ile push açık: bu süreç oyuncuların çevrimiçi olup olmadığını GÖREMEZ '
+        + '(gateway kaydı yalnız API sürecinde dolu) → WS bağlıyken de push gider. '
+        + 'Tek süreçli profil için ROLE=all kullan.',
       );
     }
     const notifier = new NotifyService(handle.db, {
@@ -105,12 +134,10 @@ async function bootstrap(): Promise<void> {
       settings,
     });
     worker.start();
-    // eslint-disable-next-line no-console
-    console.log(
-      `[mobilwar] worker çalışıyor (dünya ${process.env['WORLD_ID'] ?? 1}) · `
-      + `push ${pushEnabled() ? 'AÇIK' : 'kapalı (VAPID anahtarı yok)'} · `
-      + `posta ${mailEnabled() ? 'Resend' : 'konsol (RESEND_API_KEY yok)'}`,
-    );
+    BOOT.info({
+      worldId: Number(process.env['WORLD_ID'] ?? 1),
+      push: pushEnabled(), mail: mailEnabled() ? 'resend' : 'console',
+    }, 'worker çalışıyor');
   }
 
   if (app) {
@@ -126,14 +153,12 @@ async function bootstrap(): Promise<void> {
     // İttifak uçları çevrimiçi rozeti + oda senkronu için aynı instance'a buradan ulaşır.
     setGateway(gateway);
 
-    // eslint-disable-next-line no-console
-    console.log(`[mobilwar] api hazır → http://localhost:${port}/healthz  ·  ws /ws  (ROLE=${role})`);
+    BOOT.info({ port, role }, `api hazır → http://localhost:${port}/healthz · ws /ws`);
   }
 
   // Graceful shutdown: çalışan görev turu bitene kadar bekle → yarım iş kalmaz.
   const shutdown = async (signal: string): Promise<void> => {
-    // eslint-disable-next-line no-console
-    console.log(`[mobilwar] ${signal} alındı, kapatılıyor…`);
+    BOOT.info({ signal }, 'kapatılıyor');
     await settings.stop();
     await worldState?.stop();
     await gateway?.close();

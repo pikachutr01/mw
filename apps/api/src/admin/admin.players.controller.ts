@@ -27,6 +27,7 @@ import { DB } from '../db/tokens.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 const PAGE = 25;
 
@@ -401,10 +402,10 @@ export class AdminPlayersController {
     const ids = await this.auth.revokeChain(Number(row['account_id']), chainId);
     const sockets = getGateway()?.revokeSessions(ids) ?? 0;
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${Number(row['world_id'])}, ${req.player!.playerId}, 'admin.sessions.revoke_chain',
               'player', ${Number(playerId)},
-              ${JSON.stringify({ chainId, revoked: ids.length, sockets })}::jsonb)
+              ${JSON.stringify({ chainId, revoked: ids.length, sockets })}::jsonb, ${currentTraceId()})
     `);
     return { ok: true, revoked: ids.length, sockets };
   }

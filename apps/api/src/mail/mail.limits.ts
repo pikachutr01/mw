@@ -35,6 +35,17 @@ export const MAIL = {
   appOrigin: str('APP_ORIGIN', 'http://localhost:5173'),
   /** Resend uç noktası (test/proxy için değiştirilebilir). */
   endpoint: str('RESEND_ENDPOINT', 'https://api.resend.com/emails'),
+  /**
+   * ⭐ OPERASYON ALARMI (Faz 3) — eşik aşımlarının ve çoklu hesap raporunun gittiği adres.
+   *
+   * ⚠️ Ayarlara DEĞİL env'e konuldu, `MAIL` bloğunun geri kalanıyla aynı gerekçeyle: bu bir
+   * dağıtım bilgisi, denge düğmesi değil. Ayrıca panelden düzenlenebilir olsaydı, paneli ele
+   * geçiren biri alarmları kendine yönlendirip sessizce susturabilirdi.
+   *
+   * ⚠️ Boşsa olaylar yine **kaydedilir** (`ops_events`), yalnız posta gitmez. Alarm kanalının
+   * yokluğu geçmişin de tutulmamasına yol açmamalı — kullanıcının açık şartı.
+   */
+  alertTo: str('OPS_ALERT_EMAIL', ''),
 } as const;
 
 /**

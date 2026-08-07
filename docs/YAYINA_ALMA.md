@@ -219,14 +219,48 @@ içinde `define` ile gömülüyor — çalışma zamanı değişkeni değil, kay
 - Oyuncudan hata raporu alırken bu satırı istemek en ucuz teşhis: hangi paketi çalıştırdığı
   tek bakışta belli olur (`select-all` ile tek tıkta kopyalanıyor).
 
+### Sunucuda BİR KEZ yapılacaklar (Faz 3 — kod değil, dağıtım ayarı)
+
+⚠️ Bu iki adım koda yazılamaz; sunucuda elle yapılır ve **yapılmazsa Faz 3'ün yarısı sessizce
+çalışmaz**.
+
+```bash
+# 1. LOG ROTASYONU — bugün YOK ve dosyalar sınırsız büyüyor.
+#    ⚠️ Faz 3 logu yapılandırdı (JSON, pino) ve hacmi ARTIRDI. 40 GB'lık diskte, üzerinde iki
+#    canlı site daha barındıran bir sunucuda rotasyonsuz log, çözdüğü sorundan büyük bir
+#    sorun: disk dolunca Postgres yazamaz ve oyun tamamen durur.
+ssh deploy@31.210.36.185 "pm2 install pm2-logrotate"
+ssh deploy@31.210.36.185 "pm2 set pm2-logrotate:max_size 20M"
+ssh deploy@31.210.36.185 "pm2 set pm2-logrotate:retain 14"
+ssh deploy@31.210.36.185 "pm2 set pm2-logrotate:compress true"
+
+# 2. ALARM ADRESİ — .env'e ekle, sonra `pm2 reload mobilwar`.
+#    ⚠️ Boşsa eşik aşımları `ops_events` tablosuna yine YAZILIR ve panelde görünür; yalnız
+#    e-posta gitmez. Yani boş bırakmak "izleme kapalı" değil, "kimse haber almıyor" demek —
+#    06.08.2026'da arızanın 9,5 saat sürmesinin sebebi tam olarak buydu.
+#    OPS_ALERT_EMAIL=destek@mobilwar.com
+```
+
+**İsteğe bağlı ama önerilir — dış yoklayıcı `/healthz?deep=1`e baksın.** Sığ `/healthz`, süreç
+ayakta olduğu sürece daima 200 döner; 06.08.2026'da API sapasağlamdı, uç yeşildi ve kuyruk 9,5
+saattir durmuştu. Derin kontrol nabız yaşına, kuyruk gecikmesine ve ölü mektuba bakıp **503**
+döner. ⚠️ Eşik aşımını scheduler'ın kendisi değerlendiriyor; **scheduler ölürse alarm da ölür**
+— o boşluğu ancak dışarıdan bakan bir yoklayıcı kapatır.
+
 ### Elle müdahale gereken durumlar
 ```bash
 # Geri alma (sağlık kontrolü geçmiş ama sorun sonradan görülmüşse)
 ssh deploy@31.210.36.185 "ls -1t /var/www/mobilwar/releases | head -5"
 ssh deploy@31.210.36.185 "/var/www/mobilwar/releases/<eski-sürüm>/ops/surum-yayinla.sh <eski-sürüm>"
 
-# Loglar
+# Loglar (Faz 3'ten beri JSON — `jq` ile süzülebilir)
 ssh deploy@31.210.36.185 "pm2 logs mobilwar --lines 100 --nostream"
+ssh deploy@31.210.36.185 "tail -n 2000 ~/.pm2/logs/mobilwar-out.log | jq -c 'select(.mod==\"scheduler\")'"
+ssh deploy@31.210.36.185 "tail -n 5000 ~/.pm2/logs/mobilwar-error.log | jq -c 'select(.traceId==\"<oyuncunun-verdigi-id>\")'"
+
+# Derin sağlık: süreç ayakta ama KUYRUK durmuş mu? (`/healthz` tek başına bunu söylemez)
+ssh deploy@31.210.36.185 "curl -s -o /dev/null -w '%{http_code}\n' localhost:3002/healthz?deep=1"
+ssh deploy@31.210.36.185 "curl -s 'localhost:3002/healthz?deep=1' | jq ."
 
 # Ayarları değiştirmek (yönetim paneli): yeniden başlatma GEREKMEZ —
 # `LISTEN mw_settings` ile tüm süreçler milisaniyeler içinde tazelenir.

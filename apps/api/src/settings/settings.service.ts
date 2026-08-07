@@ -30,6 +30,8 @@ import type { Db } from '../db/client.ts';
 import { catalogOverrides } from './catalog.ts';
 import { combatOverrides, lootOverrides, mapOverrides, meritOverrides } from './combat.ts';
 import { setLiveSettings } from './live.ts';
+import { log } from '../common/logger.ts';
+const SET_LOG = log('settings');
 
 /** Ayar değişikliğinin duyurulduğu Postgres kanalı. */
 export const SETTINGS_CHANNEL = 'mw_settings';
@@ -118,8 +120,7 @@ export class SettingsService {
       // ⚠️ Yükleme hatası YUTULUR: ayar tazeleyememek oyunu durdurmayı hak etmez; süreç
       // eski (geçerli) anlık görüntüyle çalışmaya devam eder.
       void this.load().catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error('[settings] yeniden yükleme başarısız:', err);
+        SET_LOG.error({ err }, 'yeniden yükleme başarısız');
       });
     });
     this.unlisten = () => sub.unlisten();
@@ -328,8 +329,7 @@ export class SettingsService {
     try {
       await this.db.execute(sql`SELECT pg_notify(${SETTINGS_CHANNEL}, '1')`);
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[settings] duyuru başarısız:', err);
+      SET_LOG.error({ err }, 'duyuru başarısız');
     }
   }
 }

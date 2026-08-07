@@ -70,6 +70,15 @@ export interface SchedulerOptions {
    * ⚠️ Hatası YUTULUR ve tura yansımaz: bekçi, koruduğu döngüyü asla düşürmemeli.
    */
   watchdog?: (worldId: number) => Promise<void>;
+  /**
+   * ⭐ OPERASYON İZLEYİCİSİ (Faz 3) — her turun sonunda çağrılır, **kendi kendini seyreltir**
+   * (`ops/ops-monitor.ts`, dakikada bir). Verilmezse hiç örnek yazılmaz: testler ve tabloları
+   * olmayan profiller etkilenmez — `heartbeat` ile birebir aynı sözleşme.
+   *
+   * ⚠️ Bakımda da çağrılıyor (`skippedPaused: true` ile): bakım penceresinin grafikte görünmesi,
+   * "kuyruk neden durdu" sorusunun cevabının kendisi.
+   */
+  sampler?: (result: TickResult) => Promise<void>;
 }
 
 export interface TickResult {
@@ -103,8 +112,8 @@ export interface TickResult {
 export class SchedulerService {
   private readonly repo: MissionRepository;
   private readonly opts:
-    Required<Omit<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat' | 'watchdog'>>
-    & Pick<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat' | 'watchdog'>;
+    Required<Omit<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat' | 'watchdog' | 'sampler'>>
+    & Pick<SchedulerOptions, 'onError' | 'engineFor' | 'heartbeat' | 'watchdog' | 'sampler'>;
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopped = false;
@@ -136,6 +145,7 @@ export class SchedulerService {
       engineFor: options.engineFor,
       heartbeat: options.heartbeat,
       watchdog: options.watchdog,
+      sampler: options.sampler,
     };
   }
 
@@ -161,6 +171,7 @@ export class SchedulerService {
        * bakım panelinde aynı görünseydi (kuyruk ilerlemiyor) yanlış alarm ya da daha
        * kötüsü kaçırılmış alarm üretirdi.
        */
+      await this.sample(result);
       await this.beat(result);
       return result;
     }
@@ -203,6 +214,11 @@ export class SchedulerService {
           err instanceof Error ? err.message : String(err),
           this.opts.maxAttempts,
           this.opts.retryBackoffMs,
+          // ⭐ Hata GEÇMİŞİ (0044): `last_error` üzerine yazıyor, ilk hata kayboluyordu.
+          {
+            worldId: mission.worldId, type: mission.type,
+            attempts: mission.attempts, workerId: this.opts.workerId,
+          },
         );
         if (outcome === 'dead') result.dead++;
         else result.retried++;
@@ -217,8 +233,22 @@ export class SchedulerService {
     } catch (err) {
       this.opts.onError?.(err, null);
     }
+    await this.sample(result);
     await this.beat(result);
     return result;
+  }
+
+  /**
+   * ⭐ Operasyon örneği (Faz 3). Kısıtlama ve hata yutma `OpsMonitor`ün içinde — ama burada da
+   * ikinci bir kalkan var: izleyicinin BİR sözleşme ihlali bile (senkron atan bir hata) görev
+   * döngüsünü düşürmemeli. `watchdog` ile aynı gerekçe.
+   */
+  private async sample(result: TickResult): Promise<void> {
+    try {
+      await this.opts.sampler?.(result);
+    } catch (err) {
+      this.opts.onError?.(err, null);
+    }
   }
 
   /** Nabız (§admin Faz 8). Kısıtlama ve hata yutma `Heartbeat`in içinde. */
@@ -324,10 +354,21 @@ export class SchedulerService {
         });
       }
 
-      // Durum geçişi AYNI transaction'da: süreç burada ölürse görev 'running' kalır ve
-      // reapStale onu geri kuyruğa alır — yarım iş kalmaz.
+      /**
+       * Durum geçişi AYNI transaction'da: süreç burada ölürse görev 'running' kalır ve
+       * reapStale onu geri kuyruğa alır — yarım iş kalmaz.
+       *
+       * ⭐ `duration_ms` HANDLER süresini ölçüyor (0044), kuyrukta beklemeyi değil (`lag_ms`).
+       * İkisi ayrı çünkü ayrı arızaları gösteriyor: biri altyapı tıkanması, diğeri yavaş iş.
+       * ⚠️ `completed_by` `locked_by` NULL'lanmadan ÖNCE kopyalanıyor — aynı ifadedeki eski
+       * değer okunur (SQL'de SET sağ tarafları satırın güncelleme öncesi hâlini görür).
+       */
       await tx.execute(sql`
-        UPDATE missions SET status = 'done', finished_at = now(), locked_by = NULL, locked_at = NULL
+        UPDATE missions
+           SET status = 'done', finished_at = now(),
+               duration_ms = GREATEST(0, (EXTRACT(EPOCH FROM (now() - COALESCE(claimed_at, locked_at, now()))) * 1000)::int),
+               completed_by = COALESCE(locked_by, completed_by),
+               locked_by = NULL, locked_at = NULL
          WHERE id = ${mission.id}
       `);
     });

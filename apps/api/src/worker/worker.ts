@@ -15,8 +15,12 @@ import { echoHandler } from '../missions/echo.handler.ts';
 import type { MailSender } from '../mail/mail.service.ts';
 import { HandlerRegistry } from '../missions/handler-registry.ts';
 import { SchedulerService } from '../missions/scheduler.service.ts';
+import { log } from '../common/logger.ts';
+import { MAIL } from '../mail/mail.limits.ts';
 import { notificationForOutbox } from '../notify/notify.catalog.ts';
 import { NotifyService } from '../notify/notify.service.ts';
+import { OpsMonitor } from '../ops/ops-monitor.ts';
+import type { OpsThresholds } from '../ops/ops-rules.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
 import { createAbuseScanHandler, ensureAbuseScanSchedule } from '../abuse/scan.handler.ts';
@@ -49,6 +53,11 @@ export interface WorkerOptions {
     /** Askerî ünvan eşikleri/süreleri (§ünvanlar). */
     merit(worldId: number): MeritConfig | undefined;
     revisionId(worldId: number): number | null;
+    /**
+     * ⭐ Faz 3 — operasyon eşikleri (`ops` grubu). Yapısal tipleme sayesinde `SettingsService`
+     * bunu zaten karşılıyor; opsiyonel çünkü testlerdeki sahte ayar nesneleri bilmiyor.
+     */
+    group?(worldId: number, id: string): Readonly<Record<string, unknown>>;
   } | null;
 }
 
@@ -60,9 +69,30 @@ export interface Worker {
   stop(): Promise<void>;
 }
 
+const SCHED_LOG = log('scheduler');
+const OUTBOX_LOG = log('outbox');
+const OPS_LOG = log('ops');
+
 export function createWorker(db: Db, opts: WorkerOptions): Worker {
   const clock = new GameClockService(db);
   const workerId = opts.workerId ?? `worker-${process.pid}`;
+
+  /**
+   * ⭐⭐ OPERASYON İZLEYİCİSİ (Faz 3) — kuyruğun GEÇMİŞİ + eşik alarmı.
+   *
+   * ⚠️ Eşikler her turda YENİDEN okunuyor (fonksiyon geçiliyor, nesne değil): panelden bir eşik
+   * değiştirildiğinde bir sonraki değerlendirme onu görmeli, yeniden başlatma beklememeli —
+   * `engineFor` ile aynı gerekçe.
+   */
+  const monitor = new OpsMonitor(db, {
+    worldId: opts.worldId,
+    workerId,
+    thresholds: opts.settings?.group
+      ? () => opts.settings!.group!(opts.worldId, 'ops') as Partial<OpsThresholds>
+      : undefined,
+    alertTo: MAIL.alertTo,
+    onError: (err) => { OPS_LOG.error({ err }, 'örnekleme/değerlendirme hatası'); },
+  });
 
   /**
    * Görev tipleri (§1: "hepsi aynı çatı").
@@ -100,9 +130,13 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
      * çalışma sırasında koparsa yeniden başlatmaya kadar ölü kalıyor — canlıda 15 saat sürdü.
      */
     watchdog: createRankingWatchdog(db),
+    /** ⭐ Faz 3: dakikada bir `scheduler_samples` + eşik değerlendirmesi. Seyreltme içeride. */
+    sampler: (result) => monitor.observe(result),
     onError: (err, mission) => {
-      // eslint-disable-next-line no-console
-      console.error(`[scheduler] görev ${mission?.id ?? '-'} (${mission?.type ?? '-'}) hata:`, err);
+      SCHED_LOG.error(
+        { err, missionId: mission?.id ?? null, missionType: mission?.type ?? null },
+        'görev hatası',
+      );
     },
     // ⚠️ `undefined` bırakılıyorsa handler `ctx.engine` görmez ve motor varsayılanını kullanır.
     engineFor: opts.settings
@@ -118,8 +152,10 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
   const dispatcher = new OutboxDispatcher(db, {
     heartbeat: new Heartbeat(db, 'dispatcher', { workerId, worldId: opts.worldId }),
     onError: (err, row) => {
-      // eslint-disable-next-line no-console
-      console.error(`[outbox] satır ${row?.id ?? '-'} (${row?.topic ?? '-'}) teslim edilemedi:`, err);
+      OUTBOX_LOG.error(
+        { err, outboxId: row?.id ?? null, topic: row?.topic ?? null },
+        'satır teslim edilemedi',
+      );
     },
   });
 
@@ -187,6 +223,48 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
         idempotencyKey: `outbox-${row.id}-${row.createdAt.getTime()}`,
       });
     });
+
+    /**
+     * ⭐⭐ ÇOKLU HESAP RAPORU — **bu satır bugüne kadar HİÇBİR YERE GİTMİYORDU** (Faz 3'te ölçüldü).
+     *
+     * `scan.service.ts` §9.1.4'ün gerektirdiği haftalık raporu `admin:abuse_report` konusuyla
+     * outbox'a yazıyor ve `abuse_scan_runs.emailed_at`i işaretliyordu — ama o konu için ne bir
+     * sink vardı ne de `notify.catalog.ts`te bir karşılığı. Satır `'*'` sink'ine düşüyor,
+     * `eventForOutbox` `null` dönüyor (`realtime.test.ts` bunu zaten kilitliyor), hiçbir şey
+     * üretilmeden **teslim edilmiş** işaretleniyordu. Yani sistem raporu yazıyor, "gönderdim"
+     * diyor ve kimseye ulaşmıyordu.
+     *
+     * ⚠️ Konuya ÖZEL sink olduğu için `'*'`i susturmuyor (`sinkFor` önce tam eşleşmeye bakar).
+     * ⚠️ Hata ATILIR: bu bir operasyon raporu, "en iyi çaba" bildirimi değil — gitmezse satır
+     * yeniden denensin ve gitmemişse ölü mektup kuyruğunda GÖRÜNSÜN.
+     */
+    if (MAIL.alertTo !== '') {
+      dispatcher.on('admin:abuse_report', async (row) => {
+        const p = row.payload as Record<string, unknown>;
+        const pairs = Array.isArray(p['pairs']) ? p['pairs'] as Record<string, unknown>[] : [];
+        const lines = pairs.map((x) =>
+          `• ${String(x['a'])} ↔ ${String(x['b'])} — puan ${String(x['score'])} `
+          + `(${(x['signals'] as string[] | undefined)?.join(', ') ?? ''})`);
+        const notes = Object.entries((p['innocentNotes'] ?? {}) as Record<string, string>)
+          .map(([k, v]) => `  ${k}: ${v}`);
+        const text = [
+          `Dünya ${String(p['worldId'])} · pencere ${String(p['windowFrom'])} → ${String(p['windowTo'])}`,
+          `Eşik: ${String(p['threshold'])} · eşiği geçen çift: ${pairs.length}`,
+          '', ...lines, '',
+          'Masum açıklamalar:', ...notes, '',
+          String(p['reminder'] ?? ''),
+        ].join('\n');
+        await opts.mail!.send({
+          to: MAIL.alertTo,
+          subject: `[MobilWar] Çoklu hesap raporu — dünya ${String(p['worldId'])}`,
+          text,
+          html: `<pre style="font:14px/1.5 ui-monospace,monospace;white-space:pre-wrap">${
+            text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] ?? c))
+          }</pre>`,
+          idempotencyKey: `outbox-${row.id}-${row.createdAt.getTime()}`,
+        });
+      });
+    }
   }
 
   return {
@@ -202,13 +280,11 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
        * Sonraki açılış aynı işi tekrar dener ve tekillik anahtarı kopya üretmez.
        */
       void ensureRankingSchedule(db, opts.worldId).catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error('[ranking] anlik goruntu zinciri kurulamadi:', err);
+        SCHED_LOG.error({ err }, 'siralama anlik goruntu zinciri kurulamadi');
       });
       // Çoklu hesap taraması aynı desenle: ateşle-unut, tekillik anahtarı kopya üretmiyor.
       void ensureAbuseScanSchedule(db, opts.worldId).catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error('[abuse] tarama zinciri kurulamadi:', err);
+        SCHED_LOG.error({ err }, 'istismar tarama zinciri kurulamadi');
       });
     },
     async stop() {

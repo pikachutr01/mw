@@ -8,8 +8,8 @@
  */
 import { relations, sql } from 'drizzle-orm';
 import {
-  bigint, bigserial, boolean, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text,
-  timestamp, uniqueIndex, uuid, type AnyPgColumn,
+  bigint, bigserial, boolean, doublePrecision, index, integer, jsonb, numeric, pgTable, primaryKey,
+  smallint, text, timestamp, uniqueIndex, uuid, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 export const worlds = pgTable('worlds', {
@@ -17,9 +17,18 @@ export const worlds = pgTable('worlds', {
   name: text('name').notNull(),
   state: text('state').notNull().default('running'), // running | maintenance | archived
   /**
-   * ⭐ OYUN SAATİ (§2): game_now() = now() − clock_offset_ms.
-   * clock_offset_ms = dünyanın TOPLAM duraklama süresi. Bakımda geçen süre oyun saatine
-   * yansımaz → bakım sırasında hiçbir geri sayım ilerlemez, savaşlar kaymaz.
+   * ⛔⛔ **EMEKLİ — 0043'ten (tek zaman çizgisi) beri DAİMA 0. Hiçbir kod onu okumuyor.**
+   *
+   * Eski model: `gameNow = (paused_at ?? now()) − clock_offset_ms`, yani dünyanın toplam
+   * duraklama süresi burada birikiyordu ve veritabanındaki her damga "hangi saatte yazıldı?"
+   * sorusunu sordurmuş oluyordu. O soru ~10 yerde yanlış cevaplandı, ikisi canlıya çıktı.
+   * Yeni model: `gameNow == now() == UTC`; bakımdan çıkarken bekleyen vadeler duraklama süresi
+   * kadar ileri kaydırılıyor (`world/time-registry.ts` · `world/time-shift.ts`).
+   *
+   * ⚠️ Sütun **bilerek DÜŞÜRÜLMEDİ** (expand-contract): `surum-yayinla.sh` sırası
+   * *göç → symlink → reload*, yani göç koşarken ESKİ kod hâlâ çalışıyor ve bu sütunu okuyor.
+   * Ayrıca sağlık kontrolü düşüp koda geri dönülürse eski kod `now() − 0` ile **doğru** çalışır.
+   * `DROP COLUMN` bir SONRAKİ dağıtımın işi — bu dağıtımda yapmak geri dönüş yolunu keserdi.
    */
   clockOffsetMs: bigint('clock_offset_ms', { mode: 'number' }).notNull().default(0),
   /** Bakım başlangıcı (gerçek zaman). NULL = dünya çalışıyor. */
@@ -695,11 +704,24 @@ export const missions = pgTable('missions', {
   lockedBy: text('locked_by'),
   lockedAt: timestamp('locked_at', { withTimezone: true }),
   attempts: smallint('attempts').notNull().default(0),
+  /** ⚠️ ÜZERİNE YAZILIR — hata geçmişi için `mission_errors` (0044). */
   lastError: text('last_error'),
   /** Çift-tıklama koruması: aynı anahtarla ikinci görev yazılamaz. */
   idempotencyKey: text('idempotency_key'),
   payload: jsonb('payload').notNull().default({}),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
+  /**
+   * ⭐ ZAMAN KÜNYESİ (0044) — iki farklı arıza tek sayıya sıkışmıştı.
+   *
+   * `lagMs` KUYRUKTA bekleme (`claimed_at − execute_at`), `durationMs` HANDLER süresi
+   * (`finished_at − claimed_at`). Birincisi altyapı arızası, ikincisi performans sorunu;
+   * `finished_at − execute_at` farkı ikisini toplayıp ayırt edilemez kılıyordu.
+   */
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
+  lagMs: bigint('lag_ms', { mode: 'number' }),
+  durationMs: integer('duration_ms'),
+  /** ⚠️ `locked_by` bitişte NULL'lanıyor; "kim işledi" sorusu ancak bununla cevaplanır. */
+  completedBy: text('completed_by'),
 }, (t) => [
   // Kuyruğun performans temeli: tamamlanmış milyonlarca görev indekste yer kaplamaz.
   index('missions_due').on(t.executeAt, t.id).where(sql`${t.status} = 'scheduled'`),
@@ -719,6 +741,34 @@ export const missionUnits = pgTable('mission_units', {
   unitType: text('unit_type').notNull(),
   count: integer('count').notNull(),
 }, (t) => [uniqueIndex('mission_units_pk').on(t.missionId, t.unitType)]);
+
+/**
+ * ⭐ GÖREV HATA GEÇMİŞİ (0044) — **ekleme-yalnız**, hiçbir kod yolu UPDATE etmiyor.
+ *
+ * ⚠️ Var olma sebebi: `missions.last_error` her denemede üzerine yazılıyor. Beş kez denenip ölen
+ * bir görevde elde yalnız SONUNCU hata kalıyor — oysa tanı için gereken genelde İLKİdir;
+ * sonrakiler çoğu zaman birincinin yan etkisidir (yarım kalan durum, kilit, tükenmiş kaynak).
+ *
+ * ⚠️ `outcome` (`retry` | `dead`) burada tutuluyor çünkü satırın kendisi ölümün tek kaydı
+ * olabilir: `markFailed` görevi `failed`e çevirdiğinde `attempts` artık artmıyor ve dışarıdan
+ * "kaçıncı denemede öldü" görünmüyor.
+ */
+export const missionErrors = pgTable('mission_errors', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  missionId: bigint('mission_id', { mode: 'number' }).notNull()
+    .references(() => missions.id, { onDelete: 'cascade' }),
+  worldId: smallint('world_id').notNull(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  attempt: smallint('attempt').notNull().default(0),
+  missionType: text('mission_type'),
+  error: text('error').notNull(),
+  /** retry | dead */
+  outcome: text('outcome').notNull(),
+  workerId: text('worker_id'),
+}, (t) => [
+  index('mission_errors_mission').on(t.missionId, t.id),
+  index('mission_errors_world_at').on(t.worldId, t.at),
+]);
 
 /* ═══ KAHRAMAN (§13.11.4b/c) ════════════════════════════════════════════════
  * Kahraman ADET değil VARLIK: her biri kendi seviyesi, tecrübesi ve yetenek dağılımıyla
@@ -914,6 +964,93 @@ export const workerHeartbeats = pgTable('worker_heartbeats', {
 }, (t) => [primaryKey({ columns: [t.kind, t.workerId] })]);
 
 /**
+ * ⭐⭐ KUYRUK SAĞLIĞININ ZAMAN SERİSİ (0044) — nabzın yapamadığı tek şey.
+ *
+ * ⚠️ `worker_heartbeats` **UPSERT**lenir: son turun özeti dışında hiçbir geçmiş taşımaz. 06.08
+ * olayında bunun bedeli ödendi — kuyruk 9,5 saat tıkandı, `lagMs` o süre boyunca hesaplandı ve
+ * her hesaplama bir öncekinin üzerine yazıldı. Olay bittiğinde geriye **hiçbir kanıt kalmadı**;
+ * tanı ancak `missions` satırlarından, elle, olaydan sonra çıkarılabildi.
+ *
+ * Bu tablo aynı sayıları **saklıyor**. Nabız "şu an yaşıyor mu", bu "dün gece ne oldu" sorusunun
+ * cevabı; ikisi ayrı tablo çünkü ayrı yazma desenleri var (biri üzerine yazan, biri ekleme-yalnız)
+ * ve karıştırmak birinin maliyetini diğerine yüklerdi.
+ *
+ * ⚠️ Seyreltme ZORUNLU (`SchedulerService`, dakikada bir): saniyede bir yazsaydık izleme kaydı
+ * izlediği sistemden 60 kat fazla yazma üretirdi — `Heartbeat`in 1. kuralının aynısı.
+ */
+export const schedulerSamples = pgTable('scheduler_samples', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  worldId: smallint('world_id').notNull(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  workerId: text('worker_id'),
+  lagMs: bigint('lag_ms', { mode: 'number' }).notNull().default(0),
+  dueCount: integer('due_count').notNull().default(0),
+  claimed: integer('claimed').notNull().default(0),
+  /** ⭐ `min(due, batchSize) − claimed`. 06.08 olayının tek doğrudan göstergesi. */
+  skippedLocked: integer('skipped_locked').notNull().default(0),
+  stuck: integer('stuck').notNull().default(0),
+  scheduled: integer('scheduled').notNull().default(0),
+  running: integer('running').notNull().default(0),
+  failed: integer('failed').notNull().default(0),
+  reaped: integer('reaped').notNull().default(0),
+  dead: integer('dead').notNull().default(0),
+  oldestLockedAgeMs: bigint('oldest_locked_age_ms', { mode: 'number' }),
+  /** ⚠️ Terk edilmiş transaction — 06.08 olayının KÖK NEDENİ tam olarak buydu. */
+  poolIdleInTx: integer('pool_idle_in_tx'),
+  oldestTxS: integer('oldest_tx_s'),
+  outboxPending: integer('outbox_pending'),
+  outboxDead: integer('outbox_dead'),
+  /** Bakımda kuyruk ilerlemez ama bu ARIZA DEĞİL — grafikte ayırt edilebilsin. */
+  paused: boolean('paused').notNull().default(false),
+}, (t) => [index('scheduler_samples_world_at').on(t.worldId, t.at)]);
+
+/**
+ * ⭐⭐ OPERASYON OLAYLARI (0044) — eşik aşımının AÇILIP KAPANAN kaydı.
+ *
+ * Bugüne kadar tek alarm kanalı *yöneticinin paneli elle açması*ydı (`Health.tsx`, 10 sn'de bir,
+ * yalnız ekran açıkken). 06.08'de kimse bakmadığı için arıza 9,5 saat sürdü.
+ *
+ * ⚠️⚠️ **Her turda satır açan bir tasarım denenmedi çünkü sonucu belliydi:** saniyede bir koşan
+ * bir döngüde 9,5 saatlik bir arıza 34.000 satır ve 34.000 e-posta üretirdi. Alarm sisteminin
+ * kendisi arızadan büyük bir olaya dönüşür, gerçek uyarı gürültüde kaybolurdu. Bu yüzden olay
+ * **bir kez** açılır, kapanana kadar yalnız `peak`/`samples` güncellenir.
+ *
+ * ⚠️ Tekillik uygulama katmanında değil **kısmî unique indekste** (`ops_events_open`): iki worker
+ * aynı anda eşiği görürse ikincisinin INSERT'ü çakışır ve sessizce düşer. `time_shifts` ile aynı
+ * felsefe — "iki kez çağrılmasın" kontrolü tek başına asla yeterli değil.
+ */
+export const opsEvents = pgTable('ops_events', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  /** NULL = dünyadan bağımsız (outbox küresel bir kuyruk). İndekste `COALESCE(-1)`. */
+  worldId: smallint('world_id'),
+  /** queue_lag · queue_stuck · mission_dead · outbox_dead · worker_stale · idle_in_tx */
+  kind: text('kind').notNull(),
+  /** warn | crit — yalnız `crit` e-posta üretir (`ops.alertSeverity`). */
+  severity: text('severity').notNull().default('warn'),
+  openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  value: doublePrecision('value'),
+  /** Olay boyunca görülen EN KÖTÜ değer — "ne kadar kötüleşti" sorusunun cevabı. */
+  peak: doublePrecision('peak'),
+  threshold: doublePrecision('threshold'),
+  /** Kaç kez ölçüldü: bir kerelik sıçrama ile kalıcı arıza ayrımı. */
+  samples: integer('samples').notNull().default(1),
+  detail: jsonb('detail').notNull().default({}),
+  /** Alarm gönderim izi. NULL = gönderilmedi (severity `warn`di ya da e-posta kapalı). */
+  notifiedAt: timestamp('notified_at', { withTimezone: true }),
+  outboxId: bigint('outbox_id', { mode: 'number' }),
+}, (t) => [
+  /**
+   * ⭐ (dünya, tür) başına EN FAZLA BİR açık olay — alarmın tekrarlamamasının yapısal garantisi.
+   * ⚠️ `COALESCE(world_id, -1)`: NULL'lar birbiriyle çakışmaz, o yüzden dünyadan bağımsız
+   * olaylar (outbox) kural dışına düşerdi.
+   */
+  uniqueIndex('ops_events_open').on(sql`(COALESCE(${t.worldId}, -1))`, t.kind)
+    .where(sql`${t.resolvedAt} IS NULL`),
+  index('ops_events_world_at').on(t.worldId, t.openedAt),
+]);
+
+/**
  * ⭐⭐ ZAMAN KAYDIRMA DEFTERİ (0043, tek zaman çizgisi).
  *
  * Bakımdan çıkarken bekleyen vadeler duraklama süresi kadar ileri kaydırılıyor
@@ -969,6 +1106,14 @@ export const auditLog = pgTable('audit_log', {
 }, (t) => [
   index('audit_player').on(t.playerId, t.at),
   index('audit_entity').on(t.entity, t.entityId, t.at),
+  /**
+   * ⭐ 0044 — panelin en çok sorduğu iki soru indekssizdi ve TAM TABLO TARAMASI yapıyordu:
+   * *"son 1 saatte bu dünyada ne oldu"* ve *"bu işlem türü ne zaman koştu"*. Tablo
+   * ekleme-yalnız ve bilerek hiç temizlenmiyor (denetim kaydı silinemez) → tarama maliyeti
+   * zamanla yalnızca artıyordu.
+   */
+  index('audit_world_at').on(t.worldId, t.at),
+  index('audit_action_at').on(t.action, t.at),
 ]);
 
 /* ═══ SOHBET (§13.12) ═══════════════════════════════════════════════════════

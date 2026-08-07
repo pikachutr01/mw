@@ -22,6 +22,9 @@ import { MAIL, mailLimits } from './mail.limits.ts';
 import {
   deleteAccount, emailChanged, passwordChanged, resetPassword, verifyEmail, type Template,
 } from './templates.ts';
+import { log } from '../common/logger.ts';
+
+const MAIL_LOG = log('mail');
 
 export type MailErrorCode =
   | 'invalid_token'          // jeton yok / süresi dolmuş / kullanılmış
@@ -179,8 +182,7 @@ export class EmailTokenService {
     try {
       await this.issue({ ...o, purpose: 'verify' });
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[mail] kayıt doğrulama e-postası kuyruğa alınamadı:', err);
+      MAIL_LOG.error({ err }, 'kayıt doğrulama e-postası kuyruğa alınamadı');
     }
   }
 
@@ -448,7 +450,7 @@ export class EmailTokenService {
       })}::jsonb)
       `);
     } catch (err) {
-      console.warn('[mail] bilgilendirme maili yazılamadı:', err);
+      MAIL_LOG.warn({ err }, 'bilgilendirme maili yazılamadı');
     }
   }
 

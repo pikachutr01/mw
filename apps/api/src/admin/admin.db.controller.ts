@@ -21,6 +21,7 @@ import { DB } from '../db/tokens.ts';
 import { ADMIN_ACTIONS } from './admin.actions.controller.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 import { DB_TABLES, TABLES_BY_NAME, type TableSpec } from './db-registry.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 const PAGE = 50;
 
@@ -215,10 +216,10 @@ export class AdminDbController {
         RETURNING *
       `);
       await tx.execute(sql`
-        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after)
+        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after, trace_id)
         VALUES (${req.player!.worldId}, ${req.player!.playerId}, 'admin.db.patch',
                 ${spec.name}, NULL,
-                ${JSON.stringify(before)}::jsonb, ${JSON.stringify(after)}::jsonb)
+                ${JSON.stringify(before)}::jsonb, ${JSON.stringify(after)}::jsonb, ${currentTraceId()})
       `);
       return after;
     });

@@ -15,6 +15,9 @@
  * bildirim asla YALNIZ buradan gitmez.
  */
 import type postgres from 'postgres';
+import { log } from '../common/logger.ts';
+
+const RT_LOG = log('realtime');
 
 /** Postgres kanal adı. Tek kanal yeterli; ayrım yükteki `topic` alanında. */
 export const CHANNEL = 'mw_realtime';
@@ -51,15 +54,13 @@ export class RealtimeBus {
     const payload = JSON.stringify(event);
     if (payload.length > 7500) {
       // Bu asla olmamalı (olaylar kimlik taşır); olduysa kod bir yerde veri koymuş demektir.
-      // eslint-disable-next-line no-console
-      console.warn('[realtime] olay çok büyük, atlandı:', event.topic, payload.length);
+      RT_LOG.warn({ topic: event.topic, bytes: payload.length }, 'olay çok büyük, atlandı');
       return;
     }
     try {
       await this.sql`SELECT pg_notify(${CHANNEL}, ${payload})`;
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[realtime] yayın başarısız:', err);
+      RT_LOG.error({ err }, 'yayın başarısız');
     }
   }
 
@@ -69,8 +70,7 @@ export class RealtimeBus {
       try {
         handler(JSON.parse(raw) as RealtimeEvent);
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[realtime] bozuk olay yükü:', err);
+        RT_LOG.error({ err }, 'bozuk olay yükü');
       }
     });
     this.unsubscribe = () => sub.unlisten();

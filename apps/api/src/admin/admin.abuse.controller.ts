@@ -30,6 +30,7 @@ import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { liveBool, liveNumber } from '../settings/live.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 /**
  * ⚠️ `resolution` sözlüğü şemadaki değerlerle BİREBİR (`abuse_signals.resolution`). Kendi
@@ -158,9 +159,8 @@ export class AdminAbuseController {
     const risk = new EmailRiskService(this.db);
     const rows = await risk.refresh();
     const filled = await risk.backfill();
-    await this.audit(0, req.player!.playerId, req.player!.playerId, {
-      action: 'abuse.disposable.refresh', rows, backfill: filled,
-    });
+    await this.audit('admin.abuse.disposable_refresh', 0, req.player!.playerId,
+      req.player!.playerId, { rows, backfill: filled });
     return { ok: true, rows, backfill: filled, list: await risk.status() };
   }
 
@@ -185,8 +185,7 @@ export class AdminAbuseController {
     const svc = new AbuseScanService(this.db);
     const result = await svc.run(w);
     const emailed = await svc.report(w, result);
-    await this.audit(w, req.player!.playerId, req.player!.playerId, {
-      action: 'abuse.scan.manual',
+    await this.audit('admin.abuse.scan', w, req.player!.playerId, req.player!.playerId, {
       windowFrom: result.from.toISOString(), windowTo: result.to.toISOString(),
       signals: result.signals, reported: result.reported, emailed,
     });
@@ -216,9 +215,8 @@ export class AdminAbuseController {
   async refreshAsn(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
     const rows = await this.asn.refresh();
     const filled = await this.asn.backfill();
-    await this.audit(0, req.player!.playerId, req.player!.playerId, {
-      action: 'asn.refresh', rows, backfill: filled,
-    });
+    await this.audit('admin.abuse.asn_refresh', 0, req.player!.playerId, req.player!.playerId,
+      { rows, backfill: filled });
     return { ok: true, rows, backfill: filled, status: await this.asn.status() };
   }
 
@@ -327,7 +325,7 @@ export class AdminAbuseController {
       RETURNING id
     `);
 
-    await this.audit(parsed.data.worldId, req.player!.playerId, a, {
+    await this.audit('admin.abuse.resolve', parsed.data.worldId, req.player!.playerId, a, {
       pair: [a, b], resolution: parsed.data.resolution, note: parsed.data.note ?? null,
       signalId: Number(row!['id']),
     });
@@ -358,6 +356,7 @@ export class AdminAbuseController {
     if (rows.length === 0) throw new NotFoundException('Sinyal bulunamadı.');
 
     await this.audit(
+      'admin.abuse.signal_resolve',
       Number(rows[0]!['world_id'] ?? 0), req.player!.playerId,
       Number(rows[0]!['subject_player_id'] ?? 0),
       {
@@ -422,13 +421,26 @@ export class AdminAbuseController {
     return out;
   }
 
+  /**
+   * ⚠️⚠️ **`action` ARTIK PARAMETRE** (Faz 3'te düzeltildi).
+   *
+   * Bu yardımcı beş farklı işlemin hepsini `audit_log.action` kolonuna `'admin.abuse.resolve'`
+   * diye yazıyordu: tek kullanımlık alan listesinin tazelenmesi, elle tarama, ASN veri kümesi
+   * indirmesi ve iki ayrı karar kaydı — hepsi aynı ad. Gerçek ad üçünde `after` JSON'unun içine
+   * gömülüydü, ikisinde hiç yoktu.
+   *
+   * Bedeli somuttu: `action` denetim kaydının **süzülebilir tek alanı** ve 0044 ona bir indeks
+   * ekledi. *"Bu ASN indirmesi ne zaman koştu"* sorusu, JSON'un içine bakan bir tam tablo
+   * taraması olmadan cevaplanamıyordu — indeks de yanlış değeri indeksliyor olacaktı.
+   */
   private async audit(
+    action: string,
     worldId: number, actorPlayerId: number, targetId: number, payload: Record<string, unknown>,
   ): Promise<void> {
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
-      VALUES (${worldId}, ${actorPlayerId}, 'admin.abuse.resolve', 'player', ${targetId},
-              ${JSON.stringify(payload)}::jsonb)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
+      VALUES (${worldId}, ${actorPlayerId}, ${action}, 'player', ${targetId},
+              ${JSON.stringify(payload)}::jsonb, ${currentTraceId()})
     `);
   }
 }

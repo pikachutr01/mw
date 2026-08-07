@@ -241,6 +241,18 @@ export const NON_TIMELINE_COLUMNS: readonly string[] = [
   'outbox.created_at', 'outbox.dispatched_at',
   'worker_heartbeats.started_at', 'worker_heartbeats.at',
 
+  /**
+   * 3 — Gözlemlenebilirlik (0044). ⚠️ Hepsi **gerçek zamanda** ve bu bilinçli: bunlar oyun
+   * olayı değil ALTYAPI ölçümü. Bakımda oyun saati donsa bile *"worker 3 dakikadır nabız
+   * atmıyor"* gerçek bir arızadır; kaydırsaydık arıza penceresi bakım süresi kadar gizlenirdi.
+   * `missions.claimed_at` de öyle: görevin VADESİ oyun kuralıdır (kayar), ama ALINDIĞI an
+   * bir ölçümdür ve `missions.locked_at` ile aynı aileye girer.
+   */
+  'scheduler_samples.at',
+  'mission_errors.at',
+  'missions.claimed_at',
+  'ops_events.opened_at', 'ops_events.resolved_at', 'ops_events.notified_at',
+
   // 2 — Kimlik ve oturum (güvenlik: gerçek zamanda tanımlı)
   'accounts.created_at', 'accounts.email_verified_at', 'accounts.locked_until',
   'sessions.created_at', 'sessions.last_seen_at', 'sessions.expires_at',

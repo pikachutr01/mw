@@ -24,6 +24,37 @@ export type OutboxSink = (row: OutboxRow) => Promise<void>;
  */
 export const OUTBOX_MAX_ATTEMPTS = 10;
 
+/**
+ * ⭐⭐ BAKIMDA GEÇEN KONULAR (Faz 3, kullanıcı kararı: *"bildirimler dursun, e-posta hariç"*).
+ *
+ * Bakımda oyun donuyor: yoldaki ordu ilerlemiyor, kuyruk ilerlemiyor, geri sayımlar duruyor.
+ * Ama bugüne kadar dispatcher **bakımı hiç görmüyordu** ve oyun olayı bildirimleri (savaş
+ * raporu, görev bitişi) bakım penceresinin içinde teslim edilmeye devam ediyordu. İki ayrı
+ * yanlış üretiyordu bu:
+ *   • Oyuncu perdenin ARKASINDA push bildirimi alıyor, oyuna giriyor, hiçbir şeyin değişmediğini
+ *     görüyordu — "oyun donduruldu" mesajıyla doğrudan çelişen bir deneyim.
+ *   • Faz 2'den sonra daha ciddi: bakımdan çıkışta vadeler kaydırılıyor, yani bakımda gönderilen
+ *     bir bildirimin işaret ettiği zaman damgası **kaydırma öncesinden** kalma oluyor.
+ *
+ * ⚠️ Buradaki iki konu bilerek MUAF ve ikisi de "oyun olayı değil" ailesinden:
+ *   • `mail:send` — şifre sıfırlama ve e-posta doğrulama. Bunlar HESAP ERİŞİMİdir; bakım
+ *     yüzünden bekletmek, oyuncunun hesabına giremediği için destek yazmasına yol açardı.
+ *     Operasyon alarmları da bu konudan gidiyor: bakım sırasında çıkan bir arıza tam olarak
+ *     duyulması gereken andır.
+ *   • `admin:abuse_report` — yöneticiye giden operasyon raporu, oyuncuya giden bildirim değil.
+ */
+export const MAINTENANCE_PASSTHROUGH_TOPICS: readonly string[] = ['mail:send', 'admin:abuse_report'];
+
+/**
+ * Yukarıdaki listenin parametreli `IN (...)` hâli.
+ * ⚠️ `= ANY(${dizi})` yerine açık `IN`: dizi parametresinin sürücü tarafında Postgres dizisine
+ * kodlanmasına güvenmek yerine her eleman kendi `$n` parametresi olarak gidiyor.
+ */
+const PASSTHROUGH_SQL = sql.join(
+  MAINTENANCE_PASSTHROUGH_TOPICS.map((t) => sql`${t}`),
+  sql`, `,
+);
+
 export interface OutboxRow {
   id: number;
   worldId: number | null;
@@ -92,15 +123,29 @@ export class OutboxDispatcher {
     return this.sinks.get(topic) ?? this.sinks.get('*');
   }
 
-  /** Tek tur: bekleyen satırları alıp teslim eder. Testler bunu elle çağırır. */
+  /**
+   * Tek tur: bekleyen satırları alıp teslim eder. Testler bunu elle çağırır.
+   *
+   * ⭐⭐ **BAKIM KARARI SQL'İN İÇİNDE** (Faz 3) — `claimDue`da öğrenilen dersin aynısı.
+   *
+   * Uygulama katmanında "önce bakımı oku, sonra satırları al" yazsaydık ikisi arasında bir yarış
+   * penceresi kalırdı ve tam o pencerede bakıma girilirse oyun olayı bildirimleri yine sızardı.
+   * Yüklem sorgunun içinde olunca ara durum yok: satır ya bakım öncesini görür ya sonrasını.
+   *
+   * ⚠️ `LEFT JOIN`: `world_id` NULL olan satırlar (`mail:send`in çoğu) dünyaya bağlı değildir
+   * ve `w.paused_at IS NULL` onlar için TRUE kalır — bakımdan hiç etkilenmezler.
+   */
   async tick(): Promise<{ dispatched: number; failed: number; skipped: number }> {
     // SKIP LOCKED: birden çok dispatcher aynı satırı iki kez göndermez.
     const raw = await this.db.execute<OutboxRowRaw>(sql`
-      SELECT id, world_id AS "worldId", topic, payload, attempts, created_at AS "createdAt"
-        FROM outbox
-       WHERE dispatched_at IS NULL AND attempts < ${this.opts.maxAttempts}
-       ORDER BY id
-         FOR UPDATE SKIP LOCKED
+      SELECT o.id, o.world_id AS "worldId", o.topic, o.payload, o.attempts,
+             o.created_at AS "createdAt"
+        FROM outbox o
+        LEFT JOIN worlds w ON w.id = o.world_id
+       WHERE o.dispatched_at IS NULL AND o.attempts < ${this.opts.maxAttempts}
+         AND (w.paused_at IS NULL OR o.topic IN (${PASSTHROUGH_SQL}))
+       ORDER BY o.id
+         FOR UPDATE OF o SKIP LOCKED
        LIMIT ${this.opts.batchSize}
     `);
     const rows: OutboxRow[] = raw.map((r) => ({

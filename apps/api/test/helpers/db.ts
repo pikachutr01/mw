@@ -156,6 +156,11 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
      Kaydırma defteri temizlenmezse önceki koşudan kalan satırlar "kaç kez kaydırıldı"
      sayan testleri kırar (ikinci koşuda 2 görünür). */
   await h.db.execute(sql`DELETE FROM time_shifts WHERE world_id = ${worldId}`);
+  /* Aynı gerekçe (Faz 3): `ops_events`in kısmî tekillik indeksi "(dünya, tür) başına bir AÇIK
+     olay" diyor — önceki koşudan kalan açık bir satır, yeni koşunun ilk aşımını "zaten açık"
+     sayar ve olay açılışını ölçen test sessizce yanlış sonuç verir. */
+  await h.db.execute(sql`DELETE FROM ops_events WHERE world_id = ${worldId}`);
+  await h.db.execute(sql`DELETE FROM scheduler_samples WHERE world_id = ${worldId}`);
   await h.db.execute(sql`DELETE FROM echo_effects WHERE world_id = ${worldId}`);
   // Dünya kimlikleri her koşuda 100'den başlıyor → önceki koşunun oyuncuları temizlenmeli,
   // yoksa username/email tekilliği ikinci koşuda çakışır. (cities → players sırası önemli.)

@@ -25,6 +25,8 @@ import type { Notification } from './notify.catalog.ts';
 import {
   NOTIFY_DEFAULTS, notifyLimits, VAPID, pushEnabled, type NotifyCategory,
 } from './notify.limits.ts';
+import { log } from '../common/logger.ts';
+const NOTIFY_LOG = log('notify');
 
 /** Tarayıcının `PushSubscription.toJSON()` çıktısının bize gereken kısmı. */
 export interface PushSubscriptionInput {
@@ -102,8 +104,7 @@ export class NotifyService {
       } catch (err) {
         // Bildirim hatası ASLA outbox satırını düşürmemeli: oyun mutasyonu çoktan yazıldı,
         // bildirim "en iyi çaba" katmanı (realtime.bus.publish ile aynı felsefe).
-        // eslint-disable-next-line no-console
-        console.error('[notify] teslim başarısız:', note.category, err);
+        NOTIFY_LOG.error({ err, category: note.category }, 'teslim başarısız');
       }
     }
   }

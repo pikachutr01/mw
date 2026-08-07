@@ -35,6 +35,7 @@ import { recomputeScoreBaseFromHoldings } from '../scoring/score.service.ts';
 import { endVacation } from '../vacation/vacation.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 const cityId = z.number().int().positive();
 
@@ -693,9 +694,9 @@ export class AdminActionsController {
     payload: Record<string, unknown>,
   ): Promise<void> {
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${worldId}, ${req.player!.playerId}, ${action}, ${entity}, ${entityId},
-              ${JSON.stringify(payload)}::jsonb)
+              ${JSON.stringify(payload)}::jsonb, ${currentTraceId()})
     `);
   }
 }

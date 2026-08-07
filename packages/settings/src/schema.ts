@@ -1544,6 +1544,78 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'int', default: 30, min: 5, max: 3600, tag: 'design', unit: 'sn',
     description: 'Bir sunucu döngüsünün nabzı kaç saniye güncellenmezse «ölü» sayılır. Nabız 5 saniyede '
       + 'bir yazıldığı için 30 sn altı yanlış alarm üretir.',
+    note: '⭐ Alarm eşiği bunun 3 KATIdır (yeniden başlatma penceresi yanlış alarma dönüşmesin). '
+      + 'Panelde «ölü» rozeti ise bu değerin kendisiyle çizilir — panel daha hassas, alarm daha sabırlı.',
+  },
+  {
+    key: 'ops.schedulerSampleDays',
+    label: 'Kuyruk ölçüm saklama',
+    type: 'int', default: 30, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Dakikada bir yazılan kuyruk sağlığı örneklerinin (`scheduler_samples`) saklama '
+      + 'süresi. Günde ~1.440 satır/dünya.',
+    note: '⚠️ Kısaltmak geçmişe dönük teşhisi kısaltır: 06.08.2026 olayı ancak saatler sonra '
+      + 'fark edildi ve o zaman elde hiç geçmiş yoktu. 30 gün, "geçen ay şu bakımdan sonra '
+      + 'bozuldu" tipi soruların cevaplanabildiği en kısa süre.',
+  },
+  {
+    key: 'ops.missionDoneDays',
+    label: 'Bitmiş görev saklama',
+    type: 'int', default: 60, min: 7, max: 3650, tag: 'design', unit: 'gün',
+    description: 'Tamamlanmış (`done`) görev satırları kaç gün sonra silinir. Bu tablo oyunun en '
+      + 'çok satır üreteni: her sefer, her yükseltme, her üretim bir satır.',
+    note: '⚠️ Yalnız `done` siliniyor. Ölü (`failed`) görevler yaşı ne olursa olsun KALIR — her '
+      + 'biri çözülmemiş bir arıza kanıtıdır ve silmek arızayı görünmez yapar. İptal edilenler de '
+      + 'kalır: oyuncunun "ben bunu iptal etmiştim" itirazının tek dayanağı o satır.',
+  },
+
+  /* ── Operasyon alarmı (Faz 3) ────────────────────────────────────────────────
+   *
+   * ⚠️ Eşikleri KÜÇÜLTMEK daha güvenli değil: yanlış alarm, alarmın okunmamasına yol açar ve
+   * gerçek arıza gürültüde kaybolur. Varsayılanlar "normal işleyişte ASLA görülmeyen" değerler
+   * olarak seçildi — 06.08.2026 olayında hepsi fazlasıyla aşılmıştı.
+   */
+  {
+    key: 'ops.alertLagS',
+    label: 'Kuyruk gecikmesi alarmı',
+    type: 'int', default: 120, min: 5, max: 86400, tag: 'design', unit: 'sn',
+    description: 'En eski bekleyen görev bu kadar geride kalırsa alarm. §8 hedefi p95 < 2 sn; '
+      + 'alarm bilerek çok yukarıda.',
+    note: '⚠️ 2 örnek (≈2 dk) üst üste aşılmadan e-posta gitmez. Tek turluk sıçrama normaldir.',
+  },
+  {
+    key: 'ops.alertStuck',
+    label: 'Takılmış görev alarmı',
+    type: 'int', default: 0, min: 0, max: 10000, tag: 'design', unit: 'görev',
+    description: 'Vadesi 5 dakikadan uzun süredir geçtiği hâlde hâlâ «scheduled» duran görev '
+      + 'sayısı bunu AŞARSA alarm. Varsayılan 0 = bir tane bile olmamalı.',
+    note: '⭐ 06.08.2026 olayının doğrudan göstergesi. `reapStale` bu satırları görmez — o yalnız '
+      + '«running» tarar; o gün satırlar «scheduled» takılmıştı.',
+  },
+  {
+    key: 'ops.alertDeadMissions',
+    label: 'Ölen görev alarmı',
+    type: 'int', default: 0, min: 0, max: 10000, tag: 'design', unit: 'görev',
+    description: 'Son 1 saatte deneme hakkını tüketip ölen görev sayısı bunu AŞARSA alarm.',
+    note: 'Ölçüm PENCERELİ (son 1 saat), toplam değil — toplam olsaydı ilk ölü görevden sonra '
+      + 'olay bir daha hiç kapanmazdı.',
+  },
+  {
+    key: 'ops.alertOutboxDead',
+    label: 'Ölü mektup alarmı',
+    type: 'int', default: 0, min: 0, max: 10000, tag: 'design', unit: 'satır',
+    description: 'Teslim edilemeyip deneme hakkı tükenmiş outbox satırı sayısı bunu AŞARSA alarm.',
+    note: '⚠️ Bu olay KENDİLİĞİNDEN kapanmaz ve bu doğru: ölü mektup kalıcı bir teslim '
+      + 'başarısızlığıdır, insan müdahalesi gerektirir.',
+  },
+  {
+    key: 'ops.alertOldestTxS',
+    label: 'Açık transaction alarmı',
+    type: 'int', default: 300, min: 10, max: 86400, tag: 'design', unit: 'sn',
+    description: 'Bir veritabanı transaction\'ı bu kadar süre açık kalırsa alarm.',
+    note: '⭐⭐ 06.08.2026 olayının KÖK NEDENİ tam olarak buydu: terk edilmiş bir transaction '
+      + 'satırları tutuyor, `SKIP LOCKED` onları sessizce atlıyordu. Faz 1 buna karşı '
+      + '`idle_in_transaction_session_timeout = 30s` koydu; bu eşik o emniyetin ÇALIŞTIĞINI '
+      + 'doğrulayan ikinci katman.',
   },
 
   /* ── Harita ve sefer süreleri ────────────────────────────────────────────────

@@ -20,6 +20,7 @@ import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 /**
  * ⚠️ `days` yoksa ban **SÜRESİZ**. Varsayılanı süreli yapmadık: süresiz ban bilinçli bir karar
@@ -461,9 +462,9 @@ export class AdminModerationController {
     payload: Record<string, unknown>,
   ): Promise<void> {
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${worldId}, ${actorPlayerId}, ${action}, 'player', ${targetId},
-              ${JSON.stringify(payload)}::jsonb)
+              ${JSON.stringify(payload)}::jsonb, ${currentTraceId()})
     `);
   }
 }

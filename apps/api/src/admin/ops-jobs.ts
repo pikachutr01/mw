@@ -1,12 +1,15 @@
 /**
  * ⭐ TEMİZLİK GÖREVLERİ (§admin Faz 8) — hangi tablodan, hangi satır, NEDEN silinebilir.
  *
- * ⚠️ **ZAMAN KOLONU TUZAĞI.** Bu projede iki farklı zaman var: `messages.at`, `battles.at`,
- * `ranking_runs.taken_at` **OYUN saatinde**dir; bakımda donar, `worlds.clock_offset_ms` ile
- * gerçek saatten kayar. Saklama süresi ise bir DEPOLAMA kuralıdır ve gerçek zamanla ölçülür.
- * Bu yüzden her görev `created_at` benzeri **gerçek zaman** kolonuna bakar. `at` kullansaydık
- * uzun bir bakımdan sonra "60 günlük" eşiği aslında 62 gün öncesini keserdi — sessiz ve
- * fark edilmesi zor bir sapma.
+ * ⚠️ **ZAMAN KOLONU TUZAĞI — 0043'ten sonra da geçerli.** `messages.at`, `battles.at`,
+ * `ranking_runs.taken_at` bir OYUN OLAYININ anıdır; saklama süresi ise bir DEPOLAMA kuralıdır.
+ * Bu yüzden her görev `created_at` benzeri **gerçek zaman** kolonuna bakar.
+ *
+ * ⭐ Tek zaman çizgisinden (0043) önce fark daha da büyüktü: oyun saati `clock_offset_ms` kadar
+ * geride yürüyordu ve `at` kullanan bir eşik uzun bir bakımdan sonra "60 günlük" yerine 62 gün
+ * öncesini keserdi. O sapma artık YOK — ama ayrım hâlâ duruyor, çünkü bakımdan çıkışta oyun
+ * damgaları ileri kaydırılırken (`world/time-registry.ts`) saklama damgaları kaydırılmıyor.
+ * Yani "hangi kolona bakıyorum" sorusu hâlâ doğru cevaplanmak zorunda.
  *
  * ⚠️ **NE SİLİNMEZ:** `audit_log` (yönetimin kendi kaydı — silinebilseydi denetim anlamsız
  * olurdu) · `battles` (savaş yeniden oynatılabilir kalmalı, §5) · teslim EDİLMEMİŞ `outbox`
@@ -30,6 +33,10 @@ export interface OpsRetention {
   deviceSignalDays: number;
   cleanupBatch: number;
   staleHeartbeatS: number;
+  /** ⭐ Faz 3 — kuyruk ölçüm örnekleri (`scheduler_samples`, dakikada 1 satır/dünya). */
+  schedulerSampleDays: number;
+  /** ⭐ Faz 3 — TAMAMLANMIŞ görevler. Oyunun en çok satır üreten tablosu. */
+  missionDoneDays: number;
 }
 
 export interface CleanupJob {
@@ -173,6 +180,53 @@ export const CLEANUP_JOBS: readonly CleanupJob[] = [
     keeps: 'Son kullanımı pencerenin içinde olan kayıtlar.',
     settings: ['ops.deviceSignalDays'],
     where: (r) => sql`last_seen < ${daysAgo(r.deviceSignalDays)}`,
+  },
+  /**
+   * ⭐⭐ BİTMİŞ GÖREVLER (Faz 3) — **plan bunu "hiç görevi yok" diye işaretlemişti** ve haklıydı:
+   * oyunun en çok satır üreten tablosuna (her sefer, her yükseltme, her üretim bir satır) hiçbir
+   * temizlik dokunmuyordu. Faz 3'ün ölçüm sorguları (`ops-monitor.ts`) bu tabloyu tarıyor, yani
+   * büyümesi artık yalnız disk değil **izlemenin maliyeti** demek.
+   *
+   * ⚠️ Yalnız `done` siliniyor. Üç şey bilerek dışarıda:
+   *   • `failed` — her biri çözülmemiş bir arıza kanıtı; silmek arızayı görünmez yapardı.
+   *   • `canceled` — oyuncunun "ben bunu iptal etmiştim" itirazının tek dayanağı.
+   *   • `scheduled`/`running` — yoldaki ordu. (Söylemeye gerek yok gibi duruyor; tam da bu
+   *     yüzden yüklem `status = 'done'` ile AÇIKÇA sınırlanıyor, `finished_at IS NOT NULL` ile
+   *     değil — ölü bir görevin de `finished_at`i dolu.)
+   *
+   * ⚠️ `mission_units` / `mission_heroes` / `mission_errors` FK'leri CASCADE → beraber gider.
+   * `battles.mission_id` ise `ON DELETE SET NULL`: savaş kaydı KALIR (§5 yeniden oynatılabilirlik),
+   * yalnız görevle bağı kopar.
+   */
+  {
+    id: 'missions',
+    label: 'Tamamlanmış görevler',
+    table: 'missions',
+    timeColumn: 'finished_at',
+    description: 'Bitmiş sefer/yükseltme/üretim görevleri. Oyunun en hızlı satır üreteni; '
+      + 'oyun durumu artık bu satırlarda değil, şehir ve ordu tablolarında.',
+    keeps: '⚠️ ÖLÜ (`failed`) ve İPTAL EDİLMİŞ görevler — yaşı ne olursa olsun. Biri arıza '
+      + 'kanıtı, diğeri oyuncunun itiraz hakkı. Yoldaki ordular da elbette dokunulmaz.',
+    settings: ['ops.missionDoneDays'],
+    where: (r) => sql`status = 'done' AND finished_at < ${daysAgo(r.missionDoneDays)}`,
+  },
+  /**
+   * ⭐ KUYRUK ÖLÇÜMLERİ (Faz 3). Dakikada 1 satır/dünya = yılda ~525 bin satır (~60 MB).
+   * ⚠️ `ops_events` ve `mission_errors` bilerek BURADA YOK: ikisi de seyrek yazılıyor (yalnız
+   * arıza anında) ve ikisi de tam olarak "geçmişe dönük hata ayıklama" için var — büyüme riski
+   * yokken silmenin tek etkisi kanıt kaybı olurdu.
+   */
+  {
+    id: 'scheduler_samples',
+    label: 'Kuyruk sağlığı ölçümleri',
+    table: 'scheduler_samples',
+    timeColumn: 'at',
+    description: 'Scheduler\'ın dakikada bir yazdığı kuyruk sağlığı örnekleri (gecikme, '
+      + 'atlanan satır, havuz durumu). Panelin geçmiş grafiği bunları okuyor.',
+    keeps: 'Saklama penceresi içindeki örnekler. ⚠️ Kısaltmak geçmişe dönük teşhis yeteneğini '
+      + 'kısaltır — 06.08.2026 olayında elde hiç geçmiş olmaması tanıyı saatlerce geciktirmişti.',
+    settings: ['ops.schedulerSampleDays'],
+    where: (r) => sql`at < ${daysAgo(r.schedulerSampleDays)}`,
   },
 ] as const;
 

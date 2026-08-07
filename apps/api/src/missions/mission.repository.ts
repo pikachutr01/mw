@@ -99,6 +99,18 @@ export class MissionRepository {
    * 2026-08-03'te oyun saati için öğrenilen dersin aynısı: **kıyaslama verinin yanında yapılır.**
    * Uygulama katmanındaki kontrol ucuz bir erken çıkış olarak kalıyor — ama doğruluk artık ondan
    * gelmiyor.
+   *
+   * ⭐ **`claimed_at` / `lag_ms` (0044) — geçmişe dönük ölçümün çıpası.**
+   *
+   * ⚠️ `locked_at` ile AYNI DEĞİL ve olmamalı: `reapStale` bayat bir kilidi kurtarınca
+   * `locked_at` NULL'lanıp yeniden yazılıyor, yani o alan **canlı kilit** bilgisidir. `claimed_at`
+   * `COALESCE` ile korunuyor → yeniden denenen bir görevde bile İLK alım anını taşır, çünkü
+   * "kuyrukta ne kadar bekledi" sorusunun cevabı orada.
+   *
+   * ⚠️ `now()` (DB saati) kullanılıyor, süreç saati değil: `execute_at` de DB'den geliyor ve
+   * kıyaslamanın iki tarafını ayrı saatlerden almak tam olarak 2026-08-03 hatasıydı. Tek zaman
+   * çizgisinde `now() = gameNow` — dünya duraklıysa buraya zaten hiç girilmiyor (`paused_at IS
+   * NULL` yüklemi) → fark doğrudan gecikmedir.
    */
   async claimDue(opts: ClaimOptions): Promise<MissionRow[]> {
     const rows = await this.db.execute<MissionRowRaw>(sql`
@@ -106,6 +118,8 @@ export class MissionRepository {
          SET status = 'running',
              locked_by = ${opts.workerId},
              locked_at = now(),
+             claimed_at = COALESCE(m.claimed_at, now()),
+             lag_ms = GREATEST(0, (EXTRACT(EPOCH FROM (now() - m.execute_at)) * 1000)::bigint),
              attempts = m.attempts + 1
        WHERE m.id IN (
              SELECT m2.id FROM missions m2
@@ -159,9 +173,19 @@ export class MissionRepository {
     return rows.length;
   }
 
+  /**
+   * ⭐ `duration_ms` / `completed_by` (0044) — HANDLER süresi, kuyrukta beklemeden ayrı.
+   *
+   * ⚠️ `locked_by` bitişte NULL'lanmak ZORUNDA (kilit alanı), ama o zaman "bu görevi hangi
+   * worker işledi" sorusu çok süreçli bir dağıtımda cevapsız kalıyordu → `completed_by` kalıcı.
+   */
   async markDone(missionId: number): Promise<void> {
     await this.db.execute(sql`
-      UPDATE missions SET status = 'done', finished_at = now(), locked_by = NULL, locked_at = NULL
+      UPDATE missions
+         SET status = 'done', finished_at = now(),
+             duration_ms = GREATEST(0, (EXTRACT(EPOCH FROM (now() - COALESCE(claimed_at, locked_at, now()))) * 1000)::int),
+             completed_by = COALESCE(locked_by, completed_by),
+             locked_by = NULL, locked_at = NULL
        WHERE id = ${missionId}
     `);
   }
@@ -169,20 +193,49 @@ export class MissionRepository {
   /**
    * Hata: deneme hakkı varsa geri kuyruğa (üstel backoff ile), yoksa `failed` (dead letter).
    * Backoff OYUN saatinde değil execute_at üzerinden verilir; böylece sıra bozulmaz.
+   *
+   * ⭐⭐ **HATA GEÇMİŞİ AYRI TABLOYA (0044).**
+   *
+   * ⚠️ `missions.last_error` her denemede ÜZERİNE yazılıyor. Beş kez denenip ölen bir görevde
+   * elde yalnız SONUNCU hata kalıyordu — oysa tanı için gereken genelde İLKİdir; sonrakiler
+   * çoğu zaman birincinin yan etkisidir (yarım kalan durum, tükenmiş kaynak, hâlâ tutulan kilit).
+   * `mission_errors` ekleme-yalnız: hiçbir kod yolu onu UPDATE etmiyor.
+   *
+   * ⚠️ İki ifade **aynı transaction'da değil** ve bu bilinçli: kayıt yazımı başarısız olursa
+   * görevin durum geçişi geri alınmamalı. Kaybedilebilecek en kötü şey bir log satırı; geri
+   * alınan bir `markFailed` ise görevi sonsuza kadar `running` bırakırdı.
    */
-  async markFailed(missionId: number, error: string, maxAttempts: number, backoffMs: number): Promise<'retry' | 'dead'> {
+  async markFailed(
+    missionId: number, error: string, maxAttempts: number, backoffMs: number,
+    meta: { worldId: number; type: string; attempts: number; workerId?: string } | null = null,
+  ): Promise<'retry' | 'dead'> {
     const rows = await this.db.execute<{ status: string } & Record<string, unknown>>(sql`
       UPDATE missions
          SET status = CASE WHEN attempts >= ${maxAttempts} THEN 'failed' ELSE 'scheduled' END,
              execute_at = CASE WHEN attempts >= ${maxAttempts} THEN execute_at
                                ELSE execute_at + (${backoffMs}::bigint * interval '1 millisecond') END,
              last_error = ${error.slice(0, 2000)},
+             duration_ms = GREATEST(0, (EXTRACT(EPOCH FROM (now() - COALESCE(claimed_at, locked_at, now()))) * 1000)::int),
+             completed_by = COALESCE(locked_by, completed_by),
              locked_by = NULL, locked_at = NULL,
              finished_at = CASE WHEN attempts >= ${maxAttempts} THEN now() ELSE NULL END
        WHERE id = ${missionId}
       RETURNING status
     `);
-    return rows[0]?.status === 'failed' ? 'dead' : 'retry';
+    const outcome = rows[0]?.status === 'failed' ? 'dead' : 'retry';
+
+    if (meta) {
+      try {
+        await this.db.execute(sql`
+          INSERT INTO mission_errors (mission_id, world_id, attempt, mission_type, error, outcome, worker_id)
+          VALUES (${missionId}, ${meta.worldId}, ${Math.min(meta.attempts, 32_767)}, ${meta.type},
+                  ${error.slice(0, 4000)}, ${outcome}, ${meta.workerId ?? null})
+        `);
+      } catch {
+        // Kural: izleme kaydı, izlediği döngüyü asla düşürmez (`Heartbeat` kuralı 2).
+      }
+    }
+    return outcome;
   }
 
   /** Bir sonraki görevin oyun-saati vadesi (scheduler'ın ne kadar uyuyacağını bilmesi için). */

@@ -36,6 +36,7 @@ import { GameClockService } from '../world/game-clock.service.ts';
 import { DrainNotReadyError, type ShiftOutcome } from '../world/time-shift.ts';
 import { WorldStateService } from '../world/world-state.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 /**
  * ⚠️ Çarpanlar TAM SAYI ve en az 1. Şema da öyle (`integer NOT NULL DEFAULT 1`). 0 verilseydi
@@ -187,9 +188,9 @@ export class AdminWorldController {
         WHERE id = ${worldId}
       `);
       await tx.execute(sql`
-        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after)
+        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after, trace_id)
         VALUES (${worldId}, ${req.player!.playerId}, 'admin.world.multipliers', 'world', ${worldId},
-                ${JSON.stringify(before)}::jsonb, ${JSON.stringify(d)}::jsonb)
+                ${JSON.stringify(before)}::jsonb, ${JSON.stringify(d)}::jsonb, ${currentTraceId()})
       `);
     });
     return { ok: true };
@@ -236,9 +237,9 @@ export class AdminWorldController {
       RETURNING id
     `);
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${worldId}, ${req.player!.playerId}, 'admin.ranking.manual', 'world', ${worldId},
-              ${JSON.stringify({ missionId: Number(row!['id']) })}::jsonb)
+              ${JSON.stringify({ missionId: Number(row!['id']) })}::jsonb, ${currentTraceId()})
     `);
     // Zincirin kopmaması için düzenli görevin de yerinde olduğundan emin ol (tekrar dayanıklı).
     await scheduleSnapshot(this.db, worldId, gameNow);
@@ -396,9 +397,9 @@ export class AdminWorldController {
         VALUES (${worldId}, 'world:maintenance', ${JSON.stringify({ worldId, ...payload })}::jsonb)
       `);
       await tx.execute(sql`
-        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
         VALUES (${worldId}, ${playerId}, ${action}, 'world', ${worldId},
-                ${JSON.stringify(payload)}::jsonb)
+                ${JSON.stringify(payload)}::jsonb, ${currentTraceId()})
       `);
     });
   }
@@ -476,9 +477,9 @@ export class AdminWorldController {
     const ids = await this.auth.revokeAllIds(Number(row['account_id']));
     const sockets = getGateway()?.revokeSessions(ids) ?? 0;
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${Number(row['world_id'])}, ${req.player!.playerId}, 'admin.sessions.revoke',
-              'player', ${Number(playerId)}, ${JSON.stringify({ revoked: ids.length, sockets })}::jsonb)
+              'player', ${Number(playerId)}, ${JSON.stringify({ revoked: ids.length, sockets })}::jsonb, ${currentTraceId()})
     `);
     return { ok: true, revoked: ids.length, sockets };
   }
@@ -516,9 +517,9 @@ export class AdminWorldController {
         worldId: id, patch: parsed.data.values, actorId: req.player!.accountId,
       });
       await this.db.execute(sql`
-        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+        INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
         VALUES (${id}, ${req.player!.playerId}, 'admin.settings.update', 'settings', ${id},
-                ${JSON.stringify(res)}::jsonb)
+                ${JSON.stringify(res)}::jsonb, ${currentTraceId()})
       `);
       return res;
     } catch (err) {
@@ -539,9 +540,9 @@ export class AdminWorldController {
     const id = Number(worldId);
     await this.settings.reset(id, parsed.data.keys);
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${id}, ${req.player!.playerId}, 'admin.settings.reset', 'settings', ${id},
-              ${JSON.stringify({ keys: parsed.data.keys })}::jsonb)
+              ${JSON.stringify({ keys: parsed.data.keys })}::jsonb, ${currentTraceId()})
     `);
     return { ok: true, hash: this.settings.hash(id) };
   }

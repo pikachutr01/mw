@@ -46,6 +46,20 @@ interface Job {
 }
 interface SlowQuery { query: string; calls: number; totalMs: number; meanMs: number; rows: number }
 
+/**
+ * ⭐⭐ OPERASYON OLAYI (Faz 3) — eşik aşımının AÇILIP KAPANAN kaydı.
+ *
+ * ⚠️ Bu ekranın geri kalanı ANLIK durumu gösteriyor ve 06.08.2026'da tam da bu yüzden işe
+ * yaramadı: arıza fark edildiğinde çoktan bitmişti, panelde her şey yeşildi. Kapanmış bir olay
+ * bir arızanın **kanıtı ve süresidir** — o gün elimizde olsaydı tanı saatler değil dakikalar alırdı.
+ */
+interface OpsEvent {
+  id: number; worldId: number | null; kind: string; label: string; hint: string | null;
+  severity: string; openedAt: string; resolvedAt: string | null; open: boolean;
+  durationS: number; value: number | null; peak: number | null; threshold: number | null;
+  samples: number; notifiedAt: string | null;
+}
+
 const bytes = (n: number): string => {
   if (n < 1024) return `${n} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -96,6 +110,7 @@ export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
     { available: boolean; reason?: string; howTo?: string; queries: SlowQuery[] } | null
   >(null);
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [events, setEvents] = useState<OpsEvent[] | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -103,6 +118,14 @@ export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
 
   const loadHealth = useCallback(async (): Promise<void> => {
     try { setHealth(await api<Health>('/api/v1/admin/ops/health')); } catch (err) { setError(err); }
+  }, []);
+
+  /** ⚠️ Sağlıkla AYNI tempoda: açık bir olayın kapandığını görmek anlık durum kadar önemli. */
+  const loadEvents = useCallback(async (): Promise<void> => {
+    try {
+      const out = await api<{ events: OpsEvent[] }>('/api/v1/admin/ops/events');
+      setEvents(out.events);
+    } catch (err) { setError(err); }
   }, []);
 
   const loadJobs = useCallback(async (): Promise<void> => {
@@ -114,21 +137,22 @@ export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
 
   useEffect(() => {
     void loadHealth();
+    void loadEvents();
     void loadJobs();
     void api<{ databaseBytes: number; tables: SizeRow[] }>('/api/v1/admin/ops/sizes')
       .then(setSizes).catch(setError);
     void api<{ available: boolean; queries: SlowQuery[] }>('/api/v1/admin/ops/slow')
       .then(setSlow).catch(setError);
-  }, [loadHealth, loadJobs]);
+  }, [loadHealth, loadEvents, loadJobs]);
 
   /**
    * ⚠️ Sağlık 10 saniyede bir tazeleniyor, boyutlar TAZELENMİYOR. Boyut sorgusu her tabloyu
    * dolaşıyor ve saniyede bir koşması gereken bir bilgi değil; canlılık ise tam tersi.
    */
   useEffect(() => {
-    const t = setInterval(() => void loadHealth(), 10_000);
+    const t = setInterval(() => { void loadHealth(); void loadEvents(); }, 10_000);
     return () => clearInterval(t);
-  }, [loadHealth]);
+  }, [loadHealth, loadEvents]);
 
   const run = async (job: Job, confirm: boolean): Promise<void> => {
     setBusy(job.id); setError(null); setNote(null);
@@ -163,6 +187,53 @@ export function HealthScreen({ onNeedStepUp }: { onNeedStepUp: () => void }) {
         <p className="rounded-[var(--radius-sm)] border border-success bg-success/10 px-2.5 py-2
           text-xs text-success">{note}</p>
       ) : null}
+
+      {/* ── 0. OLAYLAR ──────────────────────────────────────────────────────────
+        ⭐⭐ **EN ÜSTTE, bilerek.** Bu ekrandaki her şey ANLIK durumu gösteriyor ve 06.08.2026'da
+        tam bu yüzden işe yaramadı: arıza fark edildiğinde bitmişti, panel yeşildi, geriye hiç iz
+        kalmamıştı. Açık bir olay her şeyden önce görünmeli; kapanmış olaylar ise bir arızanın
+        kanıtı ve **süresi**dir.
+      */}
+      <Panel
+        title="Operasyon olayları"
+        right={events == null ? '…' : `${events.filter((e) => e.open).length} açık`}
+      >
+        {events == null ? <p className="p-3 text-xs text-muted">Yükleniyor…</p>
+          : events.length === 0 ? (
+            <p className="p-3 text-xs text-muted">
+              Kayıtlı olay yok. ⭐ Eşikler aşılmadıkça satır <b>açılmaz</b>; bu liste boşsa
+              scheduler kuyruğu zamanında işliyor demektir.
+            </p>
+          ) : (
+            <div className="divide-y divide-border">
+              {events.map((e) => (
+                <div key={e.id} className="px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge tone={e.open ? 'danger' : 'muted'}>{e.open ? 'AÇIK' : 'kapandı'}</Badge>
+                    <strong className="text-ink">{e.label}</strong>
+                    {e.worldId != null ? <span className="text-muted">dünya #{e.worldId}</span> : null}
+                    <span className="text-muted">
+                      {/* ⭐ `peak` en KÖTÜ değer — "ne kadar kötüleşti" sorusunun cevabı. */}
+                      değer {e.value ?? '—'} · en kötü {e.peak ?? '—'} · eşik {e.threshold ?? '—'}
+                    </span>
+                    <span className="text-muted">süre {dur(e.durationS)} · {e.samples} örnek</span>
+                    {e.notifiedAt ? <Badge tone="muted">posta gitti</Badge> : null}
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-muted">
+                    {formatGameTime(e.openedAt)}
+                    {e.resolvedAt ? ` → ${formatGameTime(e.resolvedAt)}` : ' → sürüyor'}
+                  </p>
+                  {/* ⚠️ İpucu YALNIZ açık olayda: kapanmış bir arıza için "şuraya bak" demek,
+                      okuyanı çözülmüş bir soruna yönlendirir. */}
+                  {e.open && e.hint ? (
+                    <p className="mt-1 rounded-[var(--radius-sm)] border border-danger bg-danger/10
+                      px-2 py-1 text-[11px] leading-snug text-danger">{e.hint}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+      </Panel>
 
       {/* ── 1. CANLILIK ─────────────────────────────────────────────────────── */}
       <Panel

@@ -18,6 +18,8 @@ import { PLACEMENT_LOCK } from '../world/placement-lock.ts';
 import { PlacementService } from '../world/placement.service.ts';
 import { PasswordService } from './password.service.ts';
 import { hashRefreshToken, type TokenPair, type TokenService } from './token.service.ts';
+import { log } from '../common/logger.ts';
+const AUTH_LOG = log('auth');
 
 export class AuthError extends Error {
   constructor(readonly code: AuthErrorCode, message: string) {
@@ -142,8 +144,7 @@ export class AuthService {
       }
     } catch (err) {
       if (err instanceof AuthError) throw err;
-      // eslint-disable-next-line no-console
-      console.error('[auth] kayit riski olculemedi, kayit surduruluyor:', err);
+      AUTH_LOG.error({ err }, 'kayit riski olculemedi, kayit surduruluyor');
     }
 
     const gameNow = await this.clock.gameNow(input.worldId);

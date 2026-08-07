@@ -22,6 +22,8 @@
 import { sql } from 'drizzle-orm';
 import type postgres from 'postgres';
 import type { Db } from '../db/client.ts';
+import { log } from '../common/logger.ts';
+const WORLD_LOG = log('world');
 
 /** Dünya durumu değişikliğinin duyurulduğu Postgres kanalı. */
 export const WORLD_CHANNEL = 'mw_world';
@@ -92,8 +94,7 @@ export class WorldStateService {
     if (!conn) return;
     const sub = await conn.listen(WORLD_CHANNEL, () => {
       void this.load().catch((err: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error('[world] durum tazeleme başarısız:', err);
+        WORLD_LOG.error({ err }, 'durum tazeleme başarısız');
       });
     });
     this.unlisten = () => sub.unlisten();
@@ -181,8 +182,7 @@ export class WorldStateService {
       await this.db.execute(sql`SELECT pg_notify(${WORLD_CHANNEL}, '1')`);
     } catch (err) {
       // Duyuru gitmezse emniyet ağı zamanlayıcısı en geç 30 sn içinde toparlar.
-      // eslint-disable-next-line no-console
-      console.error('[world] duyuru başarısız:', err);
+      WORLD_LOG.error({ err }, 'duyuru başarısız');
     }
   }
 }

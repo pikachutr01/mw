@@ -222,6 +222,30 @@ bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görünt
 
 ---
 
+## 3b. ⏱️ ZAMAN MİMARİSİNDEN KALAN (Faz 1-3 sonrası, 2026-08-07)
+
+Üç faz da yazıldı ve test altında; aşağıdakiler **bilinçli olarak sonraya bırakıldı**.
+
+- ⛔ **`worlds.clock_offset_ms` DÜŞÜRÜLMEDİ** — 0043 onu yalnız 0'ladı ve hiçbir kod artık
+  okumuyor. Düşürmek **bir SONRAKİ dağıtımın** işi, bu dağıtımınki değil: `surum-yayinla.sh`
+  sırası *göç → symlink → reload*, yani göç koşarken ESKİ kod hâlâ çalışıyor ve o sütunu
+  okuyor. Ayrıca sağlık kontrolü düşüp koda geri dönülürse eski kod `now() − 0` ile **doğru**
+  çalışmaya devam eder — sütunu şimdi düşürmek geri dönüş yolunu keserdi. Faz 1+2+3 canlıda
+  bir süre sorunsuz koştuktan sonra tek satırlık bir `0045` yeter.
+- **Sunucuda elle yapılacak iki iş** (`YAYINA_ALMA.md` → «Sunucuda BİR KEZ yapılacaklar»):
+  `pm2 install pm2-logrotate` (bugün rotasyon YOK ve Faz 3 log hacmini artırdı) ·
+  `OPS_ALERT_EMAIL` (boşsa olaylar kaydedilir ama **kimse haber almaz**).
+- **Dış yoklayıcı** `/healthz?deep=1`e bakmalı. Eşik alarmını scheduler'ın kendisi
+  değerlendiriyor; **scheduler ölürse alarm da ölür** — kendi ölümünü haber veren bir süreç
+  yazılamaz, o boşluk yapısal olarak yalnız dışarıdan kapanır.
+- **`ops_events` panelden kapatılamıyor.** Ölü mektup gibi kendiliğinden kapanmayan olaylar
+  ancak sebep giderilince kapanır; "gördüm, kapat" düğmesi yok. Bilerek: elle kapatılabilen
+  bir alarm, bir süre sonra bakılmadan kapatılan bir alarma dönüşür.
+- **Ölü görevi yeniden kuyruğa alma ucu yok** — `mission_dead` alarmı geliyor, satır panelde
+  görünüyor ama `failed` → `scheduled` geçişi elle SQL gerektiriyor.
+
+---
+
 ## 4. ❌ ORİJİNALDE DE YOK — "eksik" sanılmasın
 
 Grep ile doğrulandı: **ticaret/pazar · günlük görev · olaylar · hava durumu · sezon ·

@@ -15,17 +15,19 @@
  * önce ÖLÇMEDEN çalıştırmak, geri alınamaz bir kaybı bir tık uzağa koyar.
  */
 import {
-  BadRequestException, Body, Controller, Get, HttpCode, Inject, Param, Post, Req, UseGuards,
+  BadRequestException, Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
+import { RULES_BY_KIND } from '../ops/ops-rules.ts';
 import { OUTBOX_MAX_ATTEMPTS } from '../outbox/outbox.dispatcher.ts';
 import { SettingsService } from '../settings/settings.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 import { CLEANUP_JOBS, JOBS_BY_ID, type CleanupJob, type OpsRetention } from './ops-jobs.ts';
+import { currentTraceId } from '../common/request-context.ts';
 
 const runBody = z.object({
   /** ⚠️ Silme yalnız bununla olur. Yokluğunda uç kuru koşu döndürür, hata değil. */
@@ -68,6 +70,8 @@ export class AdminOpsController {
       deviceSignalDays: g['deviceSignalDays'] ?? 90,
       cleanupBatch: g['cleanupBatch'] ?? 20_000,
       staleHeartbeatS: g['staleHeartbeatS'] ?? 30,
+      schedulerSampleDays: g['schedulerSampleDays'] ?? 30,
+      missionDoneDays: g['missionDoneDays'] ?? 60,
     };
   }
 
@@ -192,6 +196,111 @@ export class AdminOpsController {
         maxConnections: Number(pool?.['max_connections'] ?? 0),
         oldestTxS: Number(pool?.['oldest_tx_s'] ?? 0),
       },
+    };
+  }
+
+  /**
+   * ⭐⭐ OLAY GEÇMİŞİ (Faz 3) — panelin *"dün gece ne oldu"* sorusuna cevabı.
+   *
+   * ⚠️ `health` ucu ANLIK durumu gösteriyor ve tam da bu yüzden 06.08.2026'da işe yaramadı:
+   * arıza fark edildiğinde çoktan bitmişti, panelde her şey yeşildi. Bu uç açık olayları da
+   * kapanmışları da veriyor; kapanmış bir olay bir arızanın **kanıtı** ve süresidir.
+   */
+  @Get('events')
+  async events(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT id, world_id, kind, severity, opened_at, resolved_at, value, peak, threshold,
+             samples, detail, notified_at, outbox_id,
+             EXTRACT(EPOCH FROM (COALESCE(resolved_at, now()) - opened_at))::int AS duration_s
+        FROM ops_events
+       WHERE world_id IS NULL OR world_id = ${req.player!.worldId}
+       ORDER BY resolved_at IS NULL DESC, opened_at DESC
+       LIMIT 100
+    `);
+    return {
+      events: rows.map((e) => ({
+        id: Number(e['id']),
+        worldId: e['world_id'] == null ? null : Number(e['world_id']),
+        kind: String(e['kind']),
+        label: RULES_BY_KIND[String(e['kind'])]?.label ?? String(e['kind']),
+        hint: RULES_BY_KIND[String(e['kind'])]?.hint ?? null,
+        severity: String(e['severity']),
+        openedAt: e['opened_at'], resolvedAt: e['resolved_at'] ?? null,
+        open: e['resolved_at'] == null,
+        durationS: Number(e['duration_s'] ?? 0),
+        value: e['value'] == null ? null : Number(e['value']),
+        peak: e['peak'] == null ? null : Number(e['peak']),
+        threshold: e['threshold'] == null ? null : Number(e['threshold']),
+        samples: Number(e['samples'] ?? 1),
+        notifiedAt: e['notified_at'] ?? null,
+      })),
+    };
+  }
+
+  /**
+   * ⭐ KUYRUK ÖLÇÜM SERİSİ (Faz 3) — `scheduler_samples`ın son N saati.
+   *
+   * ⚠️ Ham satırlar dönüyor, sunucuda toplulaştırılmıyor: 24 saat = 1.440 satır ve bu bir
+   * grafiğin çizeceği nokta sayısından fazla değil. Toplulaştırma **tepe noktalarını siler** ve
+   * arıza tam olarak tepe noktasıdır.
+   */
+  @Get('samples')
+  async samples(
+    @Req() req: AdminRequest, @Query('hours') hours?: string,
+  ): Promise<Record<string, unknown>> {
+    const h = Math.min(Math.max(Number(hours ?? 24) || 24, 1), 168);
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT at, lag_ms, due_count, claimed, skipped_locked, stuck, scheduled, running, failed,
+             reaped, dead, oldest_locked_age_ms, pool_idle_in_tx, oldest_tx_s,
+             outbox_pending, outbox_dead, paused
+        FROM scheduler_samples
+       WHERE world_id = ${req.player!.worldId} AND at > now() - (${h} * interval '1 hour')
+       ORDER BY at
+    `);
+    return {
+      hours: h,
+      samples: rows.map((s) => ({
+        at: s['at'],
+        lagMs: Number(s['lag_ms'] ?? 0), due: Number(s['due_count'] ?? 0),
+        claimed: Number(s['claimed'] ?? 0), skippedLocked: Number(s['skipped_locked'] ?? 0),
+        stuck: Number(s['stuck'] ?? 0), scheduled: Number(s['scheduled'] ?? 0),
+        running: Number(s['running'] ?? 0), failed: Number(s['failed'] ?? 0),
+        reaped: Number(s['reaped'] ?? 0), dead: Number(s['dead'] ?? 0),
+        oldestLockedAgeMs: s['oldest_locked_age_ms'] == null
+          ? null : Number(s['oldest_locked_age_ms']),
+        poolIdleInTx: s['pool_idle_in_tx'] == null ? null : Number(s['pool_idle_in_tx']),
+        oldestTxS: s['oldest_tx_s'] == null ? null : Number(s['oldest_tx_s']),
+        outboxPending: s['outbox_pending'] == null ? null : Number(s['outbox_pending']),
+        outboxDead: s['outbox_dead'] == null ? null : Number(s['outbox_dead']),
+        paused: Boolean(s['paused']),
+      })),
+    };
+  }
+
+  /**
+   * ⭐ GÖREV HATA GEÇMİŞİ (Faz 3) — `missions.last_error` üzerine yazıyordu, ilk hata kayıptı.
+   * ⚠️ Sıralama `at DESC` ama görev başına gruplama yapılmıyor: bir görevin BEŞ denemesini de
+   * görmek isteniyor — tanı için gereken genelde ilkidir.
+   */
+  @Get('mission-errors')
+  async missionErrors(@Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT e.id, e.mission_id, e.at, e.attempt, e.mission_type, e.error, e.outcome,
+             e.worker_id, m.status AS mission_status, m.execute_at
+        FROM mission_errors e
+        LEFT JOIN missions m ON m.id = e.mission_id
+       WHERE e.world_id = ${req.player!.worldId}
+       ORDER BY e.at DESC, e.id DESC
+       LIMIT 200
+    `);
+    return {
+      errors: rows.map((e) => ({
+        id: Number(e['id']), missionId: Number(e['mission_id']), at: e['at'],
+        attempt: Number(e['attempt'] ?? 0), type: e['mission_type'] ?? null,
+        error: String(e['error']).slice(0, 2000), outcome: String(e['outcome']),
+        workerId: e['worker_id'] ?? null,
+        missionStatus: e['mission_status'] ?? null, executeAt: e['execute_at'] ?? null,
+      })),
     };
   }
 
@@ -342,11 +451,11 @@ export class AdminOpsController {
     const after = await this.preview(job, r);
 
     await this.db.execute(sql`
-      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after)
+      INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after, trace_id)
       VALUES (${req.player!.worldId}, ${req.player!.playerId}, 'admin.ops.cleanup',
               ${job.table}, NULL,
               ${JSON.stringify({ job: job.id, matched: before.matched, retention: r })}::jsonb,
-              ${JSON.stringify({ deleted: deleted.length, remaining: after.matched })}::jsonb)
+              ${JSON.stringify({ deleted: deleted.length, remaining: after.matched })}::jsonb, ${currentTraceId()})
     `);
 
     return {

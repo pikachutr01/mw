@@ -46,6 +46,27 @@
 > Resend'de verified, DNS **Cloudflare**'de) · ✅ ~~4 GB RAM~~ (yapıldı) ·
 > 🔵 **GitHub secret'ları** (`YAYINA_ALMA.md §2.5`) · 🔵 Cloudflare panel ayarları (§2.4).
 >
+> ### ⏱️ 2026-08-07 — ZAMAN MİMARİSİ 3 FAZDA YENİDEN YAZILDI
+> Tetikleyen olay: bir oyuncu *"ordu dönüş süresi olmadan şehre döndü"* dedi. Rapor gerçekti ama
+> **sebep dönüş mantığı değildi**: terk edilmiş bir transaction satırları tutuyor, `SKIP LOCKED`
+> onları sessizce atlıyor ve 24 görev 9,5 saat bekliyordu. Hiçbir gösterge bunu söylemedi.
+> - **Faz 1** (`138ac1d`) — DB zaman aşımları (`idle_in_transaction` 30 sn) · `claimDue`'ya
+>   `paused_at IS NULL` · asılı tur bekçisi · `due`/`skippedLocked`/`stuck` sayaçları ·
+>   istemcide 7 saat/oyun-saati karışması düzeltildi.
+> - **Faz 2** (`dcd1ae7`, göç **0043**) — ⭐⭐ **TEK ZAMAN ÇİZGİSİ**: `gameNow == now() == UTC`.
+>   `clock_offset_ms` emekli (0'landı, **düşürülmedi** — expand-contract). Bakımdan çıkışta
+>   bekleyen vadeler duraklama süresi kadar ileri kaydırılıyor; kapsam `world/time-registry.ts`
+>   ve `information_schema` bekçisi yeni bir `timestamptz` sütununu unutturmuyor.
+> - **Faz 3** (göç **0044**) — geçmişe dönük kayıt ve alarm: `scheduler_samples` (dakikada bir
+>   kuyruk fotoğrafı) · `mission_errors` (ekleme-yalnız hata geçmişi) · `missions.lag_ms` /
+>   `duration_ms` / `completed_by` · `ops_events` (**açılıp kapanan** eşik olayı + e-posta,
+>   tekrarlamıyor) · `/healthz?deep=1` · bakımda outbox durur (e-posta hariç) · `pino` +
+>   istek `traceId` → `audit_log.trace_id` · `audit_log` indeksleri · `missions` temizlik görevi.
+>
+> ⚠️ **Üçü de HENÜZ CANLIYA ÇIKMADI** — kullanıcı kararı: tek bir dağıtımla birlikte. Yayın
+> öncesi prosedür `YAYINA_ALMA.md` ve `0043_single_timeline.sql` başlığında; ⛔ **adım 6'da sapma
+> görülürse devam ettirme.** Sunucuda elle yapılacak iki iş var: `pm2-logrotate` + `OPS_ALERT_EMAIL`.
+>
 > **🔑 Test hesapları:** `wstest` / `mobiwar2026` (5 şehir, dolu ordu — ⚠️ parola DB'de öyle,
 > marka değişse de değişmedi) · ittifak denemesi için `itflider` + `itfuye` / `parola-12345`
 > (run.dll ittifağı). Giriş **kullanıcı adıyla**.
@@ -111,7 +132,11 @@ Hepsi bu projede **gerçekten başımıza geldi**. Yeni oturum bunları okumadan
 | ⭐⭐ **İstemcide `serverNow()` ile oyun damgası kıyaslamak** | **İKİ KEZ canlıda yaşandı** (2026-08-02 casusluk hep «varıyor», 2026-08-07 asker sayacı kalıcı «sipariş tamamlandı» + sur onarım oranı yanlış). ⭐ **0043'ten sonra ikisi aynı** — fark yalnız BAKIMDA oluşuyor, o zaman da `gameNow()` donuyor | **`gameNow()`**. Yalnız `maintenance_eta` gerçek zamanda → orada `serverNow()`. Bekçi: `apps/web/test/clock.test.ts` |
 | ⭐⭐ **Yeni bir `timestamptz` sütunu eklemek** | Bakımdan çıkarken bekleyen vadeler kaydırılıyor. Yeni sütun kayıt defterine girmezse **sessizce** bakım süresi kadar geride kalır | `apps/api/src/world/time-registry.ts`'de karar ver: şimdiki zamanla kıyaslanıyor mu? Evet → `TIME_SHIFT_REGISTRY`, hayır → `NON_TIMELINE_COLUMNS`. **Unutamazsın**: `time-registry.test.ts` `information_schema`'yı tarayıp kırılır |
 | Sunucuda `toLocaleString('tr-TR')` | Biçimi Türkçe yapar ama **saat dilimini sürecin `TZ`'sine bırakır**; canlıda süreç UTC → oyuncuya 3 saat yanlış saat gösteriliyordu (ceza/susturma metinleri) | **`formatGameTime()`** (`packages/contracts`), `Europe/Istanbul` açıkça verili |
-| Kuyrukta `claimed = 0` görüp "iş yoktu" sanmak | `SKIP LOCKED` başkasının tuttuğu satırı **sessizce** atlar. 2026-08-06'da 24 görev 9 saate kadar bekledi ve hiçbir gösterge söylemedi | `TickResult.due` / **`skippedLocked`** / `stuck`. Kök neden DB'de zaman aşımı olmamasıydı → `db/client.ts` |
+| Kuyrukta `claimed = 0` görüp "iş yoktu" sanmak | `SKIP LOCKED` başkasının tuttuğu satırı **sessizce** atlar. 2026-08-06'da 24 görev 9 saate kadar bekledi ve hiçbir gösterge söylemedi | `TickResult.due` / **`skippedLocked`** / `stuck`. Kök neden DB'de zaman aşımı olmamasıydı → `db/client.ts`. ⭐ 0044'ten beri bu üç sayı **`scheduler_samples`e kaydediliyor** (dakikada bir) — arıza bittikten sonra da bakılabilir |
+| ⭐ `/healthz` yeşil diye "sistem sağlıklı" demek | Sığ uç süreç ayakta olduğu sürece **daima 200**. 2026-08-06'da API sapasağlamdı, uç yeşildi ve kuyruk 9,5 saattir durmuştu | **`/healthz?deep=1`** — nabız yaşı + kuyruk gecikmesi + ölü mektuba bakıp 503 döner. ⚠️ Eşik alarmını scheduler'ın kendisi değerlendiriyor; **scheduler ölürse alarm da ölür**, o boşluğu yalnız bu uç kapatır |
+| ⭐ Görev gecikmesini `finished_at − execute_at` ile ölçmek | O fark **iki ayrı şeyi topluyor**: kuyrukta bekleme (altyapı arızası) + handler süresi (yavaş iş). Yavaş bir savaş çözümü ile tıkanmış bir kuyruk aynı sayıyı üretiyordu | 0044'ten beri ayrı: **`missions.lag_ms`** (= `claimed_at − execute_at`) ve **`duration_ms`** (= `finished_at − claimed_at`) |
+| Görevin hata geçmişini `last_error`dan okumak | Her denemede **üzerine yazılıyor**; beş kez denenip ölen görevde elde yalnız SONUNCU hata kalıyor — oysa tanı için gereken genelde İLKİdir | **`mission_errors`** (ekleme-yalnız, 0044). Panelde: Bakım → görev hataları |
+| Yeni bir alarm eşiğini koda gömmek | Eşik, gerekçesi ve "ilk bakılacak yer" ayrı yerlere dağılırsa alarm e-postası *"queue_lag > 120"* yazan ve kimseye ne yapacağını söylemeyen bir bildirime dönüşür | `apps/api/src/ops/ops-rules.ts` — `describe` + **`hint`** aynı satırda; e-posta gövdesi bundan üretiliyor |
 | Nest DI'da `import type` | Dekoratör metadata'sı `Object` yazar, bağımlılık çözülemez | Servisleri **değer** olarak import et; sembol belirteçte `@Inject(DB)` |
 | Gövdesiz istekte `content-type: application/json` | Fastify **400**: *"Body cannot be empty…"* — yapı iptali ve "okundu" böyle patlıyordu | Başlığı **yalnız gövde varken** gönder (`api.ts`) |
 | Süre böleninde `?? 1` | Bölen `1,2^seviye`; kurulmamış yapı için 1 yazmak **var olmayan binayı çalıştırır** | Varsayılan **`?? 0`** |

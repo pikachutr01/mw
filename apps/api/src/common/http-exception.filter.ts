@@ -22,6 +22,10 @@ import { Catch, HttpException, HttpStatus } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { RequestPlayer } from '../auth/auth.guard.ts';
+import { log } from './logger.ts';
+import { currentTraceId } from './request-context.ts';
+
+const HTTP_LOG = log('http');
 
 interface LoggedRequest {
   method?: string;
@@ -53,15 +57,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
      * ⚠️ `traceId` hem loga hem yanıta gider. Kullanıcı bir ekran görüntüsü gönderdiğinde
      * log dosyasında o satırı aramanın tek pratik yolu bu — yoksa "saat 12:37'de bir 500
      * gördüm" ile yüz binlerce satır arasında eşleştirme yapmak gerekir.
+     *
+     * ⭐⭐ **ARTIK İSTEK BAŞINDA ÜRETİLİYOR** (Faz 3). Eskiden burada, yani hata ANINDA
+     * üretiliyordu ve sonucu şuydu: kimlik yalnız log satırında ve yanıtta yaşıyor, isteğin
+     * veritabanında yazdığı `audit_log` satırlarıyla HİÇBİR bağı olmuyordu. Kimlik isteğin
+     * başında doğunca (`request-context.ts`) üçü de aynı ipe diziliyor: yanıt → log → denetim
+     * kaydı. `randomUUID` yedeği yalnız bağlam dışı bir çağrı için (ör. açılış hatası).
      */
-    const traceId = randomUUID().slice(0, 8);
-    const who = req.player ? `p${req.player.playerId}/w${req.player.worldId}` : 'anon';
+    const traceId = currentTraceId() ?? randomUUID().slice(0, 8);
     const message = exception instanceof Error ? exception.message : String(exception);
 
-    console.error(
-      `[500] ${traceId} ${req.method ?? '?'} ${req.url ?? '?'} · ${who} · ${message}`,
-    );
-    if (exception instanceof Error && exception.stack) console.error(exception.stack);
+    HTTP_LOG.error({
+      traceId,
+      status,
+      method: req.method ?? null,
+      url: req.url ?? null,
+      playerId: req.player?.playerId ?? null,
+      worldId: req.player?.worldId ?? null,
+      err: exception instanceof Error ? exception : undefined,
+    }, message);
 
     reply.status(status).send({
       statusCode: status,
