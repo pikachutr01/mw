@@ -219,7 +219,106 @@ içinde `define` ile gömülüyor — çalışma zamanı değişkeni değil, kay
 - Oyuncudan hata raporu alırken bu satırı istemek en ucuz teşhis: hangi paketi çalıştırdığı
   tek bakışta belli olur (`select-all` ile tek tıkta kopyalanıyor).
 
-### ⏱️ Zaman mimarisi dağıtımı — canlıdan ÖLÇÜLEN başlangıç durumu (2026-08-08)
+## ⏱️ ZAMAN MİMARİSİ DAĞITIMI — ADIM ADIM (Faz 1+2+3, tek seferde)
+
+> ⛔⛔ **«Run workflow»a tek başına basmak YETMEZ ve zarar da vermez.** `0043` göçü ilk iş olarak
+> dünyanın bakımda olup olmadığına bakıyor; değilse şu hatayla kendini iptal ediyor:
+>
+> ```
+> Tek zaman cizgisi gocu yalniz BAKIM MODUNDA kosabilir.
+> Once: POST /api/v1/admin/worlds/:id/pause
+> ```
+>
+> `surum-yayinla.sh` `set -euo pipefail` ile koşuyor ve göç **1. adım** — yani symlink'e ve
+> `pm2 reload`a hiç gelinmiyor. Eski sürüm dokunulmadan çalışmaya devam eder. Yanlışlıkla
+> basarsan kaybın yalnız birkaç dakika CI süresidir.
+
+### A. ÖNCEDEN (oyun AÇIKKEN yapılabilir, kesinti yok)
+
+```bash
+# A1. Log rotasyonu — ÖLÇÜLDÜ: kurulu DEĞİL. Faz 3 log hacmini artırıyor, 40 GB disk.
+ssh deploy@31.210.36.185
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 20M
+pm2 set pm2-logrotate:retain 14
+pm2 set pm2-logrotate:compress true
+
+# A2. Alarm adresi — ÖLÇÜLDÜ: .env'de YOK. Dağıtımın kendi `pm2 reload`u bunu alacak,
+#     yani şimdi eklemek ayrı bir yeniden başlatma gerektirmiyor.
+sudo sh -c 'echo "OPS_ALERT_EMAIL=destek@mobilwar.com" >> /etc/mobilwar/.env'
+sudo grep OPS_ALERT /etc/mobilwar/.env      # doğrula
+```
+
+```sql
+-- A3. İki ölü mektubu KAPAT (silme!). 02.08 Resend idempotency artığı; sebebi düzeltildi.
+--     Yapılmazsa Faz 3'ün `outbox_dead` eşiği (0) dağıtımın ilk dakikasında yanlış alarm üretir.
+UPDATE outbox SET dispatched_at = now() WHERE id IN (1, 2) AND dispatched_at IS NULL;
+INSERT INTO audit_log (world_id, action, entity, after)
+VALUES (NULL, 'ops.outbox.acknowledge', 'outbox',
+        '{"ids":[1,2],"reason":"2026-08-02 Resend idempotency olayi; anahtar duzeltildi"}'::jsonb);
+```
+
+### B. BAKIM PENCERESİ (~15 dk, düşük trafik — ör. 05:00 TRT)
+
+| # | Ne | Nasıl |
+|---|---|---|
+| **B1** | Tam yedek | `sudo -u postgres pg_dump mobilwar > ~/mobilwar-$(date +%F-%H%M).sql` |
+| **B2** | Başlangıç değerini **kaydet** | `SELECT clock_offset_ms FROM worlds WHERE id=1;` → **196563** bekleniyor |
+| **B3** | **Bakıma al** | `admin.mobilwar.com` → Dünyalar → *«Bakıma al (oyunu dondur)»*. Metin: «Zaman altyapısı güncelleniyor», ETA 15 dk |
+| **B4** | Dağıtımı başlat | GitHub → Actions → **Canlıya çıkış** → *Run workflow* → dal `main` |
+| **B5** | Doğrula — **dünya HÂLÂ duraklıyken** | aşağıdaki sorgu |
+| **B6** | Devam ettir | Panel → *«Bakımı bitir ve devam et»* |
+| **B7** | Duman testi | Bina kuyruğa al + **casusluk gönder (120 sn — en hassas gösterge)** |
+
+⭐ **B3 ile B4 arasında beklemene gerek yok.** Akış derleme + testlerle birkaç dakika sürüyor ve
+göç ancak ondan sonra koşuyor — yani **workflow'un kendi süresi drenaj penceresidir.** Bakıma
+alındığı anda uçuşta olan görevler saniyeler içinde biter.
+
+```sql
+-- B5 — üçü de tutmalı. ⛔ TUTMUYORSA B6'YI ÇALIŞTIRMA: dünya duraklı kalır, yedekten dönülür.
+SELECT clock_offset_ms FROM worlds WHERE id = 1;             -- 0 olmalı
+SELECT kind, shift_ms, registry_hash FROM time_shifts
+ WHERE world_id = 1 AND kind = 'migration';                   -- shift_ms = B2'deki değer
+-- Bekleyen görevlerin kalan süresi B3 öncesiyle aynı mı (donmuş saate göre):
+SELECT id, type,
+       EXTRACT(EPOCH FROM (execute_at - (SELECT paused_at FROM worlds WHERE id=1)))::int AS kalan_sn
+  FROM missions WHERE world_id = 1 AND status = 'scheduled' ORDER BY execute_at;
+```
+
+⭐ **B6 sonrası:** panel `shiftMs` ve `rowsByTable` gösterir. **Hiçbir tablo 0 olmamalı** —
+0, o girişin yükleminin bozuk olduğunun tek göstergesi.
+
+### C. GERİ DÖNÜŞ — ne zaman mümkün, ne zaman değil
+
+| An | Geri dönüş |
+|---|---|
+| B4 başarısız (göç reddetti/patladı) | **Hiçbir şey değişmedi.** Eski sürüm çalışıyor, B3'ü geri al (panel → devam ettir) |
+| Göç koştu, sağlık kontrolü düştü | Betik symlink'i **kendiliğinden** eski sürüme döndürür. ⭐ Ve bu **güvenli**: göç `V' = V + K`, `K = 0` yaptı; eski kod `gameNow = now() − 0` ile kalan süreyi `V + K − now()` hesaplar — göç ÖNCESİ `V − (now() − K)` ile **cebirsel olarak aynı**. Oyuncu farkı görmez. ⚠️ Ama o hâlde bir daha bakım yapma: eski `resume` `clock_offset_ms`i tekrar şişirir |
+| **B6'dan sonra** | ⛔ **Geri dönüş YOK.** Kaydırma uygulandı |
+
+### D. SONRASI — 24 saat
+
+```bash
+curl -s 'http://127.0.0.1:3002/healthz?deep=1' | jq .          # status: ok
+tail -n 500 ~/.pm2/logs/mobilwar-out.log | jq -c 'select(.mod=="scheduler")'
+```
+```sql
+SELECT at, lag_ms, due_count, skipped_locked, stuck FROM scheduler_samples
+ ORDER BY at DESC LIMIT 20;                       -- lag_ms küçük, skipped_locked/stuck 0
+SELECT * FROM ops_events ORDER BY id DESC LIMIT 5;                       -- boş olmalı
+SELECT taken_at, entries FROM ranking_runs ORDER BY taken_at DESC LIMIT 4;
+--   ⚠️ 21:00 / 05:00 / 13:00 UTC DOĞRUDUR (= 00/08/16 Türkiye saati, §13.22). «Kaymış» değil.
+SELECT COUNT(*) FROM missions WHERE status='done' AND finished_at > now() - interval '1 hour'
+   AND finished_at - execute_at > interval '30 seconds';   -- 0 olmalı: 197 sn artefaktı BİTTİ
+```
+
+⭐ **Son satır tek başına Faz 2'nin kanıtı.** Bugün canlıda her bitmiş görev
+`finished_at − execute_at ≈ 197 sn` gösteriyor; bu gecikme değil, iki ayrı saatin çıkarılması.
+Göçten sonra bu fark **gerçek işlem süresine** iner.
+
+---
+
+### ⏱️ Canlıdan ÖLÇÜLEN başlangıç durumu (2026-08-08)
 
 Aşağıdakiler tahmin değil, sunucuda çalıştırılan sorguların çıktısı. Göç sonrası doğrulama
 adımının beklenen değerleri bunlar.
@@ -251,7 +350,7 @@ VALUES (NULL, 'ops.outbox.acknowledge', 'outbox',
         '{"ids":[1,2],"reason":"2026-08-02 Resend idempotency olayi; anahtar duzeltildi, mail artik gonderilemez"}'::jsonb);
 ```
 
-### Sunucuda BİR KEZ yapılacaklar (Faz 3 — kod değil, dağıtım ayarı)
+### Sunucuda BİR KEZ yapılacaklar — ayrıntı (yukarıdaki A1/A2 adımlarının gerekçesi)
 
 ⚠️ Bu iki adım koda yazılamaz; sunucuda elle yapılır ve **yapılmazsa Faz 3'ün yarısı sessizce
 çalışmaz**.
