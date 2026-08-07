@@ -110,6 +110,83 @@ gücü tamamen emiyor → savunan 0 kayıp; şaman vurmadığı için saldıran 
 
 ---
 
+# 🔵 2026-08-07 — YENİ ÖLÇÜM İSTEĞİ: "savaş-dışı birimler ne zaman ölür?"
+
+Kalan tek ayrışma ailesi bu. **Kazanan ve tur sayısı doğru**, tutmayan şey kayıp dökümü.
+
+## Motorun BUGÜNKÜ kuralı (ölçüldü, aşağıdaki tabloda görünüyor)
+
+| Birim | Motor ne yapıyor |
+|---|---|
+| **Casus Kuş** | **HİÇ ölmüyor** — hangi taraf kaybederse kaybetsin uçup kaçıyor |
+| **Gnom** | **HİÇ ölmüyor** |
+| **Yük Arabası** | Yalnız **kaybeden** tarafta, kayıp oranıyla **orantısal** gidiyor (C3: 300'ün 150'si) |
+| **Okçu Kulesi** | Normal savunma birimi gibi kayıp veriyor — **binary ile zaten uyuşuyor** (E1/E2: 10 kayıp ≈ senin ölçtüğün "38-41 kalır") |
+
+## Binary'de görünen ve açıklayamadığımız üç şey
+
+1. **Satır 4:** `Cüce 120 → Cüce 1 + Kuş 1000` = **1001 kayıp.** Yani savunanın tek cücesi
+   ölünce 1000 kuş da gidiyor. Motorda kuşlar sağ kalıyor.
+2. **Satır 1:** `Cüce 120 → Kuş 1000` = **0 kayıp** (sen "(doğru)" diye işaretledin). Yani
+   savaş HİÇ olmayınca kuşlar yaşıyor. Satır 4'ten tek farkı bir cüce.
+3. **Satır 3:** `Cüce 120 → Gnom 500` = **4 gnom** ölüyor, hem de 1 turda (yani vuruşma yok).
+   Motor 0 diyor. Bu sayı nereden geliyor?
+
+**Çalışma varsayımım:** *"gerçek bir tur dönerse, kaybeden tarafın savaş-dışı birimleri de
+yok olur; hiç tur dönmezse yaşarlar."* Aşağıdaki senaryolar bunu sınamak için seçildi —
+özellikle **A5/B1** (kazanan tarafta kuş) ve **A6/C3** (iki taraf da kısmen sağ kalıyor)
+varsayımı ya doğrular ya çürütür.
+
+## 📋 Senaryolar — binary sonuçlarını `Binary` sütununa yazman yeterli
+
+> Hepsi **gündüz**, teknik 0, kahraman yok, sur/kalkan yok. Tohum `bin-<no>`.
+> `—` = hiç kayıp yok.
+
+| # | Saldıran | Savunan | Motor: kazanan | Tur | Motor: saldıran kaybı | Motor: savunan kaybı | Binary |
+|---|---|---|---|---|---|---|---|
+| A1 | Cüce 120 | Casus Kuş 1000 | **SALDIRAN** | 1 | — | — | *(satır 1: kuşlar sağ ✅)* |
+| A2 | Cüce 120 | Cüce 1 + Casus Kuş 1000 | **SALDIRAN** | 3 | — | Cüce −1 | *(satır 4: 1001 ölü ❌)* |
+| A3 | Cüce 120 | Cüce 50 + Casus Kuş 1000 | **SALDIRAN** | 4 | Cüce −11 | Cüce −50 |  |
+| A4 | Cüce 2000 | Cüce 50 + Casus Kuş 1000 | **SALDIRAN** | 3 | — | Cüce −50 |  |
+| **A5** | Cüce 20 | Cüce 500 + Casus Kuş 1000 | **SAVUNAN** | 3 | Cüce −20 | — |  |
+| **A6** | Cüce 100 + Casus Kuş 500 | Cüce 100 + Casus Kuş 500 | **SALDIRAN** | 5 | Cüce −63 | Cüce −63 |  |
+| **B1** | Cüce 120 + Casus Kuş 1000 | Cüce 1 | **SALDIRAN** | 3 | — | Cüce −1 |  |
+| B2 | Cüce 20 + Casus Kuş 1000 | Cüce 500 | **SAVUNAN** | 3 | Cüce −20 | — |  |
+| C1 | Cüce 120 | Cüce 1 + Yük Arabası 500 | **SALDIRAN** | 3 | — | Cüce −1, Yük −500 |  |
+| C2 | Cüce 20 + Yük Arabası 500 | Cüce 500 | **SAVUNAN** | 3 | Cüce −20, Yük −500 | — |  |
+| **C3** | Cüce 100 + Yük Arabası 300 | Cüce 100 + Yük Arabası 300 | **SALDIRAN** | 5 | Cüce −63 | Cüce −63, Yük −150 |  |
+| D1 | Cüce 120 | Gnom 500 | **SALDIRAN** | 1 | — | — | *(satır 3: 4 gnom ölü ❌)* |
+| D2 | Cüce 240 | Gnom 500 | **SALDIRAN** | 1 | — | — |  |
+| D3 | Cüce 120 | Gnom 50 | **SALDIRAN** | 1 | — | — |  |
+| D4 | Gnom 500 | Cüce 120 | **SAVUNAN** | 1 | — | — |  |
+| D5 | Cüce 120 + Gnom 100 | Cüce 120 | **SALDIRAN** | 5 | Cüce −75 | Cüce −75 |  |
+| E1 | Cüce 3000 | Okçu Kulesi 50 | **SALDIRAN** | 3 | — | Okçu Kulesi −10 |  |
+| E2 | Cüce 3000 | Casus Kuş 1000 + Okçu Kulesi 50 | **SALDIRAN** | 3 | — | Okçu Kulesi −10 | *(satır 14: +1000 kuş ölü ❌)* |
+
+## Her blok neyi ayırt ediyor
+
+- **A3 · A4** — savunanın savaşçısı tamamen kırılıyor. Kuşlar da gidiyor mu, yoksa kalan
+  savaşçı sayısıyla mı orantılı?
+- **A5 ⭐** — savunan **KAZANIYOR** ve kuşları var. Kuş kaybı "kaybeden taraf" kuralına mı
+  bağlı, yoksa savaşa girmek yeterli mi? *Bu satır varsayımı tek başına çürütebilir.*
+- **A6 ⭐⭐** — iki tarafta da kuş var, savaş 5 tur sürüyor ve **iki taraf da kısmen sağ
+  kalıyor**. Kaybedenin kuşlarının hepsi mi gidiyor yoksa oranla mı? Kazananın kuşları duruyor
+  mu? *En bilgilendirici tek satır.*
+- **B1 · B2** — kuş **SALDIRANDA**. Kural taraf-bağımsız mı?
+- **C1 · C2 · C3** — yük arabasında aynı sorular. C3 orantısallığı doğrudan ölçüyor
+  (motor 300'ün 150'sini alıyor).
+- **D2 · D3** — satır 3'teki "4 gnom" saldıran sayısıyla mı (D2: cüce iki katı) yoksa gnom
+  havuzuyla mı (D3: gnom onda bir) ölçekleniyor? Sabitse mekanizma başka.
+- **D4 · D5** — gnom saldıranda; D5'te gerçek bir 5 turluk savaş var.
+- **E1 ⭐** — kulelerin kayıp sayısı kuşlardan **bağımsız** mı? E1 ile E2 aynı çıkarsa
+  (motorda öyle) satır 14'teki tek fark kuşlar demektir.
+
+⚠️ **Rastgelelik varsa aralık yaz** (satır 9'da yaptığın gibi: "63-85 arası"). Motorun
+sayıları tek tohumla (`bin-<no>`) üretildi, seninkiler farklı tohumla düşebilir — önemli olan
+**hangi birimin ölüp ölmediği**, tam sayı değil.
+
+---
+
 ## Ölçüm için kısa şablon
 
 Binary simülatörde her satır için yalnız şunlar lazım:
