@@ -939,6 +939,76 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
   });
 });
 
+/**
+ * ⭐⭐ KAPASİTEYE SIĞMAYAN YAĞMA ŞEHİRDE **KALIR** (kullanıcı sorusu, 2026-08-08).
+ *
+ * Kullanıcı raporu okuyup haklı olarak sordu: *"Şehrin kasasından sadece taşınan iki miktar
+ * eksiliyor değil mi? Şehirde kalan olarak yazdığın 441.242 ile 441.264 değil?"*
+ *
+ * Evet. `plunderNotCarried` **bilgi amaçlı** bir sayıdır: "oranca alınabilirdi ama kapasite
+ * yetmedi". Savunandan düşülen tek kalem `fromPlunder`dır (`battle.handlers.ts` → tek
+ * `trySpend` çağrısı). Bu ayrım kolayca ters uygulanabilirdi — ve o hâlde savunan, saldıranın
+ * hiç götürmediği kaynağı kaybederdi.
+ *
+ * ⚠️ Mevcut testlerde bu değişmez yalnız DOLAYLI duruyordu (sur iptali testinin kasa hesabı
+ * içinde). Kapasitenin gerçekten aştığı bir kurguda doğrudan ölçülmemişti; bu blok onu
+ * kilitliyor.
+ */
+describe('⭐ yağma: kapasiteye sığmayan kısım şehirde kalır', () => {
+  it('savunanın kasasından YALNIZ taşınan kadar düşer', async () => {
+    // Kağnısız, düşük kapasiteli bir ordu + zengin şehir → kapasite kesin aşılır.
+    await giveUnits(attackCity, 'dwarf', 400);
+    await setResources(defendCity, 2_000_000, 2_000_000);
+    const kasa0 = await resourcesOf(defendCity);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 400 }, at,
+    });
+    await runDue(m.missionId);
+
+    const [b] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT result FROM battles WHERE world_id = ${worldId}
+    `);
+    const res = b!['result'] as {
+      winner: string;
+      attackerCarryCapacity: number;
+      loot: {
+        taken: { gold: number; food: number };
+        fromPlunder: { gold: number; food: number };
+        plunderNotCarried: { gold: number; food: number };
+        leftoverDebrisToDefender: { gold: number; food: number };
+      };
+    };
+    expect(res.winner, 'kurgu bozuk: saldıran kazanmalıydı').toBe('attacker');
+
+    // Kurgunun gerçekten kapasite freniyle karşılaştığını doğrula — yoksa test boş geçer.
+    expect(
+      res.loot.plunderNotCarried.gold + res.loot.plunderNotCarried.food,
+      'kurgu bozuk: kapasite aşılmamış, test ölçmek istediğini ölçmüyor',
+    ).toBeGreaterThan(0);
+    // ⭐ Taşınan, kapasitenin TAMAMINI kullanmalı (kullanıcının ikinci sorusu).
+    expect(res.loot.taken.gold + res.loot.taken.food)
+      .toBeCloseTo(res.attackerCarryCapacity, 0);
+
+    const kasa1 = await resourcesOf(defendCity);
+    for (const kaynak of ['gold', 'food'] as const) {
+      const beklenen = kasa0[kaynak]
+        - res.loot.fromPlunder[kaynak]
+        + res.loot.leftoverDebrisToDefender[kaynak];
+      expect(kasa1[kaynak], `${kaynak}: yalnız taşınan düşmeli`).toBeCloseTo(beklenen, 0);
+      /**
+       * ⚠️ Asıl yasak: `plunderNotCarried` DE düşülmüş olsaydı kasa bu kadar azalırdı.
+       * Ayrımı açıkça yazıyoruz ki bir gün biri "alınabilecek kadarını düş" derse test
+       * ona sebebini göstersin.
+       */
+      const yanlisBeklenti = beklenen - res.loot.plunderNotCarried[kaynak];
+      expect(kasa1[kaynak]).not.toBeCloseTo(yanlisBeklenti, 0);
+    }
+  });
+});
+
 describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
   it('iki taraf AYNI savaşın farklı yüzünü görür', async () => {
     await giveUnits(attackCity, 'dwarf', 3000);
