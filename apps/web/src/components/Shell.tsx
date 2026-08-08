@@ -262,10 +262,10 @@ function InfoBar() {
             ‹
           </NavLink>
         ) : null}
-        <Res kind="gold" value={fmt(gold)} size={22} numClass="min-w-[9ch]"
-          className="text-[12px] font-semibold sm:text-[15px]" />
-        <Res kind="food" value={fmt(food)} size={22} numClass="min-w-[9ch]"
-          className="text-[12px] font-semibold sm:text-[15px]" />
+        <ResRate kind="gold" value={gold} perHour={d?.production.goldPerHour}
+          onVacation={d?.onVacation === true} />
+        <ResRate kind="food" value={food} perHour={d?.production.foodPerHour}
+          onVacation={d?.onVacation === true} />
       </div>
 
       {/* ── ORTA: şehir · koordinat · sayfa (daima ortada) ────────────────────── */}
@@ -345,6 +345,50 @@ function SpeedBadge({ speed }: {
         <span aria-hidden className="text-[15px] leading-none">⚡</span>
         <span className="sr-only">Hızlandırılmış dünya</span>
       </span>
+    </Tooltip>
+  );
+}
+
+/**
+ * ⭐ Bilgi çubuğundaki kaynak sayacı + **saatlik üretim ipucu** (kullanıcı, 2026-08-08):
+ * *"navbardaki altın ve yemek sayısına tıklayınca saatte kaç adet ürettiğini göstersin."*
+ *
+ * ⚠️ Sayı `production.*PerHour`'dan geliyor, istemcide YENİDEN HESAPLANMIYOR: aynı sayı zaten
+ * sayacın akış hızını belirliyor (`InfoBar`daki ekstrapolasyon). İkinci bir kaynaktan
+ * hesaplasaydık "ipucu +50 diyor ama sayaç başka hızda akıyor" ayrışması kaçınılmazdı.
+ *
+ * ⭐ Tatilde sunucu ikisini de 0 döndürüyor; ipucu bunu **sebebiyle** söylüyor, yoksa oyuncu
+ * "üretimim niye sıfır" diye sorardı.
+ */
+function ResRate({
+  kind, value, perHour, onVacation,
+}: { kind: 'gold' | 'food'; value: number; perHour: number | undefined; onVacation: boolean }) {
+  const title = kind === 'gold' ? 'Altın' : 'Yemek';
+  const rate = perHour ?? 0;
+  return (
+    <Tooltip
+      placement="bottom"
+      label={
+        <>
+          <TooltipTitle>{title}</TooltipTitle>
+          <TooltipRow label="Üretim" value={`+${fmt(Math.round(rate))} / saat`}
+            tone={rate > 0 ? 'accent' : 'muted'} />
+          {onVacation ? (
+            <span className="mt-1 block text-muted">Tatil modunda üretim durur.</span>
+          ) : null}
+        </>
+      }
+    >
+      {/*
+        ⚠️ Tetikleyici **`<button>`**: `Tooltip`in sarmalayıcısı düz bir `span` ve odak
+        alamıyor — klavye kullanıcısı ipucuna hiç ulaşamazdı. `MeritBadge` ve `AllyBadge`
+        aynı gerekçeyle `<button>` kullanıyor.
+      */}
+      <button type="button" aria-label={`${title} üretimi`}
+        className="cursor-help text-left outline-none">
+        <Res kind={kind} value={fmt(value)} size={22} numClass="min-w-[9ch]" nativeTitle={false}
+          className="text-[12px] font-semibold sm:text-[15px]" />
+      </button>
     </Tooltip>
   );
 }

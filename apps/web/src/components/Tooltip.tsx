@@ -16,8 +16,9 @@
  *    birinde gizli bir kutu tutmak bedava değil.
  *  • **Erişilebilirlik:** tetikleyici `aria-describedby` ile ipucunu gösterir; ipucunun kendisi
  *    fare olaylarını yutmaz (`pointer-events: none`).
+ *  • ⭐ **Dokunmatikte TIKLAMA AÇIP KAPATIR** (kullanıcı, 2026-08-08) — ayrıntısı aşağıda.
  */
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useReducer, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 export type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
@@ -30,6 +31,74 @@ interface Box {
 /** İpucu ile tetikleyici arasındaki boşluk ve pencere kenarından bırakılan pay (px). */
 const GAP = 8;
 const EDGE = 6;
+
+/* ── Açılma/kapanma mantığı — saf, bu yüzden test edilebilir ─────────────────── */
+
+export type TipEvent =
+  | { type: 'pointerdown'; pointer: string }
+  | { type: 'enter'; pointer: string }
+  | { type: 'leave'; pointer: string }
+  | { type: 'focus' }
+  | { type: 'blur' }
+  | { type: 'click' }
+  | { type: 'outside' };
+
+export interface TipState {
+  open: boolean;
+  /** Son etkileşim dokunmatik miydi? Fare/dokunmatik davranışını ayıran tek bayrak. */
+  byTouch: boolean;
+}
+
+export const TIP_INITIAL: TipState = { open: false, byTouch: false };
+
+/**
+ * ⭐⭐ İPUCUNUN TÜM DAVRANIŞI TEK YERDE — ve React'ten bağımsız (kullanıcı, 2026-08-08).
+ *
+ * ⚠️ Bu mantık **iki kez geriledi** (2026-08-04 dokunmatiği kör etti, 2026-08-06 geri alındı,
+ * 2026-08-08 dokunmatikte hiç açılmadığı ortaya çıktı). Sebebi hep aynı: hata tek bir olayda
+ * değil, olayların **SIRASINDA** yaşıyor. Bir dokunuşta tarayıcı şunu üretiyor —
+ *   `pointerdown → pointerup → enter(taklit) → focus → click`
+ * Eski kodda `enter` ve `focus` açıyor, hemen ardından `click` kapatıyordu: net sonuç
+ * **hiç görünmemek**. Kullanıcının *"uygulamayı arka plana alıp öne çekince görülüyor"*
+ * gözlemi teşhisin kendisiydi: orada yalnız taklit `enter` ateşleniyor, `click` gelmiyor.
+ *
+ * Mantık saf bir fonksiyona çıkarıldı ki bu sıra **gerçekten sınanabilsin**; bileşenin içinde
+ * kaldığı sürece ancak gerçek bir tarayıcıda elle denenebiliyordu ve iki kez kaçtı.
+ *
+ * ⚠️ Fare/dokunmatik ayrımı `matchMedia('(hover: hover)')` ile DEĞİL, olayın kendi
+ * `pointerType`'ıyla: dokunmatik ekranlı dizüstüler iki girdiyi de taşır ve ortam sorgusu
+ * onlarda ikisinden birini yanlış tarafa atardı. Olayın türü ise her zaman doğru.
+ */
+export function tipReduce(s: TipState, e: TipEvent): TipState {
+  switch (e.type) {
+    case 'pointerdown':
+      return { ...s, byTouch: e.pointer !== 'mouse' };
+    // Fare üstüne gelince açılır/çekilince kapanır; dokunmatiğin taklit ettiği aynı olay yok sayılır.
+    case 'enter':
+      return e.pointer === 'mouse' ? { ...s, open: true } : s;
+    case 'leave':
+      return e.pointer === 'mouse' ? { ...s, open: false } : s;
+    /**
+     * Klavye erişimi korunuyor — ama DOKUNUŞLA gelen `focus` açmamalı: açarsa hemen ardından
+     * gelen `click` onu kapatır ve baştaki hataya geri döneriz.
+     */
+    case 'focus':
+      return s.byTouch ? s : { ...s, open: true };
+    case 'blur':
+      return { ...s, open: false };
+    /**
+     * ⭐ Fare: tıklamak KAPATIR (kullanıcı zaten eyleme geçti, ipucunun işi bitti).
+     * ⭐ Dokunmatik: tıklamak AÇAR/KAPATIR — kullanıcının istediği davranış.
+     * ⚠️ Karar `pointerdown`da değil `click`te veriliyor: araya giren `focus` sonucu bozardı.
+     */
+    case 'click':
+      return { ...s, open: s.byTouch ? !s.open : false };
+    case 'outside':
+      return { ...s, open: false };
+    default:
+      return s;
+  }
+}
 
 export function Tooltip({
   label, children, placement = 'bottom', className = '',
@@ -44,7 +113,7 @@ export function Tooltip({
   const id = useId();
   const anchorRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
+  const [{ open, byTouch }, dispatch] = useReducer(tipReduce, TIP_INITIAL);
   const [pos, setPos] = useState<Box | null>(null);
 
   /**
@@ -86,36 +155,38 @@ export function Tooltip({
     };
   }, [open, place]);
 
+  /**
+   * ⭐ Dokunmatikte açık ipucu, **başka bir yere dokununca** kapanır.
+   *
+   * ⚠️ Tetikleyicinin İÇİNDEKİ dokunuş dışlanmalı: dışlanmazsa `pointerdown` ipucunu kapatır,
+   * hemen ardından gelen `click` yeniden açar ve ipucu asla kapanmaz (yazarken bir kez oldu).
+   * ⚠️ Balon `pointer-events: none` olduğu için balonun üstüne dokunmak da "dışarı" sayılır —
+   * ipucunda tıklanacak bir şey yok, bu doğru davranış. Tıklanabilir içerik gerekiyorsa
+   * `Popover` kullanılmalı.
+   */
+  useEffect(() => {
+    if (!open || !byTouch) return;
+    const onDown = (e: PointerEvent): void => {
+      if (anchorRef.current?.contains(e.target as Node)) return;
+      dispatch({ type: 'outside' });
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [open, byTouch]);
+
   return (
     <>
       <span
         ref={anchorRef}
         aria-describedby={open ? id : undefined}
-        /**
-         * ⚠️⚠️ **DOKUNMATİK KAPISI GERİ ALINDI (kullanıcı, 2026-08-06).**
-         *
-         * 2026-08-04'te buraya `if (canHover())` konmuştu: sıralama tablosundaki mesaj
-         * düğmesine dokununca ipucu, üstüne açılan sohbet penceresinin önünde asılı kalıyordu
-         * (dokunmatikte `mouseenter` taklit ediliyor ama `mouseleave` hiç gelmiyor).
-         *
-         * Çare doğru soruna bakmıyordu: **tüm ipuçlarını mobilde kör etti**. Kullanıcı:
-         * *"Artık mobil ekranlarda tooltip hiç gözükmüyor gibi bir şey. Önceki gibi olsun."*
-         *
-         * Asıl sebep o düğmelerdi ve onlar aynı turda sıralama tablosundan kaldırıldı
-         * (aksiyonlar artık satır modalında). Sebep gidince çareye de gerek kalmadı.
-         * ⚠️ Aşağıdaki `onClick`-kapat DURUYOR: asılı kalma ihtimaline karşı ucuz bir emniyet
-         * ve zaten doğru davranış (tıkladıysan ipucunun işi bitti).
-         */
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        /**
-         * ⭐ Tıklamak ipucunu KAPATIR. Kullanıcı zaten eyleme geçti — ipucunun işi bitti.
-         * ⚠️ `pointerdown` DEĞİL `click`: sıra `pointerdown → focus → click` ve `focus`
-         * ipucunu yeniden açıyor. Kapatmayı zincirin sonuna koymak şart.
-         */
-        onClick={() => setOpen(false)}
+        /* ⭐ Kararın TAMAMI `tipReduce`ta ve orada gerekçeleriyle yazılı; burada yalnız
+           tarayıcı olaylarını ona bağlıyoruz. */
+        onPointerDown={(e) => dispatch({ type: 'pointerdown', pointer: e.pointerType })}
+        onPointerEnter={(e) => dispatch({ type: 'enter', pointer: e.pointerType })}
+        onPointerLeave={(e) => dispatch({ type: 'leave', pointer: e.pointerType })}
+        onFocus={() => dispatch({ type: 'focus' })}
+        onBlur={() => dispatch({ type: 'blur' })}
+        onClick={() => dispatch({ type: 'click' })}
         className={`inline-flex ${className}`}
       >
         {children}

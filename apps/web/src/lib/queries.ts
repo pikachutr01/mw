@@ -174,6 +174,12 @@ export interface CatalogBuilding extends CatalogEntry {
   nextCost: { gold: number; food: number } | null;
   /** Bir sonraki seviyenin süresi (saniye). Tavandaysa null. */
   nextSeconds: number | null;
+  /**
+   * ⭐ Saatlik üretim — yalnız üreten yapılarda (Çiftlik/Maden), diğerlerinde `null`.
+   * ⚠️ Sunucudan geliyor: oran ve dünya çarpanı panelden ayarlanabiliyor, istemcide
+   * hesaplamak ekranın yanılması demekti (aynı gerekçe `nextCost` için de geçerli).
+   */
+  production: { perHour: number; nextPerHour: number | null } | null;
 }
 
 export interface CatalogUnit extends CatalogEntry {

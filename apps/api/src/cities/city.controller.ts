@@ -15,8 +15,8 @@ import {
   defenseStructureCost, BUILDINGS, BUILDINGS_BY_ID, BUILDING_ORDER, BUILDING_REQUIREMENTS,
   DEFENSE_ORDER, TECHS, TECHS_BY_ID, TECH_ORDER, TECH_REQUIREMENTS,
   UNITS, UNITS_BY_ID, UNIT_REQUIREMENTS, WARRIOR_ORDER,
-  buildingCost, buildingTimeSeconds, orderBy, techCost, techTimeSeconds, timeFromCost,
-  trainingTimeSeconds, unitCost,
+  buildingCost, buildingTimeSeconds, farmOutput, mineOutput, orderBy, techCost, techTimeSeconds,
+  timeFromCost, trainingTimeSeconds, unitCost,
 } from '@mobilwar/catalog';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
@@ -431,6 +431,26 @@ export class CityController {
       }
       : null;
 
+    /**
+     * ⭐ ÜRETİM ÖNİZLEMESİ — Çiftlik ve Maden için "şu an" ve "sonraki seviyede" saatlik üretim
+     * (kullanıcı, 2026-08-08: yapı bilgisi kutusunda gösterilecek).
+     *
+     * ⚠️ İstemcide hesaplanmıyor, bilerek. Bu dosyanın başındaki kural: *"İstemci maliyeti KENDİ
+     * hesaplamaz; formül tek yerde kalsın diye buradan okur."* Üretim de aynı sınıfta — üstelik
+     * `foodBase`/`foodRate` panelden ayarlanabiliyor (`cfg`) ve dünya `resource_multiplier`
+     * taşıyor. İstemci kendi hesaplasaydı yönetici oranı değiştirdiği anda ekran yanılırdı.
+     *
+     * ⚠️ **Tatil sıfırlaması BURAYA UYGULANMIYOR** — ve bu bilinçli bir ayrım. Bilgi çubuğundaki
+     * sayaç `snapshot.goldPerHour`u kullanır, o tatilde 0'dır ve öyle olmalı: yanındaki sayı da
+     * donmuş. Buradaki rakam ise "bu YAPI bu seviyede ne üretir" sorusunun cevabı; tatildeyken
+     * «sv 21: 0/sa» yazmak yükseltmenin ne kazandırdığını gizlerdi.
+     */
+    const mult = Number(snap.speed.resource ?? 1);
+    const outputOf: Record<string, (lv: number) => number> = {
+      farm: (lv) => farmOutput(lv, cfg) * mult,
+      mine: (lv) => mineOutput(lv, cfg) * mult,
+    };
+
     return {
       verify,
       // ⚠️ Sıra ARAYÜZ sırasıdır (§ display-order): katalog dizisinin kendi sırası değil.
@@ -438,12 +458,17 @@ export class CityController {
         const level = snap.buildings[b.id] ?? 0;
         const next = level + 1;
         const available = next <= b.maxLevel;
+        const out = outputOf[b.id];
         return {
           id: b.id, name: b.name.tr, level, maxLevel: b.maxLevel,
           nextCost: available ? buildingCost(b.id, next, cfg) : null,
           // ⭐ Bir sonraki seviyenin SÜRESİ (saniye) — oyuncu maliyetle birlikte bunu da görmeli.
           nextSeconds: available
             ? Math.round(buildingTimeSeconds(b.id, next, architect, cfg)) : null,
+          /** Saatlik üretim; yalnız üreten yapılarda (Çiftlik/Maden), diğerlerinde `null`. */
+          production: out
+            ? { perHour: Math.floor(out(level)), nextPerHour: available ? Math.floor(out(next)) : null }
+            : null,
           requirements: BUILDING_REQUIREMENTS[b.id] ?? {},
           requirementNames: nameRequirements(BUILDING_REQUIREMENTS[b.id]),
         };

@@ -101,14 +101,20 @@ export function ResIcon({ kind, size = 18 }: { kind: 'gold' | 'food'; size?: num
  * isteyen çağıran `numClass="min-w-[9ch]"` yazar — `tnum` sayesinde `ch` gerçekten sabit.
  */
 export function Res({
-  kind, value, size = 18, className = '', numClass = '',
+  kind, value, size = 18, className = '', numClass = '', nativeTitle = true,
 }: {
   kind: 'gold' | 'food'; value: string | number; size?: number;
   className?: string; numClass?: string;
+  /**
+   * ⚠️ Tarayıcının kendi `title` balonu. Çağıran bu kaynağı **`Tooltip` içine** sarıyorsa
+   * `false` geçmeli: aksi hâlde masaüstünde iki balon üst üste çıkar (bizimki anında,
+   * tarayıcınınki bir saniye sonra imlecin altında). Bilgi çubuğu tam olarak öyle bir yer.
+   */
+  nativeTitle?: boolean;
 }) {
   return (
     <span className={`tnum inline-flex items-center gap-1.5 whitespace-nowrap ${className}`}
-      title={kind === 'gold' ? 'Altın' : 'Yemek'}>
+      title={nativeTitle ? (kind === 'gold' ? 'Altın' : 'Yemek') : undefined}>
       <ResIcon kind={kind} size={size} />
       <span className={numClass}>{value}</span>
     </span>

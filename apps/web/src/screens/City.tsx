@@ -17,15 +17,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { caveRepairSeconds, wallCurrentIntegrity } from '@mobilwar/catalog';
 import { nameOf } from '../lib/names.ts';
+import { BUILDING_INFO } from '../lib/info-texts.ts';
 import { fmt, formatDuration, gameNow, remaining, useTick } from '../lib/hooks.ts';
 import {
   useCancelCaveJob, useCancelQueue, useCatalog, useCity, useEnqueue, useMoveQueue,
-  type CatalogUnit, type CityDetail, type QueueRow, type TechQueueRow,
+  type CatalogBuilding, type CatalogUnit, type CityDetail, type QueueRow, type TechQueueRow,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import {
   AmountInput, Button, CatalogIcon, Empty, ErrorBox, Panel, Requirements, Res,
 } from '../components/ui.tsx';
+import { Popover, PopoverRow } from '../components/Popover.tsx';
 import { useConfirm } from '../components/Modal.tsx';
 import { CaveModal } from './cave-modal.tsx';
 
@@ -75,35 +77,43 @@ export function Budget({ label, used, total, hint }: { label: string; used: numb
 /**
  * Ad + parantez içinde seviye/adet (kullanıcı kararı): "Çiftlik (20)" · "Cüce (302)".
  *
- * ⭐ `info` verilirse **yalnız AD** ipucu tetikler (kullanıcı şartı: *"Sadece yapının adına
- * hover olunca tetiklensin"*). Noktalı altçizgi, "burada daha fazlası var" için bu ekranda
- * zaten kullanılan işaret.
+ * ⭐ `info` verilirse **seviyenin hemen sağında** küçük bir `i` düğmesi çıkar ve tıklanınca
+ * açıklama kutusu açılır (kullanıcı, 2026-08-08: *"parantez içindeki seviyesinin sağ tarafında
+ * ufak ikon olacak ve tıklayınca açılıp tekrar tıklayınca kapanacak"*).
  *
- * ⚠️ `onClick` ile ipucu **birlikte** yaşayabiliyor: Mağara satırı hem tıklanabilir hem
- * açıklamalı. Eskiden Mağara bu bileşeni KOPYALAMIŞTI ve ona eklenen her şey Mağara'yı
- * atlıyordu — kopya kaldırıldı.
+ * ⚠️ Açıklama neden `Tooltip` DEĞİL: bunlar iki-üç cümlelik kalıcı metinler. Hover balonu
+ * fare çekilince kaybolur, dokunmatikte okunurken kapanır ve içindeki metin seçilemez.
+ * `Popover` tıklamayla açılır ve okuyucu isteyene kadar durur — ayrımın gerekçesi orada yazılı.
+ *
+ * ⚠️ `onClick` ile bilgi düğmesi **birlikte** yaşayabiliyor: Mağara satırı hem tıklanabilir
+ * (doldurma modalı) hem açıklamalı. Eskiden Mağara bu bileşeni KOPYALAMIŞTI ve ona eklenen her
+ * şey Mağara'yı atlıyordu — kopya kaldırıldı.
  */
 function ItemName({
-  name, value, onClick, right,
+  name, value, onClick, right, info,
 }: {
   name: string;
   value: number | string;
   onClick?: () => void;
   right?: React.ReactNode;
+  info?: React.ReactNode;
 }) {
   const nameNode = <span className="font-semibold text-ink">{name}</span>;
 
   return (
-    <div className="text-[15px] leading-tight">
-      {onClick ? (
-        /* Noktalı altçizgi = "burada tıklanacak bir şey var" işareti; bu ekranda tek
-           tıklanabilir ad Mağara ve işaret olmadan tıklanabilirliği görünmüyor. */
-        <button type="button" onClick={onClick}
-          className="text-left underline decoration-dotted underline-offset-2 hover:text-accent">
-          {nameNode}
-        </button>
-      ) : nameNode}
-      <span className="tnum ml-1.5 text-accent">({value})</span>
+    <div className="flex flex-wrap items-center gap-x-1.5 text-[15px] leading-tight">
+      <span>
+        {onClick ? (
+          /* Noktalı altçizgi = "burada tıklanacak bir şey var" işareti; bu ekranda tek
+             tıklanabilir ad Mağara ve işaret olmadan tıklanabilirliği görünmüyor. */
+          <button type="button" onClick={onClick}
+            className="text-left underline decoration-dotted underline-offset-2 hover:text-accent">
+            {nameNode}
+          </button>
+        ) : nameNode}
+        <span className="tnum ml-1.5 text-accent">({value})</span>
+      </span>
+      {info ? <Popover label={`${name} hakkında bilgi`}>{info}</Popover> : null}
       {right}
     </div>
   );
@@ -275,6 +285,39 @@ const queueFor = (city: CityDetail, category: string, itemType: string): QueueRo
 
 /* ── Yapılar ────────────────────────────────────────────────────────────────── */
 
+/**
+ * Bir yapının bilgi kutusu: açıklama metni + (üreten yapılarda) saatlik üretim.
+ *
+ * ⚠️ Üretim rakamları SUNUCUDAN (`b.production`) — istemcide hesaplanmıyor. Oranlar panelden
+ * ayarlanabiliyor ve dünyanın kaynak çarpanı var; ikinci bir hesap yeri açmak, yönetici oranı
+ * değiştirdiği anda ekranın yalan söylemesi demekti (`city.controller.ts`teki aynı kural).
+ *
+ * ⚠️ Açıklaması olmayan yapı için `null` döner ve `ItemName` o satırda hiç düğme çizmez —
+ * boş bir kutu açan bir düğmeden iyidir.
+ */
+function BuildingInfo({ b }: { b: CatalogBuilding }): React.ReactElement | null {
+  const text = BUILDING_INFO[b.id];
+  const p = b.production;
+  if (!text && !p) return null;
+
+  const unit = b.id === 'farm' ? 'yemek' : 'altın';
+  return (
+    <>
+      {text ? <span className="block">{text}</span> : null}
+      {p ? (
+        <span className="mt-2 block space-y-0.5 border-t border-border pt-1.5">
+          <PopoverRow label={`Şu an (sv ${b.level})`} value={`${fmt(p.perHour)} ${unit} / saat`} />
+          {/* Tavandaki yapıda "sonraki seviye" yok — satırı hiç çizme, «—» yazma. */}
+          {p.nextPerHour != null ? (
+            <PopoverRow label={`Sonraki seviye (sv ${b.level + 1})`}
+              value={`${fmt(p.nextPerHour)} ${unit} / saat`} />
+          ) : null}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function Buildings({ city }: { city: CityDetail }) {
   const { cityId } = useActiveCity();
   const catalog = useCatalog(cityId);
@@ -334,8 +377,9 @@ function Buildings({ city }: { city: CityDetail }) {
                   <ItemName
                     name={b.name} value={b.level}
                     onClick={b.id === 'cave' && b.level > 0 ? () => setCaveOpen(true) : undefined}
+                    info={<BuildingInfo b={b} />}
                     right={b.id === 'cave' && b.level > 0 ? (
-                      <span className="tnum ml-2 text-[11px] text-muted">
+                      <span className="tnum text-[11px] text-muted">
                         {fmt(cave.usedArea)} / {fmt(cave.capacity)} alan
                       </span>
                     ) : undefined}
