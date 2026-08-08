@@ -944,20 +944,42 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'açık kalıyor. Kota YALNIZ otomatik yerleştirmeyi sınırlıyor.',
   },
   {
+    key: 'placement.neighborQuota',
+    label: 'Diyar başına komşu kotası',
+    type: 'int', default: 5, min: 1, max: 10, tag: 'design', unit: 'oyuncu',
+    description: '⭐ Bir diyarda şehri (başkent VEYA koloni) bulunan kaç FARKLI oyuncu varsa '
+      + 'oraya artık yeni başkent atanmaz. Başkent kotasından farkı: koloniler de sayılır.',
+    note: 'Kullanıcı isteği (2026-08-08): «başkent olmasa bile başka oyuncuların şehirleri '
+      + 'varsa oraya başkent atanmamalı, çok kalabalık yapıyorlar.» Yoldaki şehir kurma '
+      + 'görevleri de sayılır — o yer zaten rezerve.',
+  },
+  {
     key: 'placement.targetOccupancy',
     label: 'Cephe hedef doluluğu',
-    type: 'number', default: 0.6, min: 0.1, max: 1, tag: 'design',
-    description: 'Açık yerleşim bölgesinin ne kadar dolu tutulacağı. 0,60 = bölge hep ~%60 '
-      + 'dolu. Büyütürsen oyuncular birbirine yakın doğar; küçültürsen dünya seyrelir.',
+    type: 'number', default: 0.3, min: 0.1, max: 1, tag: 'design',
+    description: 'Cephe diyarı başına hedeflenen ortalama başkent = bu × başkent kotası. '
+      + '0,30 × 5 = ~1,5. Büyütürsen oyuncular birbirine yakın doğar; küçültürsen dünya seyrelir.',
     note: 'Açık bölge [1..N] ÖNEKİ olduğu için eski diyarlar daima aday kalır — «dünya '
-      + 'büyüdükçe geriye dönüp serpiştir» kuralı bu doluluk ağırlığından kendiliğinden çıkıyor.',
+      + 'büyüdükçe geriye dönüp serpiştir» kuralı bu doluluk ağırlığından kendiliğinden çıkıyor. '
+      + '⚠️ Bu TEK BAŞINA cepheyi büyütmeye yetmez; asıl garanti «boş diyar rezervi».',
   },
   {
     key: 'placement.minOpenDistricts',
     label: 'En az açık diyar',
-    type: 'int', default: 8, min: 1, max: 500, tag: 'design', unit: 'adet',
+    type: 'int', default: 16, min: 1, max: 500, tag: 'design', unit: 'adet',
     description: 'Dünya bomboşken bile bu kadar diyar açık tutulur. İlk oyuncuların hepsinin '
       + 'tek diyara yığılmasını engeller.',
+  },
+  {
+    key: 'placement.emptyReserve',
+    label: 'Boş diyar rezervi',
+    type: 'int', default: 12, min: 0, max: 200, tag: 'design', unit: 'adet',
+    description: '⭐ Açık bölgede HER ZAMAN bulunması garanti edilen bomboş diyar sayısı. '
+      + 'Cephe «dolu diyar sayısı + bu kadar» genişler, yani yeni oyuncunun önünde daima '
+      + 'taze toprak olur.',
+    note: 'Bu olmadan cephe yalnız nüfusla büyüyordu (oyuncu başına 1/3 diyar) ve nüfusu asla '
+      + 'geçemiyordu: canlıda 23 başkent → cephe tam 8 diyar, 9. diyar aday bile değildi. '
+      + '0 yazarsan o davranışa dönersin.',
   },
   {
     key: 'placement.sampleSize',
@@ -971,16 +993,20 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'placement.neighborIdeal',
     label: 'İdeal komşu sayısı',
-    type: 'number', default: 2, min: 0, max: 10, tag: 'design', unit: 'adet',
-    description: '⭐ Yeni oyuncunun düşmeyi TERCİH ettiği başkent sayısı. 2 = «yanımda birkaç '
-      + 'komşu olsun ama kalabalık olmasın». 0 yaparsan herkes ıssız diyarlara dağılır.',
-    note: 'Bu çarpan tasarımın özü: boş diyar (n=0) ağırlık 0,25 · n=1 → 0,71 · n=2 → 1,00 · '
-      + 'n=4 → 0,25. Kimse ıssız çölde tek başına uyanmaz, kimse 5 kişinin ortasına düşmez.',
+    type: 'number', default: 1, min: 0, max: 10, tag: 'design', unit: 'oyuncu',
+    description: '⭐ Yeni oyuncunun düşmeyi TERCİH ettiği KOMŞU (farklı oyuncu) sayısı. '
+      + '1 = «yanımda bir komşu olsun ama kalabalık olmasın». 0 yaparsan herkes ıssız '
+      + 'diyarlara dağılır.',
+    note: 'Bu çarpan tasarımın özü. Varsayılan σ=0,9 ile ağırlıklar: boş 0,54 · 1 komşu 0,85 · '
+      + '2 → 0,39 · 3 → 0,050 · 4 → 0,0027. Tek komşulu diyar en cazip aday olduğu için kimse '
+      + 'ıssız çölde yalnız kalmaz; buna karşılık 4 komşulu diyar, boş diyardan 200 kat daha '
+      + 'düşük ihtimalli. ⚠️ 2026-08-08 öncesi bu 2 idi ve o oran yalnız 2 kattı — kullanıcının '
+      + '«5 başkentli diyara doluşuyorlar» şikâyetinin kaynağı.',
   },
   {
     key: 'placement.neighborSigma',
     label: 'Komşuluk toleransı',
-    type: 'number', default: 1.2, min: 0.1, max: 5, tag: 'design',
+    type: 'number', default: 0.9, min: 0.1, max: 5, tag: 'design',
     description: 'İdeal komşu sayısından sapmanın ne kadar cezalandırılacağı. Büyütmek '
       + 'tercihi düzleştirir (fark etmez hâle getirir), küçültmek katılaştırır.',
   },
@@ -1008,6 +1034,28 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'sayılacak.',
     note: 'Tüm dünyanın ortalaması DEĞİL — çıpa yeni oyuncunun kuşağı olmalı, yoksa dünya '
       + 'yaşlandıkça çıpa yükselir ve güç uyumu kendiliğinden işlevsizleşirdi.',
+  },
+  {
+    key: 'placement.minThreatAnchor',
+    label: 'Tehdit çıpası tabanı',
+    type: 'number', default: 250, min: 0, max: 1_000_000, tag: 'design', unit: 'puan',
+    description: '⭐ Çıpa (medyan puan) bunun altındaysa bunun yerine bu kullanılır. Bu tabanın '
+      + 'altındaki her puan «eşit derecede zayıf» sayılır.',
+    note: '⚠️ Bu taban 2026-08-08\'e kadar YOKTU ve algoritmayı bozuyordu: yeni dünyada '
+      + 'oyuncuların çoğu sıfır puanlı olduğu için medyan 0\'a yapışıyordu (canlıda 23 '
+      + 'oyuncunun 9\'u sıfır → çıpa 7). Tehdit binlerken oran 1600 çıkıyor ve güç uyumu '
+      + 'diğer iki çarpanı tamamen eziyordu. 0 yazarsan o davranışa dönersin.',
+  },
+  {
+    key: 'placement.threatFloor',
+    label: 'Güç uyumu alt sınırı',
+    type: 'number', default: 0.15, min: 0.001, max: 1, tag: 'design',
+    description: '⭐ Güç uyumu çarpanının inebileceği en düşük değer. 0,15 = güç uyumu bir '
+      + 'diyarı en fazla ~7 kat cezalandırabilir. 1 yazarsan güç uyumu tamamen etkisizleşir.',
+    note: 'Skor üç çarpanın ÇARPIMI olduğu için ölçeği kaçan bir çarpan diğer ikisini yok '
+      + 'eder. Canlıda tam bu oldu: güç uyumu 0,00001\'e inip boşluk ve komşuluk tercihlerini '
+      + 'anlamsız kıldı. Bu sınır, çarpanı belgelenmiş rolüne — yumuşak ağırlık, sert dışlama '
+      + 'değil — geri döndürüyor.',
   },
 
   /* ── Çoklu hesap tespiti (§9.1) ──────────────────────────────────────────────

@@ -1644,22 +1644,37 @@ safhada herkesi aynı diyara yığma ama birbirinden de koparma · dünya büyü
 > transaction'ı dünya başına `pg_advisory_xact_lock` alıyor — yerleşim saniyede bir bile
 > olmayan bir işlem, sıraya sokmanın ölçülebilir maliyeti yok.
 
+> ⚠️⚠️ **2026-08-08 — ALGORİTMA CANLIDA TERS ÇALIŞIYORDU, ONARILDI.** Kullanıcı bildirdi:
+> *"kayıt olan herkes ilk 7 diyara doluşmuş; bazı diyara 5 başkent, bazısına 1. Bir sürü boş
+> diyar varken 5. başkentin 4 başkentli diyara düşmesi çok çok düşük ihtimal olmalı."* Canlı
+> veriyle (23 başkent / 34 şehir) skor bileşenleri birebir yeniden hesaplandı → §13.6.6.
+> Aşağıdaki §13.6.2–13.6.4 **onarım sonrası** hâli anlatır.
+
 ### 13.6.1 Yapı
 - Diyar başına **10 şehir yeri**. Bunların en fazla **`BAŞKENT_KOTA = 5`**'i *otomatik yerleştirme*
   ile yeni hesap başkentine verilir; kalan yerler serbesttir. **Koloniler için kota YOK** — oyuncu
   boş olan herhangi bir boş şehri seçebilir (§13.6.5). Kota yalnız otomatik yerleştirmeyi sınırlar,
   yani "yeni oyuncu akını tek diyara yığılmasın" amacına hizmet eder.
+- ⭐ **`KOMŞU_KOTA = 5` (2026-08-08):** diyarda şehri (başkent **veya koloni**) bulunan farklı oyuncu
+  sayısı buna ulaşırsa oraya artık otomatik başkent atanmaz. Kullanıcı: *"başkent olmasa bile başka
+  oyuncuların şehirleri varsa oraya başkent atanmamalı, çok kalabalık yapıyorlar."*
 - Global diyar sırası: `g = (kıta−1)×500 + diyar` → 1..5000. Yerleşim g=1'den başlar, sağa büyür.
 
 ### 13.6.2 Yerleşim cephesi (açık bölge) — nefes payı sabit tutulur
 ```
-açıkDiyar = clamp( ceil( oyuncuSayısı / (HEDEF_DOLULUK × BAŞKENT_KOTA) ), MIN_AÇIK, 5000 )
-HEDEF_DOLULUK = 0.60      MIN_AÇIK = 8
+açıkDiyar = clamp( max( ceil((başkent+1) / (HEDEF_DOLULUK × BAŞKENT_KOTA)),   // nüfus tabanı
+                        doluDiyar + BOŞ_REZERV ),                             // ⭐ rezerv tabanı
+                   MIN_AÇIK, 5000 )
+HEDEF_DOLULUK = 0.30     BOŞ_REZERV = 12     MIN_AÇIK = 16
 ```
-Açık bölge oyuncu sayısıyla **orantılı** büyür ve doluluk hep ~%60'ta kalır: ne tıkış tıkış, ne hayalet.
-Örnek: 3 oyuncu → 8 diyar · 100 oyuncu → 34 diyar · 1.000 → 334 · 5.000 → 1.667 diyar.
 Açık bölge bir **önek** [1..açıkDiyar] olduğu için eski diyarlar **daima aday kalır** → "geriye dönüp
 serpiştirme" ayrı bir mekanizma gerektirmez, doluluk ağırlığından kendiliğinden çıkar.
+
+⭐ **Rezerv tabanı asıl olandır.** Yalnız nüfus tabanı varken cephe oyuncu başına 1/3 diyar büyüyordu,
+yani nüfusu **asla geçemiyordu**: canlıda 23 başkent → cephe tam 8 diyar, 9. diyar ağırlık tablosunun
+tepesindeyken aday bile değildi. Rezerv, *"her zaman en az 12 bomboş diyar açık olsun"* kuralını
+doğrudan yazar; artık "yeni diyar açılması" bir yan etki değil bir garanti. Dolu diyar sayımına
+yoldaki `found_city` hedefleri de girer (o diyar boş değil).
 
 ### 13.6.3 Aday skorlaması — üç çarpan
 Açık bölgeden **rastgele 60 diyarlık örneklem** alınır (O(1) maliyet + kümelenmeyi kırar), her aday
@@ -1669,30 +1684,41 @@ halde herkes aynı yere gider):
 ```
 skor(d) = A(d) × B(d) × C(d)
 
-A(d) = (1 − doluluk(d))^1.5                        // boş diyar tercihi
-B(d) = exp( −(n(d) − 2)² / (2·1.2²) )              // KOMŞULUK: ideal 2 başkent
-C(d) = 1 / (1 + (tehdit(d) / tehdit_ref)^1.5)      // GÜÇ UYUMU
+A(d) = (1 − doluluk(d))^1.5                                  // boş diyar tercihi
+B(d) = exp( −(komşu(d) − 1)² / (2·0.9²) )                    // KOMŞULUK: ideal 1 komşu
+C(d) = max( TABAN_C , 1 / (1 + (tehdit(d)/tehdit_ref)^1.5) ) // GÜÇ UYUMU
+TABAN_C = 0.15     tehdit_ref = max(medyan, ÇIPA_TABANI=250)
 ```
-- **B — Gauss komşuluk tercihi (bu tasarımın özü):** boş diyar (n=0) ağırlık 0,25; n=1 → 0,71;
-  **n=2 → 1,00**; n=3 → 0,71; n=4 → 0,25. Yani yeni oyuncu **1-2 komşusu olan** diyara düşmeyi tercih
-  eder. Sonuç: kimse ıssız çölde tek başına uyanmaz (hedef ve müttefik bulur), kimse 5 kişinin ortasına
-  düşmez. Diyarlar doğal olarak 2-3 başkentte doyar, 5'e nadiren ulaşır.
+- ⭐ **`komşu(d)` = diyarda şehri olan FARKLI oyuncu sayısı** (başkent + koloni + yoldaki şehir kurma
+  görevi). Başkent sayısı DEĞİL: kalabalığı yapan şey kaç farklı oyuncuyla yan yana olduğundur.
+  Bir oyuncunun 3 kolonisi tek komşudur; 3 farklı oyuncunun birer kolonisi üç komşudur.
+- **B — Gauss komşuluk tercihi (bu tasarımın özü):** boş diyar 0,54 · **1 komşu → 0,85 (tepe)** ·
+  2 → 0,39 · 3 → 0,050 · 4 → 0,0027. **Tek komşulu diyar en cazip aday** olduğu için kimse ıssız çölde
+  yalnız uyanmaz; buna karşılık 4 komşulu diyar, boş diyardan **200 kat** düşük ihtimallidir.
+  ⚠️ Eskiden tepe 2'deydi (σ=1,2) ve bu oran yalnız **2 kat**tı — şikâyetin kaynağı. Kota artık bir
+  **TAVAN**, hedef değil: diyarlar 1-2 komşuda doyar, 5'e ancak dünya dolarken ulaşır.
 - **C — güç uyumu (çoğu oyunda atlanan kısım):** `tehdit(d)` = d ve iki komşu diyarındaki oyuncuların
-  **75. persentil puanı**; `tehdit_ref` = son 14 günde kayıt olmuş oyuncuların medyan puanı (taban
-  değerle korunur). Böylece yeni oyuncu **kendi kuşağının yanına** düşer; 3 aylık bir devin bitişiğinde
-  uyanmaz. Sert dışlama değil yumuşak ağırlık → dünya doyduğunda yine de yer bulunur.
-- Sert filtreler (skorlamadan önce): boş başkent yeri var · dünya durumu uygun · diyar yasaklı değil.
+  **75. persentil puanı**; `tehdit_ref` = son 14 günde kayıt olmuş oyuncuların medyan puanı, **250
+  tabanıyla korunur**. Böylece yeni oyuncu **kendi kuşağının yanına** düşer; 3 aylık bir devin
+  bitişiğinde uyanmaz. ⚠️ Sert dışlama değil yumuşak ağırlık — bu, `TABAN_C = 0,15` ile artık
+  **yapısal olarak** güvence altında: C bir diyarı en fazla ~7 kat cezalandırabilir.
+- Sert filtreler (skorlamadan önce): boş şehir yeri var · `başkent < BAŞKENT_KOTA` ·
+  ⭐ `komşu < KOMŞU_KOTA` · dünya durumu uygun.
+- ⭐ Örneklemin tamamı elenirse **önce ilk tamamen boş diyar** denenir; eski "en küçük boş indeks"
+  yolu (yani 1:1:x) yalnızca hiç boş diyar kalmadıysa çalışır.
 
 ### 13.6.4 Neden bu üçlü yeterli
 | İstenen | Sağlayan |
 |---|---|
 | 1. kıtanın erken diyarlarından başla | açık bölge = [1..N] öneki |
-| diyar başına max 4-5 başkent | `BAŞKENT_KOTA` sert sınır + A(d) yumuşak baskı |
-| erken safhada tek diyara yığılmasın | `MIN_AÇIK = 8` + A(d) |
-| birbirinden çok uzağa atmasın | B(d) Gauss (n*=2) — ıssız diyar cazip değil |
-| kotayı erken doldurmasın | `HEDEF_DOLULUK = 0.60` (cephe oyuncu sayısıyla büyür) |
+| diyar başına max 4-5 başkent | `BAŞKENT_KOTA` + ⭐ `KOMŞU_KOTA` sert sınır + A(d) yumuşak baskı |
+| erken safhada tek diyara yığılmasın | `MIN_AÇIK = 16` + ⭐ `BOŞ_REZERV = 12` + A(d) |
+| birbirinden çok uzağa atmasın | B(d) Gauss (tepe = 1 komşu) — ıssız diyar tek komşuludan cazip değil |
+| ⭐ kalabalık diyara düşmesin | B(d) çok dik: 4 komşulu diyar boş diyardan 200 kat düşük |
+| ⭐ koloniler de kalabalık saysın | `komşu(d)` başkent değil FARKLI OYUNCU sayar |
+| kotayı erken doldurmasın | `BOŞ_REZERV` (cephe dolu diyarların hep önünde) |
 | büyüdükçe geriye serpiştirme | açık bölge önek olduğundan eski diyarlar hep aday; terk edilen şehir yerleri A(d)'yi yükseltir |
-| adalet | tehdit uyumu C(d) |
+| adalet | tehdit uyumu C(d), `TABAN_C` ile sınırlı |
 
 ### 13.6.5 Uygulama notları
 - Seçim **tohumlu** (`hash(world_seed, player_id)`) → tekrar üretilebilir ve denetlenebilir.
@@ -1713,6 +1739,46 @@ C(d) = 1 / (1 + (tehdit(d) / tehdit_ref)^1.5)      // GÜÇ UYUMU
   > gitmez, sefer süresi saatlerce sürer (§13.5). Bu bir kural değil, oyuncunun bilinçli riski olmalı.
   > Yeni oyuncu yeri sıkışırsa yerleşim cephesi (§13.6.2) kendiliğinden yeni diyar açar; ek kural gerekmez.
 - Tüm sabitler `world_config`'te (§13.7) → dünya bazında ayarlanabilir.
+
+### 13.6.6 ⭐⭐ CANLI ARIZA VE ONARIMI (2026-08-08)
+
+Kullanıcı 8 Ağustos'ta bildirdi: *"Şu an kayıt olan oyuncuların hepsi ilk 7 diyara doluşmuş… Bazı
+diyarlara 5 başkent atanırken bazılarına 1 atanmış. Bir sürü boş diyar varken beşinci şehrin 4
+başkentli bir diyara düşmesi çok çok düşük ihtimal olmalı."* Canlı veritabanında (23 başkent /
+34 şehir / 8 dolu diyar) skorun üç bileşeni **birebir yeniden hesaplandı**:
+
+| g | başkent | şehir | A | B | C | ağırlık |
+|---|---|---|---|---|---|---|
+| 1 | **5** | 5 | 0,354 | 0,044 | 3,1e-3 | **4,9e-5** ← en yüksek |
+| 4 | 1 | 1 | 0,854 | 0,707 | 1,6e-5 | 9,6e-6 |
+| 8 | 0 | 0 | 1,000 | 0,249 | 1,2e-5 | 3,0e-6 |
+| 9+ | 0 | 0 | 1,000 | 0,249 | 1,0 | **0,249** ← aday DEĞİL |
+
+**Üç bağımsız arıza:**
+
+1. **Cephe 8 diyarda kilitliydi.** `ceil(24/(0,6×5)) = 8` ve `MIN_AÇIK` de 8 → açık bölge tam
+   `[1..8]`. Tablonun tepesindeki 9. diyar örnekleme hiç girmiyordu. Cephe oyuncu başına 1/3 diyar
+   büyüdüğü için nüfusu asla geçemiyor, "yeni diyar açma" olayı pratikte hiç gerçekleşmiyordu.
+2. **Tehdit çıpası çöktü, C diktatör oldu.** Çıpa = son 14 günün medyan puanı = **7** (23 oyuncunun
+   9'u sıfır puanlı). Tehdit = komşuluğun 75. persentili = binler → oran ~1600, üssü 1,5 → C **1e-5**.
+   Yumuşak olması gereken çarpan, beş büyüklük mertebesiyle A ve B'yi tamamen bastırdı.
+   ⭐ Ve etkisi tasarımın **tersineydi:** g=1'i kayırıyordu, çünkü g=1'in komşuluğunda güçlü oyuncu
+   yoktu — g=1'in komşuluğu zayıftı, çünkü bütün yeni oyuncular oraya yığılmıştı. Kendini besleyen
+   döngü: son üç kayıt (Sauron · SAVARONA · ShoWTiMe) **üçü de** g=1'e düşüp diyarı 2'den 5'e çıkardı.
+   ⚠️ §13.6.3 zaten *"taban değerle korunur"* diyordu; **o taban koda hiç yazılmamıştı.**
+3. **Kota yalnız başkent sayıyordu.** g=3'te 9 şehir / 6 farklı oyuncu vardı ama başkent 4 olduğu
+   için hâlâ adaydı.
+
+**Neden testler yakalamadı** — `placement.test.ts`'in dağılım testleri her oyuncuyu `score = 0` ile
+yaratıyordu. O zaman çıpa 0 olur, kodun `anchor <= 0 ? 1 : …` koruması devreye girer ve **C her adayda
+1 çıkar**: 200 kayıtlık test, canlıyı bozan çarpanı hiç çalıştırmamıştı. C'yi sınayan tek test ise
+iki oyuncu kullanıyordu (5.000.000 ve 0 → çıpa 2,5M), yani sağlıklı ölçekteydi. Arıza bölgesi —
+çıpa≈0 **ve** tehdit≫0 — test takımından **yapısal olarak erişilemezdi**. Yeni bekçiler puanları
+açıkça veriyor ve eski davranışı ayarlardan geri getirip ölçümün gerçekten ayrım yaptığını kanıtlıyor.
+
+**Onarım sonrası ölçüm** (canlı dünya birebir tohumlanıp 20 yeni kayıt simüle edildi):
+yeni başkentler **14 ayrı diyara** dağıldı (2·4·9·10·11·14·15·17·18·21·22·23·25·26); kalabalık
+g=1 · g=3 · g=7'ye **hiç** başkent atanmadı.
 
 ---
 
@@ -1767,9 +1833,11 @@ JSONB config hâlâ gelecek işi; bugün fiilen çalışan model `worlds` tablos
            "districtWeight": 20, "continentWeight": 4000, "k": 600, "p": 0.46,
            "baseArmySeconds": 600, "baseSpySeconds": 120, "capHours": 18,
            "cartographyStep": 0.05 },
-  "settlement": { "capitalQuota": 5, "targetDensity": 0.60, "minOpen": 8,
-                  "sampleSize": 60, "idealNeighbors": 2, "neighborSigma": 1.2,
-                  "threatExponent": 1.5 },
+  "settlement": { "capitalQuota": 5, "neighborQuota": 5,      // ⭐ komşu kotası: koloniler de sayılır
+                  "targetDensity": 0.30, "minOpen": 16, "emptyReserve": 12,
+                  "sampleSize": 60, "idealNeighbors": 1, "neighborSigma": 0.9,
+                  "threatExponent": 1.5, "minThreatAnchor": 250, "threatFloor": 0.15 },
+                  // ⚠️ Bu değerler 2026-08-08'de değişti — gerekçe ve canlı ölçüm §13.6.6'da.
   // NOT: koloni konum kısıtı YOK (kullanıcı kararı). İleride istenirse buraya
   // "colonyMaxDistrict" eklenip CityFoundService tek yerden kısıtlanabilir.
   "rules": { "dailyAttackLimit": 3, "beginnerProtectionHours": 72,
