@@ -601,7 +601,13 @@ describe('casusluk', () => {
     // Savunmasız şehir: hiç kuş vurulmadı ama rapor YİNE düştü.
     const savunan = (await messagesOf(rival)).find((x) => x['kind'] === 'spy_report');
     expect(savunan).toBeDefined();
-    expect(savunan!['subject']).toBe('Casusluk Önleme Raporu');
+    /**
+     * ⭐ Başlıkta CASUSLUK YAPANIN ADI (kullanıcı, 2026-08-08). Bilgi zaten gövdedeydi
+     * (`route.origin.owner`), eksik olan posta listesiydi: savunan raporu açmadan «kim»
+     * sorusunu cevaplayamıyordu.
+     */
+    expect(String(savunan!['subject'])).toMatch(/^Casusluk Önleme Raporu · /);
+    expect(String((savunan!['body'] as Record<string, unknown>)['spyPlayer'])).toBeTruthy();
     const body = savunan!['body'] as Record<string, unknown>;
     expect(body['birdsSent']).toBe(8);
     expect(body['birdsShot']).toBe(0);

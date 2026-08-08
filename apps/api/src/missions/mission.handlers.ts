@@ -211,9 +211,18 @@ export function createSpyHandler(): MissionHandler {
     const intel = gotIntel ? await gatherIntel(ctx.tx, targetCityId!, target.playerId, level) : null;
     await writeMessage(ctx, {
       playerId: spyPlayerId, kind: 'spy_report', side: 'spy',
+      /**
+       * ⭐ BAŞLIKTA RAKİBİN ADI (kullanıcı, 2026-08-08). Gövdede `route.target.owner` zaten
+       * vardı (`report-route.ts`) ama posta LİSTESİNDE yalnız başlık görünüyor — oyuncunun
+       * "bu rapor kiminle ilgili" sorusunu raporu açmadan cevaplaması gerekiyor.
+       * ⚠️ Şehir adı KALDIRILMADI, kullanıcı adı ONA EKLENDİ: şehir adı oyuncunun kendi
+       * kullandığı işaret (aynı oyuncunun beş şehri olabilir), kullanıcı adı ise kimliği.
+       */
       subject: gotIntel
-        ? `Casusluk raporu · ${target.name}`
-        : (hit.survivors <= 0 ? 'Casus kuşların vuruldu' : 'Casusluk engellendi'),
+        ? `Casusluk raporu · ${target.name} (${target.username})`
+        : (hit.survivors <= 0
+          ? `Casus kuşların vuruldu · ${target.username}`
+          : `Casusluk engellendi · ${target.username}`),
       body: {
         targetCityId, targetCityName: target.name, targetPlayer: target.username,
         birdsSent: birds, birdsLost: hit.killed, birdsBlocked: hit.blocked,
@@ -225,11 +234,23 @@ export function createSpyHandler(): MissionHandler {
     /* ── ⭐ CASUSLUK ÖNLEME RAPORU — savunan HER casuslukta alır (kullanıcı, 2026-07-30).
      * Eski kural yalnız kuş vurulduysa haber veriyordu; artık sessiz casusluk YOK: kaç kuş
      * geldi, kaçı vuruldu/engellendi ve hangi bilginin sızdığı savunana da yazılır. */
+    /**
+     * ⭐ Casusluk yapanın adı — ÖNLEME raporunda bugüne kadar hiç yoktu (kullanıcı, 2026-08-08).
+     *
+     * ⚠️ Bilgi zaten sızıyordu: `routeOf` her rapor gövdesine `route.origin.owner`ı yazıyor,
+     * yani savunan raporu AÇINCA kimin casusluk yaptığını görebiliyordu. Eksik olan yalnız
+     * posta listesindeki başlıktı — "kim" sorusu raporu açmadan cevaplanamıyordu. Yani bu
+     * ek bir istihbarat sızıntısı DEĞİL, var olanın görünür hâle gelmesi.
+     */
+    const spyName = await usernameOf(ctx.tx, spyPlayerId);
+
     await writeMessage(ctx, {
       playerId: target.playerId, kind: 'spy_report', side: 'target',
-      subject: 'Casusluk Önleme Raporu',
+      subject: `Casusluk Önleme Raporu · ${spyName}`,
       body: {
         cityId: targetCityId,
+        /** Casusluğu yapan — gövdede de dursun ki ekran başlığı ayrıştırmak zorunda kalmasın. */
+        spyPlayer: spyName,
         birdsSent: birds, birdsShot: hit.killed, birdsBlocked: hit.blocked,
         /** Rakibin aldığı bilgi kademesi — sızma yoksa null. */
         leakedLevel: gotIntel ? level : null,
@@ -632,6 +653,18 @@ async function loadMissionHeroNames(tx: Tx, missionId: number): Promise<string[]
      ORDER BY h.level DESC, h.name
   `);
   return rows.map((r: Record<string, unknown>) => String(r['name']));
+}
+
+/**
+ * Tek oyuncunun kullanıcı adı. ⚠️ `loadCityOwner`ın şehir üzerinden gitmeyen hâli: casusluğu
+ * YAPAN taraf için elimizde yalnız `playerId` var (kaynak şehir görev satırında ama raporun
+ * başlığı şehri değil kişiyi soruyor).
+ */
+async function usernameOf(tx: Tx, playerId: number): Promise<string> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT username FROM players WHERE id = ${playerId}
+  `);
+  return rows[0] ? String(rows[0]['username']) : '—';
 }
 
 async function loadCityOwner(

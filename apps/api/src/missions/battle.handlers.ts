@@ -1153,6 +1153,25 @@ async function writeBattleReports(ctx: HandlerContext, o: {
   };
 }): Promise<void> {
   const won = o.result.winner === 'attacker';
+
+  /**
+   * ⭐ RAPOR BAŞLIĞINDA RAKİBİN ADI (kullanıcı, 2026-08-08).
+   *
+   * ⚠️ Bilgi zaten raporun İÇİNDEydi (`coords.origin.owner` / `coords.target.owner`,
+   * 2026-08-07). Eksik olan posta LİSTESİydi: orada yalnız başlık görünüyor ve
+   * *"Saldırın püskürtüldü"* satırı kime karşı olduğunu söylemiyordu — oyuncu üst üste
+   * saldırdığında raporları birbirinden ayıramıyordu.
+   *
+   * ⚠️ Tek sorgu, iki oyuncu. Savaş seyrek bir olay; `report-route.ts`teki aynı gerekçe.
+   */
+  const nameRows = await ctx.tx.execute<Record<string, unknown>>(sql`
+    SELECT id, username FROM players WHERE id IN (${o.attackerPlayerId}, ${o.defenderPlayerId})
+  `);
+  const playerName = (pid: number): string =>
+    String(nameRows.find((r: Record<string, unknown>) => Number(r['id']) === pid)?.['username'] ?? '—');
+  const attackerName = playerName(o.attackerPlayerId);
+  const defenderName = playerName(o.defenderPlayerId);
+
   const base = {
     battleId: o.battleId,
     winner: o.result.winner,
@@ -1186,9 +1205,11 @@ async function writeBattleReports(ctx: HandlerContext, o: {
     kind: 'battle_report',
     side: 'attacker',
     battleId: o.battleId,
-    subject: won ? 'Saldırın başarılı' : 'Saldırın püskürtüldü',
+    subject: `${won ? 'Saldırın başarılı' : 'Saldırın püskürtüldü'} · ${defenderName}`,
     body: {
       ...base,
+      /** Rakibin adı gövdede de dursun — ekran başlığı ayrıştırmak zorunda kalmasın. */
+      opponent: defenderName,
       targetCityId: o.targetCityId,
       lost: o.result.attacker.lost,
       survivors: o.result.attacker.counts,
@@ -1211,9 +1232,10 @@ async function writeBattleReports(ctx: HandlerContext, o: {
     kind: 'battle_report',
     side: 'defender',
     battleId: o.battleId,
-    subject: won ? 'Şehrin yağmalandı' : 'Saldırıyı püskürttün',
+    subject: `${won ? 'Şehrin yağmalandı' : 'Saldırıyı püskürttün'} · ${attackerName}`,
     body: {
       ...base,
+      opponent: attackerName,
       cityId: o.targetCityId,
       lost: o.result.defender.lost,
       survivors: o.result.defender.counts,

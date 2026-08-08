@@ -156,6 +156,80 @@ describe('mağara', () => {
     expect(dwarvesToBreakCave(1, 4)).toBe(83);
   });
 
+  /**
+   * ⭐⭐ **ÖLÇÜLEN TABLONUN TAMAMI** — `docs/veri/cuce-magara.md` (kaynak: `cuce-magara.png`).
+   *
+   * ⚠️ Bugüne kadar bu formülün yalnız **10 örnek hücresi** test ediliyordu. 120 hücrenin
+   * 10'unu kontrol etmek, iki modeli birbirinden ayırmaya yetmez: Demircilik etkisinin
+   * TOPLAMSAL (`1 + 0,05·d`) mı yoksa ÜSSEL (`0,95^d`) mı olduğu ancak yüksek seviyelerde
+   * ayrışıyor ve seçilen örnekler oraya değmiyordu. Fark küçük değil — Demircilik 30'da
+   * toplamsal model 1/2,5 = 0,40, üssel model 0,95³⁰ = 0,21 veriyor, yani **iki kat**.
+   *
+   * ⚠️ **Tabloda BİR basım hatası var ve bilerek dışarıda:** Demircilik 4 · Mağara 22 →
+   * tabloda 415.667, formül 415.657. Hücre tablonun KENDİ ×1,5 zinciriyle de tutmuyor
+   * (277.105 × 1,5 = 415.657,5), yani rakam basımında 5↔6 yer değiştirmiş. Kalan **119/120
+   * hücre birebir** tutuyor — bu, formülün ölçümden türediğinin kanıtı.
+   */
+  const CUCE_MAGARA: Readonly<Record<number, readonly number[]>> = {
+    0: [100, 150, 225, 338, 506, 759, 1139, 1709, 2563, 3844, 5767, 8650, 12975, 19462, 29193,
+      43789, 65684, 98526, 147789, 221684, 332526, 498789, 748183, 1122274],
+    1: [95, 143, 214, 321, 482, 723, 1085, 1627, 2441, 3661, 5492, 8238, 12357, 18535, 27803,
+      41704, 62556, 93834, 140752, 211127, 316691, 475037, 712555, 1068833],
+    2: [91, 136, 205, 307, 460, 690, 1036, 1553, 2330, 3495, 5242, 7863, 11795, 17693, 26539,
+      39809, 59713, 89569, 134354, 201531, 302296, 453444, 680166, 1020249],
+    3: [87, 130, 196, 293, 440, 660, 990, 1486, 2229, 3343, 5014, 7522, 11282, 16923, 25385,
+      38078, 57117, 85675, 128512, 192769, 289153, 433729, 650594, 975891],
+    4: [83, 125, 188, 281, 422, 633, 949, 1424, 2136, 3204, 4805, 7208, 10812, 16218, 24327,
+      36491, 54737, 82105, 123158, 184736, 277105, 415667, 623486, 935228],
+  };
+  /** Bilinen basım hatası: `[demircilik, mağara seviyesi]`. */
+  const BASIM_HATASI: readonly (readonly [number, number])[] = [[4, 22]];
+
+  it('⭐ ölçülen tablonun 119/120 hücresi birebir tutuyor', () => {
+    const sapan: string[] = [];
+    let kontrol = 0;
+    for (const [dStr, satır] of Object.entries(CUCE_MAGARA)) {
+      const d = Number(dStr);
+      satır.forEach((beklenen, i) => {
+        const seviye = i + 1;
+        if (BASIM_HATASI.some(([bd, bs]) => bd === d && bs === seviye)) return;
+        kontrol++;
+        const bulunan = dwarvesToBreakCave(seviye, d);
+        if (bulunan !== beklenen) {
+          sapan.push(`Demircilik ${d} · Mağara ${seviye}: tablo ${beklenen}, formül ${bulunan}`);
+        }
+      });
+    }
+    expect(kontrol).toBe(119);
+    expect(sapan, `ölçümden sapan hücreler:\n${sapan.join('\n')}`).toEqual([]);
+  });
+
+  /**
+   * ⚠️ Basım hatasının **hâlâ hata olduğunu** kilitliyor. Bir gün tabloyu yeniden okuyup
+   * 415.657 yazan biri çıkarsa bu test kırılır ve muafiyetin kaldırılması gerektiğini söyler —
+   * yani muafiyet sessizce kalıcı bir örtü hâline gelemez.
+   */
+  it('bilinen basım hatası hücresi hâlâ ölçümden 10 sapıyor', () => {
+    expect(dwarvesToBreakCave(22, 4)).toBe(415_657);
+    expect(CUCE_MAGARA[4]![21]).toBe(415_667);
+    // Tablonun kendi ×1,5 zinciri de formülü doğruluyor, basılı sayıyı değil.
+    expect(Math.round(CUCE_MAGARA[4]![20]! * 1.5)).toBe(415_658);
+  });
+
+  /**
+   * ⭐ MODEL AYRIMI — toplamsal payda mı, üssel mi? Tablo yalnız Demircilik 0-4'ü veriyor;
+   * asıl fark yüksek seviyede doğuyor ve orada ölçüm yok. Bu test seçimi AÇIKÇA yazıyor ki
+   * biri "0,95^d daha doğal durur" deyip değiştirmesin.
+   */
+  it('demircilik etkisi TOPLAMSAL paydadır, üssel değil', () => {
+    // 1 + 0,05×30 = 2,5 → 100/2,5 = 40. Üssel olsaydı 100 × 0,95³⁰ ≈ 21 olurdu.
+    expect(dwarvesToBreakCave(1, 30)).toBe(40);
+    expect(dwarvesToBreakCave(1, 20)).toBe(50);
+    // Yapılmamış mağara yıkılamaz — «0 cüce yeter» tuzağı.
+    expect(dwarvesToBreakCave(0, 0)).toBe(Infinity);
+    expect(dwarvesToBreakCave(0, 30)).toBe(Infinity);
+  });
+
   it('kapasite 50 × 2^(sv−1)', () => {
     expect(caveCapacity(1)).toBe(50);
     expect(caveCapacity(5)).toBe(800);

@@ -176,7 +176,11 @@ export function ChatWindow({ target, myId, onClose }: {
     >
       <header className="tex-header flex shrink-0 items-center gap-2 border-b-2 border-strong
         bg-panel-header px-3 py-2 text-on-panel-header">
-        <span className="display min-w-0 flex-1 truncate text-sm font-semibold tracking-wide">
+        {/* ⚠️ `display` (Cinzel) YOK — küçük harfsiz bir font, oyuncunun yazdığı kullanıcı
+            adını büyük harfe çeviriyordu. Şehir adlarındakiyle aynı gerekçe (`Shell.tsx`).
+            ⭐ Yandaki «İttifak Sohbeti» başlığı Cinzel KALIYOR: o sistem metni, kullanıcı
+            girdisi değil — ayrım tam olarak burada. */}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-wide">
           {target.username}
         </span>
         <button type="button" aria-label="Sohbet menüsü" onClick={() => setMenuOpen((v) => !v)}
