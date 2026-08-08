@@ -1061,6 +1061,22 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
               ) : null}
             </div>
           ) : null}
+          {/*
+            ⭐ «Neden bu kadar az ganimet?» sorusunun cevabı (oyuncu bildirimi, 2026-08-08).
+            Yağma oranı şehrin kasasına uygulanıyor ama eve dönen yük TAŞIMA KAPASİTESİYLE
+            sınırlı. Canlı örnekte 521 bin altın alınabilirken 79.862 taşınabildi; rapor
+            farktan hiç söz etmediği için oyuncu ganimetin az OLUŞTUĞUNU sandı.
+            ⚠️ Satır yalnız gerçekten geride bir şey kaldığında çizilir — kapasite yettiğinde
+            «0 kaldı» yazmak bilgi değil gürültü olurdu.
+          */}
+          {r.lootBreakdown?.leftBehind ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-warning">
+              <span>Kapasiten yetmedi{r.lootBreakdown.capacity != null
+                ? ` (${fmt(r.lootBreakdown.capacity)})` : ''} — şehirde kaldı:</span>
+              <Res kind="gold" value={fmt(r.lootBreakdown.leftBehind.gold)} size={13} />
+              <Res kind="food" value={fmt(r.lootBreakdown.leftBehind.food)} size={13} />
+            </div>
+          ) : null}
         </div>
       ) : null}
 

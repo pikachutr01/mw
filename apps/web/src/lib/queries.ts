@@ -824,6 +824,13 @@ export interface BattleReport {
     revealed: { gold: number; food: number };
     /** Fiilen eve taşınan yük. Saldıran kaybettiyse `null` → «Taşınan» satırı hiç çizilmez. */
     carried: { gold: number; food: number } | null;
+    /**
+     * ⭐ Oranca alınabilecekken TAŞIMA KAPASİTESİNE sığmayıp şehirde kalan kısım.
+     * `null` = kapasite yetti → satır hiç çizilmez.
+     */
+    leftBehind: { gold: number; food: number } | null;
+    /** Hayatta kalan ordunun toplam taşıma kapasitesi. */
+    capacity: number | null;
   } | null;
   notes: string[];
   text: string;

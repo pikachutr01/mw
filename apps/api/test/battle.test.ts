@@ -1000,6 +1000,32 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(atk.lootBreakdown!.revealed).toEqual(row.result.debris);
     expect(atk.lootBreakdown!.carried).toEqual(atk.loot);
 
+    /**
+     * ⭐⭐ «NEDEN BU KADAR AZ GANİMET?» — kapasite freni raporda görünmeli
+     * (oyuncu bildirimi + canlı doğrulama, 2026-08-08).
+     *
+     * Canlı savaş #14 (tohum 3295440785): şehirde ~1,5M altın ve ~1,5M yemek vardı, yağma
+     * oranı %34,6 → **521 bin + 521 bin** alınabilirdi. Ordunun taşıma kapasitesi 159.728'di
+     * ve TAM o kadar taşındı; kalan 441 bin + 441 bin şehirde kaldı. Veri (`plunderNotCarried`)
+     * doğruydu ama rapor bundan hiç söz etmiyordu ve oyuncu ganimetin az OLUŞTUĞUNU sandı.
+     *
+     * ⚠️ Ölçüt sabit bir sayı değil **veriyle tutarlılık**: geride kalan miktar motorun
+     * söylediğinin aynısı olmalı. Sabit yazsaydım denge değişince test yanlış yere düşerdi.
+     */
+    const notCarried = row.result.loot!.plunderNotCarried!;
+    const kapasiteAsildi = notCarried.gold > 0 || notCarried.food > 0;
+    if (kapasiteAsildi) {
+      expect(atk.lootBreakdown!.leftBehind).toEqual(notCarried);
+      expect(atk.lootBreakdown!.capacity).toBe(row.result.attackerCarryCapacity);
+      expect(atk.text).toMatch(/Taşıma kapasiten yetmedi/);
+      // ⚠️ Savunan bu satırı GÖRMEZ: kendi kasasında ne kaldığını zaten biliyor, ve
+      //    saldıranın kapasitesi bir istihbarat kırıntısıdır.
+      expect(def.lootBreakdown).toBeNull();
+    } else {
+      expect(atk.lootBreakdown!.leftBehind).toBeNull();
+      expect(atk.text).not.toMatch(/kapasiten yetmedi/i);
+    }
+
     // ⭐ Sur oranı SALDIRANA gitmez (kullanıcı, 2026-08-08) — savunan kendi surunu görür.
     if (atk.wall) expect(atk.wall.integrity).toBeNull();
     expect(atk.text).not.toMatch(/bütünlük %/);

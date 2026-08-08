@@ -104,6 +104,13 @@ export interface BattleReport {
   lootBreakdown: {
     revealed: { gold: number; food: number };
     carried: { gold: number; food: number } | null;
+    /**
+     * ⭐ Oranca alınabilecekken TAŞIMA KAPASİTESİNE sığmayıp şehirde kalan kısım.
+     * `null` = kapasite yetti, geride bir şey kalmadı → satır hiç çizilmez.
+     */
+    leftBehind: { gold: number; food: number } | null;
+    /** Hayatta kalan ordunun toplam taşıma kapasitesi — "neden yetmedi" sorusunun ölçüsü. */
+    capacity: number | null;
   } | null;
   notes: string[];
   text: string;
@@ -139,9 +146,13 @@ interface BattleResultShape {
     fromDebris: { gold: number; food: number };
     fromPlunder: { gold: number; food: number };
     leftoverDebrisToDefender: { gold: number; food: number };
+    /** ⚠️ Eski savaşlarda YOK (motor sonradan ekledi) → okuyucu `?.` ile korunmalı. */
+    plunderNotCarried?: { gold: number; food: number };
     effectivePlunderRate?: number;
     effectiveRates?: { gold: number; food: number };
   };
+  /** Hayatta kalan saldıran ordunun taşıma kapasitesi. Eski savaşlarda YOK. */
+  attackerCarryCapacity?: number;
   /** ⭐ Sur tam yıkılınca iptal edilen savunma üretimi + iadesi (2026-07-30). Eski savaşlarda YOK. */
   wallProduction?: {
     canceled: { type: string; left: number }[];
@@ -361,9 +372,24 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
       ? (won ? r.loot.taken : null)
       : r.loot.fromPlunder;
     if (side === 'attacker') {
+      /**
+       * ⭐⭐ ÜÇÜNCÜ EKSİK (2026-08-08, oyuncu bildirimi): rapor *"neden bu kadar az ganimet
+       * çıktı"* sorusunu cevaplayamıyordu.
+       *
+       * Canlı örnek (savaş #14, tohum 3295440785): şehirde ~1,5M altın ve ~1,5M yemek vardı,
+       * yağma oranı %34,6 (%40 × 0,866 şans) → **521 bin altın + 521 bin yemek** alınabilirdi.
+       * Ama ordunun taşıma kapasitesi 159.728'di ve tam o kadar taşındı; kalan 441 bin + 441
+       * bin şehirde kaldı. Veri doğruydu (`plunderNotCarried`), rapor bundan hiç söz etmiyordu:
+       * oyuncu 79.862'yi görüp *"ganimet neden bu kadar az"* diye sordu. Doğru cevap "az
+       * çıkmadı, **taşıyamadın**" — ve bunu raporun kendisi söylemeli.
+       */
+      const left = won ? (r.loot.plunderNotCarried ?? null) : null;
+      const kapasiteAsildi = left != null && (left.gold > 0 || left.food > 0);
       lootBreakdown = {
         revealed: r.debris ?? { gold: 0, food: 0 },
         carried: won ? r.loot.taken : null,
+        leftBehind: kapasiteAsildi ? left : null,
+        capacity: kapasiteAsildi ? (r.attackerCarryCapacity ?? null) : null,
       };
     }
     if (side === 'defender' && (r.loot.leftoverDebrisToDefender.gold > 0 || r.loot.leftoverDebrisToDefender.food > 0)) {
@@ -499,6 +525,11 @@ function renderText(r: BattleReport): string {
       + (r.lootBreakdown.carried
         ? ` · Taşınan: ${tr(r.lootBreakdown.carried.gold)} altın, ${tr(r.lootBreakdown.carried.food)} yemek`
         : ''));
+  }
+  if (r.lootBreakdown?.leftBehind) {
+    out.push(`  Taşıma kapasiten yetmedi (${tr(r.lootBreakdown.capacity ?? 0)}): `
+      + `${tr(r.lootBreakdown.leftBehind.gold)} altın, `
+      + `${tr(r.lootBreakdown.leftBehind.food)} yemek şehirde kaldı.`);
   }
   if (r.loot || r.lootBreakdown) out.push('');
 
