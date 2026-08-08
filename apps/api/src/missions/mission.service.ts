@@ -22,7 +22,7 @@ import {
 import { isVerified, UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
-import { liveNumber } from '../settings/live.ts';
+import { liveNumberFor } from '../settings/live.ts';
 import { WORLD_SHAPE } from '../world/world-shape.ts';
 import { hasCargo, normalizeCargo, readResources, type Cargo } from './cargo.ts';
 import type { Tx } from './handler-registry.ts';
@@ -114,7 +114,7 @@ export const DEFAULT_ATTACK_RULES: AttackRules = {
  * "neden o açık, bu kapalı" sorusunun cevabı görünür olmalı.
  */
 export const scoreGapMessage = (limit: number): string =>
-  `Kendinden ${limit} kat güçlü veya ${limit} kat zayıf birine saldıramazsın. Casusluk serbest.`;
+  `Kendinden ${limit} kat güçlü veya ${limit} kat zayıf birine saldıramazsın.`;
 
 export interface AttackMission {
   missionId: number;
@@ -187,7 +187,7 @@ export class MissionService {
      * (`teleport.baseHours` / `levelStep`, 2026-08-03). Aynı dünya-başına-çözücü deseni.
      */
     private readonly catFor?: (worldId: number) => CatalogConfig,
-  ) {}
+  ) { }
 
   /** Bu dünyanın harita ayarı; çözücü yoksa motor varsayılanı. */
   private map(worldId: number): MapConfig {
@@ -258,7 +258,7 @@ export class MissionService {
        * gerek yok; kuralı buraya koymak onu kendiliğinden sağlıyor. Ortak yola koysaydık
        * istisnayı elle işlemek gerekir ve bir görev tipi eklendiğinde unutulurdu.
        */
-      await this.assertScoreRatio(t, opts.playerId, target.playerId);
+      await this.assertScoreRatio(t, opts.worldId, opts.playerId, target.playerId);
       await this.assertMarchLimit(t, opts.originCityId, opts.playerId);
 
       // ⭐ Saldıran kendi acemi korumasını ANINDA kaybeder (§13.5.4). Saldırı yazılmadan önce
@@ -286,10 +286,10 @@ export class MissionService {
                 ${target.k}, ${target.d}, ${target.s},
                 ${executeAt.toISOString()}::timestamptz,
                 ${JSON.stringify({
-                  distance: D, speed, travelSeconds: seconds, cartography,
-                  ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
-                  departedAt: opts.at.toISOString(),
-                })}::jsonb,
+        distance: D, speed, travelSeconds: seconds, cartography,
+        ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
+        departedAt: opts.at.toISOString(),
+      })}::jsonb,
                 ${opts.idempotencyKey ?? null})
         RETURNING id
       `);
@@ -324,16 +324,16 @@ export class MissionService {
         INSERT INTO outbox (world_id, topic, payload)
         VALUES (${opts.worldId}, 'city:incoming_attack',
                 ${JSON.stringify({
-                  missionId,
-                  defenderPlayerId: target.playerId,
-                  targetCityId: target.id,
-                  originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
-                  /** ⭐ Bildirim gövdesi: savunanın HANGİ şehrine geliyor (ad + koordinat). */
-                  targetCity: { k: target.k, d: target.d, s: target.s, name: target.name },
-                  arrivesAt: executeAt.toISOString(),
-                  units,
-                  heroCount: heroIds.length,
-                })}::jsonb)
+        missionId,
+        defenderPlayerId: target.playerId,
+        targetCityId: target.id,
+        originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
+        /** ⭐ Bildirim gövdesi: savunanın HANGİ şehrine geliyor (ad + koordinat). */
+        targetCity: { k: target.k, d: target.d, s: target.s, name: target.name },
+        arrivesAt: executeAt.toISOString(),
+        units,
+        heroCount: heroIds.length,
+      })}::jsonb)
       `);
 
       // ⭐ Gönderenin Ordular rozeti de anında güncellensin (bkz. `march` içindeki ikizi).
@@ -341,13 +341,13 @@ export class MissionService {
         INSERT INTO outbox (world_id, topic, payload)
         VALUES (${opts.worldId}, 'mission:sent',
                 ${JSON.stringify({
-                  missionId,
-                  ownerPlayerId: opts.playerId,
-                  targetPlayerId: target.playerId,
-                  originCityId: opts.originCityId,
-                  targetCityId: target.id,
-                  type: 'attack',
-                })}::jsonb)
+        missionId,
+        ownerPlayerId: opts.playerId,
+        targetPlayerId: target.playerId,
+        originCityId: opts.originCityId,
+        targetCityId: target.id,
+        type: 'attack',
+      })}::jsonb)
       `);
 
       return {
@@ -756,14 +756,14 @@ export class MissionService {
                 ${targetCityId}, ${originCityId},
                 ${executeAt.toISOString()}::timestamptz,
                 ${JSON.stringify({
-                  loot: canceledCargo,
-                  travelSeconds: returnSeconds,
-                  fromMissionId: opts.missionId,
-                  // ⭐ Dönüşün ASLI: simge ve rapor metni buna bakar (casusluk dönüşü kuş simgesi
-                  //    göstermeli, kılıç değil).
-                  returnOf: type,
-                  canceled: true,
-                })}::jsonb,
+        loot: canceledCargo,
+        travelSeconds: returnSeconds,
+        fromMissionId: opts.missionId,
+        // ⭐ Dönüşün ASLI: simge ve rapor metni buna bakar (casusluk dönüşü kuş simgesi
+        //    göstermeli, kılıç değil).
+        returnOf: type,
+        canceled: true,
+      })}::jsonb,
                 ${`return:${opts.missionId}`})
         RETURNING id
       `);
@@ -799,14 +799,14 @@ export class MissionService {
         INSERT INTO outbox (world_id, topic, payload)
         VALUES (${opts.worldId}, 'mission:canceled',
                 ${JSON.stringify({
-                  missionId: opts.missionId,
-                  returnMissionId,
-                  type,
-                  ownerPlayerId: opts.playerId,
-                  targetPlayerId,
-                  targetCityId,
-                  originCityId,
-                })}::jsonb)
+        missionId: opts.missionId,
+        returnMissionId,
+        type,
+        ownerPlayerId: opts.playerId,
+        targetPlayerId,
+        targetCityId,
+        originCityId,
+      })}::jsonb)
       `);
 
       await t.execute(sql`
@@ -961,11 +961,11 @@ export class MissionService {
                 ${o.target.k}, ${o.target.d}, ${o.target.s},
                 ${executeAt.toISOString()}::timestamptz,
                 ${JSON.stringify({
-                  ...(o.payloadExtra ?? {}),
-                  distance: D, speed, travelSeconds: seconds, cartography,
-                  ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
-                  departedAt: o.at.toISOString(),
-                })}::jsonb,
+        ...(o.payloadExtra ?? {}),
+        distance: D, speed, travelSeconds: seconds, cartography,
+        ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
+        departedAt: o.at.toISOString(),
+      })}::jsonb,
                 ${o.idempotencyKey ?? null})
         RETURNING id
       `);
@@ -982,9 +982,9 @@ export class MissionService {
         INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
         VALUES (${o.worldId}, ${o.playerId}, ${`mission.${o.type}.sent`}, 'mission', ${missionId},
                 ${JSON.stringify({
-                  units, heroIds, target: o.target, targetCityId: targetId,
-                  executeAt: executeAt.toISOString(), ...(o.payloadExtra ?? {}),
-                })}::jsonb,
+        units, heroIds, target: o.target, targetCityId: targetId,
+        executeAt: executeAt.toISOString(), ...(o.payloadExtra ?? {}),
+      })}::jsonb,
                 ${`mission:${missionId}`})
       `);
 
@@ -1003,25 +1003,25 @@ export class MissionService {
         INSERT INTO outbox (world_id, topic, payload)
         VALUES (${o.worldId}, 'mission:sent',
                 ${JSON.stringify({
-                  missionId,
-                  ownerPlayerId: o.playerId,
-                  /**
-                   * ⚠️ ALICI da yazılıyor (2026-08-03): gelen nakliye/destek/şehir kurma
-                   * savunan tarafta HİÇ olay üretmiyordu — `city:incoming_*` yalnız saldırı
-                   * ve casuslukta var. Alıcının Ordular satırı 60 sn'lik yoklamayı bekliyordu.
-                   */
-                  targetPlayerId,
-                  originCityId: o.originCityId,
-                  targetCityId: targetId,
-                  type: o.type,
-                  /**
-                   * ⭐ Bildirim gövdesi için kaynak şehir (kullanıcı 2026-08-07): başka bir
-                   * oyuncuya nakliye yola çıkınca ALICI kalkışta haber alıyor ve gövdede
-                   * "nereden" yazıyor. Katalog tek metin kaynağı olduğu için adı buradan
-                   * almak zorunda — `mission:sent` yükünde şehir kimliğinden başka bir şey yoktu.
-                   */
-                  originCity: { k: origin.k, d: origin.d, s: origin.s, name: origin.name },
-                })}::jsonb)
+        missionId,
+        ownerPlayerId: o.playerId,
+        /**
+         * ⚠️ ALICI da yazılıyor (2026-08-03): gelen nakliye/destek/şehir kurma
+         * savunan tarafta HİÇ olay üretmiyordu — `city:incoming_*` yalnız saldırı
+         * ve casuslukta var. Alıcının Ordular satırı 60 sn'lik yoklamayı bekliyordu.
+         */
+        targetPlayerId,
+        originCityId: o.originCityId,
+        targetCityId: targetId,
+        type: o.type,
+        /**
+         * ⭐ Bildirim gövdesi için kaynak şehir (kullanıcı 2026-08-07): başka bir
+         * oyuncuya nakliye yola çıkınca ALICI kalkışta haber alıyor ve gövdede
+         * "nereden" yazıyor. Katalog tek metin kaynağı olduğu için adı buradan
+         * almak zorunda — `mission:sent` yükünde şehir kimliğinden başka bir şey yoktu.
+         */
+        originCity: { k: origin.k, d: origin.d, s: origin.s, name: origin.name },
+      })}::jsonb)
       `);
 
       // ⭐ CASUSLUK GİDİŞİ HEDEFTE GÖRÜNÜR (kullanıcı, §13.11.6): kırmızı kuş simgesi. Kaç kuş
@@ -1034,12 +1034,12 @@ export class MissionService {
           INSERT INTO outbox (world_id, topic, payload)
           VALUES (${o.worldId}, 'city:incoming_spy',
                   ${JSON.stringify({
-                    missionId, defenderPlayerId: targetPlayerId, targetCityId: targetId,
-                    originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
-                    targetCity: targetPlace,
-                    arrivesAt: executeAt.toISOString(),
-                    birds: units['spy_bird'] ?? 0,
-                  })}::jsonb)
+          missionId, defenderPlayerId: targetPlayerId, targetCityId: targetId,
+          originCoordinates: { k: origin.k, d: origin.d, s: origin.s },
+          targetCity: targetPlace,
+          arrivesAt: executeAt.toISOString(),
+          birds: units['spy_bird'] ?? 0,
+        })}::jsonb)
         `);
       }
 
@@ -1077,7 +1077,7 @@ export class MissionService {
         'carry_capacity',
         capacity === 0
           ? 'Bu orduda kaynak taşıyabilecek birim yok. Kaynak göndermek için Yük Arabası gibi '
-            + 'taşıma kapasitesi olan bir birim ekleyin.'
+          + 'taşıma kapasitesi olan bir birim ekleyin.'
           : `Ordunun taşıma kapasitesi ${capacity}; ${total} kaynak taşıyamaz.`,
         { capacity, requested: total },
       );
@@ -1193,6 +1193,9 @@ export class MissionService {
     }
   }
 
+  /** Etkin saldırı kuralları — arayüz "kalan hak"kı bundan hesaplasın diye açık. */
+  get attackRules(): AttackRules { return this.rules; }
+
   /**
    * ⭐ 24 SAATTE 3 SALDIRI — **saldıran-hedef çifti başına** (anti-farm standardı).
    *
@@ -1200,16 +1203,7 @@ export class MissionService {
    * dördüncü orduyu yola çıkarıp "henüz varmadı" diyerek limiti delerdi.
    */
   private async assertAttackLimit(tx: Tx, attackerPlayerId: number, targetCityId: number, at: Date): Promise<void> {
-    const since = new Date(at.getTime() - this.rules.attackWindowHours * 3600_000);
-    const rows = await tx.execute<Record<string, unknown>>(sql`
-      SELECT COUNT(*)::int AS n FROM missions
-       WHERE type = 'attack'
-         AND owner_player_id = ${attackerPlayerId}
-         AND target_city_id = ${targetCityId}
-         AND status <> 'canceled'
-         AND execute_at > ${since.toISOString()}::timestamptz
-    `);
-    const n = Number(rows[0]?.['n'] ?? 0);
+    const n = await this.attacksUsed(attackerPlayerId, targetCityId, at, tx);
     if (n >= this.rules.dailyAttackLimit) {
       throw new MissionError(
         'attack_limit',
@@ -1217,6 +1211,35 @@ export class MissionService {
         { used: n, limit: this.rules.dailyAttackLimit },
       );
     }
+  }
+
+  /**
+   * ⭐ Pencerede kullanılmış saldırı sayısı — **tek sayım yeri** (2026-08-08).
+   *
+   * ⚠️ Kapı (`assertAttackLimit`) ile ekrandaki "kalan hak" sayısı aynı sorgudan okumak
+   * ZORUNDA. `mission.controller.ts` bu sayımı kopyalamıştı ve iki fark taşıyordu: pencereyi
+   * 24 saat, limiti 3 olarak **koda gömüyordu**. Bugün ikisi de aynı sayı olduğu için görünür
+   * bir arıza yoktu; `attackWindowHours` ya da `dailyAttackLimit` değiştiği an ekran yanlış
+   * sayıyı gösterecekti — 10 kat kuralında yaşanan ayrışmanın aynısı.
+   *
+   * ⚠️ Sayıma giren: son `attackWindowHours` içinde **varmış** (başarılı ya da başarısız) ve
+   * hâlâ **yolda** olan saldırılar. İptal edilenler girmez — slot geri verilir.
+   * ⚠️ Ölçüt `execute_at` (VARIŞ anı), gönderim anı değil: kural "bu şehir 24 saatte kaç kez
+   * dövüldü" sorusunu ölçüyor. Dönüş bacağı ayrı bir tip (`return`), yani iki kez sayılmıyor.
+   */
+  async attacksUsed(
+    attackerPlayerId: number, targetCityId: number, at: Date, runner: Tx | Db = this.db,
+  ): Promise<number> {
+    const since = new Date(at.getTime() - this.rules.attackWindowHours * 3600_000);
+    const rows = await runner.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM missions
+       WHERE type = 'attack'
+         AND owner_player_id = ${attackerPlayerId}
+         AND target_city_id = ${targetCityId}
+         AND status <> 'canceled'
+         AND execute_at > ${since.toISOString()}::timestamptz
+    `);
+    return Number(rows[0]?.['n'] ?? 0);
   }
 
   /**
@@ -1244,8 +1267,10 @@ export class MissionService {
    * ⚠️ Karşılaştırma `>=`: kullanıcı *"tam 10 kat olunca bu kural devreye girer"* dedi.
    * 20 → 200 ENGELLİ, 20 → 199 serbest.
    */
-  private async assertScoreRatio(tx: Tx, attackerId: number, defenderId: number): Promise<void> {
-    const gap = await this.scoreGap(attackerId, defenderId, tx);
+  private async assertScoreRatio(
+    tx: Tx, worldId: number, attackerId: number, defenderId: number,
+  ): Promise<void> {
+    const gap = await this.scoreGap(worldId, attackerId, defenderId, tx);
     if (!gap?.blocked) return;
     throw new MissionError(
       'score_gap',
@@ -1265,14 +1290,20 @@ export class MissionService {
    * ve bu tam olarak düzeltmeye çalıştığımız şikâyet.
    *
    * `null` = kural kapalı (`attackScoreRatio <= 0`).
+   *
+   * ⚠️⚠️ **`liveNumberFor` — `liveNumber` DEĞİL** (2026-08-08). Kullanıcı paneli açıp sınırı 0
+   * yaptı ve kural çalışmaya devam etti. Kayıt gerçekten yazılmıştı ama `world_id = 1`
+   * katmanına; eski `liveNumber` ise yalnız dünya 0'ı görüyordu ve koda gömülü 10'a düşüyordu.
+   * Gerekçenin tamamı `settings/live.ts`te — bu yüzden buradaki okuma **dünyayı bilmek
+   * zorunda**, ve `worldId` parametresi tam olarak bu yüzden var.
    */
   async scoreGap(
-    attackerId: number, defenderId: number, runner: Tx | Db = this.db,
+    worldId: number, attackerId: number, defenderId: number, runner: Tx | Db = this.db,
   ): Promise<{
     blocked: boolean; limit: number; ratio: number;
     attackerScore: number; defenderScore: number;
   } | null> {
-    const limit = liveNumber('combat', 'attackScoreRatio', 10);
+    const limit = liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10);
     if (limit <= 0) return null;                  // 0/negatif = kural kapalı
 
     const rows = await runner.execute<Record<string, unknown>>(sql`

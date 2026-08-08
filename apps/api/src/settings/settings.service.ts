@@ -29,7 +29,7 @@ import {
 import type { Db } from '../db/client.ts';
 import { catalogOverrides } from './catalog.ts';
 import { combatOverrides, lootOverrides, mapOverrides, meritOverrides } from './combat.ts';
-import { setLiveSettings } from './live.ts';
+import { setLiveSettings, setLiveSettingsResolver } from './live.ts';
 import { log } from '../common/logger.ts';
 const SET_LOG = log('settings');
 
@@ -101,6 +101,16 @@ export class SettingsService {
      * yerlerde de çağrılıyor (`mail/templates.ts`, `mail.service.ts`). Gerekçe `live.ts`te.
      */
     setLiveSettings(this.snapshot(DEFAULT_WORLD).effective);
+    /**
+     * ⭐⭐ Dünyayı BİLEN çağrı noktaları için ikinci yol (2026-08-08).
+     *
+     * ⚠️ Bu satır olmadan panelin yazdığı katman hiçbir `liveNumber` tüketicisine ulaşmıyordu:
+     * panel `worldId: 1`'e yazıyor, köprü ise dünya 0'ı okuyordu. Kullanıcı bunu «puan farkı
+     * sınırını 0 yaptım, kural hâlâ çalışıyor» diye bildirdi. Ayrıntı `live.ts`te.
+     * ⚠️ Anlık görüntü değil FONKSİYON veriliyor: `snapshot()` tembel ve `load()`ta zaten
+     * temizleniyor, yani tazeleme sorumluluğu ikiye bölünmüyor.
+     */
+    setLiveSettingsResolver((w) => this.snapshot(w).effective);
   }
 
   /**

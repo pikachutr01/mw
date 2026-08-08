@@ -104,7 +104,7 @@ describe('yerleşim — temel kurallar', () => {
     const c = await place(1);
     expect(c.k).toBe(1);
     // Açık cephe en az 8 diyar; oyuncu bunun içinde bir yere düşmeli.
-    expect(c.d).toBeLessThanOrEqual(placementConfig().minOpenDistricts);
+    expect(c.d).toBeLessThanOrEqual(placementConfig(worldId).minOpenDistricts);
     expect(c.s).toBeGreaterThanOrEqual(1);
     expect(c.s).toBeLessThanOrEqual(WORLD_SHAPE.citiesPerDistrict);
   });
@@ -371,7 +371,7 @@ describe('yerleşim — canlı arızanın bekçileri (2026-08-08)', () => {
 
 describe('yerleşim — dağılım (200 kayıt)', () => {
   it('⭐ kota aşılmaz, dünya makul yayılır, kimse ıssız kalmaz', async () => {
-    const cfg = placementConfig();
+    const cfg = placementConfig(worldId);
     const list: { k: number; d: number; s: number }[] = [];
     for (let i = 0; i < 200; i++) list.push(await place(1000 + i));
 

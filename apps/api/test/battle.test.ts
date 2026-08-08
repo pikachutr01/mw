@@ -422,6 +422,126 @@ describe('⭐ 24 saatte 3 saldırı limiti (saldıran-hedef çifti başına)', (
       target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
     })).resolves.toBeTruthy();
   });
+
+  /* ── Kullanıcının tarif ettiği mantığın birebir ölçümü (2026-08-08) ──────────────────── */
+
+  /**
+   * ⭐ Kullanıcı: *"o andan 24 saat öncesine kadar olan sürede yapılan **başarılı veya
+   * başarısız** saldırıların toplamı 3 değilse izin verilir."*
+   *
+   * ⚠️ Yukarıdaki testler yalnız YOLDAKİ (scheduled) saldırıları ölçüyordu. Çözülmüş bir
+   * saldırının da sayılması kuralın yarısı ve hiç sınanmamıştı — sayım `status <> 'canceled'`
+   * dediği için doğru çalışıyor, ama bunu bir testin söylemesi gerekiyor.
+   */
+  it('⭐ ÇÖZÜLMÜŞ saldırılar da sayılır (başarılı/başarısız ayrımı yok)', async () => {
+    await giveUnits(attackCity, 'dwarf', 3000);
+    await giveUnits(defendCity, 'dwarf', 5);
+    const at = await clock.gameNow(worldId);
+
+    for (let i = 0; i < 3; i++) {
+      const m = await missions.sendAttack({
+        originCityId: attackCity, playerId: attacker, worldId,
+        target: { k: 1, d: 1, s: 2 }, units: { dwarf: 20 }, at,
+      });
+      await runDue(m.missionId);                    // savaş çözülsün → status 'done'
+    }
+    /**
+     * ⚠️ `openMissions` adına rağmen o tipteki TÜM satırları döndürüyor (açık olanları değil) —
+     * ilk yazımda `toHaveLength(0)` bekledim ve test bu yüzden düştü. Doğru kontrol satırların
+     * varlığı değil **durumu**: üçü de çözülmüş olmalı ki ölçüm "çözülmüş saldırı sayılır mı"
+     * sorusunu gerçekten sorsun.
+     */
+    const rows = await openMissions('attack');
+    expect(rows, 'kurgu bozuk: üç saldırı da yazılmalıydı').toHaveLength(3);
+    expect(
+      rows.map((r) => String(r['status'])),
+      'kurgu bozuk: saldırılar hâlâ çözülmemiş',
+    ).toEqual(['done', 'done', 'done']);
+
+    await expect(missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 20 }, at,
+    })).rejects.toThrow(/en fazla 3 saldırı/);
+  });
+
+  /**
+   * ⭐ İptal edilen saldırı hakkı GERİ VERİR. Canlıda da böyle işliyor (8 Ağustos ölçümü:
+   * oyuncu 8 → şehir 12'de 3 iptal + 1 tamamlanmış, yalnız 1'i sayılmış).
+   */
+  it('⭐ İPTAL edilen saldırı hakkı geri verir', async () => {
+    await giveUnits(attackCity, 'dwarf', 1000);
+    const at = await clock.gameNow(worldId);
+    const send = (): Promise<{ missionId: number }> => missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
+    });
+
+    await send(); await send();
+    const ucuncu = await send();
+    await expect(send()).rejects.toThrow(/en fazla 3 saldırı/);
+
+    await h.db.execute(sql`
+      UPDATE missions SET status = 'canceled' WHERE id = ${ucuncu.missionId}
+    `);
+    await expect(send()).resolves.toBeTruthy();
+  });
+
+  /**
+   * ⭐⭐ EKRANDAKİ SAYI İLE KAPI AYNI OLMALI (kullanıcı: *"o şehre kalan günlük saldırı sayısı
+   * yazılır"*). Sayım `mission.controller.ts`te KOPYAlanmıştı ve pencereyi 24, limiti 3 olarak
+   * koda gömüyordu; artık ikisi de `MissionService.attacksUsed`ten okuyor. Bu test o tekliği
+   * uçtan uca ölçüyor: her adımda ekrandaki "kalan" ile kapının kabul/ret kararı tutmalı.
+   */
+  it('⭐⭐ modaldaki «kalan saldırı hakkı» kapıyla adım adım tutuyor', async () => {
+    await giveUnits(attackCity, 'dwarf', 1000);
+    const at = await clock.gameNow(worldId);
+    const controller = new MissionController(missions, clock, h.db);
+    const kalan = async (): Promise<number> => {
+      const res = await controller.options(
+        String(attackCity), '1', '1', '2',
+        { player: { playerId: attacker, worldId } } as never,
+      );
+      return res['attacksLeft'] as number;
+    };
+    const send = (): Promise<unknown> => missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
+    });
+
+    expect(await kalan()).toBe(3);
+    await send();
+    expect(await kalan()).toBe(2);
+    await send();
+    expect(await kalan()).toBe(1);
+    await send();
+    // Ekran 0 diyorsa kapı da reddetmeli — ikisinin ayrışması tam olarak yasak olan şey.
+    expect(await kalan()).toBe(0);
+    await expect(send()).rejects.toThrow(/en fazla 3 saldırı/);
+  });
+
+  /** Kalan hak ÇİFT BAŞINA: başka şehir için sayaç dolu görünmemeli. */
+  it('ekrandaki kalan hak da çift başına', async () => {
+    await giveUnits(attackCity, 'dwarf', 1000);
+    const at = await clock.gameNow(worldId);
+    const ucuncu = await createPlayer(h, worldId, 'kalan2');
+    await cities.create({
+      worldId, playerId: ucuncu, name: 'kalan2', k: 1, d: 1, s: 6, isCapital: true, at,
+    });
+    await h.db.execute(sql`UPDATE players SET protected_until = NULL WHERE id = ${ucuncu}`);
+
+    for (let i = 0; i < 3; i++) {
+      await missions.sendAttack({
+        originCityId: attackCity, playerId: attacker, worldId,
+        target: { k: 1, d: 1, s: 2 }, units: { dwarf: 10 }, at,
+      });
+    }
+    const controller = new MissionController(missions, clock, h.db);
+    const res = await controller.options(
+      String(attackCity), '1', '1', '6',
+      { player: { playerId: attacker, worldId } } as never,
+    );
+    expect(res['attacksLeft']).toBe(3);
+  });
 });
 
 describe('Baraka sefer limiti', () => {

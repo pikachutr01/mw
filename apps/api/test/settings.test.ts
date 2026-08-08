@@ -13,7 +13,9 @@ import type { DbHandle } from '../src/db/client.ts';
 import { chatLimits } from '../src/chat/chat.limits.ts';
 import { mailLimits } from '../src/mail/mail.limits.ts';
 import { notifyLimits } from '../src/notify/notify.limits.ts';
+import { liveNumberFor } from '../src/settings/live.ts';
 import { DEFAULT_WORLD, SettingsError, SettingsService } from '../src/settings/settings.service.ts';
+import { placementConfig } from '../src/world/placement.service.ts';
 import { createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
 
 let h: DbHandle;
@@ -240,5 +242,65 @@ describe('canlı limit köprüsü', () => {
     expect(notifyLimits().maxFailures).toBe(9);
     expect(mailLimits().dailyPerIp).toBe(42);
     await svc.reset(DEFAULT_WORLD, ['notify.maxFailures', 'mail.dailyPerIp']);
+  });
+});
+
+/**
+ * ⭐⭐ PANELİN YAZDIĞI KATMAN OKUNUYOR MU? (2026-08-08)
+ *
+ * ⚠️⚠️ **Bu bloğun var olma sebebi, yukarıdaki testlerin hepsinin `DEFAULT_WORLD`e yazması.**
+ * Panel ise `worldId: 1`'e yazıyor (`apps/admin/src/App.tsx` — sabit). İki taraf ayrı ayrı
+ * doğruydu ve test takımı ikisinin ARASINDAKİ boşluğu hiç görmüyordu: panelden değiştirilen
+ * her `liveNumber` ayarı sessizce etkisiz kalıyordu.
+ *
+ * Kullanıcı bunu canlıda buldu: *"saldırı puan farkı sınırını 0 yapmama rağmen engellenmeye
+ * devam ediyorum."* Yerel veri tabanında kayıt gerçekten duruyordu —
+ * `world_id = 1 · combat.attackScoreRatio = 0` — ama okuyucu dünya 0'a bakıyordu.
+ *
+ * Bu yüzden testler artık **panelin yaptığını yapıyor**: dünya 0'a değil, gerçek bir dünyaya
+ * yazıyor.
+ */
+describe('⭐ dünya bazlı ayar köprüsü (panelin yazdığı katman)', () => {
+  it('⭐ dünyaya yazılan ayar `liveNumberFor` ile okunur', async () => {
+    expect(liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10)).toBe(10);
+
+    await svc.update({ worldId, patch: { 'combat.attackScoreRatio': 0 }, actorId: null });
+    expect(liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10)).toBe(0);
+
+    // Varsayılana dönünce kural da geri gelmeli.
+    await svc.reset(worldId, ['combat.attackScoreRatio']);
+    expect(liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10)).toBe(10);
+  });
+
+  /** ⚠️ Dünya ayarı BAŞKA dünyaya sızmamalı — katman sırasının kendi anlamı bu. */
+  it('bir dünyanın ayarı diğerine sızmaz', async () => {
+    const other = freshWorldId();
+    await createWorld(h, other);
+    await svc.update({ worldId, patch: { 'combat.attackScoreRatio': 3 }, actorId: null });
+
+    expect(liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10)).toBe(3);
+    expect(liveNumberFor(other, 'combat', 'attackScoreRatio', 10)).toBe(10);
+  });
+
+  /** Dünya katmanı yoksa dünya 0'a (kurulum geneli) düşer — düşüş zincirinin orta halkası. */
+  it('dünya katmanı yoksa dünya 0 değeri kullanılır', async () => {
+    await svc.update({ worldId: DEFAULT_WORLD, patch: { 'combat.attackScoreRatio': 4 }, actorId: null });
+    expect(liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10)).toBe(4);
+
+    // Dünyanın kendi değeri varsa O kazanır.
+    await svc.update({ worldId, patch: { 'combat.attackScoreRatio': 7 }, actorId: null });
+    expect(liveNumberFor(worldId, 'combat', 'attackScoreRatio', 7)).toBe(7);
+    await svc.reset(DEFAULT_WORLD, ['combat.attackScoreRatio']);
+  });
+
+  /**
+   * ⭐ Yerleşim ayarları da aynı köprüden okunuyor ve aynı kör noktadaydı (13 düğme).
+   * Onlar için de panelin yaptığı yolu ölçüyoruz.
+   */
+  it('⭐ yerleşim ayarları da dünya katmanından okunur', async () => {
+    expect(placementConfig(worldId).capitalQuota).toBe(5);
+    await svc.update({ worldId, patch: { 'placement.capitalQuota': 2 }, actorId: null });
+    expect(placementConfig(worldId).capitalQuota).toBe(2);
+    await svc.reset(worldId, ['placement.capitalQuota']);
   });
 });

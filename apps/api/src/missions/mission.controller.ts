@@ -273,7 +273,9 @@ export class MissionController {
        * değil — kuralın kendi tanımı bu. Böylece listedeki sebep, oyuncunun sıralama ekranında
        * gördüğü sayıyla birebir tutarlı.
        */
-      const gap = await this.missions.scoreGap(player.playerId, target.player_id);
+      const gap = await this.missions.scoreGap(
+        player.worldId, player.playerId, target.player_id,
+      );
       const gapBlocked = gap?.blocked === true;
 
       // ⚠️ Sıra önemli: koruma/tatil daha temel bir sebep, önce o yazılır.
@@ -282,15 +284,18 @@ export class MissionController {
       add('spy', 'Casusluk', !shielded, shielded ? why : null);
       add('transport', 'Nakliye', true);
 
-      // ⭐ Kalan saldırı hakkı — arayüz kuralı anlatmak yerine SAYIYI gösteriyor.
-      const since = new Date(at.getTime() - 24 * 3600_000);
-      const used = await this.db.execute<Record<string, unknown>>(sql`
-        SELECT COUNT(*)::int AS n FROM missions
-         WHERE type = 'attack' AND owner_player_id = ${player.playerId}
-           AND target_city_id = ${target.id} AND status <> 'canceled'
-           AND execute_at > ${since.toISOString()}::timestamptz
-      `);
-      attacksLeft = Math.max(0, 3 - Number(used[0]?.['n'] ?? 0));
+      /**
+       * ⭐ Kalan saldırı hakkı — arayüz kuralı anlatmak yerine SAYIYI gösteriyor.
+       *
+       * ⚠️ Sayım artık `MissionService.attacksUsed`ten (2026-08-08). Burada bir KOPYASI vardı
+       * ve pencereyi `24`, limiti `3` olarak koda gömüyordu; kapı ise `attackWindowHours` /
+       * `dailyAttackLimit` okuyor. Bugün ikisi aynı sayı olduğu için görünür bir arıza yoktu —
+       * ama kural değiştiği an ekran yanlış "kalan hak" gösterecekti. Aynı dosyanın kendi
+       * kuralı: sayım tek yerde yaşamalı.
+       */
+      const rules = this.missions.attackRules;
+      const used = await this.missions.attacksUsed(player.playerId, target.id, at);
+      attacksLeft = Math.max(0, rules.dailyAttackLimit - used);
     }
 
     return {

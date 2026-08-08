@@ -97,7 +97,7 @@
 import { sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import type { Db } from '../db/client.ts';
-import { liveNumber } from '../settings/live.ts';
+import { liveNumberFor } from '../settings/live.ts';
 import { TOTAL_DISTRICTS, WORLD_SHAPE, districtAt, districtIndex } from './world-shape.ts';
 
 export interface Coords { k: number; d: number; s: number }
@@ -135,21 +135,33 @@ export interface PlacementConfig {
   threatFloor: number;
 }
 
-export function placementConfig(): PlacementConfig {
+/**
+ * ⚠️⚠️ **`worldId` ŞART, ve 2026-08-08'e kadar YOKTU.** Ayarlar `liveNumber` ile yalnız dünya 0
+ * katmanından okunuyordu; panel ise `worldId: 1`'e yazıyor. Yani bu on üç düğmenin hiçbiri
+ * panelden gerçekten çevrilemiyordu — kaydediliyor, görünüyor, hiçbir şey değişmiyordu.
+ * Arıza `combat.attackScoreRatio`ta yakalandı (kullanıcı bildirdi); aynı köprüyü kullanan
+ * yerleşim ayarları da aynı kör noktadaydı. Gerekçenin tamamı `settings/live.ts`te.
+ *
+ * ⚠️ `worldId` isteğe bağlı DEĞİL: varsayılan verseydik çağrı noktalarının hangisinin dünyayı
+ * geçmeyi unuttuğu görünmez olurdu — hatanın tam da bu sınıfı yeniden doğardı.
+ */
+export function placementConfig(worldId: number): PlacementConfig {
+  const n = (key: string, fallback: number): number =>
+    liveNumberFor(worldId, 'placement', key, fallback);
   return {
-    capitalQuota: liveNumber('placement', 'capitalQuota', 5),
-    neighborQuota: liveNumber('placement', 'neighborQuota', 5),
-    targetOccupancy: liveNumber('placement', 'targetOccupancy', 0.3),
-    minOpenDistricts: liveNumber('placement', 'minOpenDistricts', 16),
-    emptyReserve: liveNumber('placement', 'emptyReserve', 12),
-    sampleSize: liveNumber('placement', 'sampleSize', 60),
-    neighborIdeal: liveNumber('placement', 'neighborIdeal', 1),
-    neighborSigma: liveNumber('placement', 'neighborSigma', 0.9),
-    emptinessExponent: liveNumber('placement', 'emptinessExponent', 1.5),
-    threatExponent: liveNumber('placement', 'threatExponent', 1.5),
-    threatWindowDays: liveNumber('placement', 'threatWindowDays', 14),
-    minThreatAnchor: liveNumber('placement', 'minThreatAnchor', 250),
-    threatFloor: liveNumber('placement', 'threatFloor', 0.15),
+    capitalQuota: n('capitalQuota', 5),
+    neighborQuota: n('neighborQuota', 5),
+    targetOccupancy: n('targetOccupancy', 0.3),
+    minOpenDistricts: n('minOpenDistricts', 16),
+    emptyReserve: n('emptyReserve', 12),
+    sampleSize: n('sampleSize', 60),
+    neighborIdeal: n('neighborIdeal', 1),
+    neighborSigma: n('neighborSigma', 0.9),
+    emptinessExponent: n('emptinessExponent', 1.5),
+    threatExponent: n('threatExponent', 1.5),
+    threatWindowDays: n('threatWindowDays', 14),
+    minThreatAnchor: n('minThreatAnchor', 250),
+    threatFloor: n('threatFloor', 0.15),
   };
 }
 
@@ -209,7 +221,7 @@ export class PlacementService {
     worldId: number, accountId: number, tx?: Db, attempt = 0,
   ): Promise<Coords> {
     const db = tx ?? this.db;
-    const cfg = placementConfig();
+    const cfg = placementConfig(worldId);
     const next = rng(seedOf(worldId, accountId) + attempt * 7919);
 
     const open = await this.openFrontier(worldId, cfg, db);
