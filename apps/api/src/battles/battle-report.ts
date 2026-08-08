@@ -230,6 +230,42 @@ const toHeroLine = (h: RawHeroLine, mine: boolean): ReportHeroLine => ({
   xpGained: mine ? h.xpGained : 0,
 });
 
+/**
+ * ⭐⭐ «ORTAYA ÇIKAN GANİMET» — bu savaşın ÜRETTİĞİ toplam ganimet.
+ *
+ * ⚠️⚠️ **Bu tanım üçüncü denemede oturdu; ikisi de oyuncu tarafından bildirildi.**
+ *
+ *  1. En baştaki: `fromDebris + fromPlunder`. O toplam TANIMI GEREĞİ `taken`e eşit
+ *     (`engine/loot.ts`: `fromPlunder = taken − fromDebris`) → «Ortaya çıkan» ile «Taşınan»
+ *     her zaman aynı sayıyı gösteriyordu, iki satır hiçbir bilgi taşımıyordu.
+ *
+ *  2. İkinci deneme: yalnız `debris` (ölen birimlerin bıraktığı). Kaybedilen savaşta doğruydu
+ *     ama **hiç ölü olmayan savaşta 0 çıkıyordu.** Oyuncu bunu bildirdi (yerel savaş #24,
+ *     tohum 3839748965): savunanda yalnız 1000 casus kuş vardı, kimse ölmedi, `debris = 0`,
+ *     ama şehirde ~1M altın duruyor ve 387.528 altın **alınabilir** durumdaydı. Rapor
+ *     *"ortaya çıkan: 0"* diyordu — oyuncunun sorduğu soru tam olarak buydu.
+ *
+ *  3. Şimdiki: **alınabilir olan + savunanda kalan enkaz.** Tek formül, dallanma yok:
+ *       `taken + plunderNotCarried + leftoverDebrisToDefender`
+ *     • Kazanılan savaşta: yağma oranının açtığı havuzun tamamı (taşınan + taşınamayan) —
+ *       oyuncunun beklediği sayı. Aradaki farkı «Taşıma kapasiten yetmedi» satırı açıklıyor.
+ *     • Kaybedilen savaşta: motor `taken`/`plunderNotCarried`ı sıfırlayıp enkazın tamamını
+ *       `leftoverDebrisToDefender`a yazar → sonuç **enkazın kendisi**, yani 2. denemenin
+ *       doğru olduğu durum aynen korunuyor.
+ *   Böylece «Taşınan ≤ Ortaya çıkan» her savaşta doğru, sezgiyle uyumlu bir ilişki.
+ *
+ * ⚠️ ESKİ SAVAŞLARDA `plunderNotCarried` YOK (motor sonradan ekledi). O satırlarda eski
+ * anlama (`debris`) düşülüyor: uydurma bir sayı göstermektense bilinen doğruyu göstermek.
+ */
+function revealedLoot(r: BattleRow['result']): { gold: number; food: number } {
+  const l = r.loot;
+  if (!l?.plunderNotCarried) return r.debris ?? { gold: 0, food: 0 };
+  return {
+    gold: l.taken.gold + l.plunderNotCarried.gold + l.leftoverDebrisToDefender.gold,
+    food: l.taken.food + l.plunderNotCarried.food + l.leftoverDebrisToDefender.food,
+  };
+}
+
 export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleReport {
   const r = battle.result;
   const won = r.winner === side;
@@ -362,6 +398,7 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
    * ölen askerlerin bıraktığı şey. Tanımı sonuçtan bağımsız, dolayısıyla kaybedilen savaşta da
    * doğru. «Taşınan» yalnız gerçekten eve dönen yük; yoksa satır hiç yazılmıyor.
    */
+
   let loot: { gold: number; food: number } | null = null;
   let lootBreakdown: BattleReport['lootBreakdown'] = null;
   if (r.loot) {
@@ -386,7 +423,7 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
       const left = won ? (r.loot.plunderNotCarried ?? null) : null;
       const kapasiteAsildi = left != null && (left.gold > 0 || left.food > 0);
       lootBreakdown = {
-        revealed: r.debris ?? { gold: 0, food: 0 },
+        revealed: revealedLoot(r),
         carried: won ? r.loot.taken : null,
         leftBehind: kapasiteAsildi ? left : null,
         capacity: kapasiteAsildi ? (r.attackerCarryCapacity ?? null) : null,

@@ -1009,6 +1009,52 @@ describe('⭐ yağma: kapasiteye sığmayan kısım şehirde kalır', () => {
   });
 });
 
+/**
+ * ⭐⭐ HİÇ ÖLÜ YOKKEN «ORTAYA ÇIKAN» 0 GÖRÜNMEMELİ (oyuncu bildirimi, 2026-08-08).
+ *
+ * Yerel savaş #24 (tohum 3839748965): savunanda yalnız 1000 casus kuş vardı, iki tarafta da
+ * kimse ölmedi (`debris = 0`), ama şehirde ~1M altın duruyordu ve %38 oranla **387.528 altın
+ * alınabilirdi**. Rapor *"Ortaya çıkan: 0"* diyordu çünkü o alan `debris`e bağlıydı.
+ * Oyuncu: *"Neden ortaya çıkan 0 olarak gözükmeye devam ediyor?"*
+ */
+describe('⭐ ortaya çıkan ganimet: ölü olmasa da yağma görünür', () => {
+  it('enkaz 0 iken bile alınabilir yağma «ortaya çıkan»da yazar', async () => {
+    // Savunanda YALNIZ casus kuş → savaşacak birim yok, enkaz 0 kalır.
+    await giveUnits(attackCity, 'dwarf', 300);
+    await giveUnits(defendCity, 'spy_bird', 1000);
+    await setResources(defendCity, 1_000_000, 1_000_000);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 300 }, at,
+    });
+    await runDue(m.missionId);
+
+    const b = (await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, at, night, winner, input, result FROM battles WHERE world_id = ${worldId}
+    `))[0]!;
+    const row: BattleRow = {
+      id: Number(b['id']), at: toDate(b['at']), night: Boolean(b['night']),
+      winner: String(b['winner']),
+      input: b['input'] as BattleRow['input'], result: b['result'] as BattleRow['result'],
+    };
+    const atk = buildBattleReport(row, 'attacker');
+
+    // Kurgunun gerçekten "ölüsüz" olduğunu doğrula — yoksa test hatayı hiç üretmez.
+    expect(row.result.debris, 'kurgu bozuk: enkaz 0 olmalıydı').toEqual({ gold: 0, food: 0 });
+    expect(atk.won).toBe(true);
+
+    // ⭐ ASIL ÖLÇÜM: enkaz sıfırken bile ortaya çıkan ganimet pozitif olmalı.
+    expect(atk.lootBreakdown!.revealed.gold).toBeGreaterThan(0);
+    expect(atk.lootBreakdown!.revealed.food).toBeGreaterThan(0);
+    // Ve taşınandan büyük olmalı: aradaki fark kapasitenin yetmediği kısım.
+    expect(atk.lootBreakdown!.revealed.gold)
+      .toBeGreaterThan(atk.lootBreakdown!.carried!.gold);
+    expect(atk.text).toMatch(/Taşıma kapasiten yetmedi/);
+  });
+});
+
 describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
   it('iki taraf AYNI savaşın farklı yüzünü görür', async () => {
     await giveUnits(attackCity, 'dwarf', 3000);
@@ -1062,12 +1108,26 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(atk.text).toMatch(/Kaynak: 1:1:1 \(saldiran\) → Hedef: 1:1:2 \(savunan\)/);
 
     /**
-     * ⭐ «Ortaya çıkan» ile «Taşınan» AYRI şeyler olmalı. Eskiden `revealed` =
-     * `fromDebris + fromPlunder` yazıyordu ve o toplam TANIMI GEREĞİ `taken`e eşit
-     * (`engine/loot.ts`: `fromPlunder = taken − fromDebris`) → iki satır her zaman aynı
-     * sayıyı gösteriyordu. Artık `revealed` motorun ürettiği ENKAZ.
+     * ⭐⭐ «ORTAYA ÇIKAN» = bu savaşın ürettiği TOPLAM ganimet (2026-08-08, üçüncü tanım).
+     *
+     * Tanım `taken + plunderNotCarried + leftoverDebrisToDefender`. Ölçüt sabit sayı değil
+     * **iki değişmez**:
+     *   • «Taşınan ≤ Ortaya çıkan» — sezgiyle uyumlu olması gereken ilişki. Eski iki tanımda
+     *     bu ya eşitlikti (bilgisiz) ya da TERSİNE dönebiliyordu (ölü yokken revealed = 0
+     *     iken taşınan pozitifti — oyuncunun bildirdiği hâl).
+     *   • Fark, kapasiteye sığmayan kısmı içermeli.
      */
-    expect(atk.lootBreakdown!.revealed).toEqual(row.result.debris);
+    const rev = atk.lootBreakdown!.revealed;
+    const carried = atk.lootBreakdown!.carried!;
+    for (const kaynak of ['gold', 'food'] as const) {
+      expect(rev[kaynak], `${kaynak}: taşınan, ortaya çıkanı aşamaz`)
+        .toBeGreaterThanOrEqual(carried[kaynak]);
+      expect(rev[kaynak]).toBe(
+        carried[kaynak]
+        + row.result.loot!.plunderNotCarried![kaynak]
+        + row.result.loot!.leftoverDebrisToDefender[kaynak],
+      );
+    }
     expect(atk.lootBreakdown!.carried).toEqual(atk.loot);
 
     /**
@@ -1150,6 +1210,11 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(atk.text).not.toMatch(/Taşınan:/);
     // ✅ Ama ortaya çıkan enkaz GÖRÜNÜR — hatanın tam olarak düzeltildiği yer burası.
     expect(atk.lootBreakdown).not.toBeNull();
+    /**
+     * ⭐ KAYBEDİLEN savaşta tanım kendiliğinden ENKAZA iniyor: motor `taken` ve
+     * `plunderNotCarried`ı sıfırlayıp enkazın tamamını `leftoverDebrisToDefender`a yazıyor.
+     * Yani formül dallanmadan doğru sonucu veriyor — bu satır onun kanıtı.
+     */
     expect(atk.lootBreakdown!.revealed).toEqual(debris);
     expect(atk.lootBreakdown!.carried).toBeNull();
     expect(atk.text).toMatch(/Ortaya çıkan:/);
