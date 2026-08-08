@@ -125,6 +125,17 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'sefer varış anı girerken hesaplanıp yazılıyor; yalnız bundan sonraki işler etkilenir.',
   },
   {
+    id: 'scoring',
+    label: 'Puanlama',
+    description: '⭐ Oyuncu puanının nasıl hesaplandığı. Oyunun kendi dokümanı: *"Puanlama, '
+      + 'harcadığınız kaynak miktarına göre yapılır. Harcanmış her 1000 birim kaynağa karşılık '
+      + '1 puan alırsınız. Ordularınızın savaştaki kayıpları ise aynı oranda puan kaybetmenize '
+      + 'neden olur."* '
+      + '⚠️ Saklanan asıl büyüklük HARCANAN KAYNAK (`score_base`); gösterilen puan ondan '
+      + 'bölmeyle türetilir. Böylece binlik artıklar kaybolmaz: 900 + 900 harcayan oyuncu '
+      + '0 değil 1 puan alır.',
+  },
+  {
     id: 'placement',
     label: 'Yerleşim (yeni oyuncu)',
     description: '⭐ Yeni kaydolan oyuncunun BAŞKENTİ dünyada nereye kurulur (§13.6). '
@@ -930,6 +941,21 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     label: 'Teknik fiyat çarpanı',
     type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
     description: 'TÜM teknik fiyatlarını topluca ölçekler.',
+  },
+
+  /* ── Puanlama ──────────────────────────────────────────────────────────────── */
+  {
+    key: 'scoring.resourcePerPoint',
+    label: 'Puan başına kaynak',
+    type: 'int', default: 1000, min: 1, max: 1000000, tag: 'design', unit: 'birim',
+    description: '⭐ Kaç birim HARCANMIŞ kaynak 1 puan eder. Oyunun kendi dokümanı 1000 diyor. '
+      + 'Küçültmek herkesin puanını topluca büyütür, büyütmek küçültür — sıralamadaki YERLER '
+      + 'değişmez, yalnız ölçek değişir.',
+    note: 'Altın ve yemek EŞİT ağırlıkta sayılır. Puan verenler: yapı · teknik · savunma · '
+      + 'asker üretimi. Puan VERMEYENLER: kahraman diriltme ve şehirde duran harcanmamış '
+      + 'kaynak. Savaşta ölen birimler aynı oranda puan GÖTÜRÜR. ⚠️ Bu değer `score_base`e '
+      + '(harcanan kaynak) dokunmaz, yalnız bölendir; kaydedince dünyadaki tüm oyuncuların '
+      + 'puanı hemen yeniden türetilir.',
   },
 
   /* ── Yerleşim (§13.6) ────────────────────────────────────────────────────── */

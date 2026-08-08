@@ -27,6 +27,7 @@ import { AuthService } from '../auth/auth.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { scheduleSnapshot } from '../ranking/ranking.service.ts';
+import { rederiveScores } from '../scoring/score.service.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
 import { catalogOverrides } from '../settings/catalog.ts';
 import { combatOverrides } from '../settings/combat.ts';
@@ -526,6 +527,20 @@ export class AdminWorldController {
       const res = await this.settings.update({
         worldId: id, patch: parsed.data.values, actorId: req.player!.accountId,
       });
+      /**
+       * ⭐ Puan böleni değiştiyse mevcut puanları HEMEN yeniden türet (2026-08-08).
+       *
+       * ⚠️ Bu satır olmadan ayar "çalışmıyor" görünürdü: `players.score` yalnız bir harcama
+       * olduğunda yeniden hesaplanıyor, yani yönetici 1000'i 500 yapsa hiç kimsenin puanı bir
+       * sonraki harcamasına kadar oynamazdı. Aynı turda `attackScoreRatio`da yaşanan
+       * "kaydettim, hiçbir şey değişmedi" arızasının kardeşi olurdu.
+       * ⚠️ Kanca AYARLAR servisinde değil BURADA: "operatör bir düğmeyi çevirdi, sonucu
+       * görünür olsun" bir panel sorumluluğu; `SettingsService`i puanlamaya bağlamak onu her
+       * alan adına bağımlı kılardı.
+       */
+      if (res.changed.includes('scoring.resourcePerPoint')) {
+        await rederiveScores(this.db as never, id);
+      }
       await this.db.execute(sql`
         INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
         VALUES (${id}, ${req.player!.playerId}, 'admin.settings.update', 'settings', ${id},

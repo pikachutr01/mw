@@ -178,8 +178,8 @@ export function createAttackHandler(cities: CityService): MissionHandler {
      */
     const attackerLosses = perTypeLosses(attacker.units, result.attacker.counts);
     const defenderLosses = perTypeLosses(defender.units, result.defender.counts);
-    await debitLosses(ctx.tx, attackerPlayerId, attackerLosses);
-    await debitLosses(ctx.tx, defenderCity.playerId, defenderLosses);
+    await debitLosses(ctx.tx, ctx.worldId, attackerPlayerId, attackerLosses);
+    await debitLosses(ctx.tx, ctx.worldId, defenderCity.playerId, defenderLosses);
 
     /**
      * ⭐ ASKERÎ ÜNVAN — aynı kayıp tablosunun ikinci okuyucusu.
@@ -763,7 +763,7 @@ async function cancelDefenseBand(
       UPDATE cities SET gold = gold + ${refunded.gold}::numeric, food = food + ${refunded.food}::numeric
        WHERE id = ${cityId}
     `);
-    await debitRefund(ctx.tx as never, playerId, refunded);
+    await debitRefund(ctx.tx as never, ctx.worldId, playerId, refunded);
   }
   return { canceled, refunded };
 }

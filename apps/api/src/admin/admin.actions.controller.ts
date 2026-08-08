@@ -450,7 +450,7 @@ export class AdminActionsController {
     `);
     if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
 
-    await recomputeScoreBaseFromHoldings(this.db as never, d.playerId);
+    await recomputeScoreBaseFromHoldings(this.db as never, Number(p['world_id']), d.playerId);
     const [after] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT score FROM players WHERE id = ${d.playerId}
     `);
@@ -567,8 +567,8 @@ export class AdminActionsController {
       `);
     });
     /** ⚠️ İki tarafın da puanı türev — ikisi de yeniden hesaplanmalı. */
-    await recomputeScoreBaseFromHoldings(this.db as never, city.playerId);
-    await recomputeScoreBaseFromHoldings(this.db as never, d.toPlayerId);
+    await recomputeScoreBaseFromHoldings(this.db as never, city.worldId, city.playerId);
+    await recomputeScoreBaseFromHoldings(this.db as never, city.worldId, d.toPlayerId);
 
     await this.audit(city.worldId, req, 'admin.action.move_city', 'city', d.cityId, {
       from: city.playerId, to: d.toPlayerId,

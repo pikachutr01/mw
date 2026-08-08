@@ -105,7 +105,7 @@ export class QueueService {
      * sonraki istekte güncel olsun, süreç ömrü boyunca donmasın.
      */
     private readonly catalogFor?: (worldId: number) => CatalogConfig,
-  ) {}
+  ) { }
 
   /** Bu dünyanın etkin katalog sabitleri (yoksa varsayılan). */
   private cat(worldId: number): CatalogConfig {
@@ -174,7 +174,7 @@ export class QueueService {
 
       const cfg = this.cat(st.worldId);
       const cost = buildingCost(opts.type, target, cfg);
-      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
+      await this.spend(tx as never, st.worldId, opts.cityId, opts.playerId, cost, opts.at);
 
       const mult = await this.worldMultipliers(tx as never, st.worldId);
       const seconds = scaled(
@@ -240,7 +240,7 @@ export class QueueService {
       }
 
       const cost = { gold: def.gold * opts.count, food: def.food * opts.count };
-      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
+      await this.spend(tx as never, st.worldId, opts.cityId, opts.playerId, cost, opts.at);
 
       const mult = await this.worldMultipliers(tx as never, st.worldId);
       const perUnit = scaled(
@@ -386,7 +386,7 @@ export class QueueService {
         ) * count;
       }
 
-      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
+      await this.spend(tx as never, st.worldId, opts.cityId, opts.playerId, cost, opts.at);
 
       // Sur / Büyü Kalkanı: tek kalem, banda girmez → eski davranış aynen.
       if (levelBased) {
@@ -453,7 +453,7 @@ export class QueueService {
 
       const cfg = this.cat(st.worldId);
       const cost = techCost(opts.type, target, cfg);
-      await this.spend(tx as never, opts.cityId, opts.playerId, cost, opts.at);
+      await this.spend(tx as never, st.worldId, opts.cityId, opts.playerId, cost, opts.at);
 
       // Süre O ŞEHRİN akademisine bağlı (§13.9: a[187]="w" hangi şehir)
       const mult = await this.worldMultipliers(tx as never, st.worldId);
@@ -706,7 +706,8 @@ export class QueueService {
    * noktaya koysak yeni bir kalem türü eklendiğinde puan sessizce yazılmadan kalırdı.
    */
   private async spend(
-    tx: Db, cityId: number, playerId: number, cost: { gold: number; food: number }, at: Date,
+    tx: Db, worldId: number, cityId: number, playerId: number,
+    cost: { gold: number; food: number }, at: Date,
   ): Promise<void> {
     const ok = await this.cities.trySpend(cityId, cost, at, tx as never);
     if (!ok) {
@@ -716,7 +717,7 @@ export class QueueService {
         cost,
       );
     }
-    await creditSpend(tx as never, playerId, cost);
+    await creditSpend(tx as never, worldId, playerId, cost);
   }
 
   /** Kuyruk satırı + bitiş görevi — AYNI transaction (yarım iş olamaz). */
@@ -805,12 +806,14 @@ export class QueueService {
     const extraRatio = Math.max(0, Math.min(1, opts.refundRatio ?? 1));
 
     return this.db.transaction(async (tx) => {
+      /** ⚠️ `world_id` de okunuyor: puan böleni dünya bazlı ayar (`scoring.resourcePerPoint`). */
       const rows = await tx.execute<Record<string, unknown>>(sql`
-        SELECT id, city_id, player_id, spent_gold, spent_food, mission_id, category, item_type,
-               count, target_level, started_at, finish_at, done, position
-          FROM queues
-         WHERE id = ${opts.queueId} AND completed_at IS NULL AND canceled_at IS NULL
-         FOR UPDATE
+        SELECT q.id, q.city_id, q.player_id, q.spent_gold, q.spent_food, q.mission_id,
+               q.category, q.item_type, q.count, q.target_level, q.started_at, q.finish_at,
+               q.done, q.position, c.world_id
+          FROM queues q JOIN cities c ON c.id = q.city_id
+         WHERE q.id = ${opts.queueId} AND q.completed_at IS NULL AND q.canceled_at IS NULL
+         FOR UPDATE OF q
       `);
       const q = rows[0];
       if (!q) throw new QueueError('city_not_found', 'İptal edilecek kuyruk bulunamadı.');
@@ -892,7 +895,7 @@ export class QueueService {
          * Bu satır olmadan "sipariş ver, hemen iptal et" döngüsü kaynak harcamadan puan basardı:
          * sipariş harcamayı puana yazar, iptal kaynağı geri verir, kasa hiç azalmaz.
          */
-        await debitRefund(tx as never, opts.playerId, refunded);
+        await debitRefund(tx as never, Number(q['world_id']), opts.playerId, refunded);
       }
       return { refunded, rule, progress };
     });

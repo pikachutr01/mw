@@ -26,11 +26,26 @@ import {
 } from '@mobilwar/catalog';
 import type { Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
+import { liveNumberFor } from '../settings/live.ts';
 
 type Runner = Db | Tx;
 
-/** Kaç birim kaynak 1 puan eder (doküman: 1000). */
+/** Kaç birim kaynak 1 puan eder (doküman: 1000) — panel dokunmamışsa bu kullanılır. */
 export const RESOURCE_PER_POINT = 1000;
+
+/**
+ * ⭐ Bölen artık **panelden ayarlanabilir** (kullanıcı, 2026-08-08: *"Bu 1000 değerini admin
+ * panelde ayarlardan değiştirilebilir yapalım"*).
+ *
+ * ⚠️ Dünya bazlı okunuyor (`liveNumberFor`) çünkü panel ayarları `worldId`e yazıyor; eski
+ * `liveNumber` yalnız dünya 0'ı görürdü ve düğme sessizce işlevsiz kalırdı (o hatanın tam
+ * anlatımı `settings/live.ts`te).
+ * ⚠️ `max(1, …)`: 0 ya da negatif bölen puanı sonsuza/negatife götürürdü. Şema da 1 alt sınırı
+ * koyuyor; buradaki kelepçe onun ikinci savunması — ayar dosyası elle düzenlenebilir.
+ */
+export function resourcePerPoint(worldId: number): number {
+  return Math.max(1, liveNumberFor(worldId, 'scoring', 'resourcePerPoint', RESOURCE_PER_POINT));
+}
 
 export interface ResourceAmount {
   gold: number;
@@ -42,9 +57,12 @@ export function scoreValue(amount: ResourceAmount): number {
   return Math.max(0, amount.gold) + Math.max(0, amount.food);
 }
 
-/** Taban → gösterilen puan. Tek yerde durur ki sunucu ve testler aynı yuvarlamayı kullansın. */
-export function pointsFromBase(base: number): number {
-  return Math.floor(Math.max(0, base) / RESOURCE_PER_POINT);
+/**
+ * Taban → gösterilen puan. Tek yerde durur ki sunucu ve testler aynı yuvarlamayı kullansın.
+ * `perPoint` verilmezse doküman varsayılanı (1000) kullanılır.
+ */
+export function pointsFromBase(base: number, perPoint = RESOURCE_PER_POINT): number {
+  return Math.floor(Math.max(0, base) / Math.max(1, perPoint));
 }
 
 /**
@@ -76,37 +94,57 @@ export function lossValue(lost: Record<string, number>, cfg?: CatalogConfig): nu
  * bayat bir tabandan hesaplanır ve sessizce kayar.
  */
 export async function addScoreBase(
-  runner: Runner, playerId: number, delta: number,
+  runner: Runner, worldId: number, playerId: number, delta: number,
 ): Promise<void> {
   if (!Number.isFinite(delta) || delta === 0) return;
+  const perPoint = resourcePerPoint(worldId);
   await runner.execute(sql`
     UPDATE players
        SET score_base = GREATEST(0::numeric, score_base + ${delta}::numeric),
            score = FLOOR(GREATEST(0::numeric, score_base + ${delta}::numeric)
-                         / ${RESOURCE_PER_POINT}::numeric)
+                         / ${perPoint}::numeric)
      WHERE id = ${playerId}
   `);
 }
 
 /** Harcama → puan artışı. */
 export async function creditSpend(
-  runner: Runner, playerId: number, cost: ResourceAmount,
+  runner: Runner, worldId: number, playerId: number, cost: ResourceAmount,
 ): Promise<void> {
-  await addScoreBase(runner, playerId, scoreValue(cost));
+  await addScoreBase(runner, worldId, playerId, scoreValue(cost));
 }
 
 /** İade → puan geri alınır (harcanmamış sayılır). */
 export async function debitRefund(
-  runner: Runner, playerId: number, refund: ResourceAmount,
+  runner: Runner, worldId: number, playerId: number, refund: ResourceAmount,
 ): Promise<void> {
-  await addScoreBase(runner, playerId, -scoreValue(refund));
+  await addScoreBase(runner, worldId, playerId, -scoreValue(refund));
 }
 
 /** Savaş kaybı → ölen birimlerin bedeli kadar puan düşer. */
 export async function debitLosses(
-  runner: Runner, playerId: number, lost: Record<string, number>,
+  runner: Runner, worldId: number, playerId: number, lost: Record<string, number>,
 ): Promise<void> {
-  await addScoreBase(runner, playerId, -lossValue(lost));
+  await addScoreBase(runner, worldId, playerId, -lossValue(lost));
+}
+
+/**
+ * ⭐ Bölen değişince **mevcut puanları yeniden türet** (dünyanın tamamı, tek UPDATE).
+ *
+ * ⚠️ Bu olmadan ayar "çalışmıyor" görünürdü: `score` yalnız `addScoreBase` çağrıldığında
+ * yeniden hesaplanıyor, yani yönetici 1000'i 500 yapsa hiç kimsenin puanı bir sonraki
+ * harcamasına kadar değişmezdi. Panelde düğmeyi çevirip ekranda hiçbir şeyin oynamaması, tam
+ * olarak bu turda `attackScoreRatio`da yaşanan sessiz arızanın kardeşi olurdu.
+ * ⚠️ `score_base`e DOKUNMAZ: taban harcanan kaynağın kendisi, bölenden bağımsız.
+ */
+export async function rederiveScores(runner: Runner, worldId: number): Promise<number> {
+  const perPoint = resourcePerPoint(worldId);
+  const rows = await runner.execute<Record<string, unknown>>(sql`
+    UPDATE players SET score = FLOOR(GREATEST(0::numeric, score_base) / ${perPoint}::numeric)
+     WHERE world_id = ${worldId}
+    RETURNING id
+  `);
+  return rows.length;
 }
 
 /* ═══ GERİYE DÖNÜK DOLDURMA ═════════════════════════════════════════════════
@@ -163,7 +201,7 @@ export function unitsValue(counts: Record<string, number>, cfg?: CatalogConfig):
  * @returns yazılan taban (kaynak birimi)
  */
 export async function recomputeScoreBaseFromHoldings(
-  runner: Runner, playerId: number, cfg?: CatalogConfig,
+  runner: Runner, worldId: number, playerId: number, cfg?: CatalogConfig,
 ): Promise<number> {
   const [buildingRows, techRows, unitRows, defenseRows] = await Promise.all([
     runner.execute<Record<string, unknown>>(sql`
@@ -200,7 +238,7 @@ export async function recomputeScoreBaseFromHoldings(
   await runner.execute(sql`
     UPDATE players
        SET score_base = ${base}::numeric,
-           score = FLOOR(${base}::numeric / ${RESOURCE_PER_POINT}::numeric)
+           score = FLOOR(${base}::numeric / ${resourcePerPoint(worldId)}::numeric)
      WHERE id = ${playerId}
   `);
   return base;

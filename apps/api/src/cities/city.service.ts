@@ -375,7 +375,7 @@ export class CityService {
       // ⚠️ `cfg` geçiliyor: dünya bazlı fiyat override'ında terk edilen şehrin puan bedeli
       // oyuncunun gerçekte ödediğiyle aynı olmalı.
       const scoreBaseLost = await cityScoreBase(runner, o.cityId, this.cat(o.worldId));
-      await addScoreBase(runner, o.playerId, -scoreBaseLost);
+      await addScoreBase(runner, o.worldId, o.playerId, -scoreBaseLost);
 
       /**
        * Tek DELETE yetiyor: `buildings` · `units` · `cave_units` · `defenses` · `queues`

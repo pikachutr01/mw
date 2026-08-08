@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { UNITS_BY_ID, buildingCost } from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
@@ -18,8 +18,10 @@ import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { QueueService } from '../src/queues/queue.service.ts';
 import {
-  lossValue, pointsFromBase, recomputeScoreBaseFromHoldings, scoreValue,
+  lossValue, pointsFromBase, recomputeScoreBaseFromHoldings, rederiveScores, resourcePerPoint,
+  scoreValue,
 } from '../src/scoring/score.service.ts';
+import { setLiveSettings } from '../src/settings/live.ts';
 import {
   nextSnapshotAt, previousSnapshotAt, scheduleSnapshot, takeSnapshot,
 } from '../src/ranking/ranking.service.ts';
@@ -144,17 +146,17 @@ describe('savaş kaybının puan bedeli', () => {
 describe('sahip olunanlardan geriye dönük doldurma', () => {
   it('mevcut yapı ve orduyu puana çevirir; hiç oynamamış oyuncu 0 kalır', async () => {
     const fresh = await createPlayer(h, worldId, 'bos');
-    expect(await recomputeScoreBaseFromHoldings(h.db, fresh)).toBe(0);
+    expect(await recomputeScoreBaseFromHoldings(h.db, worldId, fresh)).toBe(0);
 
     // Başlangıç yapıları (Kale/Baraka/Çiftlik/Maden sv1) HEDİYE → puan yazmaz.
-    expect(await recomputeScoreBaseFromHoldings(h.db, playerId)).toBe(0);
+    expect(await recomputeScoreBaseFromHoldings(h.db, worldId, playerId)).toBe(0);
 
     await h.db.execute(sql`
       INSERT INTO units (city_id, type, count) VALUES (${cityId}, 'dwarf', 10)
       ON CONFLICT (city_id, type) DO UPDATE SET count = 10
     `);
     const dwarf = UNITS_BY_ID['dwarf']!;
-    const base = await recomputeScoreBaseFromHoldings(h.db, playerId);
+    const base = await recomputeScoreBaseFromHoldings(h.db, worldId, playerId);
     expect(base).toBe((dwarf.gold + dwarf.food) * 10);
     expect((await scoreOf()).score).toBe(Math.floor(base / 1000));
   });
@@ -329,3 +331,181 @@ async function ranks(): Promise<Map<number, { rank: number; prev: number | null 
   }
   return out;
 }
+
+/**
+ * ⭐⭐ KULLANICININ SAYDIĞI KURALLARIN TEK TEK DENETİMİ (2026-08-08).
+ *
+ * Kullanıcı puanlamayı sekiz maddede tarif etti ve *"bu hesaplama algoritmasını iyice bir test
+ * et"* dedi. Bu blok o maddeleri **birebir** ölçüyor; her testin başlığı hangi maddeyi
+ * kilitlediğini söylüyor ki bir gün biri kuralı değiştirmek istediğinde hangi testi
+ * güncelleyeceğini bilsin.
+ */
+describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
+  const spend = (c: { gold: number; food: number }): number => c.gold + c.food;
+
+  it('K1 · yapı KÜMÜLATİF: her seviye ayrı ayrı eklenir', async () => {
+    await giveResources(1e9, 1e9);
+    const at = await clock.gameNow(worldId);
+    const before = (await scoreOf()).base;
+
+    // Çiftlik 1→2 ve 2→3: iki ayrı harcama, ikisi de toplanmalı.
+    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    await h.db.execute(sql`UPDATE buildings SET level = 2 WHERE city_id = ${cityId} AND type = 'farm'`);
+    await h.db.execute(sql`DELETE FROM queues WHERE city_id = ${cityId}`);
+    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+
+    const beklenen = spend(buildingCost('farm', 2)) + spend(buildingCost('farm', 3));
+    expect((await scoreOf()).base - before).toBe(beklenen);
+  });
+
+  it('K2 · teknik yükseltmesi de puan yazar', async () => {
+    await giveResources(1e9, 1e9);
+    // ⚠️ Okçuluk'un ön-şartı Akademi 2 — kurgu eksikti ve test ilk yazımda bu yüzden düştü.
+    await h.db.execute(sql`
+      INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, 'academy', 2)
+      ON CONFLICT (city_id, type) DO UPDATE SET level = 2`);
+    const at = await clock.gameNow(worldId);
+    const before = (await scoreOf()).base;
+    await queues.enqueueTech({ cityId, playerId, type: 'archery', at });
+    expect((await scoreOf()).base - before).toBeGreaterThan(0);
+  });
+
+  it('K3 · asker üretimi puan yazar (adet kadar)', async () => {
+    await giveResources(1e9, 1e9);
+    await h.db.execute(sql`
+      INSERT INTO techs (player_id, type, level) VALUES (${playerId}, 'blacksmithing', 1)
+      ON CONFLICT (player_id, type) DO UPDATE SET level = 1`);
+    const at = await clock.gameNow(worldId);
+    const before = (await scoreOf()).base;
+    await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 7, at });
+    const d = UNITS_BY_ID['dwarf']!;
+    expect((await scoreOf()).base - before).toBe((d.gold + d.food) * 7);
+  });
+
+  it('K4 · savunma birimi ve Sur da puan yazar', async () => {
+    await giveResources(1e12, 1e12);
+    await h.db.execute(sql`
+      INSERT INTO techs (player_id, type, level) VALUES (${playerId}, 'archery', 1)
+      ON CONFLICT (player_id, type) DO UPDATE SET level = 1`);
+    // ⚠️ Okçu Kulesi'nin ön-şartı Sur 1; Sur'u önce kuruyoruz (kurgu eksikti).
+    await h.db.execute(sql`
+      INSERT INTO defenses (city_id, type, count) VALUES (${cityId}, 'wall', 1)
+      ON CONFLICT (city_id, type) DO UPDATE SET count = 1`);
+    const at = await clock.gameNow(worldId);
+
+    const a = (await scoreOf()).base;
+    await queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 3, at });
+    expect((await scoreOf()).base).toBeGreaterThan(a);
+
+    const b = (await scoreOf()).base;
+    await queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at });
+    expect((await scoreOf()).base).toBeGreaterThan(b);
+  });
+
+  /** ⭐ Kullanıcı: *"Kahraman diriltmesi için harcanan ganimet puan vermez."* */
+  it('K5 · KAHRAMAN DİRİLTME puan VERMEZ', async () => {
+    await giveResources(1e9, 1e9);
+    const at = await clock.gameNow(worldId);
+    const before = (await scoreOf()).base;
+    // Diriltme kuyruktan değil doğrudan `trySpend`ten geçiyor → puan yazılmamalı.
+    await cities.trySpend(cityId, { gold: 50_000, food: 50_000 }, at);
+    expect((await scoreOf()).base).toBe(before);
+  });
+
+  /** ⭐ Kullanıcı: *"Şehirde henüz harcanmayan ganimet miktarı da puan vermez."* */
+  it('K6 · şehirdeki HARCANMAMIŞ kaynak puan vermez', async () => {
+    const before = (await scoreOf()).base;
+    await giveResources(9_999_999, 9_999_999);
+    expect((await scoreOf()).base).toBe(before);
+  });
+
+  /** ⭐ Kullanıcı: *"savaşlarda kaybedilen askerler için aynı oranda puan kaybedilir."* */
+  it('K7 · kayıp, üretimde YAZILAN puanın aynısını geri alır', async () => {
+    await giveResources(1e9, 1e9);
+    await h.db.execute(sql`
+      INSERT INTO techs (player_id, type, level) VALUES (${playerId}, 'blacksmithing', 1)
+      ON CONFLICT (player_id, type) DO UPDATE SET level = 1`);
+    const at = await clock.gameNow(worldId);
+
+    const before = (await scoreOf()).base;
+    await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+    const yazilan = (await scoreOf()).base - before;
+
+    // Onunun da öldüğü senaryo: tam olarak yazılan kadar düşmeli.
+    expect(lossValue({ dwarf: 10 })).toBe(yazilan);
+  });
+
+  it('K8 · puan oyuncunun TÜM şehirlerinin toplamı', async () => {
+    await giveResources(1e9, 1e9);
+    const at = await clock.gameNow(worldId);
+    /**
+     * ⚠️ `cities.create` **`number` döndürüyor**, nesne değil — ilk yazımda `ikinci.id`
+     * yazdım, parametre `undefined` gitti ve Postgres «syntax error at end of input» dedi.
+     */
+    const ikinciId = await cities.create({
+      worldId, playerId, name: 'ikinci', k: 1, d: 9, s: 9, isCapital: false, at,
+    });
+    await h.db.execute(sql`
+      UPDATE cities SET gold = 1000000000::numeric, food = 1000000000::numeric
+       WHERE id = ${ikinciId}`);
+
+    const before = (await scoreOf()).base;
+    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    await queues.enqueueBuilding({ cityId: ikinciId, playerId, type: 'farm', at });
+
+    // İki AYRI şehirdeki harcama tek oyuncu tabanında toplanmalı.
+    expect((await scoreOf()).base - before).toBe(2 * spend(buildingCost('farm', 2)));
+  });
+});
+
+/**
+ * ⭐⭐ PUAN BÖLENİ PANELDEN AYARLANABİLİR (kullanıcı, 2026-08-08:
+ * *"Bu 1000 değerini admin panelde ayarlardan değiştirilebilir yapalım"*).
+ *
+ * ⚠️ Ölçülen iki ayrı şey var ve ikincisi kolayca unutulur:
+ *   1. Yeni harcamalar yeni böleni kullanıyor mu?
+ *   2. **Zaten var olan puanlar** ayar değişince güncelleniyor mu? `score` yalnız harcama
+ *      anında yeniden hesaplandığı için, bu olmadan yönetici düğmeyi çevirir ve ekranda
+ *      hiçbir şey oynamaz — "kaydettim, çalışmıyor" arızası.
+ */
+describe('⭐ puan böleni ayarlanabilir', () => {
+  afterEach(() => { setLiveSettings({}); });
+
+  it('bölen ayardan okunur (varsayılan 1000)', () => {
+    expect(resourcePerPoint(worldId)).toBe(1000);
+    setLiveSettings({ scoring: { resourcePerPoint: 250 } });
+    expect(resourcePerPoint(worldId)).toBe(250);
+  });
+
+  it('⭐ yeni harcama YENİ böleni kullanır', async () => {
+    setLiveSettings({ scoring: { resourcePerPoint: 100 } });
+    await giveResources(1e9, 1e9);
+    const at = await clock.gameNow(worldId);
+    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+
+    const { score, base } = await scoreOf();
+    expect(score).toBe(Math.floor(base / 100));
+  });
+
+  it('⭐⭐ bölen değişince MEVCUT puanlar yeniden türetilir', async () => {
+    // 10.000 birim harcanmış bir oyuncu: 1000 bölenle 10 puan.
+    await h.db.execute(sql`
+      UPDATE players SET score_base = 10000::numeric, score = 10 WHERE id = ${playerId}`);
+
+    setLiveSettings({ scoring: { resourcePerPoint: 500 } });
+    const n = await rederiveScores(h.db as never, worldId);
+
+    expect(n).toBeGreaterThanOrEqual(1);
+    const { score, base } = await scoreOf();
+    expect(base, 'taban DEĞİŞMEMELİ — harcanan kaynak bölenden bağımsız').toBe(10000);
+    expect(score, '10.000 / 500 = 20').toBe(20);
+  });
+
+  /** ⚠️ 0 ya da negatif bölen puanı sonsuza götürürdü; şema alt sınırı 1, kod da kelepçeliyor. */
+  it('sıfır/negatif bölen kelepçelenir', () => {
+    setLiveSettings({ scoring: { resourcePerPoint: 0 } });
+    expect(resourcePerPoint(worldId)).toBe(1);
+    setLiveSettings({ scoring: { resourcePerPoint: -5 } });
+    expect(resourcePerPoint(worldId)).toBe(1);
+  });
+});
