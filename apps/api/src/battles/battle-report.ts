@@ -95,10 +95,15 @@ export interface BattleReport {
     repairUntil: string | null;
   } | null;
   loot: { gold: number; food: number } | null;
-  /** Yalnız saldıran: savaşta ORTAYA ÇIKAN (enkaz+yağma havuzu) ve fiilen TAŞINAN ganimet. */
+  /**
+   * Yalnız saldıran.
+   *   `revealed` — savaşta ORTAYA ÇIKAN enkaz (ölen birimlerin bıraktığı). Savaşın sonucundan
+   *     BAĞIMSIZ: saldıran kaybetse de enkaz oluşur, yalnız tamamı savunanın şehrine gider.
+   *   `carried`  — fiilen eve taşınan yük. Saldıran kaybettiyse **null** (taşınacak şey yok).
+   */
   lootBreakdown: {
     revealed: { gold: number; food: number };
-    carried: { gold: number; food: number };
+    carried: { gold: number; food: number } | null;
   } | null;
   notes: string[];
   text: string;
@@ -251,7 +256,9 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
   const wall: BattleReport['wall'] = wallLevel > 0
     ? {
       level: wallLevel,
-      integrity,
+      // ⚠️ Oran YALNIZ savunana. Ekran bu alanı doğrudan basıyor; `null` bırakmak, «göstermeyi
+      // unutma» sorumluluğunu istemciden alıp tek yerde çözüyor (bkz. aşağıdaki sur notu).
+      integrity: side === 'defender' ? integrity : null,
       destroyed: r.wall?.destroyed ?? (integrity != null && integrity <= 0),
     }
     : null;
@@ -276,10 +283,25 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
     );
   }
 
+  /**
+   * ⭐ SUR HASARI — **saldıran ORANI görmez** (kullanıcı, 2026-08-08).
+   *
+   * ⚠️ Bütünlük yüzdesi savunma gücünün doğrudan ölçüsü: bir sonraki saldırının ne kadar
+   * kolay olacağını söylüyor. Saldırganın bunu bedavaya öğrenmesi, arka arkaya vurup surun
+   * ne zaman düşeceğini hesaplamasını sağlardı — casusluğun işini savaş raporu yapmış olurdu.
+   * Saldırana yalnız **hasar var/yok** bilgisi gidiyor; savunan kendi surunun tam durumunu
+   * görmeye devam ediyor. (Aynı ayrım `wallProduction` notunda da uygulanıyor.)
+   */
   if (integrity != null && integrity < 1 && wallLevel > 0) {
-    notes.push(integrity <= 0
-      ? 'SUR TAMAMEN YIKILDI — onarımı bitene kadar savunma birimi üretilemez.'
-      : `Sur bütünlüğü %${Math.round(integrity * 100)}'e düştü.`);
+    if (integrity <= 0) {
+      notes.push(side === 'defender'
+        ? 'SUR TAMAMEN YIKILDI — onarımı bitene kadar savunma birimi üretilemez.'
+        : 'Rakibin suru TAMAMEN YIKILDI.');
+    } else {
+      notes.push(side === 'defender'
+        ? `Sur bütünlüğü %${Math.round(integrity * 100)}'e düştü.`
+        : 'Rakibin suru hasar gördü.');
+    }
   }
 
   /**
@@ -308,18 +330,40 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
     notes.push(`Savaştan yeni bir kahraman çıktı: ${heroes.captured.name}!`);
   }
 
-  // Ganimet: saldıran ne ALDIĞINI, savunan ne KAYBETTİĞİNİ görür.
+  /**
+   * Ganimet: saldıran ne ALDIĞINI, savunan ne KAYBETTİĞİNİ görür.
+   *
+   * ⚠️⚠️ **İKİ HATA BURADAYDI (2026-08-08, oyuncu bildirimi + canlı veriyle doğrulandı).**
+   *
+   * 1. `revealed` = `fromDebris + fromPlunder` yazıyordu. Ama `fromPlunder`ın TANIMI
+   *    `taken − fromDebris` (bkz. `engine/loot.ts`) — yani toplamları **her zaman `taken`e
+   *    eşit**. «Ortaya çıkan» ile «Taşınan» satırları kazanılan savaşta da birbirinin
+   *    kopyasıydı; iki satır hiçbir bilgi taşımıyordu.
+   *
+   * 2. Saldıran KAYBEDİNCE motor `taken/fromDebris/fromPlunder`ı sıfırlayıp enkazın tamamını
+   *    `leftoverDebrisToDefender`a yazıyor. Yani `revealed` **sıfır** çıkıyordu ve rapor
+   *    *"hiç ganimet oluşmadı"* diyordu — oysa oluşmuştu. Canlı örnek (savaş #5, tohum
+   *    731518373): `debris = 84.495 altın / 82.995 yemek`, tamamı savunanın şehrine eklendi
+   *    (`battle.handlers.ts`), ama saldıranın raporunda **0** yazıyordu. Oyuncu bunu
+   *    *"savunana ganimet eklenmemiş"* diye bildirdi; veri doğruydu, RAPOR yalan söylüyordu.
+   *
+   * Düzeltme: «ortaya çıkan» artık motorun ürettiği **enkazın kendisi** (`result.debris`) —
+   * ölen askerlerin bıraktığı şey. Tanımı sonuçtan bağımsız, dolayısıyla kaybedilen savaşta da
+   * doğru. «Taşınan» yalnız gerçekten eve dönen yük; yoksa satır hiç yazılmıyor.
+   */
   let loot: { gold: number; food: number } | null = null;
   let lootBreakdown: BattleReport['lootBreakdown'] = null;
   if (r.loot) {
-    loot = side === 'attacker' ? r.loot.taken : r.loot.fromPlunder;
+    const won = r.winner === 'attacker';
+    // ⭐ Kaybeden saldıranda «Ganimet» satırı YOK: taşıdığı bir şey olmadığı için «0 altın,
+    //   0 yemek» yazmak bilgi değil gürültü (kullanıcı, 2026-08-08).
+    loot = side === 'attacker'
+      ? (won ? r.loot.taken : null)
+      : r.loot.fromPlunder;
     if (side === 'attacker') {
       lootBreakdown = {
-        revealed: {
-          gold: r.loot.fromDebris.gold + r.loot.fromPlunder.gold,
-          food: r.loot.fromDebris.food + r.loot.fromPlunder.food,
-        },
-        carried: r.loot.taken,
+        revealed: r.debris ?? { gold: 0, food: 0 },
+        carried: won ? r.loot.taken : null,
       };
     }
     if (side === 'defender' && (r.loot.leftoverDebrisToDefender.gold > 0 || r.loot.leftoverDebrisToDefender.food > 0)) {
@@ -446,12 +490,17 @@ function renderText(r: BattleReport): string {
   if (r.loot) {
     const label = r.side === 'attacker' ? 'Ganimet' : 'Yağmalanan';
     out.push(`${label}: ${tr(r.loot.gold)} altın, ${tr(r.loot.food)} yemek`);
-    if (r.lootBreakdown) {
-      out.push(`  Ortaya çıkan: ${tr(r.lootBreakdown.revealed.gold)} altın, ${tr(r.lootBreakdown.revealed.food)} yemek`
-        + ` · Taşınan: ${tr(r.lootBreakdown.carried.gold)} altın, ${tr(r.lootBreakdown.carried.food)} yemek`);
-    }
-    out.push('');
   }
+  if (r.lootBreakdown) {
+    // ⚠️ `carried` yoksa satır «Ortaya çıkan»da biter — kaybeden saldırana «Taşınan: 0» yazmak
+    //   bilgi değil gürültü olurdu (aynı gerekçe `loot`un null bırakılmasında).
+    out.push(`  Ortaya çıkan: ${tr(r.lootBreakdown.revealed.gold)} altın, `
+      + `${tr(r.lootBreakdown.revealed.food)} yemek`
+      + (r.lootBreakdown.carried
+        ? ` · Taşınan: ${tr(r.lootBreakdown.carried.gold)} altın, ${tr(r.lootBreakdown.carried.food)} yemek`
+        : ''));
+  }
+  if (r.loot || r.lootBreakdown) out.push('');
 
   for (const n of r.notes) out.push(n);
   return out.join('\n').trimEnd();

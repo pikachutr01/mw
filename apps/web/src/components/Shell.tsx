@@ -270,7 +270,14 @@ function InfoBar() {
 
       {/* ── ORTA: şehir · koordinat · sayfa (daima ortada) ────────────────────── */}
       <div className="flex min-w-0 items-center justify-center gap-2 sm:gap-4">
-        <span className="display hidden truncate text-sm font-semibold tracking-wide sm:block">
+        {/*
+          ⚠️ `display` sınıfı BİLEREK YOK — o sınıf **Cinzel**'i getiriyor ve Cinzel tasarımı
+          gereği küçük harfsiz bir Roma yazı tipi: küçük harfleri küçük-büyük harf (small caps)
+          olarak çiziyor. Sonuç, oyuncu «Mithlond» yazsa da ekranda «MİTHLOND» görünmesiydi.
+          Şehir adı OYUNCUNUN YAZDIĞI metindir; onu fontun yeniden biçimlendirmesi doğru değil.
+          Gövde fontu (Spectral) gerçek küçük harf taşıyor. Aynı düzeltme `CityStrip`te de var.
+        */}
+        <span className="hidden truncate text-sm font-semibold tracking-wide sm:block">
           {d?.name ?? '—'}
         </span>
         {/* Koordinat mobilde sayfa başlığının yerini alır ve VURGULU (kullanıcı, 2026-07-30). */}

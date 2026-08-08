@@ -1031,22 +1031,34 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
         </div>
       ) : null}
 
-      {r.loot ? (
+      {/*
+        ⚠️ İki blok AYRI koşulda: kaybeden saldıranda «Ganimet» satırı YOK ama «Ortaya çıkan»
+        VAR — ölen askerlerden enkaz oluşur, yalnız tamamı savunanın şehrine gider. Eskiden
+        ikisi tek `r.loot` koşuluna bağlıydı ve sunucu ganimeti `null` yapınca döküm de
+        kaybolurdu (2026-08-08 düzeltmesinin istemci yarısı).
+      */}
+      {r.loot || r.lootBreakdown ? (
         <div className="mb-2 space-y-1 text-xs">
-          <div className="flex items-center gap-2 text-ink">
-            <span>{r.side === 'attacker' ? 'Ganimet:' : 'Yağmalanan:'}</span>
-            <Res kind="gold" value={fmt(r.loot.gold)} size={14} />
-            <Res kind="food" value={fmt(r.loot.food)} size={14} />
-          </div>
+          {r.loot ? (
+            <div className="flex items-center gap-2 text-ink">
+              <span>{r.side === 'attacker' ? 'Ganimet:' : 'Yağmalanan:'}</span>
+              <Res kind="gold" value={fmt(r.loot.gold)} size={14} />
+              <Res kind="food" value={fmt(r.loot.food)} size={14} />
+            </div>
+          ) : null}
           {/* Oyuncu isteği (mesajlar.txt): ortaya çıkan ile taşınabilen ayrı yazılsın. */}
           {r.lootBreakdown ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted">
               <span>Ortaya çıkan:</span>
               <Res kind="gold" value={fmt(r.lootBreakdown.revealed.gold)} size={13} />
               <Res kind="food" value={fmt(r.lootBreakdown.revealed.food)} size={13} />
-              <span>· Taşınan:</span>
-              <Res kind="gold" value={fmt(r.lootBreakdown.carried.gold)} size={13} />
-              <Res kind="food" value={fmt(r.lootBreakdown.carried.food)} size={13} />
+              {r.lootBreakdown.carried ? (
+                <>
+                  <span>· Taşınan:</span>
+                  <Res kind="gold" value={fmt(r.lootBreakdown.carried.gold)} size={13} />
+                  <Res kind="food" value={fmt(r.lootBreakdown.carried.food)} size={13} />
+                </>
+              ) : null}
             </div>
           ) : null}
         </div>

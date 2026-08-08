@@ -803,8 +803,10 @@ export interface BattleReport {
   loot: { gold: number; food: number } | null;
   /** Yalnız saldıran: ortaya çıkan havuz vs fiilen taşınan. */
   lootBreakdown: {
+    /** Savaşta ortaya çıkan enkaz — saldıran KAYBETSE de dolu (tamamı savunana gider). */
     revealed: { gold: number; food: number };
-    carried: { gold: number; food: number };
+    /** Fiilen eve taşınan yük. Saldıran kaybettiyse `null` → «Taşınan» satırı hiç çizilmez. */
+    carried: { gold: number; food: number } | null;
   } | null;
   notes: string[];
   text: string;

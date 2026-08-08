@@ -870,6 +870,77 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
     expect(atk.coords?.origin?.owner).toMatch(/^atk-/);
     // Metin dökümünde de ad koordinatın yanında (kullanıcı, 2026-08-04).
     expect(atk.text).toMatch(/Kaynak: 1:1:1 \(saldiran\) → Hedef: 1:1:2 \(savunan\)/);
+
+    /**
+     * ⭐ «Ortaya çıkan» ile «Taşınan» AYRI şeyler olmalı. Eskiden `revealed` =
+     * `fromDebris + fromPlunder` yazıyordu ve o toplam TANIMI GEREĞİ `taken`e eşit
+     * (`engine/loot.ts`: `fromPlunder = taken − fromDebris`) → iki satır her zaman aynı
+     * sayıyı gösteriyordu. Artık `revealed` motorun ürettiği ENKAZ.
+     */
+    expect(atk.lootBreakdown!.revealed).toEqual(row.result.debris);
+    expect(atk.lootBreakdown!.carried).toEqual(atk.loot);
+
+    // ⭐ Sur oranı SALDIRANA gitmez (kullanıcı, 2026-08-08) — savunan kendi surunu görür.
+    if (atk.wall) expect(atk.wall.integrity).toBeNull();
+    expect(atk.text).not.toMatch(/bütünlük %/);
+    expect(atk.notes.join(' ')).not.toMatch(/Sur bütünlüğü %/);
+  });
+
+  /**
+   * ⭐⭐ **KAYBEDEN SALDIRANIN RAPORU** — oyuncu bildirimi (2026-08-08) ve canlı veriyle
+   * doğrulandı (savaş #5, tohum 731518373).
+   *
+   * ⚠️ Oyuncu *"kaybettiğim savaşta hiç ganimet oluşmamış yazıyor, oysa ölen askerler var"*
+   * dedi ve bunu *"savunana ganimet eklenmemiş"* diye yorumladı. Canlı satırda `debris`
+   * **84.495 altın / 82.995 yemek**'ti ve tamamı savunanın şehrine eklenmişti — yani VERİ
+   * doğruydu, **rapor yalan söylüyordu**: `revealed` sıfırlanmış alanlardan hesaplanıyordu.
+   *
+   * Bu test o yalanı imkânsız kılıyor: enkaz varsa raporda GÖRÜNMEK zorunda.
+   */
+  it('saldıran kaybedince: enkaz raporda görünür, «Ganimet» ve «Taşınan» yazılmaz', async () => {
+    // Savunan ezici üstünlükte → saldıran kesin kaybeder ama iki taraf da kayıp verir.
+    await giveUnits(attackCity, 'dwarf', 40);
+    await giveUnits(defendCity, 'dwarf', 4000);
+    await setResources(defendCity, 500_000, 500_000);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 40 }, at,
+    });
+    await runDue(m.missionId);
+
+    const b = (await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, at, night, winner, input, result FROM battles
+       WHERE world_id = ${worldId} ORDER BY id DESC LIMIT 1
+    `))[0]!;
+    const row: BattleRow = {
+      id: Number(b['id']), at: toDate(b['at']), night: Boolean(b['night']),
+      winner: String(b['winner']),
+      input: b['input'] as BattleRow['input'], result: b['result'] as BattleRow['result'],
+    };
+    expect(row.winner).toBe('defender');
+
+    // Enkaz gerçekten oluştu (ölen askerler var) ve TAMAMI savunana yazıldı.
+    const debris = row.result.debris;
+    expect(debris.gold + debris.food).toBeGreaterThan(0);
+    expect(row.result.loot!.leftoverDebrisToDefender).toEqual(debris);
+    expect(row.result.loot!.taken).toEqual({ gold: 0, food: 0 });
+
+    const atk = buildBattleReport(row, 'attacker');
+    // ⛔ Taşıdığı bir şey yok → «Ganimet» satırı HİÇ yazılmaz (kullanıcı kararı).
+    expect(atk.loot).toBeNull();
+    expect(atk.text).not.toMatch(/Ganimet:/);
+    expect(atk.text).not.toMatch(/Taşınan:/);
+    // ✅ Ama ortaya çıkan enkaz GÖRÜNÜR — hatanın tam olarak düzeltildiği yer burası.
+    expect(atk.lootBreakdown).not.toBeNull();
+    expect(atk.lootBreakdown!.revealed).toEqual(debris);
+    expect(atk.lootBreakdown!.carried).toBeNull();
+    expect(atk.text).toMatch(/Ortaya çıkan:/);
+
+    // Savunan kaybını ve şehrinde kalan enkazı görmeye devam eder.
+    const def = buildBattleReport(row, 'defender');
+    expect(def.notes.join(' ')).toMatch(/Taşınamayan enkaz şehrinde kaldı/);
   });
 
   /**

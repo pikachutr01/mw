@@ -115,7 +115,9 @@ export function CityStrip() {
         >
           <img src="/assets/buildings/city.png" alt="" width={96} height={77}
             className="icon-shadow h-5 w-auto shrink-0 object-contain" />
-          <span className="display truncate font-semibold text-accent">{activeCity?.name}</span>
+          {/* ⚠️ `display` (Cinzel) YOK: küçük harfsiz bir font, oyuncunun yazdığı adı
+              büyük harfe çeviriyordu. Gerekçe `Shell.tsx`teki eşinde ayrıntılı. */}
+          <span className="truncate font-semibold text-accent">{activeCity?.name}</span>
           {/* ⭐ Başkent etiketi buraya 2026-08-03'te taşındı: `CityHub`taki ad kartı kaldırıldı
               ve mobilde "hangisi başkentim?" sorusunun cevabı başka hiçbir yerde kalmıyordu. */}
           {activeCity?.isCapital ? (
@@ -196,7 +198,8 @@ export function CityStrip() {
                     ) : null}
                   </span>
 
-                  <span className={`display mt-0.5 block truncate text-[10px] leading-tight sm:text-sm ${
+                  {/* ⚠️ Burada da `display` (Cinzel) YOK — aynı gerekçe. */}
+                  <span className={`mt-0.5 block truncate text-[10px] leading-tight sm:text-sm ${
                     active ? 'font-semibold text-accent' : 'text-ink'
                   }`}>
                     {c.name}
