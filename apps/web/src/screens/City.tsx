@@ -144,14 +144,49 @@ function LockNote({ text }: { text: string }) {
   return <div className="mt-0.5 text-[11px] text-warning">{text}</div>;
 }
 
-function CostLine({ gold, food, seconds }: { gold: number; food: number; seconds: number | null }) {
+/**
+ * ⭐ SÜRE — dünya hız çarpanı devredeyse **indirim etiketi** gibi (kullanıcı, 2026-08-08).
+ *
+ * ⚠️⚠️ **Arızanın kendisi:** çarpan yalnız kuyruğa uygulanıyordu, ekrana değil. Kullanıcı
+ * *"İnşaat süresi hızını 10 kat yapıp yükseltme başlattığımda geri sayım hızlanmış görünüyor
+ * ama binanın yanında yazan süre 1x hâliyle duruyor"* dedi — yani başlatmadan önce gördüğü
+ * süre ile başladıktan sonraki geri sayım tutmuyordu. Artık **sunucu ikisini de gönderiyor**
+ * (`seconds` = gerçek, `baseSeconds` = çarpansız) ve burada ikisi birden gösteriliyor.
+ *
+ * ⚠️ `baseSeconds` **yalnız farklıysa** dolu geliyor; çarpan 1'ken bu bileşen bit-bit eski
+ * görüntüyü çiziyor. "Her zaman gönder, istemci karşılaştırsın" demedik: eşit değerleri
+ * karşılaştırma sorumluluğu iki yere bölünürdü.
+ */
+function Duration({ seconds, baseSeconds }: { seconds: number; baseSeconds?: number | null }) {
+  if (baseSeconds == null || baseSeconds === seconds) {
+    return (
+      <span className="tnum inline-flex items-center gap-1" title="Süre">
+        ⏳ {formatDuration(seconds)}
+      </span>
+    );
+  }
+  return (
+    /* Dikey yığın: üstte küçük ve üstü kırmızı çizili eski süre, altında geçerli süre. */
+    <span className="inline-flex flex-col leading-tight"
+      title={`Dünya hız çarpanı: ${formatDuration(baseSeconds)} → ${formatDuration(seconds)}`}>
+      <span className="tnum text-[10px] text-muted line-through decoration-danger decoration-2">
+        {formatDuration(baseSeconds)}
+      </span>
+      <span className="tnum inline-flex items-center gap-1 font-semibold text-accent">
+        ⏳ {formatDuration(seconds)}
+      </span>
+    </span>
+  );
+}
+
+function CostLine({
+  gold, food, seconds, baseSeconds,
+}: { gold: number; food: number; seconds: number | null; baseSeconds?: number | null }) {
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
       <Res kind="gold" value={fmt(gold)} size={14} />
       <Res kind="food" value={fmt(food)} size={14} />
-      {seconds != null ? (
-        <span className="tnum inline-flex items-center gap-1" title="Süre">⏳ {formatDuration(seconds)}</span>
-      ) : null}
+      {seconds != null ? <Duration seconds={seconds} baseSeconds={baseSeconds} /> : null}
     </div>
   );
 }
@@ -384,7 +419,10 @@ function Buildings({ city }: { city: CityDetail }) {
                       </span>
                     ) : undefined}
                   />
-                  {cost ? <CostLine gold={cost.gold} food={cost.food} seconds={b.nextSeconds} /> : null}
+                  {cost ? (
+                    <CostLine gold={cost.gold} food={cost.food}
+                      seconds={b.nextSeconds} baseSeconds={b.baseSeconds} />
+                  ) : null}
                   <Requirements requirementNames={b.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
                   {capped ? <VerifyCap max={catalog.data!.verify!.maxBuildingLevel} /> : null}
@@ -776,9 +814,17 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
         {list.map((u, i) => {
           const n = Number(counts[u.id] ?? '') || 0;
           const levelBased = u.levelBased === true;
+          /**
+           * ⚠️ Toplam süre adetle çarpılıyor; ÇARPANSIZ toplam da aynı şekilde çarpılmalı,
+           * yoksa "indirim etiketi" tek birimde doğru, 100 birimde saçma görünürdü.
+           */
           const total = levelBased
-            ? { gold: u.cost.gold, food: u.cost.food, seconds: u.seconds }
-            : { gold: u.cost.gold * n, food: u.cost.food * n, seconds: (u.seconds ?? 0) * n };
+            ? { gold: u.cost.gold, food: u.cost.food, seconds: u.seconds, base: u.baseSeconds }
+            : {
+              gold: u.cost.gold * n, food: u.cost.food * n,
+              seconds: (u.seconds ?? 0) * n,
+              base: u.baseSeconds == null ? null : u.baseSeconds * n,
+            };
           const afford = city.resources.gold >= total.gold && city.resources.food >= total.food;
           const unmet = (u.requirementNames ?? []).some((r) => {
             const lv = r.kind === 'building' ? (structureLevels[r.id] ?? 0) : (city.techs[r.id] ?? 0);
@@ -811,7 +857,8 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                       Mağarada: <b className="tnum text-ink">{fmt(city.cave.units[u.id]!)}</b>
                     </div>
                   ) : null}
-                  <CostLine gold={u.cost.gold} food={u.cost.food} seconds={u.seconds ?? null} />
+                  <CostLine gold={u.cost.gold} food={u.cost.food}
+                    seconds={u.seconds ?? null} baseSeconds={u.baseSeconds} />
                   <Requirements requirementNames={u.requirementNames}
                     buildings={structureLevels} techs={city.techs} />
                   {capped ? (
@@ -853,7 +900,7 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
                   <span>Toplam:</span>
                   <Res kind="gold" value={fmt(total.gold)} size={13} />
                   <Res kind="food" value={fmt(total.food)} size={13} />
-                  <span className="tnum">⏳ {formatDuration(total.seconds)}</span>
+                  <Duration seconds={total.seconds} baseSeconds={total.base} />
                 </div>
               ) : null}
 
@@ -933,7 +980,8 @@ function Techs({ city }: { city: CityDetail }) {
                 <CatalogIcon kind="techs" id={t.id} alt={t.name} />
                 <div className="min-w-0 flex-1">
                   <ItemName name={t.name} value={t.level} />
-                  <CostLine gold={t.nextCost.gold} food={t.nextCost.food} seconds={t.nextSeconds} />
+                  <CostLine gold={t.nextCost.gold} food={t.nextCost.food}
+                    seconds={t.nextSeconds} baseSeconds={t.baseSeconds} />
                   <Requirements requirementNames={t.requirementNames}
                     buildings={city.buildings} techs={city.techs} />
                   {capped ? <VerifyCap max={caps.maxTechLevel} what="Araştırma" /> : null}

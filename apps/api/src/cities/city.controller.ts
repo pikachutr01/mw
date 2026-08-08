@@ -451,6 +451,37 @@ export class CityController {
       mine: (lv) => mineOutput(lv, cfg) * mult,
     };
 
+    /**
+     * ⭐⭐ DÜNYA HIZ ÇARPANI EKRANA DA UYGULANIR (kullanıcı, 2026-08-08).
+     *
+     * ⚠️⚠️ **Arıza:** `queue.service.ts` süreyi `scaled(seconds, çarpan)` ile bölüyordu ama bu
+     * uç bölmeden gönderiyordu. Sonuç, kullanıcının bildirdiği tablo: *"İnşaat süresi hızını 10
+     * kat yapıp yükseltme başlattığımda geri sayım hızlanmış görünüyor ama binanın yanında yazan
+     * süre 1x hâliyle duruyor."* Yani oyuncu **başlatmadan önce gördüğü süreyle** başlattıktan
+     * sonraki geri sayımın tutmadığını görüyordu.
+     *
+     * ⚠️ Bölme burada KOPYALANMIYOR, `queue.service`teki `scaled` ile **birebir aynı formül**
+     * yazılıyor (`max(1, sn / max(1, çarpan))`) ve bir test ikisinin eşitliğini kilitliyor.
+     * Yuvarlama yalnız EKRAN için: kuyruk kesirli saklıyor (tembel materyalizasyon ona bağlı).
+     *
+     * ⚠️ Hangi kaleme hangi çarpan — `queue.service`teki dağılımın aynısı:
+     *   bina · teknik · Sur/Büyü Kalkanı → `construction` · savaşçı · savunma birimi → `training`
+     * Karıştırmak sessiz bir hata olurdu: ekran doğru görünür, kuyruk başka süre yazardı.
+     *
+     * `baseSeconds` = çarpansız süre; **yalnız farklıysa** dolu döner. İstemci onu üstü çizili
+     * "indirim etiketi" olarak gösteriyor, eşitse hiç çizmiyor.
+     */
+    const speed = snap.speed;
+    const dur = (base: number, multiplier: number): {
+      seconds: number; baseSeconds: number | null;
+    } => {
+      const m = Math.max(1, Number(multiplier ?? 1));
+      const effective = Math.max(1, base / m);
+      const rounded = Math.round(effective);
+      const roundedBase = Math.round(base);
+      return { seconds: rounded, baseSeconds: rounded === roundedBase ? null : roundedBase };
+    };
+
     return {
       verify,
       // ⚠️ Sıra ARAYÜZ sırasıdır (§ display-order): katalog dizisinin kendi sırası değil.
@@ -459,12 +490,15 @@ export class CityController {
         const next = level + 1;
         const available = next <= b.maxLevel;
         const out = outputOf[b.id];
+        // ⭐ Bir sonraki seviyenin SÜRESİ — dünya `construction` çarpanı UYGULANMIŞ hâliyle.
+        const t = available
+          ? dur(buildingTimeSeconds(b.id, next, architect, cfg), speed.construction)
+          : null;
         return {
           id: b.id, name: b.name.tr, level, maxLevel: b.maxLevel,
           nextCost: available ? buildingCost(b.id, next, cfg) : null,
-          // ⭐ Bir sonraki seviyenin SÜRESİ (saniye) — oyuncu maliyetle birlikte bunu da görmeli.
-          nextSeconds: available
-            ? Math.round(buildingTimeSeconds(b.id, next, architect, cfg)) : null,
+          nextSeconds: t?.seconds ?? null,
+          baseSeconds: t?.baseSeconds ?? null,
           /** Saatlik üretim; yalnız üreten yapılarda (Çiftlik/Maden), diğerlerinde `null`. */
           production: out
             ? { perHour: Math.floor(out(level)), nextPerHour: available ? Math.floor(out(next)) : null }
@@ -473,15 +507,19 @@ export class CityController {
           requirementNames: nameRequirements(BUILDING_REQUIREMENTS[b.id]),
         };
       }),
-      units: orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER).map((u) => ({
-        // `carry` nakliye/destek formunun kapasite göstergesi için gerekiyor (§NAKLİYE).
-        id: u.id, name: u.name.tr, area: u.area, speed: u.speed, carry: u.carry,
-        cost: unitCost(u.id, 1, cfg),
+      units: orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER).map((u) => {
         /** Bir birimin üretim süresi: `((a+y)/10)^0,8 × 65 / 1,4^Baraka`. Adetle çarpılır. */
-        seconds: Math.round(trainingTimeSeconds(u.id, barracks, 'balanced', cfg)),
-        requirements: UNIT_REQUIREMENTS[u.id] ?? {},
-        requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
-      })),
+        const t = dur(trainingTimeSeconds(u.id, barracks, 'balanced', cfg), speed.training);
+        return {
+          // `carry` nakliye/destek formunun kapasite göstergesi için gerekiyor (§NAKLİYE).
+          id: u.id, name: u.name.tr, area: u.area, speed: u.speed, carry: u.carry,
+          cost: unitCost(u.id, 1, cfg),
+          seconds: t.seconds,
+          baseSeconds: t.baseSeconds,
+          requirements: UNIT_REQUIREMENTS[u.id] ?? {},
+          requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
+        };
+      }),
       defenses: orderBy(
         UNITS.filter((u) => u.kind === 'defense' && u.id !== 'temple'), DEFENSE_ORDER,
       ).map((u) => {
@@ -493,22 +531,32 @@ export class CityController {
         const cost = levelBased
           ? defenseStructureCost(u.id, nextLevel, cfg)
           : unitCost(u.id, 1, cfg);
+        /**
+         * İki dal da AYNI süre kuralını kullanır (10(a+y)/1,4^MimarOkulu) ama **ÇARPANLARI
+         * FARKLI**: Sur/Büyü Kalkanı bir YAPI (construction), adetli savunma birimi bir ÜRETİM
+         * (training). `queue.service.ts`teki dağılımın aynısı — ikisini eşitlemek, ekranla
+         * kuyruğun sessizce ayrışmasına yol açardı.
+         */
+        const t = levelBased
+          ? dur(timeFromCost(cost, architect, cfg), speed.construction)
+          : dur(trainingTimeSeconds(u.id, architect, 'balanced', cfg), speed.training);
         return {
           id: u.id, name: u.name.tr, area: u.area, levelBased, current, cost,
-          // İki dal da AYNI kural: 10(a+y)/1,4^MimarOkulu. Fark yalnız maliyetin seviyeli olması.
-          seconds: levelBased
-            ? Math.round(timeFromCost(cost, architect, cfg))
-            : Math.round(trainingTimeSeconds(u.id, architect, 'balanced', cfg)),
+          seconds: t.seconds,
+          baseSeconds: t.baseSeconds,
           requirements: UNIT_REQUIREMENTS[u.id] ?? {},
           requirementNames: nameRequirements(UNIT_REQUIREMENTS[u.id]),
         };
       }),
       techs: orderBy(TECHS, TECH_ORDER).map((t) => {
         const level = techs[t.id] ?? 0;
+        // ⚠️ Teknik `construction` çarpanına bağlı (`queue.service.ts:461`), `training`e değil.
+        const d = dur(techTimeSeconds(t.id, level + 1, academy, cfg), speed.construction);
         return {
           id: t.id, name: t.name.tr, level,
           nextCost: techCost(t.id, level + 1, cfg),
-          nextSeconds: Math.round(techTimeSeconds(t.id, level + 1, academy, cfg)),
+          nextSeconds: d.seconds,
+          baseSeconds: d.baseSeconds,
           requirements: TECH_REQUIREMENTS[t.id] ?? {},
           requirementNames: nameRequirements(TECH_REQUIREMENTS[t.id]),
         };

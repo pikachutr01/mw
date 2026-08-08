@@ -13,8 +13,11 @@ import {
 } from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
+import { CaveService } from '../src/cave/cave.service.ts';
 import { CapacityService, DEFAULT_AREA_RULES } from '../src/cities/capacity.service.ts';
+import { CityController } from '../src/cities/city.controller.ts';
 import { CityService } from '../src/cities/city.service.ts';
+import { SettingsService } from '../src/settings/settings.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { echoHandler } from '../src/missions/echo.handler.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';
@@ -921,5 +924,103 @@ describe('dünya hız çarpanları üretim/inşaat sürelerini böler', () => {
     const at = await clock.gameNow(worldId);
     const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
     expect(durationOf(q)).toBe(Math.round(buildingTimeSeconds('farm', 2, 0)));
+  });
+
+  /* ── EKRAN İLE KUYRUK AYNI SÜREYİ SÖYLEMELİ (kullanıcı, 2026-08-08) ─────────────────── */
+
+  /**
+   * ⭐⭐ ASIL BEKÇİ. Kullanıcı: *"İnşaat süresi hızını 10 kat yapıp yükseltme başlattığımda
+   * geri sayım hızlanmış görünüyor ama binanın yanında yazan süre 1x hâliyle duruyor."*
+   *
+   * Sebep: çarpanı YALNIZ `queue.service` uyguluyordu; katalog ucu (ekrandaki süre) bölmeden
+   * gönderiyordu. Yukarıdaki testler kuyruğu ölçüyor, ekranı hiç ölçmüyordu — arıza tam o
+   * boşlukta yaşıyordu.
+   *
+   * ⚠️ Ölçülen şey bir formül değil, **iki tarafın eşitliği**: ekranda yazan süre, kuyruğa
+   * gerçekten yazılan süreye (yuvarlanmış hâliyle) eşit olmalı. Formülü tekrar yazsaydım
+   * ikisi de benim yazdığıma uyar ama birbirinden yine kayabilirdi.
+   */
+  const catalogOf = async (): Promise<Record<string, Record<string, unknown>[]>> => {
+    const ctl = new CityController(
+      cities, queues, new CaveService(h.db), clock, new SettingsService(h.db), h.db,
+    );
+    return await ctl.catalog(
+      String(cityId), { player: { playerId, worldId } } as never,
+    ) as never;
+  };
+  const pick = (rows: Record<string, unknown>[], id: string): Record<string, unknown> =>
+    rows.find((r) => r['id'] === id)!;
+
+  it('⭐⭐ ekrandaki bina süresi, kuyruğun yazdığı süreyle AYNI', async () => {
+    await setMultipliers(1, 10);
+    const at = await clock.gameNow(worldId);
+
+    const row = pick((await catalogOf())['buildings']!, 'farm');
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+
+    expect(row['nextSeconds']).toBe(Math.round(durationOf(q)));
+    // Üstü çizili "eski" değer de çarpansız süre olmalı.
+    expect(row['baseSeconds']).toBe(Math.round(buildingTimeSeconds('farm', 2, 0)));
+  });
+
+  it('⭐ ekrandaki teknik süresi de kuyrukla aynı', async () => {
+    await giveResources(1e9, 1e9);
+    await setLevel('academy', 2);
+    await setMultipliers(1, 6);
+    const at = await clock.gameNow(worldId);
+
+    const row = pick((await catalogOf())['techs']!, 'blacksmithing');
+    const q = await queues.enqueueTech({ cityId, playerId, type: 'blacksmithing', at });
+
+    expect(row['nextSeconds']).toBe(Math.round(durationOf(q)));
+  });
+
+  /**
+   * ⚠️ Savunmanın İKİ dalı FARKLI çarpan kullanıyor (Sur → construction, adetli birim →
+   * training). Tek testte ölçülüyor ki biri diğerinin çarpanına kaydırılırsa yakalansın —
+   * ekranda doğru, kuyrukta yanlış bir süre en sinsi hâli olurdu.
+   */
+  it('⭐ savunmanın iki dalı ekranda da DOĞRU çarpanı kullanıyor', async () => {
+    await giveResources(1e12, 1e12);
+    await setTech('archery', 1);
+    await h.db.execute(sql`
+      INSERT INTO defenses (city_id, type, count) VALUES (${cityId}, 'wall', 3)
+      ON CONFLICT (city_id, type) DO UPDATE SET count = 3
+    `);
+    await setMultipliers(3, 5);
+    const at = await clock.gameNow(worldId);
+    const rows = (await catalogOf())['defenses']!;
+
+    const tower = await queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 4, at });
+    expect(pick(rows, 'archer_tower')['seconds'])
+      .toBe(Math.round(Number(tower.perUnitSeconds)));
+
+    const wall = await queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at });
+    expect(pick(rows, 'wall')['seconds']).toBe(Math.round(durationOf(wall)));
+  });
+
+  it('⭐ ekrandaki savaşçı süresi kuyrukla aynı (birim başına)', async () => {
+    await giveResources(1e9, 1e9);
+    await setLevel('barracks', 1);
+    await setTech('blacksmithing', 1);
+    await setMultipliers(4, 1);
+    const at = await clock.gameNow(worldId);
+
+    const row = pick((await catalogOf())['units']!, 'dwarf');
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+
+    expect(row['seconds']).toBe(Math.round(Number(q.perUnitSeconds)));
+    expect(row['baseSeconds']).toBe(Math.round(trainingTimeSeconds('dwarf', 1)));
+  });
+
+  /**
+   * ⚠️ Çarpan 1'ken `baseSeconds` **null** olmalı: istemci onu "farklı değer var" işareti
+   * olarak okuyor ve dolu gelseydi her satırda gereksiz bir üstü çizili sayı belirirdi.
+   */
+  it('çarpan 1 iken üstü çizili değer HİÇ gönderilmez', async () => {
+    const cat = await catalogOf();
+    expect(pick(cat['buildings']!, 'farm')['baseSeconds']).toBeNull();
+    expect(pick(cat['techs']!, 'blacksmithing')['baseSeconds']).toBeNull();
+    expect(pick(cat['units']!, 'dwarf')['baseSeconds']).toBeNull();
   });
 });

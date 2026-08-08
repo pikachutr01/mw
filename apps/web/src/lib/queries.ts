@@ -172,8 +172,14 @@ export interface CatalogBuilding extends CatalogEntry {
   level: number;
   maxLevel: number;
   nextCost: { gold: number; food: number } | null;
-  /** Bir sonraki seviyenin süresi (saniye). Tavandaysa null. */
+  /** Bir sonraki seviyenin süresi (saniye) — **dünya hız çarpanı uygulanmış**. Tavandaysa null. */
   nextSeconds: number | null;
+  /**
+   * ⭐ Çarpansız (1x) süre — yalnız `nextSeconds`ten FARKLIYSA dolu (2026-08-08).
+   * Arayüz bunu üstü çizili "indirim etiketi" olarak gösteriyor; eşitken hiç çizmiyor.
+   * ⚠️ İstemci hesaplamaz: bölme `queue.service`teki `scaled` ile aynı olmak zorunda.
+   */
+  baseSeconds: number | null;
   /**
    * ⭐ Saatlik üretim — yalnız üreten yapılarda (Çiftlik/Maden), diğerlerinde `null`.
    * ⚠️ Sunucudan geliyor: oran ve dünya çarpanı panelden ayarlanabiliyor, istemcide
@@ -188,8 +194,10 @@ export interface CatalogUnit extends CatalogEntry {
   /** Ganimet taşıma kapasitesi — nakliye/destek formunun tavanı (§NAKLİYE). */
   carry?: number;
   cost: { gold: number; food: number };
-  /** Bir birimin üretim süresi (saniye); adetle çarpılır. */
+  /** Bir birimin üretim süresi (saniye), dünya çarpanı uygulanmış; adetle çarpılır. */
   seconds: number;
+  /** Çarpansız süre — yalnız `seconds`ten farklıysa dolu. Bkz. `CatalogBuilding.baseSeconds`. */
+  baseSeconds: number | null;
   levelBased?: boolean;
   current?: number;
 }
@@ -197,7 +205,10 @@ export interface CatalogUnit extends CatalogEntry {
 export interface CatalogTech extends CatalogEntry {
   level: number;
   nextCost: { gold: number; food: number };
+  /** Dünya `construction` çarpanı uygulanmış süre. */
   nextSeconds: number;
+  /** Çarpansız süre — yalnız farklıysa dolu. Bkz. `CatalogBuilding.baseSeconds`. */
+  baseSeconds: number | null;
 }
 
 /**
