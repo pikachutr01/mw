@@ -22,6 +22,8 @@ import { AuthGuard } from '../auth/auth.guard.ts';
 import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
+import { applyHoldingsDelta, snapshotHoldings } from '../scoring/score.service.ts';
+import { SettingsService } from '../settings/settings.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
 import { currentTraceId } from '../common/request-context.ts';
@@ -152,6 +154,8 @@ export class AdminBulkController {
     @Inject(DB) private readonly db: Db,
     private readonly cities: CityService,
     private readonly clock: GameClockService,
+    /** Dünyanın etkin katalog sabitleri — puan farkı oyuncunun ÖDEDİĞİ fiyatla hesaplanmalı. */
+    private readonly settings: SettingsService,
   ) {}
 
   @Post(':op')
@@ -187,7 +191,34 @@ export class AdminBulkController {
     if (!d.confirm) return { ...preview, ran: false, changed: 0 };
     if (victims.length === 0) return { ...preview, ran: true, changed: 0 };
 
+    /**
+     * ⭐⭐ PUAN, MÜDAHALE KADAR OYNAR (kullanıcı bildirimi, 2026-08-09).
+     *
+     * Operatör toplu ordu dağıttı, her şehirde on binlerce savaşçı oldu ama sıralama hiç
+     * değişmedi. Sıralama doğruydu: `score_base` yalnız `creditSpend` ile büyür ve bu
+     * controller doğrudan tabloya yazıyor, o yoldan geçmiyor.
+     *
+     * ⚠️⚠️ Asıl kusur "puan artmadı" DEĞİL **asimetri**: bağışlanan birim puan kazandırmıyordu
+     * ama savaşta ölünce `debitLosses` katalog bedelini düşüyor. Yani hediye ordu, oyuncuyu ilk
+     * savaşta hiç kazanmadığı puandan ederdi.
+     *
+     * ⚠️ Taban sıfırdan YAZILMIYOR: o, oyuncunun harcayıp savaşta kaybettiği geçmişi silerdi.
+     * Uygulanan şey **fark** — müdahale öncesi/sonrası sahiplik değerinin farkı.
+     * ⚠️ Kaynak (`resources`) işlemi puana DOKUNMAZ: harcanmamış kaynak puan vermez (§K6);
+     * oyuncu onu harcadığında `creditSpend` zaten yazacak.
+     */
+    const puanEtkiler = op !== 'resources';
+    const ids = victims.map((v) => v.id);
+    const cfg = this.settings.catalog(d.target.worldId);
+    const before = puanEtkiler
+      ? await snapshotHoldings(this.db as never, ids, cfg)
+      : new Map<number, number>();
+
     const changed = await this.apply(op as Op, d as never, victims);
+
+    if (puanEtkiler) {
+      await applyHoldingsDelta(this.db as never, d.target.worldId, ids, before, cfg);
+    }
 
     await this.db.execute(sql`
       INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, before, after, trace_id)

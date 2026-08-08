@@ -200,8 +200,16 @@ export function unitsValue(counts: Record<string, number>, cfg?: CatalogConfig):
  * Bir oyuncunun sahip olduklarından puan tabanını yeniden kurar ve yazar.
  * @returns yazılan taban (kaynak birimi)
  */
-export async function recomputeScoreBaseFromHoldings(
-  runner: Runner, worldId: number, playerId: number, cfg?: CatalogConfig,
+/**
+ * ⭐ Oyuncunun ŞU AN sahip olduklarının katalog bedeli — **yazmadan** okur.
+ *
+ * ⚠️ `recomputeScoreBaseFromHoldings`ten ayrıldı (2026-08-09) çünkü ikinci bir tüketicisi
+ * çıktı: yönetici toplu ordu/yapı verdiğinde puanın **farkı** kadar oynaması gerekiyor.
+ * Orada tabanı sıfırdan yazmak, oyuncunun geçmişte harcayıp savaşta kaybettiği her şeyi
+ * silerdi — o bilgi holdings'te yok.
+ */
+export async function holdingsValue(
+  runner: Runner, playerId: number, cfg?: CatalogConfig,
 ): Promise<number> {
   const [buildingRows, techRows, unitRows, defenseRows] = await Promise.all([
     runner.execute<Record<string, unknown>>(sql`
@@ -235,6 +243,17 @@ export async function recomputeScoreBaseFromHoldings(
       : unitsValue({ [type]: n }, cfg);
   }
 
+  return base;
+}
+
+/**
+ * Bir oyuncunun sahip olduklarından puan tabanını yeniden kurar ve yazar.
+ * @returns yazılan taban (kaynak birimi)
+ */
+export async function recomputeScoreBaseFromHoldings(
+  runner: Runner, worldId: number, playerId: number, cfg?: CatalogConfig,
+): Promise<number> {
+  const base = await holdingsValue(runner, playerId, cfg);
   await runner.execute(sql`
     UPDATE players
        SET score_base = ${base}::numeric,
@@ -242,4 +261,41 @@ export async function recomputeScoreBaseFromHoldings(
      WHERE id = ${playerId}
   `);
   return base;
+}
+
+/**
+ * ⭐⭐ YÖNETİCİ MÜDAHALESİNİN PUAN KARŞILIĞI (kullanıcı bildirimi, 2026-08-09).
+ *
+ * Operatör panelden toplu ordu dağıttı: her şehirde on binlerce savaşçı oldu ama sıralama
+ * hiç oynamadı. Sıralama doğru çalışıyordu — `score_base` yalnız `creditSpend` ile büyüyor ve
+ * toplu dağıtım o yoldan geçmiyordu (`admin.bulk.controller.ts` doğrudan tabloya yazıyor).
+ *
+ * ⚠️⚠️ **Asıl kusur "puan artmadı" değil, ASİMETRİ.** Bağışlanan birim puan KAZANDIRMIYOR ama
+ * savaşta ölünce `debitLosses` katalog bedelini **düşüyor**. Yani hediye ordu, oyuncuyu ilk
+ * savaşta hiç kazanmadığı puandan eder; 9 puanlı bir oyuncuya 63.000 asker verip savaşa
+ * sokmak puanını 0'a çakar. Aynısı yapı/teknik için de geçerli: şehir terk edilince
+ * `cityScoreBase` bağışlanan seviyeleri de düşüyor.
+ *
+ * ⚠️ Çözüm tabanı sıfırdan YAZMAK değil (`recomputeScoreBaseFromHoldings`) — o, oyuncunun
+ * gerçekten harcayıp savaşta kaybettiği geçmişi siler. Doğrusu **fark kadar oynatmak**:
+ * müdahale öncesi ve sonrası sahiplik değerinin farkı. Böylece hediye de gasp da simetrik
+ * olur ve kazanılmış geçmiş korunur.
+ */
+export async function applyHoldingsDelta(
+  runner: Runner, worldId: number, playerIds: readonly number[],
+  before: ReadonlyMap<number, number>, cfg?: CatalogConfig,
+): Promise<void> {
+  for (const id of playerIds) {
+    const after = await holdingsValue(runner, id, cfg);
+    await addScoreBase(runner, worldId, id, after - (before.get(id) ?? 0));
+  }
+}
+
+/** `applyHoldingsDelta` için "önce" fotoğrafı. */
+export async function snapshotHoldings(
+  runner: Runner, playerIds: readonly number[], cfg?: CatalogConfig,
+): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  for (const id of playerIds) out.set(id, await holdingsValue(runner, id, cfg));
+  return out;
 }

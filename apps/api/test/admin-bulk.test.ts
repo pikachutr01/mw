@@ -20,6 +20,8 @@ import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
+import { UNITS_BY_ID } from '@mobilwar/catalog';
+import { SettingsService } from '../src/settings/settings.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
 import { createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
 
@@ -70,7 +72,7 @@ beforeAll(async () => {
   h = await setupTestDb();
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
-  bulk = new AdminBulkController(h.db, cities, clock);
+  bulk = new AdminBulkController(h.db, cities, clock, new SettingsService(h.db));
   actions = new AdminActionsController(h.db, cities, clock);
   dbCtl = new AdminDbController(h.db);
   adminCtl = new AdminController(h.db);
@@ -434,5 +436,99 @@ describe('form künyeleri', () => {
       expect(x.description.length, x.id).toBeGreaterThan(20);
       expect(x.fields.length, x.id).toBeGreaterThan(0);
     }
+  });
+});
+
+/**
+ * ⭐⭐ TOPLU MÜDAHALE PUANI DA OYNATIR (kullanıcı bildirimi, 2026-08-09).
+ *
+ * Operatör canlıda toplu ordu dağıttı: her şehirde on binlerce savaşçı oldu, sıralamayı elle
+ * tetikledi, **puanlar hiç değişmedi.** Sıralama doğru çalışıyordu — `score_base` yalnız
+ * `creditSpend` ile büyüyor ve bu controller doğrudan tabloya yazıyor.
+ *
+ * ⚠️⚠️ Asıl kusur "puan artmadı" DEĞİL **asimetri**: hediye ordu puan kazandırmıyordu ama
+ * savaşta ölünce `debitLosses` katalog bedelini düşüyordu. Yani operatörün iyi niyetli
+ * hediyesi, oyuncuyu ilk savaşta hiç kazanmadığı puandan ederdi.
+ */
+describe('⭐ toplu işlem puan tabanını da oynatır', () => {
+  const baseOf = async (playerId: number): Promise<number> => {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT score_base FROM players WHERE id = ${playerId}
+    `);
+    return Number(r!['score_base']);
+  };
+
+  it('⭐ ordu VERMEK puanı, birimlerin katalog bedeli kadar artırır', async () => {
+    const once = await baseOf(a.playerId);
+    await bulk.run('units', {
+      target: target(), units: { dwarf: 100 }, mode: 'set', confirm: true,
+    }, req());
+
+    const d = UNITS_BY_ID['dwarf']!;
+    const sehirSayisi = (await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM cities WHERE player_id = ${a.playerId}
+    `))[0]!['n'] as number;
+
+    expect(await baseOf(a.playerId) - once).toBe((d.gold + d.food) * 100 * sehirSayisi);
+  });
+
+  /**
+   * ⭐ ASIL DEĞİŞMEZ: verilen geri alınınca puan da geri gitmeli. Simetri bozulursa operatör
+   * ordu verip geri alarak puan basabilir (ya da tersi: oyuncu sebepsiz puan kaybeder).
+   */
+  it('⭐ orduyu GERİ ALMAK puanı aynı kadar düşürür', async () => {
+    const once = await baseOf(a.playerId);
+    await bulk.run('units', {
+      target: target(), units: { dwarf: 100 }, mode: 'set', confirm: true,
+    }, req());
+    await bulk.run('units', {
+      target: target(), units: { dwarf: 0 }, mode: 'set', confirm: true,
+    }, req());
+    expect(await baseOf(a.playerId)).toBe(once);
+  });
+
+  /**
+   * ⚠️ Kaynak vermek puana DOKUNMAMALI — kullanıcının kuralı: *"Şehirde henüz harcanmayan
+   * ganimet miktarı da puan vermez."* Oyuncu onu harcadığında `creditSpend` zaten yazacak;
+   * burada da yazsaydık aynı kaynak İKİ KEZ puan verirdi.
+   */
+  it('⭐ KAYNAK vermek puana dokunmaz', async () => {
+    const once = await baseOf(a.playerId);
+    await bulk.run('resources', {
+      target: target(), gold: 5_000_000, food: 5_000_000, mode: 'set', confirm: true,
+    }, req());
+    expect(await baseOf(a.playerId)).toBe(once);
+  });
+
+  /**
+   * ⚠️ `building` diye bir toplu işlem YOK (units · defense · structure · tech · resources).
+   * İlk yazımda uydurdum ve test «Bilinmeyen toplu işlem» ile düştü. Sur seviyesi
+   * `structure` ile veriliyor ve puana `cumulativeDefenseStructureValue` üzerinden giriyor.
+   */
+  it('Sur seviyesi vermek de puanı artırır', async () => {
+    const once = await baseOf(a.playerId);
+    await bulk.run('structure', {
+      target: target(), type: 'wall', level: 5, confirm: true,
+    }, req());
+    expect(await baseOf(a.playerId)).toBeGreaterThan(once);
+  });
+
+  /** ⭐ Teknik oyuncu geneli — kümülatif bedeli puana girmeli. */
+  it('teknik vermek de puanı artırır', async () => {
+    const once = await baseOf(a.playerId);
+    await bulk.run('tech', {
+      target: target(), type: 'archery', level: 5, confirm: true,
+    }, req());
+    expect(await baseOf(a.playerId)).toBeGreaterThan(once);
+  });
+
+  /**
+   * ⚠️ Kuru koşu (confirm yok) hiçbir satıra dokunmadığı gibi PUANA da dokunmamalı.
+   * Puan farkı `apply`den sonra hesaplandığı için bu kendiliğinden doğru — test onu kilitliyor.
+   */
+  it('kuru koşu puanı değiştirmez', async () => {
+    const once = await baseOf(a.playerId);
+    await bulk.run('units', { target: target(), units: { dwarf: 500 } }, req());
+    expect(await baseOf(a.playerId)).toBe(once);
   });
 });
