@@ -105,6 +105,17 @@ export const DEFAULT_ATTACK_RULES: AttackRules = {
   attackForbiddenUnits: ['spy_bird'],
 };
 
+/**
+ * 10 kat kuralının oyuncuya gösterilen metni — **tek yerde**.
+ *
+ * ⚠️ Gönderim reddi ile seçenek listesindeki sebep AYNI cümle olmalı: oyuncu ikisini de aynı
+ * kuralın sesi olarak tanımalı. İki ayrı metin, aynı yasağın iki farklı kural sanılmasına yol
+ * açardı. Casusluğun serbest olduğu ayrıca yazılı, çünkü listede casusluk açık duruyor ve
+ * "neden o açık, bu kapalı" sorusunun cevabı görünür olmalı.
+ */
+export const scoreGapMessage = (limit: number): string =>
+  `Kendinden ${limit} kat güçlü veya ${limit} kat zayıf birine saldıramazsın. Casusluk serbest.`;
+
 export interface AttackMission {
   missionId: number;
   originCityId: number;
@@ -1234,10 +1245,37 @@ export class MissionService {
    * 20 → 200 ENGELLİ, 20 → 199 serbest.
    */
   private async assertScoreRatio(tx: Tx, attackerId: number, defenderId: number): Promise<void> {
-    const limit = liveNumber('combat', 'attackScoreRatio', 10);
-    if (limit <= 0) return;                       // 0/negatif = kural kapalı
+    const gap = await this.scoreGap(attackerId, defenderId, tx);
+    if (!gap?.blocked) return;
+    throw new MissionError(
+      'score_gap',
+      scoreGapMessage(gap.limit),
+      { attackerScore: gap.attackerScore, defenderScore: gap.defenderScore, limit: gap.limit },
+    );
+  }
 
-    const rows = await tx.execute<Record<string, unknown>>(sql`
+  /**
+   * ⭐ 10 kat kuralının **tek hesap yeri** — hem gönderim kapısı (`assertScoreRatio`) hem de
+   * seçenek listesi (`GET /missions/options`) buradan okur.
+   *
+   * ⚠️⚠️ Paylaşmak zorunlu, kopyalamak değil. `mission.controller.ts` kendi başında şunu
+   * yazıyor: *"Kural sunucuda yaşar: istemci kendi hesaplasaydı aynı mantık iki yerde durur ve
+   * kaçınılmaz olarak birbirinden kayardı."* İki SUNUCU kopyası için de aynısı geçerli — kapı
+   * ile önizleme ayrışırsa ortaya çıkan tablo, oyuncunun açık gördüğü düğmenin reddedilmesidir
+   * ve bu tam olarak düzeltmeye çalıştığımız şikâyet.
+   *
+   * `null` = kural kapalı (`attackScoreRatio <= 0`).
+   */
+  async scoreGap(
+    attackerId: number, defenderId: number, runner: Tx | Db = this.db,
+  ): Promise<{
+    blocked: boolean; limit: number; ratio: number;
+    attackerScore: number; defenderScore: number;
+  } | null> {
+    const limit = liveNumber('combat', 'attackScoreRatio', 10);
+    if (limit <= 0) return null;                  // 0/negatif = kural kapalı
+
+    const rows = await runner.execute<Record<string, unknown>>(sql`
       SELECT subject_id, score FROM rankings
        WHERE kind = 'player' AND subject_id IN (${attackerId}, ${defenderId})
     `);
@@ -1248,13 +1286,13 @@ export class MissionService {
     const a = Math.max(1, frozen.get(attackerId) ?? 0);
     const d = Math.max(1, frozen.get(defenderId) ?? 0);
     const ratio = Math.max(a, d) / Math.min(a, d);
-    if (ratio >= limit) {
-      throw new MissionError(
-        'score_gap',
-        `Kendinden ${limit} kat güçlü veya ${limit} kat zayıf birine saldıramazsın.`,
-        { attackerScore: frozen.get(attackerId) ?? 0, defenderScore: frozen.get(defenderId) ?? 0, limit },
-      );
-    }
+    return {
+      blocked: ratio >= limit,
+      limit,
+      ratio,
+      attackerScore: frozen.get(attackerId) ?? 0,
+      defenderScore: frozen.get(defenderId) ?? 0,
+    };
   }
 
   /**

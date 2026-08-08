@@ -1831,4 +1831,112 @@ describe('10 kat kuralı (saldırı puan farkı)', () => {
     const err = await attack().catch((e: unknown) => e);
     expect(missionErrorToHttp(err).constructor.name).toBe('ForbiddenException');
   });
+
+  /* ── Seçenek listesi: kural ORDU SEÇİLMEDEN ÖNCE görünmeli (kullanıcı, 2026-08-08) ──────── */
+
+  /**
+   * ⭐⭐ Kullanıcı: *"kullanıcı tüm bunları ordusunu seçtikten sonra öğreniyor ve zaman kaybı
+   * yaşıyor."* Kural yalnız `sendAttack` kapısındaydı; artık `GET /missions/options` de
+   * bildiriyor.
+   *
+   * ⚠️ Aşağıdaki testlerin ASIL ölçtüğü şey tek tek bayraklar değil, **kapı ile önizlemenin
+   * aynı cevabı vermesi**. İki taraf ayrı hesaplasaydı ayrışma kaçınılmazdı ve ortaya çıkan
+   * tablo — açık görünen düğmenin reddedilmesi — tam olarak düzeltilmek istenen şikâyet olurdu.
+   */
+  const optionsFor = async (): Promise<{
+    type: string; enabled: boolean; reason: string | null;
+  }[]> => {
+    const controller = new MissionController(missions, clock, h.db);
+    const res = await controller.options(
+      String(attackCity), '1', '1', '2',
+      { player: { playerId: attacker, worldId } } as never,
+    );
+    return res['options'] as { type: string; enabled: boolean; reason: string | null }[];
+  };
+  const optionOf = async (type: string): ReturnType<typeof optionsFor> extends Promise<infer T>
+    ? Promise<T extends (infer E)[] ? E | undefined : never> : never => {
+    return (await optionsFor()).find((o) => o.type === type) as never;
+  };
+
+  it('⭐ 10 kat farkta SALDIRI seçeneği PASİF ve sebebi yazılı', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 200, 2);
+
+    const attackOpt = await optionOf('attack');
+    expect(attackOpt?.enabled).toBe(false);
+    expect(attackOpt?.reason).toContain('10 kat');
+  });
+
+  /** ⭐ Casusluk muafiyeti listede de görünmeli — yoksa oyuncu ikisini tek yasak sanır. */
+  it('⭐ aynı çiftte CASUSLUK seçeneği AÇIK kalır', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 200, 2);
+
+    expect((await optionOf('spy'))?.enabled).toBe(true);
+    expect((await optionOf('transport'))?.enabled).toBe(true);
+  });
+
+  it('sınırın altında saldırı seçeneği AÇIK (20 → 199)', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 199, 2);
+    expect((await optionOf('attack'))?.enabled).toBe(true);
+  });
+
+  /**
+   * ⭐⭐ ASIL BEKÇİ: liste ile gönderim kapısı **hiçbir puan çiftinde ayrışmamalı**. Tek tek
+   * eşik testleri yazmak yerine kullanıcının kendi örneklerini ve sınır komşularını tarayıp
+   * iki tarafın kararını KARŞILAŞTIRIYORUZ — biri değişip diğeri kalırsa test düşer.
+   */
+  it('⭐⭐ liste ile gönderim kapısı HİÇBİR puan çiftinde ayrışmaz', async () => {
+    const ciftler: [number, number][] = [
+      [20, 200], [20, 199], [20, 2], [200, 20], [0, 10], [0, 9], [0, 0], [1, 10], [100, 1000],
+    ];
+    for (const [a, d] of ciftler) {
+      /**
+       * ⚠️⚠️ **HER ÇİFTTEN ÖNCE TEMİZLİK ŞART, ve bunu ilk yazımda atladım.** Döngü başarılı
+       * saldırıları gerçekten gönderiyor; birkaç tur sonra 24 saatlik saldırı limiti ve Baraka
+       * sefer limiti doluyor, kapı artık `score_gap` yerine BAŞKA bir sebeple reddediyor ve
+       * ölçüm anlamını yitiriyor. Test tam olarak bu yüzden düştü (1 ↔ 10 çiftinde).
+       */
+      await h.db.execute(sql`DELETE FROM missions WHERE owner_player_id = ${attacker}`);
+      await freezeScore(attacker, a);
+      await freezeScore(defender, d, 2);
+
+      /**
+       * ⚠️ Ölçüt "izin verildi mi" DEĞİL, **"10 kat kuralı devrede mi"**. İlk yazımda
+       * `score_gap` dışındaki her hatayı "izin verildi" saymıştım; o ölçüt, kapının başka bir
+       * sebeple reddettiği durumu sessizce "açık" diye okuyor ve karşılaştırmayı bozuyor.
+       * Karşılaştırılması gereken şey iki tarafın AYNI KURAL hakkındaki kararı.
+       */
+      const listeKapali = await optionOf('attack').then((o) =>
+        o?.enabled === false && (o.reason ?? '').includes('10 kat'));
+      const kapiKapali = await attack().then(() => false, (e: unknown) =>
+        (e as { code?: string }).code === 'score_gap');
+
+      expect(listeKapali, `puanlar ${a} ↔ ${d}: liste ve kapı ayrıştı`).toBe(kapiKapali);
+    }
+  }, 60_000);
+
+  /** Ayar kapatılınca liste de açılmalı — iki taraf aynı ayarı okuyor mu? */
+  it('ayar 0 iken listede de saldırı AÇIK', async () => {
+    setLiveSettings({ combat: { attackScoreRatio: 0 } });
+    await freezeScore(attacker, 1);
+    await freezeScore(defender, 100_000, 2);
+    expect((await optionOf('attack'))?.enabled).toBe(true);
+  });
+
+  /**
+   * ⚠️ Acemi koruması 10 kat kuralından ÖNCE gelir: ikisi de geçerliyken oyuncuya daha temel
+   * olan sebep gösterilmeli, yoksa koruma bitince "hâlâ neden saldıramıyorum" sorusu doğar.
+   */
+  it('koruma ve puan farkı birlikteyken KORUMA sebebi yazılır', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 200, 2);
+    await h.db.execute(sql`
+      UPDATE players SET protected_until = now() + interval '10 hours' WHERE id = ${defender}
+    `);
+    const opt = await optionOf('attack');
+    expect(opt?.enabled).toBe(false);
+    expect(opt?.reason).toContain('acemi koruması');
+  });
 });

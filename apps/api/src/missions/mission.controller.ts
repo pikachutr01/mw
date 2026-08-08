@@ -16,7 +16,9 @@ import { UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
-import { CANCELABLE_TYPES, MissionError, MissionService } from './mission.service.ts';
+import {
+  CANCELABLE_TYPES, MissionError, MissionService, scoreGapMessage,
+} from './mission.service.ts';
 
 @Controller('api/v1/missions')
 @UseGuards(AuthGuard)
@@ -251,8 +253,32 @@ export class MissionController {
       const vac = target.vacation_until == null ? null : toDate(target.vacation_until);
       const shielded = (prot != null && prot > at) || (vac != null && vac > at);
       const why = prot != null && prot > at ? 'Oyuncu acemi koruması altında.' : 'Oyuncu tatil modunda.';
-      // ⚠️ Aynı ittifakta olmak saldırı/casusluğa ENGEL DEĞİL (kullanıcı kuralı).
-      add('attack', 'Saldırı', !shielded, shielded ? why : null);
+
+      /**
+       * ⭐⭐ 10 KAT KURALI ARTIK **LİSTEDE** GÖRÜNÜYOR (kullanıcı, 2026-08-08).
+       *
+       * Şikâyet: *"kullanıcı tüm bunları ordusunu seçtikten sonra öğreniyor ve zaman kaybı
+       * yaşıyor."* Haklı — kural yalnız `sendAttack` kapısındaydı, yani oyuncu saldırıyı seçip
+       * orduyu tek tek dizip «Saldırıyı Başlat»a bastıktan SONRA reddediliyordu.
+       *
+       * ⚠️ Hesap KOPYALANMADI: `MissionService.scoreGap` hem burası hem kapı için tek kaynak.
+       * Kopyalasaydık iki taraf kaçınılmaz olarak kayardı ve ortaya çıkan tablo — açık görünen
+       * bir düğmenin reddedilmesi — tam da düzeltmeye çalıştığımız şey olurdu.
+       *
+       * ⚠️ **Yalnız SALDIRIYI kapatır, casusluğu değil** (§13.5.4b, kullanıcının kuralı:
+       * *"Casusluk gönderebilir"*). Bu yüzden ayrı bir bayrak; `shielded` gibi ikisini birden
+       * kapatan bir koşula karıştırılamaz.
+       *
+       * ⚠️ Puan, **son sıralamada donmuş** değerden okunuyor (`rankings`), anlık `players.score`
+       * değil — kuralın kendi tanımı bu. Böylece listedeki sebep, oyuncunun sıralama ekranında
+       * gördüğü sayıyla birebir tutarlı.
+       */
+      const gap = await this.missions.scoreGap(player.playerId, target.player_id);
+      const gapBlocked = gap?.blocked === true;
+
+      // ⚠️ Sıra önemli: koruma/tatil daha temel bir sebep, önce o yazılır.
+      add('attack', 'Saldırı', !shielded && !gapBlocked,
+        shielded ? why : gapBlocked ? scoreGapMessage(gap!.limit) : null);
       add('spy', 'Casusluk', !shielded, shielded ? why : null);
       add('transport', 'Nakliye', true);
 

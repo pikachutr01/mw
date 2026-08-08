@@ -85,25 +85,16 @@ export function TargetModal({
           )}
         </div>
 
-        {/* ⭐ MESAJ (kullanıcı 2026-07-31): DM'nin İLK giriş noktası — orijinalde de dünya
-            menüsündeydi (`g.java:1440` case 12: Saldırı · Casusluk · Nakliye · Destek · Mesaj).
-            ⚠️ `InviteRow`'un İÇİNE konmaz: o, yetkisi olmayanda `null` döner ve mesaj düğmesi
-            de kaybolurdu. Onay sorulmaz (kullanıcı: "emin misiniz" gereksiz). */}
-        {slot.city && !slot.city.isOwn ? (
-          <div className="border-b border-border px-3 py-1.5">
-            <Button size="sm" variant="ghost"
-              onClick={() => {
-                const c = slot.city!;
-                onClose();                      // modal kapanır, sohbet penceresi açılır
-                openChat(c.playerId, c.username);
-              }}>Mesaj</Button>
-          </div>
-        ) : null}
+        {/* ⭐ OYUNCU EYLEMLERİ — Mesaj ve İttifağa Davet AYNI SATIRDA (kullanıcı, 2026-08-08:
+            *"alt alta tek satır şeklinde yapmayalım, tek buton koca bir satırı kaplıyor"*).
 
-        {/* ⭐ İTTİFAĞA DAVET (doküman: "dünya ekranında İttifak Daveti seçeneği") — yalnız
-            Konsey+Lider görür ve hedef ittifaksızsa (orijinal q>1 kapısı, g.java:1447). */}
-        {slot.city && !slot.city.isOwn && !slot.city.hasAlliance ? (
-          <InviteRow targetPlayerId={slot.city.playerId} targetName={slot.city.username} />
+            ⚠️ Eskiden ikisi ayrı `border-b`li blok halindeydi ve her biri kendi tam genişlikte
+            şeridini açıyordu — iki düğme için modalın üçte biri gidiyordu. Artık tek şerit,
+            yan yana, `flex-wrap` ile dar ekranda kendiliğinden alt satıra iniyor.
+            ⚠️ Sarmalayıcı ancak İÇİNDE bir şey varsa çizilir: davet yetkisi olmayan birinde
+            `InviteRow` `null` döner ve boş bir çizgi kalırdı. */}
+        {slot.city && !slot.city.isOwn ? (
+          <PlayerActions city={slot.city} onClose={onClose} openChat={openChat} />
         ) : null}
 
         {options.isLoading ? <Empty>Seçenekler yükleniyor…</Empty> : null}
@@ -138,23 +129,50 @@ export function TargetModal({
   );
 }
 
-/** İttifağa Davet satırı — davet yetkisi (Konsey+Lider) yoksa hiç çizilmez. */
-function InviteRow({ targetPlayerId, targetName }: { targetPlayerId: number; targetName: string }) {
+/**
+ * Hedef oyuncuyla ilgili eylemler — **tek şerit, yan yana**.
+ *
+ * ⭐ MESAJ (kullanıcı 2026-07-31): DM'nin İLK giriş noktası — orijinalde de dünya menüsündeydi
+ * (`g.java:1440` case 12: Saldırı · Casusluk · Nakliye · Destek · Mesaj). Onay sorulmaz
+ * (kullanıcı: *"emin misiniz gereksiz"*).
+ * ⭐ İTTİFAĞA DAVET (doküman: *"dünya ekranında İttifak Daveti seçeneği"*) — yalnız Konsey+Lider
+ * görür ve hedef ittifaksızsa (orijinal `q>1` kapısı, `g.java:1447`).
+ *
+ * ⚠️ Davet düğmesi mesajla AYNI bileşende ama kendi koşuluyla: yetkisi olmayan oyuncuda yalnız
+ * o düğme düşer, Mesaj kalır. Eskiden davet ayrı bir bileşendi ve `null` dönünce kendi şeridi
+ * de gidiyordu — doğruydu ama iki ayrı şerit demekti.
+ */
+function PlayerActions({
+  city, onClose, openChat,
+}: {
+  city: NonNullable<WorldSlot['city']>;
+  onClose: () => void;
+  openChat: (playerId: number, username: string) => void;
+}) {
   const my = useAlliance(0);
   const invite = useAllianceInvite();
   const confirm = useConfirm();
-  const role = my.data?.alliance?.myRole ?? 0;
-  if (role < 2) return null;
+  const canInvite = (my.data?.alliance?.myRole ?? 0) >= 2 && !city.hasAlliance;
+
   return (
-    <div className="border-b border-border px-3 py-1.5">
-      <Button size="sm" variant="ghost" disabled={invite.isPending}
-        onClick={() => {
-          void confirm({
-            title: `${targetName} → ${my.data?.alliance?.name}`,
-            body: 'Oyuncuya ittifak daveti gönderilecek. Emin misiniz!',
-          }).then((ok) => { if (ok) invite.mutate({ playerId: targetPlayerId }); });
-        }}>İttifağa Davet</Button>
-      {invite.isSuccess ? <span className="ml-2 text-[11px] text-success">Davet gönderildi.</span> : null}
+    <div className="border-b border-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="ghost"
+          onClick={() => {
+            onClose();                          // modal kapanır, sohbet penceresi açılır
+            openChat(city.playerId, city.username);
+          }}>Mesaj</Button>
+        {canInvite ? (
+          <Button size="sm" variant="ghost" disabled={invite.isPending}
+            onClick={() => {
+              void confirm({
+                title: `${city.username} → ${my.data?.alliance?.name}`,
+                body: 'Oyuncuya ittifak daveti gönderilecek. Emin misiniz!',
+              }).then((ok) => { if (ok) invite.mutate({ playerId: city.playerId }); });
+            }}>İttifağa Davet</Button>
+        ) : null}
+        {invite.isSuccess ? <span className="text-[11px] text-success">Davet gönderildi.</span> : null}
+      </div>
       <ErrorBox error={invite.error} />
     </div>
   );
