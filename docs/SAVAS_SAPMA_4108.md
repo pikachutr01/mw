@@ -661,24 +661,24 @@ Ortak kurallar bolum 4'tekiyle ayni. **N ve P gruplari kucuk ve hizli** — heps
 
 | # | Saldıran teknik | Kazanan/tur | ⬜ BINARY | S kalan | ⬜ BINARY | D kalan | ⬜ BINARY | XP | ⬜ BINARY |
 |---|---|---|---|---|---|---|---|---|---|
-| N1 | yok (= H1 kıyas) | saldıran / 5 |  | **635** |  | **0** |  | 1.060.052 |  |
-| N2 | **Zırh 20** | saldıran / 5 |  | **635** |  | **0** |  | 1.060.052 |  |
-| N3 | **Tılsım 20** | saldıran / 5 |  | **635** |  | **0** |  | 1.060.052 |  |
-| N4 | Zırh 20 + Tılsım 20 | saldıran / 5 |  | **635** |  | **0** |  | 1.060.052 |  |
-| N5 | SAVUNANDA Zırh 20 | saldıran / 5 |  | **635** |  | **0** |  | 1.060.052 |  |
+| N1 | yok (= H1 kıyas) | saldıran / 5 | saldıran / 5 | **635** | 635-637 | **0** | 0 | 1.060.052 | 1.059.087-1.061.271 |
+| N2 | **Zırh 20** | saldıran / 5 | saldıran / 5 | **635** | 720-722 | **0** | 0 | 1.060.052 | 849.979-853.391 |
+| N3 | **Tılsım 20** | saldıran / 5 | saldıran / 5 | **635** | 740-741 | **0** | 0 | 1.060.052 | 804.438-806.937 |
+| N4 | Zırh 20 + Tılsım 20 | saldıran / 5 | saldıran / 5 | **635** | 824-826 | **0** | 0 | 1.060.052 | 618.080-621.012 |
+| N5 | SAVUNANDA Zırh 20 | saldıran / 5 | saldıran / 5 | **635** | 602-603 | **0** | 0 | 1.060.052 | 1.145.570-1.149.725 |
 
 ### P · Zırh/Tılsım diğer birimlerde (Cüce dışı — C2/C3/C6 yalnız Cüce'yi sınamıştı)
 
 | # | Saldıran | Saldıran teknik | Kazanan/tur | ⬜ BINARY | S kalan | ⬜ BINARY | D kalan | ⬜ BINARY | XP | ⬜ BINARY |
 |---|---|---|---|---|---|---|---|---|---|---|
-| P1a | Süvari 1200 vs Süvari 1000 | **Zırh 20** | saldıran / 5 |  | **799** |  | **22** |  | 478 |  |
-| P1b | Süvari 1200 vs Süvari 1000 | **Tılsım 20** | saldıran / 5 |  | **631** |  | **85** |  | 780 |  |
-| P2a | Ejderha 1200 vs Ejderha 1000 | **Zırh 20** | saldıran / 5 |  | **867** |  | **0** |  | 5.771 |  |
-| P2b | Ejderha 1200 vs Ejderha 1000 | **Tılsım 20** | saldıran / 5 |  | **859** |  | **0** |  | 5.952 |  |
-| P3a | Ogre 1200 vs Ogre 1000 | **Zırh 20** | saldıran / 5 |  | **1065** |  | **294** |  | 1.932 |  |
-| P3b | Ogre 1200 vs Ogre 1000 | **Tılsım 20** | saldıran / 5 |  | **810** |  | **360** |  | 7.542 |  |
-| P4a | Mancınık 1200 vs Mancınık 1000 | **Zırh 20** | saldıran / 5 |  | **836** |  | **0** |  | 2.065 |  |
-| P4b | Mancınık 1200 vs Mancınık 1000 | **Tılsım 20** | saldıran / 5 |  | **639** |  | **0** |  | 3.641 |  |
+| P1a | Süvari 1200 vs Süvari 1000 | **Zırh 20** | saldıran / 5 | saldıran / 5 | **799** | 798-800 | **22** | 21-23 | 478 | 477-478 |
+| P1b | Süvari 1200 vs Süvari 1000 | **Tılsım 20** | saldıran / 5 | saldıran / 5 | **631** |630-632  | **85** | 84-86 | 780 | 778-781 |
+| P2a | Ejderha 1200 vs Ejderha 1000 | **Zırh 20** | saldıran / 5 | saldıran / 5 | **867** | 866-868 | **0** | 0 | 5.771 | 5764-5785 |
+| P2b | Ejderha 1200 vs Ejderha 1000 | **Tılsım 20** | saldıran / 5 | saldıran / 5 | **859** | 880-881 | **0** | 0 | 5.952 | 5478-5503 |
+| P3a | Ogre 1200 vs Ogre 1000 | **Zırh 20** | saldıran / 5 | saldıran / 5 | **1065** | 1065-1066 | **294** | 294-295 | 1.932 | 1928-1942 |
+| P3b | Ogre 1200 vs Ogre 1000 | **Tılsım 20** | saldıran / 5 | saldıran / 5 | **810** | 809-810 | **360** | 360-361 | 7.542 | 7530-7556 |
+| P4a | Mancınık 1200 vs Mancınık 1000 | **Zırh 20** | saldıran / 5 | saldıran / 5 | **836** | 836-837 | **0** | 0 | 2.065 | 2057-2072 |
+| P4b | Mancınık 1200 vs Mancınık 1000 | **Tılsım 20** | saldıran / 5 | saldraın / 5 | **639** | 639-640 | **0** | 0 | 3.641 | 3633-3648 |
 
 **N1-N5 hepsi motorda AYNI sonucu veriyor (635)** — motor Zirh ve Tilsim'i Kaos'a hic
 uygulamiyor. Binary'de bunlardan herhangi biri farkli cikarsa **kok neden bulunmus olur.**
@@ -693,6 +693,101 @@ kapsiyordu ve Tilsim'in Cuce'ye etkisi sifir oldugu icin C6 hicbir sey olcmemist
 | **1** | **N2 - N3** | Zirh/Tilsim Kaos'a degiyor mu? Tek soru, iki kosu. Sapmanin %90'i burada. |
 | **2** | **P3b - P1b** | Tilsim'in Ogre ve Suvari'deki etkisi — Tilsim hic sinanmadi. |
 | **3** | P2a-P4b | Zirh/Tilsim'in kalan birimleri. |
+
+---
+
+## 10. SONUC — uc duzeltme, sapma %8,8'den %0,7'ye
+
+### 10.1 3. turun bulgulari
+
+Kullanicinin N serisi kok nedeni tek atista buldu:
+
+| # | Saldiran teknik | Motor (eski) | **Binary** | Karar |
+|---|---|---|---|---|
+| N1 | yok | 635 | 635-637 | tamam |
+| **N2** | **Zirh 20** | **635** | **720-722** | **Zirh Kaos'a DEGIYOR** |
+| **N3** | **Tilsim 20** | **635** | **740-741** | **Tilsim Kaos'a DEGIYOR** |
+| **N4** | Zirh + Tilsim | **635** | **824-826** | ikisi birikiyor |
+| **N5** | savunanda Zirh 20 | **635** | **602-603** | savunanda da gecerli |
+| **P2b** | Ejderha + Tilsim 20 | **859** | **880-881** | Tilsim'in **buyuklugu** de yanlis |
+
+⚠️ N5'in motor satiri aslinda **betik hatasiydi**: `senaryolar3.mjs` teknigi yalniz saldirana
+uyguluyordu, yani o satir sessizce N1'in kopyasi olmustu. Duzeltildi (`dTech` parametresi).
+
+### 10.2 Uygulanan uc duzeltme
+
+**1 · Ogre, Demircilik'ten etkilenmiyor** (§9.1) — binary olcumu + Ghidra `FUN_0041279c`.
+
+**2 · Zirh ve Tilsim Kaos'a da uygulaniyor.** Iki liste de oyunun kendi doküman metninden
+kurulmustu (*"Kaos hariç tüm savaşçılar"*, *"Mancınık/Kaos/Yük/Casus HARİÇ"*). Olcum metni
+curuttu. Kaos savasin `lossMag`inin %90'ini tasidigi icin bu iki satir sapmanin buyuk kismini
+tek basina uretiyordu.
+
+**3 · Tilsim'in orani %5 degil %6.** Seviye taramasi iki bagimsiz hedefi ayni anda tutturdu:
+
+| Tilsim seviyesi (oran %5) | Kaos kalan | Ejderha kalan |
+|---|---|---|
+| 20 | 725 | 859 |
+| **24** | **740** | **880** |
+| 26 | 748 | 891 |
+| **BINARY hedefi** | **740-741** | **880-881** |
+
+Seviye 24 × %5 = seviye 20 × **%6**. Tek bir oran iki farkli birimi birden tutturuyor —
+tesaduf degil. Kardesi Zirh de zaten %6.
+
+### 10.3 Duzeltme sonrasi tablo
+
+**Canli savas 4108:**
+
+| | Once | **Sonra** | Binary | Kalan sapma |
+|---|---|---|---|---|
+| Saldiran kayip | 29.448 | **27.264** | 27.065 | %8,8 → **%0,7** |
+| Savunan kayip | 60.055 | **60.425** | 60.433 | %0,6 → **%0,01** |
+| Deneyim (XP) | 1.090.641 | **840.092** | 834.221 | %30,7 → **%0,7** |
+| Enkaz altin | 1.058.715.270 | **994.200.315** | 992.468.124 | %6,7 → **%0,17** |
+
+**3. tur senaryolari — hepsi tutuyor:**
+
+| # | Motor | Binary |
+|---|---|---|
+| N1 | 635 | 635-637 |
+| N2 | **720** | 720-722 |
+| N3 | **740** | 740-741 |
+| N4 | **825** | 824-826 |
+| N5 | **602** | 602-603 |
+| P2b | **880** | 880-881 |
+| P1a/P1b/P2a/P3a/P3b/P4a/P4b | degismedi | zaten tutuyordu |
+
+**2. tur M serisi:**
+
+| # | Once | **Sonra** | Binary |
+|---|---|---|---|
+| M3 | 2.985 | **2.757** | 2728-2735 |
+| M3 savunan kayip | 6.003 | **6.041** | **6041** (birebir) |
+| M4 | 2.987 | **2.758** | 2728-2736 |
+| M5 | 2.987 | **2.757** | 2728-2736 |
+
+**1. tur (A-G): hicbiri degismedi** — 21 satirin tamami eski degerlerinde kaldi, yani
+duzeltmeler bir yeri onarirken baska bir yeri bozmadi.
+
+### 10.4 Kalan %0,7
+
+Butun gostergeler artik binary'nin kendi kosu-arasi dagilimiyla ayni mertebede (%0,2-1).
+Bu seviyede daha ileri gitmek icin binary'nin RNG'sini birebir taklit etmek gerekir; oyun
+dengesi acisindan anlamli bir fark degil. **Sapma kapandi sayilir.**
+
+### 10.5 Katalog ozeti
+
+`2ec624e6` → **`bb11b88a`**. Eski savaslar eski ozetle duruyor ve oyle kalmali —
+`hash.test.ts` bu ani gerekcesiyle birlikte kilitliyor.
+
+⚠️ **DENGE ETKISI (canliya alma karari kullanicida):**
+* Ogre artik Demircilik'ten guc almiyor (Icgudu aynen duruyor) — **zayiflama**.
+* Kaos artik Zirh ve Tilsim'dan yararlaniyor — **guclenme**, ve Kaos zaten savasin
+  belirleyici birimi.
+* Tilsim herkeste %20 daha etkili (%5 → %6).
+
+---
 
 ## Ek · Üretim komutları
 
@@ -715,3 +810,4 @@ cd mw/apps/api && node scripts/sapma/senaryolar.mjs
 | `scripts/sapma/teknik-tarama.mjs` | §7.6 Büyücülük/İçgüdü taraması |
 | `scripts/sapma/senaryolar3.mjs` | §9.5 tablolarını üretir |
 | `scripts/sapma/dogrula.mjs` | M3'teki Sur hipotezini sınar (§9.3) |
+| `scripts/sapma/tilsim.mjs` | Tılsım seviye/oran taraması (§10.2) |

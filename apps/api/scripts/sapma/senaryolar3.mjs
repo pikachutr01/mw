@@ -1,14 +1,16 @@
 /** 3. TUR — kalan şüpheli: Zırh/Tılsım Kaos'a değiyor mu? + Şaman'ın Demircilik grubu. */
 import { simulate } from '@mobilwar/engine';
 
-const go = (ac, dc, tech = {}) => simulate({
+/** ⚠️ `dTech` 2026-08-09'da eklendi: N5 savunana teknik vermek istiyordu ama betik yalnız
+ *  saldırana uyguluyordu — satır sessizce N1'in kopyası olmuştu. */
+const go = (ac, dc, tech = {}, dTech = {}) => simulate({
   attacker: { counts: ac, tech, heroes: [], temple: 0, heroCount: 0 },
-  defender: { counts: dc, tech: {}, heroes: [], temple: 0, heroCount: 0, wallIntegrity: 1 },
+  defender: { counts: dc, tech: dTech, heroes: [], temple: 0, heroCount: 0, wallIntegrity: 1 },
   night: false, nightVisionAttacker: 0, nightVisionDefender: 0, seed: 'tur3',
 });
 
-const say = (id, not, ac, dc, tech, birim) => {
-  const r = go(ac, dc, tech);
+const say = (id, not, ac, dc, tech, birim, dTech = {}) => {
+  const r = go(ac, dc, tech, dTech);
   const k = Math.round(r.attacker.counts[birim] ?? 0);
   const d = Math.round(r.defender.counts[birim] ?? 0);
   console.log(`| ${id} | ${not} | ${r.winner === 'attacker' ? 'saldıran' : 'savunan'} / ${r.turns}`
@@ -23,7 +25,7 @@ say('N1', 'yok (= H1 kıyas)', { chaos: 1200 }, { chaos: 1000 }, {}, 'chaos');
 say('N2', '**Zırh 20**', { chaos: 1200 }, { chaos: 1000 }, { armor: 20 }, 'chaos');
 say('N3', '**Tılsım 20**', { chaos: 1200 }, { chaos: 1000 }, { talisman: 20 }, 'chaos');
 say('N4', 'Zırh 20 + Tılsım 20', { chaos: 1200 }, { chaos: 1000 }, { armor: 20, talisman: 20 }, 'chaos');
-say('N5', 'SAVUNANDA Zırh 20', { chaos: 1200 }, { chaos: 1000 }, {}, 'chaos');
+say('N5', 'SAVUNANDA Zırh 20', { chaos: 1200 }, { chaos: 1000 }, {}, 'chaos', { armor: 20 });
 
 console.log('');
 console.log('### O · Şaman gerçekten Demircilik grubunda mı? (saldıran Şaman 1200 · savunan Şaman 1000)');

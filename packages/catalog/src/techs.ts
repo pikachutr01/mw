@@ -66,10 +66,22 @@ export const TECHS: readonly TechDef[] = [
     baseGold: 200, baseFood: 160,
   },
   {
-    // "Zırh giyen ünitelerin fiziksel defans gücünü %6 arttırır" (Kaos hariç tüm savaşçılar)
+    /**
+     * ⚠️⚠️ **KAOS BU LİSTEDE — "Kaos hariç" ifadesi YANLIŞMIŞ** (2026-08-09).
+     *
+     * Liste oyunun kendi doküman metninden kurulmuştu: *"Zırh giyen ünitelerin fiziksel defans
+     * gücünü %6 arttırır (Kaos hariç tüm savaşçılar)"*. Binary ölçümü metni çürüttü —
+     * `Kaos 1200 vs Kaos 1000` savaşında Zırh 20 vermek saldıranın kalanını **635 → 720-722**
+     * çıkarıyor; motorda hiç değişmiyordu. Savunana verilince de simetrik biçimde **635 → 602**
+     * düşürüyor (§9.6 N2/N5).
+     *
+     * ⚠️ Bu, projede metin ile ölçümün çeliştiği ilk yer değil ve kural yine aynı: **ölçüm
+     * kazanır.** Kaos savaşın `lossMag`inin %90'ını taşıdığı için bu tek satır, gerçek savaştaki
+     * sapmanın büyük kısmını üretiyordu.
+     */
     id: 'armor', name: { tr: 'Zırh' }, rate: 0.06, stat: 'pmit',
     units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'mangonel', 'ogre', 'shaman', 'gnome',
-      'oil_cauldron', 'guard'],
+      'chaos', 'oil_cauldron', 'guard'],
     baseGold: 100, baseFood: 100,
   },
   {
@@ -85,9 +97,24 @@ export const TECHS: readonly TechDef[] = [
      * mAtk'ini `mAtk × (1 + sv×0,05)` yapar — kalkanın MİTİGASYONU budur. İkizi: Taş Ustalığı →
      * FUN_00411a28 → `ordu+0x10` = SUR (FUN_004136a4, pAtk+pDef). Dokümanın "Büyücülük … Büyü
      * Kalkanı" ifadesi yanıltıcı: Büyücülük büyü VURUŞ gücünü (magicHp) ölçekler, kalkanın 0. */
-    id: 'talisman', name: { tr: 'Tılsım' }, rate: 0.05, stat: 'mmit',
+    /**
+     * ⚠️⚠️ **KAOS ve MANCINIK BU LİSTEDE** (2026-08-09). Eski liste yine doküman metnindeki
+     * *"Mancınık/Kaos/Yük/Casus HARİÇ"* ifadesine dayanıyordu; ölçüm onu da çürüttü:
+     * `Kaos 1200 vs Kaos 1000` + Tılsım 20 → kalan **635 → 740-741** (§9.6 N3).
+     * ⚠️ Mancınık için doğrudan bir ayrım ölçümü YOK (P4b motorla tuttu ama Mancınık bu listede
+     * olmadığı için o test de "boş"tu); eklenmedi. Ölçülene sadık kalıyoruz.
+     */
+    /**
+     * ⚠️⚠️ **ORAN %5 DEĞİL %6** (2026-08-09, iki bağımsız ölçümle). Doküman metni *"Büyü savunma
+     * gücünü %5 arttırır"* diyor ama binary öyle davranmıyor. Tılsım 20 ile:
+     *   `Kaos 1200 vs Kaos 1000`       → binary 740-741, motor %5'te 725, **%6'da 740** ✔
+     *   `Ejderha 1200 vs Ejderha 1000` → binary 880-881, motor %5'te 859, **%6'da 880** ✔
+     * Tek bir oran iki farklı birimi birden tutturuyor — tesadüf değil. Kardeşi Zırh de zaten
+     * %6 ve o ölçümde ilk denemede tutmuştu; ikisi aynı aileden.
+     */
+    id: 'talisman', name: { tr: 'Tılsım' }, rate: 0.06, stat: 'mmit',
     units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'ogre', 'gnome', 'shaman',
-      'oil_cauldron', 'guard', 'magic_shield'],
+      'chaos', 'oil_cauldron', 'guard', 'magic_shield'],
     baseGold: 250, baseFood: 200,
   },
   // ── Savaş statlarına doğrudan etkisi olmayan teknikler ───────────────────────

@@ -21,16 +21,22 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/index.ts';
 
 /**
- * ⚠️ **2026-08-09'da BİLEREK değişti: `2ec624e6` → `a61b1491`.**
+ * ⚠️ **2026-08-09'da BİLEREK değişti: `2ec624e6` → `bb11b88a`.**
  *
- * Sebep: Demircilik'in birim listesinden **Ogre çıkarıldı** (`techs.ts`). Kullanıcının binary
- * ölçümü ve Ghidra (`FUN_0041279c`) birlikte gösterdi ki Ogre'nin `atk`ini yalnız İçgüdü
- * ölçekliyor. Bu test tam olarak bu anı yakalamak için var — özet sessizce kaymasın diye.
+ * Aynı gün üç ölçüm-tabanlı düzeltme birden girdi (`techs.ts`, hepsinin gerekçesi orada):
+ *  1. Demircilik'in listesinden **Ogre çıkarıldı** — Ghidra `FUN_0041279c` her savaşçıyı tek
+ *     bir `atk` grubuna eşliyor ve Ogre İçgüdü grubunda.
+ *  2. Zırh ve Tılsım listelerine **Kaos eklendi** — doküman metnindeki "Kaos hariç" ifadesi
+ *     ölçümle çürütüldü.
+ *  3. Tılsım'ın oranı **%5 → %6** — iki farklı birimde (Kaos, Ejderha) aynı anda tutturuyor.
+ *
+ * Sonuç: canlı savaş 4108'de motor-binary sapması saldıran kaybında %8,8 → **%0,7**,
+ * deneyimde %30,7 → **%0,7** düştü.
  *
  * ⚠️ Eski savaşlar `battles.catalog_hash = '2ec624e6'` ile duruyor ve **öyle kalmalı**: onlar
  * gerçekten başka bir dengeyle çözüldü. Tasarım burada doğru çalıştı.
  */
-const DEFAULT_HASH = 'a61b1491';
+const DEFAULT_HASH = 'bb11b88a';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -48,7 +54,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('8d7d6353');
+    expect(catalogHash(cfg)).toBe('dc191476');
   });
 
   /**
