@@ -83,10 +83,20 @@ export async function takeSnapshot(runner: Runner, worldId: number, at: Date): P
           WHERE p.id = r.subject_id AND p.banned_at IS NULL AND p.ranking_excluded = false
        )
   `);
+  /**
+   * ⚠️ Kahraman tarafında da aynı tuzak: eski satır `ON CONFLICT` ile GÜNCELLENİR, silinmez.
+   * Sahibi hesabını yeni silmiş bir kahraman hâlâ var olduğu için `NOT EXISTS (heroes)` onu
+   * bulamaz ve satır tabloda kalırdı — aşağıdaki INSERT'e süzgeç koymak tek başına yetmiyor.
+   * (Oyuncu tarafındaki `ranking_excluded` notunun birebir aynısı; 2026-08-09'da burada da
+   * gerekli oldu.)
+   */
   await runner.execute(sql`
     DELETE FROM rankings r
      WHERE r.world_id = ${worldId} AND r.kind = 'hero'
-       AND NOT EXISTS (SELECT 1 FROM heroes h WHERE h.id = r.subject_id)
+       AND NOT EXISTS (
+         SELECT 1 FROM heroes h JOIN players p ON p.id = h.player_id
+          WHERE h.id = r.subject_id AND p.deleted_at IS NULL
+       )
   `);
   // Dağıtılan ittifaklar sıralamadan düşer (kayıt silindiği için EXISTS bulamaz).
   await runner.execute(sql`
@@ -117,13 +127,27 @@ export async function takeSnapshot(runner: Runner, worldId: number, at: Date): P
    * ⭐ Kahraman sıralaması **seviye, sonra tecrübe**. Tek sayıya katlanıyor
    * (`seviye × 1e9 + tecrübe`) çünkü `rankings.score` tek sütun; 1e9 tavanı 80. seviyede bile
    * tecrübenin seviyeyi taşırmasını engelliyor (§13.11.4b tablosu bu büyüklüğe uzak).
+   *
+   * ⭐ **SİLİNMİŞ HESABIN KAHRAMANI LİSTEDE YOK** (kullanıcı, 2026-08-09: *"sıralamalarda
+   * gözükmesini istemiyorum"*). Kahraman satırı sahibinin adını da yazıyor
+   * (`command.controller` → `p.username AS owner`), yani süzgeç olmadan silinmiş hesap
+   * kahraman sekmesinden vitrine geri sızıyordu — oyuncu ve ittifak sekmelerinden düşmüş olsa bile.
+   *
+   * ⚠️ Süzgeç `deleted_at`, **`ranking_excluded` DEĞİL** ve bu ayrım bilinçli: muafiyet
+   * bayrağının kahraman sıralamasını ETKİLEMEMESİ kullanıcının 2026-08-03'teki açık şartı
+   * (yönetici/servis hesabı vitrinden gizlenir ama kahramanı listede kalır). İki soru ayrı:
+   * "gizlensin mi" ile "bu hesap artık yok mu". Silinen hesapta ikincisi geçerli.
+   *
+   * ⚠️ `deleted_at`i `purge-player` de yazıyor; oradaki kahramanlar zaten siliniyor, yani bu
+   * süzgeç orada bir şey değiştirmiyor — yalnız iki akış da aynı yönde davranmış oluyor.
    */
   const heroes = await runner.execute<Record<string, unknown>>(sql`
     WITH ordered AS (
-      SELECT id,
-             (level::bigint * 1000000000 + LEAST(xp, 999999999)) AS score,
-             RANK() OVER (ORDER BY level DESC, xp DESC, id ASC) AS rank
-        FROM heroes WHERE world_id = ${worldId}
+      SELECT h.id,
+             (h.level::bigint * 1000000000 + LEAST(h.xp, 999999999)) AS score,
+             RANK() OVER (ORDER BY h.level DESC, h.xp DESC, h.id ASC) AS rank
+        FROM heroes h JOIN players p ON p.id = h.player_id
+       WHERE h.world_id = ${worldId} AND p.deleted_at IS NULL
     )
     INSERT INTO rankings (world_id, kind, subject_id, rank, prev_rank, score, taken_at)
     SELECT ${worldId}, 'hero', o.id, o.rank, NULL, o.score, ${ts}::timestamptz FROM ordered o

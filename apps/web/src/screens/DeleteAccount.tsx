@@ -76,9 +76,11 @@ export function DeleteAccountScreen(): React.ReactElement {
                 bildirim aboneliklerin.</li>
               <li><strong>Yıkılan:</strong> başkentin dışındaki tüm şehirlerin (içlerinde ordu
                 olsa bile).</li>
-              <li><strong>Kalan:</strong> başkentin dünyada durur, ama adın ve şehrin adı
-                anonim bir adla değiştirilir — böylece diğer oyuncuların savaş geçmişi ve
-                sıralaması bozulmaz.</li>
+              <li><strong>Kalan:</strong> başkentin <strong>şu anki adıyla</strong> dünyada
+                durur — böylece diğer oyuncuların savaş geçmişinde delik oluşmaz. Yalnız
+                <strong> oyuncu adın</strong> anonim bir adla değiştirilir.</li>
+              <li><strong>Sıralamalar:</strong> şehrin oyuncu, ittifak ve kahraman
+                sıralamalarının hiçbirinde görünmez; puanın ittifakının toplamına da eklenmez.</li>
             </ul>
           </div>
           <p className="text-xs text-muted">
@@ -93,10 +95,14 @@ export function DeleteAccountScreen(): React.ReactElement {
   if (state === 'done' && result) {
     return (
       <Frame title="Hesabın silindi.">
+        {/* ⚠️ `result.username` artık OYUNCU adı; şehrin adı değişmediği için burada şehir
+            adı yazılmıyor — oyuncu onu zaten biliyor ve "adıyla duruyor" cümlesi eski
+            davranışta iki şeyi birden anlatıyordu. */}
         <p className="mb-3 text-sm text-ink">
-          Kişisel bilgilerin kaldırıldı ve tüm oturumların kapatıldı. Başkentin dünyada{' '}
-          <strong>{result.username}</strong> adıyla duruyor
-          {result.razed > 0 ? `; diğer ${result.razed} şehrin yıkıldı` : ''}.
+          Kişisel bilgilerin kaldırıldı ve tüm oturumların kapatıldı. Başkentin{' '}
+          <strong>adı değişmeden</strong> dünyada duruyor
+          {result.razed > 0 ? `; diğer ${result.razed} şehrin yıkıldı` : ''}. Oyuncu adın
+          bundan sonra <strong>{result.username}</strong>.
         </p>
         <p className="text-xs text-muted">
           E-posta adresin serbest bırakıldı — istersen aynı adresle yeniden kayıt olabilirsin.
@@ -173,10 +179,15 @@ export function DeleteAccountScreen(): React.ReactElement {
             <p className="text-ink">
               Başkentin <strong>{preview.capital.name}</strong>{' '}
               <span className="tnum text-muted">({coords(preview.capital)})</span> dünyada
-              kalır; adın ve şehrin adı anonim bir adla değiştirilir.
+              <strong> bu adıyla</strong> kalır — şehrin adı değişmez. Yalnız{' '}
+              <strong>oyuncu adın</strong> anonim bir adla değiştirilir.
             </p>
+            {/* ⚠️ Sıralama cümlesi burada çünkü oyuncunun asıl merak ettiği "puanım ne olacak".
+                Şehir kalıyor ve ganimet üretmeye devam ediyor; ama vitrinden tamamen çıkıyor. */}
             <p className="mt-1 text-muted">
-              Böylece diğer oyuncuların savaş geçmişinde ve sıralamada delik oluşmaz.
+              Şehrin dünyada gerçek bir şehir olarak durur (saldırılabilir, kaynak üretir) ama{' '}
+              <strong>hiçbir sıralamada görünmez</strong>; ittifakındaysan üyeliğin sürer, puanın
+              ittifakının toplamına eklenmez.
             </p>
           </div>
         ) : null}

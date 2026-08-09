@@ -302,6 +302,42 @@ describe('sıralama anlık görüntüsü', () => {
     expect(rows.length).toBe(1);
   });
 
+  /**
+   * ⭐⭐ SİLİNMİŞ HESABIN KAHRAMANI LİSTEDEN DÜŞER (kullanıcı, 2026-08-09).
+   *
+   * ⚠️ Bir ÜSTTEKİ testin ikizi ve **kasten farklı sonuç veriyor**: muafiyet bayrağı kahramanı
+   * listede bırakır (2026-08-03 şartı), hesabın silinmiş olması ise düşürür. İki soru ayrı:
+   * "gizlensin mi" ile "bu hesap artık yok mu". Biri diğerine bağlanırsa ikisinden biri
+   * sessizce ihlal edilir — ikisi de test edilmeden bırakılmamalı.
+   *
+   * ⚠️ Kahraman satırı sahibinin ADINI da yazıyor (`command.controller` → `owner`), yani bu
+   * süzgeç olmadan silinmiş hesap oyuncu ve ittifak sekmelerinden düşse bile kahraman
+   * sekmesinden vitrine geri sızıyordu.
+   */
+  it('⭐ SİLİNMİŞ hesabın kahramanı sıralamadan düşer (muafiyetten farklı)', async () => {
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, name, level, xp, status)
+      VALUES (${worldId}, ${playerId}, 'Hayalet', 7, 250, 'alive') RETURNING id
+    `);
+    const heroId = Number(hero!['id']);
+    const inRanking = async (): Promise<number> => {
+      const rows = await h.db.execute<Record<string, unknown>>(sql`
+        SELECT subject_id FROM rankings
+         WHERE world_id = ${worldId} AND kind = 'hero' AND subject_id = ${heroId}
+      `);
+      return rows.length;
+    };
+
+    await takeSnapshot(h.db, worldId, new Date('2026-07-30T08:00:00.000Z'));
+    expect(await inRanking(), 'silinmeden önce listede olmalı').toBe(1);
+
+    // ⚠️ Hesap silinince satır ARTIK VAR olan bir kahramana ait; `NOT EXISTS (heroes)`
+    //    temizliği onu bulamaz. Silme dalı `deleted_at`e de bakmazsa satır tabloda kalır.
+    await h.db.execute(sql`UPDATE players SET deleted_at = now() WHERE id = ${playerId}`);
+    await takeSnapshot(h.db, worldId, new Date('2026-07-30T16:00:00.000Z'));
+    expect(await inRanking(), 'silinmiş hesabın kahramanı düşmeliydi').toBe(0);
+  });
+
   it('bir sonraki görevi yazar ve aynı ana İKİNCİ görev yazılamaz', async () => {
     const gameNow = new Date('2026-07-28T09:00:00.000Z');       // TSİ 12:00
     const at = await scheduleSnapshot(h.db, worldId, gameNow);

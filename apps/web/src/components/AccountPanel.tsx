@@ -131,7 +131,8 @@ function DeleteAccountBody({ verified }: { verified: boolean }): React.ReactElem
         </p>
         <p>
           Onayladığında e-postan, şifren ve oturumların silinir; <strong>başkentin dışındaki
-          şehirlerin yıkılır</strong>. Başkentin dünyada kalır ama anonim bir adla.
+          şehirlerin yıkılır</strong>. Başkentin <strong>şu anki adıyla</strong> dünyada kalır;
+          oyuncu adın anonimleşir ve şehrin hiçbir sıralamada görünmez.
         </p>
         {!verified ? (
           <p className="text-warning">

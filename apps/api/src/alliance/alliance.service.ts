@@ -803,26 +803,7 @@ export class AllianceService {
    * yazılmalı; değişirse indeks sessizce kullanılmaz olur (sonuç doğru kalır, tarama uzar).
    */
   private async dropInviteMessages(tx: Tx, worldId: number, inviteIds: number[]): Promise<void> {
-    /* ⚠️ `sql.raw` kullanıldığı için süzgeç güvenlik sınırı: yalnız pozitif TAM SAYI geçer
-       (`Number.isFinite` yetmezdi — 1.5 süzgeci geçip `::bigint[]` dökümünde patlardı). */
-    const ids = [...new Set(inviteIds.filter((n) => Number.isInteger(n) && n > 0))];
-    if (ids.length === 0) return;
-
-    const gone = await tx.execute<Record<string, unknown>>(sql`
-      DELETE FROM messages
-       WHERE world_id = ${worldId}
-         AND kind IN ('alliance_invite', 'alliance_application')
-         AND (body ->> 'inviteId')::bigint = ANY(${sql.raw(`ARRAY[${ids.join(',')}]::bigint[]`)})
-      RETURNING player_id
-    `);
-
-    // Aynı oyuncuya birden fazla satır düşmüş olabilir; olay oyuncu başına bir kez gider.
-    for (const playerId of new Set(gone.map((r) => Number(r['player_id'])))) {
-      await tx.execute(sql`
-        INSERT INTO outbox (world_id, topic, payload)
-        VALUES (${worldId}, 'message:removed', ${JSON.stringify({ playerId })}::jsonb)
-      `);
-    }
+    await dropInviteMessages(tx, worldId, inviteIds);
   }
 
   private async writeMessage(tx: Tx, o: {
@@ -890,5 +871,39 @@ export class AllianceService {
       }
       return members.length;
     });
+  }
+}
+
+/**
+ * ⭐ SONUÇLANMIŞ DAVET/BAŞVURU MESAJLARINI SİL — gövde burada, sınıftaki metot delege ediyor.
+ *
+ * ⚠️ **Sınıfın DIŞINDA ve dışa açık** (2026-08-09): hesap silme akışı da çağırıyor
+ * (`account-delete.service.ts`, silinen oyuncunun bekleyen istekleri iptal edilirken).
+ * Yalnız `tx` kullanıyor, `this`e ihtiyacı yok; sırf bu metoda ulaşmak için sahte bir
+ * `AllianceService` örneği kurmak ya da SQL'i ikinci kez yazmak yerine fonksiyona çıkarıldı.
+ * Gerekçesi ve kararları için sınıftaki `dropInviteMessages` başlığına bak.
+ */
+export async function dropInviteMessages(
+  tx: Tx, worldId: number, inviteIds: number[],
+): Promise<void> {
+  /* ⚠️ `sql.raw` kullanıldığı için süzgeç güvenlik sınırı: yalnız pozitif TAM SAYI geçer
+     (`Number.isFinite` yetmezdi — 1.5 süzgeci geçip `::bigint[]` dökümünde patlardı). */
+  const ids = [...new Set(inviteIds.filter((n) => Number.isInteger(n) && n > 0))];
+  if (ids.length === 0) return;
+
+  const gone = await tx.execute<Record<string, unknown>>(sql`
+    DELETE FROM messages
+     WHERE world_id = ${worldId}
+       AND kind IN ('alliance_invite', 'alliance_application')
+       AND (body ->> 'inviteId')::bigint = ANY(${sql.raw(`ARRAY[${ids.join(',')}]::bigint[]`)})
+    RETURNING player_id
+  `);
+
+  // Aynı oyuncuya birden fazla satır düşmüş olabilir; olay oyuncu başına bir kez gider.
+  for (const playerId of new Set(gone.map((r) => Number(r['player_id'])))) {
+    await tx.execute(sql`
+      INSERT INTO outbox (world_id, topic, payload)
+      VALUES (${worldId}, 'message:removed', ${JSON.stringify({ playerId })}::jsonb)
+    `);
   }
 }

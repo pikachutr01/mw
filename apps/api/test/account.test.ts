@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { AllianceService } from '../src/alliance/alliance.service.ts';
 import { AccountDeleteError, AccountDeleteService } from '../src/auth/account-delete.service.ts';
 import { AuthError, AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
@@ -20,7 +21,7 @@ import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { EmailError, EmailTokenService } from '../src/mail/email-token.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -33,6 +34,8 @@ let deletes: AccountDeleteService;
 let accountId: number;
 let playerId: number;
 let capitalId: number;
+/** ⚠️ Başkentin adını `auth.register()` üretiyor (tohumlu); testte SABİT yazılamaz. */
+let CAPITAL_NAME: string;
 let email: string;
 const PW = 'parola-12345';
 
@@ -60,9 +63,10 @@ beforeEach(async () => {
   playerId = r.playerId;
   await verifyEmail(h, playerId);
   const [c] = await h.db.execute<Record<string, unknown>>(sql`
-    SELECT id FROM cities WHERE player_id = ${playerId} AND is_capital
+    SELECT id, name FROM cities WHERE player_id = ${playerId} AND is_capital
   `);
   capitalId = Number(c!['id']);
+  CAPITAL_NAME = String(c!['name']);
   await h.db.execute(sql`DELETE FROM outbox`);
 });
 
@@ -141,11 +145,18 @@ describe('hesap silme', () => {
     expect(p!['username']).toBe('hükümdar1');
     expect(p!['deleted_at']).not.toBeNull();
 
-    // Başkent duruyor ve adı da anonim (kullanıcı şartı: ikisi AYNI).
+    /**
+     * ⭐⭐ BAŞKENTİN ADI **DEĞİŞMİYOR** (kullanıcı, 2026-08-09: *"bu sistemden tamamen
+     * vazgeçtim, başkentin o andaki mevcut adı neyse öyle kalsın"*).
+     *
+     * ⚠️ Bu testin eski hâli tam tersini kilitliyordu (`cap.name === 'hükümdar1'`).
+     * Anonimleşen tek şey OYUNCU adı: o kişisel veri, şehir adı ise bir yer adı.
+     */
     const [cap] = await h.db.execute<Record<string, unknown>>(sql`
       SELECT name FROM cities WHERE id = ${capitalId}
     `);
-    expect(cap!['name']).toBe('hükümdar1');
+    expect(cap!['name']).toBe(CAPITAL_NAME);
+    expect(cap!['name']).not.toBe('hükümdar1');
 
     const gone = await h.db.execute<Record<string, unknown>>(sql`
       SELECT id FROM cities WHERE id = ${colony}
@@ -265,14 +276,113 @@ describe('silme engelleri', () => {
     `);
     expect((await deletes.preview(playerId)).blockers.join(' ')).toMatch(/lideri/);
 
-    // Üyeye indirilince engel kalkar ve silme ittifaktan sessizce çıkarır.
+    /**
+     * ⭐ Askere indirilince engel kalkar ve üyelik **KORUNUR** (kullanıcı, 2026-08-09).
+     * ⚠️ Eski hâli `alliance_id`nin NULL olmasını bekliyordu — kullanıcı bunu değiştirdi:
+     * *"Asker olarak hesabını sildiğinde ittifakta kalmaya devam edebilir ama puanı
+     * ittifağın toplam puanına eklenmesin."*
+     */
     await h.db.execute(sql`UPDATE players SET alliance_role = 1 WHERE id = ${playerId}`);
     expect((await deletes.preview(playerId)).blockers).toHaveLength(0);
     await run();
     const [p] = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT alliance_id FROM players WHERE id = ${playerId}
+      SELECT alliance_id, alliance_role, alliance_score_excluded, ranking_excluded
+        FROM players WHERE id = ${playerId}
     `);
-    expect(p!['alliance_id']).toBeNull();
+    // ⚠️ `alliance_id` bigint → postgres.js DİZE döndürüyor; sayıya çevirmeden kıyaslanmaz.
+    expect(Number(p!['alliance_id']), 'üyelik korunmalı').toBe(Number(a!['id']));
+    expect(p!['alliance_score_excluded'], 'puan takım toplamına yazılmamalı').toBe(true);
+    expect(p!['ranking_excluded'], 'sıralamada görünmemeli').toBe(true);
+  });
+
+  /**
+   * ⭐ KONSEY ÜYESİ ASKER'E İNER (2026-08-09 kararı, kullanıcının cümlesinin gereği).
+   *
+   * ⚠️ Konsey daveti kabul edebilir, başvuru sonuçlandırabilir ve asker atabilir. Sahibi
+   * olmayan bir satırın üstünde bu yetkileri bırakmak, ittifak adına iş yapan her gelecek
+   * özellik için açık kapı olurdu.
+   */
+  it('⭐ KONSEY üyesi silince Asker rütbesine iner ama ittifakta kalır', async () => {
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO alliances (world_id, name, leader_id) VALUES (${worldId}, 'Şahin', ${playerId})
+      RETURNING id
+    `);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${Number(a!['id'])}, alliance_role = 2 WHERE id = ${playerId}
+    `);
+    await run();
+
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT alliance_id, alliance_role FROM players WHERE id = ${playerId}
+    `);
+    expect(Number(p!['alliance_id'])).toBe(Number(a!['id']));
+    expect(Number(p!['alliance_role'])).toBe(1);
+  });
+
+  /**
+   * ⭐ TATİL MODU BİTİRİLİR (2026-08-09'da bulunan boşluk).
+   *
+   * ⚠️ Tatildeki oyuncu **saldırılamaz** ve kaynağı akmaz. Tatildeyken silen biri arkasında
+   * 30 güne kadar dokunulamaz, donmuş bir hayalet şehir bırakıyordu — üstelik tatili
+   * bitirebilecek tek kişi artık giriş yapamıyor.
+   */
+  it('⭐ tatildeyken silinirse tatil BİTİRİLİR (şehir dokunulmaz kalmasın)', async () => {
+    const [m] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO missions (world_id, type, status, execute_at, owner_player_id)
+      VALUES (${worldId}, 'vacation_end', 'scheduled', now() + interval '10 days', ${playerId})
+      RETURNING id
+    `);
+    await h.db.execute(sql`
+      UPDATE players
+         SET vacation_since = now(), vacation_until = now() + interval '10 days',
+             vacation_mission_id = ${Number(m!['id'])}
+       WHERE id = ${playerId}
+    `);
+
+    await run();
+
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT vacation_until, vacation_since FROM players WHERE id = ${playerId}
+    `);
+    expect(p!['vacation_until'], 'tatil bitmeliydi').toBeNull();
+    expect(p!['vacation_since']).toBeNull();
+  });
+
+  /**
+   * ⭐ BEKLEYEN İTTİFAK İSTEKLERİ İPTAL EDİLİR (2026-08-09'da bulunan boşluk).
+   *
+   * ⚠️ Yoksa bir lider «Kabul»e bastığında **silinmiş bir hesap ittifağa girerdi** ve kimse
+   * onun silinmiş olduğunu görmezdi. Mesaj satırı da gidiyor (`dropInviteMessages`).
+   */
+  it('⭐ bekleyen başvuru/davetler iptal olur ve mesajları silinir', async () => {
+    const other = await createPlayer(h, worldId, 'lider');
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO alliances (world_id, name, leader_id) VALUES (${worldId}, 'Kartal', ${other})
+      RETURNING id
+    `);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${Number(a!['id'])}, alliance_role = 3 WHERE id = ${other}
+    `);
+
+    const alliances = new AllianceService(h.db);
+    await alliances.apply({ worldId, playerId, allianceId: Number(a!['id']) });
+
+    const boxOf = async (pid: number): Promise<number> => {
+      const [r] = await h.db.execute<Record<string, unknown>>(sql`
+        SELECT count(*)::int AS n FROM messages
+         WHERE player_id = ${pid} AND kind = 'alliance_application'
+      `);
+      return Number(r!['n']);
+    };
+    expect(await boxOf(other)).toBe(1);
+
+    await run();
+
+    const [inv] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT status FROM alliance_invites WHERE player_id = ${playerId}
+    `);
+    expect(inv!['status']).toBe('canceled');
+    expect(await boxOf(other), 'liderin kutusundaki ölü satır kalmamalı').toBe(0);
   });
 });
 
