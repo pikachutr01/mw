@@ -51,10 +51,12 @@ export interface Viewport { width: number; height: number }
  * tetikleyicinin ÜSTÜNE bindirir ve neyi anlattığı görünmez olur. Sıra şu olmalı:
  * **önce daralt → sonra taraf seç (alt sığmıyorsa üst) → en son kelepçele.**
  */
-export function placePopover(a: Rect, boxHeight: number, vp: Viewport): Box {
+export function placePopover(
+  a: Rect, boxHeight: number, vp: Viewport, maxWidth: number = MAX_W,
+): Box {
   // 1) Genişlik ekrana göre: sabit `rem` genişlik 320px ekranda taşardı ve kelepçe onu
   //    yalnız kaydırırdı, daraltmazdı.
-  const width = Math.min(MAX_W, vp.width - EDGE * 2);
+  const width = Math.min(maxWidth, vp.width - EDGE * 2);
 
   // 2) Dikey taraf ÖLÇÜLEN yükseklikle seçilir; sabit tercih (hep alt) kısa ekranlarda taşıyordu.
   const below = a.bottom + GAP;
@@ -70,13 +72,23 @@ export function placePopover(a: Rect, boxHeight: number, vp: Viewport): Box {
 }
 
 export function Popover({
-  label, children, className = '',
+  label, children, className = '', trigger, width,
 }: {
   /** Kutunun içeriği. */
   children: ReactNode;
   /** Ekran okuyucu için düğmenin adı ("Çiftlik hakkında bilgi" gibi). */
   label: string;
   className?: string;
+  /**
+   * ⭐ Tetikleyicinin görüntüsü (2026-08-09). Verilmezse varsayılan küçük «i» dairesi çizilir.
+   *
+   * ⚠️ Bu genişletme, **açılır menüler için ikinci bir konumlandırma kodu yazmamak** için var:
+   * "ekrandan taşmadan aç/kapa" davranışı zaten burada çözülmüş ve testli. İttifak sayfasındaki
+   * üye işlemleri ve başlık düğmeleri de aynı kutuyu kullanıyor.
+   */
+  trigger?: ReactNode;
+  /** Kutunun en fazla genişliği (px). Menüler bilgi kutusundan dar olabilir. */
+  width?: number;
 }) {
   const id = useId();
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -88,8 +100,8 @@ export function Popover({
     const a = btnRef.current?.getBoundingClientRect();
     const b = boxRef.current?.getBoundingClientRect();
     if (!a || !b) return;
-    setPos(placePopover(a, b.height, { width: window.innerWidth, height: window.innerHeight }));
-  }, []);
+    setPos(placePopover(a, b.height, { width: window.innerWidth, height: window.innerHeight }, width ?? MAX_W));
+  }, [width]);
 
   /**
    * ⚠️ `useLayoutEffect` — `useEffect` DEĞİL. Konum, kutu çizildikten SONRA ölçülüyor; boyama
@@ -141,8 +153,10 @@ export function Popover({
          * bir daire parmakla ıskalanır. `after:-inset-2` görünmez bir 32px'lik hedef ekliyor;
          * `absolute` olduğu için satır düzenini hiç etkilemiyor (kutuyu büyütmek satırdaki
          * her şeyi kaydırırdı).
+         * ⚠️ Özel tetikleyici verilmişse bu süslemelerin HİÇBİRİ uygulanmaz: çağıran kendi
+         * düğmesini getiriyorsa boyutunu da o biliyor.
          */
-        className={`relative inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full
+        className={trigger != null ? className : `relative inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full
           border border-border text-[10px] leading-none font-semibold text-muted
           transition-colors hover:border-accent hover:text-accent
           after:absolute after:-inset-2 after:content-['']
@@ -151,7 +165,7 @@ export function Popover({
         {/* ⚠️ Metin `i` DEĞİL, `ℹ` de değil: ikisi de yazı tipine göre farklı yükseklikte
             oturuyor ve dairenin içinde kayıyordu. Düz `i` + `leading-none` + sabit kutu
             en tutarlı sonucu veriyor. */}
-        <span aria-hidden>i</span>
+        {trigger ?? <span aria-hidden>i</span>}
       </button>
 
       {open ? createPortal(
@@ -162,7 +176,7 @@ export function Popover({
           style={{
             top: pos?.top ?? 0,
             left: pos?.left ?? 0,
-            width: pos?.width ?? MAX_W,
+            width: pos?.width ?? (width ?? MAX_W),
             // Ölçülmeden önce görünmez: yanlış yerde bir kare parlamasın.
             visibility: pos ? 'visible' : 'hidden',
             boxShadow: 'var(--mw-shadow-md)',

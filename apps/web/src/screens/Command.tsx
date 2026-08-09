@@ -37,6 +37,7 @@ import { useOpenChat } from '../lib/chat-context.tsx';
 import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { Modal } from '../components/Modal.tsx';
+import { AllianceModal } from '../components/AllianceModal.tsx';
 import { MeritBadge, meritRemaining } from '../components/MeritBadge.tsx';
 import { AllianceScreen } from './Alliance.tsx';
 import { SearchScreen } from './Search.tsx';
@@ -299,6 +300,8 @@ function Rankings(): React.ReactElement {
   // hizalanmazsa "kayıt yok" satırı tabloyu dar gösterir.
   const cols = kind === 'hero' ? 4 : 5;
   const [picked, setPicked] = useState<RankingRow | null>(null);
+  /** ⭐ İttifak satırına tıklanınca açılan herkese açık künye modalı (2026-08-09). */
+  const [allianceId, setAllianceId] = useState<number | null>(null);
 
   return (
     <div className="space-y-2">
@@ -360,14 +363,18 @@ function Rankings(): React.ReactElement {
                   : d.rows.map((r, i) => (
                     /**
                      * ⭐ SATIRIN KENDİSİ TIKLANABİLİR (kullanıcı, 2026-08-06).
-                     * ⚠️ İttifak sekmesinde `playerId` YOK (satır bir ittifağı gösteriyor,
-                     * oyuncuyu değil) → orada tıklama pasif kalmalı, yoksa boş bir modal açardı.
+                     * ⭐ İTTİFAK SEKMESİ DE ARTIK TIKLANABİLİR (2026-08-09): satır bir ittifağı
+                     * gösterdiği için `playerId` yok, ama artık açacak bir şey VAR — ittifak
+                     * künyesi modalı (metin · lider · üye · başvuru). Kahraman sekmesi hâlâ
+                     * pasif: orada satır bir kahraman ve `playerId` gelmiyor.
                      */
                     <tr key={r.id}
-                      onClick={r.playerId == null ? undefined : () => setPicked(r)}
+                      onClick={kind === 'alliance' ? () => setAllianceId(r.id)
+                        : r.playerId == null ? undefined : () => setPicked(r)}
                       className={`h-8 border-b border-border ${i % 2 === 1 ? 'bg-row-alt' : ''} ${
                         r.isMine ? 'text-accent' : 'text-ink'} ${
-                        r.playerId == null ? '' : 'cursor-pointer hover:bg-raised'}`}>
+                        kind === 'alliance' || r.playerId != null
+                          ? 'cursor-pointer hover:bg-raised' : ''}`}>
                       <Td className="tnum text-center font-semibold">{fmt(r.rank)}</Td>
                       <Td className="max-w-[12rem] truncate">
                         {r.name}
@@ -411,6 +418,9 @@ function Rankings(): React.ReactElement {
 
       {picked ? (
         <RankingRowModal row={picked} kind={kind} onClose={() => setPicked(null)} />
+      ) : null}
+      {allianceId != null ? (
+        <AllianceModal id={allianceId} onClose={() => setAllianceId(null)} />
       ) : null}
     </div>
   );

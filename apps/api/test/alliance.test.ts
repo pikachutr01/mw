@@ -7,6 +7,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { AllianceController } from '../src/alliance/alliance.controller.ts';
 import { AllianceService, ROLE } from '../src/alliance/alliance.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { takeSnapshot } from '../src/ranking/ranking.service.ts';
@@ -533,5 +534,91 @@ describe('ittifak sıralaması (snapshot)', () => {
     `);
     expect(kalan).toHaveLength(1);
     expect(Number(kalan[0]!['subject_id'])).toBe(rakip.id);
+  });
+});
+
+/**
+ * ⭐⭐ HERKESE AÇIK İTTİFAK KÜNYESİ (kullanıcı, 2026-08-09).
+ *
+ * *"Başka bir ittifağa üye olsak bile diğer ittifakların ittifak metinlerini görebilelim."*
+ *
+ * ⚠️⚠️ Bu uç bir **gizlilik sınırı** taşıyor ve testlerin asıl işi onu korumak: metin ve
+ * toplamlar açılıyor, ama üye listesi · çevrimiçilik · askerî ünvan AÇILMIYOR. Üçü de ittifak
+ * içi bilgi (§ünvanlar: *"bunu gören düşmanlar ordusunun yeni kırıldığını anlar"*). Uç
+ * genişletilirken biri sessizce sızarsa bu testler kırılır.
+ */
+describe('⭐ herkese açık ittifak künyesi', () => {
+  /** ⚠️ Controller kendi servislerini KENDİ kuruyor — tek argümanı `db`. */
+  const ctl = (): AllianceController => new AllianceController(h.db);
+  const asPlayer = (playerId: number): never =>
+    ({ player: { playerId, worldId } }) as never;
+
+  it('⭐ DIŞARIDAN biri ittifak metnini ve künyeyi görebiliyor', async () => {
+    const id = await foundedAlliance();
+    await service.setText({ worldId, playerId: lider, text: 'Kapımız herkese açık.' });
+
+    const p = await ctl().profile(asPlayer(disaridan), String(id));
+
+    expect(p['name']).toBe('run.dll');
+    expect(p['text']).toBe('Kapımız herkese açık.');
+    // ⚠️ `createPlayer` ada rastgele son ek ekliyor (tekillik) → ön ek eşleşmesi.
+    expect(String(p['leader'])).toMatch(/^lider/);
+    expect(p['memberCount']).toBe(3);
+  });
+
+  /** ⭐ Kullanıcının açık şartı: BAŞKA bir ittifakta olsan da metni görebilmelisin. */
+  it('⭐ BAŞKA ittifağın üyesi de metni görebiliyor', async () => {
+    const id = await foundedAlliance();
+    await service.setText({ worldId, playerId: lider, text: 'Gizli değil.' });
+    await giveCastle(disaridan, 5);
+    await service.found({ worldId, playerId: disaridan, name: 'rakip' });
+
+    const p = await ctl().profile(asPlayer(disaridan), String(id));
+    expect(p['text']).toBe('Gizli değil.');
+    expect(p['canApply'], 'başka ittifaktayken başvuramaz').toBe(false);
+    expect(String(p['applyBlockedReason'])).toMatch(/ayrılmalısın/);
+  });
+
+  /**
+   * ⭐⭐ GİZLİLİK SINIRI. Uç toplamları verir, kimliği vermez.
+   * ⚠️ Ölçüt tek tek alan adı değil, yanıtın **anahtar kümesi**: yeni bir alan eklenirse
+   * (üye listesi, çevrimiçilik, ünvan) bu test onu yakalar ve bilerek eklendiğini yazmaya
+   * zorlar. Beyaz liste, kara listeden daha güvenli.
+   */
+  it('⭐⭐ üye listesi / çevrimiçilik / ünvan SIZMAZ', async () => {
+    const id = await foundedAlliance();
+    const p = await ctl().profile(asPlayer(disaridan), String(id));
+
+    expect(Object.keys(p).sort()).toEqual([
+      'alreadyApplied', 'applyBlockedReason', 'canApply', 'foundedAt', 'id', 'isMine',
+      'leader', 'memberCount', 'name', 'rank', 'rankChange', 'score', 'text',
+    ]);
+  });
+
+  it('ittifaksız oyuncuya BAŞVUR açık; başvurduktan sonra kapanır', async () => {
+    const id = await foundedAlliance();
+
+    const once = await ctl().profile(asPlayer(disaridan), String(id));
+    expect(once['canApply']).toBe(true);
+    expect(once['alreadyApplied']).toBe(false);
+
+    await service.apply({ worldId, playerId: disaridan, allianceId: id });
+
+    const sonra = await ctl().profile(asPlayer(disaridan), String(id));
+    expect(sonra['alreadyApplied']).toBe(true);
+    expect(sonra['canApply'], 'ikinci kez başvurulamaz').toBe(false);
+  });
+
+  it('kendi ittifağında BAŞVUR yok, «senin ittifağın» işareti var', async () => {
+    const id = await foundedAlliance();
+    const p = await ctl().profile(asPlayer(asker), String(id));
+    expect(p['isMine']).toBe(true);
+    expect(p['canApply']).toBe(false);
+  });
+
+  it('başka dünyanın ittifağı görünmez', async () => {
+    const id = await foundedAlliance();
+    const baskaDunya = { player: { playerId: disaridan, worldId: worldId + 1 } } as never;
+    await expect(ctl().profile(baskaDunya, String(id))).rejects.toThrow(/bulunamadı/i);
   });
 });

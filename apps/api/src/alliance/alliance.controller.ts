@@ -185,6 +185,78 @@ export class AllianceController {
     };
   }
 
+  /**
+   * ⭐⭐ HERKESE AÇIK İTTİFAK KÜNYESİ (kullanıcı, 2026-08-09).
+   *
+   * *"Sıralamalar sayfasından veya arama sonucundan ittifakların üzerine tıklayınca açılan
+   * modalde ittifak metni, lideri, kaç üyesi olduğu gibi detayları göstersin… başka bir
+   * ittifağa üye olsak bile diğer ittifakların metinlerini görebilelim."*
+   *
+   * ⚠️⚠️ **İTTİFAK METNİ ARTIK HERKESE AÇIK — bilinçli bir gizlilik kararı.** Bugüne kadar
+   * yalnız üyeler görüyordu. Metin bir tanıtım/duyuru alanı (*"scr_web06 üst kutusu"*), sır
+   * değil; kapalı olması yeni oyuncunun hangi ittifağa başvuracağına karar vermesini
+   * imkânsız kılıyordu. Yazan kişi de artık bunu bilerek yazsın diye `ModalNote` metni
+   * güncellendi.
+   *
+   * ⚠️ **ÜYE LİSTESİ BURADAN SIZMAZ.** `mine` ucu üyeleri, çevrimiçilik durumunu ve askerî
+   * ünvanları döndürüyor; üçü de **ittifak içi** bilgi (§ünvanlar: *"bunu gören düşmanlar
+   * ordusunun yeni kırıldığını anlar"*). Bu uç yalnız TOPLAMLARI verir: kaç üye, kaç puan,
+   * kaçıncı sıra, lider kim. Lider adı zaten sıralama ekranında görünüyor.
+   */
+  @Get('alliances/:id')
+  async profile(@Req() req: AuthedRequest, @Param('id') idRaw: string): Promise<Record<string, unknown>> {
+    const player = req.player!;
+    const id = Number(idRaw);
+    if (!Number.isInteger(id) || id <= 0) throw new BadRequestException('Geçersiz ittifak.');
+
+    const [a] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT a.id, a.name, a.text, a.created_at, p.username AS leader_name,
+             r.rank, r.prev_rank,
+             (SELECT COUNT(*)::int FROM players m WHERE m.alliance_id = a.id) AS member_count,
+             (SELECT COALESCE(SUM(m.score), 0) FROM players m WHERE m.alliance_id = a.id) AS score
+        FROM alliances a
+        JOIN players p ON p.id = a.leader_id
+        LEFT JOIN rankings r ON r.world_id = a.world_id AND r.kind = 'alliance' AND r.subject_id = a.id
+       WHERE a.id = ${id} AND a.world_id = ${player.worldId}
+    `);
+    if (!a) throw new NotFoundException('İttifak bulunamadı.');
+
+    /**
+     * ⭐ Başvuru düğmesinin görünürlüğü SUNUCUDAN geliyor, istemci karar vermiyor: kural
+     * (`alliance.service.apply`) zaten burada yaşıyor ve iki yerde tutmak kaçınılmaz olarak
+     * kayardı. `canApply` false ise `applyBlockedReason` niçinini söylüyor.
+     */
+    const my = await this.service.myMembership(player.playerId);
+    const [pending] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM alliance_invites
+       WHERE player_id = ${player.playerId} AND alliance_id = ${id}
+         AND kind = 'application' AND status = 'pending'
+    `);
+    const alreadyApplied = pending != null;
+    const isMine = my.allianceId === id;
+
+    const rank = a['rank'] == null ? null : Number(a['rank']);
+    const prevRank = a['prev_rank'] == null ? null : Number(a['prev_rank']);
+    return {
+      id: Number(a['id']),
+      name: String(a['name']),
+      text: String(a['text'] ?? ''),
+      leader: String(a['leader_name']),
+      memberCount: Number(a['member_count']),
+      score: Number(a['score']),
+      rank,
+      rankChange: rank != null && prevRank != null ? prevRank - rank : null,
+      foundedAt: toDate(a['created_at']).toISOString(),
+      isMine,
+      alreadyApplied,
+      canApply: !isMine && my.allianceId == null && !alreadyApplied,
+      applyBlockedReason: isMine ? 'Zaten bu ittifaktasın.'
+        : my.allianceId != null ? 'Başvurmak için önce mevcut ittifağından ayrılmalısın.'
+          : alreadyApplied ? 'Başvurun zaten bekliyor.'
+            : null,
+    };
+  }
+
   /* ── Kurma / yaşam döngüsü ────────────────────────────────────────────────── */
 
   @Post('alliance')

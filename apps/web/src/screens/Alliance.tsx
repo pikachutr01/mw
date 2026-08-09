@@ -24,6 +24,7 @@ import {
   Badge, Button, Empty, ErrorBox, Input, Panel, Skeleton, Td, TextArea, Th,
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
+import { Popover } from '../components/Popover.tsx';
 import { AllianceChatSheet } from '../components/AllianceChatSheet.tsx';
 import { MERIT_ROW_CLASS, MeritBadge } from '../components/MeritBadge.tsx';
 
@@ -184,42 +185,69 @@ function MemberView({ a, page, setPage }: {
             : <span className="text-muted">— henüz yazılmamış —</span>}
         </div>
 
+        {/**
+          * ⭐⭐ BAŞLIK DÜĞMELERİ SADELEŞTİ (kullanıcı, 2026-08-09):
+          * *"ittifak sohbeti, ittifak metni, ittifağa mesaj gibi butonlar topluca durunca kötü
+          * görünüyorlar."* Lider için altı düğme yan yanaydı ve dar ekranda üç satıra yayılıyordu.
+          *
+          * ⚠️ Ayrım keyfî değil: **ana eylem dışarıda, yönetim menüde.** Sohbet her rolün her
+          * gün kullandığı tek düğme — onu menüye gömmek en sık işi bir tık uzağa iterdi.
+          * Ayrılma/dağıtma da menüde ama **ayırıcının altında ve kırmızı**: geri alınamaz
+          * eylemlerin yanlışlıkla tıklanmaması için ayrı bir bölge.
+          */}
         <div className="flex flex-wrap items-center gap-2 px-3 py-2">
           {/* ⭐ Rol koşulu YOK — Asker de sohbete girer (yazma hakkı sunucuda kararlaşıyor). */}
           <Button onClick={() => setChatOpen(true)}>İttifak Sohbeti</Button>
-          {isCouncil ? (
-            <>
-              <Button variant="ghost" onClick={() => setPanel(panel === 'text' ? 'none' : 'text')}>
-                İttifak Metni
-              </Button>
-              <Button variant="ghost" onClick={() => setPanel(panel === 'message' ? 'none' : 'message')}>
-                İttifağa Mesaj
-              </Button>
-            </>
-          ) : null}
-          {isLeader ? (
-            <>
-              <Button variant="ghost" onClick={() => setPanel(panel === 'rename' ? 'none' : 'rename')}>
-                İttifak Adı Değiştir
-              </Button>
-              <Button variant="danger" disabled={disband.isPending}
+
+          <Popover
+            label="İttifak işlemleri"
+            width={230}
+            trigger={(
+              <span className="tex-header inline-flex items-center gap-1.5 rounded-[var(--radius-sm)]
+                border-2 border-strong bg-surface px-3 py-2 text-sm font-medium text-ink
+                shadow-[var(--bevel)] hover:bg-raised active:translate-y-px">
+                İşlemler <span aria-hidden className="text-[10px]">▾</span>
+              </span>
+            )}
+          >
+            <span className="flex flex-col gap-1">
+              {isCouncil ? (
+                <>
+                  <MenuItem onClick={() => setPanel(panel === 'text' ? 'none' : 'text')}>
+                    İttifak Metni
+                  </MenuItem>
+                  <MenuItem onClick={() => setPanel(panel === 'message' ? 'none' : 'message')}>
+                    İttifağa Mesaj
+                  </MenuItem>
+                </>
+              ) : null}
+              {isLeader ? (
+                <MenuItem onClick={() => setPanel(panel === 'rename' ? 'none' : 'rename')}>
+                  İttifak Adı Değiştir
+                </MenuItem>
+              ) : null}
+
+              <span className="my-0.5 block border-t border-border" />
+              <MenuItem danger disabled={leave.isPending}
                 onClick={() => {
                   void confirm({
-                    title: 'İttifağı Dağıt',
-                    body: 'Kendi ittifağınız dağıtılacak. Emin misiniz!',
+                    title: 'İttifaktan Ayrıl',
+                    body: 'İttifağı terk ediyorsunuz. Emin misiniz!',
                     danger: true,
-                  }).then((ok) => { if (ok) disband.mutate(); });
-                }}>İttifağı Dağıt</Button>
-            </>
-          ) : null}
-          <Button variant="danger" disabled={leave.isPending}
-            onClick={() => {
-              void confirm({
-                title: 'İttifaktan Ayrıl',
-                body: 'İttifağı terk ediyorsunuz. Emin misiniz!',
-                danger: true,
-              }).then((ok) => { if (ok) leave.mutate(); });
-            }}>İttifaktan Ayrıl</Button>
+                  }).then((ok) => { if (ok) leave.mutate(); });
+                }}>İttifaktan Ayrıl</MenuItem>
+              {isLeader ? (
+                <MenuItem danger disabled={disband.isPending}
+                  onClick={() => {
+                    void confirm({
+                      title: 'İttifağı Dağıt',
+                      body: 'Kendi ittifağınız dağıtılacak. Emin misiniz!',
+                      danger: true,
+                    }).then((ok) => { if (ok) disband.mutate(); });
+                  }}>İttifağı Dağıt</MenuItem>
+              ) : null}
+            </span>
+          </Popover>
         </div>
         <div className="px-3 pb-2">
           <ErrorBox error={leave.error ?? disband.error} />
@@ -250,7 +278,7 @@ function MemberView({ a, page, setPage }: {
                   tabloya yedinci sütun eklemek mobilde taşırıyordu. */}
               <Th className="w-28">Rütbe</Th>
               <Th className="w-16 text-center">Durum</Th>
-              <Th className="w-40 text-right">İşlem</Th>
+              <Th className="w-16 text-right">İşlem</Th>
             </tr>
           </thead>
           <tbody>
@@ -273,6 +301,19 @@ function MemberView({ a, page, setPage }: {
   );
 }
 
+/** Açılır menü maddesi — başlık menüsü ve üye menüsü aynı görünümü paylaşsın diye tek yerde. */
+function MenuItem({ children, onClick, danger = false, disabled = false }: {
+  children: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled}
+      className={`rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-[13px]
+        hover:bg-raised disabled:opacity-45 ${danger ? 'text-danger' : 'text-ink'}`}>
+      {children}
+    </button>
+  );
+}
+
 function MemberLine({ m, index, myRole, alt }: {
   m: AllianceMember; index: number; myRole: number; alt: boolean;
 }) {
@@ -287,6 +328,30 @@ function MemberLine({ m, index, myRole, alt }: {
     void confirm({ title: m.username, body: text, danger: action === 'kick' })
       .then((ok) => { if (ok) act.mutate({ playerId: m.playerId, action }); });
   };
+
+  /**
+   * Bu satırda kimin neyi yapabileceği — **tek yerde**. Eskiden dört ayrı JSX koşuluydu;
+   * menüye taşınırken listeye çevrildi, böylece "hiç işlem yoksa menüyü çizme" kararı tek bir
+   * `length` kontrolüne indi.
+   */
+  const actions: { action: 'kick' | 'promote' | 'demote' | 'transfer'; label: string;
+    confirm: string; danger?: boolean }[] = [];
+  if (canKick) {
+    actions.push({ action: 'kick', label: 'İttifaktan At', danger: true,
+      confirm: 'Oyuncu ittifaktan çıkarılacak. Emin misiniz!' });
+  }
+  if (isLeaderMe && m.role === 1) {
+    actions.push({ action: 'promote', label: 'Konseye Al',
+      confirm: 'Oyuncu konsey üyesi yapılacak. Emin misiniz!' });
+  }
+  if (isLeaderMe && m.role === 2) {
+    actions.push({ action: 'demote', label: 'Konseyden Çıkar',
+      confirm: 'Oyuncu konseyden çıkarılacak. Emin misiniz!' });
+  }
+  if (isLeaderMe && m.role !== 3) {
+    actions.push({ action: 'transfer', label: 'Liderliği Devret',
+      confirm: 'İttifak liderliğinizi devir ediyorsunuz. Emin misiniz!' });
+  }
 
   return (
     /**
@@ -331,24 +396,44 @@ function MemberLine({ m, index, myRole, alt }: {
         </span>
       </Td>
       <Td className="text-right">
-        <span className="flex flex-wrap justify-end gap-1">
-          {canKick ? (
-            <Button size="sm" variant="danger" disabled={act.isPending}
-              onClick={() => run('kick', 'Oyuncu ittifaktan çıkarılacak. Emin misiniz!')}>At</Button>
-          ) : null}
-          {isLeaderMe && m.role === 1 ? (
-            <Button size="sm" variant="ghost" disabled={act.isPending}
-              onClick={() => run('promote', 'Oyuncu konsey üyesi yapılacak. Emin misiniz!')}>Konseye Al</Button>
-          ) : null}
-          {isLeaderMe && m.role === 2 ? (
-            <Button size="sm" variant="ghost" disabled={act.isPending}
-              onClick={() => run('demote', 'Oyuncu konseyden çıkarılacak. Emin misiniz!')}>Konseyden Çıkar</Button>
-          ) : null}
-          {isLeaderMe && m.role !== 3 ? (
-            <Button size="sm" variant="ghost" disabled={act.isPending}
-              onClick={() => run('transfer', 'İttifak liderliğinizi devir ediyorsunuz. Emin misiniz!')}>Devret</Button>
-          ) : null}
-        </span>
+        {/**
+          * ⭐⭐ İŞLEMLER TEK AÇILIR MENÜDE (kullanıcı, 2026-08-09).
+          *
+          * ⚠️ Eskiden dört düğme yan yana çiziliyordu ve lider için hepsi birden görünüyordu:
+          * *"birden fazla buton görüyor, bu da görüntü bozukluğuna sebep oluyor."* Sütun
+          * genişliği sabit (`w-40`) olduğu için düğmeler alt satıra kayıyor, satır yüksekliği
+          * oynuyor ve tablo dalgalanıyordu.
+          *
+          * ⚠️ Menü `Popover` ile — yeni bir konumlandırma kodu YAZILMADI. "Ekrandan taşmadan
+          * aç/kapa, dışarı tıklayınca kapan, Esc" davranışı orada zaten çözülmüş ve testli
+          * (`popover-place.test.ts`). Tablo hücresi `overflow` kesen bir kapsayıcı; portala
+          * çizilmeseydi menü kırpılırdı.
+          * ⚠️ Hiç yetki yoksa menü düğmesi HİÇ çizilmez — boş bir menü açan üç nokta,
+          * dört düğmeden daha kafa karıştırıcı olurdu.
+          */}
+        {actions.length === 0 ? null : (
+          <Popover
+            label={`${m.username} için işlemler`}
+            width={200}
+            trigger={(
+              <span className="inline-flex h-6 w-7 items-center justify-center rounded-[var(--radius-sm)]
+                border border-border text-sm leading-none text-muted hover:border-accent hover:text-accent">
+                ⋯
+              </span>
+            )}
+          >
+            <span className="flex flex-col gap-1">
+              {actions.map((a) => (
+                <button key={a.action} type="button" disabled={act.isPending}
+                  onClick={() => run(a.action, a.confirm)}
+                  className={`rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-[13px]
+                    hover:bg-raised disabled:opacity-45 ${a.danger ? 'text-danger' : 'text-ink'}`}>
+                  {a.label}
+                </button>
+              ))}
+            </span>
+          </Popover>
+        )}
       </Td>
     </tr>
   );
@@ -410,9 +495,12 @@ function TextEditor({ initial, onClose }: { initial: string; onClose: () => void
         </>
       }>
       <div className="space-y-2.5 px-3 py-3">
+        {/* ⚠️ Metin 2026-08-09'da HERKESE AÇIK oldu (sıralama/arama künye modalı). Uyarı da
+            güncellendi: yazan kişi kimin okuyacağını yazmadan ÖNCE bilmeli. */}
         <ModalNote icon="📜">
-          İttifak metni <b className="text-ink">ittifak sayfasının en üstünde</b> durur;
-          üyeler ve ittifağı inceleyen herkes görür.
+          İttifak metni <b className="text-ink">herkese açıktır</b>: üyelerin yanı sıra
+          sıralama ve arama ekranlarından ittifağınıza bakan <b className="text-ink">tüm
+          oyuncular</b> okur. Başvuru almak için bir tanıtım yazısı gibi düşünün.
         </ModalNote>
         <TextArea
           value={text} maxLength={TEXT_MAX} rows={7}

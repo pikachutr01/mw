@@ -14,12 +14,12 @@
  */
 import { useState } from 'react';
 import { USERNAME_MAX } from '@mobilwar/catalog';
-import { useNavigate } from 'react-router-dom';
 import {
   useAllianceSearchTab, usePlayerSearch, type SearchAllianceRow, type SearchPlayerRow,
 } from '../lib/queries.ts';
 import { useDebounced } from '../lib/hooks.ts';
 import { Button, Empty, Field, Input, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
+import { AllianceModal } from '../components/AllianceModal.tsx';
 import { TargetModal } from './world-modal.tsx';
 
 type Kind = 'player' | 'alliance';
@@ -153,12 +153,15 @@ function PlayerSearch(): React.ReactElement {
 /**
  * ⚠️ İttifak araması eskiden `Alliance.tsx`'te, YALNIZ ittifaksız oyuncuya görünüyordu
  * (`OutsiderView` içindeydi). Orijinalde herkes arayabiliyordu (`g.java:2051` — Arama menüsü
- * ittifak üyeliğine bakmıyor). Buraya taşınınca üye de arayabiliyor; "Başvur" düğmesi
- * doğal olarak yalnız İttifak ekranında kalıyor.
+ * ittifak üyeliğine bakmıyor). Buraya taşınınca üye de arayabiliyor.
+ *
+ * ⭐ **Satır artık tıklanabilir** (2026-08-09): künye modalı açılıyor — metin, lider, üye
+ * sayısı ve (uygunsa) BAŞVUR düğmesi. Eski *"İttifak ekranı"* düğmesi kaldırıldı: oyuncuyu
+ * kendi ittifak sayfasına götürüyordu, yani aradığı ittifak hakkında hiçbir şey göstermiyordu.
  */
 function AllianceSearch(): React.ReactElement {
   const [name, setName] = useState('');
-  const navigate = useNavigate();
+  const [picked, setPicked] = useState<number | null>(null);
   const debounced = useDebounced(name, 300);
   const q = useAllianceSearchTab(debounced, debounced.trim().length >= 2);
   const rows: SearchAllianceRow[] = q.data?.items ?? [];
@@ -185,19 +188,15 @@ function AllianceSearch(): React.ReactElement {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr><Th>Sıra</Th><Th>İttifak</Th><Th>Puan</Th><Th>Üye</Th><Th>{''}</Th></tr></thead>
+                <thead><tr><Th>Sıra</Th><Th>İttifak</Th><Th>Puan</Th><Th>Üye</Th></tr></thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.id} className="border-t border-border">
+                    <tr key={r.id} onClick={() => setPicked(r.id)}
+                      className="cursor-pointer border-t border-border hover:bg-raised">
                       <Td>{r.rank ?? '-'}</Td>
                       <Td>{r.name}</Td>
                       <Td className="tnum">{r.score.toLocaleString('tr-TR')}</Td>
                       <Td className="tnum">{r.memberCount}</Td>
-                      <Td>
-                        <Button variant="ghost" onClick={() => navigate('/command/alliance')}>
-                          İttifak ekranı
-                        </Button>
-                      </Td>
                     </tr>
                   ))}
                 </tbody>
@@ -205,6 +204,9 @@ function AllianceSearch(): React.ReactElement {
             </div>
           )}
       </Panel>
+      {picked != null ? (
+        <AllianceModal id={picked} onClose={() => setPicked(null)} />
+      ) : null}
     </>
   );
 }

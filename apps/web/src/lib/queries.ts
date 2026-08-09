@@ -1167,6 +1167,37 @@ export const useAlliance = (page = 0): UseQueryResult<AllianceView> => useQuery(
   enabled: useAuthed(),
 });
 
+/**
+ * ⭐ HERKESE AÇIK İTTİFAK KÜNYESİ (2026-08-09) — sıralama/arama satırına tıklayınca açılan
+ * modalı besler. Üye listesi, çevrimiçilik ve askerî ünvan **gelmez**; onlar ittifak içi bilgi.
+ */
+export interface AllianceProfile {
+  id: number;
+  name: string;
+  text: string;
+  leader: string;
+  memberCount: number;
+  score: number;
+  rank: number | null;
+  rankChange: number | null;
+  foundedAt: string;
+  isMine: boolean;
+  alreadyApplied: boolean;
+  /** Başvuru düğmesi çizilsin mi — kararı SUNUCU verir, istemci kural bilmez. */
+  canApply: boolean;
+  /** `canApply` false ise sebebi; oyuncuya düğme yerine bu yazılır. */
+  applyBlockedReason: string | null;
+}
+
+export const useAllianceProfile = (
+  id: number | null,
+): UseQueryResult<AllianceProfile> => useQuery({
+  queryKey: ['alliance-profile', id],
+  queryFn: () => get<AllianceProfile>(`/api/v1/alliances/${id}`),
+  enabled: id != null && useAuthed(),
+  staleTime: 15_000,
+});
+
 export const useAllianceSearch = (query: string): UseQueryResult<{ alliances: AllianceListRow[] }> =>
   useQuery({
     queryKey: ['alliances', query],
