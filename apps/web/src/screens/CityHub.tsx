@@ -8,15 +8,10 @@ import { Link } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCity } from '../lib/queries.ts';
 import { Panel } from '../components/ui.tsx';
-import { ActivityDot, cityActivity } from '../components/Shell.tsx';
-
-const ITEMS = [
-  { to: '/barracks', label: 'Baraka', icon: 'barracks', hint: 'Savaşçı üret' },
-  { to: '/buildings', label: 'Yapılar', icon: 'castle', hint: 'Bina yükselt' },
-  { to: '/defense', label: 'Savunma', icon: 'architect_school', hint: 'Sur ve savunma birimleri' },
-  { to: '/academy', label: 'Akademi', icon: 'academy', hint: 'Teknik araştır' },
-  { to: '/temple', label: 'Tapınak', icon: 'temple', hint: 'Kahramanlar' },
-] as const;
+import { ActivityDot, cityActivity } from '../lib/city-activity.tsx';
+/* ⚠️ Liste artık burada TANIMLI DEĞİL: aynı beş rota mobil sekme şeridinde de kullanılıyor ve
+   iki kopya kaçınılmaz olarak ayrışırdı (`lib/city-screens.ts` başlığında gerekçesi yazılı). */
+import { CITY_SCREENS } from '../lib/city-screens.ts';
 
 export function CityHub() {
   const { cityId } = useActiveCity();
@@ -38,7 +33,7 @@ export function CityHub() {
         */}
       <Panel title="Şehir ekranları">
         <ul className="divide-y divide-border">
-          {ITEMS.map((it, i) => (
+          {CITY_SCREENS.map((it, i) => (
             <li key={it.to} className={i % 2 === 1 ? 'bg-row-alt' : ''}>
               <Link to={it.to} className="flex items-center gap-3 px-3 py-2.5 hover:bg-raised">
                 <img src={`/assets/buildings/${it.icon}.png`} alt="" width={32} height={32}

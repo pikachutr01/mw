@@ -18,15 +18,17 @@ import { useEffect, useState } from 'react';
 import { getSession, logout } from '../lib/api.ts';
 import { getConnectionState, onConnectionChange } from '../lib/realtime.ts';
 import { coords } from '../lib/format.ts';
+import { ActivityDot, cityActivity } from '../lib/city-activity.tsx';
+import { matchCityScreen } from '../lib/city-screens.ts';
 import { fmt, gameNow, useMediaQuery, useTick } from '../lib/hooks.ts';
 import { VerifyBanner } from './VerifyBanner.tsx';
 import { NotifyBanner } from './NotifyBanner.tsx';
 import {
   armiesBadge, useAlliance, useChatConversations, useCity, useMessages, useMovements,
-  type CityDetail,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { CityStrip } from './CityStrip.tsx';
+import { CityTabs } from './CityTabs.tsx';
 import { useConfirm } from './Modal.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
 import { InstallButton } from './InstallButton.tsx';
@@ -40,6 +42,9 @@ import { MenuIcon, Panel, Res, Skeleton, UserText } from './ui.tsx';
  * ⭐ Simgeler kullanıcının çizdiği set (`images/ikonlar`), emoji DEĞİL: emoji işletim sistemine
  * göre değişiyor ve oyunun antik paletiyle hiç uyuşmuyordu. Dosya adı = `assets/menu/<icon>.png`.
  */
+/* ⚠️ Şehir ekranlarının rota+ad listesi ayrıca `lib/city-screens.ts`te duruyor (sekme şeridi
+   ve CityHub oradan okuyor). Bu dizi BİLEREK ayrı: ikon kümesi farklı (`assets/menu/*`) ve
+   burada şehir dışı yedi madde var. Beş rotadan biri değişirse ikisini de güncelle. */
 const MENU = [
   { to: '/armies', label: 'Ordular', icon: 'ordular' },
   { to: '/barracks', label: 'Baraka', icon: 'baraka' },
@@ -105,30 +110,8 @@ const PAGE_TITLE: [string, string][] = [
   ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'], ['/simulate', 'Simülatör'],
 ];
 
-/**
- * ⭐ AKTİVİTE NOKTALARI (kullanıcı, 2026-07-30): aktif şehirde süren iş varsa ilgili menü
- * satırının sağında küçük nokta yanar — ŞEHİR BAZLI: başka şehre geçince o şehrin işleri okunur.
- * Akademi noktası araştırmayı BAŞLATAN şehirde görünür (akademiler ortak ama iptal oradan).
- */
-export function cityActivity(d: CityDetail | undefined, cityId: number | null): Record<string, boolean> {
-  if (!d) return {};
-  const q = d.queues ?? [];
-  return {
-    '/barracks': q.some((x) => x.category === 'unit'),
-    '/defense': q.some((x) => x.category === 'defense') || d.wallRepair != null,
-    '/buildings': q.some((x) => x.category === 'building') || d.cave.repairing || d.cave.job != null,
-    '/academy': (d.techQueues ?? []).some((x) => x.cityId === cityId),
-    '/temple': d.heroReviving === true,
-  };
-}
-
-/** Menü satırındaki aktivite noktası — rozetle çakışmasın diye rozet yokken çizilir. */
-export function ActivityDot() {
-  return (
-    <span aria-label="bu şehirde süren iş var"
-      className="inline-block h-2 w-2 shrink-0 rounded-full bg-success shadow-[0_0_4px_var(--mw-color-success)]" />
-  );
-}
+/* ⚠️ `cityActivity` ve `ActivityDot` 2026-08-09'da `lib/city-activity.tsx`e taşındı —
+   gerekçesi (döngüsel bağımlılık) orada yazılı. */
 
 /**
  * ⭐ ÜST BÖLGE SABİT — ama `position: sticky` DEĞİL (kullanıcı, 2026-08-02).
@@ -170,6 +153,11 @@ export function Shell({ children }: { children: ReactNode }) {
                 doğrulama daha acildir (kısıtları o kaldırıyor). */}
             <NotifyBanner />
             <CityStrip />
+            {/* ⭐ Şehir sekmeleri şeridin HEMEN ALTINDA (kullanıcı, 2026-08-09) ve yalnız
+                mobilde + beş şehir ekranında; kararını kendisi veriyor, burada koşul yok.
+                Üst bölge kaydırılmadığı için (dosya başındaki yerleşim notu) şerit sayfa
+                kayarken de yerinde duruyor — ayrıca `sticky` gerekmiyor. */}
+            <CityTabs />
           </div>
 
           {/* `pb-24`: mobilde alt bar `fixed`, son satır onun altında kalmasın. */}
@@ -198,9 +186,6 @@ export function Shell({ children }: { children: ReactNode }) {
 
 /* ── Orta sütunun üstündeki küçük bilgi çubuğu ─────────────────────────────── */
 
-/** Mobilde Şehir sayfasına geri götüren rotalar (şehir alt ekranları). */
-const CITY_SCREENS = ['/barracks', '/buildings', '/defense', '/academy', '/temple'];
-
 function InfoBar() {
   const { cityId } = useActiveCity();
   const city = useCity(cityId);
@@ -221,8 +206,6 @@ function InfoBar() {
   useEffect(() => {
     document.title = page && !pathname.startsWith('/armies') ? `${page} · MobilWar` : 'MobilWar';
   }, [page, pathname]);
-
-  const onCityScreen = CITY_SCREENS.some((r) => pathname.startsWith(r));
 
   /**
    * ⭐ ÜÇ BÖLGELİ GRID (kullanıcı, 2026-08-01) — `flex + justify-center` YERİNE.
@@ -254,14 +237,9 @@ function InfoBar() {
 
       {/* ── SOL: kaynak (sola yaslı, kullanıcı isteği) ────────────────────────── */}
       <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-        {/* ⭐ Mobil geri butonu (kullanıcı, 2026-07-30): şehir alt ekranlarından Şehir'e dönüş. */}
-        {onCityScreen ? (
-          <NavLink to="/city" aria-label="Şehir sayfasına dön"
-            className="-ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)]
-              border border-transparent text-lg leading-none hover:border-border hover:bg-raised lg:hidden">
-            ‹
-          </NavLink>
-        ) : null}
+        {/* ⚠️ Mobil geri butonu (‹ → /city) 2026-08-09'da KALDIRILDI: şehir sekmeleri
+            (`CityTabs`) beş ekrana da doğrudan geçiş verdiği için tek işi kalan "listeye dön"
+            artık sekmelerin tekrarıydı. Hub'a erişim alt bardaki «Şehir» sekmesinde duruyor. */}
         <ResRate kind="gold" value={gold} perHour={d?.production.goldPerHour}
           onVacation={d?.onVacation === true} />
         <ResRate kind="food" value={food} perHour={d?.production.foodPerHour}
@@ -623,7 +601,14 @@ function BottomBar() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="mx-auto flex w-full max-w-3xl">
         {TABS.map((t) => {
-          const active = pathname.startsWith(t.to);
+          /**
+           * ⚠️ «Şehir» sekmesi şehir ALT ekranlarında da yanar (2026-08-09). `startsWith`
+           * tek başına `/barracks`ı `/city` ile eşleştiremiyordu ve o beş sayfada alt barda
+           * **hiçbir sekme aktif değildi**; geri butonu kalkınca "neredeyim" ipucu iyice
+           * azalıyordu. `matchCityScreen` zaten sekme şeridinin de kullandığı eşleştirici.
+           */
+          const active = pathname.startsWith(t.to)
+            || (t.to === '/city' && matchCityScreen(pathname) != null);
           const badge = t.to === '/messages' ? unread : t.to === '/armies' ? armies?.count ?? 0 : 0;
           const tone = t.to === '/armies' ? BADGE_TONE[armies?.tone ?? 'danger']! : BADGE_TONE['danger']!;
           return (
