@@ -12,8 +12,9 @@
  * Konsey yalnız Asker'i atabilir; Lider + Konseye Al/Çıkar + Liderliği Devret. Onay metinleri
  * orijinal kalıpla: "… Emin misiniz!" (ünlem).
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { deepLinkAction } from '../lib/deep-link.ts';
 import { fmt } from '../lib/hooks.ts';
 import {
   useAlliance, useAllianceApply, useAllianceBroadcast, useAllianceDisband, useAllianceFound,
@@ -159,10 +160,19 @@ function MemberView({ a, page, setPage }: {
    *
    * ⚠️ Parametre **temizleniyor**: kalsaydı oyuncu sheet'i kapattığında adres hâlâ `chat=1`
    * derdi ve bir sonraki render onu tekrar açardı.
+   *
+   * ⚠️ Mandal (`deepLinkAction`) burada da var, oysa bu efekt döngüye girmiyordu: eylemi
+   * `setChatOpen(true)` — tekrarı zararsız, üstelik mutasyon çağırmıyor. Yine de aynı desende
+   * duruyor çünkü ikizi olan `?dm=` **tam olarak bu güvene dayanıp** canlıda kırıldı
+   * (`lib/deep-link.ts`). Tek satırlık farkla ayrışan iki kopya, bu turda defalarca görülen
+   * hata sınıfının ta kendisi.
    */
   const [params, setParams] = useSearchParams();
+  const chatLatch = useRef<string | null>(null);
   useEffect(() => {
-    if (params.get('chat') !== '1') return;
+    const step = deepLinkAction(params.get('chat'), true, chatLatch.current);
+    chatLatch.current = step.handled;
+    if (!step.act || params.get('chat') !== '1') return;
     setChatOpen(true);
     setParams((prev) => {
       const next = new URLSearchParams(prev);

@@ -10,8 +10,9 @@
  * ⭐ Okunmamış sayacı **iyimser** düşer: mesaja tıklandığı anda sol paneldeki rozet azalır,
  * sunucu yanıtı beklenmez (bkz. `useMarkRead`).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { deepLinkAction } from '../lib/deep-link.ts';
 import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
@@ -199,13 +200,21 @@ export function Messages() {
    * Sohbet penceresi ad ister ama bildirimden yalnız kimlik geliyor → ad, sohbet listesinden
    * çözülür. Bu yüzden liste yüklenene kadar beklenir. Adres, pencere açılınca temizlenir:
    * kalırsa oyuncu sekmeyi kapattığında pencere kendini tekrar tekrar açardı.
+   *
+   * ⚠️⚠️ **"Bir kez" güvencesi adres temizliğinde DEĞİL, mandalda** (2026-08-09). Adres
+   * temizliği `startTransition` içinde koşuyor (react-router v7) ve efektin kendi tetiklediği
+   * yüksek öncelikli güncellemeler onu sürekli erteliyordu → sonsuz POST döngüsü. Tam gerekçe
+   * `lib/deep-link.ts` başlığında; oradaki `deepLinkAction` bu kararın saf ve test edilebilir
+   * hâli. `setParams` yine çağrılıyor ama artık yalnız görüntü ve geri tuşu için.
    */
   const dmParam = params.get('dm');
+  const dmLatch = useRef<string | null>(null);
   useEffect(() => {
-    if (!dmParam) return;
+    const step = deepLinkAction(dmParam, chats.data != null, dmLatch.current);
+    dmLatch.current = step.handled;
+    if (!step.act || !chats.data) return;      // liste henüz gelmediyse gelince tekrar denenir
     const playerId = Number(dmParam);
-    const known = (chats.data?.items ?? []).find((c) => c.playerId === playerId);
-    if (!chats.data) return;                   // liste henüz gelmedi; gelince tekrar denenir
+    const known = chats.data.items.find((c) => c.playerId === playerId);
     setTab('messages');
     if (known) openChat(known.playerId, known.username);
     setParams((prev) => {

@@ -23,15 +23,31 @@ export const useOpenChat = (): OpenChatFn => useContext(ChatContext);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<ChatTarget | null>(null);
-  const open = useOpenConversation();
+  /**
+   * ⚠️⚠️ **YALNIZ `mutate` alınır, sonuç nesnesinin tamamı DEĞİL** (2026-08-09).
+   *
+   * `useMutation` her render'da `{ ...result, mutate }` diye **yeni bir nesne** kuruyor ve
+   * `result` bir `useSyncExternalStore` değeri — yani mutasyonun her durum geçişinde
+   * (`idle → pending → success`) nesnenin kimliği değişiyor. `useCallback(..., [open])`
+   * bu yüzden `openChat`i **her POST'ta yeniden doğuruyordu**.
+   *
+   * Sonuç canlıda görüldü: DM bildirimine tıklayınca `Messages.tsx`in derin bağlantı efekti
+   * (bağımlılığında `openChat` var) kendi açtığı sohbetin durum geçişiyle yeniden koşuyor,
+   * her koşuda bir POST daha atıyor ve React *"Maximum update depth exceeded"* ile ekranı
+   * bozuyordu. Gerekçenin tamamı `lib/deep-link.ts` başlığında.
+   *
+   * `mutate` ise `useCallback(..., [observer])` ile üretiliyor ve `observer` bir `useState`
+   * başlangıç değeri → **ömür boyu sabit**. Kimliği sabit olan tek alan bu.
+   */
+  const { mutate: openConversation } = useOpenConversation();
   /* Engel bayrağı listeden okunur — pencere kendi başına sorgu açmasın. */
   const conversations = useChatConversations();
 
   const openChat = useCallback<OpenChatFn>((playerId, username) => {
-    open.mutate(playerId, {
+    openConversation(playerId, {
       onSuccess: (r) => setTarget({ channelId: r.channelId, playerId, username }),
     });
-  }, [open]);
+  }, [openConversation]);
 
   const myId = getSession()?.playerId ?? 0;
   const live = target
