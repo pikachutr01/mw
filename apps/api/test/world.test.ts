@@ -161,3 +161,65 @@ describe('müttefik işareti (isAlly)', () => {
     expect(slots[1]!.city).toBeNull();
   });
 });
+
+/**
+ * ⭐ SIRA / PUAN SÜTUNU (kullanıcı, 2026-08-09): *"Bu sütun artık sadece sıra yerine
+ * Sıra / Puan şeklinde bir gösterim yapsın. **Son güncelleme sonrası** Sıra / Puanı yan yana
+ * göstersin."*
+ *
+ * ⚠️⚠️ Bu testlerin bekçilik ettiği şey **puanın kaynağı**. Sorguda `players.score` (canlı puan)
+ * zaten seçili durumda ve `rankScore: Number(r['score'])` yazmak bir satır kısa olurdu — ama
+ * yanlış olurdu: `rank` günde 3 kez donan `rankings` anlık görüntüsünden geliyor. İkisini yan
+ * yana yazmak **hiçbir zaman birlikte var olmamış** bir çift üretir ve oyuncu bunu Sıralamalar
+ * ekranıyla karşılaştırdığında tutmadığını görür. Kullanıcının *"son güncelleme sonrası"*
+ * ifadesi tam olarak bunu istiyor.
+ */
+describe('sıra / puan (rankScore)', () => {
+  /** Anlık görüntü satırı yazar. `score` bilerek `players.score`tan FARKLI verilebilsin diye ayrı. */
+  async function snapshot(playerId: number, rank: number, score: number): Promise<void> {
+    await h.db.execute(sql`
+      INSERT INTO rankings (world_id, kind, subject_id, rank, score, taken_at)
+      VALUES (${worldId}, 'player', ${playerId}, ${rank}, ${score}, now())
+    `);
+  }
+
+  it('⭐ puan ANLIK GÖRÜNTÜDEN gelir, canlı players.score DEĞİL', async () => {
+    const me = await withCity('bakan', 1);
+    const hedef = await withCity('hedef', 2);
+    // Donmuş sıralama 4.000 diyor; oyuncu o günden beri 9.999'a çıkmış.
+    await snapshot(hedef, 7, 4_000);
+    await h.db.execute(sql`UPDATE players SET score = 9999 WHERE id = ${hedef}`);
+
+    const row = (await districtBy(me)).get(hedef)!;
+    expect(row['rank']).toBe(7);
+    expect(row['rankScore']).toBe(4_000);
+    // Canlı puan hâlâ ayrı bir alan olarak gidiyor; ikisi karışmamalı.
+    expect(row['score']).toBe(9_999);
+  });
+
+  /**
+   * ⚠️ İkisi AYNI satırdan geliyor, dolayısıyla birlikte var birlikte yok. Ekran `rank` null
+   * iken puanı da yazmıyor: tek başına bir puan, sıranın "hesaplanamadığını" değil "sıfır"
+   * olduğunu ima ederdi.
+   */
+  it('anlık görüntü hiç alınmadıysa ikisi de null', async () => {
+    const me = await withCity('bakan', 1);
+    const yeni = await withCity('yeni', 2);
+
+    const row = (await districtBy(me)).get(yeni)!;
+    expect(row['rank']).toBeNull();
+    expect(row['rankScore']).toBeNull();
+  });
+
+  it('anlık görüntüdeki puan 0 ise null DEĞİL, 0 döner', async () => {
+    // ⚠️ `?? null` gibi bir kısayol 0'ı da yutardı ve yeni oyuncu «sırası var, puanı yok»
+    //    gibi görünürdü. `== null` kontrolü bu ayrımı koruyor.
+    const me = await withCity('bakan', 1);
+    const sifir = await withCity('sifir', 2);
+    await snapshot(sifir, 42, 0);
+
+    const row = (await districtBy(me)).get(sifir)!;
+    expect(row['rank']).toBe(42);
+    expect(row['rankScore']).toBe(0);
+  });
+});

@@ -303,6 +303,13 @@ export interface WorldSlot {
     isOwn: boolean;
     /** Dünya sırası — canlı değil, son anlık görüntüden (§13.16). Hiç alınmadıysa `null`. */
     rank: number | null;
+    /**
+     * ⭐ Sıranın alındığı anlık görüntüdeki PUAN — `rank` ile aynı satırdan gelir, bu yüzden
+     * ikisi daima aynı ana ait. ⚠️ Yukarıdaki `score` (canlı puan) ile karıştırma: onu `rank`
+     * ile yan yana yazmak birbirini tutmayan bir çift üretir.
+     * ⚠️ İsteğe bağlı: eski bir API sürümüne bakan istemci `undefined` görür ve yalnız sırayı yazar.
+     */
+    rankScore?: number | null;
     /** İttifak adı (ittifaksızsa null). */
     alliance: string | null;
     /**

@@ -1,7 +1,7 @@
 /**
  * DÜNYA sekmesi — **harita değil, DİYAR LİSTESİ** (§13.16.2), referans `images/scr_web03`.
  *
- * Tablo altı sütun: **No · Şehir · Oyuncu · İttifak · Sıra · Görev**. Boş şehir de dolu şehir de
+ * Tablo altı sütun: **No · Şehir · Oyuncu · İttifak · Sıra / Puan · Görev**. Boş şehir de dolu şehir de
  * **aynı yükseklikte** satır alır — orijinalde de öyle ve göz sütunları kaydırmadan tarıyor.
  *
  * ⭐ **Görev sütunu bir kısayoldur:** simgeye tıklamak modalı doğrudan o görevin formunda açar.
@@ -18,6 +18,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
+import { fmt } from '../lib/hooks.ts';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
 import { AllyBadge } from '../components/AllyBadge.tsx';
 import { BoundedAmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
@@ -125,7 +126,10 @@ export function World() {
                 <Th>Şehir</Th>
                 <Th>Oyuncu</Th>
                 <Th className="hidden sm:table-cell">İttifak</Th>
-                <Th className="w-12 text-center">Sıra</Th>
+                {/* ⭐ Sıra TEK BAŞINA yetmiyordu (kullanıcı, 2026-08-09): «12.» bir hedefin ne
+                    kadar güçlü olduğunu söylemiyor, aradaki fark söylüyor. İkisi tek sütunda
+                    çünkü aynı anlık görüntünün iki yüzü. */}
+                <Th className="w-28 text-center whitespace-nowrap">Sıra / Puan</Th>
                 {/* Mobilde sığmıyor → gizli; satıra tıklayınca seçenek listesi açılıyor. */}
                 <Th className="hidden w-32 text-center sm:table-cell">Görev</Th>
               </tr>
@@ -140,7 +144,7 @@ export function World() {
                     <Td><Skeleton w="7rem" /></Td>
                     <Td><Skeleton w="5rem" /></Td>
                     <Td className="hidden sm:table-cell"><Skeleton w="4rem" /></Td>
-                    <Td className="text-center"><Skeleton w="1.5rem" /></Td>
+                    <Td className="text-center"><Skeleton w="3.5rem" /></Td>
                     <Td className="hidden sm:table-cell"><Skeleton w="5rem" /></Td>
                   </tr>
                 ))
@@ -193,7 +197,24 @@ export function World() {
                     <Td className="hidden max-w-[8rem] truncate text-muted sm:table-cell">
                       {c?.alliance ?? '—'}
                     </Td>
-                    <Td className="tnum text-center text-muted">{c?.rank ?? '—'}</Td>
+                    {/*
+                      ⚠️ `rank` yoksa puan da YAZILMAZ: ikisi de aynı `rankings` satırından
+                      geliyor, biri yoksa diğeri de yok (anlık görüntü henüz alınmamış). Tek
+                      başına bir puan yazmak, sıranın "hesaplanamadığını" değil "sıfır"
+                      olduğunu ima ederdi.
+                      ⚠️ `rankScore` ayrıca `?? null` ile korunuyor: sunucusu eski bir istemci
+                      alanı hiç görmez, o zaman satır eskisi gibi yalnız sırayı yazar.
+                    */}
+                    <Td className="tnum text-center whitespace-nowrap text-muted">
+                      {c?.rank == null ? '—' : (
+                        <>
+                          {c.rank}
+                          {c.rankScore == null ? null : (
+                            <><span className="mx-0.5 opacity-50">/</span>{fmt(c.rankScore)}</>
+                          )}
+                        </>
+                      )}
+                    </Td>
                     <Td className="hidden sm:table-cell">
                       <span className="flex items-center justify-center gap-1">
                         {shortcuts.map((s) => (

@@ -95,7 +95,7 @@ export class WorldController {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT c.id, c.name, c.s, c.is_capital,
              p.id AS player_id, p.username, p.score, p.protected_until, p.vacation_until,
-             r.rank, a.name AS alliance_name, p.alliance_id,
+             r.rank, r.score AS rank_score, a.name AS alliance_name, p.alliance_id,
              (p.alliance_id IS NOT NULL
                AND p.alliance_id = (SELECT alliance_id FROM players WHERE id = ${player.playerId}))
                AS is_ally
@@ -139,6 +139,23 @@ export class WorldController {
            */
           isAlly: !isOwn && Boolean(r['is_ally']),
           rank: r['rank'] == null ? null : Number(r['rank']),
+          /**
+           * ⭐ **Anlık görüntüdeki PUAN** (kullanıcı, 2026-08-09): *"Son güncelleme sonrası
+           * Sıra / Puanı yan yana göstersin."*
+           *
+           * ⚠️⚠️ Kaynak `rankings.score`, **`players.score` DEĞİL** — oysa `p.score` bu
+           * sorguda zaten var ve kullanmak bir satır kısa olurdu. Sebep: `rank` günde 3 kez
+           * donan anlık görüntüden geliyor, `p.score` ise canlı. İkisini yan yana yazmak
+           * "sıra 12 · puan 48.000" gibi **hiçbir zaman birlikte var olmamış** bir çift
+           * üretirdi; oyuncu da haklı olarak "12. sıradaki adamın puanı bu mu?" diye
+           * sıralamayla karşılaştırıp tutmadığını görürdü.
+           * Kullanıcının cümlesindeki *"son güncelleme sonrası"* tam olarak bunu söylüyor.
+           * Aynı gerekçe 10 kat saldırı kuralında da yazılı (`mission.service.ts` → donmuş
+           * sıralama puanları).
+           * ⚠️ `rank` ile `rank_score` AYNI satırdan (`LEFT JOIN rankings`) geliyor: ikisi
+           * birlikte var, birlikte yok. Anlık görüntü hiç alınmadıysa ikisi de `null`.
+           */
+          rankScore: r['rank_score'] == null ? null : Number(r['rank_score']),
           alliance: r['alliance_name'] == null ? null : String(r['alliance_name']),
           /** Davet butonu için: hedef zaten bir ittifakta mı? (adı olmasa bile kimliği yeter) */
           hasAlliance: r['alliance_id'] != null,
