@@ -215,6 +215,69 @@ describe('puan (türev alan)', () => {
   });
 });
 
+/* ═══ Hesabı elle doğrula ═══════════════════════════════════════════════════ */
+
+/**
+ * ⭐ HESABI ELLE DOĞRULA (kullanıcı, 2026-08-09) — doğrulama e-postası ulaşmayan oyuncunun
+ * tek çıkışı. Doğrulanmamış hesap saldıramıyor, nakliye yapamıyor, ittifağa giremiyor ve
+ * mesaj yazamıyor; adres yanlış yazıldıysa oyuncunun elinde başka hiçbir yol kalmıyordu.
+ */
+describe('hesabı elle doğrula', () => {
+  const verifiedAt = async (): Promise<unknown> => {
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT a.email_verified_at FROM accounts a
+        JOIN players p ON p.account_id = a.id WHERE p.id = ${playerId}
+    `);
+    return a!['email_verified_at'];
+  };
+
+  it('doğrular ve geri alır', async () => {
+    // `beforeEach` hesabı doğrulanmış bırakıyor; önce doğrulanmamışa çekiyoruz.
+    await actions.verifyEmailAction({ playerId, verified: 'hayır' }, req());
+    expect(await verifiedAt()).toBeNull();
+
+    const r = await actions.verifyEmailAction({ playerId, verified: 'evet' }, req());
+    expect(r['ok']).toBe(true);
+    expect(r['verified']).toBe(true);
+    expect(await verifiedAt()).not.toBeNull();
+  });
+
+  /**
+   * ⚠️ Aksiyon OYUNCU alıyor ama kolon `accounts` tablosunda. Kayıt sırasında oyuncu ve hesap
+   * bire bir eşleşiyor; yazmanın hesaba gittiğini ispat etmek gerekiyor çünkü aynı hesabın
+   * başka dünyalarda oyuncusu olabilir ve doğrulama onlarda da geçerli olmalı.
+   */
+  it('⭐ yazma HESABA gider — aynı hesabın başka oyuncusu da doğrulanmış olur', async () => {
+    const [acc] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT account_id FROM players WHERE id = ${playerId}
+    `);
+    const world2 = freshWorldId();
+    await createWorld(h, world2);
+    const [ikinci] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO players (world_id, account_id, username)
+      VALUES (${world2}, ${Number(acc!['account_id'])}, ${'ikinci_' + randomUUID().slice(0, 6)})
+      RETURNING id
+    `);
+
+    await actions.verifyEmailAction({ playerId, verified: 'hayır' }, req());
+    await actions.verifyEmailAction({ playerId: Number(ikinci!['id']), verified: 'evet' }, req());
+
+    // İkinci dünyadaki oyuncudan doğrulandı → BİRİNCİSİ de doğrulanmış görünmeli.
+    expect(await verifiedAt()).not.toBeNull();
+  });
+
+  it('bilinmeyen oyuncu 404', async () => {
+    await expect(actions.verifyEmailAction({ playerId: 999_999_999, verified: 'evet' }, req()))
+      .rejects.toMatchObject({ status: 404 });
+  });
+
+  it('künyede kayıtlı ve alanları panelin form üreticisiyle uyumlu', async () => {
+    const a = ADMIN_ACTIONS.find((x) => x.id === 'verify-email');
+    expect(a, 'aksiyon künyeye eklenmemiş — panelde görünmez').toBeDefined();
+    expect(a!.fields.map((f) => f.key)).toEqual(['playerId', 'verified']);
+  });
+});
+
 /* ═══ Kuyruk ↔ görev çifti ══════════════════════════════════════════════════ */
 
 describe('kuyruğu iptal et', () => {

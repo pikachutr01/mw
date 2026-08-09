@@ -94,6 +94,12 @@ const rankingExemptBody = z.object({
   allianceToo: z.enum(['evet', 'hayır']).default('hayır'),
 });
 
+/** ⚠️ Yukarıdaki `'evet' | 'hayır'` gerekçesinin aynısı: panelde `boolean` alan tipi yok. */
+const verifyEmailBody = z.object({
+  playerId: z.number().int().positive(),
+  verified: z.enum(['evet', 'hayır']).default('evet'),
+});
+
 const moveCityBody = z.object({ cityId, toPlayerId: z.number().int().positive() });
 
 /**
@@ -493,6 +499,56 @@ export class AdminActionsController {
   }
 
   /**
+   * ⭐ HESABI ELLE DOĞRULA (kullanıcı, 2026-08-09).
+   *
+   * Doğrulama e-postası her zaman ulaşmıyor: adres yanlış yazılmış, sağlayıcı sessizce yutmuş
+   * ya da oyuncu adrese artık erişemiyor olabiliyor. Bu durumda oyuncunun elinde hiçbir yol
+   * kalmıyor — kısıtlar (saldırı, nakliye, ittifak, mesaj yazma) destek talebiyle bile
+   * kalkmıyordu. Aksiyon o çıkışı veriyor.
+   *
+   * ⚠️ **Kolon `accounts` tablosunda, aksiyon ise OYUNCU alıyor.** Panelin her yerinde seçim
+   * birimi oyuncu (`playerPicker`) ve yöneticinin elindeki de o; `account_id` üzerinden
+   * çevriliyor. ⚠️ Bir hesabın birden çok dünyada oyuncusu olabilir: doğrulama **hesaba**
+   * yazıldığı için hepsinde birden geçerli olur. Doğru davranış bu (kısıt da hesap
+   * düzeyinde), ama seçilen oyuncudan fazlasını etkilediği için künyede yazıyor.
+   *
+   * ⚠️ **Geri alma bilerek var** (`verified: hayır`). Yanlış oyuncuya basmanın telafisi
+   * olmayan bir aksiyon, panelde en son isteyeceğimiz şey. Geri almak yıkıcı değil: kısıt
+   * bir kapı, hapis değil — yapılar/teknikler geri alınmaz, ittifak üyeliği düşmez, yalnız
+   * ilerleme yeniden tavana takılır (`unverified.ts`teki «≥» kuralı).
+   *
+   * ⚠️ Oyuncunun AÇIK ekranı kendiliğinden yenilenmez: gerçek doğrulama (jetonla) da olay
+   * yaymıyor, istemci bir sonraki okumada öğreniyor. Aynı davranış burada da korunuyor —
+   * iki yolun biri olay yayıp diğeri yaymasa, "neden bazen hemen düzeliyor" sorusu doğardı.
+   */
+  @Post('verify-email')
+  @HttpCode(200)
+  async verifyEmailAction(@Body() body: unknown, @Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const d = parse(verifyEmailBody, body);
+    const [p] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT p.world_id, p.username, a.id AS account_id, a.email, a.email_verified_at
+        FROM players p JOIN accounts a ON a.id = p.account_id
+       WHERE p.id = ${d.playerId}
+    `);
+    if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
+
+    const verified = d.verified === 'evet';
+    const [after] = await this.db.execute<Record<string, unknown>>(sql`
+      UPDATE accounts
+         SET email_verified_at = ${verified ? sql`now()` : sql`NULL`}
+       WHERE id = ${Number(p['account_id'])}
+      RETURNING email_verified_at
+    `);
+
+    await this.audit(Number(p['world_id']), req, 'admin.action.verify_email', 'player', d.playerId, {
+      before: { verifiedAt: p['email_verified_at'] },
+      after: { verifiedAt: after?.['email_verified_at'] ?? null },
+      username: p['username'], email: p['email'], accountId: Number(p['account_id']),
+    });
+    return { ok: true, verified, email: String(p['email'] ?? '') };
+  }
+
+  /**
    * ⭐ SIRALAMA MUAFİYETİ (kullanıcı, 2026-08-03) — yönetici/servis hesabını vitrinden gizler.
    *
    * İki bayrak ayrı ayrı yazılıyor (§0036): oyuncu sıralaması ve ittifak toplamı bağımsız
@@ -815,6 +871,22 @@ export const ADMIN_ACTIONS = [
       + 'kaynak çıpasını giriş anında bırakır ve oyuncu ilk okumada TÜM tatil süresini kaynak '
       + 'olarak alır. Bu aksiyon çıpayı da şimdiye çeker. 48 saatlik alt sınır uygulanmaz.',
     fields: [{ key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true }],
+  },
+  {
+    id: 'verify-email', label: 'Hesabı elle doğrula',
+    description: 'Doğrulama e-postası ulaşmayan oyuncunun hesabını yönetici olarak onaylar; '
+      + 'saldırı, nakliye, ittifak, mesaj yazma ve seviye tavanı kısıtları anında kalkar. '
+      + '⚠️ Doğrulama HESABA yazılır: aynı hesabın başka dünyalardaki oyuncuları da doğrulanmış '
+      + 'olur. «Doğrulandı: hayır» ile geri alınır — geri almak hiçbir şeyi silmez, yalnız '
+      + 'ilerlemeyi yeniden tavana bağlar (mevcut yapı/teknik/üyelik korunur). '
+      + '⚠️ Oyuncunun açık ekranı hemen yenilenmez; sayfayı tazelemesi gerekir.',
+    fields: [
+      { key: 'playerId', label: 'Oyuncu', type: 'playerPicker', required: true },
+      {
+        key: 'verified', label: 'Doğrulandı', type: 'select', options: ['evet', 'hayır'],
+        default: 'evet',
+      },
+    ],
   },
   {
     id: 'ranking-exempt', label: 'Sıralama muafiyeti',
