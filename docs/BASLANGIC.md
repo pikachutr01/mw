@@ -386,7 +386,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 
 | Belge | Ne zaman |
 |---|---|
-| **`CASUSLUK_SISTEMI.md`** | ⭐ **Casusluk röntgeni** (2026-08-09): iki ayrı hesap (geçiş = kesişim · kademe = etkin fark), kademe tablosu (mağara/teleport dâhil), kesişim ağırlıkları, savunma maliyet karşılaştırması ve **1:17:5 → 1:28:5 vakası** (8 deneme, 8 kez sıfır bilgi — sebebi sayılarla) |
+| **`CASUSLUK_SISTEMI.md`** | ⭐ **Casusluk röntgeni.** ⚠️ Sistem 2026-08-09'da **baştan sadeleştirildi**: duvar/engelleme kaldırıldı, model dört satır (`E = seviye + min(log2(kuş), 8) − rakip` · kayıp = `P/(1+2^E)`). Savunma bilgiyi ENGELLEMEZ, kuş vergilendirir. Kademe tablosu · panelden ayarlanabilir 7 sabit · kalibrasyon tabloları · sadeleştirmenin gerekçesi olan 1:17:5 → 1:28:5 vakası |
 | **`MOBIWAR_SISTEM_PLANI.md`** | **Projenin beyni.** Kural, formül ve gerekçe (§13.5 harita · §13.9 ekonomi · §13.11 şehir/üretim · §13.12 sohbet · §13.13 tema · §13.16 dünya). ⚠️ Yalnız **kural değişince** güncellenir, özellik bitince değil |
 | **`EKSIK_OZELLIKLER.md`** | **Tek backlog.** Yeni iş seçerken açılır (arayüz listesi de buraya katlandı) |
 | **`DAGITIM.md`** | ⭐ **«Bunu canlıya nasıl alırım?»** — değişiklik türüne göre akış (cevap: hepsi aynı), göç kuralları (expand-contract), **servis başlat/durdur/log komutları**, ilk admin, ileride Flutter CI/CD |

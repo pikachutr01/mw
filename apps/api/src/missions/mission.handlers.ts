@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm';
 import { hasCargo, readResources, type Cargo } from './cargo.ts';
 import { routeOf } from './report-route.ts';
 import {
-  BUILDINGS_BY_ID, clampName, colonyName, maxCities, spyEffectiveDiff, spyInterception, spyLevelFor,
+  BUILDINGS_BY_ID, clampName, colonyName, maxCities, spyEffectiveDiff, spyLosses, spyLevelFor,
   UNITS_BY_ID, type SpyLevel,
 } from '@mobilwar/catalog';
 import type { CityService } from '../cities/city.service.ts';
@@ -150,21 +150,32 @@ export function createSupportHandler(cities: CityService): MissionHandler {
 /* ═══ CASUSLUK ═════════════════════════════════════════════════════════════ */
 
 /**
- * ⭐ CASUSLUK — KESİŞİM MODELİ (kullanıcı tasarımı, 2026-07-30 · kalibrasyon: spy-balance.mjs).
+ * ⭐⭐ CASUSLUK — TEK AŞAMA (kullanıcı tasarımı, 2026-08-09 SADELEŞTİRMESİ).
  *
- * Bilgi kademesi doküman-birebir: `fark = benimCasusluk + log2(GÖNDERİLEN kuş) − rakipCasusluk`.
- * Kuş kaybı/engellenmesi katalogdaki `spyInterception`dan:
- *   • **Kule + Elf VURUR** (doküman) — kapasiteleri sayıya ve casusluk seviye farkına bağlı,
- *   • **rakip Casus Kuşlar ENGELLER** (vurmaz): eşit seviyede kuşa kuş — kimse bilgi alamaz
- *     ama kimse ölmez,
- *   • her iki kapasite de `2^(seviyeFarkı)` ile ölçeklenir → en büyük çarpan seviye farkı.
+ * ⚠️ **Eski «kesişim» modeli (2026-07-30 – 08-09) KALDIRILDI.** Orada iki hesap vardı: bir
+ * ENGEL duvarı (rakip kuş sayısı × `2^fark`, doğrusal aşılması gereken) ve ayrıca bilgi
+ * kademesi (`log2(kuş)`, logaritmik). Duvar aşılmadan kademe hiç kullanılmıyordu ve oyuncu
+ * ikisini ayırt edemiyordu — `docs/CASUSLUK_SISTEMI.md`deki vakada bir oyuncu 8 denemede
+ * 7.339 kuşu, duvarın %5,7'sinde kaldığını hiç öğrenemeden harcadı. Kullanıcı: *"Duvarı aşma
+ * algoritması olmasın… daha çok tek aşamada işi bitirelim."*
+ *
+ * Bugünkü akış üç satır:
+ *   1. `spyEffectiveDiff` → **kademe** (doküman-birebir; `log2(kuş)` bonusu artık tavanlı).
+ *   2. `spyLosses`        → **kaç kuş öldü**. Bilgiyi ENGELLEMEZ, yalnız vergilendirir.
+ *   3. Sağ dönen ≥ 1 ise bilgi gelir.
+ *
+ * ⚠️ **Savunma artık bilgiyi engellemiyor** ve bu bilinçli: kullanıcı *"yeterli kuş gönderilip
+ * casusluk seviyesi farkı kapatılırsa gerekli bilgiler alınır"* dedi. Savunmanın karşılığı üç
+ * yerde duruyor: kuş kaybı · alçak seviyeli casusun zaten düşük kalan kademesi · kuşlar
+ * yoldayken savunanın aldığı `city:incoming_spy` ön uyarısı.
  *
  * **Raporlama (kullanıcı kararı):** iki rapor da casusluğun ÇÖZÜLDÜĞÜ anda yazılır — kuşların
  * eve dönüşü beklenmez. Savunan HER casuslukta "Casusluk Önleme Raporu" alır: kaç kuş geldi,
- * kaçı vuruldu/engellendi, hangi bilgi sızdı. Gönderen de aynı anda kendi raporunu alır.
+ * kaçı vuruldu, hangi bilgi sızdı. Gönderen de aynı anda kendi raporunu alır.
  *
  * ⚠️ **Tüm kuşlar ölürse dönüş görevi** oluşmaz — ordu yok olmuştur (saldırıdaki "tam kayıpta
- * dönüş yok" kuralının ikizi). Engellenen kuşlar ölmez, eve döner.
+ * dönüş yok" kuralının ikizi). Pratikte nadir: `spy.lossMax < 1` olduğu için yeterince büyük
+ * bir akından daima bir kısmı döner (`config.ts` → `SpyConfig.lossMax` gerekçesi).
  */
 export function createSpyHandler(): MissionHandler {
   return async (ctx) => {
@@ -190,22 +201,26 @@ export function createSpyHandler(): MissionHandler {
     const diff = spyEffectiveDiff(mine, birds, theirs);
     const level = spyLevelFor(diff);
 
-    // ── Kesişim: savunanın kulesi/elfi VURUR, kuşları ENGELLER ────────────────
+    /**
+     * ── Kayıp: savunmanın anti-hava ağırlığı × casusluk farkı ─────────────────
+     *
+     * ⚠️ Bu hesap bilgiyi **ENGELLEMEZ**, yalnız kuş öldürür (2026-08-09 sadeleştirmesi).
+     * Tek geçit şartı `survivors >= 1`; kademe zaten yukarıdaki `diff`ten çıktı.
+     */
     const defense = await ctx.tx.execute<Record<string, unknown>>(sql`
       SELECT
         (SELECT COALESCE(count,0) FROM units    WHERE city_id = ${targetCityId} AND type = 'elf')          AS elf,
         (SELECT COALESCE(count,0) FROM units    WHERE city_id = ${targetCityId} AND type = 'spy_bird')     AS birds,
         (SELECT COALESCE(count,0) FROM defenses WHERE city_id = ${targetCityId} AND type = 'archer_tower') AS tower
     `);
-    const hit = spyInterception({
+    const hit = spyLosses({
       birds,
-      myEspionage: mine,
-      theirEspionage: theirs,
+      effectiveDiff: diff,
       towers: Number(defense[0]?.['tower'] ?? 0),
       elves: Number(defense[0]?.['elf'] ?? 0),
       defenderBirds: Number(defense[0]?.['birds'] ?? 0),
     });
-    const gotIntel = hit.infoBirds >= 1;
+    const gotIntel = hit.survivors >= 1;
 
     // ── Gönderenin raporu — çözüm ANINDA (kuşlar daha yolda) ──────────────────
     const intel = gotIntel ? await gatherIntel(ctx.tx, targetCityId!, target.playerId, level) : null;
@@ -218,22 +233,32 @@ export function createSpyHandler(): MissionHandler {
        * ⚠️ Şehir adı KALDIRILMADI, kullanıcı adı ONA EKLENDİ: şehir adı oyuncunun kendi
        * kullandığı işaret (aynı oyuncunun beş şehri olabilir), kullanıcı adı ise kimliği.
        */
+      /**
+       * ⚠️ «Casusluk engellendi» başlığı KALKTI: engelleme diye bir sonuç artık yok. Bilgi
+       * gelmemesinin tek sebebi kalabilir — kuşların tamamının vurulmuş olması.
+       */
       subject: gotIntel
         ? `Casusluk raporu · ${target.name} (${target.username})`
-        : (hit.survivors <= 0
-          ? `Casus kuşların vuruldu · ${target.username}`
-          : `Casusluk engellendi · ${target.username}`),
+        : `Casus kuşların vuruldu · ${target.username}`,
+      /**
+       * ⛔ `diff` GÖVDEDEN ÇIKTI (kullanıcı, 2026-08-09). Oyuncu kendi casusluk seviyesini ve
+       * gönderdiği kuş sayısını bildiği için `diff = benim + log2(kuş) − rakip` denkleminden
+       * **rakibin seviyesini birebir çözebiliyordu** — kullanıcı tam bu sızıntı yüzünden
+       * "bir üst kademe için N kuş" ipucunu da reddetti. Ekranda hiç yazmıyordu ama gövde
+       * JSON'unda duruyordu. Denge çalışmaları için `mission.spy.resolved` denetim kaydında
+       * duruyor; orayı yalnız yönetici görüyor.
+       */
       body: {
         targetCityId, targetCityName: target.name, targetPlayer: target.username,
-        birdsSent: birds, birdsLost: hit.killed, birdsBlocked: hit.blocked,
-        level: gotIntel ? level : null, diff: Math.round(diff * 100) / 100,
+        birdsSent: birds, birdsLost: hit.killed, birdsReturned: hit.survivors,
+        level: gotIntel ? level : null,
         intel, at: ctx.at.toISOString(),
       },
     });
 
     /* ── ⭐ CASUSLUK ÖNLEME RAPORU — savunan HER casuslukta alır (kullanıcı, 2026-07-30).
      * Eski kural yalnız kuş vurulduysa haber veriyordu; artık sessiz casusluk YOK: kaç kuş
-     * geldi, kaçı vuruldu/engellendi ve hangi bilginin sızdığı savunana da yazılır. */
+     * geldi, kaçı vuruldu ve hangi bilginin sızdığı savunana da yazılır. */
     /**
      * ⭐ Casusluk yapanın adı — ÖNLEME raporunda bugüne kadar hiç yoktu (kullanıcı, 2026-08-08).
      *
@@ -251,14 +276,14 @@ export function createSpyHandler(): MissionHandler {
         cityId: targetCityId,
         /** Casusluğu yapan — gövdede de dursun ki ekran başlığı ayrıştırmak zorunda kalmasın. */
         spyPlayer: spyName,
-        birdsSent: birds, birdsShot: hit.killed, birdsBlocked: hit.blocked,
+        birdsSent: birds, birdsShot: hit.killed,
         /** Rakibin aldığı bilgi kademesi — sızma yoksa null. */
         leakedLevel: gotIntel ? level : null,
         at: ctx.at.toISOString(),
       },
     });
 
-    // ── Dönüş: engellenenler dahil sağ kalanlar; hepsi öldüyse dönüş yok ─────
+    // ── Dönüş: sağ kalanlar; hepsi öldüyse dönüş görevi YOK (ordu yok olmuştur) ──
     if (hit.survivors > 0) {
       await scheduleReturn(ctx, {
         homeCityId: originCityId,
@@ -269,7 +294,7 @@ export function createSpyHandler(): MissionHandler {
     }
     await ctx.audit({
       action: 'mission.spy.resolved', entity: 'city', entityId: targetCityId!,
-      after: { birds, killed: hit.killed, blocked: hit.blocked, level: gotIntel ? level : null, diff },
+      after: { birds, killed: hit.killed, lossRate: hit.lossRate, level: gotIntel ? level : null, diff },
     });
   };
 }

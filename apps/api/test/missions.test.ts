@@ -371,7 +371,7 @@ describe('casusluk', () => {
    *
    * Kademe eşlemesi (`spyEffectiveDiff` = benim + log2(kuş) − onun; ikisi de 0 ⇒ kuş sayısı
    * doğrudan farkı verir): 4 kuş = fark 2 = `armyTypes` · 8 kuş = fark 3 = `armyCounts`.
-   * Rakipte kule/elf/kuş olmadığı için engelleme yok, `infoBirds` gönderilenin tamamı.
+   * Rakipte kule/elf/kuş olmadığı için hiç kuş ölmez — hepsi sağ döner.
    */
   async function spyOn(birds: number): Promise<Record<string, unknown>> {
     await giveUnits(home, 'spy_bird', birds);
@@ -535,57 +535,93 @@ describe('casusluk', () => {
   });
 
   /**
-   * ⭐ KESİŞİM MODELİ (kullanıcı tasarımı, 2026-07-30): rakip kuşlar VURMAZ, ENGELLER.
-   * Eşit casuslukta rakipte gönderilen kadar kuş varsa hiçbir bilgi sızmaz — ve kimse ölmez.
+   * ⭐⭐ SAVUNMA BİLGİYİ ENGELLEMEZ, KUŞ ÖLDÜRÜR (kullanıcı, 2026-08-09).
+   *
+   * ⚠️ Burada 2026-08-09'a kadar iki test vardı ve ikisi de KALDIRILAN modeli kilitliyordu:
+   * «TAM BLOK» (rakipte eşit kuş varsa hiçbir bilgi sızmaz) ve «kule kapasitesi» (eşiğin
+   * altındaki akın tamamen vurulur). İkisinin de dayandığı engelleme/kapasite duvarı artık yok.
+   *
+   * Yeni kural tek cümle: **sağ dönen en az bir kuş varsa bilgi gelir.** Savunmanın rolü o
+   * kuşların bir kısmını düşürmek.
    */
-  it('⭐ TAM BLOK: rakipte eşit sayıda casus kuş → bilgi yok, ölü yok, kuşlar döner', async () => {
-    await giveUnits(home, 'spy_bird', 50);
-    await giveUnits(enemy, 'spy_bird', 50);
+  it('⭐⭐ rakipte kuş+kule olsa da bilgi GELİR; savunma yalnız kuş düşürür', async () => {
+    await giveUnits(enemy, 'spy_bird', 300);
+    await giveDefenses(enemy, 'archer_tower', 100);
+    await giveUnits(home, 'spy_bird', 64);
+    await setTech(me, 'espionage', 5);
+    await setTech(rival, 'espionage', 13);       // kullanıcının örneği: 5 + log2(64) − 13 = −2
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 64 }, at,
+    });
+    await runDue(m.missionId);
+
+    const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    // ⭐ Eski modelde bu akın TAMAMEN engellenirdi (300 kuş × 2^8 = 76.800 duvar).
+    expect(body['level']).toBe('resources');
+    expect(body['intel']).not.toBeNull();
+    // …ama bedava değil: kuşların bir kısmı vuruldu, bir kısmı döndü.
+    expect(Number(body['birdsLost'])).toBeGreaterThan(0);
+    expect(Number(body['birdsReturned'])).toBeGreaterThan(0);
+    expect(Number(body['birdsLost']) + Number(body['birdsReturned'])).toBe(64);
+
+    // Sağ kalanlar dönüş görevine biniyor.
+    const ret = await openReturn();
+    expect(ret).not.toBeNull();
+    const [mu] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count FROM mission_units WHERE mission_id = ${ret!.id} AND unit_type = 'spy_bird'
+    `);
+    expect(Number(mu!['count'])).toBe(Number(body['birdsReturned']));
+  });
+
+  /**
+   * ⭐ *"Casusluk seviyesi fazla ise 1 kuşla bile rakibin her şeyini görüp kuş ölmeden
+   * geri gelebilir. Rakipte 100 casus kuş, 100 elf olsa bile."* (kullanıcı, 2026-08-09)
+   */
+  it('⭐ yüksek seviye farkı: ağır savunmaya 1 kuş, kayıp yok, TAM rapor', async () => {
+    await giveUnits(enemy, 'spy_bird', 100);
+    await giveUnits(enemy, 'elf', 100);
+    await giveDefenses(enemy, 'archer_tower', 100);
+    await giveUnits(home, 'spy_bird', 1);
+    await setTech(me, 'espionage', 12);          // 12 + 0 − 4 = +8 → full
+    await setTech(rival, 'espionage', 4);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 1 }, at,
+    });
+    await runDue(m.missionId);
+
+    const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    expect(body['level']).toBe('full');
+    expect(body['birdsLost']).toBe(0);
+    expect(body['birdsReturned']).toBe(1);
+  });
+
+  /**
+   * ⭐ RAKİBİN CASUSLUK SEVİYESİ SIZMAZ (kullanıcı, 2026-08-09).
+   *
+   * ⚠️ Kullanıcı "bir üst kademe için N kuş" ipucunu tam bu yüzden reddetti. Aynı sızıntı
+   * `diff` alanında ZATEN açıktı: oyuncu kendi seviyesini ve gönderdiği kuşu bildiği için
+   * `diff = benim + log2(kuş) − rakip` denkleminden rakibin seviyesini birebir çözerdi.
+   */
+  it('⭐ rapor gövdesinde diff (ve engelleme alanı) YOK', async () => {
+    await giveUnits(home, 'spy_bird', 8);
     const at = await clock.gameNow(worldId);
     const m = await missions.sendSpy({
       originCityId: home, playerId: me, worldId,
-      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 50 }, at,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 8 }, at,
     });
     await runDue(m.missionId);
 
     const gonderen = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
-    expect(gonderen['level']).toBeNull();              // bilgi SIZMADI
-    expect(gonderen['intel']).toBeNull();
-    expect(gonderen['birdsLost']).toBe(0);             // kuş kuşu vurmaz
-    expect(gonderen['birdsBlocked']).toBe(50);
-
-    const ret = await openReturn();
-    expect(ret).not.toBeNull();                        // engellenen kuşlar eve döner
-    const [mu] = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT count FROM mission_units WHERE mission_id = ${ret!.id} AND unit_type = 'spy_bird'
-    `);
-    expect(Number(mu!['count'])).toBe(50);
-  });
-
-  it('⭐ kule kapasitesi: eşiğin altı TAMAMEN vurulur, üstü sızar (256/300 mantığı)', async () => {
-    await giveDefenses(enemy, 'archer_tower', 30);     // eşit casuslukta K_vur = 30
-    await giveUnits(home, 'spy_bird', 61);
-    const at = await clock.gameNow(worldId);
-
-    // 30 kuş → hepsi vurulur, dönüş görevi bile yok.
-    const m1 = await missions.sendSpy({
-      originCityId: home, playerId: me, worldId,
-      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 30 }, at,
-    });
-    await runDue(m1.missionId);
-    expect(await openReturn()).toBeNull();
-
-    // 31 kuş → 30 vurulur, 1 kuş bilgiyi getirir.
-    const m2 = await missions.sendSpy({
-      originCityId: home, playerId: me, worldId,
-      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 31 }, at,
-    });
-    await runDue(m2.missionId);
-    const raporlar = (await messagesOf(me)).filter((x) => x['kind'] === 'spy_report');
-    const son = raporlar[raporlar.length - 1]!['body'] as Record<string, unknown>;
-    expect(son['birdsLost']).toBe(30);
-    expect(son['level']).not.toBeNull();
-    expect(son['intel']).not.toBeNull();
+    expect(gonderen['diff']).toBeUndefined();
+    expect(gonderen['birdsBlocked']).toBeUndefined();
+    const savunan = (await messagesOf(rival)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    expect(savunan['birdsBlocked']).toBeUndefined();
   });
 
   /** ⭐ Savunan HER casuslukta "Casusluk Önleme Raporu" alır (kullanıcı, 2026-07-30). */

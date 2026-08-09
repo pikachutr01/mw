@@ -101,6 +101,42 @@ export interface TeleportConfig {
 }
 
 /**
+ * ⭐ CASUSLUK (kullanıcı, 2026-08-09 — sistem sadeleştirmesi).
+ *
+ * ⚠️ Bu yedi sayı 2026-08-09'a kadar `formulas.ts`te `SPY_CONSTANTS` diye gömülüydü ve
+ * panelden ayarlanamıyordu. Kullanıcı sertliği seçerken *"biraz daha yumuşatabilmek için
+ * admin panelden kritik sabitleri değiştirme imkânı sunulsun"* dedi; katalog config'ine
+ * taşımak bunun **tek** yolu (`settings/catalog.ts` grup adına bakıp mekanik eşliyor).
+ *
+ * ⚠️ Bedeli `catalogHash`in değişmesi. Bilerek ödendi: casusluk sonucu artık dengeye bağlı
+ * bir çıktı ve hangi denge sürümüyle üretildiği kaydedilebilmeli.
+ */
+export interface SpyConfig {
+  /**
+   * `log2(kuş)` bonusunun tavanı. 8 → 256 kuş; üstü bilgiye HİÇBİR ŞEY katmaz, yalnız ölür.
+   * ⭐ *"On binlerce kuş göndermek zorunda olmasınlar"* şartını **yapısal** olarak kapatan sayı.
+   */
+  birdBonusCap: number;
+  /**
+   * Kayıp oranının mutlak tavanı (0..1).
+   * ⚠️ **1'den KÜÇÜK olması bir tercih değil, bir garantinin dayanağı**: her akından en az bir
+   * kuş sağ döner, yani yeterince kuş gönderen **daima** bir şey öğrenir. 1 yapılırsa
+   * *"acemi, veteranın kaynak bilgisini alabilsin"* kuralı sessizce ölür.
+   */
+  lossMax: number;
+  /** `S/(S+K)` doygunluğundaki K. KÜÇÜK = sert savunma (kullanıcı «sert» ucu seçti). */
+  defenseSaturation: number;
+  /** Kayıp eğrisinin denge noktası: `kayıp = P/(1+2^(E − balancePoint))`. 0 = eşitlikte P/2. */
+  balancePoint: number;
+  /** Okçu Kulesi ağırlığı — adanmış anti-hava yapısı (doküman onu ilk sayıyor). */
+  wTower: number;
+  /** Savunandaki Casus Kuş ağırlığı — silahsız, kovalar; maliyeti kulenin ~%40'ı. */
+  wBird: number;
+  /** Elf ağırlığı — savaşçı, anti-hava YAN görevi; bu yüzden bilerek düşük. */
+  wElf: number;
+}
+
+/**
  * ⭐ VARLIK BAŞINA İNCE AYAR (2. nesil Tur 4) — yapı ve teknik **başına** taban fiyat,
  * büyüme oranı ve süre çarpanı.
  *
@@ -143,6 +179,7 @@ export interface CatalogConfig {
   cave: CaveConfig;
   wall: WallConfig;
   teleport: TeleportConfig;
+  spy: SpyConfig;
   /** `castle:gold` · `castle:rate` · `castle:timeFactor` … — bkz. `TuningConfig`. */
   buildingTuning: TuningConfig;
   /** `blacksmithing:gold` · `blacksmithing:rate` … */
@@ -187,6 +224,20 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     baseHours: 24,
     levelStep: 0.02,
   },
+  /**
+   * ⚠️ Sertlik kullanıcının seçimi (2026-08-09): `defenseSaturation: 40` «sert» uç.
+   * 100 kule + 300 kuş savunması → kayıp tavanı %82; etkin fark −2'de 64 kuşun 42'si ölür.
+   * Yumuşatmak isteyen K'yi büyütür (150 → tavan %59).
+   */
+  spy: {
+    birdBonusCap: 8,
+    lossMax: 0.95,
+    defenseSaturation: 40,
+    balancePoint: 0,
+    wTower: 1,
+    wBird: 0.5,
+    wElf: 0.25,
+  },
   cave: {
     capacityBase: 50,
     breakBase: 100,
@@ -228,6 +279,7 @@ export function mergeCatalogConfig(overrides?: DeepPartialCatalog): CatalogConfi
     cave: { ...DEFAULT_CATALOG_CONFIG.cave, ...overrides.cave },
     wall: { ...DEFAULT_CATALOG_CONFIG.wall, ...overrides.wall },
     teleport: { ...DEFAULT_CATALOG_CONFIG.teleport, ...overrides.teleport },
+    spy: { ...DEFAULT_CATALOG_CONFIG.spy, ...overrides.spy },
     // ⚠️ Seyreklik korunuyor: override yoksa boş nesne kalır (bkz. `TuningConfig` yorumu).
     buildingTuning: { ...DEFAULT_CATALOG_CONFIG.buildingTuning, ...overrides.buildingTuning },
     techTuning: { ...DEFAULT_CATALOG_CONFIG.techTuning, ...overrides.techTuning },

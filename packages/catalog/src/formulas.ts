@@ -508,95 +508,104 @@ export const SPY_LEVELS = [
 ] as const;
 export type SpyLevel = (typeof SPY_LEVELS)[number];
 
-export function spyEffectiveDiff(myEspionage: number, birds: number, theirEspionage: number): number {
-  const bonus = birds > 0 ? Math.log2(birds) : 0;
+export function spyEffectiveDiff(
+  myEspionage: number, birds: number, theirEspionage: number,
+  cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): number {
+  /**
+   * ⭐ KUŞ BONUSU TAVANLI (kullanıcı, 2026-08-09) — varsayılan +8, yani **256 kuş**.
+   *
+   * ⚠️ Bu tavan dokümanda YOK; bilerek eklendi ve kullanıcının şikâyetinin doğrudan cevabı:
+   * *"Oyuncular bilgi sızdırabilmek için on binlerce kuş göndermek zorunda olmasın."*
+   * Tavansız hâlde 10 seviye geride olan biri TAM bilgi için 16.384 kuş göndermek zorundaydı.
+   *
+   * ⚠️ Tavanın ASIL işlevi bir sınır koymak değil, **seviyeyi tek gerçek kaldıraç yapmak**:
+   * 256'nın üstündeki kuş bilgiye hiçbir şey katmaz (yalnız ölür), dolayısıyla farkı kapatmanın
+   * tek yolu casusluk tekniğini yükseltmek olur. Kullanıcı: *"Casusluk seviyesini bir şekilde
+   * uğraşıp yükselten kişinin buna değmesi gerekir."*
+   */
+  const bonus = birds > 0 ? Math.min(Math.log2(birds), cfg.spy.birdBonusCap) : 0;
   return Math.max(0, myEspionage) + bonus - Math.max(0, theirEspionage);
 }
 
-/* ═══ CASUSLUK KESİŞİMİ (kullanıcı tasarımı + sweep kalibrasyonu, 2026-07-30) ═══
+/* ═══ CASUSLUK KAYIPLARI (kullanıcı tasarımı, 2026-08-09 — SADELEŞTİRME) ═══════
  *
- * İki ayrı kapasite; ikisi de casusluk seviye FARKIYLA üstel ölçeklenir — en büyük çarpan
- * bilinçli olarak seviye farkı (kullanıcı: "buradaki en büyük çarpan casusluk seviyesi farkı").
+ * ⚠️⚠️ **DUVAR KALDIRILDI.** 2026-07-30 ile 08-09 arasında burada bir «kesişim» modeli vardı:
+ * rakip kuş sayısı `2^fark` ile çarpılıp bir ENGELLEME kapasitesi üretiyor, gönderilen kuş
+ * bunu DOĞRUSAL aşmak zorunda kalıyordu. Bilgi kademesi ise `log2(kuş)` ile LOGARİTMİK
+ * ilerliyordu. İki eksen birbirini yiyordu ve oyuncu farkı göremiyordu: `docs/CASUSLUK_
+ * SISTEMI.md`deki vakada bir oyuncu 8 denemede 7.339 kuşu duvarın %5,7'si olduğunu hiç
+ * öğrenemeden harcadı. Kullanıcı: *"Duvarı aşma algoritması olmasın… daha çok tek aşamada
+ * işi bitirelim."*
  *
- *   espK   = 2^clamp(rakipEsp − benimEsp, −6, +6)
- *   K_vur  = (kule×wKule + elf×wElf) × espK      ← doküman: yalnız Kule + Elf VURUR
- *   K_engel= rakipKuş × wKuş × espK              ← rakip kuşlar VURMAZ, ENGELLER (jam)
- *   ölen   = min(gönderilen, round(K_vur))        (vurma yalnız kule/elf VARSA)
- *   bilgi  = max(0, gönderilen − ölen − round(K_engel))
+ * Yeni model TEK aşamalı. Kademe yalnız `spyEffectiveDiff`ten çıkar; buradaki hesap **yalnız
+ * kaç kuşun öleceğini** söyler ve bilgiyi ENGELLEMEZ:
  *
- * `2^fark` tabanı bilerek: bilgi kademesi tarafındaki `log2(kuş)` ile AYNI eksen — +1 casusluk
- * seviyesi tam olarak "kuşları ikiye katlamak" demektir, iki denklem tek cetvelde okunur.
- * Deterministiktir (jitter yok): kullanıcının örneği de deterministik — savunma öyle bir
- * değerdedir ki 256 kuşun tamamını vururken 300 kuştan 280'ini vurur, kalan 20 bilgiyi getirir.
+ *   S      = kule×wTower + rakipKuş×wBird + elf×wElf        ← savunmanın anti-hava ağırlığı
+ *   P      = lossMax × S/(S + K)                            ← kayıp oranının TAVANI (doygun)
+ *   oran   = P / (1 + 2^(E − balancePoint))                 ← E = etkin fark
+ *   ölen   = round(kuş × oran)   ·   dönen = kuş − ölen
  *
- * Ağırlıklar maliyet-temelli, sweep ile doğrulandı (`scripts/spy-balance.mjs`):
- *   kuş 100+200=300 · kule 300+450=750 · elf 450+650=1100 kaynak. Engelleme başına maliyet:
- *   kuş 300 (bire bir, en verimli — tek işi bu) < kule 750 (çift görevli savunma yapısı)
- *   < elf 5.500 (savaşçı; anti-hava YAN görevi, wElf=0,2). Böylece "hatrı sayılır elf/kule/kuş"
- *   gerçek bir engel ama adanmış sayaç her zaman kuş.
+ * Üç özellik ve neden onlar:
+ *
+ * ⭐ `1/(1+2^E)` — `log2(kuş)` ile **AYNI EKSEN** (taban 2). "+1 casusluk seviyesi" ile
+ *   "kuşu ikiye katlamak" tek cetvelde okunur. Eski modelin tek gerçekten iyi fikri buydu,
+ *   korundu. E büyüdükçe kayıp hızla sıfıra iner: kullanıcının *"seviye farkı büyükse 1 kuşla
+ *   bile, rakipte 100 kuş 100 elf olsa bile bilgi alınır ve kuş ölmeden döner"* şartı budur.
+ *
+ * ⭐ `S/(S+K)` doygunluğu — savunma ne kadar büyürse büyüsün oran tavana yaklaşır, ona
+ *   çarpmaz. Kullanıcı: *"Rakipteki casus kuşların, elflerin ve okçu kulelerinin sayısı
+ *   gönderdiğimiz kuşları pat diye vurmamalı."* `S = 0` ise `P = 0`: kule/elf/kuş yoksa
+ *   **hiç kuş ölmez** (dokümanla uyumlu).
+ *
+ * ⭐ `lossMax < 1` — bu bir denge düğmesi değil, bir **garantinin dayanağı**: oran hiçbir
+ *   zaman 1 olamayacağı için yeterince kuş gönderen daima en az bir kuşu geri getirir, yani
+ *   **daima bir şey öğrenir**. Kullanıcı: *"Oyuna yeni başlamış birisi uzun süredir oynayan
+ *   birisinin kaynak bilgisini alabilsin ama rakibi güçlü olduğu için kuş da kaybetsin."*
+ *   Ayrı bir "en az bir kuş sağ kalsın" kuralı YAZILMADI; bu özellik formülden çıkıyor.
+ *
+ * ⚠️ Ağırlıklar maliyet-temelli: kuş 300 · kule 750 · elf 1.100 kaynak. Kule adanmış anti-hava
+ * yapısı (wTower=1), kuş silahsız ama tek işi bu (0,5), elf ise savaşçı — anti-hava YAN görevi
+ * olduğu için bilerek en düşük (0,25).
  */
-export const SPY_CONSTANTS = {
-  /** Rakip casus kuşu başına ENGELLEME (jam) kapasitesi — bire bir, tam blok kuralının temeli. */
-  wBird: 1.0,
-  /** Okçu Kulesi başına VURMA kapasitesi. */
-  wTower: 1.0,
-  /** Elf başına VURMA kapasitesi — savaşçının yan görevi, kasıtlı düşük. */
-  wElf: 0.2,
-  /** Seviye farkı üssü tabanı (2 = her seviye ikiye katlar) ve kırpma sınırı (±6 → en çok 64×). */
-  espBase: 2,
-  espClamp: 6,
-} as const;
-
-export interface SpyInterceptionInput {
+export interface SpyLossInput {
   /** Gönderilen casus kuş sayısı. */
   birds: number;
-  /** Saldıranın casusluk tekniği seviyesi. */
-  myEspionage: number;
-  /** Savunanın casusluk tekniği seviyesi. */
-  theirEspionage: number;
+  /** ⚠️ `spyEffectiveDiff` çıktısı — kademeyle **aynı** sayı, ikinci kez hesaplanmıyor. */
+  effectiveDiff: number;
   /** Savunan şehirdeki Okçu Kulesi adedi. */
   towers: number;
   /** Savunan şehirdeki Elf adedi. */
   elves: number;
-  /** Savunan şehirdeki Casus Kuş adedi (vurmaz, ENGELLER). */
+  /** Savunan şehirdeki Casus Kuş adedi. */
   defenderBirds: number;
 }
 
-export interface SpyInterceptionResult {
-  /** Kule/Elf tarafından vurulan (ölen) kuşlar. */
+export interface SpyLossResult {
+  /** Vurulan (ölen) kuşlar. */
   killed: number;
-  /** Rakip kuşlarca engellenen kuşlar — ölmez, eve döner ama bilgi getiremez. */
-  blocked: number;
-  /** Bilgiyi getiren kuşlar: ≥1 ise casusluk raporu yazılır. */
-  infoBirds: number;
-  /** Eve dönen kuşlar (engellenenler dahil, ölenler hariç). */
+  /** Eve dönen kuşlar. ⭐ `≥ 1` ise bilgi gelir — tek geçit şartı budur. */
   survivors: number;
+  /** Uygulanan kayıp oranı (0..1) — rapor ve denge çalışmaları için. */
+  lossRate: number;
 }
 
-export function spyInterception(o: SpyInterceptionInput): SpyInterceptionResult {
+export function spyLosses(
+  o: SpyLossInput, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+): SpyLossResult {
   const birds = Math.max(0, Math.trunc(o.birds));
-  const { wBird, wTower, wElf, espBase, espClamp } = SPY_CONSTANTS;
-  const diff = Math.max(0, o.theirEspionage) - Math.max(0, o.myEspionage);
-  const espK = espBase ** Math.max(-espClamp, Math.min(espClamp, diff));
+  const { lossMax, defenseSaturation, balancePoint, wTower, wBird, wElf } = cfg.spy;
 
-  // Doküman: kuşları yalnız Kule ve Elf vurabilir — yoksa kayıp da yok.
-  const towers = Math.max(0, o.towers);
-  const elves = Math.max(0, o.elves);
-  const killCapacity = towers + elves > 0
-    ? Math.round((towers * wTower + elves * wElf) * espK) : 0;
-  const killed = Math.min(birds, killCapacity);
+  const strength = Math.max(0, o.towers) * wTower
+    + Math.max(0, o.defenderBirds) * wBird
+    + Math.max(0, o.elves) * wElf;
 
-  // Rakip kuşlar VURMAZ, ENGELLER: eşit seviyede kuş kuşa — rakipte gönderdiğin kadar kuş
-  // varsa hiçbir bilgi sızmaz ama kimse ölmez (kullanıcının "kimse kimseden alamaz" açmazı).
-  const jamCapacity = Math.round(Math.max(0, o.defenderBirds) * wBird * espK);
-  const blocked = Math.min(birds - killed, jamCapacity);
+  // Anti-hava yoksa hiç kuş ölmez; `S/(S+K)` zaten 0 veriyor ama bölme 0/0'a düşmesin.
+  const ceiling = strength > 0 ? lossMax * (strength / (strength + defenseSaturation)) : 0;
+  const rate = ceiling / (1 + 2 ** (o.effectiveDiff - balancePoint));
 
-  return {
-    killed,
-    blocked,
-    infoBirds: Math.max(0, birds - killed - blocked),
-    survivors: birds - killed,
-  };
+  const killed = Math.min(birds, Math.round(birds * rate));
+  return { killed, survivors: birds - killed, lossRate: rate };
 }
 
 /** Etkin farkı bilgi kademesine çevirir. `fark` kesirli olabilir → aşağı yuvarlanır. */

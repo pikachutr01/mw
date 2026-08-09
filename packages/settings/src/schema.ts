@@ -168,6 +168,15 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'ikisi de kurgu (§13.21.2).',
   },
   {
+    id: 'spy',
+    label: 'Casusluk',
+    description: '⭐ **Tek aşamalı model** (2026-08-09): kademe yalnız `casusluk + log2(kuş) − '
+      + 'rakip` farkından çıkar; buradaki sabitler yalnız **kaç kuşun öleceğini** belirler. '
+      + 'Savunma bilgiyi ENGELLEMEZ, vergilendirir. ⚠️ En sert düğme «Savunma doygunluğu»: '
+      + 'KÜÇÜLTMEK savunmayı sertleştirir. ⚠️ «Kayıp tavanı»nı 1 yapma — 1\'den küçük olması '
+      + '"yeterince kuş gönderen daima bir şey öğrenir" garantisinin tek dayanağı.',
+  },
+  {
     id: 'ops',
     label: 'Bakım ve saklama',
     description: '⭐ Temizlik görevlerinin **saklama süreleri** ve sağlık eşikleri (§admin Faz 8). '
@@ -1404,6 +1413,67 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'number', default: 0.92, min: 0.1, max: 1, tag: 'design',
     description: 'Surun her seviyesi onarımı ne kadar kısaltır. Seviye 20 sur 2 sa 28 dk\'da toparlanır.',
     note: 'Dokümanda yok, bilerek eklendi: suru yükseltmek toparlanma hızı da kazandırmalı.',
+  },
+
+  /* ── Casusluk (§casusluk, 2026-08-09 sadeleştirmesi) ─────────────────────── */
+  {
+    key: 'spy.birdBonusCap',
+    label: 'Kuş bonusu tavanı',
+    type: 'number', default: 8, min: 0, max: 20, tag: 'design', unit: 'seviye',
+    description: '`log2(kuş)` bonusunun tavanı. 8 → 256 kuş; üstündeki kuşlar bilgiye hiçbir şey '
+      + 'KATMAZ, yalnız ölür. TAM bilgi için: eşit seviyede 16 kuş · 4 seviye geride 256 kuş · '
+      + '5+ seviye geride ulaşılamaz.',
+    note: 'Dokümanda yok, bilerek eklendi: "on binlerce kuş" sarmalını yapısal olarak kapatıyor '
+      + 've farkı kapatmanın tek yolunu tekniği yükseltmek yapıyor.',
+  },
+  {
+    key: 'spy.lossMax',
+    label: 'Kayıp tavanı',
+    type: 'number', default: 0.95, min: 0.05, max: 0.99, tag: 'design',
+    description: 'Bir akında ölebilecek kuşların ORANININ mutlak tavanı. Savunma ne kadar büyük '
+      + 'olursa olsun bu oran aşılmaz.',
+    note: '⚠️ 1 YAPMA. 1\'den küçük olması "yeterince kuş gönderen daima en az bir kuşu geri '
+      + 'getirir, yani daima bir şey öğrenir" garantisinin TEK dayanağı; acemi oyuncunun '
+      + 'veterandan kaynak bilgisi alabilmesi buna bağlı.',
+  },
+  {
+    key: 'spy.defenseSaturation',
+    label: 'Savunma doygunluğu',
+    type: 'number', default: 40, min: 1, max: 5000, tag: 'design',
+    description: 'Kayıp tavanı = `kayıpTavanı × S/(S+bu sayı)`. ⚠️ KÜÇÜLTMEK savunmayı '
+      + 'SERTLEŞTİRİR. 40 (sert): 100 kule + 300 kuş → tavan %82. 150 (ölçülü): aynı savunma '
+      + '→ %59. Doygunluk sayesinde 100 kule ile 10.000 kule arasında uçurum yok.',
+    note: 'Kullanıcı 2026-08-09\'da «sert» ucu seçti ama yumuşatabilmek için bu düğmeyi istedi.',
+  },
+  {
+    key: 'spy.balancePoint',
+    label: 'Kayıp eğrisi denge noktası',
+    type: 'number', default: 0, min: -4, max: 4, tag: 'design',
+    description: 'Kayıp oranı = `tavan / (1 + 2^(etkinFark − bu sayı))`. 0 iken etkin fark 0\'da '
+      + 'tavanın yarısı kaybedilir; +4 farkta tavanın ~1/17\'si. Büyütmek yüksek seviyeli casusa '
+      + 'da kayıp verdirir.',
+  },
+  {
+    key: 'spy.wTower',
+    label: 'Okçu Kulesi ağırlığı',
+    type: 'number', default: 1, min: 0, max: 10, tag: 'design',
+    description: 'Adanmış anti-hava yapısı — doküman kuşları vurabilenler arasında onu ilk sayıyor.',
+  },
+  {
+    key: 'spy.wBird',
+    label: 'Savunan Casus Kuş ağırlığı',
+    type: 'number', default: 0.5, min: 0, max: 10, tag: 'design',
+    description: 'Savunandaki casus kuşlar saldıran kuşları kovalar. Silahsız oldukları için '
+      + 'kuleden düşük; maliyeti de kulenin ~%40\'ı (300 / 750 kaynak).',
+    note: 'Dokümanda kuşları yalnız Kule ve Elf vurur; savunan kuşuna rol vermek kullanıcının '
+      + '2026-08-09 kararı ("casus kuş, elf ve okçu kulesi olma durumuna göre").',
+  },
+  {
+    key: 'spy.wElf',
+    label: 'Elf ağırlığı',
+    type: 'number', default: 0.25, min: 0, max: 10, tag: 'design',
+    description: 'Elf bir SAVAŞÇI; anti-hava onun yan görevi. Bu yüzden üçünün en düşüğü — '
+      + 'yoksa savaş ordusu bedava casus savunması olurdu.',
   },
 
   /* ── Oturum — jeton ömürleri ve tek cihaz kuralı (§9) ────────────────────── */

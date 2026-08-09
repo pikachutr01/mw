@@ -1,14 +1,33 @@
 /**
- * ⭐ CASUSLUK — kademe tablosu (doküman-birebir) + kesişim modeli altın testleri.
+ * ⭐⭐ CASUSLUK — TEK AŞAMALI MODEL (kullanıcı tasarımı, 2026-08-09).
  *
- * Model kullanıcı tasarımı (2026-07-30): Kule+Elf VURUR, rakip kuşlar ENGELLER; ikisi de
- * casusluk seviye farkıyla `2^fark` ölçeklenir. Ağırlıklar `spy-balance.mjs` sweep'iyle
- * kalibre edildi — buradaki sayılar o kalibrasyonun kilididir, değişirlerse denge bozulur.
+ * ⚠️ Bu dosya 2026-08-09'da **baştan yazıldı**. Öncesinde bir «kesişim» modeli vardı: rakip
+ * kuşları `2^fark` ile çarpılıp ENGELLEME duvarı üretiyor, gönderilen kuş bunu doğrusal aşmak
+ * zorunda kalıyordu. Duvar aşılmadan bilgi kademesi hiç kullanılmıyordu. Kullanıcı sistemi
+ * *"çok karışık ve çok zor"* bulduğu için duvar tamamen kaldırıldı.
+ *
+ * Yeni model iki bağımsız parça:
+ *   • `spyEffectiveDiff` + `spyLevelFor` → **kademe** (doküman-birebir; kuş bonusu artık tavanlı)
+ *   • `spyLosses`                        → **kaç kuş öldü**; bilgiyi ENGELLEMEZ
+ *
+ * Buradaki testler kullanıcının cümlelerini birebir kilitliyor; her ⭐ bir şartın karşılığı.
  */
 import { describe, expect, it } from 'vitest';
 import {
-  SPY_CONSTANTS, spyEffectiveDiff, spyInterception, spyLevelFor, UNITS_BY_ID,
+  DEFAULT_CATALOG_CONFIG, mergeCatalogConfig, spyEffectiveDiff, spyLevelFor, spyLosses,
 } from '../src/index.ts';
+
+/** Kullanıcının örneğindeki ağır savunma: 100 okçu kulesi + 300 casus kuş. */
+const AGIR = { towers: 100, elves: 0, defenderBirds: 300 };
+/** Oyunu bırakmış oyuncu: savunma yapılarından dörder tane kalmış. */
+const TERK = { towers: 4, elves: 0, defenderBirds: 0 };
+/** Hiç anti-hava yok. */
+const BOS = { towers: 0, elves: 0, defenderBirds: 0 };
+
+const kayip = (birds: number, effectiveDiff: number, d: typeof AGIR) =>
+  spyLosses({ birds, effectiveDiff, ...d });
+
+/* ═══ KADEME — doküman tablosu, DEĞİŞMEDİ ═══════════════════════════════════ */
 
 describe('bilgi kademesi (doküman-birebir, GÖNDERİLEN kuştan)', () => {
   it('8 kuş = +3 seviye · 16 kuş = +4 seviye', () => {
@@ -26,110 +45,128 @@ describe('bilgi kademesi (doküman-birebir, GÖNDERİLEN kuştan)', () => {
     expect(spyLevelFor(9.2)).toBe('full');
   });
 
-  it('256 ile 300 kuş AYNI kademeye denk gelir (2^8 bandı) — eşik 512', () => {
-    expect(Math.floor(Math.log2(256))).toBe(Math.floor(Math.log2(300)));
-    expect(Math.floor(Math.log2(512))).toBe(9);
+  /**
+   * ⭐⭐ KUŞ BONUSU TAVANI (kullanıcı: *"on binlerce kuş göndermek zorunda olmasınlar"*).
+   *
+   * ⚠️ Tavanın asıl işlevi sınır koymak değil, **seviyeyi tek gerçek kaldıraç yapmak**:
+   * 256'nın üstündeki kuş kademeye hiçbir şey katmaz, yalnız ölür.
+   */
+  it('⭐ 256 üstü kuş kademeye HİÇBİR ŞEY katmaz (tavan +8)', () => {
+    const bes = spyEffectiveDiff(5, 256, 5);
+    expect(bes).toBe(8);                                   // 5 + 8 − 5
+    expect(spyEffectiveDiff(5, 512, 5)).toBe(bes);
+    expect(spyEffectiveDiff(5, 100_000, 5)).toBe(bes);
+  });
+
+  it('tavan panelden gevşetilebilir (birdBonusCap)', () => {
+    const cfg = mergeCatalogConfig({ spy: { birdBonusCap: 10 } });
+    expect(spyEffectiveDiff(0, 1024, 0, cfg)).toBe(10);
+    expect(spyEffectiveDiff(0, 1024, 0)).toBe(8);          // varsayılan tavan
+  });
+
+  /**
+   * ⭐ TAM bilgi (fark ≥ 4) için gereken kuş — tavanın somut sonucu.
+   * 5+ seviye geride olan biri kuşla ASLA `full` alamaz; tekniği yükseltmek zorunda.
+   */
+  it('⭐ TAM bilgi eşiği: eşitte 16 · 4 geride 256 · 5 geride ULAŞILAMAZ', () => {
+    expect(spyLevelFor(spyEffectiveDiff(10, 16, 10))).toBe('full');
+    expect(spyLevelFor(spyEffectiveDiff(10, 256, 14))).toBe('full');
+    expect(spyLevelFor(spyEffectiveDiff(10, 100_000, 15))).not.toBe('full');
   });
 });
 
-describe('kesişim modeli', () => {
-  const base = { myEspionage: 5, theirEspionage: 5, towers: 0, elves: 0, defenderBirds: 0 };
+/* ═══ KAYIP — yeni tek aşamalı model ════════════════════════════════════════ */
 
-  it('anti-hava yoksa (kule=elf=0) hiç kuş ölmez', () => {
-    const r = spyInterception({ ...base, birds: 100, defenderBirds: 0 });
-    expect(r.killed).toBe(0);
-    expect(r.infoBirds).toBe(100);
+describe('kayıp modeli', () => {
+  /** Doküman: kuşları yalnız anti-hava vurabilir. Hiç yoksa kayıp da yok. */
+  it('⭐ anti-hava yoksa hiç kuş ölmez (fark ne olursa olsun)', () => {
+    expect(kayip(500, -20, BOS).killed).toBe(0);
+    expect(kayip(500, -20, BOS).survivors).toBe(500);
   });
 
-  it('⭐ TAM BLOK: eşit casuslukta rakipte gönderilen kadar kuş → bilgi SIZMAZ, kimse ölmez', () => {
-    const r = spyInterception({ ...base, birds: 300, defenderBirds: 300 });
-    expect(r.killed).toBe(0);          // kuş kuşu vurmaz
-    expect(r.blocked).toBe(300);       // ama tamamını engeller
-    expect(r.infoBirds).toBe(0);       // "kimse kimseden casusluk bilgisi alamaz"
-    expect(r.survivors).toBe(300);     // hepsi eve döner — açmaz kansızdır
+  /**
+   * ⭐⭐ KULLANICININ ÖRNEĞİ: *"32 kuş gönderseydik … 64'e oranla daha fazla kuşun vurulması
+   * gerekirdi."* Az kuş → küçük etkin fark → **daha yüksek kayıp ORANI**.
+   */
+  it('⭐ az kuş gönderen ORANSAL olarak daha çok kaybeder', () => {
+    const a = kayip(64, -2, AGIR);      // ben 5, rakip 13 → 5 + log2(64) − 13 = −2
+    const b = kayip(32, -3, AGIR);      // aynı taraflar, yarı kuş → fark −3
+    expect(b.lossRate).toBeGreaterThan(a.lossRate);
+    expect(a.survivors).toBeGreaterThanOrEqual(1);
+    expect(b.survivors).toBeGreaterThanOrEqual(1);
   });
 
-  it("⭐ kullanıcının 256/300 örneği: K_vur=280'de 256'nın tamamı ölür, 300'den 20 kuş sızar", () => {
-    const k256 = spyInterception({ ...base, birds: 256, towers: 280 });
-    expect(k256.killed).toBe(256);
-    expect(k256.infoBirds).toBe(0);
-
-    const k300 = spyInterception({ ...base, birds: 300, towers: 280 });
-    expect(k300.killed).toBe(280);
-    expect(k300.infoBirds).toBe(20);
+  /**
+   * ⭐⭐ *"Casusluk seviyesi fazla ise 1 kuşla bile rakibin tüm her şeyini rahat görüp kuş
+   * ölmeden geri gelebilir. Rakipte 100 tane casus kuş, 100 tane elf olsa bile."*
+   */
+  it('⭐ yüksek seviye farkında ağır savunma bile kuş öldüremez', () => {
+    const dev = { towers: 100, elves: 200, defenderBirds: 500 };
+    expect(kayip(1, 4, dev).killed).toBe(0);
+    expect(kayip(1, 8, dev).killed).toBe(0);
   });
 
-  it('⭐ +1 casusluk seviyesi ≙ kuşları İKİYE katlamak (aynı oran ölçeğinde)', () => {
-    // Savunma sabit; saldıran ya +1 seviye alır ya kuşları ikiye katlar → sızan oran aynı.
-    const defans = { towers: 100, elves: 500, defenderBirds: 50 };
-    const seviyeli = spyInterception({
-      birds: 400, myEspionage: 6, theirEspionage: 5, ...defans,
-    });
-    const kalabalik = spyInterception({
-      birds: 800, myEspionage: 5, theirEspionage: 5, ...defans,
-    });
-    expect(kalabalik.killed).toBe(seviyeli.killed * 2);
-    expect(kalabalik.blocked).toBe(seviyeli.blocked * 2);
-    expect(kalabalik.infoBirds).toBe(seviyeli.infoBirds * 2);
+  /** ⭐ Oyunu bırakmış hedef: 4 kule kalmış, yüksek seviyeli casus 1 kuşla TAM bilgi alır. */
+  it('⭐ terk edilmiş hedef (4 kule) — 1 kuş, kayıp yok, TAM bilgi', () => {
+    const fark = spyEffectiveDiff(20, 1, 5);
+    expect(spyLevelFor(fark)).toBe('full');
+    expect(kayip(1, fark, TERK).killed).toBe(0);
   });
 
-  it('seviye farkı her iki kapasiteyi de 2^fark ölçekler, ±6 ile kırpılır', () => {
-    const at = (my: number) => spyInterception({
-      birds: 100_000, myEspionage: my, theirEspionage: 10,
-      towers: 100, elves: 0, defenderBirds: 100,
-    });
-    expect(at(10).killed).toBe(100);
-    expect(at(9).killed).toBe(200);       // savunan +1 → ×2
-    expect(at(12).killed).toBe(25);       // saldıran +2 → ÷4
-    expect(at(0).killed).toBe(6_400);     // fark 10 ama kırpma 6 → ×64
-    expect(at(0).blocked).toBe(6_400);
+  /**
+   * ⭐⭐ **GARANTİ: yeterince kuş gönderen DAİMA bir şey öğrenir.**
+   *
+   * Kullanıcı: *"Oyuna yeni başlamış birisi uzun süredir oynayan birisinin kaynak bilgisini
+   * alabilsin ama rakibi güçlü olduğu için kuş da kaybetsin."*
+   *
+   * ⚠️ Bu ayrı bir kural DEĞİL, `lossMax < 1` olmasının sonucu — oran hiçbir zaman 1'e
+   * ulaşamadığı için sağ kalan kalır. `lossMax` 1 yapılırsa bu garanti sessizce ölür;
+   * `SpyConfig.lossMax` yorumu ve panel notu bu yüzden var.
+   */
+  it('⭐⭐ kayıp oranı hiçbir koşulda tavanı aşmaz → sağ kalan hep olur', () => {
+    const canavar = { towers: 100_000, elves: 100_000, defenderBirds: 100_000 };
+    const r = kayip(256, -30, canavar);
+    expect(r.lossRate).toBeLessThan(DEFAULT_CATALOG_CONFIG.spy.lossMax);
+    expect(r.survivors).toBeGreaterThanOrEqual(1);
   });
 
-  it('monotonluk: savunma arttıkça bilgi kuşu azalır, kuş arttıkça artar', () => {
-    const bilgi = (birds: number, towers: number) => spyInterception({
-      birds, myEspionage: 5, theirEspionage: 5, towers, elves: 0, defenderBirds: 0,
-    }).infoBirds;
-    expect(bilgi(200, 50)).toBeGreaterThan(bilgi(200, 150));
-    expect(bilgi(400, 150)).toBeGreaterThan(bilgi(200, 150));
-    expect(bilgi(100, 100)).toBe(0);
-    expect(bilgi(100, 0)).toBe(100);
+  /** ⭐ İki eksende de kesin monotonluk — modelin okunabilirliğinin şartı. */
+  it('⭐ monotonluk: fark ↑ → kayıp ↓ · savunma ↑ → kayıp ↑', () => {
+    let onceki = Infinity;
+    for (const E of [-6, -4, -2, 0, 2, 4, 6]) {
+      const r = kayip(128, E, AGIR).lossRate;
+      expect(r).toBeLessThan(onceki);
+      onceki = r;
+    }
+    let az = -1;
+    for (const kule of [1, 10, 50, 200, 1000]) {
+      const r = kayip(128, 0, { towers: kule, elves: 0, defenderBirds: 0 }).lossRate;
+      expect(r).toBeGreaterThan(az);
+      az = r;
+    }
   });
 
-  it('önce vurulur, kalanlar engellenir — engel ölüleri kapsamaz', () => {
-    const r = spyInterception({
-      birds: 100, myEspionage: 5, theirEspionage: 5,
-      towers: 60, elves: 0, defenderBirds: 70,
-    });
-    expect(r.killed).toBe(60);
-    expect(r.blocked).toBe(40);           // kalan 40, jam kapasitesi 70 ama kuş kalmadı
-    expect(r.infoBirds).toBe(0);
-    expect(r.survivors).toBe(40);
-  });
-});
-
-describe('maliyet dengesi (sweep kilidi)', () => {
-  it('engelleme başına maliyet: kuş < kule < elf — adanmış sayaç daima kuş', () => {
-    const bird = UNITS_BY_ID['spy_bird']!;
-    const tower = UNITS_BY_ID['archer_tower']!;
-    const elf = UNITS_BY_ID['elf']!;
-    const per = (u: { gold: number; food: number }, w: number) => (u.gold + u.food) / w;
-
-    const kusMaliyet = per(bird, SPY_CONSTANTS.wBird);      // 300
-    const kuleMaliyet = per(tower, SPY_CONSTANTS.wTower);   // 750
-    const elfMaliyet = per(elf, SPY_CONSTANTS.wElf);        // 5.500
-
-    expect(kusMaliyet).toBeLessThan(kuleMaliyet);
-    expect(kuleMaliyet).toBeLessThan(elfMaliyet);
-    // Bandın kendisi de kilitli: oynarsa sweep yeniden koşulmalı.
-    expect(kusMaliyet).toBe(300);
-    expect(kuleMaliyet).toBe(750);
-    expect(elfMaliyet).toBe(5_500);
+  /**
+   * ⚠️ Doygunluk: savunma 25 katına çıkınca kayıp oranı 25 katına ÇIKMAZ.
+   * Kullanıcı: *"gönderdiğimiz kuşları pat diye vurmamalı."*
+   */
+  it('⭐ savunma doygun — 25 kat savunma kayıp oranını 2 kattan az artırır', () => {
+    const az = kayip(128, 0, { towers: 40, elves: 0, defenderBirds: 0 }).lossRate;
+    const cok = kayip(128, 0, { towers: 1000, elves: 0, defenderBirds: 0 }).lossRate;
+    expect(cok / az).toBeLessThan(2);
   });
 
-  it('erken oyunda casusluk imkânsız değil: 10 kule + 100 elf eşit seviyede 31 kuşla sızılır', () => {
-    const r = spyInterception({
-      birds: 31, myEspionage: 1, theirEspionage: 1, towers: 10, elves: 100, defenderBirds: 0,
-    });
-    expect(r.infoBirds).toBe(1);
+  /** Ağırlık sırası: kule > kuş > elf (maliyet ve adanmışlık temelli). */
+  it('ağırlık sırası kule > savunan kuş > elf', () => {
+    const { wTower, wBird, wElf } = DEFAULT_CATALOG_CONFIG.spy;
+    expect(wTower).toBeGreaterThan(wBird);
+    expect(wBird).toBeGreaterThan(wElf);
+  });
+
+  it('sertlik panelden yumuşatılabilir (defenseSaturation ↑ → kayıp ↓)', () => {
+    const yumusak = mergeCatalogConfig({ spy: { defenseSaturation: 150 } });
+    const sert = spyLosses({ birds: 64, effectiveDiff: -2, ...AGIR }).lossRate;
+    const gevsek = spyLosses({ birds: 64, effectiveDiff: -2, ...AGIR }, yumusak).lossRate;
+    expect(gevsek).toBeLessThan(sert);
   });
 });

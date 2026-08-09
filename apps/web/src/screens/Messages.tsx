@@ -681,7 +681,10 @@ function PlainBody({ m, body, onDone }: {
  */
 /**
  * ⭐ CASUSLUK ÖNLEME RAPORU gövdesi (savunan tarafı) — alanları gönderen raporundan farklı:
- * birdsShot/birdsBlocked/leakedLevel. Savunan HER casuslukta bu raporu alır (2026-07-30).
+ * `birdsShot` / `leakedLevel`. Savunan HER casuslukta bu raporu alır (2026-07-30).
+ *
+ * ⚠️ `birdsBlocked` 2026-08-09'da KALKTI (engelleme diye bir sonuç kalmadı). Eski raporlarda
+ * alan hâlâ duruyor; okunmadığı için sorun çıkarmıyor, göç yazılmadı.
  */
 /**
  * ⭐ İTTİFAK DAVETİ / BAŞVURUSU — mesaj kutusunda Kabul/Red (orijinal t=8/9 akışı).
@@ -721,7 +724,6 @@ function AllianceRequestBody({ m, body, onDone }: {
 function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
   const sent = Number(body['birdsSent'] ?? 0);
   const shot = Number(body['birdsShot'] ?? 0);
-  const blocked = Number(body['birdsBlocked'] ?? 0);
   const leaked = body['leakedLevel'] as string | null | undefined;
   /**
    * ⚠️ Bu etiketler `gatherIntel`in kademeleriyle AYNI ŞEYİ anlatmak zorunda: kapsam büyüyüp
@@ -741,7 +743,6 @@ function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
       <div className="text-xs text-muted">
         Şehrinin üstünde <b className="tnum text-ink">{fmt(sent)}</b> casus kuş uçtu
         {shot > 0 ? <span className="text-success"> · {fmt(shot)} tanesi vuruldu</span> : null}
-        {blocked > 0 ? <span className="text-success"> · {fmt(blocked)} tanesi engellendi</span> : null}
       </div>
       {leaked ? (
         <div className="rounded-[var(--radius-sm)] border border-danger bg-danger/10 px-2.5 py-2 text-xs text-danger">
@@ -749,7 +750,7 @@ function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
         </div>
       ) : (
         <div className="rounded-[var(--radius-sm)] border border-success bg-success/10 px-2.5 py-2 text-xs text-success">
-          Hiçbir bilgi sızmadı — casusluk tamamen engellendi.
+          Hiçbir bilgi sızmadı — casus kuşların hepsi vuruldu.
         </div>
       )}
     </div>
@@ -777,17 +778,18 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
       <div className="text-xs text-muted">
         {fmt(sent)} casus kuş gönderildi
         {lost > 0 ? <span className="text-danger"> · {fmt(lost)} tanesi vuruldu</span> : ' · kayıp yok'}
-        {Number(body['birdsBlocked'] ?? 0) > 0
-          ? <span className="text-warning"> · {fmt(Number(body['birdsBlocked']))} tanesi engellendi</span> : null}
-        {/* ⚠️ «etkin fark» sayısı 2026-08-02'de kaldırıldı (kullanıcı): iç hesabın ara
-            değeriydi, oyuncuya hiçbir şey anlatmıyordu. Sunucu `diff`i göndermeye devam
-            ediyor — dengelemede işimize yarıyor, yalnız ekranda yazmıyor. */}
+        {/*
+          ⚠️ **Ne «etkin fark» ne de «bir üst kademe için N kuş» YAZILIR** (kullanıcı,
+          2026-08-09). İkisi de aynı sızıntıyı açıyor: oyuncu kendi casusluk seviyesini ve
+          gönderdiği kuşu bildiği için `fark = benim + log2(kuş) − rakip` denkleminden
+          **rakibin seviyesini birebir çözer**. Sunucu artık `diff`i gövdeye hiç koymuyor
+          (`mission.handlers.ts`); burada gösterilecek bir şey de kalmadı.
+        */}
       </div>
 
-      {/* ⚠️ Sebep AÇIKLANMIYOR (kullanıcı, 2026-08-03). Metin *"kuşlar ya vuruldu ya da rakip
-          kuşlarca engellendi"* diyordu; zaten üstteki satırda kaç kuşun vurulduğu ve kaçının
-          engellendiği yazıyor — tekrarın ötesinde, hangi ihtimalin gerçekleştiğini bilmediğimiz
-          için cümle de belirsizdi. */}
+      {/* ⚠️ Sebep AÇIKLANMIYOR (kullanıcı, 2026-08-03) — ama artık tek ihtimal var: bilgi
+          gelmediyse kuşların hepsi vurulmuştur (engelleme diye bir sonuç 2026-08-09'da
+          kaldırıldı). Üstteki satır kaç kuşun vurulduğunu zaten yazıyor. */}
       {body['level'] == null ? (
         <div className="text-danger">Bilgi alınamadı.</div>
       ) : null}

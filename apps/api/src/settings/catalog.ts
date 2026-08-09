@@ -21,7 +21,7 @@ type Values = Readonly<Record<string, Record<string, number | boolean> | undefin
  * `TuningConfig`) yeni bir katalog ailesi açmak tek satırlık iş.
  */
 export const CATALOG_GROUPS = [
-  'economy', 'cave', 'wall', 'teleport', 'buildingTuning', 'techTuning',
+  'economy', 'cave', 'wall', 'teleport', 'spy', 'buildingTuning', 'techTuning',
 ] as const;
 
 export function catalogOverrides(
