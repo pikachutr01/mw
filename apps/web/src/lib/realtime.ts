@@ -129,6 +129,22 @@ export function closeChatChannel(): void {
   socket?.emit('chat:close');
 }
 
+/**
+ * ⭐ Şu an ekranda AÇIK olan DM kanalı — yoksa `null` (kullanıcı, 2026-08-09).
+ *
+ * Tek kullanıcısı `Toaster`: aynı kişiyle konuşurken onun mesajının sol altta toast olarak da
+ * belirmesi *"kullanıcı deneyimini kötü etkiliyor"*. Pencere açıksa toast bastırılır.
+ *
+ * ⚠️ Bu değişken **zaten vardı** ve zaten "pencere açık mı"nın istemcideki tek kaynağı:
+ * `ChatWindow` bağlanınca `openChatChannel`, sökülünce `closeChatChannel` çağırıyor ve
+ * yeniden bağlanmada odaya buradan dönülüyor. İkinci bir bayrak eklemek, bu oturumda
+ * defalarca ısırılan "aynı kural iki yerde" hatasını yeniden üretirdi.
+ *
+ * ⚠️ **Fonksiyon, değer değil.** Modül seviyesinde bir sabit dışa aktarılsaydı içe aktaran
+ * tarafta ilk değeri donardı; olay anında okunması gereken bir durum bu.
+ */
+export const currentChatChannel = (): number | null => openChatChannelId;
+
 export function sendTyping(channelId: number): void {
   socket?.emit('chat:typing', { channelId });
 }

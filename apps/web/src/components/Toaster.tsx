@@ -15,7 +15,7 @@ import {
   createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { onSocketEvent } from '../lib/realtime.ts';
+import { currentChatChannel, onSocketEvent } from '../lib/realtime.ts';
 
 /** Ekranda kalma süresi. Kısa metinler için 6 sn okumaya yeter, akışı da tıkamaz. */
 const DWELL_MS = 6000;
@@ -46,6 +46,35 @@ const ICON: Record<string, string> = {
   production: '⚒',
   mention: '@',
 };
+
+/**
+ * ⭐⭐ AÇIK SOHBET PENCERESİ TOAST'I SUSTURUR (kullanıcı, 2026-08-09):
+ * *"Bir kişiyle sohbet ederken, pencere açıkken karşıdakinin mesajı anlık olarak sohbete
+ * düşüyor ama aynı zamanda sol altan notify olarak da çıkıyor… Pencere açıksa bu notify
+ * çıkmasın, kapalıysa çıksın."*
+ *
+ * ⚠️ Kural **yalnız o kişiye** işler: A ile konuşurken B'den gelen mesajın toast'ı yine çıkar —
+ * şart "mesaj **atan kişinin** penceresi açıksa".
+ *
+ * ⚠️ Karar İSTEMCİDE, sunucuda değil. Sunucunun oda üyeliği ("bu soket `chat:open` yaptı mı")
+ * bir vekil ve **kayabiliyor**: soket koptuğunda üyelik düşer, yeniden bağlanana dek sunucu
+ * pencereyi kapalı sanır — oysa pencere ekranda durur. O aralıkta gelen mesaj toast üretir ve
+ * şikâyet aynen sürerdi. Ekran, kendi durumunun tek doğru sahibi.
+ *
+ * ⚠️ Karşılaştırma sunucunun açıkça gönderdiği `channelId` ile; `tag` (bugün `dm:<channelId>`)
+ * **ayrıştırılmıyor**. Etiket bir kimliktir, biçimi yarın değişirse bastırma sessizce çalışmayı
+ * bırakırdı — bu oturumda tam olarak o sınıftan hatalar çıktı.
+ *
+ * Saf fonksiyon: projede tarayıcı testi altyapısı yok, karar ancak böyle sınanabiliyor
+ * (`tipReduce` · `placePopover` · `deepLinkAction` ile aynı gerekçe).
+ */
+export function suppressToast(
+  payload: { category?: unknown; channelId?: unknown }, openChannel: number | null,
+): boolean {
+  if (payload.category !== 'dm') return false;
+  if (openChannel == null || payload.channelId == null) return false;
+  return Number(payload.channelId) === openChannel;
+}
 
 export function NotifyProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -90,6 +119,8 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
   useEffect(() => onSocketEvent('notify:show', (payload) => {
     const title = String(payload['title'] ?? '').trim();
     if (title === '') return;
+    /* ⭐ Açık pencerenin toast'ı bastırılır — gerekçesi `suppressToast`ta. */
+    if (suppressToast(payload, currentChatChannel())) return;
     show({
       title,
       body: String(payload['body'] ?? ''),

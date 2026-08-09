@@ -95,12 +95,23 @@ export function ChatWindow({ target, myId, onClose }: {
 
   /* ── "yazıyor…" — kanal odasından gelen tek olay ─────────────────────────── */
   useEffect(() => {
+    let timer = 0;
     const off = onSocketEvent('chat:typing', (payload) => {
       if (Number(payload['channelId']) !== channelId) return;
       setPeerTyping(true);
-      window.setTimeout(() => setPeerTyping(false), 3000);
+      /**
+       * ⚠️ **Önceki zamanlayıcı İPTAL EDİLİR.** Eskiden her olay kendi 3 sn'lik zamanlayıcısını
+       * kuruyordu ve hiçbiri iptal edilmiyordu: karşı taraf durmadan yazarken olaylar ~2,5
+       * sn'de bir geliyor, ama ilk olayın zamanlayıcısı 3. saniyede ateşleyip göstergeyi
+       * KAPATIYORDU — yazı sürerken "yazıyor…" yanıp sönüyordu. Kullanıcının şikâyet ettiği
+       * huzursuzluğun yarısı buydu; ayrılmış şerit onu görünmez yapmaz, yalnız yerinde tutar.
+       * ⚠️ Sökülürken de temizleniyor: pencere kapandıktan sonra ateşleyen bir zamanlayıcı
+       * ölü bileşene yazar.
+       */
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setPeerTyping(false), 3000);
     });
-    return off;
+    return () => { window.clearTimeout(timer); off(); };
   }, [channelId]);
 
   /**
@@ -255,10 +266,27 @@ export function ChatWindow({ target, myId, onClose }: {
             </div>
           );
         })}
+      </div>
 
-        {peerTyping ? (
-          <div className="text-[11px] text-muted">{target.username} yazıyor…</div>
-        ) : null}
+      {/**
+        * ⭐⭐ «YAZIYOR…» KENDİ ŞERİDİNDE, KAYDIRMA ALANININ DIŞINDA (kullanıcı, 2026-08-09):
+        * *"karşı taraftaki kişinin yazıyor bilgisi sohbet ekranı doluyken zıplamalara sebep
+        * oluyor. Yazıyor alanı için altta küçük bir alan bırakalım, böylece son mesajı sürekli
+        * yukarı zıplatarak gözükmez, kendisine ayrılan küçük alanda görülür."*
+        *
+        * ⚠️ Eskiden satır mesajların ARASINDAYDI, yani kaydırılan içeriğin bir parçasıydı:
+        * belirince içerik uzuyor, dipteki son mesaj yukarı kayıyor, üç saniye sonra kaybolunca
+        * geri düşüyordu. Kaydırmayı dibe çeken `useLayoutEffect` yalnız `messages.length`e bağlı
+        * olduğu için bu değişimi hiç toparlamıyordu — düzeltmek için onu da tetiklemek yerine
+        * satırı akıştan çıkarmak doğrusu: bu bir mesaj değil, bir DURUM göstergesi.
+        *
+        * ⚠️ Şerit **koşulsuz** çiziliyor, yalnız metni gidip geliyor: yer `h-4` ile daima ayrılı,
+        * yoksa şeridin kendisi belirip kaybolarak aynı zıplamayı bir kat aşağıda tekrarlardı.
+        * Bir satırlık maliyeti var ve kullanıcının istediği tam olarak bu ("küçük bir alan").
+        */}
+      <div aria-live="polite"
+        className="h-4 shrink-0 truncate px-2.5 text-[11px] leading-4 text-muted">
+        {peerTyping ? `${target.username} yazıyor…` : ''}
       </div>
 
       <div className="shrink-0 space-y-1 border-t-2 border-strong bg-raised px-2.5 py-2">

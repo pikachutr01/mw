@@ -179,6 +179,39 @@ describe('notify.catalog', () => {
   });
 
   /**
+   * ⭐ AÇIK PENCEREYİ SUSTURMANIN SUNUCU AYAĞI (kullanıcı, 2026-08-09): *"mesaj atan kişinin
+   * sohbet penceresi açıksa bu notify çıkmasın"*. Kararı istemci veriyor (`suppressToast`)
+   * ama karşılaştıracağı kanal kimliğini sunucu göndermek zorunda.
+   *
+   * ⚠️ İstemci bunu `tag`ten ("dm:5") ayrıştırmıyor — etiketin biçimi değişse bastırma
+   * **sessizce** çalışmayı bırakırdı. Alan açık, bu test de onun gitmeye devam ettiğinin bekçisi.
+   */
+  it('⭐ DM bildirimi sohbet KANAL KİMLİĞİNİ taşır (açık pencereyi susturmak için)', () => {
+    const [note] = notificationForOutbox('chat:dm', {
+      channelId: 5, messageId: 11, senderId: 1, senderName: 'Ayla',
+      recipientId: 2, preview: 'selam',
+    }, 1);
+    expect(note?.channelId).toBe(5);
+  });
+
+  /** ⚠️ Kanal bilinmiyorsa alan HİÇ gitmez → istemci bastırmaz, toast çıkar (güvenli yön). */
+  it('kanal kimliği yoksa alan gönderilmez', () => {
+    const [note] = notificationForOutbox('chat:dm', {
+      messageId: 11, senderId: 1, senderName: 'Ayla', recipientId: 2, preview: 'selam',
+    }, 1);
+    expect(note?.channelId).toBeUndefined();
+  });
+
+  /** ⚠️ DM DIŞI bildirimler bu alanı taşımaz: bastırma yalnız sohbete özgü bir kural. */
+  it('DM olmayan bildirimlerde kanal kimliği yok', () => {
+    const [note] = notificationForOutbox('city:incoming_attack', {
+      defenderPlayerId: 2, targetCity: route.target,
+      arrivesAt: '2026-07-31T14:00:00.000Z', units: { dwarf: 10 },
+    }, 1);
+    expect(note?.channelId).toBeUndefined();
+  });
+
+  /**
    * ⭐ SALDIRININ ASIL BİLDİRİMİ: kalkışta susan sistem varışta konuşuyor. Başlık
    * kazanan/kaybeden, gövde ise güzergâhın oyuncuyu ilgilendiren UCU — saldıran hedefi,
    * savunan saldırganı görür. Uçların takas edilmesi en olası regresyon, test onu ölçüyor.

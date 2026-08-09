@@ -58,6 +58,22 @@ export interface Notification {
    * daha zor bir durum.
    */
   push?: boolean;
+  /**
+   * ⭐ **DM'in ait olduğu sohbet kanalı** (kullanıcı, 2026-08-09): *"Eğer mesaj atan kişinin
+   * sohbet penceresi açıksa bu notify çıkmasın, pencere kapalıysa çıksın."*
+   *
+   * İstemci bunu açık pencerenin kanalıyla karşılaştırıp toast'ı bastırıyor.
+   *
+   * ⚠️ Karar neden İSTEMCİDE: *"pencere açık mı"* sorusunun tek doğru sahibi ekranın kendisi.
+   * Sunucunun oda üyeliği (`chat:open`) bir vekil ve **kayabiliyor**: soket koptuğunda oda
+   * üyeliği düşer, yeniden bağlanana dek sunucu "kapalı" sanır — oysa pencere ekranda duruyor.
+   * O aralıkta gelen mesaj için toast çıkardı ve kullanıcının şikâyeti aynen sürerdi.
+   *
+   * ⚠️ Alan `tag`ten TÜRETİLMİYOR (`tag` bugün `dm:<channelId>`). Etiket bir *kimlik*tir,
+   * bildirim merkezinde satırı değiştirmeye yarar; biçimi yarın değişirse bastırma **sessizce**
+   * çalışmayı bırakırdı. Bu oturumda tam olarak o sınıftan üç hata çıktı — bağ açık olsun.
+   */
+  channelId?: number;
 }
 
 /* ── Küçük yardımcılar ──────────────────────────────────────────────────────── */
@@ -242,13 +258,16 @@ export function notificationForOutbox(
       const from = n(payload['senderId']);
       if (to == null) return [];
       const name = String(payload['senderName'] ?? '').trim();
+      const channelId = n(payload['channelId']);
       return [note({
         playerId: to, worldId, category: 'dm',
         title: name === '' ? 'Yeni mesaj' : name,
         body: String(payload['preview'] ?? '').trim() || 'Sana bir mesaj gönderdi.',
         // Derin bağlantı: Mesajlar açılır ve sohbet penceresi bu oyuncuyla doğrudan gelir.
         url: from == null ? '/messages' : `/messages?dm=${from}`,
-        tag: `dm:${n(payload['channelId']) ?? to}`,
+        tag: `dm:${channelId ?? to}`,
+        /* ⭐ Açık pencereyi susturmak için — bkz. `Notification.channelId`. */
+        ...(channelId == null ? {} : { channelId }),
       })];
     }
 

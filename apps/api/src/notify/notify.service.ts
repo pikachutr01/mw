@@ -124,6 +124,13 @@ export class NotifyService {
           body: note.body,
           url: note.url,
           tag: note.tag,
+          /**
+           * ⚠️ Yalnız DM'de dolu. İstemci açık sohbet penceresinin kanalıyla karşılaştırıp
+           * toast'ı bastırıyor (kullanıcı: *"o kişiyle konuşurken sol alttan belirmesi
+           * deneyimi kötü etkiliyor"*). Push tarafına GEÇMİYOR: oyuncu çevrimiçiyse zaten
+           * push atmıyoruz, çevrimdışıysa da açık pencere diye bir şey yok.
+           */
+          ...(note.channelId == null ? {} : { channelId: note.channelId }),
         },
       });
       return;
