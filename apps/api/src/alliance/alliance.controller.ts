@@ -13,7 +13,9 @@ import {
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
-import { UNVERIFIED_CODE } from '../auth/unverified.ts';
+import {
+  isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
+} from '../auth/unverified.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
@@ -234,6 +236,17 @@ export class AllianceController {
     `);
     const alreadyApplied = pending != null;
     const isMine = my.allianceId === id;
+    /**
+     * ⭐ §verify — doğrulanmamış hesap başvuramaz, DÜĞMEYİ DE GÖRMEZ (kullanıcı, 2026-08-09).
+     *
+     * ⚠️ `apply()`teki kapı tek başına yeterdi ama yanlış anı seçerdi: oyuncu «Başvur»a basar,
+     * bekler, sonra hatayı okurdu. Sebebi TIKLAMADAN ÖNCE söylemek bu ekranın zaten var olan
+     * sözleşmesi ("sebep yazılıyor, düğme sessizce gizlenmiyor" — `AllianceModal.tsx`).
+     *
+     * ⚠️ Bu satır kapının YERİNE geçmiyor, önüne geçiyor: karar yine `apply()`te veriliyor.
+     * Görünürlük istemciye bilgi verir; kuralı uygulayan yer sunucudaki kapıdır.
+     */
+    const verified = !unverifiedLimits().enabled || await isVerified(this.db as never, player.playerId);
 
     const rank = a['rank'] == null ? null : Number(a['rank']);
     const prevRank = a['prev_rank'] == null ? null : Number(a['prev_rank']);
@@ -249,11 +262,12 @@ export class AllianceController {
       foundedAt: toDate(a['created_at']).toISOString(),
       isMine,
       alreadyApplied,
-      canApply: !isMine && my.allianceId == null && !alreadyApplied,
+      canApply: !isMine && my.allianceId == null && !alreadyApplied && verified,
       applyBlockedReason: isMine ? 'Zaten bu ittifaktasın.'
         : my.allianceId != null ? 'Başvurmak için önce mevcut ittifağından ayrılmalısın.'
           : alreadyApplied ? 'Başvurun zaten bekliyor.'
-            : null,
+            : !verified ? UNVERIFIED_MESSAGE.alliance
+              : null,
     };
   }
 

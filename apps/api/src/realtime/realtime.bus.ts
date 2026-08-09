@@ -270,6 +270,23 @@ export function eventForOutbox(
       };
 
     /**
+     * ⭐ KUTUDAN SATIR SİLİNDİ (2026-08-09) — bugün yalnız sonuçlanan ittifak davet/başvuruları
+     * (`AllianceService.dropInviteMessages`).
+     *
+     * ⚠️ **`message:written` yeniden kullanılamazdı**, ikisi de aynı istemci konusuna çıksa bile:
+     * o konu `notify.catalog.ts`te ayrıca **bildirim/push üretiyor** ve `REPORT_TEXT` iki ittifak
+     * `kind`ini de tanıyor. Yani silinen bir satır için oyuncuya "İttifak başvurusu — mesaj
+     * kutunda Kabul / Red ile bekliyor" push'u giderdi; tıkladığında ortada mesaj olmazdı.
+     * Ayrı konu `notify.catalog`un `default` dalına düşüyor ve sessiz kalıyor — istenen bu.
+     */
+    case 'message:removed':
+      return {
+        topic: 'messages:changed', worldId,
+        playerIds: players(num(payload['playerId'])),
+        ref: {},
+      };
+
+    /**
      * ⭐ ÖZEL MESAJ (2026-07-31) — İKİ tarafa da gider: alıcı balonu/rozeti görsün, gönderenin
      * başka sekmesi/cihazı da senkronlansın.
      *

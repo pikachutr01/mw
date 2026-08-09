@@ -207,6 +207,108 @@ describe('başvuru → yönetim kabulü', () => {
   });
 });
 
+/**
+ * ⭐⭐ SONUÇLANAN İSTEĞİN MESAJI KUTUDAN SİLİNİR (kullanıcı, 2026-08-09).
+ *
+ * *"İttifak liderinin sonuçlandırdığı başvuru raporları raporlardan hepten silinsin. Mesajlarda
+ * kalmaya devam ediyor, yeniden açıp Kabul veya Red tıklandığında «Bu istek zaten sonuçlanmış.»
+ * uyarısı geliyor."*
+ *
+ * ⚠️ Kritik olan **kararı VERMEYEN yöneticinin** kutusu: karar veren zaten kendi ekranını
+ * tazeliyor, şikâyetin kalıcı hâli diğerlerinde yaşıyor. Aşağıdaki testlerin hepsi bu yüzden
+ * `lider` karar verip `konsey`in kutusuna bakıyor.
+ */
+describe('⭐ sonuçlanan davet/başvuru mesajları silinir', () => {
+  const applicationsOf = async (playerId: number): Promise<number> => {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS n FROM messages
+       WHERE player_id = ${playerId} AND kind IN ('alliance_invite', 'alliance_application')
+    `);
+    return Number(r!['n']);
+  };
+
+  it('KABUL — başvuru satırı lider ve konseyin kutusundan birden gider', async () => {
+    const aid = await foundedAlliance();
+    const appId = await service.apply({ worldId, playerId: disaridan, allianceId: aid });
+    expect(await applicationsOf(lider)).toBe(1);
+    expect(await applicationsOf(konsey)).toBe(1);
+
+    await service.decide({ worldId, playerId: lider, inviteId: appId, accept: true });
+
+    expect(await applicationsOf(lider)).toBe(0);
+    // ⚠️ Asıl iddia: kararı VERMEYEN konsey üyesinin kutusu da temiz.
+    expect(await applicationsOf(konsey)).toBe(0);
+    // ⚠️ Sonuç bildirimi ayrı bir satır — silinen yalnız düğmeli istek satırı, bilgi kalıyor.
+    expect((await messagesOf(disaridan)).some((m) => String(m['subject']).includes('kabul edildi')))
+      .toBe(true);
+  });
+
+  it('RED — reddedilen başvuru da kutulardan gider', async () => {
+    const aid = await foundedAlliance();
+    const appId = await service.apply({ worldId, playerId: disaridan, allianceId: aid });
+
+    await service.decide({ worldId, playerId: lider, inviteId: appId, accept: false });
+
+    expect(await applicationsOf(lider)).toBe(0);
+    expect(await applicationsOf(konsey)).toBe(0);
+    expect((await messagesOf(disaridan)).some((m) => String(m['subject']).includes('reddedildi')))
+      .toBe(true);
+  });
+
+  it('DAVET — kabul edilince davet edilenin kutusundan gider', async () => {
+    const aid = await foundedAlliance();
+    await service.invite({ worldId, playerId: lider, targetId: disaridan });
+    expect(await applicationsOf(disaridan)).toBe(1);
+
+    const [inv] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM alliance_invites WHERE player_id = ${disaridan} AND kind = 'invite'
+    `);
+    await service.decide({ worldId, playerId: disaridan, inviteId: Number(inv!['id']), accept: true });
+
+    expect(await applicationsOf(disaridan)).toBe(0);
+    expect((await roleOf(disaridan)).allianceId).toBe(aid);
+  });
+
+  /**
+   * ⚠️ En sinsi hâli: oyuncu iki ittifağa başvurmuş, biri kabul edince ÖTEKİ başvuru
+   * `canceled`a düşüyor ama o ittifağın yönetimi bunu hiç öğrenmiyordu. Kutusunda kalan satır
+   * sonsuza kadar «Bu istek zaten sonuçlanmış.» veriyordu.
+   */
+  it('⭐ BAŞKA ittifağa katılınca oradaki bekleyen başvurunun mesajı da gider', async () => {
+    const aid = await foundedAlliance();
+    await giveCastle(disaridan, 5);
+    const b = await service.found({ worldId, playerId: disaridan, name: 'ikinci' });
+
+    const yeni = await createPlayer(h, worldId, 'yeni');
+    await makeCity(yeni, 9);
+    const app1 = await service.apply({ worldId, playerId: yeni, allianceId: aid });
+    await service.apply({ worldId, playerId: yeni, allianceId: b.id });
+    expect(await applicationsOf(disaridan)).toBe(1);
+
+    await service.decide({ worldId, playerId: lider, inviteId: app1, accept: true });
+
+    expect(await applicationsOf(disaridan)).toBe(0);
+  });
+
+  /**
+   * ⚠️ Olay `message:removed` — `message:written` DEĞİL. İkincisi `notify.catalog`ta bildirim
+   * üretiyor ve silinen bir satır için oyuncuya "kutunda Kabul/Red ile bekliyor" push'u giderdi.
+   */
+  it('⭐ silme outbox olayı message:removed olarak yazılır (message:written değil)', async () => {
+    const aid = await foundedAlliance();
+    const appId = await service.apply({ worldId, playerId: disaridan, allianceId: aid });
+    await h.db.execute(sql`DELETE FROM outbox WHERE world_id = ${worldId}`);
+
+    await service.decide({ worldId, playerId: lider, inviteId: appId, accept: true });
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT topic, payload FROM outbox WHERE world_id = ${worldId} AND topic = 'message:removed'
+    `);
+    const alicilar = rows.map((r) => Number((r['payload'] as Record<string, unknown>)['playerId']));
+    expect(new Set(alicilar)).toEqual(new Set([lider, konsey]));
+  });
+});
+
 describe('yetki matrisi: at / konsey / devir', () => {
   it('⭐ Konsey yalnız ASKERİ atabilir; Lider konseyi de atabilir; kimse lideri atamaz', async () => {
     await foundedAlliance();
@@ -607,6 +709,25 @@ describe('⭐ herkese açık ittifak künyesi', () => {
     const sonra = await ctl().profile(asPlayer(disaridan), String(id));
     expect(sonra['alreadyApplied']).toBe(true);
     expect(sonra['canApply'], 'ikinci kez başvurulamaz').toBe(false);
+  });
+
+  /**
+   * ⭐ §verify — doğrulanmamış hesap düğmeyi HİÇ GÖRMEZ ve sebebini tıklamadan okur
+   * (kullanıcı, 2026-08-09). Kapının kendisi `apply()`te; buradaki yalnız görünürlük.
+   *
+   * ⚠️ Bu dosyadaki oyuncular `createPlayer` ile doğrulanmış doğuyor, o yüzden doğrulama
+   * bu testte açıkça DÜŞÜRÜLÜYOR — aksi hâlde test hiçbir şey ölçmezdi.
+   */
+  it('⭐ doğrulanmamış hesapta BAŞVUR kapalı ve sebebi yazıyor', async () => {
+    const id = await foundedAlliance();
+    await h.db.execute(sql`
+      UPDATE accounts SET email_verified_at = NULL
+       WHERE id = (SELECT account_id FROM players WHERE id = ${disaridan})
+    `);
+
+    const p = await ctl().profile(asPlayer(disaridan), String(id));
+    expect(p['canApply'], 'doğrulanmamış hesap başvuramaz').toBe(false);
+    expect(String(p['applyBlockedReason'])).toMatch(/doğrula/i);
   });
 
   it('kendi ittifağında BAŞVUR yok, «senin ittifağın» işareti var', async () => {

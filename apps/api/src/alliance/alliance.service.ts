@@ -102,7 +102,7 @@ export function assertCanModerate(
 }
 
 export class AllianceService {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: Db) { }
 
   /* ── Okumalar ─────────────────────────────────────────────────────────────── */
 
@@ -449,6 +449,27 @@ export class AllianceService {
     return this.db.transaction(async (tx) => {
       const me = await this.lockPlayer(tx as never, o.playerId);
       if (me.allianceId != null) throw new AllianceError('already_member', 'Zaten bir ittifaktasın.');
+      /**
+       * ⭐ §verify — DOĞRULAMA KAPISI BAŞVURU ANINDA (kullanıcı, 2026-08-09).
+       *
+       * ⚠️ Eskiden yalnız `decide()`te bakılıyordu ve sonuç şuydu: doğrulanmamış oyuncu
+       * başvuruyu **gönderebiliyor**, başvuru lider ve tüm konsey üyelerinin kutusuna
+       * düşüyor, lider «Kabul»e bastığında hata **LİDERE** çıkıyordu. Yani kısıtı, onu
+       * kaldıramayacak olan kişi okuyordu; başvuran ise neden alınmadığını hiç öğrenmiyordu.
+       * Kapı artık burada: başvuru hiç oluşmuyor ve uyarıyı **başvuran** görüyor.
+       *
+       * ⚠️ `decide()`teki kontrol KALDIRILMADI, ikisi birden duruyor. Sebep bu dosyaya özgü
+       * değil: doğrulama **sonradan kaybedilebiliyor** — e-posta adresini değiştirmek
+       * `email_verified_at`i NULL'a çekiyor (`email-token.service.ts`). Başvuru ile karar
+       * arasında geçen sürede tam olarak bu olabilir.
+       *
+       * ⚠️ `invite()`e AYNI kapı KONULMADI ve bu bilinçli: orada doğrulanmamış olan taraf
+       * daveti ALAN kişi olurdu, kapı da onun hesap durumunu **davet edene** söylerdi.
+       * Doğrulanmamış hesaplar büyük ölçüde taze/çoklu hesaplar olduğu için bu, "kim
+       * doğrulamamış" diye tarama yapmaya yarayan bir sızıntı olurdu. Davet yolunda uyarı
+       * zaten doğru kişiye gidiyor: davet edilen «Kabul»e bastığında metni O okuyor.
+       */
+      await this.assertVerifiedToJoin(tx as never, o.playerId);
       const [a] = await tx.execute<Record<string, unknown>>(sql`
         SELECT id, name FROM alliances WHERE id = ${o.allianceId} AND world_id = ${o.worldId}
       `);
@@ -530,6 +551,8 @@ export class AllianceService {
           UPDATE alliance_invites SET status = 'rejected', decided_at = now(), decided_by = ${o.playerId}
            WHERE id = ${o.inviteId}
         `);
+        // ⭐ İstek sonuçlandı → kutulardaki düğmeli satır ARTIK ÖLÜ; siliniyor (bkz. yardımcı).
+        await this.dropInviteMessages(tx as never, o.worldId, [o.inviteId]);
         // Başvurana sonucu söyle (doküman: "kabul edilmez ise yine cevap olarak ret mesajı gelecektir").
         if (kind === 'application') {
           await this.notice(tx as never, {
@@ -573,22 +596,37 @@ export class AllianceService {
           UPDATE alliance_invites SET status = 'canceled', decided_at = now(), decided_by = ${o.playerId}
            WHERE id = ${o.inviteId}
         `);
+        /**
+         * ⚠️ Bu dal **hata fırlatıyor ama transaction'ı geri almıyor**: `AllianceError` çağırana
+         * gidiyor, `UPDATE … 'canceled'` ise kalıcı — yani mesajın da gitmesi gerekiyor, aksi
+         * hâlde ölü satırın en can sıkıcı türü kalırdı (basınca hep aynı hatayı veren düğme).
+         */
+        await this.dropInviteMessages(tx as never, o.worldId, [o.inviteId]);
         throw new AllianceError('target_has_alliance', 'Oyuncu bu arada başka bir ittifağa katılmış.');
       }
       await tx.execute(sql`
         UPDATE alliance_invites SET status = 'accepted', decided_at = now(), decided_by = ${o.playerId}
          WHERE id = ${o.inviteId}
       `);
-      // Diğer tüm bekleyen davet/başvuruları düşür — oyuncu artık bir ittifakta.
-      await tx.execute(sql`
+      /**
+       * Diğer tüm bekleyen davet/başvuruları düşür — oyuncu artık bir ittifakta.
+       *
+       * ⭐ `RETURNING id` 2026-08-09'da eklendi: iptal edilen her isteğin mesajı da siliniyor.
+       * ⚠️ Bunlar **başka ittifakların** kutularındaki satırlar: oyuncu üç ittifağa başvurmuşsa
+       * diğer ikisinin yönetimi, artık sonuçlanamayacak bir başvuruya bakmaya devam ediyordu.
+       * Sildiğimiz satır sayısı görünmez ama semptom aynı: «Bu istek zaten sonuçlanmış.»
+       */
+      const canceled = await tx.execute<Record<string, unknown>>(sql`
         UPDATE alliance_invites SET status = 'canceled', decided_at = now()
-         WHERE player_id = ${subjectId} AND status = 'pending'
+         WHERE player_id = ${subjectId} AND status = 'pending' RETURNING id
       `);
+      await this.dropInviteMessages(tx as never, o.worldId,
+        [o.inviteId, ...canceled.map((r) => Number(r['id']))]);
       if (kind === 'application') {
         await this.notice(tx as never, {
           worldId: o.worldId, playerId: subjectId,
           subject: 'İttifak başvurun kabul edildi',
-          text: `${allianceName} ittifağına katıldın. Rütben Asker olarak başlıyor.`,
+          text: `${allianceName} ittifağına katıldın.`,
           extra: { allianceId, reason: 'application_accepted' },
         });
       } else {
@@ -735,6 +773,58 @@ export class AllianceService {
   }
 
   /** Posta satırı + rozet haberi (mission bağlamı dışındaki `writeMessage` ikizi). */
+  /**
+   * ⭐ SONUÇLANMIŞ DAVET/BAŞVURU MESAJLARINI SİL (kullanıcı, 2026-08-09).
+   *
+   * *"İttifak liderinin sonuçlandırdığı başvuru raporları raporlardan hepten silinsin.
+   * Mesajlarda kalmaya devam ediyor, yeniden açıp Kabul veya Red tıklandığında «Bu istek zaten
+   * sonuçlanmış.» uyarısı geliyor."*
+   *
+   * Başvuru mesajı lider VE her konsey üyesine ayrı satır olarak yazılıyor; karar tek kişiden
+   * geliyor. Karardan sonra geriye kalan satırların hepsi, üstündeki iki düğme yalnız hata
+   * üreten ölü satırlar oluyordu.
+   *
+   * ─ Kararlar ────────────────────────────────────────────────────────────────────────────
+   * ⚠️ **Silme, "sonuçlandı" diye güncelleme DEĞİL** — kullanıcı şartı ("hepten silinsin").
+   * Sonucu zaten ayrı bir bildirim satırı anlatıyor (`notice`), yani bilgi kaybolmuyor;
+   * güncelleme yapılsaydı kutuda aynı olayı anlatan İKİ satır kalırdı.
+   *
+   * ⚠️ **Alıcı listesi burada YENİDEN KURULMUYOR.** `DELETE … RETURNING player_id` kimin
+   * kutusundan satır düştüğünü bize kendisi söylüyor. Alıcıları ikinci kez hesaplasaydım
+   * (lider + konsey) o kural iki yere yazılmış olurdu ve biri değişince temizlik **sessizce**
+   * eksik kalırdı — bu projede tam olarak böyle üç hata çıktı.
+   *
+   * ⚠️ Olay `message:removed`, `message:written` DEĞİL. İkisi de istemcide `messages:changed`e
+   * çevriliyor ama `message:written` ayrıca **bildirim/push üretiyor** (`notify.catalog.ts`,
+   * `REPORT_TEXT`te iki `kind` de kayıtlı): silinen mesaj için "yeni mesajın var" bildirimi
+   * gönderirdi. Ayrı konu, `notify.catalog`un `default` dalına düşüp sessiz kalıyor.
+   *
+   * ⚠️ `(body->>'inviteId')::bigint` ifadesi `0045` göçündeki kısmi indeksle BİREBİR aynı
+   * yazılmalı; değişirse indeks sessizce kullanılmaz olur (sonuç doğru kalır, tarama uzar).
+   */
+  private async dropInviteMessages(tx: Tx, worldId: number, inviteIds: number[]): Promise<void> {
+    /* ⚠️ `sql.raw` kullanıldığı için süzgeç güvenlik sınırı: yalnız pozitif TAM SAYI geçer
+       (`Number.isFinite` yetmezdi — 1.5 süzgeci geçip `::bigint[]` dökümünde patlardı). */
+    const ids = [...new Set(inviteIds.filter((n) => Number.isInteger(n) && n > 0))];
+    if (ids.length === 0) return;
+
+    const gone = await tx.execute<Record<string, unknown>>(sql`
+      DELETE FROM messages
+       WHERE world_id = ${worldId}
+         AND kind IN ('alliance_invite', 'alliance_application')
+         AND (body ->> 'inviteId')::bigint = ANY(${sql.raw(`ARRAY[${ids.join(',')}]::bigint[]`)})
+      RETURNING player_id
+    `);
+
+    // Aynı oyuncuya birden fazla satır düşmüş olabilir; olay oyuncu başına bir kez gider.
+    for (const playerId of new Set(gone.map((r) => Number(r['player_id'])))) {
+      await tx.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${worldId}, 'message:removed', ${JSON.stringify({ playerId })}::jsonb)
+      `);
+    }
+  }
+
   private async writeMessage(tx: Tx, o: {
     worldId: number; playerId: number; kind: string; subject: string; body: Record<string, unknown>;
   }): Promise<void> {

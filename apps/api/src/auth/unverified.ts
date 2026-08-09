@@ -105,14 +105,31 @@ export async function warriorTotal(
  * kursaydı oyuncu aynı duvara her çarptığında başka bir şey okurdu.
  */
 
-const SUFFIX = ' E-posta adresini doğrulayınca bu kısıt kalkar.';
+/**
+ * ⚠️ **Kuyruk cümlesi 2026-08-09'da değişti** (kullanıcı: *"metin daha sade ve bilgilendirici
+ * olsun"*). Eskisi *"E-posta adresini doğrulayınca bu kısıt kalkar."* idi: doğru ama oyuncuyu
+ * boşlukta bırakıyordu — "doğrulama e-postası gelmedi, ne yapacağım?" sorusunun cevabı yoktu.
+ * Yenisi ATILACAK ADIMI söylüyor ve kısıtın kalkacağını da koruyor.
+ *
+ * ⚠️ Ek tek yerde ve **hepsini birden** değiştirdi (11 metin): oyuncu aynı duvara farklı
+ * ekranlarda çarpıyor ve her seferinde başka bir cümle okumamalı. Alternatif —ittifaka özel
+ * bir kuyruk— tam da bu dosyanın engellemek için var olduğu ayrışmayı başlatırdı.
+ */
+const SUFFIX = ' Doğrulayınca kısıt kalkar; bağlantıyı Seçenekler sayfasından yeniden gönderebilirsin.';
 
 export const UNVERIFIED_MESSAGE = {
   attack: 'Doğrulanmamış hesapla saldırı yapılamaz.' + SUFFIX,
   transport: 'Doğrulanmamış hesapla nakliye yapılamaz.' + SUFFIX,
   foundCity: 'Doğrulanmamış hesapla yeni şehir kurulamaz.' + SUFFIX,
   rename: 'Doğrulanmamış hesapla şehir adı değiştirilemez.' + SUFFIX,
-  alliance: 'Doğrulanmamış hesapla ittifak kurulamaz ve ittifağa katılınamaz.' + SUFFIX,
+  /**
+   * ⚠️ Edilgen *"Doğrulanmamış hesapla ittifak kurulamaz ve ittifağa katılınamaz"* cümlesi
+   * 2026-08-09'da bırakıldı (kullanıcı isteği). Yenisi ETKEN ve tek bir şey söylüyor:
+   * ne gerekiyor. Diğer metinlerin edilgen kalıbı korundu — orada eylem tek ("saldırı
+   * yapılamaz") ve kısaltmak bir şey kazandırmıyor; burada eylem üç taneydi.
+   */
+  alliance: 'İttifak kurmak ve ittifağa katılmak için e-posta adresini doğrulaman gerekiyor.'
+    + SUFFIX,
   chat: 'Doğrulanmamış hesapla mesaj yazılamaz. Gelen mesajları okuyabilirsin.' + SUFFIX,
   defenseUnit: 'Doğrulanmamış hesapla savunma ünitesi üretilemez.' + SUFFIX,
   building: (max: number): string =>

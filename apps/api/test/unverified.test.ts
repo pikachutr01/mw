@@ -345,14 +345,53 @@ describe('sosyal kısıtlar', () => {
   });
 
   /**
-   * ⚠️ Kapı `applyMembership`te: "oyuncu X ittifak Y'ye girdi" olayının TEK yeri orası ve
-   * üç ayrı yoldan geliniyor. Başvuruyu ONAYLAYAN doğrulanmış olsa bile KATILAN kısıtlıysa
-   * katılım gerçekleşmemeli — kontrol onaylayanda olsaydı bu boşluk açık kalırdı.
+   * ⭐⭐ **BAŞVURU GÖNDERİLİRKEN DURUYOR** (kullanıcı, 2026-08-09).
+   *
+   * ⚠️ Bu testin ESKİ hâli tam tersini kilitliyordu: `apply()` başarılı sayılıyor, hata ancak
+   * `decide()`te çıkıyordu. Kullanıcının bildirdiği şikâyet buydu — kısıtı, onu kaldıramayacak
+   * olan LİDER okuyordu; başvuran ise başvurusunun neden sonuçlanmadığını hiç öğrenmiyordu.
    */
-  it('⭐ başvuru doğrulanmış bir konsey üyesince onaylansa da katılım olmuyor', async () => {
+  it('⭐ ittifağa başvuru GÖNDERME anında reddediliyor', async () => {
     await setBuilding(otherCity, 'castle', 20);
     const a = await alliances.found({ worldId, playerId: other, name: 'Kartal' });
+
+    await expect(alliances.apply({ worldId, playerId: me, allianceId: a.id }))
+      .rejects.toMatchObject({ code: 'email_unverified' });
+
+    // ⚠️ Yalnız hata yetmez: başvuru satırı da mesaj da hiç OLUŞMAMALI, yoksa liderin
+    // kutusunda sonuçlanamayacak bir istek belirirdi (şikâyetin kendisi).
+    const [inv] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS n FROM alliance_invites WHERE player_id = ${me}
+    `);
+    expect(inv!['n']).toBe(0);
+    const [msg] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS n FROM messages
+       WHERE player_id = ${other} AND kind = 'alliance_application'
+    `);
+    expect(msg!['n']).toBe(0);
+  });
+
+  /**
+   * ⭐ KABUL ANINDAKİ KAPI DA DURUYOR — gönderim kapısı onu gereksiz kılmıyor.
+   *
+   * ⚠️ Doğrulama **sonradan kaybedilebiliyor**: e-posta adresini değiştirmek
+   * `email_verified_at`i NULL'a çekiyor. Aşağıdaki dizilim tam olarak o: doğrulanmışken
+   * başvur, sonra doğrulamayı kaybet, sonra lider kabul etsin. Kontrol yalnız `apply()`te
+   * olsaydı bu yoldan doğrulanmamış bir hesap ittifağa GİRERDİ.
+   *
+   * ⚠️ Kapı `applyMembership`te değil `decide()`te: `decide` yarış koruması eklenirken kendi
+   * `UPDATE players SET alliance_id`ini yazdı ve `applyMembership`ten geçmiyor.
+   */
+  it('⭐ başvurudan SONRA doğrulama kaybedilirse kabul de katılım üretmiyor', async () => {
+    await setBuilding(otherCity, 'castle', 20);
+    const a = await alliances.found({ worldId, playerId: other, name: 'Kartal' });
+
+    await verifyEmail(h, me);
     const inviteId = await alliances.apply({ worldId, playerId: me, allianceId: a.id });
+    await h.db.execute(sql`
+      UPDATE accounts SET email_verified_at = NULL
+       WHERE id = (SELECT account_id FROM players WHERE id = ${me})
+    `);
 
     await expect(alliances.decide({ worldId, playerId: other, inviteId, accept: true }))
       .rejects.toMatchObject({ code: 'email_unverified' });
