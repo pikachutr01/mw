@@ -181,8 +181,10 @@ describe('yapı yükseltme', () => {
 
   it('⭐ KALE BÜTÇESİ aşılamaz: Σ(bina seviyeleri) ≤ Kale × 10', async () => {
     await giveResources(1e12, 1e12);
-    // Kale 1 → bütçe 10. Çiftlik 8 + Maden 1 + Baraka 1 = 10 → dolu.
-    await setLevel('farm', 8);
+    /* Kale 1 → bütçe 10. ⚠️ Baraka 2026-08-09'da 0 seviyeden başlıyor, yani başlangıç toplamı
+       bir eksildi (Çiftlik + Maden = 2). Bütçeyi doldurmak için Çiftlik 8 yerine 9 gerekiyor:
+       Çiftlik 9 + Maden 1 = 10. */
+    await setLevel('farm', 9);
     const at = await clock.gameNow(worldId);
 
     const err = await queues.enqueueBuilding({ cityId, playerId, type: 'mine', at })
@@ -203,6 +205,14 @@ describe('yapı yükseltme', () => {
 });
 
 describe('savaşçı üretimi', () => {
+  /**
+   * ⚠️ **Baraka AÇIKÇA kuruluyor** (2026-08-09): şehirler artık Baraka 0 ile doğuyor
+   * (kullanıcı kararı, `STARTING_BUILDINGS`). Öncesinde bedava sv1 vardı ve bu blok ona
+   * sessizce güveniyordu. Süre formülü de Baraka seviyesine bölüyor, yani sayı testin
+   * parçası — kurulumu görünür kılmak beklenen sürelerin neden o olduğunu da açıklıyor.
+   */
+  beforeEach(async () => { await setLevel('barracks', 1); });
+
   it('ön-şart sağlanınca kuyruk açılır ve bitişte barakaya eklenir', async () => {
     await setTech('blacksmithing', 1);
     const at = await clock.gameNow(worldId);
@@ -496,6 +506,8 @@ describe('Baraka ↔ asker, Akademi ↔ teknik kilidi', () => {
   beforeEach(async () => {
     await giveResources(1e12, 1e12);
     await setTech('blacksmithing', 1);   // Cüce ön-şartı
+    // ⚠️ Baraka 2026-08-09'dan beri 0 başlıyor; Cüce ön-şartı Baraka 1 istiyor.
+    await setLevel('barracks', 1);
   });
 
   it('Baraka yükseltilirken asker üretilemez', async () => {
@@ -569,6 +581,13 @@ describe('Baraka ↔ asker, Akademi ↔ teknik kilidi', () => {
       worldId, playerId, name: 'ikinci', k: 5, d: 5, s: 5, isCapital: false, at,
     });
     await h.db.execute(sql`UPDATE cities SET gold = 1e9, food = 1e9 WHERE id = ${city2}`);
+    /* ⚠️ İkinci şehre Baraka AÇIKÇA kuruluyor: 2026-08-09'dan beri yeni şehirler de Baraka 0
+       ile doğuyor, yani Cüce ön-şartı (Baraka 1) kendiliğinden sağlanmıyor. Testin ölçtüğü şey
+       bu değil — kilidin şehir başına olduğu. */
+    await h.db.execute(sql`
+      INSERT INTO buildings (city_id, type, level) VALUES (${city2}, 'barracks', 1)
+      ON CONFLICT (city_id, type) DO UPDATE SET level = 1
+    `);
 
     // İkinci şehrin barakası boşta → üretim serbest.
     await expect(queues.enqueueUnits({ cityId: city2, playerId, type: 'dwarf', count: 5, at }))
@@ -642,6 +661,9 @@ describe('sahiplik ve idempotency', () => {
 });
 
 describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur")', () => {
+  /* ⚠️ Savaşçı iptali testleri asker üretiyor; Baraka 2026-08-09'dan beri 0 başlıyor. */
+  beforeEach(async () => { await setLevel('barracks', 1); });
+
   it('⭐ YAPI iptali SÜREYE göre iade eder (dokümanın kuralı)', async () => {
     const at = await clock.gameNow(worldId);
     const cost = buildingCost('farm', 2);

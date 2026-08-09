@@ -142,11 +142,20 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
     INSERT INTO worlds (id, name, state, clock_offset_ms)
     VALUES (${worldId}, ${'test-' + worldId}, 'running', 0)
     ON CONFLICT (id) DO UPDATE SET state = 'running', clock_offset_ms = 0, paused_at = NULL,
-      deleted_player_seq = 0
+      deleted_player_seq = 0,
+      speed_multiplier = 1, resource_multiplier = 1,
+      training_multiplier = 1, construction_multiplier = 1
   `);
   /* ⚠️ Yukarıdaki SIFIRLAMA şart: dünya kimlikleri her koşuda 100'den başladığı için satır
    * yeniden kullanılıyor ve sayaç önceki koşudan devrederse hesap silme testi ikinci
    * koşuda "hükümdar1" yerine "hükümdar2" görür.
+   *
+   * ⚠️⚠️ **ÇARPANLAR 2026-08-09'da eklendi — aynı tuzağın İKİNCİ kurbanı.** `queues.test.ts`
+   * bir testte `training_multiplier = 3` yazıyor ve satır öyle kalıyordu; sonraki koşuda aynı
+   * kimliği alan BAŞKA bir test üretim sürelerini 3'e bölünmüş buluyordu. Hata testin kendi
+   * dosyasında değil, sırf **test sırası kaydığı için** ortaya çıkıyor — yani sinsi ve
+   * tekrarlanabilirliği düşük. Sayaç için yazılan bu sıfırlama listesi, satırın yeniden
+   * kullanıldığı HER kolonu kapsamak zorunda.
    * ⚠️ Not: bu yorum SQL'in İÇİNDE değil — orada ters tırnak kullanmak şablon dizesini
    * kapatıyor ve dosya derlenmiyor (tam bu şekilde yaşandı). */
   await h.db.execute(sql`DELETE FROM missions WHERE world_id = ${worldId}`);

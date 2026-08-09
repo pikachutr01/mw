@@ -64,6 +64,22 @@ beforeEach(async () => {
   cityId = Number(rows[0]!.id);
 });
 
+/**
+ * Cüce üretebilmek için Baraka 1 (ön-şart). Şehirler 2026-08-09'dan beri Baraka **0** ile
+ * doğuyor (kullanıcı kararı, `STARTING_BUILDINGS`).
+ *
+ * ⚠️ **Genel `beforeEach`e KONULAMAZ**, denendi ve kırdı: Baraka artık 0'dan başladığı için
+ * seviye 1 *ödenmiş* bir seviye sayılıyor ve `recomputeScoreBaseFromHoldings` ona 200 puan
+ * yazıyor. Bu da «hiç oynamamış oyuncu 0 kalır» testini düşürüyordu. Yani yardımcı, YALNIZ
+ * asker üreten testlerde çağrılmalı.
+ */
+async function giveBarracks(): Promise<void> {
+  await h.db.execute(sql`
+    INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, 'barracks', 1)
+    ON CONFLICT (city_id, type) DO UPDATE SET level = 1
+  `);
+}
+
 async function scoreOf(id = playerId): Promise<{ score: number; base: number }> {
   const rows = await h.db.execute<Record<string, unknown>>(sql`
     SELECT score, score_base FROM players WHERE id = ${id}
@@ -106,6 +122,7 @@ describe('puan tabanı', () => {
   });
 
   it('iptal iadesi puanı geri alır — sipariş/iptal döngüsü bedava puan basamaz', async () => {
+    await giveBarracks();
     await giveResources(1_000_000, 1_000_000);
     // Cüce'nin ön-şartı Demircilik 1 — teknik seviyesi puana burada karışmasın diye
     // doğrudan yazılıyor (kuyruktan araştırılsaydı harcaması da tabana eklenirdi).
@@ -407,6 +424,7 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
   });
 
   it('K3 · asker üretimi puan yazar (adet kadar)', async () => {
+    await giveBarracks();
     await giveResources(1e9, 1e9);
     await h.db.execute(sql`
       INSERT INTO techs (player_id, type, level) VALUES (${playerId}, 'blacksmithing', 1)
@@ -457,6 +475,7 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
 
   /** ⭐ Kullanıcı: *"savaşlarda kaybedilen askerler için aynı oranda puan kaybedilir."* */
   it('K7 · kayıp, üretimde YAZILAN puanın aynısını geri alır', async () => {
+    await giveBarracks();
     await giveResources(1e9, 1e9);
     await h.db.execute(sql`
       INSERT INTO techs (player_id, type, level) VALUES (${playerId}, 'blacksmithing', 1)

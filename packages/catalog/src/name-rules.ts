@@ -82,14 +82,20 @@ export const clampName = (raw: string): string =>
   normalizeName(raw).slice(0, NAME_MAX).trim();
 
 /**
- * ⭐ KOLONİ ADI — «başkentAdı sıra» (kullanıcı, 2026-08-03).
+ * ⭐ KOLONİ ADI — «kullanıcıAdı sıra» (kullanıcı, 2026-08-09).
  *
- * *"Başkentlerinin adının yanına bu şehrin kaçıncı şehri olduğunu yazarak yeni şehri
- * adlandıralım. Örneğin başkentin adı çığlıktepe olunca yeni kuracağı şehir de ikinci
- * şehriyse çığlıktepe 2 şeklinde olsun. Eğer yanına bir boşluk ve sayı yazınca 15 karakter
- * sınırı aşılıyorsa şehrin son 2 karakterini silip sonuna boşluk ile şehir adı yazılsın."*
+ * *"Bir kullanıcı yeni bir şehir oluşturduğunda bu şehrin adı kullanıcı adı + şehrin kaçıncı
+ * şehir olduğu olacak. Şehrin kurulduğu şehrin adı değil, kullanıcı adı. Kullanıcı adının
+ * sonuna şehir sayısı sığmazsa da sondan kırpılır."*
  *
- * Önceki hâl `Koloni 2` idi — oyuncunun kendi kimliğiyle hiçbir bağı yoktu ve iki farklı
+ * ⚠️ **Dayanak 2026-08-09'da BAŞKENT ADINDAN kullanıcı adına çevrildi.** Öncesi «başkentAdı
+ * sıra» idi (2026-08-03) ve tek bir kusuru vardı: başkent **yeniden adlandırılabiliyor**.
+ * Oyuncu başkentini «Çığlıktepe» yapınca sonraki koloniler «Çığlıktepe 2» oluyor, sonra
+ * başkenti «Kale» yapınca «Kale 3» oluyordu — aynı oyuncunun şehirleri birbirini tutmuyordu.
+ * Kullanıcı adı DEĞİŞTİRİLEMEZ (`USERNAME_*` kuralı), yani üretilen adlar kalıcı olarak
+ * tutarlı: `abdullah` · `abdullah 2` · `abdullah 3`…
+ *
+ * Daha da öncesi `Koloni 2` idi — oyuncunun kimliğiyle hiçbir bağı yoktu ve iki farklı
  * oyuncunun şehirleri dünya listesinde birbirinin aynı görünüyordu.
  *
  * ⚠️ **Kırpma SONDAN ve tek seferde yetmeyebilir.** Kullanıcı "son 2 karakteri sil" diyor;
@@ -101,9 +107,9 @@ export const clampName = (raw: string): string =>
  * ⚠️ Kırpma sonrası oluşabilecek sondaki boşluk temizleniyor: "Çığlık Tepe" → "Çığlık Te"
  * değil "Çığlık T" gibi bir kenar durumda ad boşlukla bitmemeli.
  */
-export function colonyName(capitalName: string, index: number): string {
+export function colonyName(ownerName: string, index: number): string {
   const suffix = ` ${index}`;
-  const base = normalizeName(capitalName);
+  const base = normalizeName(ownerName);
   const room = NAME_MAX - suffix.length;
   const head = base.length <= room ? base : base.slice(0, room).trimEnd();
   return `${head}${suffix}`;

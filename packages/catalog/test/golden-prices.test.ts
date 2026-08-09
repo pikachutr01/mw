@@ -23,8 +23,14 @@ type Row = readonly [number, number, number, number];
 const BUILDING_GOLDEN: Record<string, readonly Row[]> = {
   castle: [[1, 111, 83, 108], [2, 200, 150, 173], [5, 1166, 875, 708],
     [10, 22040, 16530, 7431], [20, 7869282, 5901961, 818914]],
-  barracks: [[1, 67, 44, 69], [2, 120, 80, 110], [5, 700, 467, 453],
-    [10, 13224, 8816, 4749], [20, 4721569, 3147713, 523369]],
+  /**
+   * ⚠️ **Baraka satırı 2026-08-09'da kaydı** — tesisat değişmedi, BAŞLANGIÇ SEVİYESİ değişti.
+   * Kullanıcı barakanın 0'dan başlamasını istedi (`STARTING_BUILDINGS`), böylece taban fiyat
+   * sv2'den sv1'e oturdu ve tüm eğri 1,8 katına çıktı (sv1: 67→120 · sv2: 120→216).
+   * Eski satır bu dosyanın kilidini haklı olarak kırdı; sayılar motorla yeniden ölçülüp yazıldı.
+   */
+  barracks: [[1, 120, 80, 110], [2, 216, 144, 177], [5, 1260, 840, 724],
+    [10, 23803, 15869, 7601], [20, 8498824, 5665883, 837580]],
   farm: [[1, 1, 2, 4], [2, 3, 4, 8], [5, 18, 24, 32],
     [10, 147, 196, 170], [20, 5087, 6782, 2895]],
   mine: [[1, 2, 1, 4], [2, 4, 3, 8], [5, 24, 18, 32],

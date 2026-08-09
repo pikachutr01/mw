@@ -266,17 +266,23 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
    * Maden altın üretir → 4 altın / 3 yemek · Çiftlik yemek üretir → 3 altın / 4 yemek.
    */
   /**
-   * ⭐ Taban = oyuncunun ÖDEDİĞİ İLK yükseltme. Kale/Baraka/Çiftlik/Maden seviye 1 başladığı
-   * için onlarda bu **1→2**'dir. Bu test o yorumu kilitler: bozulursa ekranda görünen ilk
-   * fiyat kullanıcının verdiği sayı olmaktan çıkar.
+   * ⭐ Taban = oyuncunun ÖDEDİĞİ İLK yükseltme. Kale/Çiftlik/Maden seviye 1 başladığı için
+   * onlarda bu **1→2**'dir. Bu test o yorumu kilitler: bozulursa ekranda görünen ilk fiyat
+   * kullanıcının verdiği sayı olmaktan çıkar.
+   *
+   * ⚠️ **Baraka 2026-08-09'da SEVİYE 0'a indi** (kullanıcı: "Baraka da 0 başlar"), yani artık
+   * ilk ödenen seviyesi 1. Taban ona kaydı: sv1 = 120/80. Bu, kuralın ihlali değil AYNEN
+   * uygulanması — Baraka artık "seviye 0'dan başlayan yapılar" grubunda.
    */
-  it('taban fiyat = ilk ÖDENEN yükseltme (sv1→2)', () => {
+  it('taban fiyat = ilk ÖDENEN yükseltme', () => {
     expect(buildingCost('farm', 2)).toEqual({ gold: 3, food: 4 });   // yemek ağırlıklı
     expect(buildingCost('mine', 2)).toEqual({ gold: 4, food: 3 });   // altın ağırlıklı
     expect(buildingCost('castle', 2)).toEqual({ gold: 200, food: 150 });
-    expect(buildingCost('barracks', 2)).toEqual({ gold: 120, food: 80 });
     // Seviye 0'dan başlayan yapılarda taban seviye 1'in fiyatıdır (ölçekleme yok).
     expect(buildingCost('academy', 1)).toEqual({ gold: 250, food: 180 });
+    expect(buildingCost('barracks', 1)).toEqual({ gold: 120, food: 80 });
+    // ⚠️ Bedelini burada ödüyor: sv2 artık 120/80 değil 1,8 katı.
+    expect(buildingCost('barracks', 2)).toEqual({ gold: 216, food: 144 });
     // Eğri: seviye × 1,33^(seviye−1), sv2'ye göre ölçekli.
     expect(buildingCost('farm', 4)).toEqual({ gold: 11, food: 14 });
     expect(buildingCost('mine', 4)).toEqual({ gold: 14, food: 11 });
@@ -473,18 +479,24 @@ describe('yapı ve teknik süresi', () => {
 });
 
 /**
- * ⭐ KOLONİ ADI — «başkentAdı sıra» (kullanıcı, 2026-08-03).
+ * ⭐ KOLONİ ADI — «kullanıcıAdı sıra» (kullanıcı, 2026-08-09).
  *
- * Önceki hâl `Koloni 2` idi: oyuncunun kimliğiyle hiçbir bağı yoktu ve iki farklı oyuncunun
+ * ⚠️ Dayanak 2026-08-09'da BAŞKENT ADINDAN kullanıcı adına çevrildi: başkent yeniden
+ * adlandırılabildiği için üretilen adlar zamanla birbirini tutmuyordu (başkent «Çığlıktepe»
+ * iken «Çığlıktepe 2», sonra başkent «Kale» olunca «Kale 3»). Kullanıcı adı değiştirilemez.
+ * Fonksiyonun kendisi değişmedi — yalnız ÇAĞIRANIN ne geçirdiği değişti
+ * (`mission.handlers.ts` → `nextColonyName`), o yüzden buradaki kırpma testleri aynen geçerli.
+ *
+ * Daha öncesi `Koloni 2` idi: oyuncunun kimliğiyle hiçbir bağı yoktu ve iki farklı oyuncunun
  * şehirleri dünya listesinde birbirinin aynı görünüyordu.
  */
 describe('koloni adı', () => {
-  it('başkent adının yanına sıra numarası gelir', () => {
-    expect(colonyName('Çığlıktepe', 2)).toBe('Çığlıktepe 2');
+  it('kullanıcı adının yanına sıra numarası gelir', () => {
+    expect(colonyName('abdullah', 2)).toBe('abdullah 2');
     expect(colonyName('Bal', 3)).toBe('Bal 3');
   });
 
-  it('⭐ 15 karakteri aşarsa başkent adı KIRPILIR (kullanıcının kuralı)', () => {
+  it('⭐ 15 karakteri aşarsa kullanıcı adı SONDAN kırpılır (kullanıcının kuralı)', () => {
     // 15 karakterlik ad + " 2" = 17 → sondan 2 karakter kırpılır.
     const uzun = 'Aaaaabbbbbccccc';            // tam 15
     expect(uzun.length).toBe(NAME_MAX);

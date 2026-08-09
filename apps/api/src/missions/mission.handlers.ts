@@ -570,24 +570,31 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
  * "Koloni 100"e kadar (10 karakter) sığar; şehir üst sınırı bunun çok altında.
  */
 /**
- * ⭐ Yeni şehrin adı: **başkent adı + sıra** (kullanıcı, 2026-08-03) — «Çığlıktepe 2».
- * Önceki hâl `Koloni 2` idi ve oyuncunun kimliğiyle hiçbir bağı yoktu.
+ * ⭐ Yeni şehrin adı: **kullanıcı adı + sıra** (kullanıcı, 2026-08-09) — «abdullah 2».
  *
- * ⚠️ Sıra = mevcut şehir sayısı + 1, yani BAŞKENT 1 sayılıyor: ilk koloni «… 2» oluyor
- * (kullanıcının örneği birebir bu).
- * ⚠️ Başkent yoksa (teorik: silinmiş hesap artığı) eski `Koloni N` desenine düşülüyor —
- * ad üretmek zorundayız, atacak muhatap yok.
+ * ⚠️ **Dayanak BAŞKENT ADI değil, KULLANICI ADI.** Kullanıcının cümlesi birebir: *"Şehrin
+ * kurulduğu şehrin adı değil, kullanıcı adı."* 2026-08-03 ile 08-09 arasında başkentin adı
+ * kullanılıyordu ve başkent yeniden adlandırılabildiği için üretilen adlar zamanla birbirini
+ * tutmuyordu; kullanıcı adı ise değiştirilemez.
+ *
+ * ⚠️ Sıra = mevcut şehir sayısı + 1, yani BAŞKENT 1 sayılıyor: ilk koloni «… 2» oluyor.
+ * Başkentin kendi adı sayısızdır (kayıtta doğrudan kullanıcı adı veriliyor), yani dizi
+ * «abdullah · abdullah 2 · abdullah 3…» şeklinde okunuyor.
+ *
+ * ⚠️ Kırpma `colonyName` içinde: 15 karakteri aşarsa kullanıcı adı SONDAN kırpılır.
  */
 async function nextColonyName(tx: Tx, playerId: number): Promise<string> {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     SELECT (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS n,
-           (SELECT name FROM cities WHERE player_id = ${playerId} AND is_capital LIMIT 1) AS capital
+           (SELECT username FROM players WHERE id = ${playerId}) AS owner
   `);
   const index = Number(rows[0]?.['n'] ?? 1) + 1;
-  const capital = rows[0]?.['capital'];
-  return capital == null
+  const owner = rows[0]?.['owner'];
+  /* ⚠️ `players` satırı olmadan buraya gelinemez (görev sahibi o), ama ad üretmek zorunda
+     olduğumuz için yine de bir düşüş yolu duruyor. */
+  return owner == null
     ? clampName(`Koloni ${index}`)
-    : colonyName(String(capital), index);
+    : colonyName(String(owner), index);
 }
 
 /* ═══ Ortak yardımcılar ════════════════════════════════════════════════════ */

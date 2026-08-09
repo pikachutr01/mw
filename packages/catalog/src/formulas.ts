@@ -201,9 +201,12 @@ function costCurve(buildingId: string, level: number, cfg: CatalogConfig = DEFAU
  * `level` seviyesine ULAŞMANIN maliyeti (kümülatif değil).
  *
  * ⭐ **`baseGold`/`baseFood` = oyuncunun ÖDEDİĞİ İLK yükseltmenin fiyatı** (kullanıcı, 2026-07-28).
- * Kale · Baraka · Çiftlik · Maden oyuna **seviye 1** başlıyor (`STARTING_BUILDINGS`), yani onlarda
+ * Kale · Çiftlik · Maden oyuna **seviye 1** başlıyor (`STARTING_BUILDINGS`), yani onlarda
  * ilk ödenen seviye **2**'dir ve taban oraya oturur. Diğer yapılarda ilk ödenen seviye 1, hiçbir
  * şey değişmez.
+ *
+ * ⚠️ **Baraka 2026-08-09'da bu listeden çıktı** (kullanıcı: baraka 0 başlasın). Taban artık
+ * onun için de seviye 1'in fiyatı: sv1 = 120/80, sv2 = 216/144 (eskiden sv2 = 120/80).
  *
  * Bu yorum olmadan taban görünmeyen bir seviyenin fiyatıydı: kullanıcı "Çiftlik 3 altın 4 yemek"
  * dediğinde ekranda **9/12** çıkıyordu (çünkü 3/4 seviye 1'in fiyatıydı, oyuncu ise 1→2'yi görür).

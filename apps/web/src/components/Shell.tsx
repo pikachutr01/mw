@@ -298,13 +298,22 @@ function SpeedBadge({ speed }: {
   speed?: { resource: number; travel: number; training?: number; construction?: number };
 }) {
   if (!speed) return null;
-  const rows: [string, number][] = [
+  /**
+   * ⭐ **YALNIZ HIZLANDIRILMIŞ SATIRLAR** (kullanıcı, 2026-08-09).
+   *
+   * ⚠️ Eskiden dört satırın hepsi çiziliyor, normal hızda olanlar `1x` diye soluk görünüyordu.
+   * Rozetin başlığı zaten «Hızlandırılmış dünya»; altında «Sefer hızı 1x» yazması oyuncuya
+   * hiçbir şey söylemiyor, üstelik gerçekten değişmiş olan satırı gürültüye gömüyordu.
+   * Rozetin kendisi de zaten yalnız bir şey 1'den farklıysa çiziliyor — süzgeç o kuralın
+   * satır düzeyindeki karşılığı.
+   */
+  const rows: [string, number][] = ([
     ['Kaynak üretimi', speed.resource],
     ['Sefer hızı', speed.travel],
     ['Birim üretimi', speed.training ?? 1],
     ['İnşaat/araştırma', speed.construction ?? 1],
-  ];
-  if (rows.every(([, v]) => v === 1)) return null;
+  ] as [string, number][]).filter(([, v]) => v !== 1);
+  if (rows.length === 0) return null;
 
   return (
     <Tooltip
@@ -314,7 +323,7 @@ function SpeedBadge({ speed }: {
         <>
           <TooltipTitle>Hızlandırılmış dünya</TooltipTitle>
           {rows.map(([label, v]) => (
-            <TooltipRow key={label} label={label} value={`${v}x`} tone={v === 1 ? 'muted' : 'accent'} />
+            <TooltipRow key={label} label={label} value={`${v}x`} tone="accent" />
           ))}
         </>
       }

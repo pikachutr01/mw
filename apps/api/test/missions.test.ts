@@ -763,6 +763,37 @@ describe('şehir kurma', () => {
     expect(await openReturn()).toBeNull();   // garnizon olarak kalır
   });
 
+  /**
+   * ⭐⭐ YENİ ŞEHRİN ADI = **KULLANICI ADI + SIRA** (kullanıcı, 2026-08-09).
+   *
+   * ⚠️ *"Şehrin kurulduğu şehrin adı değil, kullanıcı adı."* 2026-08-03 – 08-09 arasında
+   * BAŞKENTİN adı kullanılıyordu; başkent yeniden adlandırılabildiği için üretilen adlar
+   * zamanla birbirini tutmuyordu. Bu test dayanağı kilitliyor: başkent BİLEREK başka bir ada
+   * çevriliyor ve yeni şehir yine kullanıcı adını almalı.
+   */
+  it('⭐ yeni şehrin adı kullanıcı adından türer, başkentin adından DEĞİL', async () => {
+    await setTech(me, 'colonization', 6);
+    await h.db.execute(sql`UPDATE cities SET name = 'Çığlıktepe' WHERE id = ${home}`);
+    await giveUnits(home, 'dwarf', 10);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 9 }, units: { dwarf: 10 }, at,
+    });
+    await runDue(m.missionId);
+
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT c.name, p.username FROM cities c JOIN players p ON p.id = c.player_id
+       WHERE c.world_id = ${worldId} AND c.k = 1 AND c.d = 1 AND c.s = 9
+    `);
+    const ad = String(row!['name']);
+    expect(ad).not.toContain('Çığlıktepe');
+    // `createPlayer` ada rastgele son ek ekliyor (tekillik) → ön ek eşleşmesi + sıra numarası.
+    expect(ad.startsWith(String(row!['username']).slice(0, 5))).toBe(true);
+    expect(ad).toMatch(/ \d+$/);
+  });
+
   it('⭐ şehir yeri bu arada dolarsa ordu GERİ DÖNER (doküman)', async () => {
     await setTech(me, 'colonization', 6);
     await giveUnits(home, 'dwarf', 20);
