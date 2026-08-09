@@ -17,8 +17,34 @@ export const TECHS: readonly TechDef[] = [
     baseGold: 100, baseFood: 100,
   },
   {
+    /**
+     * ⚠️⚠️ **OGRE BU LİSTEDE DEĞİL** (2026-08-09, binary'den doğrulandı).
+     *
+     * Kullanıcı binary simülatörde ölçtü: `Ogre 1200 vs Ogre 1000` savaşında Demircilik 18
+     * vermek sonucu **hiç değiştirmiyor** (kalan 809-811, tekniksiz koşuyla birebir aynı) ve
+     * İçgüdü'nün üstüne eklenince de bir şey değişmiyor.
+     *
+     * Ghidra sebebi gösterdi: `FUN_0041279c` bir birim id'sini **tek bir `atk` teknik grubuna**
+     * eşliyor — yani her savaşçının `atk`ini ölçekleyen **YALNIZ BİR** teknik var:
+     *   grup 0 → {Elf, Pegasus}                 = Okçuluk
+     *   grup 1 → {Cüce, Süvari, Şaman, Kuş, Yük, Gnom, …} = Demircilik
+     *   grup 4 → {Mancınık}                     = Kimya
+     *   grup 7 → {Ejderha, **Ogre**, Kaos}      = İçgüdü
+     * Dört uygulayıcı (`FUN_004116b8/00411744/0041185c/00411938`) bu gruba göre süzüyor.
+     *
+     * ⚠️ Bu, aynı stata iki teknik binmesi diye bir şeyin **hiç olmadığı** anlamına da geliyor:
+     * aşağıdaki `TECH_BY_UNIT` yorumundaki "toplanır" kuralının tek örneği Ogre'ydi ve o örnek
+     * yanlışmış. Kural yine de duruyor — savunma yapıları için geçerliliği ayrıca sınanmadı.
+     *
+     * ⚠️ **Şaman** binary'de bu grupta (id 7) görünüyor ama motora EKLENMEDİ — denendi ve
+     * ÖLÇÜLEBİLİR HİÇBİR ETKİSİ YOK: motorda Şaman `hp` üzerinden hasar vermiyor (kalkan gibi
+     * davranıyor, `shieldCal`), dolayısıyla `atk` ölçeklemesi ona hiç dokunmuyor. Gerçek savaşta
+     * eklemek kaybı 29.448 → 29.450 yaptı. Eklemek, ölçülemeyen bir farkı katalog kütüğüne
+     * yazmak olurdu; ölçülebilir bir sonda bulunursa (Şaman'ın hasar verdiği bir kurulum) tekrar
+     * bakılmalı.
+     */
     id: 'blacksmithing', name: { tr: 'Demircilik' }, rate: 0.05, stat: 'atk',
-    units: ['dwarf', 'cavalry', 'ogre', 'gnome', 'trap', 'guard'],
+    units: ['dwarf', 'cavalry', 'gnome', 'trap', 'guard'],
     baseGold: 100, baseFood: 100,
   },
   {

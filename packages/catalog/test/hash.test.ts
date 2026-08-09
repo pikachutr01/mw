@@ -20,8 +20,17 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/index.ts';
 
-/** 2026-08-01, katalog tesisatı değiştirilmeden önce ölçüldü. `/healthz` de bunu bildiriyor. */
-const DEFAULT_HASH = '2ec624e6';
+/**
+ * ⚠️ **2026-08-09'da BİLEREK değişti: `2ec624e6` → `a61b1491`.**
+ *
+ * Sebep: Demircilik'in birim listesinden **Ogre çıkarıldı** (`techs.ts`). Kullanıcının binary
+ * ölçümü ve Ghidra (`FUN_0041279c`) birlikte gösterdi ki Ogre'nin `atk`ini yalnız İçgüdü
+ * ölçekliyor. Bu test tam olarak bu anı yakalamak için var — özet sessizce kaymasın diye.
+ *
+ * ⚠️ Eski savaşlar `battles.catalog_hash = '2ec624e6'` ile duruyor ve **öyle kalmalı**: onlar
+ * gerçekten başka bir dengeyle çözüldü. Tasarım burada doğru çalıştı.
+ */
+const DEFAULT_HASH = 'a61b1491';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -39,7 +48,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('3f7fdea2');
+    expect(catalogHash(cfg)).toBe('8d7d6353');
   });
 
   /**
