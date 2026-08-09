@@ -27,6 +27,14 @@ export interface PrefDef {
   hint: string;
   /** ⚠️ Varsayılan daima "bugünkü davranış": tercih eklemek kimsenin ekranını değiştirmemeli. */
   default: boolean;
+  /**
+   * Yalnız dar ekranda (`< 1024px`) bir işe yarayan tercih — geniş ekranda anahtar ÇİZİLMEZ.
+   *
+   * ⚠️ Gizlemek "gereksiz" bir özen değil: tercihler zaten **cihaz başına** saklanıyor, yani
+   * masaüstünde çevrilen anahtarın telefonda hiçbir karşılığı olmaz. Çalışmayan bir anahtarı
+   * göstermek, oyuncuya hiçbir şey yapmayan bir düğme vermek olurdu.
+   */
+  mobileOnly?: boolean;
 }
 
 export const PREFS: readonly PrefDef[] = [
@@ -37,7 +45,40 @@ export const PREFS: readonly PrefDef[] = [
       + 'Ordular sayfasındaki metinli liste gizlenir, şeritteki simgeler kalır.',
     default: true,
   },
+  /**
+   * ⭐ ARKA PLAN GÖRSELİ (kullanıcı, 2026-08-09) — *"Sadece mobilde aktif olsun şimdilik…
+   * varsayılan olarak resim kapalı olsun ama switch açılınca bu resim tüm ekranlarda sabit
+   * arka plan olarak dursun, ekrana tam sığsın."*
+   *
+   * ⚠️ Bu tercih listedeki DİĞERLERİNDEN farklı: bir bileşen tarafından okunmuyor, `<html>`
+   * üzerindeki `data-backdrop` özniteliğine çevriliyor (`useBackdrop`, `hooks.ts`) ve boyama
+   * tamamen CSS'te yapılıyor (`index.css`). Sebebi ağırlık: kırılım CSS'te kaldığı sürece
+   * **geniş ekran görseli hiç indirmiyor** (eşleşmeyen `@media` bloğundaki `url()` istenmez).
+   *
+   * ⚠️ `default: false` bir DEĞER DEĞİL, sözleşme: `index.html`teki açılış betiği "anahtar
+   * yoksa arka plan yok" varsayıyor. İkisi ayrışırsa ilk boyamada görsel bir an yanıp söner.
+   * `test/prefs.test.ts` bu ikiliyi kilitliyor.
+   */
+  {
+    key: 'bgImage',
+    label: 'Arka plan görseli',
+    hint: 'Açarsan panellerin arkasında sabit duran bir sahne görseli çizilir; kaydırmayla '
+      + 'kaymaz, ekrana tam oturur. Paneller opak olduğu için görsel aralarındaki boşluklarda '
+      + 'görünür.',
+    default: false,
+    mobileOnly: true,
+  },
 ] as const;
+
+/**
+ * Ekranda çizilecek tercihler — `mobileOnly` olanlar yalnız dar ekranda.
+ *
+ * ⚠️ Saf ve dışa açık, çünkü projede tarayıcı testi altyapısı yok: filtrenin kendisi ancak
+ * böyle sınanabiliyor (`lib/deep-link.ts` · `lib/city-screens.ts` ile aynı gerekçe).
+ */
+export function visiblePrefs(narrow: boolean): readonly PrefDef[] {
+  return PREFS.filter((p) => narrow || p.mobileOnly !== true);
+}
 
 const STORAGE_KEY = 'mw-prefs';
 

@@ -4,10 +4,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!--
+    Tema ve arka plan İLK BOYAMADAN ÖNCE: React'i beklerlerse sayfa bir kare yanlış görünür
+    (gündüz temasında açılıp geceye atlamak / arka planın sonradan belirmesi).
+
+    ⚠️ Arka plan `p.bgImage === true` ile aranıyor, yani "anahtar yoksa kapalı". Bu,
+    `prefs.ts`teki `bgImage.default = false` ile AYNI cümle olmak zorunda; ikisi ayrışırsa
+    ilk boyamada görsel yanıp söner. `test/prefs.test.ts` varsayılanı kilitliyor.
+  -->
   <script>
     (function () {
       var t = localStorage.getItem('mw-theme') || 'system';
       if (t !== 'system') document.documentElement.setAttribute('data-theme', t);
+      try {
+        var p = JSON.parse(localStorage.getItem('mw-prefs') || '{}');
+        if (p.bgImage === true) document.documentElement.setAttribute('data-backdrop', 'on');
+      } catch (e) { /* bozuk/erişilemez depo: arka plan yok, sayfa yine açılır */ }
     })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />

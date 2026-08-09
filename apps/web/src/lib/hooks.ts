@@ -7,6 +7,7 @@
  */
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { getSession, onSessionChange, type Session } from './api.ts';
+import { usePref } from './prefs.ts';
 
 /**
  * ⭐ OTURUMU REACT'E BAĞLAR.
@@ -245,4 +246,32 @@ export function useTheme(): [Theme, (t: Theme) => void] {
   }, [theme]);
 
   return [theme, setThemeState];
+}
+
+/* ── Arka plan görseli (kullanıcı, 2026-08-09) ──────────────────────────────── */
+
+/**
+ * ⭐ «Arka plan görseli» tercihini `<html data-backdrop>`e çevirir; boyamayı CSS yapar.
+ *
+ * ⚠️ **Kırılım burada YOK, bilerek.** `useMediaQuery` ile "dar mı?" diye sorup özniteliği
+ * ona göre koymak da mümkündü ama gereksiz: `index.css`teki kural zaten `@media`'ya sarılı,
+ * yani geniş ekranda öznitelik dursa bile hiçbir şey çizilmez ve **görsel indirilmez**
+ * (eşleşmeyen `@media` bloğundaki `url()` için istek atılmaz). Kırılımı tek yerde —
+ * CSS'te — tutmak iki eşiğin sessizce ayrışması ihtimalini de ortadan kaldırıyor.
+ *
+ * ⚠️ `useTheme`ten farklı olarak bu kanca **daima mount olan** `App`ten çağrılıyor, tercih
+ * anahtarının durduğu ekrandan (`PrefsPanel`) değil. Sebep: `usePref` `storage` olayını da
+ * dinliyor, yani tercih BAŞKA SEKMEDE değişebilir; kanca yalnız Seçenekler'de yaşasaydı
+ * öteki sekme o ekran açılana kadar eski arka planla kalırdı.
+ */
+export function useBackdrop(): void {
+  const [on] = usePref('bgImage');
+
+  useEffect(() => {
+    const root = document.documentElement;
+    // ⚠️ Kapalıyken öznitelik SİLİNİYOR (`'off'` yazılmıyor): `index.html`teki açılış betiği
+    // de "yoksa kapalı" diliyle yazıldı, iki taraf aynı şeyi söylemeli.
+    if (on) root.setAttribute('data-backdrop', 'on');
+    else root.removeAttribute('data-backdrop');
+  }, [on]);
 }

@@ -9,14 +9,24 @@
  * ⚠️ **Kaydet düğmesi YOK** (kullanıcı şartı): switch'in kendisi karardır, ikinci bir onay
  * adımı sormak anlamsız olurdu. Değişiklik anında yazılıyor.
  */
-import { PREFS, usePref } from '../lib/prefs.ts';
+import { useMediaQuery } from '../lib/hooks.ts';
+import { usePref, visiblePrefs } from '../lib/prefs.ts';
 import { Panel } from './ui.tsx';
 
 export function PrefsPanel(): React.ReactElement {
+  /**
+   * ⚠️ Yalnız mobilde işe yarayan tercihler geniş ekranda ÇİZİLMİYOR (`mobileOnly`). Eşik
+   * `lg` = 1024 px: `index.css`teki arka plan kuralıyla ve alt barın `lg:hidden`ıyla aynı sınır.
+   * Ayrışırlarsa anahtar görünürken görsel çıkmaz (ya da tersi) — üçü de 1024'e bakıyor.
+   */
+  const narrow = !useMediaQuery('(min-width: 1024px)');
+
   return (
     <Panel title="Tercihler">
       <ul className="divide-y divide-border">
-        {PREFS.map((p) => <PrefRow key={p.key} prefKey={p.key} label={p.label} hint={p.hint} />)}
+        {visiblePrefs(narrow).map((p) => (
+          <PrefRow key={p.key} prefKey={p.key} label={p.label} hint={p.hint} />
+        ))}
       </ul>
       <p className="border-t border-border px-3 py-2 text-[11px] text-muted">
         Tercihler <b>bu cihazda</b> saklanır ve anında kaydedilir. Başka bir cihazda

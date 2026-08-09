@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getSession, onSessionChange } from './lib/api.ts';
+import { useBackdrop } from './lib/hooks.ts';
 import { connectRealtime } from './lib/realtime.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
 import { ChatProvider } from './lib/chat-context.tsx';
@@ -56,6 +57,11 @@ const emailRoutes = [
 
 export function App() {
   const [session, setSessionState] = useState(getSession);
+
+  /* ⭐ Arka plan görseli tercihi → `<html data-backdrop>`. Oturum dalının ÜSTÜNDE: tercih
+     cihazın, hesabın değil. İlk boyamayı `index.html`teki açılış betiği hallediyor; bu kanca
+     tercih SONRADAN değişince (bu sekmede ya da öteki sekmede) özniteliği güncel tutuyor. */
+  useBackdrop();
 
   // Oturum api.ts'te merkezî: refresh başarısız olunca oradan düşürülür ve burası haberdar olur
   // → token süresi dolan oyuncu boş ekranda kalmaz, giriş formuna döner.

@@ -274,3 +274,44 @@ button:disabled {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/**
+ * ⭐ ARKA PLAN GÖRSELİ — mobil, tercihe bağlı, varsayılan KAPALI (kullanıcı, 2026-08-09).
+ *
+ * Anahtar Seçenekler → Tercihler'de (`prefs.ts` → `bgImage`); açıldığında `<html>` üzerine
+ * `data-backdrop="on"` düşüyor ve boyama tamamen burada yapılıyor.
+ *
+ * ⚠️ **Kırılım CSS'te, JS'te DEĞİL** — bu bir kere de olsa doğru yer. Projede genel kural
+ * "bileşen mount OLMAMALIYSA kırılım JS'e" (`CityTabs` · `CityStrip`); burada mount olan bir
+ * şey yok, yalnız boyama var. Üstelik `@media` eşleşmediğinde tarayıcı bloktaki `url()` için
+ * **istek atmıyor**: geniş ekran 162 KB'ı hiç indirmiyor. Aynı kazancı JS'ten almak mümkün değil.
+ *
+ * ⚠️ `--tex-page` BİLEREK düşürüldü, `--tex-grain` bilerek kaldı. `--tex-page`in ilk katmanı
+ * gündüz temasında `rgb(255 255 255 / 0.45)` bir radyal yıkama — görselin üst yarısını
+ * ağartıp sisin arkasına atardı. Tanecik ise 0.045 opaklıkta: görseli arayüzün geri kalanıyla
+ * aynı dokuya bağlıyor ve gökyüzündeki WebP bantlanmasını gizliyor.
+ *
+ * ⚠️ `background-attachment: fixed` — istenen buydu ("sabit arka plan"). Gövde zaten kaymıyor
+ * (kaydırma `Shell`in iç sütununda), yani pratikte de doğru: görsel viewport'a göre ölçülür,
+ * belgeye göre değil.
+ *
+ * ⚠️ `cover`: görsel 937×1678 (0.56), telefon ~0.45 — yani kenarlardan ~%10 kırpılıyor, kompozisyon
+ * ortada olduğu için sorun değil. `contain` ekranı dolduramaz, `100% 100%` figürleri ezerdi.
+ *
+ * ⚠️ Eşik `< 1024px`: `min-width: 1024px`in TAM tümleyeni (Tailwind `lg`, alt barın sınırı).
+ * `max-width: 1023px` yazılsaydı aradaki kesirli genişlikler iki kuralın da dışında kalırdı.
+ *
+ * ⚠️ Görselin görüneceği yer panellerin ARASI: paneller opak (`bg-surface`) ve mobilde ekranın
+ * çoğunu kaplıyor. 2026-08-02'deki masaüstü denemesi tam bu yüzden beğenilmemişti; orada kaynak
+ * ayrıca 362×272 olduğu için ~5 kat büyütülüp bulanıyordu. Bu görsel 937×1678 — 360 px'lik bir
+ * ekranda 2× DPR'de bire bir, 3× DPR'de hafif yumuşak.
+ */
+@media (width < 1024px) {
+  :root[data-backdrop='on'] body {
+    background-image: var(--tex-grain), url('/assets/ui/bg-mobil.webp');
+    background-size: 120px 120px, cover;
+    background-position: top left, center center;
+    background-repeat: repeat, no-repeat;
+    background-attachment: fixed, fixed;
+  }
+}
