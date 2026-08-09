@@ -150,7 +150,19 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
               {ICON[t.category ?? ''] ?? '•'}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="display block truncate text-sm font-semibold text-ink">{t.title}</span>
+              {/**
+                * ⚠️ **DM bildiriminde başlık = GÖNDERENİN ADI**, sistem metni değil
+                * (`notify.catalog.ts` → `title: name`). Cinzel'in küçük harfi olmadığı için
+                * `Ayline` toast'ta `AYLINE` görünüyordu. Kullanıcı 2026-08-09'da adların her
+                * yerde aynen yazılmasını istedi.
+                *
+                * ⚠️ Ayrım kategoriden okunuyor çünkü sunucu "bu başlık kullanıcı girdisi mi"
+                * diye bir alan göndermiyor ve yalnız `dm` böyle: `attack`/`report`/`production`
+                * başlıkları sabit metin ("Saldırı geliyor!"), `mention` ise «İttifak sohbeti».
+                * Adı taşıyan tek dal bu — onlar Cinzel'de kalmalı, oyunun sesi orada.
+                */}
+              <span className={`block truncate text-sm font-semibold text-ink ${
+                t.category === 'dm' ? 'font-body' : 'display'}`}>{t.title}</span>
               {t.body ? (
                 <span className="mt-0.5 block text-xs leading-snug text-muted line-clamp-2">{t.body}</span>
               ) : null}

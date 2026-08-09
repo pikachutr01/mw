@@ -20,7 +20,9 @@ import {
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { HERO_SKILLS } from '../lib/hero-skills.ts';
-import { Badge, Button, Empty, ErrorBox, Input, Panel, Res, SectionTitle } from '../components/ui.tsx';
+import {
+  Badge, Button, Empty, ErrorBox, Input, Panel, Res, SectionTitle, UserText,
+} from '../components/ui.tsx';
 import { useConfirm } from '../components/Modal.tsx';
 
 /**
@@ -208,7 +210,7 @@ function HeroCard({ hero, temple }: { hero: HeroRow; temple: TempleView }) {
               disabled={revive.isPending}
               onClick={() => {
                 void confirm({
-                  title: `${hero.name} diriltilsin mi?`,
+                  title: <><UserText>{hero.name}</UserText> diriltilsin mi?</>,
                   body: (
                     <div className="space-y-1 text-sm">
                       <p>

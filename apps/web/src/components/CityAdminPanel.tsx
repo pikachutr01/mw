@@ -22,7 +22,7 @@ import { api } from '../lib/api.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, type CitySummary } from '../lib/queries.ts';
 import { useConfirm } from './Modal.tsx';
-import { Button, ErrorBox, Field, Input, Panel } from './ui.tsx';
+import { Button, ErrorBox, Field, Input, Panel, UserText } from './ui.tsx';
 import { useQueryClient } from '@tanstack/react-query';
 
 
@@ -156,7 +156,7 @@ function AbandonCity({ city }: { city: CitySummary }): React.ReactElement {
 
   const run = async (): Promise<void> => {
     const ok = await confirm({
-      title: `${city.name} terk edilsin mi?`,
+      title: <><UserText>{city.name}</UserText> terk edilsin mi?</>,
       danger: true,
       confirmLabel: 'Şehri terk et',
       body: (

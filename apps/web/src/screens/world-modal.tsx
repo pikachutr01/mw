@@ -21,7 +21,9 @@ import {
   useAlliance, useAllianceInvite, useCatalog, useCity, useMissionOptions, useSendMission,
   useTemple, type MissionOption, type WorldSlot,
 } from '../lib/queries.ts';
-import { AmountInput, Badge, Button, Empty, ErrorBox, MissionIcon } from '../components/ui.tsx';
+import {
+  AmountInput, Badge, Button, Empty, ErrorBox, MissionIcon, UserText,
+} from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 
 /**
@@ -59,8 +61,8 @@ export function TargetModal({
 
   const data = options.data;
   const title = slot.city
-    ? `${slot.city.name} (${target.k}:${target.d}:${target.s})`
-    : `Boş şehir (${target.k}:${target.d}:${target.s})`;
+    ? <><UserText>{slot.city.name}</UserText> ({target.k}:{target.d}:{target.s})</>
+    : <>Boş şehir ({target.k}:{target.d}:{target.s})</>;
 
   return (
     <Modal
@@ -166,7 +168,7 @@ function PlayerActions({
           <Button size="sm" variant="ghost" disabled={invite.isPending}
             onClick={() => {
               void confirm({
-                title: `${city.username} → ${my.data?.alliance?.name}`,
+                title: <><UserText>{city.username}</UserText> → <UserText>{my.data?.alliance?.name}</UserText></>,
                 body: 'Oyuncuya ittifak daveti gönderilecek. Emin misiniz!',
               }).then((ok) => { if (ok) invite.mutate({ playerId: city.playerId }); });
             }}>İttifağa Davet</Button>

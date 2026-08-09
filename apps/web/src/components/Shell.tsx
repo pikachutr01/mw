@@ -30,7 +30,7 @@ import { CityStrip } from './CityStrip.tsx';
 import { useConfirm } from './Modal.tsx';
 import { Tooltip, TooltipRow, TooltipTitle } from './Tooltip.tsx';
 import { InstallButton } from './InstallButton.tsx';
-import { MenuIcon, Panel, Res, Skeleton } from './ui.tsx';
+import { MenuIcon, Panel, Res, Skeleton, UserText } from './ui.tsx';
 
 /**
  * Sol menü sırası orijinaldeki gibi (`images/scr_web05` sol sütun). Mesajlar orijinalin **web**
@@ -474,7 +474,8 @@ function SideMenu() {
           className="icon-shadow h-auto w-full max-w-[190px] object-contain" />
       </div>
 
-      <Panel title={session?.username ?? 'Menü'}>
+      {/* ⭐ Sol menü başlığı = KULLANICI ADI, o yüzden aynen yazılır (kullanıcı, 2026-08-09). */}
+      <Panel title={session?.username ? <UserText>{session.username}</UserText> : 'Menü'}>
         <nav className="p-1.5">
           {MENU.map((t) => {
             const badge = t.to === '/messages' ? unread : t.to === '/armies' ? armies?.count ?? 0 : 0;
@@ -563,7 +564,7 @@ function AlliancePanel() {
   }
 
   return (
-    <Panel title={`${a.name} İttifağı`}>
+    <Panel title={<><UserText>{a.name}</UserText> İttifağı</>}>
       <ul className="divide-y divide-border">
         {a.members.slice(0, 15).map((m) => (
           <li key={m.playerId} className="flex items-center justify-between px-3 py-1 text-xs">

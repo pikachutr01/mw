@@ -13,6 +13,32 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
   );
 }
 
+/**
+ * ⭐⭐ OYUNCUNUN YAZDIĞI METİN — **aynen** göster (kullanıcı, 2026-08-09):
+ * *"her yerde kullanıcı adı orijinal şeklinde yazılsın. Harfler otomatik büyük yazılmasın."*
+ *
+ * Arayüzün başlık bantları (panel · modal · onay penceresi · tablo başlığı) bilerek **Cinzel +
+ * `uppercase`** taşıyor; oyunun görsel dili bu. Ama o kalıba oyuncunun yazdığı bir ad girince
+ * ad artık okuduğu şey olmuyor. İki ayrı mekanizma bozuyor:
+ *
+ *  1. `text-transform: uppercase` — üstelik CSS büyük harfe çevirirken Türkçe kuralını
+ *     bilmiyor: `lang="tr"` olmadan **«i» → «I»** oluyor, «İ» değil. `Ayline` → `AYLINE`.
+ *  2. **Cinzel'in küçük harfi YOK** — küçük harfleri küçük-büyük harf (small caps) çiziyor,
+ *     yani `uppercase` hiç olmasa bile ad yine büyük görünüyor.
+ *
+ * Bu yüzden ikisi de burada sıfırlanıyor: gövde fontu + `normal-case` + normal harf aralığı.
+ * `font-family` ve `text-transform` MİRAS alınan özellikler olduğu için başlığın içindeki bir
+ * `span`de yazmak kesin sonuç veriyor (`Command.tsx`teki şehir adı düzeltmesinin gerekçesi).
+ *
+ * ⚠️ **Ayrım: sistem metni mi, oyuncu girdisi mi?** «RAPORLAR», «İTTİFAK SOHBETİ» gibi sabit
+ * başlıklar Cinzel'de KALIR — onlar arayüzün kendi sesi. Yalnız kullanıcı adı, şehir adı,
+ * ittifak adı ve kahraman adı bu sarmalın içine girer. Aynı ayrım `ChatWindow` başlığında
+ * ve `CityStrip`te de yazılı.
+ */
+export function UserText({ children }: { children: ReactNode }) {
+  return <span className="font-body tracking-normal normal-case">{children}</span>;
+}
+
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 px-3 pt-3 pb-2">

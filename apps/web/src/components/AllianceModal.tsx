@@ -16,7 +16,7 @@
  */
 import { fmt } from '../lib/hooks.ts';
 import { useAllianceApply, useAllianceProfile } from '../lib/queries.ts';
-import { Badge, Button, Empty, ErrorBox, Skeleton } from './ui.tsx';
+import { Badge, Button, Empty, ErrorBox, Skeleton, UserText } from './ui.tsx';
 import { Modal } from './Modal.tsx';
 
 export function AllianceModal({ id, onClose }: { id: number; onClose: () => void }) {
@@ -26,7 +26,7 @@ export function AllianceModal({ id, onClose }: { id: number; onClose: () => void
 
   return (
     <Modal
-      title={a ? `${a.name} İttifağı` : 'İttifak'}
+      title={a ? <><UserText>{a.name}</UserText> İttifağı</> : 'İttifak'}
       onClose={onClose}
       footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}
     >

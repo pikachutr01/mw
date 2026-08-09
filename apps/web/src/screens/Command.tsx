@@ -34,7 +34,9 @@ import {
 import { coords } from '../lib/format.ts';
 import { fmt } from '../lib/hooks.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
-import { Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th } from '../components/ui.tsx';
+import {
+  Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th, UserText,
+} from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { Modal } from '../components/Modal.tsx';
 import { AllianceModal } from '../components/AllianceModal.tsx';
@@ -178,15 +180,20 @@ function CityTable({ d }: { d: Overview }): React.ReactElement {
             <tr className="tex-header border-b-2 border-strong bg-panel-header text-on-panel-header">
               <Th className="min-w-[7rem]"> </Th>
               {/**
-                * ⚠️ `normal-case` **iç `span`'de**: `Th`'nin `uppercase`'i Tailwind sıralamasında
-                * kardeş sınıfı yeniyor, ama `text-transform` MİRAS alındığı için çocukta yazmak
-                * kesin sonuç veriyor. Şehir adı oyuncunun yazdığı metindir, büyük harfe çevrilmez.
+                * ⚠️ İç `span` şart: `Th`'nin `uppercase`'i Tailwind sıralamasında kardeş sınıfı
+                * yeniyor, ama `text-transform` MİRAS alındığı için çocukta yazmak kesin sonuç
+                * veriyor. Şehir adı oyuncunun yazdığı metindir, büyük harfe çevrilmez.
+                *
+                * ⚠️ Burada bir zamanlar yalnız `normal-case` vardı ve **yarım bir düzeltmeydi**:
+                * `Th`'nin `display` sınıfı Cinzel'i getiriyor, o da küçük harfi small caps
+                * çiziyor — ad `uppercase` kalkmasına rağmen yine büyük görünüyordu. `UserText`
+                * fontu da sıfırlıyor (kullanıcı, 2026-08-09).
                 */}
               {d.cities.map((c) => (
                 <Th key={c.id} className="min-w-[5.5rem] text-center">
                   <Tooltip label={`${c.name} · ${coords(c.coordinates)}`}>
-                    <span className="cursor-help truncate normal-case">
-                      {c.name}{c.isCapital ? ' ★' : ''}
+                    <span className="cursor-help truncate">
+                      <UserText>{c.name}{c.isCapital ? ' ★' : ''}</UserText>
                     </span>
                   </Tooltip>
                 </Th>
@@ -464,7 +471,7 @@ function RankingRowModal({ row, kind, onClose }: {
   };
 
   return (
-    <Modal title={row.name} onClose={onClose} width="sm"
+    <Modal title={<UserText>{row.name}</UserText>} onClose={onClose} width="sm"
       footer={<Button variant="ghost" onClick={onClose}>Kapat</Button>}>
       <div className="space-y-3 p-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">

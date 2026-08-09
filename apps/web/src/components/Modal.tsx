@@ -116,7 +116,12 @@ export function Modal({
 /* ── Global onay diyaloğu ──────────────────────────────────────────────────── */
 
 export interface ConfirmOptions {
-  title: string;
+  /**
+   * ⚠️ `string` DEĞİL `ReactNode` (2026-08-09): onay başlıklarının bir kısmı kullanıcı adı
+   * taşıyor ("Ayline" · "Ayline → Kartallar") ve başlık bandı `uppercase` + Cinzel. Adın
+   * `<UserText>` ile sarmalanabilmesi için başlığın düğüm olması gerekiyor.
+   */
+  title: ReactNode;
   body?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;

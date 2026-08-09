@@ -26,7 +26,7 @@ import { HERO_SKILLS } from '../lib/hero-skills.ts';
 import {
   intelIsTransferable, sideFromCity, sideFromIntel, writeSimPrefill, WARRIORS, type SpyHero,
 } from '../lib/sim-prefill.ts';
-import { Button, CatalogIcon, Empty, ErrorBox, Panel, Res } from '../components/ui.tsx';
+import { Button, CatalogIcon, Empty, ErrorBox, Panel, Res, UserText } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 import { MissionIcon } from '../components/ui.tsx';
 import { formatGameTime } from '@mobilwar/contracts';
@@ -473,7 +473,7 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
   };
 
   return (
-    <Modal title={m.subject} onClose={onClose} width="lg"
+    <Modal title={<UserText>{m.subject}</UserText>} onClose={onClose} width="lg"
       footer={(
         <>
           {canTransfer ? (

@@ -22,7 +22,7 @@ import {
   useAllianceText, type AllianceMember,
 } from '../lib/queries.ts';
 import {
-  Badge, Button, Empty, ErrorBox, Input, Panel, Skeleton, Td, TextArea, Th,
+  Badge, Button, Empty, ErrorBox, Input, Panel, Skeleton, Td, TextArea, Th, UserText,
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 import { Popover } from '../components/Popover.tsx';
@@ -122,7 +122,7 @@ function OutsiderView({ canFound, pending }: {
                       <Button size="sm" variant="ghost" disabled={apply.isPending}
                         onClick={() => {
                           void confirm({
-                            title: `${a.name} ittifağına başvuru`,
+                            title: <><UserText>{a.name}</UserText> ittifağına başvuru</>,
                             body: 'İttifağa başvuru gönderilecek. Emin misiniz!',
                           }).then((ok) => { if (ok) apply.mutate({ allianceId: a.id }); });
                         }}>Başvur</Button>
@@ -184,7 +184,7 @@ function MemberView({ a, page, setPage }: {
   return (
     <div className="space-y-3">
       <Panel
-        title={`${alliance.name} İttifağı Ana Sayfası`}
+        title={<><UserText>{alliance.name}</UserText> İttifağı Ana Sayfası</>}
         right={`Puan: ${fmt(alliance.score)} · Sıra: ${alliance.rank ?? '-'}`}
       >
         {/* İttifak Metni — herkes görür; Konsey+Lider düzenler (scr_web06 üst kutusu). */}
@@ -341,7 +341,8 @@ function MemberLine({ m, index, myRole, alt }: {
   const canKick = m.role !== 3 && (isLeaderMe || (myRole === 2 && m.role === 1));
 
   const run = (action: 'kick' | 'promote' | 'demote' | 'transfer', text: string): void => {
-    void confirm({ title: m.username, body: text, danger: action === 'kick' })
+    // ⭐ Yetki modalının başlığı = üyenin adı → aynen (kullanıcı, 2026-08-09).
+    void confirm({ title: <UserText>{m.username}</UserText>, body: text, danger: action === 'kick' })
       .then((ok) => { if (ok) act.mutate({ playerId: m.playerId, action }); });
   };
 
