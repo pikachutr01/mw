@@ -210,43 +210,49 @@ function MemberView({ a, page, setPage }: {
               </span>
             )}
           >
-            <span className="flex flex-col gap-1">
-              {isCouncil ? (
-                <>
-                  <MenuItem onClick={() => setPanel(panel === 'text' ? 'none' : 'text')}>
-                    İttifak Metni
+            {/* ⚠️ `close` ŞART: madde seçilince menü kapanmalı. Onay penceresi menünün
+                ÜSTÜNDE açılıyordu ve ikisi birden ekranda kalıyordu (kullanıcı bildirdi). */}
+            {(close) => (
+              <span className="flex flex-col gap-1">
+                {isCouncil ? (
+                  <>
+                    <MenuItem onClick={() => { close(); setPanel('text'); }}>
+                      İttifak Metni
+                    </MenuItem>
+                    <MenuItem onClick={() => { close(); setPanel('message'); }}>
+                      İttifağa Mesaj
+                    </MenuItem>
+                  </>
+                ) : null}
+                {isLeader ? (
+                  <MenuItem onClick={() => { close(); setPanel('rename'); }}>
+                    İttifak Adı Değiştir
                   </MenuItem>
-                  <MenuItem onClick={() => setPanel(panel === 'message' ? 'none' : 'message')}>
-                    İttifağa Mesaj
-                  </MenuItem>
-                </>
-              ) : null}
-              {isLeader ? (
-                <MenuItem onClick={() => setPanel(panel === 'rename' ? 'none' : 'rename')}>
-                  İttifak Adı Değiştir
-                </MenuItem>
-              ) : null}
+                ) : null}
 
-              <span className="my-0.5 block border-t border-border" />
-              <MenuItem danger disabled={leave.isPending}
-                onClick={() => {
-                  void confirm({
-                    title: 'İttifaktan Ayrıl',
-                    body: 'İttifağı terk ediyorsunuz. Emin misiniz!',
-                    danger: true,
-                  }).then((ok) => { if (ok) leave.mutate(); });
-                }}>İttifaktan Ayrıl</MenuItem>
-              {isLeader ? (
-                <MenuItem danger disabled={disband.isPending}
+                <span className="my-0.5 block border-t border-border" />
+                <MenuItem danger disabled={leave.isPending}
                   onClick={() => {
+                    close();
                     void confirm({
-                      title: 'İttifağı Dağıt',
-                      body: 'Kendi ittifağınız dağıtılacak. Emin misiniz!',
+                      title: 'İttifaktan Ayrıl',
+                      body: 'İttifağı terk ediyorsunuz. Emin misiniz!',
                       danger: true,
-                    }).then((ok) => { if (ok) disband.mutate(); });
-                  }}>İttifağı Dağıt</MenuItem>
-              ) : null}
-            </span>
+                    }).then((ok) => { if (ok) leave.mutate(); });
+                  }}>İttifaktan Ayrıl</MenuItem>
+                {isLeader ? (
+                  <MenuItem danger disabled={disband.isPending}
+                    onClick={() => {
+                      close();
+                      void confirm({
+                        title: 'İttifağı Dağıt',
+                        body: 'Kendi ittifağınız dağıtılacak. Emin misiniz!',
+                        danger: true,
+                      }).then((ok) => { if (ok) disband.mutate(); });
+                    }}>İttifağı Dağıt</MenuItem>
+                ) : null}
+              </span>
+            )}
           </Popover>
         </div>
         <div className="px-3 pb-2">
@@ -422,16 +428,16 @@ function MemberLine({ m, index, myRole, alt }: {
               </span>
             )}
           >
-            <span className="flex flex-col gap-1">
-              {actions.map((a) => (
-                <button key={a.action} type="button" disabled={act.isPending}
-                  onClick={() => run(a.action, a.confirm)}
-                  className={`rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-[13px]
-                    hover:bg-raised disabled:opacity-45 ${a.danger ? 'text-danger' : 'text-ink'}`}>
-                  {a.label}
-                </button>
-              ))}
-            </span>
+            {(close) => (
+              <span className="flex flex-col gap-1">
+                {actions.map((a) => (
+                  <MenuItem key={a.action} danger={a.danger} disabled={act.isPending}
+                    onClick={() => { close(); run(a.action, a.confirm); }}>
+                    {a.label}
+                  </MenuItem>
+                ))}
+              </span>
+            )}
           </Popover>
         )}
       </Td>

@@ -74,8 +74,18 @@ export function placePopover(
 export function Popover({
   label, children, className = '', trigger, width,
 }: {
-  /** Kutunun içeriği. */
-  children: ReactNode;
+  /**
+   * Kutunun içeriği.
+   *
+   * ⭐ **Fonksiyon da olabilir** ve o zaman `close` alır (2026-08-09). Menüler için şart:
+   * bir madde seçildiğinde kutu kapanmalı, ama dışarı-tıklama kapatıcısı kutunun İÇİNİ
+   * bilerek dışlıyor (bilgi kutusundaki metin seçilebilsin diye). Kullanıcı bunu bildirdi:
+   * *"Konseyden Çıkar dedikten sonra hem onay penceresi hem popover ekranda kalıyor."*
+   *
+   * ⚠️ "İçeriye tıklanınca hep kapan" demedik: o, bilgi kutusunda metin seçmeyi bozardı ve
+   * ayırıcıya/boşluğa değince de kapatırdı. Kapatma kararı **maddenin kendisinde** olmalı.
+   */
+  children: ReactNode | ((close: () => void) => ReactNode);
   /** Ekran okuyucu için düğmenin adı ("Çiftlik hakkında bilgi" gibi). */
   label: string;
   className?: string;
@@ -184,7 +194,7 @@ export function Popover({
           className="tex bevel fixed z-[60] rounded-[var(--radius-sm)] border-2 border-strong
             bg-surface px-2.5 py-2 text-left text-[12px] leading-relaxed text-ink"
         >
-          {children}
+          {typeof children === 'function' ? children(() => setOpen(false)) : children}
         </div>,
         document.body,
       ) : null}
