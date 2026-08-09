@@ -7,6 +7,7 @@
  */
 import { Badge, Panel } from '../components/ui.tsx';
 import { AccountPanel, DeleteAccountPanel } from '../components/AccountPanel.tsx';
+import { BlockedPanel } from '../components/BlockedPanel.tsx';
 import { CityAdminPanel } from '../components/CityAdminPanel.tsx';
 import { DevicesPanel } from '../components/DevicesPanel.tsx';
 import { NotifySettings } from '../components/NotifySettings.tsx';
@@ -63,6 +64,9 @@ export function OptionsScreen(): React.ReactElement {
             EN ALTTA: hesap/güvenlik kartlarının önüne geçmemeli, ama «yakında» kartının
             üstünde çünkü artık gerçek bir işlevi var. */}
         <PrefsPanel />
+        {/* ⭐ Engellenenler (kullanıcı, 2026-08-10) — Tercihler'in yanında: ikisi de "benim
+            deneyimimi ben ayarlıyorum" kartları, hesap/güvenlikle ilgili değil. */}
+        <BlockedPanel />
       </div>
 
       <Soon title="Yakında" lines={[

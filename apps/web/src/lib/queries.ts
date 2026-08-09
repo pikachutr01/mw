@@ -544,6 +544,18 @@ export interface WorldMaintenance {
   notice: string | null;
   eta: string | null;
   pausedAt: string | null;
+  /**
+   * ⭐ Genel Sohbet açık mı (§13.12) — **görünürlük anahtarı** (2026-08-10).
+   *
+   * ⚠️ Bu alan bakımla ilgisi olmadığı hâlde BURADA: kart ve mobil kısayol, oyuncu sohbete
+   * BAĞLANMADAN önce çizilip çizilmeyeceğini bilmek zorunda, yani cevabı sohbetin kendi
+   * açılış paketinden okuyamaz. Bu sorgu zaten her ekranda dönüyor ve sunucu tarafında
+   * bellekten karşılanıyor — bayrak fazladan hiçbir maliyet getirmiyor.
+   * ⚠️ **`=== true` ile okunuyor** (`useGlobalChatEnabled`), yani alan yoksa/veri henüz
+   * gelmediyse sohbet ÇİZİLMEZ. Ters varsayım, kapalı bir özelliğin kartını gösterip ilk
+   * tıklamada 403 aldırırdı; "emin değilsen gösterme" burada dürüst olan.
+   */
+  globalChat?: boolean;
 }
 
 /**
@@ -1508,11 +1520,145 @@ export function useBlockPlayer() {
     mutationFn: (v: { playerId: number; blocked: boolean }) => (v.blocked
       ? api('/api/v1/chat/blocks', { method: 'POST', body: { playerId: v.playerId } })
       : api(`/api/v1/chat/blocks/${v.playerId}`, { method: 'DELETE' })),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['chat'] }); },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['chat'] });
+      /* ⭐ Seçenekler'deki engellenen listesi (2026-08-10) ve genel sohbetin geçmişi de
+         değişir: engel kalkınca o oyuncunun mesajları geri gelmeli, konunca kaybolmalı. */
+      void qc.invalidateQueries({ queryKey: ['chat-blocks'] });
+      void qc.invalidateQueries({ queryKey: ['global-chat-history'] });
+    },
   });
 }
 
 export const useReportChat = () => useMutation({
   mutationFn: (v: { channelId: number; messageId?: number | null; reason: string; note?: string }) =>
     api('/api/v1/chat/reports', { method: 'POST', body: v }),
+});
+
+/* ══ GENEL SOHBET (§13.12) ═══════════════════════════════════════════════════
+ *
+ * ⚠️ Bütün kancalar **kapalıyken hiç istek atmaz**. Kullanıcı şartı: sohbet varsayılan olarak
+ * çevrimdışı ve *"sürekli bir bağlantı olmayacak"*. Bu yüzden `enabled` kapısı sorguların
+ * kendisinde; sağlayıcı yalnız tek bir boolean tutuyor (`global-chat-context.tsx`).
+ */
+
+/**
+ * ⭐ Genel Sohbet PANELDEN açık mı — kartın/kısayolun çizilip çizilmeyeceği (2026-08-10).
+ *
+ * ⚠️ `=== true`: veri gelmediyse ya da alan yoksa ÇİZME. Ters varsayım, kapalı bir özelliğin
+ * kartını gösterip ilk tıklamada 403 aldırırdı.
+ * ⚠️ Ayrı bir uç AÇILMADI: `/world/state` zaten her ekranda dönüyor ve sunucuda bellekten
+ * karşılanıyor (bkz. `WorldMaintenance.globalChat`).
+ */
+export const useGlobalChatEnabled = (): boolean => useWorldState().data?.globalChat === true;
+
+export interface GlobalChatOpen {
+  channelId: number;
+  canWrite: boolean;
+  reason: 'disabled' | 'unverified' | 'banned' | 'too_new' | null;
+  blockedUntil: string | null;
+  blockedText: string | null;
+  /** ⚠️ Yalnız ⋮ menüsünü ÇİZMEK için — asıl yetki kapısı uçtaki `AdminGuard`. */
+  isStaff: boolean;
+}
+
+/**
+ * Açılış paketi — kanal kimliği + yazma hakkı + yönetici mi.
+ *
+ * ⚠️ `refetchInterval` YOK: bağlıyken WS zaten anlık, bağlı değilken hiçbir şey dönmemeli.
+ * (`useAllianceChat` ile aynı gerekçe.)
+ */
+export const useGlobalChat = (enabled: boolean): UseQueryResult<GlobalChatOpen> => {
+  const authed = useAuthed();
+  return useQuery({
+    queryKey: ['global-chat'],
+    queryFn: () => get<GlobalChatOpen>('/api/v1/chat/global'),
+    enabled: enabled && authed,
+  });
+};
+
+/** Geçmiş — keyset sayfalama; `before` bir sonraki sayfanın imleci (en eski görünen id). */
+export const useGlobalChatHistory = (
+  channelId: number | null,
+): UseInfiniteQueryResult<{ pages: { items: AllianceChatMessage[]; hasMore: boolean }[] }, Error> =>
+  useInfiniteQuery({
+    queryKey: ['global-chat-history', channelId],
+    enabled: channelId != null,
+    initialPageParam: null as number | null,
+    queryFn: ({ pageParam }) => get<{ items: AllianceChatMessage[]; hasMore: boolean }>(
+      `/api/v1/chat/global/messages${pageParam ? `?before=${pageParam}` : ''}`,
+    ),
+    getNextPageParam: (last) => (last.hasMore && last.items.length > 0
+      ? last.items[last.items.length - 1]!.id
+      : undefined),
+  });
+
+export function useSendGlobalChatMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { body: string; clientMsgId: string }) =>
+      api<AllianceChatMessage>('/api/v1/chat/global/messages', { method: 'POST', body: v }),
+    onSettled: () => { void qc.invalidateQueries({ queryKey: ['global-chat-history'] }); },
+  });
+}
+
+/**
+ * ⭐ `@` ÖNERİSİ — **debounce'lu sunucu araması** (kullanıcı şartı).
+ *
+ * ⚠️ İttifak sohbetinde öneriler açılış paketindeki üye listesinden süzülüyordu; genel
+ * sohbette böyle bir liste YOK (aday kümesi dünyanın tamamı), o yüzden ayrı bir uç var.
+ *
+ * ⚠️ Debounce **çağıranda değil burada**: `q` zaten geciktirilmiş hâlde geliyor
+ * (`useDebounced`), böylece her tuşta yeni bir sorgu ANAHTARI doğmuyor. TanStack aynı `q` için
+ * sonucu önbellekte tutuyor, yani geri silip yeniden yazmak istek üretmiyor.
+ * ⚠️ 2 karakter altı hiç sorulmuyor — sunucu da reddediyor, ama boşuna gidip gelmesin.
+ */
+export const useGlobalMentionSuggest = (
+  q: string, enabled: boolean,
+): UseQueryResult<{ items: Array<{ playerId: number; username: string }> }> => useQuery({
+  queryKey: ['global-chat-mentions', q],
+  queryFn: () => get<{ items: Array<{ playerId: number; username: string }> }>(
+    `/api/v1/chat/global/mentions?q=${encodeURIComponent(q)}`,
+  ),
+  enabled: enabled && q.trim().length >= 2,
+  staleTime: 30_000,
+});
+
+/* ── Yönetici işlemleri (uçlar `AdminGuard` arkasında) ─────────────────────── */
+
+export function useGlobalChatMute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { playerId: number; minutes: number | null; reason?: string }) =>
+      api('/api/v1/chat/global/mutes', { method: 'POST', body: v }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['global-chat'] }); },
+  });
+}
+
+export function useDeleteGlobalChatMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    // ⚠️ Gövdesiz DELETE — `api.ts` bu durumda `content-type` GÖNDERMİYOR (Fastify 400 verirdi).
+    mutationFn: (messageId: number) =>
+      api(`/api/v1/chat/global/messages/${messageId}`, { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['global-chat-history'] }); },
+  });
+}
+
+/* ── Engellenen oyuncular (Seçenekler ekranı) ──────────────────────────────── */
+
+export interface BlockedPlayer {
+  playerId: number;
+  username: string;
+  createdAt: string;
+}
+
+/**
+ * ⚠️ Emniyet ağı yoklaması **yok**: liste yalnız Seçenekler ekranı açıkken görünür ve
+ * kendiliğinden değişmez (`useDevices` ile aynı gerekçe).
+ */
+export const useBlockedPlayers = (): UseQueryResult<{ items: BlockedPlayer[] }> => useQuery({
+  queryKey: ['chat-blocks'],
+  queryFn: () => get<{ items: BlockedPlayer[] }>('/api/v1/chat/blocks'),
+  enabled: useAuthed(),
 });

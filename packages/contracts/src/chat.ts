@@ -109,7 +109,15 @@ export const chatMention = z.object({
 });
 export type ChatMention = z.infer<typeof chatMention>;
 
-export const allianceChatMessage = z.object({
+/**
+ * ⭐ ODA SOHBETİ MESAJI — ittifak sohbeti ve **Genel Sohbet** aynı şekli kullanır.
+ *
+ * ⚠️ İki ad da ihraç ediliyor ama şema **TEK**: bugün alanları birebir aynı ve ayrışmaları
+ * için bir sebep yok. İki ayrı `z.object` yazsaydık, birine eklenen alan diğerine eklenmeyi
+ * unuttururdu — üstelik ikisini de aynı istemci bileşeni çiziyor (`GlobalChat.tsx` ve
+ * `AllianceChatSheet.tsx` `splitMentions`'ı paylaşıyor).
+ */
+export const chatRoomMessage = z.object({
   id: z.number().int().positive(),
   senderId: playerId.nullable(),
   /** null = dünyadan kaldırılmış oyuncu; ekran «kaldırılmış oyuncu» yazar (ham id ASLA görünmez). */
@@ -118,12 +126,19 @@ export const allianceChatMessage = z.object({
   mentions: z.array(chatMention).default([]),
   createdAt: z.string().datetime(),
 });
-export type AllianceChatMessage = z.infer<typeof allianceChatMessage>;
+export type ChatRoomMessage = z.infer<typeof chatRoomMessage>;
 
-export const allianceChatSendRequest = z.object({
+export const allianceChatMessage = chatRoomMessage;
+export type AllianceChatMessage = ChatRoomMessage;
+export const globalChatMessage = chatRoomMessage;
+export type GlobalChatMessage = ChatRoomMessage;
+
+export const chatRoomSendRequest = z.object({
   body: z.string().trim().min(1).max(500),
   clientMsgId: z.string().uuid(),
 });
+export const allianceChatSendRequest = chatRoomSendRequest;
+export const globalChatSendRequest = chatRoomSendRequest;
 
 /**
  * Susturma isteği.
@@ -138,6 +153,14 @@ export const allianceChatMuteRequest = z.object({
   minutes: z.number().int().positive().max(43_200).nullable(),
   reason: z.string().trim().max(200).optional(),
 });
+
+/**
+ * ⭐ GENEL SOHBET SUSTURMASI — şekil ittifaktakiyle aynı, **yetki farklı**: bunu ittifak
+ * yönetimi değil YÖNETİCİ (`AdminGuard`) verir ve kaydı `chat_bans`e `scope = 'global'`
+ * olarak düşer. `minutes: null` yine KALICI demek (aynı gerekçe: en yıkıcı seçenek açıkça
+ * yazılmalı).
+ */
+export const globalChatMuteRequest = allianceChatMuteRequest;
 
 /** Şikayet: mesaj bazlı (messageId dolu) ya da oyuncu bazlı (null). */
 export const chatReportRequest = z.object({
@@ -156,7 +179,12 @@ export const chatErrorCode = z.enum([
   'banned',
   /** Acemi DM kısıtı: o dünyada ilk 12 saat yeni konuşma başlatılamaz (§13.12.4). */
   'dm_new_player_restricted',
+  /**
+   * ⭐ Genel Sohbet panelden kapatıldı (`globalChat.enabled`) — canlıya çıkışta kullanılacak
+   * acil vana. Kapalıyken okumak da mümkün değil: özellik "tamamen iptal" edilebilmeli.
+   */
   'global_disabled',
+  /** Hesap `globalChat.minPlayerAgeMinutes` eşiğini doldurmadı. Varsayılan 0 → normalde hiç görünmez. */
   'global_account_too_new',
   'wrong_world',
   /**

@@ -3038,7 +3038,7 @@ mesaj (eski oyundakinin interaktif hâli)* + *Genel Sohbet (beta/geliştirme ger
 ### 13.12.1 Kanal türleri
 | Kanal | `kind` | Kim görür | Ne zaman | Not |
 | :-- | :-- | :-- | :-- | :-- |
-| **Genel Sohbet** | `global` | dünyadaki herkes | **Faz 2** (beta'nın ilk günü) | dünya başına 1 kanal; `chat.globalEnabled` ile kapatılabilir (canlı sürümde kapatma seçeneği kalsın diye) |
+| **Genel Sohbet** | `global` | dünyadaki herkes | ✅ **2026-08-10** (plandaki Faz 2 değil — kullanıcı en sona aldı) | dünya başına 1 kanal; `globalChat.enabled` ile **tamamen** kapatılır (okuma dâhil) — canlıya çıkarken kapatılacak |
 | **İttifak** | `alliance` | yalnız o ittifakın üyeleri | **Faz 4** (ittifak sistemiyle) | ittifak başına 1 kanal; üyelikten çıkan **geçmişi de göremez** |
 | **Özel mesaj (DM)** | `dm` | iki oyuncu | **Faz 3** | eski oyunun ilkel mesaj kutusunun yerini alır |
 
@@ -3046,6 +3046,47 @@ mesaj (eski oyundakinin interaktif hâli)* + *Genel Sohbet (beta/geliştirme ger
   tembel** (lazy) yaratılır.
 - Sistem duyuruları `global` kanala `sender_id IS NULL` + `is_pinned` ile düşer (beta duyurusu, bakım
   uyarısı) — ayrı bir mekanizma kurulmaz.
+
+> ### ⭐ GENEL SOHBET UYGULANDI (2026-08-10) — plandan üç bilinçli sapma
+>
+> Faz 2'ye yazılmıştı, kullanıcı en sona aldı, sohbetin **üçüncü ve son** türü olarak geldi.
+> `chat_channels.kind = 'global'` + göç 0046 (`UNIQUE(world_id) WHERE kind='global'`), yeni
+> tablo yok. Plandan farklar ve gerekçeleri:
+>
+> **1. «Kapalı» = YOK, «okunur» değil.** Plan `chat.globalEnabled`i bir yazma vanası sayıyordu.
+> Kullanıcı 2026-08-10'da özelliği *"oyunun gerçek üretime çıktığı aşamada tamamen iptal"*
+> edilecek diye tarifledi, o yüzden `globalChat.enabled` kapalıyken **okuma da** duruyor
+> (`assertEnabled`) ve istemci ne sağdaki kartı ne mobildeki kısayolu çiziyor. İttifak
+> sohbetinin anahtarı hâlâ eski anlamda (kapalıyken geçmiş okunur) — ikisi bilerek farklı.
+>
+> **2. Yazma eşiği: yaş 60 dk → 0, e-posta doğrulaması AYNEN kaldı.** Kullanıcı *"oyuna ilk
+> kayıt olan birisi bile burada sohbet edebilir"* dedi; kanalın amacı erken geri bildirim
+> toplamak, yeni oyuncuyu susturmak en değerli sesi susturmak olurdu. Doğrulama ayrı bir eksen
+> ve orada karar tersine çıktı (2026-08-10: *"yazamasın, okusun"*) — DM/ittifak ile aynı kural.
+>
+> **3. Bağlantı SÜREKLİ DEĞİL.** Plan kanalı "bağlanınca katılınan bir oda" sayıyordu; kullanıcı
+> masaüstünde **«Sohbete Bağlan» düğmesi** istedi: *"sağ tarafta sohbet penceresi açık gibi
+> dursa da sürekli bir bağlantı olmayacak"*. Kapalıyken ne sorgu gider ne WS odasına katılınır;
+> sessizlik bir bayrağa değil bileşenin yaşam döngüsüne bağlı. Mobilde pencere açık olmak =
+> bağlı olmak, yani tek boolean üç yüzeyi birden yönetiyor.
+>
+> **Plan dışı eklenenler** (hepsi kullanıcı isteği): roster'sız `@` çözümü
+> (`mentionCandidateNames` — metinden aday ad üretip tek sorguda soruyor) ve **debounce'lu**
+> öneri ucu · «Yanıtla» kısayolu (ayrı veri modeli YOK, sadece mention) · odadaki **tekil
+> oyuncu sayısı** ve «kimler yazıyor» (ikisi de DB'ye hiç inmiyor; ikincisinin `typingEnabled`
+> kill-switch'i var) · engellemenin **genel sohbete uygulanması** (tek yönlü: engelleyen görmez)
+> ve Seçenekler'de engellenen listesi · yöneticinin sohbet içinden **susturması** ve
+> **mesaj kaldırması**.
+>
+> ⚠️ **Yan etki — `chat_bans.scope` artık OKUNUYOR.** Susturma `chat_bans`e `scope = 'global'`
+> yazıyor; kolon bugüne kadar hiç süzülmüyordu, yani her yasak her kanalı kapatıyordu. Artık
+> `all` her yeri, `global` yalnız genel sohbeti kapatıyor (`assertNotBanned(…, where)`).
+> Panelin varsayılanı `all` olduğu için mevcut yasakların davranışı değişmedi.
+>
+> ⚠️ **Bahsetme bildirimi bağlıyken çıkmıyor**, bağlı değilken çıkıyor: karar istemcide
+> (`suppressToast`), çünkü sunucunun oda üyeliği bir vekil ve soket koptuğunda pencere ekranda
+> dururken düşüyor. Üç durum kendiliğinden doğru çıkıyor: bağlı → balon · çevrimiçi ama kapalı
+> → toast · çevrimdışı → push.
 
 ### 13.12.1b ⭐ DÜNYA YALITIMI — pazarlıksız (kullanıcı kararı, 2026-07-26)
 **Sohbetin üç türü de dünya başına ayrıdır.** Dünya 1'deki Genel Sohbet Dünya 2'de görünmez; aynı
@@ -3152,8 +3193,11 @@ yetki `ChatAccessService.canRead/canWrite(player, channel)` ile **her olayda** y
 - **Rate limit** (kova, oyuncu başına): `chat.rateLimit` = 10 sn'de 5 mesaj; aşınca ack `{error:"rate"}`
   ve istemcide geri sayım. Ayrı kova: oyun REST kovasından bağımsız.
 - **Slow mode** `global` kanalda varsayılan 5 sn (`slow_mode_s`); ittifak/DM'de 0.
-- **Genel Sohbet'e yazma eşiği:** doğrulanmış e-posta + oyuncu yaşı ≥ 60 dk
-  (`chat.minPlayerAgeMinutesForGlobal`) → sıfırıncı dakika spam botu engellenir. Okuma serbest.
+- **Genel Sohbet'e yazma eşiği:** doğrulanmış e-posta + oyuncu yaşı ≥ `globalChat.minPlayerAgeMinutes`.
+  ⚠️ **Yaş eşiği 2026-08-10'da 60 → 0 yapıldı** (kullanıcı: *"oyuna ilk kayıt olan birisi bile
+  burada sohbet edebilir"*): kanalın amacı erken geri bildirim, yeni oyuncuyu susturmak en
+  değerli sesi susturmak olurdu. Anahtar duruyor — spam botu görülürse tek sayıyla kapanır.
+  ⚠️ **E-posta doğrulaması AYNEN geçerli** (DM/ittifak ile aynı kural). Okuma serbest.
 - **⭐ DM acemi kısıtı (kullanıcı kararı):** oyuncu o dünyada **12 saatini doldurmadan yeni bir özel
   konuşma BAŞLATAMAZ** (`chat.minPlayerAgeHoursForDm: 12`). Amaç: kayıt→spam/dolandırıcılık botu ve
   çok-hesap tacizi.

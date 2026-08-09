@@ -42,11 +42,17 @@ export function toHttp(err: unknown): Error {
    * ⚠️ `alliance_muted` neden 429 DEĞİL: 429 "çok hızlısın, birazdan dene" der ve yanlış
    * olurdu — susturma bir hız sınırı değil, bir moderasyon kararı.
    */
+  /**
+   * ⭐ Genel sohbetin iki kodu da bu ailede: ikisi de oyuncuya **sebebiyle birlikte söylenen**
+   * kararlar. ⚠️ `global_disabled` özellikle 404 DEĞİL — özellik kapatıldığında "böyle bir şey
+   * yok" demek, istemcinin bunu bir hata sanmasına yol açardı; kapalı olmak açık bir durum.
+   */
   if (
     err.code === 'chat_banned' || err.code === UNVERIFIED_CODE
     || err.code === 'not_alliance_member' || err.code === 'alliance_muted'
     || err.code === 'alliance_new_member_restricted' || err.code === 'alliance_chat_disabled'
     || err.code === 'mute_hierarchy' || err.code === 'forbidden'
+    || err.code === 'global_disabled' || err.code === 'global_account_too_new'
   ) {
     return new ForbiddenException(body);
   }
@@ -153,6 +159,22 @@ export class ChatController {
   }
 
   /* ── Engelleme ────────────────────────────────────────────────────────────── */
+
+  /**
+   * ⭐ ENGELLEDİKLERİM (kullanıcı, 2026-08-10) — Seçenekler ekranındaki liste.
+   *
+   * ⚠️ Engellemenin **tek tablosu** `player_blocks`: DM'den engellenen de genel sohbetten
+   * engellenen de burada. İkinci bir liste tutulsaydı ikisini senkron tutmak gerekirdi ve
+   * kullanıcının şartı tam olarak *"dm üzerinden engellenenler de buna dahildir"* idi —
+   * yani şartı sağlayan şey bu uç değil, tek tablo olması.
+   *
+   * ⚠️ Dünya-kapsamlı (§13.12.1b): başka dünyadaki engeller görünmez.
+   */
+  @Get('blocks')
+  async blocks(@Req() req: AuthedRequest): Promise<Record<string, unknown>> {
+    const p = req.player!;
+    return { items: await this.service.blocks({ worldId: p.worldId, playerId: p.playerId }) };
+  }
 
   @Post('blocks')
   @HttpCode(204)

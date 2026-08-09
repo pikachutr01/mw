@@ -32,18 +32,40 @@ export class ChatError extends Error {
 /* ── Sohbet yasağı (küresel, yöneticiden) ─────────────────────────────────── */
 
 /**
- * ⭐ Oyuncunun AKTİF sohbet yasağı (yoksa `null`).
+ * ⭐⭐ YASAĞIN KAPSAMI (`chat_bans.scope`) — 2026-08-10'da **okunmaya başladı**.
+ *
+ * `'all'`    → her yerde yazamaz (özel mesaj · ittifak sohbeti · genel sohbet).
+ * `'global'` → **YALNIZ genel sohbette** yazamaz; özel mesajı ve ittifak sohbeti açık kalır.
+ *
+ * ⚠️ Kolon şemada doğduğu günden beri vardı ama `assertNotBanned` ona **hiç bakmıyordu**:
+ * hangi kapsamla yazılırsa yazılsın yasak her kanalı kapatıyordu. Şemadaki yorum bunu zaten
+ * geçici sayıyordu (*"`all` = özel mesaj + (ileride) genel sohbet"*). Genel sohbetin kendi
+ * susturması gelince kolonun anlam kazanması ZORUNLU oldu — aksi hâlde "sohbette sustur"
+ * demek, oyuncunun bütün özel yazışmalarını da kesmek olurdu.
+ *
+ * ⚠️ Panelin varsayılanı `'all'` olduğu için **mevcut yasaklar aynen çalışmaya devam eder**;
+ * değişen tek şey, bugüne kadar hiç yazılmamış olan `'global'` kapsamının artık dar olması.
+ */
+export type BanScope = 'global' | 'other';
+
+/**
+ * ⭐ Oyuncunun `where` kapsamında AKTİF sohbet yasağı (yoksa `null`).
  *
  * ⚠️ `until IS NULL` = **süresiz** yasak, `until > now()` süreli. Süresi geçmiş satır
  * SİLİNMEZ — moderasyon geçmişi kalıcı olmalı; yalnız etkisiz sayılır.
+ * ⚠️ `where` verilmezse **hepsi** sayılır: panel «bu oyuncunun yasağı var mı» diye sorarken
+ * kapsam ayrımı yapmıyor, orada tek bir satır göstermek yeterli.
  */
-export async function activeBan(tx: Tx, worldId: number, playerId: number): Promise<{
-  scope: string; until: Date | null; reason: string | null;
-} | null> {
+export async function activeBan(
+  tx: Tx, worldId: number, playerId: number, where?: BanScope,
+): Promise<{ scope: string; until: Date | null; reason: string | null } | null> {
+  /* `'other'` (DM/ittifak) YALNIZ `all` kapsamından etkilenir; genel sohbeti ikisi de kapatır. */
+  const scopeFilter = where === 'other' ? sql`AND scope = 'all'` : sql``;
   const [row] = await tx.execute<Record<string, unknown>>(sql`
     SELECT scope, until, reason FROM chat_bans
      WHERE world_id = ${worldId} AND player_id = ${playerId}
        AND (until IS NULL OR until > now())
+       ${scopeFilter}
      ORDER BY until IS NULL DESC, until DESC
      LIMIT 1
   `);
@@ -56,12 +78,16 @@ export async function activeBan(tx: Tx, worldId: number, playerId: number): Prom
 }
 
 /**
- * Yasaklıysa fırlatır. ⚠️ Mesaj **kimseye** gönderilemez (kullanıcı kararı) ama oyuncu
- * **okumaya devam eder**: kendisine yazılanı görebilmeli, yoksa ceza "sohbetten silinmek"
- * olurdu. Aynı kural ittifak sohbetinde de geçerli.
+ * Yasaklıysa fırlatır. ⚠️ Mesaj **gönderilemez** (kullanıcı kararı) ama oyuncu **okumaya
+ * devam eder**: kendisine yazılanı görebilmeli, yoksa ceza "sohbetten silinmek" olurdu.
+ * Aynı kural üç sohbet türünde de geçerli.
+ *
+ * @param where Hangi kanal soruyor — kapsam ayrımının tamamı bu parametrede (bkz. `BanScope`).
  */
-export async function assertNotBanned(tx: Tx, worldId: number, playerId: number): Promise<void> {
-  const ban = await activeBan(tx, worldId, playerId);
+export async function assertNotBanned(
+  tx: Tx, worldId: number, playerId: number, where: BanScope,
+): Promise<void> {
+  const ban = await activeBan(tx, worldId, playerId, where);
   if (!ban) return;
   /**
    * ⚠️ `toLocaleString('tr-TR')` DEĞİL — o, biçimi Türkçe yapar ama **saat dilimini SÜRECİN
@@ -73,9 +99,14 @@ export async function assertNotBanned(tx: Tx, worldId: number, playerId: number)
     ? `${formatGameTime(ban.until)} tarihine kadar`
     : 'süresiz olarak';
   const reason = ban.reason ? ` Sebep: ${ban.reason}` : '';
+  /**
+   * ⚠️ Metin kapsamı SÖYLÜYOR. Dar kapsamlı bir yasakta "Sohbet yasağın var" demek yanlış
+   * bilgi olurdu: oyuncu özel mesajlarının da kesildiğini sanıp denemeyi bırakırdı.
+   */
+  const what = ban.scope === 'global' ? 'Genel sohbet yasağın' : 'Sohbet yasağın';
   throw new ChatError(
     'chat_banned',
-    `Sohbet yasağın var — ${until} mesaj gönderemezsin.${reason}`,
+    `${what} var — ${until} mesaj gönderemezsin.${reason}`,
     ban.until ? Math.max(1, Math.ceil((ban.until.getTime() - Date.now()) / 1000)) : undefined,
   );
 }

@@ -29,7 +29,7 @@ import {
 } from '../lib/queries.ts';
 import { getSession } from '../lib/api.ts';
 import { AllianceChatMuteModal } from './AllianceChatMuteModal.tsx';
-import { MentionAutocomplete } from './MentionAutocomplete.tsx';
+import { MentionAutocomplete, type MentionItem } from './MentionAutocomplete.tsx';
 import { useConfirm } from './Modal.tsx';
 import { Button, ErrorBox, TextArea } from './ui.tsx';
 
@@ -131,7 +131,10 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
   const suggestions = query ? suggestMentions(members, query.text) : [];
   const suggestOpen = query != null && suggestions.length > 0;
 
-  const pickMention = (m: AllianceChatMember): void => {
+  /* ⚠️ Parametre `MentionItem` (dar tip): kutu artık genel sohbetle paylaşılıyor ve yalnız
+     `username` okuyor. `AllianceChatMember` istemek, kutunun sözleşmesini gereksizce
+     daraltıp derleyiciyi kırardı (contravariance). */
+  const pickMention = (m: MentionItem): void => {
     if (!query) return;
     const next = applyMention(draft, query, m.username);
     setDraft(next.value);

@@ -6,6 +6,7 @@ import { useBackdrop } from './lib/hooks.ts';
 import { connectRealtime } from './lib/realtime.ts';
 import { ActiveCityProvider } from './lib/city-context.tsx';
 import { ChatProvider } from './lib/chat-context.tsx';
+import { GlobalChatProvider } from './lib/global-chat-context.tsx';
 import { ConfirmProvider } from './components/Modal.tsx';
 import { MaintenanceCurtain } from './components/MaintenanceCurtain.tsx';
 import { OfflineBanner } from './components/OfflineBanner.tsx';
@@ -171,7 +172,12 @@ function AuthedLayout() {
       <ActiveCityProvider>
         <NotifyProvider>
           <ChatProvider>
-            <Shell><Outlet /></Shell>
+            {/* ⚠️ `GlobalChatProvider` de rotaların DIŞINDA (`ChatProvider` gerekçesi):
+                sayfa değiştirmek sohbet bağlantısını koparmamalı. `Shell`in İÇİNDE değil
+                DIŞINDA çünkü sağ sütundaki kart da, mobil sheet de aynı durumu okuyor. */}
+            <GlobalChatProvider>
+              <Shell><Outlet /></Shell>
+            </GlobalChatProvider>
           </ChatProvider>
         </NotifyProvider>
       </ActiveCityProvider>

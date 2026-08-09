@@ -94,6 +94,18 @@ const INVALIDATES: Record<string, string[]> = {
    * gereksiz trafik olurdu; liste zaten `alliance:changed` ile güncelleniyor.
    */
   'chat:alliance': ['alliance-chat-history'],
+  /**
+   * ⭐ GENEL SOHBET (§13.12) — ittifak sohbetiyle aynı kalıp: olay **kanal odasından** geliyor.
+   *
+   * ⚠️ Odaya yalnız «Sohbete Bağlan» denince katılınıyor (`global:chat:open`), dolayısıyla
+   * bağlantı kopukken bu satır HİÇ tetiklenmez — kullanıcı şartı *"bağlantıyı kopardığında
+   * sohbet çevrimdışı"* böyle sağlanıyor: bir bayrakla değil, oda üyeliğiyle.
+   * ⚠️ `global-chat` (açılış paketi) BİLEREK tazelenmiyor: her mesajda yazma hakkını yeniden
+   * sormak gereksiz trafik olurdu.
+   */
+  'chat:global': ['global-chat-history'],
+  /* Yönetici bir mesajı kaldırdı → geçmiş tazelenir, mesaj ekrandan düşer. */
+  'chat:global:deleted': ['global-chat-history'],
   /* ⭐ ÖZEL MESAJ (2026-07-31): sohbet listesi + açık pencerenin geçmişi tazelenir. Olay gövde
    * taşımaz; balon metni tazelenen geçmişten gelir (tek doğru kaynak sunucu). */
   'chat:message': ['chat', 'chat-history'],
@@ -170,6 +182,40 @@ export function closeAllianceChat(): void {
   socket?.emit('alliance:chat:close');
 }
 
+/* ── Genel sohbet (§13.12) ───────────────────────────────────────────────────
+ *
+ * ⚠️ **ÜÇÜNCÜ değişken.** Sunucuda da üçüncü bir slot var
+ * (`socket.data.globalChatChannelId`): oyuncu aynı anda bir DM penceresi, ittifak sheet'i ve
+ * genel sohbet kartı açık tutabilir; ortak bir slot birini diğerinin odasından atardı. */
+let openGlobalChannelId: number | null = null;
+
+export function openGlobalChat(channelId: number): void {
+  openGlobalChannelId = channelId;
+  socket?.emit('global:chat:open', { channelId });
+}
+
+export function closeGlobalChat(): void {
+  openGlobalChannelId = null;
+  socket?.emit('global:chat:close');
+}
+
+/**
+ * ⭐ Şu an BAĞLI olunan genel sohbet kanalı — yoksa `null`.
+ *
+ * Tek kullanıcısı `Toaster`: kullanıcı şartı *"sohbete ister mobil ister masaüstünde bağlı
+ * olsun kendinden bahsetmelerde notify bildirim gelmesin; sadece sohbet bağlı değilse bu
+ * bildirimler sağ alttan gelsin"*.
+ *
+ * ⚠️ **Fonksiyon, değer değil** (`currentChatChannel` ile aynı gerekçe): modül seviyesinde bir
+ * sabit dışa aktarılsaydı içe aktaran tarafta ilk değeri donardı.
+ */
+export const currentGlobalChannel = (): number | null => openGlobalChannelId;
+
+/** Yazıyor bildirimi — kanal kimliği taşımaz, sunucu soketin açık odasından çözer. */
+export function sendGlobalTyping(): void {
+  socket?.emit('global:chat:typing');
+}
+
 export function connectRealtime(queryClient: QueryClient): () => void {
   const start = (): void => {
     const session = getSession();
@@ -207,6 +253,11 @@ export function connectRealtime(queryClient: QueryClient): () => void {
        * sheet açık görünür ama mesajlar SESSİZCE gelmez (DM'de aynı hata bir kez yapıldı). */
       if (openAllianceChannelId != null) {
         socket?.emit('alliance:chat:open', { channelId: openAllianceChannelId });
+      }
+      /* ⚠️ Genel sohbet de yeniden katılmalı — aksi hâlde kart «bağlı» görünür ama mesajlar
+       * sessizce gelmez ve oyuncu sohbetin öldüğünü sanır. */
+      if (openGlobalChannelId != null) {
+        socket?.emit('global:chat:open', { channelId: openGlobalChannelId });
       }
     });
     socket.on('disconnect', () => setState('offline'));
@@ -291,7 +342,13 @@ export function connectRealtime(queryClient: QueryClient): () => void {
      * yok): bu olay ekrandaki veriyi değil, oyuncuya gösterilecek toast'ı taşır. İlgili
      * sorgular zaten kendi olaylarıyla (`missions:changed`, `messages:changed`…) tazeleniyor.
      */
-    for (const topic of ['chat:message', 'chat:typing', 'notify:show']) {
+    /* ⭐ `global:chat:typing` ve `global:chat:presence` de abonelere dağıtılıyor: ikisi de
+     * sorgu tazelemiyor (`INVALIDATES`'te yok), yalnız sohbet penceresinin şeridini ve
+     * başlığındaki sayıyı besliyor. Sunucuda ikisi de DB'ye hiç inmiyor. */
+    for (const topic of [
+      'chat:message', 'chat:typing', 'notify:show',
+      'global:chat:typing', 'global:chat:presence',
+    ]) {
       socket.on(topic, (raw: Record<string, unknown>) => {
         const payload = (raw?.['ref'] ?? raw ?? {}) as Record<string, unknown>;
         for (const fn of chatListeners.get(topic) ?? []) fn(payload);

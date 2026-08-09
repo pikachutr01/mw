@@ -1,22 +1,36 @@
 /**
- * ⭐ @ ÖNERİ KUTUSU (§13.15c) — ittifak sohbetinde bahsetme yardımcısı.
+ * ⭐ @ ÖNERİ KUTUSU (§13.15c) — İTTİFAK ve GENEL sohbetin paylaştığı bahsetme yardımcısı.
  *
- * ⚠️ Öneri listesi **açılış paketinden** geliyor (`useAllianceChat` → `members`), ayrı bir
- * arama ucu YOK: liste zaten çevrimiçi noktaları için çekiliyor, ikinci bir uç aynı veriyi
- * ikinci kez taşırdı. Bu yüzden debounce'a da gerek kalmıyor — süzme tamamen istemcide.
+ * ⚠️ **Aday listesinin nereden geldiği iki sohbette FARKLI** ve bu ayrım bileşenin dışında:
+ *   • İttifak: açılış paketindeki üye listesinden **istemcide** süzülüyor (≤300 üye zaten
+ *     çevrimiçi noktaları için çekiliyor; ikinci bir uç aynı veriyi ikinci kez taşırdı).
+ *   • Genel sohbet: aday kümesi dünyanın tamamı, önceden indirilemez → **debounce'lu bir
+ *     arama ucundan** geliyor (`useGlobalMentionSuggest`).
+ * Kutu ikisini de aynı görüyor; farkı yalnız `items`ın kim tarafından doldurulduğu.
  *
  * ⚠️ Bu kutu yalnız ÖNERİ verir; kanonik eşleşmeyi sunucu yapıyor (`resolveMentions`). Yani
  * buradaki Türkçe küçük-harf farkı (I/İ) en fazla listeyi boş bırakır, gönderilen metni
  * değiştirmez.
  */
 import { useEffect, useRef } from 'react';
-import type { AllianceChatMember } from '../lib/queries.ts';
+
+/**
+ * ⚠️ Öge tipi `AllianceChatMember`den **genişletildi** (2026-08-10): genel sohbetin öneri ucu
+ * yalnız `playerId` + `username` döndürüyor — dünya çapında bir aramada çevrimiçilik ve
+ * susturma durumu ne biliniyor ne de sızmalı. İki alan **isteğe bağlı**; yoksa satır sade çizilir.
+ */
+export interface MentionItem {
+  playerId: number;
+  username: string;
+  online?: boolean;
+  muted?: boolean;
+}
 
 export function MentionAutocomplete({ items, active, onPick, onActive, truncated }: {
-  items: AllianceChatMember[];
+  items: MentionItem[];
   /** Klavyeyle gezinilen satırın sırası — sahibi composer (Enter'ı o yakalıyor). */
   active: number;
-  onPick: (m: AllianceChatMember) => void;
+  onPick: (m: MentionItem) => void;
   onActive: (i: number) => void;
   truncated: boolean;
 }) {

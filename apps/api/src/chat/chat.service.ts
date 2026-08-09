@@ -82,7 +82,7 @@ export class ChatService {
        * karşı tarafın listesinde boş bir konuşma açabilir ve bu tek başına bir taciz aracı
        * olurdu (bildirim düşmese bile ad görünür).
        */
-      await assertNotBanned(tx, o.worldId, o.playerId);
+      await assertNotBanned(tx, o.worldId, o.playerId, 'other');
       const [existing] = await tx.execute<Record<string, unknown>>(sql`
         SELECT id FROM chat_channels WHERE world_id = ${o.worldId} AND dm_key = ${key}
       `);
@@ -161,7 +161,7 @@ export class ChatService {
        * tekrarı "yasaklısın" hatası almamalı — o mesaj zaten yazıldı, istemci yalnız
        * cevabını kaçırdı.
        */
-      await assertNotBanned(tx, o.worldId, o.playerId);
+      await assertNotBanned(tx, o.worldId, o.playerId, 'other');
 
       /* 1) ENGEL — iki yön iki farklı sonuç (yukarıdaki değişmez 3). */
       const blocks = await tx.execute<Record<string, unknown>>(sql`
@@ -350,6 +350,31 @@ export class ChatService {
       VALUES (${o.worldId}, ${o.playerId}, ${o.targetId})
       ON CONFLICT (player_id, blocked_player_id) DO NOTHING
     `);
+  }
+
+  /**
+   * ⭐ Engellediklerim — Seçenekler ekranındaki liste (kullanıcı, 2026-08-10).
+   *
+   * ⚠️ Ad `players`tan `JOIN`le geliyor, `player_blocks`ta saklanmıyor: ad değişebilir ve
+   * kopyalanmış bir ad bayatlardı. `INNER JOIN` yeterli — oyuncu silinirse satır zaten
+   * `ON DELETE cascade` ile gidiyor.
+   */
+  async blocks(o: { worldId: number; playerId: number }): Promise<
+    Array<{ playerId: number; username: string; createdAt: string }>
+  > {
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT b.blocked_player_id, p.username, b.created_at
+        FROM player_blocks b
+        JOIN players p ON p.id = b.blocked_player_id
+       WHERE b.player_id = ${o.playerId} AND b.world_id = ${o.worldId}
+       ORDER BY b.created_at DESC
+       LIMIT 200
+    `);
+    return rows.map((r) => ({
+      playerId: Number(r['blocked_player_id']),
+      username: String(r['username']),
+      createdAt: new Date(String(r['created_at'])).toISOString(),
+    }));
   }
 
   async unblock(o: { playerId: number; targetId: number }): Promise<void> {

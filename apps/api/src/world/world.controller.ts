@@ -10,6 +10,7 @@
 import { Controller, Get, Inject, Param, Req, UseGuards } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import { globalChatLimits } from '../chat/global-chat.limits.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { GameClockService } from './game-clock.service.ts';
@@ -58,6 +59,16 @@ export class WorldController {
       pausedAt: w?.pausedAt?.toISOString() ?? null,
       notice: w?.notice ?? null,
       eta: w?.eta?.toISOString() ?? null,
+      /**
+       * ⭐ GENEL SOHBET AÇIK MI (§13.12, 2026-08-10) — **görünürlük anahtarı bu uçtan geliyor.**
+       *
+       * ⚠️ Neden burası: kullanıcı şartı *"devre dışıysa sağdaki kart hiç gözükmeyecek, mobilde
+       * «Daha» kısayolu da gözükmeyecek"*. Yani cevap, oyuncu sohbete **bağlanmadan önce**
+       * bilinmek zorunda; sohbetin kendi açılış paketinden okunamazdı. Bu uç zaten her oturumlu
+       * istemcide dönüyor (bakım perdesi), **bellekten** karşılanıyor (ek sorgu yok) ve emniyet
+       * ağı hızında tazeleniyor — yani bayrak bedavaya geliyor.
+       */
+      globalChat: globalChatLimits().enabled,
       serverNow: new Date().toISOString(),
     };
   }

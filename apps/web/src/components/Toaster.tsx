@@ -15,7 +15,7 @@ import {
   createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { currentChatChannel, onSocketEvent } from '../lib/realtime.ts';
+import { currentChatChannel, currentGlobalChannel, onSocketEvent } from '../lib/realtime.ts';
 
 /** Ekranda kalma süresi. Kısa metinler için 6 sn okumaya yeter, akışı da tıkamaz. */
 const DWELL_MS = 6000;
@@ -69,8 +69,27 @@ const ICON: Record<string, string> = {
  * (`tipReduce` · `placePopover` · `deepLinkAction` ile aynı gerekçe).
  */
 export function suppressToast(
-  payload: { category?: unknown; channelId?: unknown }, openChannel: number | null,
+  payload: { category?: unknown; channelId?: unknown },
+  openChannel: number | null,
+  openGlobalChannel: number | null = null,
 ): boolean {
+  /**
+   * ⭐ İKİNCİ DAL — GENEL SOHBET (kullanıcı, 2026-08-10): *"Sohbete ister mobil ister
+   * masaüstünde bağlı olsun kendinden bahsetmelerde notify bildirim gelmesin. Sadece sohbet
+   * bağlı değilse bu bildirimler sağ alttan gelsin."*
+   *
+   * ⭐ Üç durum bu tek satırdan doğru çıkıyor: **bağlı** → yalnız balon (burada bastırılıyor) ·
+   * **bağlı değil ama çevrimiçi** → sağ alt toast · **çevrimdışı** → işletim sistemi push'u
+   * (`NotifyService.deliver` WS bağlıyken zaten push atmıyor).
+   *
+   * ⚠️ Kural yalnız `channelId` EŞLEŞİRSE işliyor: ittifak sohbetinin bahsetme bildirimi de
+   * `mention` kategorisinde ve onun kanalı farklı → o toast çıkmaya devam ediyor (bu tur
+   * kapsamı yalnız genel sohbetti).
+   */
+  if (payload.category === 'mention') {
+    if (openGlobalChannel == null || payload.channelId == null) return false;
+    return Number(payload.channelId) === openGlobalChannel;
+  }
   if (payload.category !== 'dm') return false;
   if (openChannel == null || payload.channelId == null) return false;
   return Number(payload.channelId) === openChannel;
@@ -120,7 +139,7 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
     const title = String(payload['title'] ?? '').trim();
     if (title === '') return;
     /* ⭐ Açık pencerenin toast'ı bastırılır — gerekçesi `suppressToast`ta. */
-    if (suppressToast(payload, currentChatChannel())) return;
+    if (suppressToast(payload, currentChatChannel(), currentGlobalChannel())) return;
     show({
       title,
       body: String(payload['body'] ?? ''),

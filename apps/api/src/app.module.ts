@@ -23,6 +23,7 @@ import { TokenService } from './auth/token.service.ts';
 import { BattleController } from './battles/battle.controller.ts';
 import { AllianceChatController } from './chat/alliance-chat.controller.ts';
 import { ChatController } from './chat/chat.controller.ts';
+import { GlobalChatController } from './chat/global-chat.controller.ts';
 import { CityController } from './cities/city.controller.ts';
 import { HeroController } from './heroes/hero.controller.ts';
 import { CityService } from './cities/city.service.ts';
@@ -51,14 +52,17 @@ export { DB } from './db/tokens.ts';
  * Faz 2 modülü. Bağımlılıklar elle kurulmuş fabrikalarla veriliyor — servislerin hiçbiri Nest'e
  * bağımlı değil (saf sınıflar), böylece testlerde Nest'i ayağa kaldırmadan doğrudan kullanılıyor.
  *
- * Faz 2'nin kalanı: Genel Sohbet (WS) ve web ekranları. **Özel mesajlaşma (DM) 2026-07-31'de
- * girdi** (`ChatController`), **İttifak Sohbeti 2026-08-07'de** (`AllianceChatController`);
- * ikisi de aynı `chat_*` altyapısını kullanıyor. Geriye yalnız Genel Sohbet kaldı.
+ * ⭐ Sohbetin ÜÇ türü de tamam (§13.12): **DM 2026-07-31** (`ChatController`), **İttifak
+ * Sohbeti 2026-08-07** (`AllianceChatController`), **Genel Sohbet 2026-08-10**
+ * (`GlobalChatController`). Üçü de aynı `chat_*` altyapısını ve `chat.guards.ts`i paylaşıyor.
+ *
+ * ⚠️ Genel Sohbet **erken aşamaya özel**: `globalChat.enabled` panelden kapatıldığında özellik
+ * tamamen yok oluyor (okuma dâhil). Canlıya çıkarken kapatılacak — controller silinmeyecek.
  */
 @Module({
   controllers: [
     HealthController, SimulateController, AuthController, CityController,
-    AllianceController, ChatController, AllianceChatController,
+    AllianceController, ChatController, AllianceChatController, GlobalChatController,
     HeroController,
     MissionController, BattleController, WorldController, WorldsPublicController, CommandController,
     NotifyController,

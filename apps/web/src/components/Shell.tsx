@@ -27,6 +27,8 @@ import {
   armiesBadge, useAlliance, useChatConversations, useCity, useMessages, useMovements,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
+import { useGlobalChatConnection } from '../lib/global-chat-context.tsx';
+import { GlobalChat } from './GlobalChat.tsx';
 import { CityStrip } from './CityStrip.tsx';
 import { CityTabs } from './CityTabs.tsx';
 import { useConfirm } from './Modal.tsx';
@@ -84,6 +86,10 @@ const TABS = [
  *
  * ⚠️ Simülatör burada da olmak ZORUNDA: masaüstünde sol menüde duruyor ama alt barın altı
  * sekmesine sığmıyor — listeye konmasaydı mobilde ekrana giden hiçbir yol kalmazdı.
+ *
+ * ⚠️ **Genel Sohbet bu dizide DEĞİL** (2026-08-10) ve olamaz: bu liste `NavLink`lerden oluşuyor,
+ * sohbet ise bir rota değil bir **aç/kapa**. Maddesi `MoreSheet` içinde elle çiziliyor; ayrıca
+ * `globalChat.enabled` kapalıyken hiç görünmemesi gerekiyor, oysa buradaki maddeler koşulsuz.
  */
 const MORE_ITEMS = [
   { to: '/simulate', label: 'Simülatör', icon: 'simulator' },
@@ -484,6 +490,7 @@ function SideMenu() {
               </NavLink>
             );
           })}
+          <GlobalChatMenuButton />
           {/* ⭐ Kurulum daveti çıkıştan ÖNCE: «Oyunu Kapat» menünün kapanış hareketi,
               altına bir şey koymak onu listenin ortasında bırakıyor. */}
           <InstallButton variant="side" />
@@ -498,6 +505,41 @@ function SideMenu() {
         </nav>
       </Panel>
     </div>
+  );
+}
+
+/**
+ * ⭐⭐ GENEL SOHBET — **1024-1279 px'in tek kapısı** (kullanıcı kararı, 2026-08-10).
+ *
+ * ⚠️ Bu düğme bir boşluğu kapatıyor: sağ sütun `xl` (≥1280) altında hiç çizilmiyor, alt bar
+ * ise `lg:hidden` (yani ≥1024'te yok). Aradaki dar dizüstü aralığında sohbete giden HİÇBİR
+ * yol kalmıyordu. Düğme yalnız o aralıkta görünüyor ve mobildeki sheet'i açıyor.
+ *
+ * ⚠️ `!wide` koşulu **JS'te**, `xl:hidden` sınıfıyla değil: sınıfla gizleseydik ≥1280'de de
+ * mount olur ve `available` için gereken sorguya bağlanırdı — üstelik iki kapı (kart + düğme)
+ * aynı anda var görünürdü. Eşik `Shell`in `wide` sabitiyle AYNI sayı olmak zorunda.
+ * ⚠️ Sol menünün kendisi zaten `lg:block`, yani <1024'te hiç çizilmiyor — alt sınır oradan
+ * geliyor, burada tekrarlanmıyor.
+ */
+function GlobalChatMenuButton() {
+  const wide = useMediaQuery('(min-width: 1280px)');
+  const { available, connected, toggle } = useGlobalChatConnection();
+  if (!available || wide) return null;
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-pressed={connected}
+      className={`mb-0.5 flex w-full items-center gap-2 rounded-[var(--radius-sm)] border px-2.5 py-1.5
+        text-[13px] transition-colors ${
+        connected
+          ? 'border-strong bg-accent font-semibold text-on-accent shadow-[var(--bevel)]'
+          : 'border-transparent text-ink hover:border-border hover:bg-raised'
+      }`}
+    >
+      <MenuIcon id="mesaj" size={26} />
+      <span className="flex-1 text-left">Genel Sohbet</span>
+    </button>
   );
 }
 
@@ -576,13 +618,21 @@ function AlliancePanel() {
   );
 }
 
+/**
+ * ⭐ Sağ sütun — ittifak + **Genel Sohbet** (2026-08-10; yer tutucu "Yakında" kartının yerine).
+ *
+ * ⚠️ Sohbet kartı `available` false ise **hiç çizilmiyor** (boş bir kart bile değil): kullanıcı
+ * şartı *"devre dışı olursa ekranın sağ tarafında genel sohbet kısmı hiç gözükmeyecek"*.
+ * ⚠️ Bu sütunun kendisi zaten `wide` (≥1280) koşuluyla mount ediliyor, o yüzden kart burada
+ * ikinci bir genişlik kontrolü yapmıyor — sağlayıcı da aynı eşiğe bakıyor ki dar ekranda sheet,
+ * geniş ekranda kart olsun ve ikisi asla aynı anda mount olmasın.
+ */
 function SidePanels() {
+  const { available } = useGlobalChatConnection();
   return (
     <div className="sticky top-3 space-y-3">
       <AlliancePanel />
-      <Panel title="Genel Sohbet">
-        <div className="p-3 text-xs text-muted">Yakında.</div>
-      </Panel>
+      {available ? <GlobalChat variant="card" /> : null}
     </div>
   );
 }
@@ -655,6 +705,9 @@ function MoreSheet() {
   const [open, setOpen] = useState(false);
   const confirm = useConfirm();
   const { pathname } = useLocation();
+  /* ⭐ Genel Sohbet kısayolu (kullanıcı, 2026-08-10): *"mobilde sohbet Daha menüsü altından
+     erişilebilir olsun"*. Kapalıyken madde HİÇ çizilmiyor — «tamamen devre dışı» şartı. */
+  const globalChat = useGlobalChatConnection();
 
   // Rota değişince liste kapanmalı; aksi hâlde yeni sayfanın üstünde asılı kalıyor.
   useEffect(() => { setOpen(false); }, [pathname]);
@@ -686,6 +739,18 @@ function MoreSheet() {
         {open ? (
           <div className="absolute bottom-full right-0 z-30 mb-1 w-40 overflow-hidden
             rounded-[var(--radius-md)] border-2 border-strong bg-panel-header shadow-[var(--mw-shadow-md)]">
+            {/* ⭐ Sohbet EN ÜSTTE: listedeki tek "aç/kapa" maddesi ve tek anlık iş; rotalar
+                onun altında kalıyor. Açıkken maddenin kendisi «Sohbeti Kapat» oluyor —
+                mobilde pencerenin açık olması sohbete bağlı olmak demek. */}
+            {globalChat.available ? (
+              <button type="button"
+                onClick={() => { setOpen(false); globalChat.toggle(); }}
+                className="flex w-full items-center gap-2 border-b border-on-panel-header/15
+                  px-3 py-2.5 text-left text-[13px] text-on-panel-header hover:bg-raised/40">
+                <MenuIcon id="mesaj" size={20} />
+                {globalChat.connected ? 'Sohbeti Kapat' : 'Genel Sohbet'}
+              </button>
+            ) : null}
             {MORE_ITEMS.map((m) => (
               <NavLink key={m.to} to={m.to}
                 className="flex items-center gap-2 border-b border-on-panel-header/15 px-3 py-2.5

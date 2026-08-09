@@ -1143,6 +1143,16 @@ export const chatChannels = pgTable('chat_channels', {
   /** Bir ittifağın TEK kanalı olur. Kısmî: DM satırlarında `alliance_id` NULL, onlar muaf. */
   uniqueIndex('chat_channels_world_alliance').on(t.worldId, t.allianceId)
     .where(sql`${t.allianceId} IS NOT NULL`),
+  /**
+   * ⭐ Bir dünyanın TEK genel kanalı olur (§13.12, göç 0046).
+   *
+   * ⚠️ `chat_channels_world_dm` bunu engellemiyor: genel kanalda `dm_key` NULL ve Postgres
+   * tekil indekslerde NULL'ları birbirinden FARKLI sayar.
+   * ⚠️ Servis `ON CONFLICT (world_id) WHERE kind = 'global'` yazmak zorunda — kısmî indekse
+   * `WHERE`siz `ON CONFLICT` "no unique or exclusion constraint matching" verir.
+   */
+  uniqueIndex('chat_channels_world_global').on(t.worldId)
+    .where(sql`${t.kind} = 'global'`),
 ]);
 
 export const chatParticipants = pgTable('chat_participants', {

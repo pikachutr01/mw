@@ -26,6 +26,17 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'herkese aynı şekilde uygulanan akış kurallarıdır.',
   },
   {
+    id: 'globalChat',
+    label: 'Genel sohbet',
+    description: '⭐ Dünyadaki HERKESE açık tek sohbet odası (§13.12). Amacı erken aşamada '
+      + 'hata ve öneri tartışması; oyun gerçek üretime çıkarken **kapatılacak**. '
+      + '⚠️ «Genel sohbet açık» anahtarı kapatılınca özellik TAMAMEN yok olur: sunucu her isteği '
+      + 'reddeder ve istemci ne sağdaki kartı ne mobildeki «Daha» kısayolunu çizer — ittifak '
+      + 'sohbetinin aksine (orada kapalıyken geçmiş okunmaya devam eder). '
+      + '⚠️ Tek tek oyuncuyu susturmak bu ayarların DIŞINDA: onu yönetici sohbetin içinden verir '
+      + 've kayıt `chat_bans` tablosuna `global` kapsamıyla düşer, yani özel mesajı etkilemez.',
+  },
+  {
     id: 'notify',
     label: 'Bildirim',
     description: 'Toast ve push davranışı; metin sınırları ve ölü abonelik temizliği (§7.2).',
@@ -336,6 +347,92 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     type: 'int', default: 300, min: 20, max: 2000, tag: 'design', unit: 'adet',
     description: 'Sohbet açılırken en fazla kaç üye çekilir. Bu liste hem çevrimiçi noktalarını hem @ '
       + 'önerilerini besler. Aşan ittifaklarda öneriler kısalır ama adı tam yazınca yine çalışır.',
+  },
+
+  /* ── Genel sohbet ────────────────────────────────────────────────────────── */
+  {
+    key: 'globalChat.enabled',
+    label: 'Genel sohbet açık',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'Genel sohbeti tamamen açar veya kapatır. Kapatınca kimse yazamaz, GEÇMİŞ DE '
+      + 'OKUNAMAZ ve oyun ekranında sohbete giden hiçbir kapı çizilmez.',
+    note: '⚠️ İttifak sohbetinin anahtarından FARKLI: orada kapatmak yalnız yazmayı durdurur. '
+      + 'Burada özellik tümüyle yok olur, çünkü genel sohbet erken aşamaya özel ve canlıya '
+      + 'çıkarken izi kalmadan kaldırılabilmeli. Mesajlar SİLİNMEZ, yalnız erişilemez olur.',
+  },
+  {
+    key: 'globalChat.burst',
+    label: 'Kova: pencere başına mesaj',
+    type: 'int', default: 5, min: 1, max: 100, tag: 'design', unit: 'adet',
+    description: 'Bir oyuncunun kısa bir süre içinde genel sohbete atabileceği en fazla mesaj.',
+    note: 'Özel mesajın ve ittifak sohbetinin kovalarından AYRI sayılır; yalnız genel kanalı kapsar. '
+      + 'Ortak olsaydı hareketli bir genel sohbet oyuncunun özel mesaj hakkını yerdi.',
+  },
+  {
+    key: 'globalChat.perSeconds',
+    label: 'Kova penceresi',
+    type: 'int', default: 10, min: 1, max: 600, tag: 'design', unit: 'sn',
+    description: 'Yukarıdaki sayının ölçüldüğü süre. «5 mesaj / 10 saniye» gibi düşün.',
+  },
+  {
+    key: 'globalChat.duplicateSeconds',
+    label: 'Aynı metin bekleme süresi',
+    type: 'int', default: 30, min: 0, max: 600, tag: 'design', unit: 'sn',
+    description: 'Aynı metni genel sohbete tekrar göndermek için beklenecek süre. 0 = kapalı.',
+    note: 'Özel mesajdakinden (15 sn) uzun: herkese açık bir odada tekrarlanan metin çok daha '
+      + 'görünür bir taciz ve çok daha fazla kişiyi rahatsız ediyor.',
+  },
+  {
+    key: 'globalChat.slowModeSeconds',
+    label: 'Yavaş mod',
+    type: 'int', default: 5, min: 0, max: 600, tag: 'design', unit: 'sn',
+    description: 'Bir oyuncunun iki mesajı arasında geçmesi gereken en az süre. 0 = kapalı.',
+    note: 'İttifak sohbetinin aksine varsayılan AÇIK (5 sn, §13.12.4). Sebep ölçek: ittifakta '
+      + 'onlarca kişi var, burada dünyanın tamamı — akış frenlenmezse sohbet okunamaz hâle gelir.',
+  },
+  {
+    key: 'globalChat.minPlayerAgeMinutes',
+    label: 'Acemi kısıtı',
+    type: 'int', default: 0, min: 0, max: 10_080, tag: 'design', unit: 'dk',
+    description: 'Oyuncunun genel sohbete yazabilmesi için o dünyada geçirmesi gereken süre. '
+      + 'Bu sürede sohbeti OKUYABİLİR, yalnız yazamaz.',
+    note: '⚠️ Varsayılan 0 ve bu bilinçli (kullanıcı, 2026-08-10): *"oyuna ilk kayıt olan birisi '
+      + 'bile burada sohbet edebilir"*. Genel sohbetin amacı erken geri bildirim toplamak; yeni '
+      + 'oyuncuyu susturmak tam da en değerli sesi susturmak olurdu. E-posta doğrulaması bundan '
+      + 'AYRI bir kapı ve o açık: doğrulanmamış hesap yazamaz (bkz. «Doğrulanmamış hesap» grubu).',
+  },
+  {
+    key: 'globalChat.pageSize',
+    label: 'Geçmiş sayfa boyutu',
+    type: 'int', default: 30, min: 5, max: 100, tag: 'design', unit: 'adet',
+    description: 'Sohbet bir seferde kaç eski mesaj çeker. Büyütmek geçmişi daha çok gösterir ama '
+      + 'her açılışı yavaşlatır.',
+  },
+  {
+    key: 'globalChat.maxMentions',
+    label: 'Mesaj başına bahsetme',
+    type: 'int', default: 3, min: 0, max: 20, tag: 'design', unit: 'adet',
+    description: 'Tek mesajda en fazla kaç oyuncudan @ ile bahsedilebilir. Tavanı aşanlar ne kalın '
+      + 'yazılır ne de bildirim üretir. 0 yazarsan bahsetme özelliği tamamen kapanır.',
+    note: 'İttifaktakinden (5) düşük: orada bahsedilebilecek kişi kümesi üyelerle sınırlı, burada '
+      + 'dünyanın tamamı. Tavan aynı zamanda mention ÇÖZÜMÜNÜN maliyetini de sınırlıyor — her '
+      + '@ için en fazla 13 aday ad üretilip tek sorguda aranıyor.',
+  },
+  {
+    key: 'globalChat.suggestLimit',
+    label: '@ önerisinde satır',
+    type: 'int', default: 8, min: 1, max: 25, tag: 'design', unit: 'adet',
+    description: 'Yazarken açılan @ öneri kutusunda en fazla kaç oyuncu listelenir. Arama sunucuda '
+      + 'yapılıyor (dünyada binlerce oyuncu var, liste önceden indirilemez).',
+  },
+  {
+    key: 'globalChat.typingEnabled',
+    label: '«Yazıyor…» göstergesi',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'Sohbetin altında o an kimlerin yazdığını canlı gösterir.',
+    note: 'Kapatmak için bir anahtar var çünkü bu tek gerçek ek yük kaynağı: olay, odadaki HER '
+      + 'bağlı istemciye gidiyor. Yine de ucuz — veritabanına hiç inmiyor ve istemci olayı '
+      + '2,5 saniyede bir kısıyor. Oda çok kalabalıklaşırsa ilk kapatılacak şey budur.',
   },
 
   /* ── Bildirim ────────────────────────────────────────────────────────────── */

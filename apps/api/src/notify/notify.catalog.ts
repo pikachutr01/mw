@@ -388,6 +388,43 @@ export function notificationForOutbox(
     }
 
     /**
+     * ⭐ GENEL SOHBETTE BAHSEDİLME (§13.12, kullanıcı 2026-08-10).
+     *
+     * ⚠️ **Yalnız `@` ile ANILANA gider** — ittifaktaki kuralın aynısı ve burada daha da
+     * gerekli: kanal dünyanın tamamına açık, her mesaja bildirim atmak kategoriyi bir gün
+     * içinde kapattırırdı.
+     *
+     * ⚠️ `mentions` yükü servise **iki kez süzülmüş** geliyor: (1) gönderen düşürülmüş
+     * (`mentionRecipients`), (2) **gönderen ENGELLEYENLER düşürülmüş**. İkincisi bu kanala
+     * özgü: engellediğim kişinin mesajını geçmişte görmüyorum, bildirimini de almamalıyım.
+     * Süzgeç katalogda DEĞİL serviste — katalog saf bir eşleyici kalmalı.
+     *
+     * ⭐ **Bağlıyken bildirim çıkmaması istemcide karara bağlanıyor**, burada değil
+     * (`Toaster.suppressToast`). Sunucunun oda üyeliği bir vekil ve soket kopunca düşüyor;
+     * oysa pencere ekranda duruyor olabilir. Bu yüzden `channelId` alanı **gönderiliyor**:
+     * istemci "bu benim açık odam mı" karşılaştırmasını onunla yapıyor.
+     *
+     * ⚠️ `chat:global:deleted` bilerek BURADA YOK → `default` dalına düşüp sessiz kalıyor.
+     * Silinen bir mesaj için bildirim üretmek anlamsız olurdu.
+     */
+    case 'chat:global': {
+      const ids = Array.isArray(payload['mentions'])
+        ? [...new Set((payload['mentions'] as unknown[]).map((x) => Number(x)))]
+          .filter((x) => Number.isInteger(x) && x > 0)
+        : [];
+      const channelId = n(payload['channelId']);
+      return ids.map((to) => note({
+        playerId: to, worldId, category: 'mention',
+        title: 'Genel sohbet',
+        body: 'Sohbette sizden bahsedildi.',
+        /* Derin bağlantı: sohbet hangi ekranda olunursa olunsun açılır (`?gchat=1`). */
+        url: '/command?gchat=1',
+        tag: `mention:${channelId ?? to}`,
+        ...(channelId == null ? {} : { channelId }),
+      }));
+    }
+
+    /**
      * Mesaj kutusuna düşen satırlar — metin `REPORT_TEXT` tablosundan çözülür.
      * Savaş raporu orada bilerek yok (bildirimi `battle:resolved` üretti) → burada atlanır.
      */

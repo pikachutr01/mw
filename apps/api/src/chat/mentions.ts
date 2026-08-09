@@ -120,6 +120,56 @@ export function resolveMentions(
 }
 
 /**
+ * ⭐⭐ ADAY ADLAR — **roster'ı olmayan sohbetin mention'ı bu fonksiyonla çözülüyor** (§13.12).
+ *
+ * İttifak sohbetinde aday listesi hazır geliyordu: üyeler (≤300) zaten çekiliyor ve
+ * `resolveMentions`'a olduğu gibi veriliyordu. **Genel sohbette öyle bir liste YOK** — aday
+ * kümesi dünyanın tamamı, yani binlerce satır. Onları çekip belleğe almak, tek bir mesaj için
+ * dünyayı taramak olurdu.
+ *
+ * ⭐ Ters çeviriyoruz: metinden **olası ad dizelerini** üretip veritabanına *"bunlardan hangisi
+ * gerçek bir oyuncu"* diye tek sorguda soruyoruz (`username = ANY($1)`, `players_world_username`
+ * tekil indeksi). Dönen satırlar sonra **değiştirilmemiş** `resolveMentions`'a besleniyor —
+ * böylece en-uzundan-en-kısaya eşleme kuralı ve I/İ kararı tek yerde kalıyor.
+ *
+ * ⚠️ **Neden `@`den sonraki tek kelimeyi almak YETMEZ:** kullanıcı adında boşluk serbest
+ * (`name-rules.ts`), yani `"@Eru Ilúvatar merhaba"` metninde adın nerede bittiği bilinemez.
+ * Bu yüzden her `@` için `USERNAME_MIN..USERNAME_MAX` arası **tüm** alt dizeler üretiliyor.
+ *
+ * ⚠️ **Maliyet sınırlı ve öngörülebilir:** `@` başına en fazla 13 dize (15−3+1), taranan `@`
+ * sayısı `maxMentions` ile kesiliyor. Varsayılan 3 mention → en fazla 39 aday, tek sorgu.
+ * `maxMentions` tavanı bu yüzden yalnız bir spam kapısı değil, aynı zamanda bir maliyet kapısı.
+ *
+ * ⚠️ `body` **kırpılmış** gelmeli — `resolveMentions` ile aynı gövdeyi görmezse aday üretilen
+ * ad ile indekslenen aralık farklı dizeye bakar.
+ */
+export function mentionCandidateNames(body: string, max: number): string[] {
+  if (max <= 0 || body.length === 0) return [];
+
+  const out = new Set<string>();
+  let seen = 0;
+
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== '@') continue;
+    // ⚠️ `resolveMentions` ile AYNI ön koşul: `ali@veli` ya da e-posta aday üretmemeli.
+    if (isWordy(body[i - 1])) continue;
+
+    const maxLen = Math.min(USERNAME_MAX, body.length - i - 1);
+    for (let len = maxLen; len >= USERNAME_MIN; len--) {
+      const raw = body.slice(i + 1, i + 1 + len);
+      /* Baş/son boşluklu aralık ada çözülmez (`resolveMentions` da reddediyor) → sorguya girmesin. */
+      if (raw.trim() !== raw) continue;
+      out.add(normalizeName(raw));
+    }
+
+    seen++;
+    if (seen >= max) break;
+  }
+
+  return [...out];
+}
+
+/**
  * Bildirim gidecek oyuncular — tekilleştirilmiş, **gönderen çıkarılmış**.
  *
  * ⚠️ Aynı kişi bir mesajda iki kez anılırsa **iki aralık** döner (ikisi de kalın yazılmalı) ama

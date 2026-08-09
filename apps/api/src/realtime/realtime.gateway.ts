@@ -5,7 +5,7 @@
  *   1. **Oyun olaylarını anında iletir** (Ordular ekranı, mesaj rozeti) — `RealtimeBus`'tan gelir.
  *   2. **Çevrimiçi durumu** tutar — ⚠️ yalnız İTTİFAK ÜYELERİ arasında görünür (kullanıcı kuralı:
  *      "başka hiçbir yerden hiçbir oyuncunun online durumu kontrol edilemez").
- *   3. Genel Sohbet'in taşıyıcısı olacak (§13.12) — odalar hazır.
+ *   3. **Sohbet odalarını** taşır — DM, ittifak ve (2026-08-10'dan beri) Genel Sohbet.
  *
  * ⚠️ **DÜNYA YALITIMI (§13.12.1b) — pazarlıksız.** `worldId` el sıkışma yükünden ASLA okunmaz,
  * **imzalı access token'dan** gelir; oda adları `w{worldId}:` ile başlar. Böylece "başka dünyanın
@@ -15,6 +15,9 @@
  * 2026-07-31'de kabul edilen ÜÇ olay bu kuralı bozmuyor — hiçbiri kalıcı durum yazmaz:
  *   `chat:open` / `chat:close` → yalnız oda katılımı · `chat:typing` → yalnız yayın.
  * Mesaj GÖNDERME ve okundu işaretleme REST'te kaldı (token tazeliği + bu değişmez).
+ * ⚠️ İttifak (`alliance:chat:*`) ve genel sohbet (`global:chat:*`) çiftleri aynı sözleşmeye
+ * uyuyor; her birinin **ayrı bir `socket.data` slotu** var çünkü üç pencere aynı anda açık
+ * olabilir ve tek slot birini diğerinin odasından atardı.
  */
 import { Server, type Socket } from 'socket.io';
 import type { Server as HttpServer } from 'node:http';
@@ -23,6 +26,7 @@ import type { Db } from '../db/client.ts';
 import type { TokenService } from '../auth/token.service.ts';
 import type { PresenceService } from '../auth/presence.service.ts';
 import { singleDeviceEnforced } from '../auth/presence.service.ts';
+import { globalChatLimits } from '../chat/global-chat.limits.ts';
 import type { RealtimeBus, RealtimeEvent } from './realtime.bus.ts';
 
 interface SocketPlayer {
@@ -30,6 +34,14 @@ interface SocketPlayer {
   worldId: number;
   accountId: number;
   allianceId: number | null;
+  /**
+   * ⭐ Genel sohbetin «kim yazıyor» şeridi için (2026-08-10). El sıkışmada ZATEN atılan
+   * sorguya bir kolon eklendi; alternatif her tuş vuruşunda ad çözmekti.
+   *
+   * ⚠️ Ad soket ömrü boyunca donuk — ama kullanıcı adı **değiştirilemez** (`name-rules.ts`),
+   * yani `allianceId`nin aksine bayatlayamaz.
+   */
+  username: string;
   /**
    * ⭐ Oturum kimliği soket üstünde TAŞINIR (§admin Faz 3): oyuncu başka bir cihazdan
    * "bu cihazı çıkar" dediğinde iptal edilen oturumun soketini bulup düşürebilmek için.
@@ -108,7 +120,7 @@ export class RealtimeGateway {
         if (rows.length === 0) throw new Error('oturum kapalı');
 
         const pRows = await this.db.execute<Record<string, unknown>>(sql`
-          SELECT alliance_id FROM players WHERE id = ${claims.pid}
+          SELECT alliance_id, username FROM players WHERE id = ${claims.pid}
         `);
         const rawInstance = String(socket.handshake.auth?.['instanceId'] ?? '').trim();
         const player: SocketPlayer = {
@@ -116,6 +128,7 @@ export class RealtimeGateway {
           worldId: claims.wid,
           accountId: Number(claims.sub),
           allianceId: pRows[0]?.['alliance_id'] == null ? null : Number(pRows[0]['alliance_id']),
+          username: String(pRows[0]?.['username'] ?? ''),
           sessionId: claims.sid,
           instanceId: rawInstance && rawInstance.length <= 64 ? rawInstance : `s:${claims.sid}`,
         };
@@ -183,12 +196,53 @@ export class RealtimeGateway {
       void this.onAllianceChatOpen(socket, p, gate, raw, ack);
     });
     socket.on('alliance:chat:close', () => this.leaveAllianceChat(socket, p));
+
+    /* ── GENEL SOHBET (§13.12) — ÜÇÜNCÜ olay çifti, ÜÇÜNCÜ slot ────────────────
+     *
+     * ⚠️ İlk iki çift YENİDEN KULLANILAMAZ: her slot TEK değer tutuyor ve açılışta önce eski
+     * kanaldan çıkılıyor. Oyuncu aynı anda bir DM penceresi, ittifak sheet'i ve genel sohbet
+     * kartı açık tutabilir — ortak slot ikisini birbirinin odasından atardı. */
+    socket.on('global:chat:open', (raw: unknown, ack?: (r: unknown) => void) => {
+      void this.onGlobalChatOpen(socket, p, gate, raw, ack);
+    });
+    socket.on('global:chat:close', () => {
+      const open = socket.data.globalChatChannelId as number | undefined;
+      this.leaveGlobalChat(socket, p);
+      if (open) this.emitGlobalPresence(p.worldId, open);
+    });
+    /**
+     * «Yazıyor…» — odadaki HERKESE gider (DM'de yalnız karşı tarafa gidiyordu).
+     *
+     * ⚠️ Ad **soketten** okunuyor: genel sohbette roster yok, istemci id'yi ada çeviremezdi.
+     * ⚠️ `typingEnabled` kapalıysa olay sessizce yutulur — kullanıcı şartı *"gerçekten ek yük
+     * getirmeyecekse yapalım"*ın kill-switch'i. Yayının kendisi DB'ye hiç inmiyor.
+     */
+    socket.on('global:chat:typing', () => {
+      if (!gate.allow()) return;
+      if (!globalChatLimits().typingEnabled) return;
+      const channelId = socket.data.globalChatChannelId as number | undefined;
+      if (!channelId) return;
+      socket.to(room.chat(p.worldId, channelId))
+        .emit('global:chat:typing', { playerId: p.playerId, username: p.username });
+    });
+
     socket.on('chat:typing', (raw: unknown) => {
       if (!gate.allow()) return;
       const channelId = Number((raw as { channelId?: unknown })?.channelId ?? 0);
       // Yalnız AÇIK olduğu kanala yazıyor bildirimi gönderebilir (oda dışına sızmaz).
       if (!Number.isInteger(channelId) || socket.data.chatChannelId !== channelId) return;
       socket.to(room.chat(p.worldId, channelId)).emit('chat:typing', { channelId, playerId: p.playerId });
+    });
+
+    /**
+     * ⚠️ **`disconnecting`, `disconnect` DEĞİL.** socket.io `disconnect` anında soketi bütün
+     * odalardan çıkarmış oluyor; sayacı orada hesaplasaydık kopan kişi hâlâ sayılırdı ve
+     * "3 kişi bağlı" yazısı biri çıktıktan sonra da 3 kalırdı. `disconnecting` odalar hâlâ
+     * doluyken çalışıyor, o yüzden sayıyı **bu soketi düşerek** hesaplıyoruz.
+     */
+    socket.on('disconnecting', () => {
+      const open = socket.data.globalChatChannelId as number | undefined;
+      if (open) this.emitGlobalPresence(p.worldId, open, socket.id);
     });
 
     socket.on('disconnect', () => {
@@ -304,6 +358,71 @@ export class RealtimeGateway {
     const open = socket.data.allianceChatChannelId as number | undefined;
     if (open) void socket.leave(room.chat(p.worldId, open));
     socket.data.allianceChatChannelId = undefined;
+  }
+
+  /**
+   * Genel sohbete BAĞLANILDI: kanal odasına katıl (§13.12).
+   *
+   * ⚠️ **Üyelik sorgusu YOK** — ittifak/DM'in aksine. Genel kanalda "üye olmak" o dünyada
+   * oyuncu olmak demek ve `worldId` zaten imzalı jetondan geliyor. Doğrulanan tek şey kanalın
+   * gerçekten **bu dünyanın genel kanalı** olduğu: aksi hâlde istemci uydurduğu bir id ile
+   * başka bir ittifağın odasına girebilirdi.
+   *
+   * ⚠️ **`enabled` HER AÇILIŞTA yeniden bakılıyor.** Panelden kapatıldığı anda ekranda açık
+   * kalmış istemciler var; onlar yeniden bağlanınca odaya dönmemeli, yoksa özellik "kapalı"
+   * görünürken bir avuç istemci arasında çalışmaya devam ederdi.
+   */
+  private async onGlobalChatOpen(
+    socket: Socket, p: SocketPlayer, gate: EventGate, raw: unknown, ack?: (r: unknown) => void,
+  ): Promise<void> {
+    if (!gate.allow()) return;
+    if (!globalChatLimits().enabled) { ack?.({ ok: false }); return; }
+    const channelId = Number((raw as { channelId?: unknown })?.channelId ?? 0);
+    if (!Number.isInteger(channelId) || channelId <= 0) { ack?.({ ok: false }); return; }
+
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM chat_channels
+       WHERE id = ${channelId} AND world_id = ${p.worldId} AND kind = 'global'
+    `);
+    if (rows.length === 0) { ack?.({ ok: false }); return; }
+
+    this.leaveGlobalChat(socket, p);
+    await socket.join(room.chat(p.worldId, channelId));
+    socket.data.globalChatChannelId = channelId;
+    ack?.({ ok: true });
+    this.emitGlobalPresence(p.worldId, channelId);
+  }
+
+  /** ⚠️ DM ve ittifak slotlarına DOKUNMAZ — üçü aynı anda açık kalabilmeli. */
+  private leaveGlobalChat(socket: Socket, p: SocketPlayer): void {
+    const open = socket.data.globalChatChannelId as number | undefined;
+    if (open) void socket.leave(room.chat(p.worldId, open));
+    socket.data.globalChatChannelId = undefined;
+  }
+
+  /**
+   * ⭐ «Şu an kaç kişi bağlı» — odadaki **tekil oyuncu** sayısı, odaya yayınlanır.
+   *
+   * ⚠️ Soket değil OYUNCU sayılıyor: aynı kişinin iki sekmesi "2 kişi" demek olurdu.
+   * ⚠️ Yalnız katılma/ayrılma anında hesaplanıyor — mesaj başına değil. Maliyet
+   * `O(odadaki soket)` ve seyrek.
+   * ⚠️ **Süreç-yerel** (`onlinePlayerIds` ile aynı sınır): çok süreçli dağıtımda her süreç
+   * yalnız kendi soketlerini görür. Tek süreçli profilde (§4.0 `ROLE=all`) doğru.
+   *
+   * @param exceptSocketId `disconnecting` sırasında kopan soket — henüz odada, sayılmamalı.
+   */
+  private emitGlobalPresence(worldId: number, channelId: number, exceptSocketId?: string): void {
+    if (!this.io) return;
+    const name = room.chat(worldId, channelId);
+    const ids = this.io.of('/').adapter.rooms.get(name);
+    const players = new Set<number>();
+    for (const id of ids ?? []) {
+      if (id === exceptSocketId) continue;
+      const q = (this.io.of('/').sockets.get(id)?.data as { player?: SocketPlayer } | undefined)
+        ?.player;
+      if (q) players.add(q.playerId);
+    }
+    this.io.to(name).emit('global:chat:presence', { count: players.size });
   }
 
   /**

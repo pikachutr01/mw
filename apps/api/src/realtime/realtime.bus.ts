@@ -325,6 +325,32 @@ export function eventForOutbox(
       };
 
     /**
+     * ⭐ GENEL SOHBET (§13.12) — ittifak sohbetiyle **birebir aynı kalıp**: olay yalnız KANAL
+     * ODASINA gidiyor, `playerIds` bilerek boş.
+     *
+     * ⚠️⚠️ Yukarıdaki felaket uyarısı burada bir kat daha ağır: bu kanal dünyanın tamamına
+     * açık ve `dispatch()`teki `chatChannelId` dalı düşerse boş `playerIds` **dünya geneli
+     * yayın** demek — yani odaya girmemiş, sohbeti kapalı HERKES her mesajda sorgu tazeler.
+     * Gizlilik sızıntısı değil (kanal zaten herkese açık) ama tam bir yük patlaması olurdu ve
+     * kullanıcının *"bağlantıyı kopardığında tam sessizlik"* şartı sessizce delinirdi.
+     *
+     * ⚠️ Odaya YALNIZ «Sohbete Bağlan» denince katılınıyor (`global:chat:open`), yani sessizlik
+     * bir bayrağa değil oda üyeliğine — yapıya — dayanıyor.
+     *
+     * ⚠️ `chat:global:deleted` yönetici bir mesajı kaldırınca yazılıyor. Ayrı bir konu, çünkü
+     * istemcide farklı bir davranış istiyor olabilir; bugün ikisi de geçmişi tazeliyor ama
+     * `notify.catalog` yalnız `chat:global`i tanıyor — silme bildirim ÜRETMEMELİ.
+     */
+    case 'chat:global':
+    case 'chat:global:deleted':
+      return {
+        topic, worldId,
+        playerIds: [],
+        chatChannelId: num(payload['channelId']),
+        ref: { channelId: num(payload['channelId']), messageId: num(payload['messageId']) },
+      };
+
+    /**
      * ⭐ BAKIM MODU (admin Faz 2) — **dünya geneli** yayın: perde herkeste aynı anda açılıp
      * kapanmalı. Olay kimlik değil DURUM taşıyor (`paused`, `notice`, `eta`) ve bu, "olay veri
      * değil haber taşır" kuralının bilinçli tek istisnası: perdenin amacı zaten oyuncuyu

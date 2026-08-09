@@ -33,7 +33,8 @@
 >   kendi "yalnız bende sil" ucundan geçiyor
 > - 3'lü filtre "Hepsini Göster" (bizde 2 sekme — bu kullanıcının bilinçli tercihi)
 > - **Şikayet moderasyon paneli** — kayıt üretiliyor, inceleme ekranı sonraki tur
-> - İttifak sohbeti ve Genel Sohbet (aynı `chat_*` altyapısı, ayrı tur)
+> - ~~İttifak sohbeti ve Genel Sohbet~~ ✅ **ikisi de bitti** (ittifak 2026-08-07, genel
+>   2026-08-10) — aynı `chat_*` altyapısı, aynı `chat.guards.ts` kapıları
 
 Orijinalde bir mesaj satırının aksiyonları (`g.java:1813-1852`):
 

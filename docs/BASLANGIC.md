@@ -22,7 +22,9 @@
 > envanterde duran adaylar, sıralama değil:
 > - **Moderasyon minimumu** — şikayet kuyruğu var, inceleme ekranı yok (§1.8)
 > - **Yardım ekranı** hâlâ yer tutucu · i18n hiç yok
-> - **Genel Sohbet** ⚠️ kullanıcı tarafından **EN SONA** alındı
+> - ~~**Genel Sohbet**~~ ✅ **2026-08-10'da bitti** (§13.12) — dünya başına tek oda, bağlan/kopar
+>   modeli, roster'sız `@` bahsetme, engelleme süzgeci, yönetici susturma + mesaj silme.
+>   ⚠️ **Erken aşamaya özel:** canlıya çıkarken panelden `globalChat.enabled` KAPATILACAK
 > - **Premium / üyelik** — ürün kararı bekliyor; tatil modunda dikiş hazır
 >   (`vacation.premiumOnly`), `players.is_premium` kolonu hâlâ okunmuyor
 > - **Mağaza bağlantıları** (Play/App Store) — PWA düğmesinde yorumla dikiş bırakıldı
@@ -128,6 +130,9 @@ Hepsi bu projede **gerçekten başımıza geldi**. Yeni oturum bunları okumadan
 | ⚠️ **Windows: `turbo.exe` «Uygulama Denetimi ilkesi bu dosyayı engelledi»** | **Smart App Control** açık (ilke `{0283ac0f-…}`) ve `turbo.exe` **hiç imzalı değil**. SAC imzasız ikiliyi ancak bulut itibar sorgusu «itibarlı» derse geçiriyor → engelleme **aralıklı**: 2026-08-05'ten beri 14 kez, aynı gün içinde bazen çalışıp bazen çalışmıyor. Kod hatası SANILIR. Aynı ilke daha önce `rolldown-binding…node`u da engelledi | Teşhis: `Get-WinEvent -LogName Microsoft-Windows-CodeIntegrity/Operational \| ? Id -eq 3077`. Geçici çözüm **`pnpm test:turbosuz`**. Kalıcı çözüm SAC'ı kapatmak — ⚠️ **GERİ ALINAMAZ** (yeniden açmak Windows kurulumu ister) ve SAC'ın **istisna listesi yoktur** |
 | API'de `pnpm dev` | NestJS dekoratörleri Node'un tip-sıyırmasıyla gitmiyor | `pnpm build` → `node dist/main.js` |
 | Testte ikinci bir DB bağlantısını **elle** adreslemek | Test veritabanı **worker başına** (`mobilwar_test_1`, `_2`…). Elle `/mobilwar_test` yazan bağlantı başka bir veritabanına düşer; LISTEN/NOTIFY veritabanı başına çalıştığı için olaylar sessizce hiç gelmez | `testDbUrl()` yardımcısı (`test/helpers/db.ts`) |
+| ⭐ **Testte outbox satırlarını `world_id` süzmeden okumak** | Test veritabanı koşular arasında YAŞIYOR ve `outbox` temizlenmiyor. `SELECT … WHERE topic = 'x' ORDER BY id` alıp `[0]`ı okumak **önceki koşudan kalmış** bir satırı yakalar; test hiç çalıştırmadığı bir gönderimi ölçer ve bambaşka bir yerde "boş dizi" olarak patlar (2026-08-10, genel sohbet mention testi) | Süzgece `AND world_id = ${worldId}` ekle — dünya kimliği `freshWorldId()` ile her testte yeni |
+| ⭐ **Drizzle `sql` şablonuna JS DİZİSİ verip `::text[]` diye cast etmek** | Şablon diziyi değer LİSTESİNE (record) açıyor → *"cannot cast type record to text[]"*. `= ANY($1::text[])` yazan her sorgu böyle patlar | Tek parametre olarak jsonb gönder: `IN (SELECT jsonb_array_elements_text(${JSON.stringify(xs)}::jsonb))`. İndeks kullanılabilir kalır |
+| ⭐ socket.io'da oda sayacını **`disconnect`** olayında hesaplamak | O an soket bütün odalardan ÇIKARILMIŞ olur, ama sayaç yayını odaya gider: kopan kişi hâlâ sayılıyor görünür ("3 kişi bağlı" biri gittikten sonra 3 kalır) | **`disconnecting`** dinle (odalar hâlâ dolu) ve kopan soketi sayımdan açıkça düş |
 | Testte "zaten bir dünya vardır" varsaymak | `SELECT id FROM worlds LIMIT 1` başka bir dosyanın artığına güvenir. Paralel/izole koşuda o dosya kendi worker'ında ilk çalışınca tablo boştur | Kendi dünyanı yarat: `freshWorldId()` + `createWorld()` |
 | `node dist/main.js` çıplak | `DATABASE_URL tanımsız` | `node --env-file=../../.env dist/main.js` |
 | Worker kapalı (`ROLE=api`) | **Savaşlar hiç çözülmez**, ordular sonsuza kadar yolda | `ROLE=all` (varsayılan) |
@@ -304,7 +309,17 @@ Koda dokunmadan önce ilgili §'yi aç.
 6. **Askerî unvanlar** (Subay/Komutan/Başkomutan/Mareşal) — kazanma şartı orijinalde
    sunucudaydı, bilinmiyor; kullanıcı "büyük savaş başarısı + süreli" diyor
 7. **Denge senaryoları** — erken/orta/geç oyun maliyet-süre testleri
-8. **Genel Sohbet** — ⚠️ kullanıcı EN SONA aldı
+8. ✅ ~~**Genel Sohbet**~~ — **2026-08-10'da bitti** (§13.12), sohbetin üç türü de tamam.
+   Dünya başına tek `kind = 'global'` kanal (göç 0046, kısmî tekil indeks) · **bağlan/kopar**
+   modeli (varsayılan çevrimdışı; kapalıyken ne sorgu ne WS odası) · masaüstünde sağ sütun
+   kartı, mobilde «Daha» sheet'i, 1024-1279 px'te sol menü düğmesi · **roster'sız mention**
+   (`mentionCandidateNames` + tek `IN` sorgusu) ve debounce'lu `@` öneri ucu · engelleme
+   `player_blocks`tan süzülüyor (DM ile TEK liste, Seçenekler'de yönetiliyor) · yönetici
+   sohbetin içinden **susturur** (`chat_bans`, `scope = 'global'`) ve **mesaj kaldırır** ·
+   bahsetme bildirimi yalnız sohbete BAĞLI DEĞİLKEN toast oluyor.
+   ⚠️ **Kapatma anahtarı ürünün bir parçası:** `globalChat.enabled` kapatılınca sunucu her
+   isteği reddeder (okuma dâhil) ve istemci hiçbir kapı çizmez — canlıya çıkışta kapatılacak.
+   ⚠️ Yan etki: `chat_bans.scope` artık OKUNUYOR — `global` kapsamlı yasak özel mesajı kesmez.
 
 ### Web arayüzü — ne var, ne yok
 Masaüstünde üç sütun: sol **logo + menü** · orta **bilgi çubuğu + şehir şeridi + içerik** ·

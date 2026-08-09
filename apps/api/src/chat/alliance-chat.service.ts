@@ -191,7 +191,7 @@ export class AllianceChatService {
     }
 
     try {
-      await assertNotBanned(tx, o.worldId, o.playerId);
+      await assertNotBanned(tx, o.worldId, o.playerId, 'other');
     } catch (err) {
       const e = err as ChatError;
       return { reason: 'banned', until: null, text: e.message, retryAfter: e.retryAfterSeconds };

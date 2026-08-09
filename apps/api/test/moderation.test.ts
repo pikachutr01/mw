@@ -112,6 +112,25 @@ describe('sohbet yasağı', () => {
       .rejects.toThrow(ChatError);
   });
 
+  /**
+   * ⭐⭐ KAPSAM YALITIMI (2026-08-10) — `chat_bans.scope` artık OKUNUYOR.
+   *
+   * Genel sohbetin kendi susturması `scope = 'global'` yazıyor. O kapsam özel mesajı da
+   * kesseydi, sohbetin içinden verilen bir moderasyon kararı oyuncunun BÜTÜN yazışmalarını
+   * kapatırdı — istenmeyen ve söylenmeyen bir ceza.
+   *
+   * ⚠️ Bu test kaldırılırsa `assertNotBanned`in `where` parametresi sessizce anlamsızlaşır:
+   * kod derlenmeye devam eder, yalnız kapsam ayrımı ölür.
+   */
+  it('⭐⭐ `global` kapsamlı yasak ÖZEL MESAJI kapatmaz', async () => {
+    const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await h.db.execute(sql`
+      INSERT INTO chat_bans (world_id, player_id, scope, until, reason)
+      VALUES (${worldId}, ${alice}, 'global', NULL, 'genel sohbette küfür')
+    `);
+    await expect(send(alice, ch)).resolves.toBeTruthy();
+  });
+
   it('süresi GEÇMİŞ yasak etkisiz', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
     await h.db.execute(sql`
