@@ -149,6 +149,7 @@ Hepsi bu projede **gerçekten başımıza geldi**. Yeni oturum bunları okumadan
 | Kuyruk emrini **sipariş anından** zamanlamak | Emirler **paralel** geri sayar; iptalde bekleyenlerin hepsi birden üretilmiş görünür | Zinciri her değişiklikte kur (`rescheduleUnitChain`): 2. emir 1.'nin BİTİŞİNDE başlar |
 | ⭐ Kısıt kapısını YALNIZ onay/karar adımına koymak | Hata, kısıtı KALDIRAMAYACAK kişiye çıkar. Doğrulanmamış hesap ittifak başvurusu gönderebiliyordu; uyarıyı lider «Kabul»e basınca O okuyordu, başvuran ise neden alınmadığını hiç öğrenmiyordu | Kapı **eylemin BAŞLADIĞI** uçta (`apply`); karar ucundaki kontrol emniyet ağı olarak KALIR (yetki arada kaybedilebiliyor). Görünürlüğü de öne al: sebep tıklamadan önce yazsın |
 | Durum makinesi satırını güncelleyip MESAJINI bırakmak | Kutuda düğmeli ama ölü satır kalır; basan her seferinde «Bu istek zaten sonuçlanmış.» alır. Kopya sayısı kadar kişide birden yaşar (başvuru lider + TÜM konseye yazılıyor) | Satırı sonuçlandıran yer mesajını da silsin (`dropInviteMessages`). Alıcı listesini yeniden kurma — `DELETE … RETURNING player_id` zaten söylüyor |
+| ⭐ Anonimleştirilen hesabın şehrini "nasılsa oynanmıyor" diye normal saymak | Hayalet şehir puan üretmeye devam eder ve vitrini kirletir: oyuncu sıralaması, ittifak toplamı **ve kahraman sıralaması** (o satır sahibinin adını da yazıyor). Tatildeyken silinirse 30 güne kadar **dokunulamaz** bir şehir kalır | Silme akışında üç bayrak + tatil: `ranking_excluded` · `alliance_score_excluded` · kahraman süzgecinde `deleted_at` · `endVacation()`. ⚠️ Puanı SIFIRLAMA — şehir gerçek, `recomputeScore` zaten geri kurar |
 | Ekranda ham katalog `id`'si | *"temple için ön-şart: sorcery 6"* — oyuncu ne olduğunu anlamaz (§13.14) | Sunucu mesajında da `nameOfItem()` ile Türkçeleştir |
 | CSS'te `position` dayatan yardımcı sınıf | `.tex` bir ara `relative` dayatıyordu → mobil alt bar **ekran dışına düştü** | Yardımcı sınıflar konumlandırmaya dokunmasın |
 | İki bileşenin aynı şeyi çizmesi | Şehir şeridi hem kabuktan hem ekrandan çizilince **iki şerit** göründü | Paylaşılan öge tek yerde (`Shell`) |
@@ -293,7 +294,12 @@ Koda dokunmadan önce ilgili §'yi aç.
 4. ✅ ~~**Hesap/şehir aksiyonları**~~ — **paket tamamen kapandı.** Şehir Adı Değiştir · Şehir
    Terk Et · Şifre/E-posta Değiştir · Hesap Silme (2026-08-01) + **Tatil Modu** (2026-08-02,
    uçtan uca: göç 0035, `apps/api/src/vacation/`, `VacationPanel`, mavi «Tatilde», yönetici
-   «Tatili bitir» aksiyonu)
+   «Tatili bitir» aksiyonu).
+   ⭐ **Hesap silme 2026-08-09'da yeniden düzenlendi** (`account-delete.service.ts`): kalan
+   başkent **adını korur** (`hükümdarN` artık yalnız OYUNCU adı) · şehir **hiçbir sıralamada
+   görünmez** (`ranking_excluded` + kahraman sıralamasında `deleted_at` süzgeci) · ittifak
+   **üyeliği sürer** ama puan takım toplamına yazılmaz (`alliance_score_excluded`) ve konsey
+   Asker'e iner · tatil bitirilir · bekleyen davet/başvurular iptal edilip mesajları silinir
 5. **Orijinal Java metin taraması** — bildirim/uyarı/rapor adlarının sistematik uygulanması
 6. **Askerî unvanlar** (Subay/Komutan/Başkomutan/Mareşal) — kazanma şartı orijinalde
    sunucudaydı, bilinmiyor; kullanıcı "büyük savaş başarısı + süreli" diyor
