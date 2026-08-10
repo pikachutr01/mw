@@ -17,12 +17,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { caveRepairSeconds, wallCurrentIntegrity } from '@mobilwar/catalog';
 import { nameOf } from '../lib/names.ts';
-import { BUILDING_INFO, UNIT_INFO } from '../lib/info-texts.ts';
+import { BUILDING_INFO, TECH_INFO, UNIT_INFO } from '../lib/info-texts.ts';
 import { unitStats, unitTechNames } from '../lib/unit-facts.ts';
+import {
+  colonizationSteps, nightGapClosed, roadTimeFactor, spyTierLabels, techEffectLine, techUnitNames,
+} from '../lib/tech-facts.ts';
 import { fmt, formatDuration, gameNow, remaining, useTick } from '../lib/hooks.ts';
 import {
   useCancelCaveJob, useCancelQueue, useCatalog, useCity, useEnqueue, useMoveQueue,
-  type CatalogBuilding, type CatalogUnit, type CityDetail, type QueueRow, type TechQueueRow,
+  type CatalogBuilding, type CatalogTech, type CatalogUnit, type CityDetail, type QueueRow,
+  type TechQueueRow,
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import {
@@ -1017,6 +1021,93 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
 
 /* ── Akademi ────────────────────────────────────────────────────────────────── */
 
+/** Popover içinde küçük bir «eşik → sonuç» çizelgesi. Kademeli teknikler bununla anlatılıyor. */
+function StepTable({ rows }: { rows: { left: string; right: string }[] }) {
+  return (
+    <span className="mt-1 block space-y-0.5">
+      {rows.map((r) => <PopoverRow key={r.left} label={r.left} value={r.right} />)}
+    </span>
+  );
+}
+
+/**
+ * ⭐ TEKNİK BİLGİ KUTUSU — Akademi satırlarındaki «i» düğmesi (kullanıcı, 2026-08-11).
+ *
+ * Birim kutusunun (`UnitInfo`) ikizi: açıklama → çizgi → etkisi → çizgi → etkilediği birimler.
+ * Metin `TECH_INFO`dan, **oran ve liste savaş motorunun kataloğundan** (`lib/tech-facts.ts`).
+ *
+ * ⚠️ Savaş statına dokunmayan dört teknikte (Casusluk · Haritacılık · Sömürgecilik · Gece Görüş)
+ * «etkilediği birimler» yoktur; onların yerine kendi mekaniklerinden türetilmiş bir çizelge
+ * çiziliyor. Boş bir bölüm göstermek "bu teknik işe yaramıyor" diye okunurdu.
+ *
+ * ⚠️ Haritacılık'ın adımı **sunucudan gelen harita config'inden** (`city.map`) okunuyor; Dünya
+ * ekranındaki süre önizlemesi de aynı sayıyı kullanıyor, ikisi ayrışmasın.
+ */
+function TechInfo({ t, city }: { t: CatalogTech; city: CityDetail }): React.ReactElement | null {
+  const text = TECH_INFO[t.id];
+  if (!text) return null;
+  const effect = techEffectLine(t.id);
+  const units = techUnitNames(t.id);
+
+  /** Savaş dışı tekniklerin çizelgesi — her biri kendi motor kuralından. */
+  const table: { title: string; rows: { left: string; right: string }[] } | null =
+    t.id === 'colonization'
+      ? {
+        title: 'Şehir hakkı',
+        rows: colonizationSteps().map((s) => ({ left: `sv ${s.level}`, right: `${s.cities} şehir` })),
+      }
+      : t.id === 'cartography'
+        ? {
+          title: 'Yol süresi',
+          rows: [5, 10, 20].map((lv) => ({
+            left: `sv ${lv}`,
+            right: `−%${Math.round((1 - roadTimeFactor(lv, city.map)) * 100)}`,
+          })),
+        }
+        : t.id === 'night_vision'
+          ? {
+            title: 'Gece kaybının kapanan payı',
+            rows: [1, 3, 9].map((lv) => ({
+              left: `sv ${lv}`, right: `%${Math.round(nightGapClosed(lv) * 100)}`,
+            })),
+          }
+          : t.id === 'espionage'
+            ? {
+              title: 'Seviye farkına göre gelen bilgi',
+              rows: spyTierLabels().map((s) => ({ left: s.gap, right: s.text })),
+            }
+            : null;
+
+  return (
+    <>
+      <span className="block">{text}</span>
+
+      {effect ? (
+        <span className="mt-2 block border-t border-border pt-1.5">
+          <InfoHeading>Etkisi</InfoHeading>
+          <span className="mt-0.5 block">{effect}</span>
+        </span>
+      ) : null}
+
+      {units.length > 0 ? (
+        <span className="mt-2 block border-t border-border pt-1.5">
+          <InfoHeading>Etkilediği birimler</InfoHeading>
+          <span className="mt-1 flex flex-wrap gap-1">
+            {units.map((u) => <Badge key={u}>{u}</Badge>)}
+          </span>
+        </span>
+      ) : null}
+
+      {table ? (
+        <span className="mt-2 block border-t border-border pt-1.5">
+          <InfoHeading>{table.title}</InfoHeading>
+          <StepTable rows={table.rows} />
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function Techs({ city }: { city: CityDetail }) {
   const { cityId } = useActiveCity();
   const catalog = useCatalog(cityId);
@@ -1062,7 +1153,8 @@ function Techs({ city }: { city: CityDetail }) {
               <div className="flex items-center justify-between gap-3">
                 <CatalogIcon kind="techs" id={t.id} alt={t.name} />
                 <div className="min-w-0 flex-1">
-                  <ItemName name={t.name} value={t.level} />
+                  <ItemName name={t.name} value={t.level}
+                    info={TECH_INFO[t.id] ? <TechInfo t={t} city={city} /> : undefined} />
                   <CostLine gold={t.nextCost.gold} food={t.nextCost.food}
                     seconds={t.nextSeconds} baseSeconds={t.baseSeconds} />
                   <Requirements requirementNames={t.requirementNames}

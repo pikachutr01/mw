@@ -155,9 +155,9 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
   magic_shield: {
     desc: 'Saldıran ordudaki büyü gücüne sahip birimlerin etkisini azaltır. Her seviyesi daha '
       + 'fazla büyü koruması sağlar.',
-    extra: 'Yalnız büyü fazında iş görür: Cüce ya da Süvari gibi büyüsüz bir orduya karşı hiçbir '
-      + 'şey yapmaz. Seviye 1 kalkan çoğu savaşta erir; asıl korumasına 2. seviyeden itibaren '
-      + 'ulaşır.',
+    extra: 'Yalnız büyülü saldırılara karşı iş görür: Cüce ya da Süvari gibi büyüsüz bir orduya '
+      + 'karşı hiçbir şey yapmaz. Seviye 1 kalkan çoğu savaşta erir; asıl korumasına 2. seviyeden '
+      + 'itibaren ulaşır.',
   },
   archer_tower: {
     desc: 'Sur savunmasının omurgasını oluştururlar. Hem canlı hem mekanize hedeflere karşı '
@@ -167,8 +167,8 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
   trap: {
     desc: 'Surun dış çevresine yerleştirilirler. Saldıran ordu şehre yaklaşmadan yer birimlerine '
       + 'ciddi zarar verirler.',
-    extra: 'Savaşın ilk turunda tek bir salvo hâlinde patlarlar. Uçan birimler tuzağa basmaz; '
-      + 'gnomlar ise tuzakları bozabilir.',
+    extra: 'Bir kez patlar, sonra tükenirler. Uçan birimler tuzağa basmaz; gnomlar ise tuzakları '
+      + 'bozabilir.',
   },
   oil_cauldron: {
     desc: 'Surun üzerinde görev yapan, yakın savaşta etkili birimlerdir. Düşman sura saldırırken '
@@ -185,6 +185,65 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
   },
   ballista: {
     desc: 'Çok büyük ve etkili okların atıldığı makinelerdir. Savunmanın en pahalı ve en güçlü '
-      + 'ünitesidir: hem menzilli hem büyü fazında vurur, dayanıklılığı da en yüksek olanıdır.',
+      + 'ünitesidir: hem oklarıyla hem büyüyle vurur, dayanıklılığı da en yüksek olanıdır.',
   },
+};
+
+/**
+ * ⭐ AKADEMİ sayfası (§10) — teknik bilgi kutusunun **metin** kısmı.
+ *
+ * Kullanıcı isteği (2026-08-11): tekniklere de Baraka'dakine benzer kutular; *"çok teknik detay
+ * vermeden, oyuncuların anlayabileceği türden"*.
+ *
+ * ⚠️ **Oran ve etkilenen birim listesi burada YOK**, `lib/tech-facts.ts` üzerinden savaş
+ * motorunun kataloğundan geliyor. Referans dokümanın oranları iki yerde yanlış (Tılsım'ı %5
+ * diyor, gerçekte %6) ve elle yazsaydık kutu o yanlışı öğretirdi.
+ *
+ * ⚠️ Metinler **ne yaptığını** anlatır, **kaç yaptığını** değil: sayı hep türetilmiş bölümde
+ * durur. Bir teknik yeniden dengelenince metne dokunulması gerekmesin.
+ */
+export const TECH_INFO: Readonly<Record<string, string>> = {
+  archery:
+    'Ok kullanan savaşçıların ve menzilli savunma ünitelerinin atış gücünü geliştirir. '
+    + 'Menzilli birimler düşman yaklaşmadan vurmaya başladığı için erken yatırım karşılığını '
+    + 'çabuk verir.',
+  blacksmithing:
+    'Silah ustalarının becerisini artırır; kılıç, balta ve mızrakla yakın dövüşe giren '
+    + 'birimlerin vuruşunu güçlendirir. Ayrıca cücelerin düşman mağarasını yıkmasını '
+    + 'kolaylaştırır — seviye yükseldikçe daha az cüce yeter.',
+  chemistry:
+    'Fırlatılan taşları ve okları yanıcı hâle getirir. Kuşatma makinelerinin ve kızgın yağın '
+    + 'düşürdüğü hasarı artırır.',
+  instinct:
+    'Ejderha, Ogre ve Kaos gibi yaratıkların doğal savaşçılık içgüdüsünü keskinleştirir. '
+    + 'Listesi dar ama oyunun en büyük vuruş güçlerini çarptığı için geç oyunun belkemiğidir.',
+  sorcery:
+    'Büyü gücü olan savaşçıların büyü kapasitesini artırır. Büyü, savaşçının uzaktan mı yakından '
+    + 'mı dövüştüğüne bakmadan işler; bu yüzden etkisi geniştir. Ayrıca pek çok üst seviye '
+    + 'birimin ve yapının ön koşuludur.',
+  armor:
+    'Demir ustaları daha iyi zırhlar üretir; birimlerin fiziksel saldırılara karşı emdiği hasarı '
+    + 'artırır. Zırh yeterince kalınsa gelen darbe hiç kayıp vermeden savuşturulur. Hem saldırıda '
+    + 'hem savunmada, oyundaki en geniş birim listesinde işler.',
+  masonry:
+    'Taş ustaları daha sağlam savunma yapıları kurar; Sur\'un ve sur üzerindeki ünitelerin '
+    + 'fiziksel dayanıklılığını artırır. Yalnız savunmada iş görür; saldırıya çıkan orduya '
+    + 'hiçbir katkısı yoktur.',
+  talisman:
+    'Savaşçıları büyüyle yapılan saldırılara karşı korur; Büyü Kalkanı\'nın gücünü de bu teknik '
+    + 'belirler. Üst seviye ordular ağırlıkla büyüyle vurduğu için önemi oyun ilerledikçe artar.',
+  espionage:
+    'Casusluk yeteneği üstün hükümdarlar rakipleri hakkında daha çok şey öğrenir. Ne kadar bilgi '
+    + 'geldiğini, sizin casusluk seviyenizle rakibinkinin FARKI belirler — mutlak seviyeniz değil.',
+  cartography:
+    'Yol ve harita bilgisi geliştikçe ordular hedefe daha çabuk ulaşır. Uzak hedeflere yapılan '
+    + 'seferlerde kazancı en yüksektir.',
+  colonization:
+    'Boş koordinatlara yeni şehir kurma hakkı verir. Her yeni şehir kendi ekonomisini, ordusunu '
+    + 've savunmasını getirir; üstelik teknikler tüm şehirlerde ortak olduğu için bütün teknik '
+    + 'yatırımınızın getirisini büyütür.',
+  night_vision:
+    'Gece (00:00–08:00) yapılan savaşlarda görüş azalır ve her iki tarafın vuruş gücü düşer. '
+    + 'Bu teknik gecenin getirdiği kaybı kapatır. Sur ve Büyü Kalkanı geceden hiç etkilenmez; '
+    + 'yani gece saldırmak savunanın işine yarar.',
 };
