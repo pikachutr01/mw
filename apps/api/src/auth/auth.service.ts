@@ -74,7 +74,6 @@ const LOCK_MINUTES = 15;
 export class AuthService {
   private readonly passwords = new PasswordService();
   private readonly devices: DeviceSignalService;
-  private readonly cities: CityService;
   private readonly emailTokens: EmailTokenService;
   private readonly placement: PlacementService;
 
@@ -82,9 +81,23 @@ export class AuthService {
     private readonly db: Db,
     private readonly tokens: TokenService,
     private readonly clock: GameClockService,
+    /**
+     * ⚠️⚠️ **UYGULAMANIN `CityService` ÖRNEĞİ — ZORUNLU.** Burada `new CityService(db)`
+     * kurulmamalı; kurulduğu için canlıda bir hata yaşandı (kullanıcı, 2026-08-10):
+     *
+     * Panelden **başlangıç altını/yemeği** değiştirildiğinde yeni kayıt olan oyuncu hâlâ
+     * varsayılan 4000/4000 ile başlıyordu. `CityService.create` keseyi `catalogFor(worldId)`
+     * üzerinden okuyor; katalog fonksiyonu verilmeyen bir örnek `DEFAULT_CATALOG_CONFIG`e
+     * düşüyor ve **panel sessizce hiçbir şey yapmıyordu** — ayar kaydediliyor, hash değişiyor,
+     * ekranda görünüyor, ama oyuncunun gördüğü ilk sayı sabit kalıyordu.
+     *
+     * ⚠️ Parametre **isteğe bağlı DEĞİL** ve bu bilinçli: varsayılanı olan bir parametre aynı
+     * tuzağı açık bırakırdı. `VacationService` de tam olarak bu sebeple örneği alıyor
+     * (`vacation.service.ts` başlığı) — orada uyarı yazılmış ama burası gözden kaçmıştı.
+     */
+    private readonly cities: CityService,
   ) {
     this.devices = new DeviceSignalService(db);
-    this.cities = new CityService(db);
     this.emailTokens = new EmailTokenService(db);
     this.placement = new PlacementService(db);
   }

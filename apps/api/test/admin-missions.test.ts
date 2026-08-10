@@ -76,7 +76,7 @@ beforeAll(async () => {
     new SettingsService(h.db),
     clock,
     new WorldStateService(h.db),
-    new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock),
+    new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities),
   );
   worldId = freshWorldId();
   await createWorld(h, worldId);

@@ -43,7 +43,7 @@ beforeAll(async () => {
   h = await setupTestDb();
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
-  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock);
+  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities);
   emails = new EmailTokenService(h.db);
   deletes = new AccountDeleteService(h.db);
 }, 60_000);

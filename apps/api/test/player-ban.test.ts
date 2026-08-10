@@ -40,7 +40,7 @@ beforeAll(async () => {
   cities = new CityService(h.db);
   missions = new MissionService(h.db, cities);
   auth = new AuthService(
-    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock,
+    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities,
   );
 }, 60_000);
 

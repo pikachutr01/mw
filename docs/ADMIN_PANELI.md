@@ -161,13 +161,56 @@ Tersi olsaydı panelden yapılan değişiklik sunucu yeniden başlayınca sessiz
 ⚠️ `world_id = 0` gerçek bir dünya değil, "tüm dünyalar için varsayılan". Bu yüzden `worlds`a
 yabancı anahtarı yok.
 
-### Kapsam sınırı (bilinçli, Faz 1)
+### ⚠️⚠️ Kapsam sınırı — Faz 1'de bilinçliydi, 2026-08-10'da ARIZAYA dönüştüğü ölçüldü
 
-İşletim limitleri (`chatLimits()`, `notifyLimits()`, `mailLimits()`) **dünya 0 katmanından**
-okunuyor. Sebep: bu okuyucular `worldId` bilmeyen yerlerde de çağrılıyor (`mail/templates.ts`,
-`mail.service.ts`). Dünya bazlı geçersiz kılma **saklanıyor ve panelde görünüyor** ama tüketim
-henüz dünya 0'dan. Gerçek dünya bazlı limit gerekince çağrı noktalarına `worldId` geçirilecek;
-**depolama değişmez**.
+**Eski karar:** işletim limitleri (`chatLimits()`, `notifyLimits()`, `mailLimits()`) **dünya 0
+katmanından** okunuyordu. Gerekçe sağlamdı: bu okuyucular `worldId` bilmeyen yerlerde de
+çağrılıyor (`mail/templates.ts`, `mail.service.ts`).
+
+**Sorun:** panel **daima dünya 1'e** yazıyor (`apps/admin/src/App.tsx` → `login({… worldId: 1 })`).
+İki karar ayrı ayrı savunulabilirdi; **birlikte** ise panelin yazdığı katmanı hiçbir tüketicinin
+okumadığı anlamına geliyordu. Ölçüm:
+
+```
+panelden chat.burst = 99
+  snapshot(1).effective.chat.burst → 99   ✓ kayıt gerçekten yazılmış
+  chatLimits().burst               → 5    ✗ tüketici varsayılanı kullanıyor
+```
+
+⚠️ Bu **on bir grubu** kapsıyordu: `chat` · `allianceChat` · `globalChat` · `verify` ·
+`vacation` · `session` · `mail` · `notify` · `ratelimit` · `abuse`. Panel *"kaydedildi, tüm
+süreçlerde hemen etkin"* diyordu ve kayıt gerçekten yazılıyordu — yalnız kimse okumuyordu.
+
+⚠️ **Aynı arıza 2026-08-08'de bir kez daha görülmüştü** (savaş ayarı) ve `liveNumberFor`
+kapısıyla çözülmüştü — ama kapıdan yalnız ÜÇ çağrı noktası geçirilmişti (`mission` · `scoring` ·
+`placement`). Yani o düzeltme hatanın kendisini değil, tek bir örneğini kapatmıştı.
+
+**Çözüm:** köprü artık `snapshot(primaryWorldId())` ile besleniyor — yani **sürecin hizmet
+ettiği dünyanın** birleştirilmiş görüntüsüyle. Katman sırası korunuyor (dünya 0 → dünya N), yani
+kurulum geneli ayarlar aynen geçerli, üstüne o dünyanınki biniyor. Davranış hiçbir koşulda
+eskisinden dar değil.
+
+⚠️ **Kalan sınır (teorik):** çok dünyalı kurulumda `worldId` bilmeyen bir okuyucu, sürecin
+birincil dünyasının katmanını görür. Bugün her süreç tek dünyaya hizmet ediyor (`WORLD_ID`,
+§4.0). Gerçekten dünya bazlı olması gereken okuyucular zaten `liveNumberFor` kullanıyor.
+
+Bekçi: `settings.test.ts` → *«dünya bilmeyen okuyucular da panelin katmanını görür»*.
+
+### ⚠️ Ayarı okuyan servisi ÇÖZÜCÜSÜZ kurmama kuralı
+
+Ayar bir servise **fonksiyon olarak** geçiyor (`new CityService(db, (w) => s.catalog(w), …)`).
+Fonksiyonu vermeyen bir örnek `DEFAULT_CATALOG_CONFIG`e düşer ve panel **sessizce** etkisiz kalır.
+
+2026-08-10'da iki kurban bulundu ve düzeltildi:
+
+| Yer | Ne kırılmıştı |
+| :-- | :-- |
+| `AuthService` | **Başlangıç altını/yemeği** yeni kayıt olan oyuncuya hiç ulaşmıyordu — herkes varsayılan 4000/4000 ile başlıyordu |
+| `worker.ts` | Worker'ın `CityService`i katalogsuzdu: aynı şehir, API tarafından ayarlanmış üretim hızıyla, worker tarafından (savaş, nakliye varışı) **varsayılan** hızla materyalize ediliyordu |
+
+⚠️ Bu tür parametreler **isteğe bağlı yapılmamalı**: varsayılanı olan bir parametre tuzağı açık
+bırakır. `AuthService`inki bu yüzden zorunlu. Bekçi: `catalog-settings.test.ts` →
+*«ayar servise ULAŞIYOR mu»*.
 
 ### Nerede ne duruyor
 

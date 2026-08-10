@@ -77,7 +77,7 @@ beforeAll(async () => {
   dbCtl = new AdminDbController(h.db);
   adminCtl = new AdminController(h.db);
   auth = new AuthService(
-    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock,
+    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities,
   );
 }, 60_000);
 

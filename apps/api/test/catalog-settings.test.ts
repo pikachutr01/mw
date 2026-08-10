@@ -23,6 +23,7 @@ import { TokenService } from '../src/auth/token.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { QueueService } from '../src/queues/queue.service.ts';
+import { createWorker } from '../src/worker/worker.ts';
 import { CATALOG_GROUPS, catalogOverrides } from '../src/settings/catalog.ts';
 import { SettingsService } from '../src/settings/settings.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
@@ -34,11 +35,27 @@ let clock: GameClockService;
 let auth: AuthService;
 let worldId: number;
 
+/**
+ * ⭐ Servislerin gördüğü CANLI katalog — testin ortasında değiştirilebilsin diye kutuda.
+ *
+ * ⚠️ **Modül kapsamına taşındı** (2026-08-10). Eskiden yalnız «süren işler» bloğunun içindeydi;
+ * artık `AuthService`in `CityService`i de buradan besleniyor, çünkü kayıt akışının panelden
+ * gelen sabiti gerçekten kullanıp kullanmadığı bu dosyanın sorusu hâline geldi.
+ */
+const live: { cfg: ReturnType<SettingsService['catalog']> } = { cfg: DEFAULT_CATALOG_CONFIG };
+
 beforeAll(async () => {
   h = await setupTestDb();
   clock = new GameClockService(h.db);
+  /**
+   * ⚠️ `AuthService` artık uygulamanın `CityService` ÖRNEĞİNİ alıyor (2026-08-10) ve burada
+   * ona CANLI katalog kutusu veriliyor: bu dosyanın ölçtüğü şey tam olarak «panelden
+   * değiştirilen sabit gerçekten kayda ulaşıyor mu». Katalogsuz bir örnek verseydik test
+   * kendi sorusunu soramazdı.
+   */
   auth = new AuthService(
     h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock,
+    new CityService(h.db, () => live.cfg),
   );
 }, 60_000);
 
@@ -201,6 +218,120 @@ describe('ayar formüllere ulaşıyor', () => {
   });
 });
 
+/* ═══ ⭐⭐ AYAR GERÇEKTEN OYUNA ULAŞIYOR MU — SERVİS BAĞLANTISI ═══════════════
+ *
+ * Bu blok, ayarın **hesaplandığını** değil **ulaştığını** ölçüyor. İkisi farklı sorular ve
+ * aradaki boşluk canlıda bir hataya dönüştü (kullanıcı, 2026-08-10):
+ *
+ *   `SettingsService.catalog(worldId).economy.startingGold` → 12345 (doğru)
+ *   yeni kayıt olan oyuncunun şehri                          → 4000  (varsayılan!)
+ *
+ * Sebep formülde değil **kabloda**: `AuthService` kendi `new CityService(db)` örneğini
+ * kuruyordu ve o örneğin katalog fonksiyonu yoktu. Panel kaydediyor, hash değişiyor, ekranda
+ * görünüyor — ama oyuncunun gördüğü ilk sayı sabit kalıyordu.
+ *
+ * ⚠️ Aynı sınıftan iki kurban vardı; ikincisi worker'ın `CityService`iydi (`worker.ts`).
+ * Bu testler "formül doğru mu"yu değil, "doğru formülü kim çağırıyor"u kilitliyor.
+ */
+
+describe('ayar servise ULAŞIYOR mu', () => {
+  it('⭐⭐ panelden değiştirilen BAŞLANGIÇ KESESİ yeni kayıtta uygulanır', async () => {
+    live.cfg = mergeCatalogConfig({ economy: { startingGold: 12345, startingFood: 777 } });
+
+    const t = randomUUID().slice(0, 8);
+    const r = await auth.register({
+      email: `s-${t}@test.local`, password: 'parola-12345', username: `s_${t}`, worldId,
+    }, { deviceId: randomUUID(), ip: '85.104.12.7', userAgent: 'test', platform: 'web' });
+
+    const [c] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT gold, food FROM cities WHERE player_id = ${r.playerId}
+    `);
+    expect(Number(c!['gold'])).toBe(12345);
+    expect(Number(c!['food'])).toBe(777);
+  });
+
+  it('ayara dokunulmamışsa varsayılan kese aynen geçerli (regresyon)', async () => {
+    live.cfg = DEFAULT_CATALOG_CONFIG;
+
+    const t = randomUUID().slice(0, 8);
+    const r = await auth.register({
+      email: `v-${t}@test.local`, password: 'parola-12345', username: `v_${t}`, worldId,
+    }, { deviceId: randomUUID(), ip: '85.104.12.7', userAgent: 'test', platform: 'web' });
+
+    const [c] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT gold, food FROM cities WHERE player_id = ${r.playerId}
+    `);
+    expect(Number(c!['gold'])).toBe(DEFAULT_CATALOG_CONFIG.economy.startingGold);
+    expect(Number(c!['food'])).toBe(DEFAULT_CATALOG_CONFIG.economy.startingFood);
+  });
+
+  /**
+   * ⭐⭐ İKİNCİ KURBAN — worker'ın `CityService`i.
+   *
+   * `createWorker` katalogsuz bir örnek kuruyordu; savaş ve nakliye handler'ları o örnekle
+   * `materialize()` çağırıyor. Sonuç sessiz bir AYRIŞMA: aynı şehir, API tarafından
+   * materyalize edilince panelden ayarlanmış üretim hızıyla, worker tarafından VARSAYILAN
+   * hızla kaynak yazıyordu.
+   *
+   * ⚠️⚠️ **Test worker'ın KENDİ `cities` örneğini kullanmak ZORUNDA.** İlk yazımda iki ayrı
+   * örnek (katalogla ve katalogsuz) karşılaştırılıyordu; o ölçüm her koşulda yeşildi ve
+   * düzeltme geri alındığında bile kırılmıyordu — yani hiçbir şey kanıtlamıyordu. `Worker`
+   * arayüzüne `cities` tam olarak bu yüzden eklendi.
+   */
+  it("⭐⭐ worker'ın CityService'i panelden gelen üretim hızını KULLANIR", async () => {
+    const t = randomUUID().slice(0, 8);
+    const r = await auth.register({
+      email: `w-${t}@test.local`, password: 'parola-12345', username: `w_${t}`, worldId,
+    }, { deviceId: randomUUID(), ip: '85.104.12.7', userAgent: 'test', platform: 'web' });
+    const [c] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM cities WHERE player_id = ${r.playerId}
+    `);
+    const cityId = Number(c!['id']);
+
+    /* Panelden yemek üretimi belirgin biçimde artırılıyor. */
+    live.cfg = mergeCatalogConfig({ economy: { foodRate: 2 } });
+
+    const worker = createWorker(h.db, {
+      worldId,
+      settings: {
+        combat: () => undefined,
+        loot: () => undefined,
+        merit: () => undefined,
+        revisionId: () => null,
+        catalog: () => live.cfg,
+      },
+    });
+    /* ⚠️ Döngü hiç BAŞLATILMIYOR — ölçülen tek şey montajın kurduğu `CityService`. */
+    await worker.stop();
+
+    const at = await clock.gameNow(worldId);
+    const later = new Date(at.getTime() + 3_600_000);
+    const reset = async (): Promise<void> => {
+      await h.db.execute(sql`
+        UPDATE cities SET food = 0, resources_at = ${at.toISOString()}::timestamptz
+         WHERE id = ${cityId}
+      `);
+    };
+    const foodAfter = async (svc: CityService): Promise<number> => {
+      await reset();
+      await svc.materialize(cityId, later);
+      const [row] = await h.db.execute<Record<string, unknown>>(sql`
+        SELECT food FROM cities WHERE id = ${cityId}
+      `);
+      return Number(row!['food']);
+    };
+
+    /* ⚠️ Çıpa ölçüm: katalogsuz bir örnek GERÇEKTEN daha az yazıyor. Bu satır olmasaydı
+       aşağıdaki eşitlik, yanlış kablolamada da (ikisi de varsayılan) doğru çıkardı. */
+    const naked = await foodAfter(new CityService(h.db));
+    const configured = await foodAfter(new CityService(h.db, () => live.cfg));
+    expect(naked).toBeLessThan(configured);
+
+    /* ⭐ Asıl iddia: WORKER'IN örneği, ayarlanmış hızı görüyor. */
+    expect(await foodAfter(worker.cities)).toBe(configured);
+  });
+});
+
 /* ═══ ⭐ Süren işler geriye dönük etkilenmemeli ═════════════════════════════ */
 
 describe('süren işler', () => {
@@ -208,11 +339,9 @@ describe('süren işler', () => {
   let cityId: number;
   let cities: CityService;
   let queues: QueueService;
-  /** Servislerin gördüğü config — testin ortasında değiştirilebilsin diye kutuda. */
-  let live: { cfg: ReturnType<SettingsService['catalog']> };
 
   beforeEach(async () => {
-    live = { cfg: DEFAULT_CATALOG_CONFIG };
+    live.cfg = DEFAULT_CATALOG_CONFIG;
     cities = new CityService(h.db, () => live.cfg);
     queues = new QueueService(h.db, cities, () => live.cfg);
 

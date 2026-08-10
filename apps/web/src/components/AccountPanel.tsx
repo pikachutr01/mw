@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, getSession } from '../lib/api.ts';
 import { useAccount, useCities } from '../lib/queries.ts';
+import { useConfirm } from './Modal.tsx';
 import { ThemePicker } from './ThemePicker.tsx';
 import { Badge, Button, ErrorBox, Field, Input, Panel } from './ui.tsx';
 
@@ -100,6 +101,14 @@ export function AccountPanel(): React.ReactElement {
  *
  * ⚠️ Düğme silmez, **bağlantı ister**. Silme, e-postadaki tek kullanımlık bağlantıdan
  * açılan `/hesap-sil` sayfasında onaylanır (Google Play'in istediği akış).
+ *
+ * ⭐ **ÖNCE ONAY DİYALOĞU** (kullanıcı, 2026-08-10). Düğme doğrudan POST atıyordu: tek bir
+ * yanlış tıklama, oyuncunun gelen kutusuna *"hesabını sil"* postası düşürüyordu. Geri
+ * alınabilir bir adım olması onu zararsız yapmıyor — panik yaratan şey postanın kendisi.
+ *
+ * ⚠️ Onay, e-postadaki ikinci onayın YERİNE geçmiyor, ÜSTÜNE biniyor. İkisi farklı soruları
+ * soruyor: bu, *"bağlantı istemek istediğine emin misin"*; oradaki, *"hesabı gerçekten
+ * siliyoruz"*. Google Play akışı ikincisini zorunlu kılıyor, birincisini biz ekliyoruz.
  */
 export function DeleteAccountPanel(): React.ReactElement {
   const verified = useAccount().data?.emailVerified ?? false;
@@ -109,8 +118,32 @@ export function DeleteAccountPanel(): React.ReactElement {
 function DeleteAccountBody({ verified }: { verified: boolean }): React.ReactElement {
   const [state, setState] = useState<'idle' | 'busy' | 'sent'>('idle');
   const [error, setError] = useState<unknown>(null);
+  const confirm = useConfirm();
 
   const request = async (): Promise<void> => {
+    /**
+     * ⚠️ Metin, silmenin **sonuçlarını** tekrarlıyor — yukarıdaki paragrafı okumadan tıklayan
+     * oyuncu da neyi kaybedeceğini görmeli. `danger: true` düğmeyi kırmızıya çeviriyor.
+     */
+    const ok = await confirm({
+      title: 'Hesabını silmek istiyor musun?',
+      danger: true,
+      confirmLabel: 'Onay bağlantısı gönder',
+      body: (
+        <div className="space-y-2 text-sm">
+          <p>
+            E-posta adresine <strong>12 saat</strong> geçerli, tek kullanımlık bir onay
+            bağlantısı göndereceğiz. Hesap o bağlantıya tıklayana kadar <strong>silinmez</strong>.
+          </p>
+          <p>
+            Onayladığında e-postan, şifren ve oturumların silinir; başkentin dışındaki
+            şehirlerin <strong>yıkılır</strong> ve bu işlem <strong>geri alınamaz</strong>.
+          </p>
+        </div>
+      ),
+    });
+    if (!ok) return;
+
     setState('busy');
     setError(null);
     try {

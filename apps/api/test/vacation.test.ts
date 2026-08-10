@@ -57,7 +57,7 @@ beforeAll(async () => {
   queues = new QueueService(h.db, cities);
   missions = new MissionService(h.db);
   vacation = new VacationService(h.db, cities);
-  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock);
+  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities);
   registry = new HandlerRegistry()
     .register('echo', echoHandler)
     .register('vacation_end', createVacationEndHandler());

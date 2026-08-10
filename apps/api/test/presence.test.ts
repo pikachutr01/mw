@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '../src/auth/auth.service.ts';
+import { CityService } from '../src/cities/city.service.ts';
 import { PresenceService, singleDeviceEnforced } from '../src/auth/presence.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
 import { setLiveSettings } from '../src/settings/live.ts';
@@ -44,6 +45,7 @@ beforeAll(async () => {
     h.db,
     new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }),
     new GameClockService(h.db),
+    new CityService(h.db),
   );
   presence = new PresenceService(h.db);
 }, 60_000);

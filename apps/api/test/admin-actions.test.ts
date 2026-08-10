@@ -45,7 +45,7 @@ beforeAll(async () => {
   cities = new CityService(h.db);
   dbCtl = new AdminDbController(h.db);
   auth = new AuthService(
-    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock,
+    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities,
   );
   // ⚠️ `auth` ÖNCE kurulmalı: `purge-player` oturumları düşürmek için onu kullanıyor.
   actions = new AdminActionsController(h.db, cities, clock, auth);

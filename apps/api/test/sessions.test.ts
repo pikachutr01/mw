@@ -11,6 +11,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuthError, AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
+import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
 import { createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
@@ -43,7 +44,7 @@ beforeAll(async () => {
   h = await setupTestDb();
   auth = new AuthService(
     h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }),
-    new GameClockService(h.db),
+    new GameClockService(h.db), new CityService(h.db),
   );
 }, 60_000);
 

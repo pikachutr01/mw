@@ -7,10 +7,12 @@
  * olmadan Faz 5 (katalog) açılmayacak.
  */
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SETTINGS, SETTINGS_BY_KEY, applySettings, validatePatch } from '@mobilwar/settings';
 import type { DbHandle } from '../src/db/client.ts';
 import { chatLimits } from '../src/chat/chat.limits.ts';
+import { globalChatLimits } from '../src/chat/global-chat.limits.ts';
+import { unverifiedLimits } from '../src/auth/unverified.ts';
 import { mailLimits } from '../src/mail/mail.limits.ts';
 import { notifyLimits } from '../src/notify/notify.limits.ts';
 import { liveNumberFor } from '../src/settings/live.ts';
@@ -261,6 +263,75 @@ describe('canlı limit köprüsü', () => {
  * yazıyor.
  */
 describe('⭐ dünya bazlı ayar köprüsü (panelin yazdığı katman)', () => {
+  /**
+   * ⭐⭐ 2026-08-10 — **AYNI ARIZANIN İKİNCİ YARISI.**
+   *
+   * 2026-08-08'de `liveNumberFor` kapısı açıldı ama kapıdan yalnız ÜÇ çağrı noktası geçirildi
+   * (`mission` · `scoring` · `placement`). `worldId` ALMAYAN okuyucular — sohbet limitleri,
+   * doğrulama kısıtları, tatil kuralları, posta/bildirim/oturum ayarları — eski yolda kaldı
+   * ve köprü onlara hâlâ **dünya 0**'ı veriyordu. Yani panelden değiştirilen on bir grup
+   * sessizce etkisiz kalmaya devam etti; arıza kapanmış SANILIYORDU.
+   *
+   * Ölçüm (bu test yazılmadan önce, elle):
+   *     panelden `chat.burst = 99` → `snapshot(1).effective.chat.burst` = 99 · `chatLimits()` = 5
+   *
+   * Çare: köprü artık **sürecin birincil dünyasının** birleştirilmiş görüntüsünü alıyor
+   * (`primaryWorldId`). Dünya 0 katmanı aynen uygulanmaya devam ediyor — üstüne dünyanınki
+   * biniyor, yani davranış hiçbir koşulda eskisinden dar değil.
+   *
+   * ⚠️ Test `WORLD_ID`yi geçici olarak bu testin dünyasına çekiyor: `beforeEach` her testte
+   * yeni bir dünya kimliği üretiyor ve süreç varsayılanı (1) onunla eşleşmiyor.
+   */
+  describe('⭐⭐ dünya bilmeyen okuyucular da panelin katmanını görür', () => {
+    const realWorldId = process.env['WORLD_ID'];
+    afterEach(() => {
+      if (realWorldId == null) delete process.env['WORLD_ID'];
+      else process.env['WORLD_ID'] = realWorldId;
+    });
+
+    it('⭐⭐ `chatLimits()` DÜNYA katmanından okur (panel oraya yazıyor)', async () => {
+      process.env['WORLD_ID'] = String(worldId);
+      expect(chatLimits().burst).toBe(SETTINGS_BY_KEY['chat.burst']!.default);
+
+      await svc.update({ worldId, patch: { 'chat.burst': 99 }, actorId: null });
+      expect(chatLimits().burst).toBe(99);
+
+      await svc.reset(worldId, ['chat.burst']);
+      expect(chatLimits().burst).toBe(SETTINGS_BY_KEY['chat.burst']!.default);
+    });
+
+    /**
+     * ⭐ Boolean anahtarlar da aynı yoldan geçiyor ve en kritik olanı bu: `globalChat.enabled`
+     * özelliğin **acil vanası**. Ulaşmasaydı yönetici sohbeti kapatamazdı — üstelik panel
+     * "kapatıldı" derdi.
+     */
+    it('⭐ `globalChat.enabled` kapatması gerçekten ulaşır (acil vana)', async () => {
+      process.env['WORLD_ID'] = String(worldId);
+      expect(globalChatLimits().enabled).toBe(true);
+
+      await svc.update({ worldId, patch: { 'globalChat.enabled': false }, actorId: null });
+      expect(globalChatLimits().enabled).toBe(false);
+    });
+
+    it('doğrulama kısıtları da dünya katmanından okunur', async () => {
+      process.env['WORLD_ID'] = String(worldId);
+      await svc.update({ worldId, patch: { 'verify.maxWarriors': 1 }, actorId: null });
+      expect(unverifiedLimits().maxWarriors).toBe(1);
+    });
+
+    /** ⚠️ Dünya 0 (kurulum geneli) katmanı KAYBOLMADI — birleştirme, seçim değil. */
+    it('dünya 0 katmanı hâlâ geçerli', async () => {
+      process.env['WORLD_ID'] = String(worldId);
+      await svc.update({ worldId: DEFAULT_WORLD, patch: { 'chat.burst': 3 }, actorId: null });
+      expect(chatLimits().burst).toBe(3);
+
+      // Dünyanın kendi değeri varsa O kazanır.
+      await svc.update({ worldId, patch: { 'chat.burst': 7 }, actorId: null });
+      expect(chatLimits().burst).toBe(7);
+      await svc.reset(DEFAULT_WORLD, ['chat.burst']);
+    });
+  });
+
   it('⭐ dünyaya yazılan ayar `liveNumberFor` ile okunur', async () => {
     expect(liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10)).toBe(10);
 

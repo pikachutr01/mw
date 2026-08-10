@@ -39,6 +39,38 @@ export const SETTINGS_CHANNEL = 'mw_settings';
 /** `world_id = 0` = "tüm dünyalar için varsayılan" (gerçek bir dünya değil). */
 export const DEFAULT_WORLD = 0;
 
+/**
+ * ⭐⭐ BU SÜRECİN HİZMET ETTİĞİ DÜNYA — dünya bilmeyen okuyucuların katmanı (2026-08-10).
+ *
+ * ⚠️ **Neden gerekli oldu.** Modül seviyesindeki limit okuyucuları (`chatLimits()`,
+ * `unverifiedLimits()`, `vacationRules()`, `mailLimits()`…) `worldId` almıyor ve köprü onlara
+ * **yalnız dünya 0** katmanını veriyordu. Panel ise her zaman **dünya 1**'e yazıyor
+ * (`apps/admin/src/App.tsx`: `login({… worldId: 1 })`). Sonuç ölçüldü:
+ *
+ *     panelden `chat.burst = 99`  → `snapshot(1).effective.chat.burst` = 99  ✓
+ *                                 → `chatLimits().burst`                = 5  ✗ (varsayılan)
+ *
+ * Yani bu köprüden okunan **on bir grup** (chat · allianceChat · globalChat · verify ·
+ * vacation · session · mail · notify · ratelimit · abuse) panelden **sessizce
+ * değiştirilemiyordu**. Ne hata ne uyarı: panel "kaydedildi, tüm süreçlerde hemen etkin"
+ * diyordu ve kayıt gerçekten yazılıyordu — yalnız kimse o katmanı okumuyordu.
+ *
+ * ⚠️ 2026-08-08'de aynı arıza SAVAŞ ayarında yaşanmış ve `liveNumberFor` ile kapı açılmıştı;
+ * ama kapıdan yalnız ÜÇ çağrı noktası geçirilmişti (`mission`, `scoring`, `placement`).
+ * Kalan onlarca okuyucu eski yolda kaldı ve arıza aynen sürdü — yani o düzeltme hatanın
+ * kendisini değil, tek bir örneğini kapatmıştı.
+ *
+ * ⚠️ **Bu bir birleştirme, seçim değil**: `snapshot(w)` önce dünya 0'ı sonra dünya w'yi
+ * uyguluyor. Yani kurulum geneli ayarlar aynen geçerli kalıyor, üstüne dünyanınki biniyor.
+ * Davranış hiçbir koşulda eskisinden dar değil.
+ *
+ * ⚠️ Bilinen sınır — **çok dünyalı kurulum**: dünya bilmeyen bir okuyucu, sürecin birincil
+ * dünyasının katmanını görür. Bugün her süreç tek dünyaya hizmet ediyor (`WORLD_ID`, §4.0),
+ * o yüzden sınır teorik. Gerçekten dünya bazlı olması gereken okuyucular `liveNumberFor` ile
+ * zaten doğru katmanı okuyor; bu yol yalnız `worldId` bilmeyenler için.
+ */
+export const primaryWorldId = (): number => Number(process.env['WORLD_ID'] ?? 1);
+
 interface Snapshot {
   effective: EffectiveSettings;
   overridden: readonly string[];
@@ -97,10 +129,13 @@ export class SettingsService {
     this.loaded = true;
     /**
      * ⭐ Modül seviyesindeki limit okuyucularını (`chatLimits()`, `notifyLimits()`,
-     * `mailLimits()`) besleyen köprü. Kapsam **dünya 0**: o okuyucular `worldId` bilmeyen
-     * yerlerde de çağrılıyor (`mail/templates.ts`, `mail.service.ts`). Gerekçe `live.ts`te.
+     * `mailLimits()`, `unverifiedLimits()`…) besleyen köprü — o okuyucular `worldId` almıyor.
+     *
+     * ⚠️⚠️ Kapsam **dünya 0 DEĞİL, bu sürecin birincil dünyası** (2026-08-10). Dünya 0
+     * okunduğu sürece panelden yapılan hiçbir değişiklik bu okuyuculara ulaşmıyordu — panel
+     * dünya 1'e yazıyor. Tam gerekçe ve ölçüm `primaryWorldId` başlığında.
      */
-    setLiveSettings(this.snapshot(DEFAULT_WORLD).effective);
+    setLiveSettings(this.snapshot(primaryWorldId()).effective);
     /**
      * ⭐⭐ Dünyayı BİLEN çağrı noktaları için ikinci yol (2026-08-08).
      *

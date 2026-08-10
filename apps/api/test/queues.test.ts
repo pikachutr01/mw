@@ -43,7 +43,7 @@ beforeAll(async () => {
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
   queues = new QueueService(h.db, cities);
-  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock);
+  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities);
   registry = new HandlerRegistry().register('echo', echoHandler);
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
 }, 60_000);

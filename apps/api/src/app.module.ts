@@ -138,11 +138,17 @@ export { DB } from './db/tokens.ts';
         new QueueService(db, cities, (w) => s.catalog(w)),
       inject: [DB, CityService, SettingsService],
     },
+    /**
+     * ⚠️ `AuthService` uygulamanın **CityService örneğini** alıyor (2026-08-10). Kendi örneğini
+     * kuruyordu ve o örneğin katalog fonksiyonu yoktu: panelden değiştirilen **başlangıç
+     * altını/yemeği** yeni oyuncuya hiç ulaşmıyor, herkes varsayılan 4000/4000 ile başlıyordu.
+     * `VacationService`in yanındaki uyarının ikizi — aynı tuzak, ikinci kurban.
+     */
     {
       provide: AuthService,
-      useFactory: (db: Db, tokens: TokenService, clock: GameClockService) =>
-        new AuthService(db, tokens, clock),
-      inject: [DB, TokenService, GameClockService],
+      useFactory: (db: Db, tokens: TokenService, clock: GameClockService, c: CityService) =>
+        new AuthService(db, tokens, clock, c),
+      inject: [DB, TokenService, GameClockService, CityService],
     },
 
     /**

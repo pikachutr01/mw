@@ -10,10 +10,23 @@
  * nesnenin altından değerin değişmesi, bu kod tabanının tam da uyardığı sınıfta bir sürpriz
  * olurdu.
  *
- * ⚠️ **KAPSAM: kurulum geneli (dünya 0).** İşletim limitleri bugün dünya bilmeyen yerlerde de
- * okunuyor (`mail/templates.ts`, `mail.service.ts` — orada `worldId` hiç yok). Dünya bazlı
- * geçersiz kılma **saklanıyor ve panelde görünüyor** ama tüketim dünya 0 katmanından. Gerçek
- * dünya bazlı limit gerektiğinde çağrı noktalarına `worldId` geçirilecek; depolama değişmez.
+ * ⚠️ **KAPSAM: bu sürecin BİRİNCİL DÜNYASI** (`WORLD_ID`, varsayılan 1) — dünya 0 DEĞİL.
+ * `SettingsService.load()` köprüyü `snapshot(primaryWorldId())` ile besliyor ve o görüntü
+ * dünya 0'ı da içeriyor (katman sırası: dünya 0 → dünya w). Yani kurulum geneli ayarlar aynen
+ * geçerli, üstüne o dünyanınki biniyor.
+ *
+ * ⚠️ **Kapsam 2026-08-10'da değişti ve sebebi aşağıdaki arızanın İKİNCİ YARISI.** Eskiden
+ * yalnız dünya 0 okunuyordu; panel ise daima dünya 1'e yazıyor. Aşağıdaki düzeltme (2026-08-08)
+ * `liveNumberFor` kapısını açtı ama kapıdan yalnız ÜÇ çağrı noktası geçirildi — `worldId`
+ * ALMAYAN onlarca okuyucu (sohbet · doğrulama · tatil · posta · bildirim · oturum · kötüye
+ * kullanım) eski yolda kaldı ve panelden **sessizce değiştirilemez** olmaya devam etti.
+ * Ölçüm: panelden `chat.burst = 99` → `snapshot(1)` 99 diyor, `chatLimits()` 5 döndürüyordu.
+ * Bekçi: `settings.test.ts` → *"dünya bilmeyen okuyucular da panelin katmanını görür"*.
+ *
+ * ⚠️ Bilinen sınır — **çok dünyalı kurulum**: dünya bilmeyen bir okuyucu (posta şablonları)
+ * sürecin birincil dünyasının katmanını görür. Bugün her süreç tek dünyaya hizmet ediyor
+ * (§4.0), o yüzden sınır teorik; gerçekten dünya bazlı olması gereken okuyucular zaten
+ * `liveNumberFor` kullanıyor.
  *
  * ══════════════════════════════════════════════════════════════════════════════════════════
  * ⭐⭐ 2026-08-08 — YUKARIDAKİ KAPSAM KARARI SESSİZ BİR ARIZAYA DÖNÜŞTÜ

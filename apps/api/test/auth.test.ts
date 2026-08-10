@@ -41,7 +41,7 @@ beforeAll(async () => {
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
   tokens = new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' });
-  auth = new AuthService(h.db, tokens, clock);
+  auth = new AuthService(h.db, tokens, clock, cities);
 }, 60_000);
 
 afterAll(async () => { await h?.close(); });

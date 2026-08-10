@@ -73,7 +73,7 @@ beforeAll(async () => {
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
   auth = new AuthService(
-    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock,
+    h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities,
   );
   ctl = new AdminPlayersController(h.db, auth, cities, clock);
 }, 60_000);

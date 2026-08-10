@@ -68,7 +68,7 @@ beforeAll(async () => {
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
   queues = new QueueService(h.db, cities);
-  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock);
+  auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities);
 }, 60_000);
 
 afterAll(async () => { await worlds?.stop(); await h?.close(); });

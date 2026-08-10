@@ -4,8 +4,8 @@
  * Küçük sunucu profilinde (§4.0) `ROLE=all` iken API süreciyle AYNI süreçte çalışır;
  * `ROLE=worker` ise yalnız bu döngüler koşar. Kod aynı, fark yalnız neyin başlatıldığı.
  */
-import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
-import type { MeritConfig } from '@mobilwar/catalog';
+import type { CombatConfig, DeepPartial, LootConfig, MapConfig } from '@mobilwar/engine';
+import type { CatalogConfig, MeritConfig } from '@mobilwar/catalog';
 import { CAVE_HANDLERS } from '../cave/cave.handlers.ts';
 import { CityService } from '../cities/city.service.ts';
 import type { Db } from '../db/client.ts';
@@ -60,6 +60,22 @@ export interface WorkerOptions {
      * bunu zaten karşılıyor; opsiyonel çünkü testlerdeki sahte ayar nesneleri bilmiyor.
      */
     group?(worldId: number, id: string): Readonly<Record<string, unknown>>;
+    /**
+     * ⭐⭐ KATALOG SABİTLERİ — `CityService`e geçiliyor (2026-08-10).
+     *
+     * ⚠️ Bu iki satır olmadan worker'ın `CityService`i **katalogsuz** kalıyor ve
+     * `materialize()` üretim hızlarını `DEFAULT_CATALOG_CONFIG`ten okuyordu. Sonuç sessiz bir
+     * AYRIŞMA: aynı şehir, API tarafından materyalize edilince panelden ayarlanmış hızla,
+     * worker tarafından (savaş çözümü, nakliye varışı) materyalize edilince VARSAYILAN hızla
+     * kaynak yazıyordu. Panelden `foodRate`/`goldRate` ya da yapı ince ayarı değiştirilmiş her
+     * dünyada iki yol farklı sayı üretir; hangisinin kazandığı hangisinin en son çalıştığına
+     * bağlı olurdu.
+     *
+     * ⚠️ Opsiyonel — testlerdeki sahte ayar nesneleri bunları bilmiyor ve verilmediğinde
+     * davranış eskisiyle **birebir aynı** kalıyor (varsayılan katalog).
+     */
+    catalog?(worldId: number): CatalogConfig;
+    map?(worldId: number): MapConfig;
   } | null;
 }
 
@@ -67,6 +83,16 @@ export interface Worker {
   scheduler: SchedulerService;
   dispatcher: OutboxDispatcher;
   registry: HandlerRegistry;
+  /**
+   * ⭐ Handler'lara verilen `CityService` örneği — **dışarı yalnız ölçülebilsin diye** veriliyor
+   * (2026-08-10).
+   *
+   * ⚠️ Katalog fonksiyonunun bu örneğe gerçekten bağlandığı, montajın DIŞINDAN gözlenemeyen bir
+   * özellikti; nitekim aylarca bağlanmamıştı ve hiçbir test bunu göremedi. Yazdığım ilk
+   * regresyon testi de göremiyordu: iki ayrı örneği karşılaştırıyor, worker'ınkine hiç
+   * dokunmuyordu — yani yeşil kalıyordu. Alanı açmak, testin doğru nesneye bakmasını sağlıyor.
+   */
+  cities: CityService;
   start(): void;
   stop(): Promise<void>;
 }
@@ -116,7 +142,16 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
    *   `abuse_scan`     → çoklu hesap davranış taraması (§9.1.3) ✓
    *   sırada: Faz 4 (hero_revive)
    */
-  const cities = new CityService(db);
+  /**
+   * ⚠️ **Katalog/harita çözücüleri geçilmek ZORUNDA** — gerekçe `WorkerOptions.settings.catalog`
+   * başlığında. Katalogsuz bir örnek, worker'ın yazdığı her kaynağı varsayılan üretim hızıyla
+   * hesaplar ve API ile sessizce ayrışır.
+   */
+  const cities = new CityService(
+    db,
+    opts.settings?.catalog ? (w) => opts.settings!.catalog!(w) : undefined,
+    opts.settings?.map ? (w) => opts.settings!.map!(w) : undefined,
+  );
   const registry = new HandlerRegistry()
     .register('echo', echoHandler)
     .register('ranking_snapshot', createRankingSnapshotHandler())
@@ -284,6 +319,7 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
     scheduler,
     dispatcher,
     registry,
+    cities,
     start() {
       scheduler.start();
       dispatcher.start();
