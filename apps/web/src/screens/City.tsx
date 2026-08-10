@@ -17,7 +17,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { caveRepairSeconds, wallCurrentIntegrity } from '@mobilwar/catalog';
 import { nameOf } from '../lib/names.ts';
-import { BUILDING_INFO } from '../lib/info-texts.ts';
+import { BUILDING_INFO, UNIT_INFO } from '../lib/info-texts.ts';
+import { unitStats, unitTechNames } from '../lib/unit-facts.ts';
 import { fmt, formatDuration, gameNow, remaining, useTick } from '../lib/hooks.ts';
 import {
   useCancelCaveJob, useCancelQueue, useCatalog, useCity, useEnqueue, useMoveQueue,
@@ -25,7 +26,7 @@ import {
 } from '../lib/queries.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import {
-  AmountInput, Button, CatalogIcon, Empty, ErrorBox, Panel, Requirements, Res,
+  AmountInput, Badge, Button, CatalogIcon, Empty, ErrorBox, Panel, Requirements, Res,
 } from '../components/ui.tsx';
 import { Popover, PopoverRow } from '../components/Popover.tsx';
 import { useConfirm } from '../components/Modal.tsx';
@@ -347,6 +348,84 @@ function BuildingInfo({ b }: { b: CatalogBuilding }): React.ReactElement | null 
             <PopoverRow label={`Sonraki seviye (sv ${b.level + 1})`}
               value={`${fmt(p.nextPerHour)} ${unit} / saat`} />
           ) : null}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Bilgi kutusundaki bölüm başlığı — küçük, hepsi aynı dilde.
+ *
+ * ⚠️ Tek istisna «Özel»: oynanışı değiştiren kuralı taşıdığı için vurgulu renkte. Diğerleri
+ * sessiz kalmalı, yoksa dört başlık birbiriyle yarışır ve hiçbiri okunmaz.
+ */
+function InfoHeading({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
+  return (
+    <span className={`block text-[10px] font-semibold uppercase tracking-wide
+      ${accent ? 'text-accent' : 'text-muted'}`}>
+      {children}
+    </span>
+  );
+}
+
+/**
+ * ⭐ BİRİM BİLGİ KUTUSU — Baraka ve Savunma satırlarındaki «i» düğmesi (kullanıcı, 2026-08-11).
+ *
+ * Yapı kutusuyla (`BuildingInfo`) aynı iskelet: en üstte kısa açıklama, altında **çizgiyle
+ * ayrılmış** bölümler. Bölümler sırayla: sayısal özellikler → etkilendiği teknikler → özel kural.
+ *
+ * ⚠️ **Metin ile liste AYRI kaynaklardan.** Açıklama elle yazılı (`UNIT_INFO`), teknik listesi ve
+ * vuruş fazı **savaş motorunun kataloğundan** türetiliyor (`lib/unit-facts.ts`). Ayrım bilinçli:
+ * oyunun kendi dokümanı motorla üç yerde çelişiyor (Kaos'un Zırh'tan etkilenmesi, Ogre'nin
+ * Demircilik'ten etkilenmemesi, Büyü Kalkanı'nı Tılsım'ın ölçeklemesi) ve liste elle yazılsaydı
+ * kutu bu yanlışları oyuncuya öğretmeye devam ederdi.
+ *
+ * ⚠️ Sayılar öncelikle **sunucudan gelen** `CatalogUnit`ten okunuyor (`area`/`speed`/`carry`);
+ * katalog paketi yalnız yedek. Ekrandaki her sayının tek kaynağı olsun diye — `nextCost` ve
+ * `production` için de aynı kural geçerli.
+ *
+ * ⚠️ Açıklaması olmayan bir birimde `null` döner ve `ItemName` o satırda hiç düğme çizmez.
+ */
+function UnitInfo({ u }: { u: CatalogUnit }): React.ReactElement | null {
+  const text = UNIT_INFO[u.id];
+  if (!text) return null;
+  const stats = unitStats(u.id, fmt, u);
+  const techs = unitTechNames(u.id);
+
+  return (
+    <>
+      <span className="block">{text.desc}</span>
+
+      {stats.length > 0 ? (
+        <span className="mt-2 block border-t border-border pt-1.5">
+          <InfoHeading>Özellikler</InfoHeading>
+          <span className="mt-1 block space-y-0.5">
+            {stats.map((s) => <PopoverRow key={s.label} label={s.label} value={s.value} />)}
+          </span>
+        </span>
+      ) : null}
+
+      {/* ⚠️ Boş liste = "hiçbir teknik bu birimi güçlendirmiyor" ve bu GERÇEK bir bilgi
+          (Yük Arabası, Casus Kuş). Bölümü hiç çizmemek "bilgi eksik" gibi okunurdu.
+          ⚠️ Metin **«savaş tekniklerinden»** diyor, «hiçbir teknikten» değil: Casus Kuş'un hemen
+          altındaki Özel bölümü Casusluk'tan söz ediyor ve ikisi çelişiyor görünürdü. Casusluk
+          birimin savaş statlarını gerçekten ölçeklemiyor — istihbarat kademesini belirliyor. */}
+      <span className="mt-2 block border-t border-border pt-1.5">
+        <InfoHeading>Etkilendiği teknikler</InfoHeading>
+        {techs.length > 0 ? (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {techs.map((t) => <Badge key={t}>{t}</Badge>)}
+          </span>
+        ) : (
+          <span className="mt-0.5 block text-muted">Savaş tekniklerinden etkilenmez.</span>
+        )}
+      </span>
+
+      {text.extra ? (
+        <span className="mt-2 block border-t border-border pt-1.5">
+          <InfoHeading accent>Özel</InfoHeading>
+          <span className="mt-0.5 block">{text.extra}</span>
         </span>
       ) : null}
     </>
@@ -848,7 +927,11 @@ function Trainable({ city, kind }: { city: CityDetail; kind: 'unit' | 'defense' 
               <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-between">
                 <CatalogIcon kind={kind === 'unit' ? 'units' : 'defenses'} id={u.id} alt={u.name} />
                 <div className="min-w-0 flex-1">
-                  <ItemName name={u.name} value={levelBased ? `sv ${have[u.id] ?? 0}` : fmt(have[u.id] ?? 0)} />
+                  {/* ⚠️ Düğme, METİN VARSA çizilir. `<UnitInfo/>` içeride `null` dönse bile
+                      element'in kendisi truthy'dir; koşul burada olmazsa katalogda yeni bir
+                      birim belirdiğinde boş bir kutu açan bir «i» düğmesi kalırdı. */}
+                  <ItemName name={u.name} value={levelBased ? `sv ${have[u.id] ?? 0}` : fmt(have[u.id] ?? 0)}
+                    info={UNIT_INFO[u.id] ? <UnitInfo u={u} /> : undefined} />
                   {/* ⭐ Orijinal Baraka kartında birimin MAĞARADAKİ adedi de yazıyor
                       (`images/scr_web01`: "Mağarada : 0"). Yalnız 0'dan büyükse çizilir —
                       mağarası olmayan oyuncunun her satırında sıfır görmesi gürültü olurdu. */}
