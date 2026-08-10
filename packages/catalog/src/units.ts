@@ -43,8 +43,20 @@ export const UNITS: readonly UnitDef[] = [
   d('mangonel_tower','Mangonel',    1,     700,      0,     0,  192,   96,   120,   3744,  1000,    8000,    257),
   d('guard',        'Muhafız',      2,     200,    300,     0,   48,  144,   120,   3172,  2400,    2000,    180),
   d('ballista',     'Balista',      1,    2500,   2500,     0,  480,  240,   600,  16640, 20000,   16000,    900),
-  d('wall',         'Sur',          2,       0,      0,     0,   50,   50,     0,    600,   960,     980,    300),
-  d('magic_shield', 'Büyü Kalkanı', 3,       0,      0,     0,    0,    0,   320,   2000,  8000,    2000,    400),
+  /**
+   * ⚠️ **SUR ve BÜYÜ KALKANI'nın FİYATI 2026-08-10'da ×2,5 oldu** (Sur 960/980 → 2500/2500,
+   * Kalkan 8000/2000 → 12000/3000). Savaş statlarına (`pAtk/pDef/mAtk/mDef/area`) **dokunulmadı**
+   * — onlar binary doğrulamasının girdisi.
+   *
+   * Gerekçe ölçüm: kaynak/savaş-gücü oranı Sur'da **3,59**, savaşçıda **81**, adetli savunma
+   * biriminde **33,6**. Sur oyundaki en ucuz güç kaynağıydı, farkla — ve fiyatı `1,8^(sv−1)`,
+   * gücü `1,8^sv` ile büyüdüğü için bu oran **seviyeden bağımsız sabit**; tek düzeltme kaldıracı
+   * taban fiyat. ×2,5, uçurumu kapatıyor ama "savunma saldırıdan ucuzdur" tür geleneğini koruyor.
+   *
+   * ⚠️ Kalkanın 4:1 altın ağırlığı korundu (orijinal asimetri); Sur'unki zaten simetrikti.
+   */
+  d('wall',         'Sur',          2,       0,      0,     0,   50,   50,     0,    600,  2500,    2500,    300),
+  d('magic_shield', 'Büyü Kalkanı', 3,       0,      0,     0,    0,    0,   320,   2000, 12000,    3000,    400),
   // Tapınak SAVAŞMAZ (bina). Binary stat tablosu idx20'de biter → savaş satırı yok.
   // Vestigial giriş: nötr (mDef=1 sıfıra bölme koruması). Savaşta hiç görünmez.
   d('temple',       'Tapınak',      3,       0,      0,     0,    0,    0,     0,      1,  8000,    2000,    400),

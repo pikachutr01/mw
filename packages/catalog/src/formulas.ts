@@ -292,27 +292,38 @@ export function unitCost(unitId: string, count = 1, cfg: CatalogConfig = DEFAULT
  * hızlandıran yapı değişir. Tek çekirdek olmasının sebebi acı deneyim: dört yerde ayrı yazılsaydı
  * biri güncellenip diğerleri unutulurdu.
  *
- * **Üs neden 0,8?** `k.java`'nın kendi üssü — ve doğru şekli veriyor: süre maliyetin altında
- * kalan bir hızla büyür, böylece elit birim saniye başına daha çok güç üretir (Ejderha, Cüce'nin
- * 100 katı maliyete karşı 39 katı süre = güç/saniye'de 2,1 kat avantaj). Bu avantajın bedeli
- * yüksek ön-şartlar. Üs 1,0 olsaydı birim seçimi yalnız maliyet verimliliğine inerdi.
+ * **Birim üssü neden 0,8?** `k.java`'nın kendi üssü — ve doğru şekli veriyor: süre maliyetin
+ * altında kalan bir hızla büyür, böylece elit birim saniye başına daha çok güç üretir (Ejderha,
+ * Cüce'nin 100 katı maliyete karşı 39 katı süre = güç/saniye'de 2,1 kat avantaj). Bu avantajın
+ * bedeli yüksek ön-şartlar. Üs 1,0 olsaydı birim seçimi yalnız maliyet verimliliğine inerdi.
+ *
+ * ⚠️⚠️ **ÜS TEK DEĞİL, İKİ TANE** (2026-08-10): birimler `timeExponent` (0,8 — Java'nın kendi
+ * savaşçı üssü), yapısal kalemler `structureTimeExponent` (0,95) kullanıyor. Ayrım şart oldu
+ * çünkü kullanıcı yapı/teknik sürelerinin üst seviyelerde günlere-haftalara çıkmasını istedi ve
+ * tek üssü büyütmek Kaos/Ejderha üretimini de patlatırdı. Gerekçenin tamamı `config.ts`te
+ * `structureTimeExponent` alanının yanında. **Yeni bir çağıran eklerken hangi üssü geçirdiğine
+ * DİKKAT ET** — yanlış olan sessizce çalışır ve dengeyi bozar.
  *
  * **Bölen neden 1,2 (orijinaldeki 1,4 değil)?** 1,4 yirmi seviyede **836 kat** demek; Baraka tek
  * başına oyunun kaderini belirler ve seviye 1'deki oyuncu hiçbir şey üretemez. 1,2 ile yirmi
  * seviye **32 kat** kazandırır — hissedilir ama tek eksenli değil.
  */
 function timeCurve(
-  value: number, factor: number, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+  value: number, factor: number, level: number, exponent: number,
+  cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
 ): number {
   return (
-    (factor * (Math.max(0, value) / 1000) ** cfg.economy.timeExponent)
+    (factor * (Math.max(0, value) / 1000) ** exponent)
     / cfg.economy.timeDecayRate ** Math.max(0, level)
   );
 }
 
 /** Maliyeti olan her YAPISAL kalemin süresi (yapı · teknik · Sur · Büyü Kalkanı). */
 export function timeFromCost(cost: Cost, divisorLevel: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
-  return timeCurve(cost.gold + cost.food, cfg.economy.structureTimeFactor, divisorLevel, cfg);
+  return timeCurve(
+    cost.gold + cost.food, cfg.economy.structureTimeFactor, divisorLevel,
+    cfg.economy.structureTimeExponent, cfg,
+  );
 }
 
 /**
@@ -425,7 +436,10 @@ export function trainingTimeSeconds(
       / cfg.economy.originalDivisorRate ** lvl
     );
   }
-  return timeCurve(unitTimeValue(unitId, cfg), cfg.economy.unitTimeFactor, lvl, cfg);
+  // ⚠️ Birim üssü `timeExponent` (0,8 — Java'nın kendi sayısı), yapısal kalemlerinki DEĞİL.
+  return timeCurve(
+    unitTimeValue(unitId, cfg), cfg.economy.unitTimeFactor, lvl, cfg.economy.timeExponent, cfg,
+  );
 }
 
 /**

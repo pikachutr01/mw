@@ -534,18 +534,21 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'economy.startingGold',
     label: 'Başlangıç altını',
-    type: 'int', default: 4000, min: 0, max: 100_000_000, tag: 'design', unit: 'altın',
+    type: 'int', default: 1000, min: 0, max: 100_000_000, tag: 'design', unit: 'altın',
     description: 'Yeni oyuncunun başkentine konan altın. Büyütürsen oyuncu ilk dakikalarda '
       + 'daha rahat başlar; küçültürsen ilk saatler beklemeyle geçer.',
-    note: '4000 seçilmişti çünkü sıfır keseyle oyuncunun ilk gününde ~26 saat ölü zaman '
-      + 'doğuyordu (§13.11.1a). ⚠️ Yalnız BAŞKENT alır; kurulan koloni sıfırla doğar ve o '
-      + 'sayı ayarlanabilir DEĞİL — koloniye kese vermek «şehir kur → keseyi al → terk et» '
-      + 'döngüsüyle sınırsız kaynak basmayı açardı.',
+    note: '⚠️⚠️ 1000\'in ALTINA İNME. Kale 1\'in bütçesi 10 seviye ve Çiftlik/Maden zaten 1\'den '
+      + 'başlıyor → oyuncunun Kale 2\'ye kadar yapabileceği tek şey Çiftlik 5 + Maden 5 (630 '
+      + 'kaynak); gerisi kapalı (Akademi Kale 2 ister, Baraka\'ya bütçe yok, asker Demircilik '
+      + 'ister). Kese Kale 2\'yi (1.600) karşılamazsa oyunun HİÇBİR ŞEY sunmadığı bir ölü bekleme '
+      + 'doğar: 500/500 → 10,9 saat · 750/750 → 6,5 saat · 1000/1000 → 2,0 saat. ⚠️ Yalnız BAŞKENT '
+      + 'alır; kurulan koloni sıfırla doğar ve o sayı ayarlanabilir DEĞİL — koloniye kese vermek '
+      + '«şehir kur → keseyi al → terk et» döngüsüyle sınırsız kaynak basmayı açardı.',
   },
   {
     key: 'economy.startingFood',
     label: 'Başlangıç yemeği',
-    type: 'int', default: 4000, min: 0, max: 100_000_000, tag: 'design', unit: 'yemek',
+    type: 'int', default: 1000, min: 0, max: 100_000_000, tag: 'design', unit: 'yemek',
     description: 'Yeni oyuncunun başkentine konan yemek. Altınla birlikte düşün: ilk '
       + 'yükseltmelerin çoğu ikisini birden istiyor.',
   },
@@ -955,12 +958,15 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'economy.economyCostRate',
     label: 'Çiftlik/Maden maliyet oranı',
-    type: 'number', default: 1.33, min: 1, max: 3, tag: 'design',
-    description: 'Çiftlik ve Maden\'in maliyet artış oranı. Diğer yapılardan ayrı ve daha düşük, çünkü '
-      + 'onlar 40 seviyeye kadar çıkıyor.',
-    note: '⚠️ 1,45 DEĞİL 1,33. Oyunun kendi dokümanı 1,45 yazıyor ama o oran orijinalin bilinmeyen '
-      + 'tabanlarına aitti. Bizim tavanımız 40 ve 1,45 ile seviye 40 ekonomik olarak ULAŞILAMAZ '
-      + 'oluyordu (190 milyon kaynak, ~1 yıl geri ödeme). 1,33 ile 7,1 milyon ve 20–36 gün.',
+    type: 'number', default: 1.45, min: 1, max: 3, tag: 'design',
+    description: 'Çiftlik ve Maden\'in maliyet artış oranı. Diğer yapılardan (1,8) ayrı ve daha düşük, '
+      + 'çünkü onlar 40 seviyeye kadar çıkıyor. ⭐ Oyunun temposunu belirleyen TEK en büyük sayı: '
+      + 'gelir eğrisinin maliyet eğrisini ne zaman yakaladığını bu belirliyor.',
+    note: '⭐ 1,45 orijinal oyunun kendi sabiti. 2026-07-28 ile 2026-08-10 arasında 1,33\'tü; '
+      + 'gerekçe «seviye 40 amorti edilebilir kalmalı» idi. O kural terk edildi: kâr eşiğinin '
+      + '(~sv25) ötesindeki seviyeler geliri değil PUANI satın alıyor (puan = harcanan/1000), '
+      + 'yani ölü içerik değil geç oyunun asıl kaynak gideri. ⚠️ 1,33\'e geri çekersen tek şehirli '
+      + 'bir oyuncu bina fiyatları ne olursa olsun bir yılda her şeyi maksimuma çıkarır — ölçüldü.',
   },
   {
     key: 'economy.techCostRate',
@@ -992,12 +998,26 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   },
   {
     key: 'economy.timeExponent',
-    label: 'Süre üssü',
+    label: 'Birim süre üssü',
     type: 'number', default: 0.8, min: 0.1, max: 2, tag: 'design',
-    description: 'Fiyatın süreye dönüşme eğrisi. 1\'den küçük olması pahalı birimi saniye başına daha '
-      + 'verimli yapar — Ejderha, Cüce\'nin 100 katı fiyata 39 katı süre alır.',
+    description: '⚠️ YALNIZ asker ve savunma birimi üretimi. Fiyatın süreye dönüşme eğrisi; 1\'den '
+      + 'küçük olması pahalı birimi saniye başına daha verimli yapar — Ejderha, Cüce\'nin 100 katı '
+      + 'fiyata 39 katı süre alır. Yapı ve teknikler için «Yapı süre üssü» geçerli.',
     note: '0,8 orijinal kaynağın kendi üssü. 1,0 olsaydı birim seçimi yalnız maliyet verimliliğine '
       + 'inerdi ve elit birimlerin anlamı kalmazdı.',
+  },
+  {
+    key: 'economy.structureTimeExponent',
+    label: 'Yapı süre üssü',
+    type: 'number', default: 0.95, min: 0.1, max: 2, tag: 'design',
+    description: 'Yapı, teknik, Sur ve Büyü Kalkanı sürelerinin üssü. ⭐ Eğri tam 1000 kaynak '
+      + 'noktasında döner: büyütürsen 1000\'in ÜSTÜNDEKİ kalemler yavaşlar, ALTINDAKİLER hızlanır. '
+      + 'Yani erken oyuna dokunmadan yalnız üst seviyeleri uzatmanın düğmesi budur — «Yapı süre '
+      + 'katsayısı» ise her seviyeyi aynı oranda çarpar.',
+    note: '⚠️ 2026-08-10\'a kadar birimlerle AYNI üssü (0,8) paylaşıyordu; ayrıldı çünkü yapı '
+      + 'sürelerini uzatmak Kaos/Ejderha üretimini de patlatıyordu. Orijinal oyunun yapı üssü 1,0 '
+      + '(süre maliyetle doğru orantılı); 0,95 ona bir yaklaşma, 1,0\'a tam çıkmak Kale 20\'yi '
+      + '2.869 güne fırlatıyordu.',
   },
   {
     key: 'economy.unitTimeFactor',

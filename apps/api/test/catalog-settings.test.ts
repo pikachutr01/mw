@@ -124,15 +124,27 @@ describe('varsayılan davranış', () => {
     }
   });
 
-  it('⭐ seyreklik: tuning gruplarının katalog varsayılanı BOŞ, şema varsayılanı DOLU', () => {
-    expect(DEFAULT_CATALOG_CONFIG.buildingTuning).toEqual({});
+  it('⭐ seyreklik: tuning gruplarının katalog varsayılanı NEREDEYSE boş, şema varsayılanı DOLU', () => {
+    /**
+     * ⚠️ Katalogdaki tek kayıt `architect_school:timeFactor` ve o bir denge ayarı değil, bir
+     * KURAL farkı: `k.java:1396-1403`te Mimar Okulu, diğer yapıların aldığı `×10` süre çarpanını
+     * hiç almıyor. Fiyat eksenleri (`:gold/:food/:rate`) boş kaldığı için global düğmeler yaşıyor.
+     */
+    expect(DEFAULT_CATALOG_CONFIG.buildingTuning).toEqual({ 'architect_school:timeFactor': 0.1 });
     expect(DEFAULT_CATALOG_CONFIG.techTuning).toEqual({});
     // Şema tarafı etkin değeri gösteriyor — panelde boş hücre değil gerçek fiyat görünsün.
     const byKey = new Map(SETTINGS.map((d) => [d.key, d]));
-    expect(byKey.get('buildingTuning.castle:gold')?.default).toBe(200);
-    expect(byKey.get('buildingTuning.farm:rate')?.default).toBe(1.33);
+    expect(byKey.get('buildingTuning.castle:gold')?.default).toBe(900);
+    expect(byKey.get('buildingTuning.farm:rate')?.default).toBe(1.45);
     expect(byKey.get('buildingTuning.castle:rate')?.default).toBe(1.8);
     expect(byKey.get('techTuning.archery:rate')?.default).toBe(1.5);
+    /**
+     * ⭐⭐ Şema, katalogdaki tek kaydı da doğru göstermeli. Burada 1 kalsaydı panel «varsayılan 1»
+     * der, yönetici 1 yazar ve oyunun en yavaş yapısı sessizce 10 kata çıkardı — `derived.ts`
+     * ile `config.ts` arasındaki elle-senkron sözleşmesinin bekçisi bu satır.
+     */
+    expect(byKey.get('buildingTuning.architect_school:timeFactor')?.default).toBe(0.1);
+    expect(byKey.get('buildingTuning.castle:timeFactor')?.default).toBe(1);
   });
 
   it('⭐ türetilmiş her ayarın karşılığı katalogda GERÇEKTEN var', () => {

@@ -8,8 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
-  buildingCost, buildingTimeSeconds, defenseCapacity, techTimeSeconds, timeFromCost,
-  trainingTimeSeconds, UNITS_BY_ID,
+  buildingCost, buildingTimeSeconds, defenseCapacity, STARTING_RESOURCES, techTimeSeconds,
+  timeFromCost, trainingTimeSeconds, UNITS_BY_ID,
 } from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
@@ -112,7 +112,7 @@ describe('yapı yükseltme', () => {
     expect(q.finishAt.getTime()).toBeGreaterThan(at.getTime());
 
     const snap = await cities.snapshot(cityId, at);
-    expect(snap!.gold).toBe(4000 - cost.gold);
+    expect(snap!.gold).toBe(STARTING_RESOURCES.gold - cost.gold);
 
     // Kuyruk ile görev AYNI transaction'da yazıldı.
     const m = await h.db.execute<Record<string, unknown>>(sql`
@@ -215,6 +215,8 @@ describe('savaşçı üretimi', () => {
 
   it('ön-şart sağlanınca kuyruk açılır ve bitişte barakaya eklenir', async () => {
     await setTech('blacksmithing', 1);
+    // ⚠️ 5 Cüce = 1.000 altın + 2.250 yemek; başlangıç kesesi (1.000/1.000) yetmiyor.
+    await giveResources(10_000, 10_000);
     const at = await clock.gameNow(worldId);
 
     const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
@@ -370,14 +372,17 @@ describe('savaşçı üretimi', () => {
 
   it('üretim adetle ölçeklenen kaynak harcar', async () => {
     await setTech('blacksmithing', 1);
+    // ⚠️ Başlangıç kesesi 5 Cüce'ye yetmiyor (1.000/1.000 ↔ 1.000 altın + 2.250 yemek).
+    const kese = { gold: 10_000, food: 10_000 };
+    await giveResources(kese.gold, kese.food);
     const at = await clock.gameNow(worldId);
     const def = UNITS_BY_ID['dwarf']!;
 
     await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });
 
     const snap = await cities.snapshot(cityId, at);
-    expect(snap!.gold).toBe(4000 - def.gold * 5);
-    expect(snap!.food).toBe(4000 - def.food * 5);
+    expect(snap!.gold).toBe(kese.gold - def.gold * 5);
+    expect(snap!.food).toBe(kese.food - def.food * 5);
   });
 });
 
@@ -683,7 +688,7 @@ describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur
     expect(String(m[0]!['status'])).toBe('canceled');
 
     const snap = await cities.snapshot(cityId, at);
-    expect(snap!.gold).toBe(4000);   // hemen iptal → kese başa döndü
+    expect(snap!.gold).toBe(STARTING_RESOURCES.gold);   // hemen iptal → kese başa döndü
   });
 
   it('⭐ dokümanın ÖRNEĞİ birebir: %20 tamamlanmış yapı iptalinde %80 iade', async () => {
@@ -703,6 +708,7 @@ describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur
 
   it('⭐ SAVAŞÇI iptali BİR BİRİM EKSİK iade eder (dokümanın kuralı)', async () => {
     await setTech('blacksmithing', 1);
+    await giveResources(10_000, 10_000);   // 5 Cüce başlangıç kesesini aşıyor
     const at = await clock.gameNow(worldId);
     const def = UNITS_BY_ID['dwarf']!;
     const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 5, at });

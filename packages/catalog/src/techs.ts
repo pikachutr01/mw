@@ -9,12 +9,36 @@ import type { TechDef, TechId, TechStat } from './types.ts';
  * Oranlar: Zırh ve Taş Ustalığı %6, diğer tüm teknikler %5.
  * Stat kodları: atk = hp (fiziksel vuruş) · matk = magicHp (büyü vuruş)
  *               pmit = pAtk + pDef (fiziksel savunma) · mmit = mAtk (büyü savunması)
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * ⭐⭐ 2026-08-10 — TABAN FİYATLAR SAVAŞ MOTORUNDAKİ ÖLÇÜLMÜŞ ETKİYE GÖRE SIRALANDI
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * Eski tabanlar dokümandan gelen kaba gruplardı ve **savaşın en değerli tekniği olan Zırh en
+ * ucuz gruptaydı** (100/100). Yeni sıralama üç ölçüden çıkıyor:
+ *
+ *  1. **Oran** — %6'lık teknikler (Zırh · Tılsım · Taş Ustalığı) yapısal olarak %5'liklerden
+ *     değerli: mitigasyon kanalı `net = pay − mit×adet` denklemindeki tek "sıfır kayıp"
+ *     kilidini açtığı için kazanç doğrusal değil **eşikli**.
+ *  2. **Faz sayısı** — tip-1 birimler savaşta 4, tip-2 birimler 3 faz vuruyor. Bu, tip-1
+ *     ölçekleyen **Okçuluk**'u tip-2 ölçekleyen **Demircilik**'ten %33 değerli yapıyor; eski
+ *     fiyatlar ikisini de 100/100 diyordu.
+ *  3. **Liste genişliği ve çarptığı sayının büyüklüğü** — İçgüdü'nün listesi dar (3 birim) ama
+ *     oyunun en büyük statlarını çarpıyor (Kaos `hp` 220.000).
+ *
+ * ⚠️ **Teknikler binalara göre daha sert yükseldi (×1,7 – ×7).** Sebep asimetri: bina fiyatı 5
+ * şehir için 5 kez ödenir, teknik BİR kez ödenir ve beş şehri birden güçlendirir; üstelik teknik
+ * seviyesi tavansız. `1,5 < 1,8` oran farkı bu asimetriyi tek başına dengelemiyordu.
+ *
+ * ⚠️ **Sıra değişti, mutlak fiyat değil.** Her taban yükseldi; değişen şey birbirlerine göre
+ * konumları. En büyük çarpan Zırh'ta (×7), en küçüğü Gece Görüş (×1,7) ve Kimya'da (×1,8) —
+ * yani ikisi listede **geriye** düştü. Ölçüm sıralaması dokümanın grup mantığından farklı çıktı
+ * ve ölçüm kazandı.
  */
 export const TECHS: readonly TechDef[] = [
   {
     id: 'archery', name: { tr: 'Okçuluk' }, rate: 0.05, stat: 'atk',
     units: ['elf', 'pegasus', 'archer_tower', 'ballista'],
-    baseGold: 100, baseFood: 100,
+    baseGold: 450, baseFood: 400,
   },
   {
     /**
@@ -45,17 +69,17 @@ export const TECHS: readonly TechDef[] = [
      */
     id: 'blacksmithing', name: { tr: 'Demircilik' }, rate: 0.05, stat: 'atk',
     units: ['dwarf', 'cavalry', 'gnome', 'trap', 'guard'],
-    baseGold: 100, baseFood: 100,
+    baseGold: 400, baseFood: 350,
   },
   {
     id: 'chemistry', name: { tr: 'Kimya' }, rate: 0.05, stat: 'atk',
     units: ['mangonel', 'oil_cauldron', 'mangonel_tower'],
-    baseGold: 200, baseFood: 160,
+    baseGold: 350, baseFood: 300,
   },
   {
     id: 'instinct', name: { tr: 'İçgüdü' }, rate: 0.05, stat: 'atk',
     units: ['dragon', 'ogre', 'chaos'],
-    baseGold: 300, baseFood: 250,
+    baseGold: 650, baseFood: 550,
   },
   {
     /* ⭐ 2026-07-29: BÜYÜ KALKANI BU LİSTEDEN ÇIKARILDI. Binary'de Büyücülük uygulayıcısı
@@ -63,7 +87,7 @@ export const TECHS: readonly TechDef[] = [
      * nesnelerine hiç dokunmaz. Kalkanın magicHp'si zaten 0 → etkisiz. Kalkanı güçlendiren TILSIM. */
     id: 'sorcery', name: { tr: 'Büyücülük' }, rate: 0.05, stat: 'matk',
     units: ['shaman', 'pegasus', 'dragon', 'chaos'],
-    baseGold: 200, baseFood: 160,
+    baseGold: 600, baseFood: 500,
   },
   {
     /**
@@ -82,13 +106,13 @@ export const TECHS: readonly TechDef[] = [
     id: 'armor', name: { tr: 'Zırh' }, rate: 0.06, stat: 'pmit',
     units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'mangonel', 'ogre', 'shaman', 'gnome',
       'chaos', 'oil_cauldron', 'guard'],
-    baseGold: 100, baseFood: 100,
+    baseGold: 700, baseFood: 700,
   },
   {
     // "Savunma ünitelerinin fiziksel savunma gücünü %6 arttırır" (Okçu Kulesi, Mangonel, Balista, Sur)
     id: 'masonry', name: { tr: 'Taş Ustalığı' }, rate: 0.06, stat: 'pmit',
     units: ['archer_tower', 'mangonel_tower', 'ballista', 'wall'],
-    baseGold: 250, baseFood: 200,
+    baseGold: 550, baseFood: 450,
   },
   {
     /* "Büyü savunma gücünü %5 arttırır" — Mancınık/Kaos/Yük/Casus HARİÇ.
@@ -115,13 +139,13 @@ export const TECHS: readonly TechDef[] = [
     id: 'talisman', name: { tr: 'Tılsım' }, rate: 0.06, stat: 'mmit',
     units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'ogre', 'gnome', 'shaman',
       'chaos', 'oil_cauldron', 'guard', 'magic_shield'],
-    baseGold: 250, baseFood: 200,
+    baseGold: 700, baseFood: 600,
   },
   // ── Savaş statlarına doğrudan etkisi olmayan teknikler ───────────────────────
-  { id: 'espionage', name: { tr: 'Casusluk' }, rate: 0, stat: null, units: [], baseGold: 120, baseFood: 80 },
-  { id: 'cartography', name: { tr: 'Haritacılık' }, rate: 0, stat: null, units: [], baseGold: 120, baseFood: 80 },
-  { id: 'colonization', name: { tr: 'Sömürgecilik' }, rate: 0, stat: null, units: [], baseGold: 400, baseFood: 300 },
-  { id: 'night_vision', name: { tr: 'Gece Görüş' }, rate: 0, stat: null, units: [], baseGold: 300, baseFood: 250 },
+  { id: 'espionage', name: { tr: 'Casusluk' }, rate: 0, stat: null, units: [], baseGold: 300, baseFood: 250 },
+  { id: 'cartography', name: { tr: 'Haritacılık' }, rate: 0, stat: null, units: [], baseGold: 250, baseFood: 200 },
+  { id: 'colonization', name: { tr: 'Sömürgecilik' }, rate: 0, stat: null, units: [], baseGold: 1200, baseFood: 1000 },
+  { id: 'night_vision', name: { tr: 'Gece Görüş' }, rate: 0, stat: null, units: [], baseGold: 500, baseFood: 450 },
 ] as const;
 
 export const TECHS_BY_ID: Readonly<Record<string, TechDef>> = Object.fromEntries(

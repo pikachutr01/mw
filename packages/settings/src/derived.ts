@@ -42,11 +42,13 @@ function defsFor(
   group: string,
   items: readonly { id: string; name: { tr: string }; baseGold: number; baseFood: number }[],
   defaultRate: (id: string) => number,
+  defaultTimeFactor: (id: string) => number = () => 1,
 ): SettingDef[] {
   const out: SettingDef[] = [];
   for (const it of items) {
     const bases: Record<string, number> = {
-      gold: it.baseGold, food: it.baseFood, rate: defaultRate(it.id), timeFactor: 1,
+      gold: it.baseGold, food: it.baseFood,
+      rate: defaultRate(it.id), timeFactor: defaultTimeFactor(it.id),
     };
     for (const axis of ['gold', 'food', 'rate', 'timeFactor'] as const) {
       const base = bases[axis]!;
@@ -71,19 +73,33 @@ function defsFor(
 }
 
 /**
- * ⚠️ `rate` varsayılanı **etkin** değeri gösteriyor: Çiftlik/Maden ayrı eğride (1,33), diğer
+ * ⚠️ `rate` varsayılanı **etkin** değeri gösteriyor: Çiftlik/Maden ayrı eğride (1,45), diğer
  * yapılar 1,8, tüm teknikler 1,5. Hepsine tek bir sayı yazsaydık panel yalan söylerdi.
  *
- * ⚠️ Bu varsayılanlar `config.ts`ten okunmuyor, elle yazılıyor — çünkü `DEFAULT_CATALOG_CONFIG`
- * import etmek `packages/settings`i katalog config'inin şekline de bağlardı. Bir test
- * ikisinin uyuştuğunu doğruluyor.
+ * ⚠️⚠️ Bu varsayılanlar `config.ts`ten okunmuyor, **elle yazılıyor** — çünkü
+ * `DEFAULT_CATALOG_CONFIG` import etmek `packages/settings`i katalog config'inin şekline de
+ * bağlardı. Yani buradaki sayı `config.ts`teki `economyCostRate`/`buildingCostRate`/`techCostRate`
+ * ile **elle senkron tutulmalı**; bir test ikisinin uyuştuğunu doğruluyor ve o test yoksa panel
+ * sessizce yanlış varsayılan gösterir. (2026-08-10'da 1,33 → 1,45 tam bu yoldan geçti.)
  */
 const BUILDING_RATE_DEFAULT = (id: string): number =>
-  (BUILDINGS.find((b) => b.id === id)?.economyCostCurve ? 1.33 : 1.8);
+  (BUILDINGS.find((b) => b.id === id)?.economyCostCurve ? 1.45 : 1.8);
+
+/**
+ * ⚠️ **Mimar Okulu'nun süre çarpanı 1 DEĞİL 0,1** — katalogdaki tek `buildingTuning` kaydı
+ * (`config.ts`, Java'nın `×10`'unun karşılığı). Burada 1 bırakılsaydı panel «varsayılan 1» der,
+ * yönetici 1 yazar ve oyunun en yavaş yapısı sessizce **10 kata** çıkardı. Aynı elle-senkron
+ * sözleşmesi `BUILDING_RATE_DEFAULT` için de geçerli; ikisini de bir test kilitliyor.
+ */
+const BUILDING_TIME_FACTOR_DEFAULT = (id: string): number =>
+  (id === 'architect_school' ? 0.1 : 1);
 
 export function derivedCatalogSettings(): SettingDef[] {
   return [
-    ...defsFor('building', 'buildingTuning', orderBy(BUILDINGS, BUILDING_ORDER), BUILDING_RATE_DEFAULT),
+    ...defsFor(
+      'building', 'buildingTuning', orderBy(BUILDINGS, BUILDING_ORDER),
+      BUILDING_RATE_DEFAULT, BUILDING_TIME_FACTOR_DEFAULT,
+    ),
     ...defsFor('tech', 'techTuning', orderBy(TECHS, TECH_ORDER), () => 1.5),
   ];
 }

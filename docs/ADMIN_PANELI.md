@@ -497,6 +497,32 @@ buna değmiyor.
 **26 sabit**, üç grup: `economy` · `cave` · `wall`. Kullanıcının istediği "temel fiyatlar,
 temel süreler, büyüme oranları" bunlar.
 
+### ⭐⭐ İKİ AYRI SÜRE ÜSSÜ (2026-08-10) — hangisi neyi yavaşlatır
+
+Süre çekirdeği `K × (değer/1000)^ÜS / 1,2^(hızlandıran yapı)` ve **üs artık iki tane**:
+
+| Ayar | Varsayılan | Neyi yönetir |
+| :-- | --: | :-- |
+| `economy.timeExponent` | **0,80** | **Yalnız** savaşçı ve savunma **birimi** üretimi. `k.java`'nın kendi sayısı — dokunmadan önce iki kez düşün. |
+| `economy.structureTimeExponent` | **0,95** | Yapı · teknik · Sur · Büyü Kalkanı yükseltmeleri. |
+
+⭐ **Üst seviyeleri yavaşlatmak istiyorsan doğru düğme `structureTimeExponent`, `structureTimeFactor`
+DEĞİL.** Sebep: eğri tam **1000 kaynak** noktasında dönüyor (`1,0^0,80 = 1,0^0,95 = 1,0`). Üssü
+büyütmek 1000'in **altındaki** kalemleri hızlandırır, üstündekileri yavaşlatır — yani erken oyuna
+dokunmadan yalnız tepeyi uzatır. Katsayı (`K`) ise her seviyeyi aynı oranda çarpar, yeni oyuncuyu
+da aynı ölçüde cezalandırır.
+
+⚠️ İkisi 2026-08-10'a kadar **tek bir alandı** (0,8). Yapı sürelerini uzatmak için o tek üssü
+büyütmek Kaos ve Ejderha üretimini de patlatıyordu; ayrım bunun için açıldı.
+
+### ⚠️ `buildingTuning`de bir tane varsayılan kayıt VAR — ve olması gerekiyor
+
+Seyreklik sözleşmesi (aşağıda) *"dokunulmamış varlık için kayıt olmaz"* diyor ve hâlâ geçerli.
+Tek istisna **`architect_school:timeFactor = 0,1`**: bu bir denge ince ayarı değil, orijinal oyunun
+**kural** farkı — `k.java:1396-1403`te Mimar Okulu, diğer yapıların aldığı `×10` süre çarpanını hiç
+almıyor. Kayıt yalnız `timeFactor` ekseninde; `:gold/:food/:rate` boş kaldığı için global fiyat ve
+oran düğmeleri yaşamaya devam ediyor. **1 yaparsan Mimar Okulu'nun her yükseltmesi 10 kat uzar.**
+
 ### Formüller: isteğe bağlı son parametre
 
 ```ts

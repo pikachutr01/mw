@@ -28,8 +28,31 @@ export interface EconomyConfig {
   timeDivisorRate: number;
   /** Her hızlandırıcı yapı seviyesi süreyi böler: `rate^seviye`. */
   timeDecayRate: number;
-  /** Pahalı birimi saniye başına daha verimli yapan üs. */
+  /**
+   * ⚠️ **YALNIZ SAVAŞÇI ve SAVUNMA BİRİMİ** üretim süresinin üssü (`k.java:10`'un kendi 0,8'i).
+   * Pahalı birimi saniye başına daha verimli yapar. Yapı/teknik/Sur/Kalkan için
+   * `structureTimeExponent` geçerli — ikisi 2026-08-10'da AYRILDI, bkz. oranın yanındaki yorum.
+   */
   timeExponent: number;
+  /**
+   * ⭐ **YAPI · TEKNİK · SUR · BÜYÜ KALKANI süre üssü** (2026-08-10'da eklendi).
+   *
+   * ⚠️⚠️ **NEDEN AYRI BİR ALAN.** `timeCurve` hem `timeFromCost` (yapısal kalemler) hem
+   * `trainingTimeSeconds` (birimler) tarafından çağrılıyordu ve ikisi de `timeExponent` okuyordu.
+   * Kullanıcı yapı/teknik sürelerinin üst seviyelerde günlere-haftalara çıkmasını istedi; tek üssü
+   * büyütmek **Kaos ve Ejderha üretimini de patlatırdı** — üstelik 0,8 Java'nın kendi savaşçı
+   * üssü ve ona sadık kalmak istiyoruz.
+   *
+   * ⭐ **Üssü büyütmek neden doğru araç:** eğri tam **1000 kaynak** noktasında dönüyor
+   * (`1,0^0,80 = 1,0^0,95 = 1,0`). 1000'in altındaki kalemler yeni üsle **daha hızlı**,
+   * üstündekiler **daha yavaş** oluyor. Yani erken oyuna hiç dokunmadan yalnız tepe uzuyor —
+   * *"erken aşama kıtlıkla geçmesin"* şartının birebir matematiksel karşılığı. `structureTimeFactor`
+   * (K) büyütmek yanlış araç olurdu: o her seviyeyi aynı katsayıyla çarpar, erken oyun dâhil.
+   *
+   * ⚠️ Java'nın kendi yapı üssü **1,0** (süre maliyetle doğru orantılı, `k.java:1400`). 0,95 ona
+   * bir yaklaşma; 1,0'a tam çıkmak Kale 20'yi 2.869 güne fırlatıyordu (§13.11.3).
+   */
+  structureTimeExponent: number;
   /** Savaşçı ve savunma birimi süre katsayısı. */
   unitTimeFactor: number;
   /** Yapı / teknik / Sur / Kalkan süre katsayısı. */
@@ -199,12 +222,25 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     goldBase: 5,
     goldRate: 1.15,
     buildingCostRate: 1.8,
-    // ⚠️ 1,45 DEĞİL 1,33 — gerekçe `formulas.ts`te (seviye 40 ulaşılabilir kalmalı).
-    economyCostRate: 1.33,
+    /**
+     * ⭐ **1,45 — `k.java:14`'ün kendi sabiti** (`a.a("1.45")`). 2026-08-10'da geri alındı.
+     *
+     * ⚠️ Bir süre **1,33** yazıyordu ve gerekçesi *"seviye 40 ulaşılabilir kalmalı"* idi
+     * (2026-07-28). Kullanıcı bu turda amorti kuralını **açıkça terk etti**: *"illa da saatlik
+     * üretimlerine göre … amorti etme zorunluluğu şeklinde bakmayalım."* Yerine geçen gerekçe:
+     * **puan = harcanan kaynak / 1000** — kâr eşiğinin (≈sv24-26) ötesindeki seviyeler geliri
+     * değil PUANI satın alıyor, yani ölü içerik değil geç oyunun asıl kaynak gideri. Orijinalin
+     * üretim tablosu 1-40 arası VE maliyet oranı 1,45 olduğuna göre orijinalde de böyleydi.
+     *
+     * ⚠️⚠️ **Temponun asıl belirleyicisi bu tek sayı.** Ölçtüm: bina tabanlarını 6 katına çıkarıp
+     * bunu 1,33'te bırakınca tek şehirli oyuncu yine **bir yılda her şeyi 20** yapıyordu.
+     */
+    economyCostRate: 1.45,
     techCostRate: 1.5,
     timeDivisorRate: 1.4,
     timeDecayRate: 1.2,
     timeExponent: 0.8,
+    structureTimeExponent: 0.95,
     unitTimeFactor: 190,
     structureTimeFactor: 400,
     carryTimeWeight: 1,
@@ -254,10 +290,40 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     repairDecayRate: 0.92,
   },
   /**
-   * ⚠️⚠️ **BOŞ KALMALI.** Dolu bir varsayılan, global fiyat/oran düğmelerini sessizce
-   * işlevsizleştirir (bkz. `TuningConfig` yorumundaki seyreklik sözleşmesi).
+   * ⚠️⚠️ **NEREDEYSE BOŞ KALMALI.** Dolu bir varsayılan, global fiyat/oran düğmelerini sessizce
+   * işlevsizleştirir (bkz. `TuningConfig` yorumundaki seyreklik sözleşmesi). Buraya bir kayıt
+   * girmesi için o kalemin **kuralı** diğerlerinden farklı olmalı — "yardımcı olsun" diye değil.
+   *
+   * ⭐⭐ **TEK KAYIT: Mimar Okulu'nun süre çarpanı — Java'nın `×10`'u** (2026-08-10).
+   *
+   * `k.java:1396-1403` yapı süresini iki dalda hesaplıyor ve fark **iki yerde**:
+   * ```java
+   * if (var11 == 67) {                                 // MİMAR OKULU'NUN KENDİSİ
+   *    var9 = (altın + yemek) / 1.2^KENDİ_SEVİYESİ;    // ← ×10 YOK
+   * } else {
+   *    var9 = 10 * (altın + yemek) / 1.4^MimarOkulu;   // ← DİĞER HER YAPI
+   * }
+   * ```
+   * Yani orijinalde Mimar Okulu `×10` çarpanını hiç almıyor (10 kat hızlı) ama karşılığında
+   * kendi bölenini diğerlerinden **zayıf** bir tabanla (1,2 ↔ 1,4) alıyor.
+   *
+   * ⚠️ **Ham terimleri kopyalamak yanlış olurdu**, çünkü biz diğer yapılar için 1,4 değil 1,2
+   * kullanıyoruz (bilinçli, `formulas.ts:300-302`). Java'nın ham kuralını taşırsak Mimar Okulu 20
+   * **22 saate** düşer ve oyunun en ucuz yükseltmesi olur. Taşınması gereken şey **oran**:
+   * ```
+   * Java'da  MO / eşdeğer-maliyetli-diğer-yapı  =  (1/10) × (1,4/1,2)^L
+   * Bizde    (architectSelfExempt + timeFactor) =  0,10   × 1,2^L
+   *   L=1  → Java 0,117  ·  bizde 0,120        (Mimar Okulu 1 dk 17 sn)
+   *   L=10 → Java 0,467  ·  bizde 0,619        (3 sa 16 dk)
+   *   L=15 → Java 1,010  ·  bizde 1,541        ← DÖNÜM: artık diğerlerinden yavaş
+   *   L=20 → Java 2,182  ·  bizde 3,834        (36 gün)
+   * ```
+   * ⭐ **`0.1` bir eğri uydurması değil, Java'nın kendi `×10`'u.** Ve şunu gösteriyor:
+   * kullanıcının 2026-08-03'teki *"Mimar Okulu kendini hızlandırmasın"* kararı, farkında olmadan
+   * Java'nın ŞEKLİNİ yeniden kurmuş (erken hızlı → ~sv13-15'te dönüm → sonra en yavaş); eksik
+   * olan tek parça `×10`'du. Bu çarpan olmadan yeni tabanlarla Mimar Okulu 20 **362 güne** çıkıyor.
    */
-  buildingTuning: {},
+  buildingTuning: { 'architect_school:timeFactor': 0.1 },
   techTuning: {},
 };
 

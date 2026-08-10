@@ -1,9 +1,10 @@
 import type { BuildingDef } from './types.ts';
 
 /**
- * Yapılar ve taban maliyetleri (SİSTEM PLANI §13.9 — kullanıcı onaylı öneri tablosu).
- * Orijinal sunucu ölü olduğu için yapı/teknik TABAN maliyetleri elimizde yoktu; bu değerler
- * deneme-yanılmayla ayarlanacak → `world_config.economy.bases` bunları geçersiz kılabilir.
+ * Yapılar ve taban maliyetleri (SİSTEM PLANI §13.9).
+ * Orijinal sunucu ölü olduğu için yapı/teknik TABAN maliyetleri elimizde YOK — `k.java` yalnız
+ * formülleri taşıyor, tabanlar `init.do` ile sunucudan geliyordu (`e.java:380-393`, `int[45]`).
+ * Yani bu sayılar **bizim tasarım alanımız**; formüller ve büyüme oranları Java'nın.
  *
  * ⭐ **`baseGold`/`baseFood` = oyuncunun ÖDEDİĞİ İLK yükseltmenin fiyatı** (kullanıcı, 2026-07-28).
  * `STARTING_BUILDINGS`'te olan yapılar (Kale · Çiftlik · Maden) oyuna **seviye 1**
@@ -13,19 +14,60 @@ import type { BuildingDef } from './types.ts';
  *
  * Seviye tavanları (§13.11.2): Çiftlik/Maden 40 · diğer yapılar 20 · teknikler sınırsız.
  * Kale bütçesi (§13.11.1): Σ(bina seviyeleri) ≤ Kale × 10 — Kale kendisi ve Sur/Büyü Kalkanı hariç.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * ⭐⭐ 2026-08-10 — TABANLAR ~5-6 KAT YÜKSELTİLDİ. Ölçüm ve iki bağımsız çapa.
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * Kullanıcı: *"maliyetler ve süreler yeterince iyi değil, kolay kaçıyor."* Ölçtüm — tek şehirli,
+ * yağmasız, hiç durmayan bir oyuncu eski sayılarla **ilk SAATTE Çiftlik/Maden 13**'e, **üç ayda
+ * HER ŞEYE 20 + Çiftlik/Maden 40**'a ulaşıyordu. Yeni sayılarla iki yıl sonra bile hiçbir yapı
+ * 20 değil.
+ *
+ * ⭐ **ÇAPA 1 — iki hatıra birbirini doğruluyor.** Kullanıcı iki taban hatırlıyordu: Mimar Okulu
+ * sv1 = **1000/1000** ve Teleport sv1 = **500.000/500.000**. Teleport'un ön koşulu Mimar Okulu 12
+ * ve `1,8` oranıyla Mimar Okulu 12 = **1.285.368**, Teleport 1 = **1.000.000** → *"Mimar Okulu'nu
+ * 12'ye çıkarabilen oyuncu Teleport 1'i tam o sırada karşılayabilir."* Eski 180/120 tabanıyla
+ * Mimar Okulu 12 yalnız 192.805 ederdi ve Teleport onun 5,2 katı olurdu. İki bağımsız hatıranın
+ * tek ölçekte buluşması, eski tabanların ~6 kat düşük olduğunun kanıtı.
+ *
+ * ⭐ **ÇAPA 2 — Çiftlik/Maden 20 ≈ Kale 10.** İki orta-oyun kilometre taşı aynı fiyata gelmeli ki
+ * *"ekonomiyi büyütmek"* ile *"kaleyi ilerletmek"* gerçek bir tercih olsun. Eskiden Çiftlik 20 =
+ * 11.869, Kale 10 = 38.570 (oran **0,31** — ekonomi tercih değil, otomatikti). Şimdi 168.595 ↔
+ * 176.320 (oran **0,96**). Kale'nin tabanını bu çapa belirledi.
+ *
+ * ⚠️ **KALE, BÜYÜK BİNALARIN EN UCUZU — bilerek.** Fiyat = stratejik değer / zorunluluk. Kale
+ * oyunun en zorunlu kapısı (her yapının her seviyesi ona bağlı) ve tek başına hiçbir şey
+ * üretmiyor, yalnız tavan açıyor. Zorunlu bir kapı süreklidir → vergi gibi ucuz olmalı; opsiyonel
+ * güç sıçraması (Tapınak, Teleport) tercihtir → pahalı. Aynı sebeple savaşta 3. sırada olan
+ * Akademi, 8. sıradaki Tapınak'tan ucuz.
  */
 export const BUILDINGS: readonly BuildingDef[] = [
-  b('castle', 'Kale', 200, 150, 20, false, false),
-  b('barracks', 'Baraka', 120, 80, 20, false, true),
-  // ⭐ EKONOMİ YAPILARI — kullanıcı kararı (2026-07-27): ürettiği kaynaktan AĞIR yer.
-  // Maden altın üretir → altın ağırlıklı (4/3); Çiftlik yemek üretir → yemek ağırlıklı (3/4).
-  // Bu sayılar **1→2 yükseltmesinin** fiyatı (ikisi de seviye 1 başlıyor).
-  b('farm', 'Çiftlik', 3, 4, 40, true, true),
-  b('mine', 'Maden', 4, 3, 40, true, true),
-  b('academy', 'Akademi', 250, 180, 20, false, true),
-  b('architect_school', 'Mimar Okulu', 180, 120, 20, false, true),
-  b('cave', 'Mağara', 150, 100, 20, false, true),
-  b('temple', 'Tapınak', 400, 300, 20, false, true),
+  b('castle', 'Kale', 900, 700, 20, false, false),
+  b('barracks', 'Baraka', 700, 500, 20, false, true),
+  /**
+   * ⭐ EKONOMİ YAPILARI — kullanıcı kararı (2026-07-27): ürettiği kaynaktan AĞIR yer.
+   * Maden altın üretir → altın ağırlıklı (12/9); Çiftlik yemek üretir → yemek ağırlıklı (9/12).
+   * Bu sayılar **1→2 yükseltmesinin** fiyatı (ikisi de seviye 1 başlıyor).
+   *
+   * ⚠️ **2026-08-10: 3/4 ve 4/3 idi, ×3 yapıldı** (3:4 asimetrisi korunarak). Kullanıcı:
+   * *"seviye 20'de bile hâlâ ucuz maliyet ve süreye tekabül ediyor … eskiden madeni bu seviyeye
+   * çıkarmak bu kadar kolay değildi."* Ölçüm doğruladı: temponun asıl belirleyicisi bina fiyatı
+   * DEĞİL, bu iki yapının ucuzluğuydu — bina tabanlarını 6 katına çıkarıp bunlara dokunmayınca
+   * oyuncu yine bir yılda her şeyi bitiriyordu. Gerekçe ÇAPA 2 (yukarıda).
+   *
+   * ⚠️ **Bedeli açıkça:** taban ×3, kâr eşiğini ~5 seviye aşağı çekiyor (≈sv29 → ≈sv24), çünkü
+   * maliyet `1,45`, üretim `1,16` büyüyor ve taban çarpanı eşiği `log3 / log(1,45/1,16) ≈ 4,9`
+   * seviye kaydırıyor. Kabul edilen bir bedel: geç oyunda kaynağın yağmadan gelmesi zaten
+   * belgelenmiş tasarım niyeti (§13.9), ve kâr etmeyen seviyeler **puan** satın alıyor
+   * (puan = harcanan/1000) — yani ölü içerik değil, geç oyunun asıl kaynak gideri.
+   */
+  b('farm', 'Çiftlik', 9, 12, 40, true, true),
+  b('mine', 'Maden', 12, 9, 40, true, true),
+  b('academy', 'Akademi', 1400, 1000, 20, false, true),
+  // ⭐ ÇAPA 1 (yukarıda) — kullanıcı hatırası, tüm ölçeği bu sayı belirliyor.
+  b('architect_school', 'Mimar Okulu', 1000, 1000, 20, false, true),
+  b('cave', 'Mağara', 900, 600, 20, false, true),
+  b('temple', 'Tapınak', 2000, 1500, 20, false, true),
   // Teleport sv1 = 500.000/500.000 (kullanıcı hatırası, §13.11.4) → taban doğrudan bu.
   b('teleport', 'Teleport', 500_000, 500_000, 20, false, true),
 ] as const;
@@ -64,6 +106,23 @@ export const STARTING_BUILDINGS: Readonly<Record<string, number>> = {
 /**
  * Başlangıç kaynağı (§13.11.1a, kullanıcı kararı 2026-07-26).
  * YALNIZ başkent alır; kurulan koloni sıfırla doğar (kur-al-terk et sömürüsünü kapatır).
+ *
+ * ⚠️ **2026-08-10: 4000/4000 → 1000/1000.** Kullanıcı: *"ilk günde kârlı getiri sayılabilecek
+ * kadar çiftlik maden kolayca yükseltilememeli."*
+ *
+ * ⚠️⚠️ **ALT SINIRI BİR YAPI KURALI KOYUYOR, TERCİH DEĞİL — 1000'in altına inilmemeli.**
+ * Kale 1'in bütçesi 10 seviye ve Çiftlik/Maden zaten 1'den başlıyor → oyuncunun Kale 2'ye kadar
+ * yapabileceği TEK şey Çiftlik 5 + Maden 5 (kümülatif **630**). Ondan sonrası kapalı: Akademi
+ * Kale 2 ister, Baraka'ya bütçe yok, savaşçı üretimi Akademi→Demircilik ister. Yani kese Kale 2'yi
+ * (1.600) karşılamıyorsa oyunun **hiçbir şey sunmadığı** bir ölü bekleme doğuyor. Ölçüldü:
+ *
+ *     kese  500/500 → 10,9 saat ölü bekleme
+ *     kese  750/750 →  6,5 saat
+ *     kese 1000/1000 →  2,0 saat   ← seçilen
+ *     kese 1500/1500 →  0 saat
+ *
+ * Hedef zaten Çiftlik/Maden tabanının ×3 olmasıyla sağlanıyor: aynı kese eskiden 13 seviye satın
+ * alırken şimdi 5 satın alıyor. `catalog-settings.test.ts` bu ölü durağı bekçi olarak tutuyor.
  */
-export const STARTING_RESOURCES = { gold: 4000, food: 4000 } as const;
+export const STARTING_RESOURCES = { gold: 1000, food: 1000 } as const;
 export const COLONY_STARTING_RESOURCES = { gold: 0, food: 0 } as const;

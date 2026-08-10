@@ -35,8 +35,14 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  *
  * ⚠️ Eski savaşlar `battles.catalog_hash = '2ec624e6'` ile duruyor ve **öyle kalmalı**: onlar
  * gerçekten başka bir dengeyle çözüldü. Tasarım burada doğru çalıştı.
+ *
+ * ⚠️⚠️ **2026-08-10'da yine BİLEREK değişti: `bb11b88a` → `0934c2b4`.** Sebep ekonomi yeniden
+ * dengelemesi — yapı/teknik/Sur/Kalkan taban fiyatları, `economy.economyCostRate` 1,33 → 1,45,
+ * yeni `structureTimeExponent` alanı ve `buildingTuning`e giren tek kayıt. Savaş STATLARINA
+ * dokunulmadı; özet yine de kaymalı çünkü ekonomi de kataloğun bir parçası ve bir savaşın hangi
+ * denge sürümünde oynandığı sorusuna fiyatlar da giriyor.
  */
-const DEFAULT_HASH = 'bb11b88a';
+const DEFAULT_HASH = '0934c2b4';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -54,7 +60,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('dc191476');
+    expect(catalogHash(cfg)).toBe('94078f3c');
   });
 
   /**

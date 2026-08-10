@@ -112,7 +112,12 @@ export interface BuildingDef {
   baseFood: number;
   /** Seviye tavanı (§13.11.2). */
   maxLevel: number;
-  /** Çiftlik/Maden maliyet istisnası: base × level × 1.45^(level−1). */
+  /**
+   * Çiftlik/Maden maliyet istisnası: `base × level × 1.45^(level−1)` — `k.java:1382-1392`.
+   * ⚠️ Bu yorum 2026-07-28 ile 2026-08-10 arasında **yanlıştı**: oran o dönemde 1,33'e çekilmişti
+   * ama yorum 1,45 demeye devam ediyordu. Oran Java'nın sabitine geri döndü, yorum yine doğru.
+   * Bayrak eğrinin **şeklini** (`level ×` çarpanı) belirler, oranı `economy.economyCostRate` verir.
+   */
   economyCostCurve: boolean;
   /** Kale bütçesini tüketir mi (§13.11.1)? Kale, Sur ve Büyü Kalkanı tüketmez. */
   consumesCastleBudget: boolean;

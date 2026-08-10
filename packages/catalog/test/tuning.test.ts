@@ -12,14 +12,25 @@ import {
 } from '../src/index.ts';
 
 describe('seyreklik sözleşmesi', () => {
-  it('⭐ varsayılan tuning grupları BOŞ', () => {
+  it('⭐ varsayılan tuning grupları NEREDEYSE boş — tek kayıt, o da bir KURAL farkı', () => {
     /**
      * Buraya "yardımcı olsun" diye 9 yapının varsayılanını doldurmak,
      * `economy.buildingCostRate`'i sessizce işlevsizleştirirdi: her yapının kendi kaydı
      * olurdu ve global düğme hiçbirine ulaşmazdı.
+     *
+     * ⚠️ **Tek istisna 2026-08-10'da girdi**: `architect_school:timeFactor = 0,1`. Bu bir denge
+     * ince ayarı değil, `k.java:1396-1403`teki KURAL farkının karşılığı — orijinalde Mimar Okulu,
+     * diğer yapıların aldığı `×10` süre çarpanını hiç almıyor. Sözleşme korunuyor çünkü kayıt
+     * yalnız `timeFactor` ekseninde; `:gold/:food/:rate` boş kaldığı için global düğmeler yaşıyor.
      */
-    expect(DEFAULT_CATALOG_CONFIG.buildingTuning).toEqual({});
+    expect(DEFAULT_CATALOG_CONFIG.buildingTuning).toEqual({ 'architect_school:timeFactor': 0.1 });
     expect(DEFAULT_CATALOG_CONFIG.techTuning).toEqual({});
+    // Fiyat eksenleri DOKUNULMAMIŞ olmalı — yoksa global oran sessizce ölür.
+    for (const axis of ['gold', 'food', 'rate'] as const) {
+      for (const id of Object.keys(DEFAULT_CATALOG_CONFIG.buildingTuning)) {
+        expect(id.endsWith(`:${axis}`), `beklenmeyen fiyat kaydı: ${id}`).toBe(false);
+      }
+    }
   });
 
   it('⭐ GLOBAL oran, varlığa dokunulmamışken hâlâ çalışıyor', () => {
@@ -55,7 +66,7 @@ describe('taban fiyat ve oran', () => {
     const cfg = mergeCatalogConfig({ buildingTuning: { 'academy:gold': 500, 'academy:food': 400 } });
     // sv 1 = taban (Akademi oyuna sıfırdan başlar, ilk ödenen seviye 1).
     expect(buildingCost('academy', 1, cfg)).toEqual({ gold: 500, food: 400 });
-    expect(buildingCost('academy', 1)).toEqual({ gold: 250, food: 180 });
+    expect(buildingCost('academy', 1)).toEqual({ gold: 1400, food: 1000 });
   });
 
   it('teknik taban fiyatı ve oranı yazılabiliyor', () => {

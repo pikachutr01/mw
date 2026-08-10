@@ -43,8 +43,9 @@
    Oyuncu kimliği, sohbeti, mesajı, sıralaması dünya-kapsamlıdır. Kural: §13.12.1b.
 10. **DM için acemi kısıtı:** yeni oyuncu ilk **12 saat** özel mesaj **başlatamaz** (spam/çok-hesap
     kalkanı). §13.12.4.
-11. **Başlangıç kaynağı:** yeni başkent **4.000 altın + 4.000 yemek** ile başlar — cömert değil,
-    ilk günü dolu dolu geçirtip 2. günde orduya geçirten miktar. Gerekçe ve tablo: §13.11.1a.
+11. **Başlangıç kaynağı:** yeni başkent **1.000 altın + 1.000 yemek** ile başlar (2026-08-10'da
+    4.000/4.000'den indi). Alt sınırı bir tercih değil bir yapı kuralı koyuyor: Kale 1'in bütçesi
+    10 seviye ve altındaki kese Kale 2 için saatlerce ölü bekleme doğuruyor. §13.11.1a.
 12. **İttifak kurma ön-şartı: Kale ≥ 5.** Şart listesi veri olarak tutulur, ileride başka koşullar
     eklenebilir. §13.15.
 
@@ -1020,7 +1021,7 @@ kuralıyla çelişiyordu — "Ayşe" tarayıcıda reddediliyor, sunucuda kabul e
 
 ### Panelden başlangıç kesesi
 
-`economy.startingGold` / `economy.startingFood` (varsayılan 4000/4000). ⚠️ Koloni kesesi
+`economy.startingGold` / `economy.startingFood` (varsayılan **1000/1000**). ⚠️ Koloni kesesi
 ayarlanabilir DEĞİL ve öyle kalıyor: 0 bir denge düğmesi değil **değişmez** — koloniye kese
 vermek "kur → al → terk et" döngüsünü açardı. `catalogHash` kaymadı (`diffFromDefault`).
 
@@ -1846,7 +1847,7 @@ JSONB config hâlâ gelecek işi; bugün fiilen çalışan model `worlds` tablos
              "allianceFound": { "minCastleLevel": 5 } },      // §13.15 — liste büyüyecek
   "economy": { "foodBase": 6, "foodRate": 1.16, "goldBase": 5, "goldRate": 1.15,
                "buildingCostRate": 1.4, "unitCostRate": 1.8, "heroReviveRate": 1.5,
-               "startingResources": { "gold": 4000, "food": 4000 },   // §13.11.1a — YALNIZ başkente
+               "startingResources": { "gold": 1000, "food": 1000 },   // §13.11.1a — YALNIZ başkente
                "colonyStartingResources": { "gold": 0, "food": 0 },
                "trainingTimeModel": "balanced",                       // ✅ §13.11.3; "area"/"original" = emekli
                "bases": { /* §13.9 yapı+teknik taban maliyet tablosu */ } },
@@ -1975,20 +1976,25 @@ Savaşçı/savunma tabanları binary'de var; yapı+teknik tabanları sunucudan g
 **Öneri (config-driven, `world_config.economy.bases`).** ⚠️ Kale · Baraka · Çiftlik · Maden
 satırlarındaki sayı **1→2 yükseltmesinin** fiyatıdır (aşağıdaki "taban fiyatın anlamı" başlığı):
 
+⚠️⚠️ **Bu tablo 2026-08-10'da TAMAMEN YENİLENDİ.** Yürürlükteki tabanlar aşağıda; eski sayılar
+(Çiftlik 3/4 · Kale 200/150 · Mimar Okulu 180/120 · Zırh 100/100 …) yalnız tarih olarak duruyor.
+Gerekçeler §13.9a'da. ⚠️ Eski tabloda **Teleport 800/600** yazıyordu ve o satır baştan beri
+yanlıştı — karar satırı da kod da 500.000/500.000 diyordu.
+
 | Yapı | altın | yemek | | Teknik | altın | yemek |
 | :-- | --: | --: | :-- | :-- | --: | --: |
-| **Çiftlik** | **3** | **4** | | Demircilik/Okçuluk/Zırh | 100 | 100 |
-| **Maden** | **4** | **3** | | Casusluk/Haritacılık | 120 | 80 |
-| Baraka | 120 | 80 | | Kimya/Büyücülük | 200 | 160 |
-| Kale | 200 | 150 | | Taş Ustalığı/Tılsım | 250 | 200 |
-| Mimar Okulu | 180 | 120 | | İçgüdü/Gece Görüş | 300 | 250 |
-| Akademi | 250 | 180 | | Sömürgecilik | 400 | 300 |
-| Mağara | 150 | 100 | | | | |
-| Tapınak | 400 | 300 | | | | |
-| Teleport | 800 | 600 | | | | |
-
-Bu tabanlarla: Çiftlik sv1 = 100 kaynak / 17 dk · sv10 = 28.300 kaynak / 79 saat (MO 0), MO 10'da 2,7 saat.
-Demircilik sv1 = 300 kaynak / 50 dk · sv10 ≈ 17.300 kaynak / 1,7 saat (Akademi 10).
+| **Çiftlik** | **9** | **12** | | Zırh | 700 | 700 |
+| **Maden** | **12** | **9** | | Tılsım | 700 | 600 |
+| Kale | 900 | 700 | | İçgüdü | 650 | 550 |
+| Baraka | 700 | 500 | | Büyücülük | 600 | 500 |
+| Mimar Okulu | 1000 | 1000 | | Taş Ustalığı | 550 | 450 |
+| Akademi | 1400 | 1000 | | Gece Görüş | 500 | 450 |
+| Mağara | 900 | 600 | | Okçuluk | 450 | 400 |
+| Tapınak | 2000 | 1500 | | Demircilik | 400 | 350 |
+| **Teleport** | **500.000** | **500.000** | | Kimya | 350 | 300 |
+| **Sur** *(`units.ts`)* | **2500** | **2500** | | Casusluk | 300 | 250 |
+| **Büyü Kalkanı** *(`units.ts`)* | **12000** | **3000** | | Haritacılık | 250 | 200 |
+| | | | | Sömürgecilik | 1200 | 1000 |
 
 **✅ ONAYLANDI (kullanıcı, 2026-07-26):** bu tabanlarla başlanacak. **Teleport sv1 = 500.000/500.000**
 (kullanıcı hatırası, §13.11.4). Tüm tabanlar `world_config.economy.bases`'da **tek yerde** durur →
@@ -2008,34 +2014,110 @@ Bu yüzden tablodaki taban artık **1→2 yükseltmesinin** fiyatıdır; seviye 
 
 #### ⭐ ÇİFTLİK/MADEN TABANLARI (kullanıcı, 2026-07-27)
 
-**Maden 4 altın + 3 yemek · Çiftlik 3 altın + 4 yemek** — *ekonomi yapısı ürettiği kaynaktan ağır
-yer*: Maden altın üretir, altın ağırlıklı maliyeti olur; Çiftlik tersi. Eski tabanlar (60/40,
-70/30) **14 kat** pahalıydı; Çiftlik'in ilk yükseltmesi 290 kaynak / **48 dakika** sürüyordu,
-şimdi 7 kaynak / **8 saniye**.
+**Maden altın ağırlıklı · Çiftlik yemek ağırlıklı** — *ekonomi yapısı ürettiği kaynaktan ağır yer*.
+Oran 3:4, ölçek 2026-08-10'da **×3** oldu (3/4 ve 4/3 → 9/12 ve 12/9); gerekçe §13.9a, ÇAPA 2.
 
-**Erken oyunun temposu artık keseyle değil KALE BÜTÇESİYLE belirleniyor** — daha iyi bir tasarım,
-çünkü tempoyu bilinçli bir yapı kararı yönetiyor. Kale 1 bütçesi = 10 seviye; Çiftlik 5 + Maden 4 +
-Baraka 1 = tam 10 ve toplam maliyeti kesenin **%6'sından az**. Kalanı Kale'ye gider → bütçe büyür.
+**Erken oyunun temposunu KALE BÜTÇESİ belirliyor** — tempoyu bilinçli bir yapı kararı yönetiyor.
+Kale 1 bütçesi = 10 seviye; Çiftlik 5 + Maden 5 = tam 10 ve toplam maliyeti **630 kaynak**, yani
+başlangıç kesesinin (1.000/1.000) üçte biri. Kalanı Kale 2'ye gider → bütçe büyür.
 
-#### ⭐ `economyCostRate` 1,45 → **1,33** (kullanıcı onayı, 2026-07-28)
+#### ⭐ `economyCostRate` — 1,45 → 1,33 → **1,45** (2026-08-10'da Java'ya geri döndü)
 
-`k.java`'daki sabit 1,45'ti ama o oran orijinalin **bilmediğimiz** tabanlarına ve muhtemelen başka
-bir seviye tavanına aitti. Bizim tavanımız **40** ve maliyet `1,45^L`, üretim `1,16^L` büyüdüğü için
-seviye 40 ekonomik olarak **ulaşılamaz** oluyordu.
+`k.java:14`'teki sabit **1,45**. 2026-07-28'de 1,33'e çekilmişti; gerekçe *"seviye 40 ekonomik
+olarak ulaşılabilir kalmalı"* idi ve o günün kuralına göre doğruydu.
+
+**2026-08-10'da geri alındı.** Kullanıcı amorti kuralını açıkça terk etti: *"illa da saatlik
+üretimlerine göre yükseltme fiyatlarını makul bir zamanda amorti etme zorunluluğu şeklinde
+bakmayalım … oyunun ekonomisini uzun aylara hatta yıllara yaymamız lazım."*
 
 | | sv20 maliyet | sv40 maliyet | sv40 geri ödeme (Maden) |
 | :-- | --: | --: | --: |
-| 1,45 | 56.198 | **189.719.565** | ~8.700 sa (≈ 1 yıl) |
-| **1,33** | 11.869 | **7.120.171** | **870 sa (≈ 36 gün)** |
+| 1,33 (eski) | 11.869 | 7.120.171 | 870 sa (≈ 36 gün) |
+| **1,45 (Java)** | **56.198** | **189.719.565** | ~8.700 sa |
 
-1,33 seçildi çünkü geri ödeme **düzgün** büyüyor ve hiçbir noktada kopmuyor:
-sv10 **6,5 sa** → sv20 **42 sa** → sv30 **195 sa** → sv40 **870 sa**. Yani her seviye planlanabilir
-bir yatırım, seviye 40 ise gerçek bir geç-oyun hedefi (iki yapıyı 40'a çıkarmanın kümülatif
-maliyeti ≈ 53 milyon = o seviyedeki gelirin **15 günü**).
+⭐ **Amortinin yerine geçen gerekçe: puan = harcanan kaynak / 1000.** Kâr eşiği (≈sv25) aşıldıktan
+sonra yükseltme geliri değil **puanı** satın alıyor — yani ölü içerik değil, geç oyunun asıl kaynak
+gideri. Orijinalin üretim tablosu 1-40 arası VE maliyet oranı 1,45 olduğuna göre orijinalde de
+böyleydi. Yeni değişmez «geri ödeme düzgün büyür, hiçbir noktada kopmaz»: beş seviyelik adımların
+oranı `1,45⁵/1,15⁵ = 3,19` limitine düzgünce yaklaşıyor (4,66 → 3,68 → 3,46 → … → 3,25).
 
-Ekonominin doyması **kasıtlı olarak korundu** (maliyet üretimden hızlı büyümeye devam ediyor →
-oyuncu geç oyunda kaynağı yağmadan almaya yöneliyor); yalnız doyma noktası oynanabilir bir yere
-çekildi. Sonraki tur: erken/orta/geç oyun senaryolarıyla kapsamlı denge testi.
+⚠️⚠️ **Temponun asıl belirleyicisi bu tek sayı.** Ölçüldü: bina tabanları 6 katına çıkarılıp oran
+1,33'te bırakılınca tek şehirli, yağmasız bir oyuncu yine **bir yılda her şeyi 20** yapıyor.
+
+---
+
+### §13.9a EKONOMİ YENİDEN DENGELEME (2026-08-10)
+
+**İstek:** *"maliyetler ve süreler yeterince iyi değil, kolay kaçıyor … yüksek seviyelerde günlerle,
+seviyeler çok daha büyüdükçe haftaları bulabilecek süreler."* Ama erken aşama **kıtlık değil, planlı
+gelişme** olmalı ve **Java'ya sadakat birinci öncelik**.
+
+**Ölçüm (tek şehir, yağmasız, hiç durmayan oyuncu, teknikler hariç):**
+
+| | 1 saat | 1 gün | 1 hafta | 1 ay | 3 ay | 1 yıl | 2 yıl |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| **ESKİ** | Çift/Mad **13** | Mad 18 | Mad 28 | Mad 37 | **hepsi 20 · Mad 40** | — | — |
+| **YENİ** | Çift/Mad 5 | Kale 2 · Çift 9 | Kale 4 · Çift 15 | Kale 8 · Çift 21 | Kale 12 | Kale 15 · Çift 28 | Kale 17 · Çift 31 |
+
+Oyunun tamamı eskiden **üç ayda**, tek şehirle, hiç savaşmadan bitiyordu. Kale 20 yalnızca 1 gün 12
+saat sürüyordu; Çiftlik 40 **3,5 saat**. Yeni sayılarla iki yıl sonra bile hiçbir yapı 20 değil.
+
+#### İki çapa — tabanların ölçeğini bunlar belirledi
+
+**ÇAPA 1 · Mimar Okulu 12 ≈ Teleport 1.** Kullanıcı iki tabanı hatırlıyordu: Mimar Okulu sv1 =
+1000/1000 ve Teleport sv1 = 500.000/500.000. Teleport'un ön koşulu **Mimar Okulu 12** ve `1,8`
+oranıyla Mimar Okulu 12 = **1.285.368**, Teleport 1 = **1.000.000**. İki bağımsız hatıra tek
+ölçekte buluşuyor — eski tabanların (Mimar Okulu 12 = 192.805, Teleport onun 5,2 katı) ~6 kat düşük
+olduğunun kanıtı.
+
+**ÇAPA 2 · Çiftlik/Maden 20 ≈ Kale 10.** İki orta-oyun kilometre taşı aynı fiyata gelmeli ki
+"ekonomiyi büyütmek" ile "kaleyi ilerletmek" gerçek bir tercih olsun. Eskiden 11.869 ↔ 38.570
+(oran **0,31** — ekonomi tercih değil, otomatikti). Şimdi 168.595 ↔ 176.320 (oran **0,96**).
+Kale'nin tabanını bu çapa belirledi.
+
+⚠️ **Bedeli açıkça:** Çiftlik/Maden tabanının ×3 olması kâr eşiğini ~5 seviye aşağı çekiyor
+(≈sv29 → ≈sv24), çünkü maliyet `1,45`, üretim `1,16` büyüyor ve taban çarpanı eşiği
+`log3 / log(1,45/1,16) ≈ 4,9` seviye kaydırıyor. Kabul edilen bir bedel: geç oyunda kaynağın
+yağmadan gelmesi zaten belgelenmiş tasarım niyeti.
+
+#### İlke: "kapı" ucuz, "lüks" pahalı
+
+Fiyat = stratejik değer **bölü** zorunluluk. ⭐ Bu yüzden **Kale, büyük binaların en ucuzu**: tek
+başına hiçbir şey üretmez, yalnız tavan açar, ama o tavan olmadan hiçbir yatırım büyümez — zorunlu
+bir kapı süreklidir, vergi gibi ucuz olmalı. Aynı sebeple savaşta 3. sırada olan Akademi, 8.
+sıradaki Tapınak'tan ucuz kalıyor.
+
+**Teknikler binalardan daha sert yükseldi (×1,7 – ×7).** Asimetri: bina fiyatı 5 şehir için 5 kez
+ödenir, teknik BİR kez ödenir ve beş şehri birden güçlendirir; üstelik teknik seviyesi tavansız.
+`1,5 < 1,8` oran farkı bunu tek başına dengelemiyordu. Sıralama savaş motorundaki ölçülmüş etkiden
+geliyor: %6'lık teknikler (Zırh · Tılsım · Taş Ustalığı) `net = pay − mit×adet` denklemindeki tek
+"sıfır kayıp" kilidini açtığı için **eşikli** kazanç veriyor · tip-1 birimler savaşta 4, tip-2
+birimler 3 faz vuruyor (Okçuluk > Demircilik) · İçgüdü'nün listesi dar ama çarptığı sayılar oyunun
+en büyükleri. ⚠️ Eski tabanlarda savaşın **en değerli** tekniği olan **Zırh en ucuz gruptaydı**.
+
+**Sur ve Büyü Kalkanı ×2,5.** Kaynak/savaş-gücü oranı Sur'da **3,59**, savaşçıda **81**, adetli
+savunma biriminde **33,6** — Sur oyundaki en ucuz güç kaynağıydı, farkla. Oran seviyeden bağımsız
+sabit (fiyat `1,8^(sv−1)`, güç `1,8^sv`), o yüzden tek kaldıraç taban fiyat. ×2,5 uçurumu kapatıyor
+ama "savunma saldırıdan ucuzdur" tür geleneğini koruyor.
+
+#### Başlangıç kesesi 4000/4000 → **1000/1000**
+
+⚠️ **Alt sınırı bir tercih değil bir YAPI KURALI koyuyor.** Kale 1'in bütçesi 10 seviye ve
+Çiftlik/Maden zaten 1'den başlıyor → oyuncunun Kale 2'ye kadar yapabileceği tek şey Çiftlik 5 +
+Maden 5 (630 kaynak). Gerisi kapalı: Akademi Kale 2 ister, Baraka'ya bütçe kalmaz, savaşçı üretimi
+Akademi→Demircilik ister. Kese Kale 2'yi (1.600) karşılamazsa oyunun **hiçbir şey sunmadığı** bir
+ölü bekleme doğar:
+
+| Kese | Kale 2 için ölü bekleme |
+| :-- | --: |
+| 500/500 | 10,9 saat |
+| 750/750 | 6,5 saat |
+| **1000/1000** | **2,0 saat** ✅ |
+| 1500/1500 | 0 saat |
+
+Hedef (*"ilk günde kârlı getiri sayılabilecek kadar çiftlik maden kolayca yükseltilememeli"*) zaten
+Çiftlik/Maden tabanının ×3 olmasıyla sağlanıyor: aynı kese eskiden 13 seviye satın alırken şimdi 5.
+`formulas.test.ts` bu bağı bekçi olarak tutuyor — kese VEYA Kale tabanı tek başına değişirse kırılır.
 
 ### 🎯 Ön-şart sorusunun cevabı: **HAYIR, seviyeyle değişmiyor**
 İstemci ön-şart eşiğini **tip başına TEK bir değerden** okuyor (`byte[45]` dizisi, `init.do`/tip-35 ile
@@ -2285,27 +2367,32 @@ yavaş gelişmeye açık"* bir başlangıç kesesi.
 **Sorun:** seviye 1 üretim **saatte 6 yemek + 5 altın = 11 kaynak**. Çiftlik'i 2'ye çıkarmak 290
 kaynak → sıfır keseyle **~26 saat** bekleme. Yani başlangıç kaynağı olmadan oyunun ilk günü ölü.
 
-**✅ KARAR: `startingResources = 4.000 altın + 4.000 yemek`** (yalnız **başkent**, hesap açılışında).
+**✅ KARAR (2026-07-26): `startingResources = 4.000 altın + 4.000 yemek`.**
 
-Bu kese tam olarak şunu alır (§13.9 tabanları + motorun birim maliyet tablosuyla hesaplandı):
-| Harcama | Altın | Yemek |
-| :-- | --: | --: |
-| Çiftlik 1→4 (290 + 631 + 1.220) | 1.285 | 856 |
-| Maden 1→4 (aynı formül, altın ağırlıklı) | 1.499 | 642 |
-| Baraka 1→2 | 216 | 144 |
-| **5 Cüce** (200 altın + 450 yemek/adet) | 1.000 | 2.250 |
-| **Toplam** | **4.000** | **3.892** |
+⚠️⚠️ **2026-08-10'da 1.000/1.000'e İNDİ.** Kullanıcı: *"4000 bana sanki yine biraz fazla geliyor …
+amaç belli, ilk günde kârlı getiri sayılabilecek kadar çiftlik maden kolayca yükseltilememeli."*
+Aynı turda Çiftlik/Maden tabanı ×3 olduğu için kesenin satın aldığı seviye sayısı zaten **13 → 5**
+düştü; kese kesintisi bunun üstüne geliyor.
 
-Sonuç: yeni oyuncunun **ilk günü dolu geçer** (ekonomi 4, baraka 2, cepte küçük bir müfreze), kese
-biter ve **2. günden itibaren üretimle yaşamaya başlar**. Üretim 11/saat → **77/saat** (7 kat), ama
-tek bir Süvari bile (1.200 + 2.400) hâlâ ~1,5 gün demek → **ordu kurmak yavaş ve kıymetli** kalır.
-72 saatlik acemi koruması tam olarak bu kurulum penceresine denk gelir.
+⚠️ **Alt sınırı bir tercih değil bir YAPI KURALI koyuyor.** Kale 1'in bütçesi 10 seviye ve
+Çiftlik/Maden zaten 1'den başlıyor → oyuncunun Kale 2'ye kadar yapabileceği tek şey **Çiftlik 5 +
+Maden 5** (630 kaynak). Gerisi kapalı: Akademi Kale 2 ister, Baraka'ya bütçe kalmaz, savaşçı üretimi
+Akademi→Demircilik ister. Kese Kale 2'yi (1.600) karşılamazsa oyunun **hiçbir şey sunmadığı** bir
+ölü bekleme doğar:
 
-| Alternatif | Ne olurdu |
-| :-- | :-- |
-| 2.000 / 2.000 | ancak ekonomi 3'e çıkar, hiç asker yok → ilk gün sıkıcı, terk oranı yüksek |
-| **4.000 / 4.000 ✅** | ekonomi 4 + baraka 2 + 5 Cüce; kese biter, gelişim üretime bağlanır |
-| 8.000 / 8.000 | ekonomi 6 + ~15 Cüce → 1. günde saldırıya çıkılır, acemi koruması anlamsızlaşır |
+| Kese | Kale 2 için ölü bekleme | Ne olur |
+| :-- | --: | :-- |
+| 500 / 500 | **10,9 saat** | ilk gün yarısı boş ekran → terk |
+| 750 / 750 | 6,5 saat | hâlâ uzun |
+| **1.000 / 1.000 ✅** | **2,0 saat** | ilk saatte 8 yükseltme, sonra kısa bir birikim |
+| 1.500 / 1.500 | 0 saat | Kale 2 anında → bütçe kapısı hissedilmiyor |
+
+Yeni ilk gün: ilk saatte Çiftlik/Maden 5 (bütçe dolar), ~2 saat sonra Kale 2, gün sonunda
+**Çiftlik 9 / Maden 8** ve saatte 327 kaynak. `formulas.test.ts` bu bağı bekçi olarak tutuyor —
+kese VEYA Kale tabanı tek başına değişirse test kırılır.
+
+⚠️ Aşağıdaki eski harcama tablosu **artık geçerli değil** (Çiftlik 1→4 = 290+631+1.220 gibi sayılar
+o günün tabanlarına aitti); tarih olarak duruyor.
 
 **Kurallar:**
 - **Yalnız başkent** alır (`colonyStartingResources = 0/0`). Kurulan koloni **sıfır** kaynakla doğar;
@@ -2397,15 +2484,26 @@ UI aynı servisten kalan bütçeyi gösterir, sunucu her yükseltme/üretim tale
 #### Yürürlükteki kural — dört kategori, tek eğri
 
 ```
-süre(sn) = K × (değer / 1000)^0,8 / 1,2^(hızlandıran yapı seviyesi)
+süre(sn) = K × (değer / 1000)^ÜS / 1,2^(hızlandıran yapı seviyesi)
 ```
 
-| Kategori | `K` | değer | hızlandıran |
-| :-- | --: | :-- | :-- |
-| **Savaşçı** | 190 | altın + yemek + **taşıma** | **Baraka** |
-| **Savunma birimi** | 190 | altın + yemek | **Mimar Okulu** |
-| **Yapı** · **Sur/Büyü Kalkanı** | 400 | o seviyenin altın + yemek maliyeti | **Mimar Okulu** |
-| **Teknik** | 400 | o seviyenin altın + yemek maliyeti | **Akademi** (o şehrin) |
+| Kategori | `K` | **üs** | değer | hızlandıran |
+| :-- | --: | --: | :-- | :-- |
+| **Savaşçı** | 190 | **0,80** | altın + yemek + **taşıma** | **Baraka** |
+| **Savunma birimi** | 190 | **0,80** | altın + yemek | **Mimar Okulu** |
+| **Yapı** · **Sur/Büyü Kalkanı** | 400 | **0,95** | o seviyenin altın + yemek maliyeti | **Mimar Okulu** |
+| **Teknik** | 400 | **0,95** | o seviyenin altın + yemek maliyeti | **Akademi** (o şehrin) |
+
+⚠️⚠️ **ÜS TEK DEĞİL, İKİ TANE** (2026-08-10). Birimler `economy.timeExponent` (**0,80** — Java'nın
+kendi savaşçı üssü), yapısal kalemler `economy.structureTimeExponent` (**0,95**) kullanıyor. Ayrım
+şart oldu: kullanıcı yapı/teknik sürelerinin üst seviyelerde günlere-haftalara çıkmasını istedi ve
+tek üssü büyütmek Kaos/Ejderha üretimini de patlatırdı.
+
+⭐ **Üssü büyütmek neden doğru araç:** eğri tam **1000 kaynak** noktasında dönüyor
+(`1,0^0,80 = 1,0^0,95 = 1,0`). Altındaki kalemler **daha hızlı**, üstündekiler **daha yavaş** oluyor
+— yani erken oyuna hiç dokunmadan yalnız tepe uzuyor. `K`'yı büyütmek aynı işi yapamazdı: o her
+seviyeyi aynı katsayıyla çarpar. Java'nın kendi yapı üssü **1,0**; 0,95 ona bir yaklaşma, 1,0'a tam
+çıkmak Kale 20'yi yine 2.869 güne fırlatırdı.
 
 Kod: `packages/catalog/src/formulas.ts` → `timeCurve` (çekirdek) · `timeFromCost` (yapısal) ·
 `trainingTimeSeconds` (birim). Dört kategori tek çekirdeği paylaşır; ayrı yazılsalardı biri
@@ -2517,12 +2615,52 @@ karşılaştırma ve denge düğmesi olarak duruyorlar, varsayılan değiller.
 
 Eski kural `10 × (altın+yemek) / 1,4^MimarOkulu` **üstel maliyet eğrisiyle çarpışıyordu**: maliyet
 `1,8^seviye` büyürken süre onunla lineer büyüyünce Kale 20 **2.869 gün** sürüyordu (Mimar Okulu 20
-ile bile 3,4 gün). Yeni kural üssü 0,8'e indirdiği için aynı yükseltme Mimar Okulu 10'da **2,4 gün**.
-İlk yükseltmeler de makul: Kale 2 = 4 dk 36 sn, Akademi 1 = 3 dk 24 sn.
+ile bile 3,4 gün). Üssü indirmek bunu çözdü.
 
-**Mimar Okulu'nun özel dalı kaldırıldı.** Orijinalde kendi süresi `(a+y)/1,2^sv` idi (10× çarpansız);
-o istisna 1,4'lük bölenin kaçışını frenlemek içindi. Bölen 1,2'ye inince frene gerek kalmadı ve
-istisna sessiz bir tutarsızlık kaynağı olurdu.
+⚠️ Bu paragraf 2026-08-10'a kadar *"Kale 20, Mimar Okulu 10'da 2,4 gün"* diyordu — o sayı **fazla
+ucuzdu** ve zaten yeniden dengelemenin sebebi oldu. Yürürlükteki değerler: Kale 2 = **10 dk**,
+Akademi 1 = **15 dk**, Kale 20 (Mimar Okulu 10) = **27 gün**, Sur 20 = **32 gün**.
+
+#### ⭐⭐ MİMAR OKULU — Java'nın kendi kuralı (2026-08-10'da yeniden kuruldu)
+
+⚠️ Bu bölüm 2026-08-10'a kadar *"Mimar Okulu'nun özel dalı kaldırıldı … istisna sessiz bir
+tutarsızlık kaynağı olurdu"* diyordu. **İki kez yanlıştı**: (a) istisna 2026-08-03'te kullanıcı
+kararıyla zaten geri gelmişti (`architectSelfExempt`), (b) orijinaldeki fark yalnız bölen değildi.
+
+`k.java:1396-1403` yapı süresini iki dalda hesaplıyor ve fark **iki yerde**:
+
+```java
+if (var11 == 67) {                                 // MİMAR OKULU'NUN KENDİSİ
+   var9 = (altın + yemek) / 1.2^KENDİ_SEVİYESİ;    // ← ×10 ÇARPANI YOK
+} else {
+   var9 = 10 * (altın + yemek) / 1.4^MimarOkulu;   // ← DİĞER HER YAPI
+}
+```
+
+Yani orijinalde Mimar Okulu `×10` çarpanını **hiç almıyor** (10 kat hızlı) ama karşılığında kendi
+bölenini diğerlerinden **zayıf** bir tabanla (1,2 ↔ 1,4) alıyor.
+
+⚠️ **Ham terimleri kopyalamak yanlış olurdu**, çünkü biz diğer yapılarda 1,4 değil 1,2 kullanıyoruz.
+Java'nın ham kuralını taşırsak Mimar Okulu 20 **22 saate** düşer ve oyunun en ucuz yükseltmesi olur.
+Taşınması gereken şey **oran**:
+
+```
+Java'da   MO / eşdeğer-maliyetli-diğer-yapı  =  (1/10) × (1,4/1,2)^L
+Bizde     (architectSelfExempt + timeFactor) =  0,10   × 1,2^L
+```
+
+| L | Java oranı | Bizde | Mimar Okulu süresi |
+| --: | --: | --: | :-- |
+| 1 | 0,117 | **0,120** | 1 dk 17 sn |
+| 10 | 0,467 | 0,619 | 3 sa 16 dk |
+| 15 | **1,010** ← dönüm | **1,541** | 2 gün |
+| 20 | 2,182 | 3,834 | **36 gün** |
+
+⭐ **`timeFactor = 0,10` bir eğri uydurması değil, Java'nın kendi `×10`'u.** Ve şunu gösteriyor:
+kullanıcının 2026-08-03'teki *"Mimar Okulu kendini hızlandırmasın"* kararı, farkında olmadan
+Java'nın **şeklini** yeniden kurmuş (erken hızlı → ~sv13-15'te dönüm → sonra oyunun en yavaş yapısı);
+eksik olan tek parça `×10`'du. Bu çarpan olmadan yeni tabanlarla Mimar Okulu 20 **362 güne** çıkıyor.
+Kayıt `config.ts`in `buildingTuning`inde ve `formulas.test.ts` dönüm noktasını kilitliyor.
 
 
 ### 13.11.4 Teleport

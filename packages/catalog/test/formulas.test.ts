@@ -275,72 +275,100 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
    * uygulanması — Baraka artık "seviye 0'dan başlayan yapılar" grubunda.
    */
   it('taban fiyat = ilk ÖDENEN yükseltme', () => {
-    expect(buildingCost('farm', 2)).toEqual({ gold: 3, food: 4 });   // yemek ağırlıklı
-    expect(buildingCost('mine', 2)).toEqual({ gold: 4, food: 3 });   // altın ağırlıklı
-    expect(buildingCost('castle', 2)).toEqual({ gold: 200, food: 150 });
+    expect(buildingCost('farm', 2)).toEqual({ gold: 9, food: 12 });   // yemek ağırlıklı
+    expect(buildingCost('mine', 2)).toEqual({ gold: 12, food: 9 });   // altın ağırlıklı
+    expect(buildingCost('castle', 2)).toEqual({ gold: 900, food: 700 });
     // Seviye 0'dan başlayan yapılarda taban seviye 1'in fiyatıdır (ölçekleme yok).
-    expect(buildingCost('academy', 1)).toEqual({ gold: 250, food: 180 });
-    expect(buildingCost('barracks', 1)).toEqual({ gold: 120, food: 80 });
-    // ⚠️ Bedelini burada ödüyor: sv2 artık 120/80 değil 1,8 katı.
-    expect(buildingCost('barracks', 2)).toEqual({ gold: 216, food: 144 });
-    // Eğri: seviye × 1,33^(seviye−1), sv2'ye göre ölçekli.
-    expect(buildingCost('farm', 4)).toEqual({ gold: 11, food: 14 });
-    expect(buildingCost('mine', 4)).toEqual({ gold: 14, food: 11 });
+    expect(buildingCost('academy', 1)).toEqual({ gold: 1400, food: 1000 });
+    expect(buildingCost('barracks', 1)).toEqual({ gold: 700, food: 500 });
+    // ⚠️ Bedelini burada ödüyor: sv2 artık 700/500 değil 1,8 katı.
+    expect(buildingCost('barracks', 2)).toEqual({ gold: 1260, food: 900 });
+    // Eğri: seviye × 1,45^(seviye−1), sv2'ye göre ölçekli.
+    expect(buildingCost('farm', 4)).toEqual({ gold: 38, food: 50 });
+    expect(buildingCost('mine', 4)).toEqual({ gold: 50, food: 38 });
   });
 
   /**
-   * ⭐ **SEVİYE TAVANI 40 GERÇEKTEN ULAŞILABİLİR OLMALI** (kullanıcı, 2026-07-28).
-   * Maliyet `1,33^L`, üretim `1,15^L` büyüdüğü için geri ödeme yine de uzuyor — bu kasıtlı
-   * (ekonomi doyar, oyuncu yağmaya yönelir) ama son seviye **bir ay** mertebesinde kalmalı,
-   * bir YIL değil. 1,45 ile sv40'ın geri ödemesi 8.700 saatti; artık 870.
+   * ⭐⭐ **GERİ ÖDEME DÜZGÜN BÜYÜR — AMA BİR TAVANI YOK** (kullanıcı, 2026-08-10).
+   *
+   * ⚠️ Bu test 2026-07-28 ile 2026-08-10 arasında **tam tersini** kilitliyordu:
+   * *"seviye tavanı 40 gerçekten ulaşılabilir olmalı … son seviye bir AY mertebesinde kalmalı"*
+   * (`geriOdeme(40) < 1000`). O kural, `economyCostRate`'i Java'nın 1,45'inden 1,33'e çekmenin
+   * gerekçesiydi. Kullanıcı bu turda kuralı **açıkça terk etti**: *"illa da saatlik üretimlerine
+   * göre … amorti etme zorunluluğu şeklinde bakmayalım."*
+   *
+   * ⭐ Yerine geçen değişmez: **eğri düzgün, sıçramasız.** Kâr eşiği (~sv25) aşıldıktan sonra
+   * yükseltme geliri değil PUANI satın alıyor (puan = harcanan/1000) — yani ölü içerik değil,
+   * geç oyunun asıl kaynak gideri. Bir sıçrama olsaydı oyuncu "buradan sonrası anlamsız" diye
+   * okurdu; kademeli uzama "buradan sonrası pahalı ama hâlâ bir yatırım" diye okunur.
    */
-  it('maden yükseltmesi seviye 40\'a kadar kendini amorti eder', () => {
+  it('⭐ maden geri ödemesi düzgün büyür, hiçbir noktada KOPMAZ', () => {
     const geriOdeme = (level: number): number => {
       const c = buildingCost('mine', level);
       return (c.gold + c.food) / (mineOutput(level) - mineOutput(level - 1));
     };
-    expect(geriOdeme(2)).toBeLessThan(2);          // ~1 saat
-    expect(geriOdeme(10)).toBeLessThan(10);        // ~6,5 saat
-    expect(geriOdeme(20)).toBeLessThan(50);        // ~42 saat
-    expect(geriOdeme(40)).toBeLessThan(1_000);     // ~870 saat ≈ 36 gün
-    // Yine de monoton artıyor: her seviye bir öncekinden pahalı bir yatırım.
-    expect(geriOdeme(40)).toBeGreaterThan(geriOdeme(30));
-    expect(geriOdeme(30)).toBeGreaterThan(geriOdeme(20));
+    // Erken oyun gerçekten kârlı: ilk yükseltmeler saatler içinde kendini ödüyor.
+    expect(geriOdeme(2)).toBeLessThan(4);            // ~2,6 saat
+    expect(geriOdeme(5)).toBeLessThan(15);           // ~10 saat
+    expect(geriOdeme(10)).toBeLessThan(60);          // ~47 saat ≈ 2 gün
+    // Kâr eşiği: sv20 hâlâ makul (~25 gün), sv25'ten sonra puan yatırımına dönüyor.
+    expect(geriOdeme(20)).toBeLessThan(700);         // ~594 saat
+    expect(geriOdeme(25)).toBeGreaterThan(1_000);    // ~1.989 saat — eşik burada geçiliyor
+    /**
+     * Monoton VE sıçramasız: her beş seviye bir öncekinin 3-5 katı, hiçbir yerde uçurum yok.
+     * Üstelik oran **azalıyor** (4,66 → 3,68 → 3,46 → … → 3,25) ve `1,45^5 / 1,15^5 = 3,19`
+     * limitine yaklaşıyor: eğrinin şekli maliyet/üretim oranının kendisi, uydurma bir kesme değil.
+     */
+    let onceki = Infinity;
+    for (const l of [10, 15, 20, 25, 30, 35, 40]) {
+      const oran = geriOdeme(l) / geriOdeme(l - 5);
+      expect(oran, `sv${l - 5}→${l} sıçraması`).toBeGreaterThan(3);
+      expect(oran, `sv${l - 5}→${l} sıçraması`).toBeLessThan(5);
+      expect(oran, `sv${l - 5}→${l} bir önceki adımdan sert olmamalı`).toBeLessThan(onceki);
+      onceki = oran;
+    }
+    const limit = 1.45 ** 5 / 1.15 ** 5;                 // 3,187 — maliyet/üretim oranı
+    expect(geriOdeme(40) / geriOdeme(35)).toBeGreaterThan(limit);
+    expect(geriOdeme(40) / geriOdeme(35)).toBeLessThan(limit * 1.05);
   });
 
-  it('kale 1→5 kümülatif ~4.150 (ittifak kurma eşiği, §13.15)', () => {
-    // Taban artık 1→2'nin fiyatı olduğu için eğri bir basamak indi (eskiden ~7.500).
+  it('kale 1→5 kümülatif ~19.000 (ittifak kurma eşiği Kale 5, §13.15)', () => {
     let total = 0;
     for (let l = 2; l <= 5; l++) {
       const c = buildingCost('castle', l);
       total += c.gold + c.food;
     }
-    expect(total).toBeGreaterThan(4_000);
-    expect(total).toBeLessThan(4_500);
+    expect(total).toBeGreaterThan(18_000);
+    expect(total).toBeLessThan(20_000);
   });
 
   /**
-   * ⭐ Yeni tabanlarla başlangıç kesesinin (4.000/4.000) rolü DEĞİŞTİ: artık ekonomiyi değil
-   * **Kale'yi** finanse ediyor. Ekonomi yapıları o kadar ucuz ki Kale 1'in izin verdiği
-   * 10 seviyenin tamamı 217 altın + 239 yemek tutuyor — kapı **Kale bütçesi**.
-   * Bu iyi bir tasarım: erken oyunun temposunu kese değil, bilinçli bir yapı kararı belirliyor.
+   * ⭐⭐ **İLK GÜN ÖLÜ DURAK BEKÇİSİ** (2026-08-10) — başlangıç kesesinin alt sınırını bir
+   * TERCİH değil bir YAPI KURALI belirliyor.
+   *
+   * Kale 1'in bütçesi 10 seviye ve Çiftlik/Maden zaten 1'den başlıyor → oyuncunun Kale 2'ye
+   * kadar yapabileceği tek şey **Çiftlik 5 + Maden 5**. Ondan sonrası kapalı: Akademi Kale 2
+   * ister, Baraka'ya bütçe kalmaz, savaşçı üretimi Akademi→Demircilik ister. Yani kese Kale 2'yi
+   * karşılamazsa oyunun **hiçbir şey sunmadığı** bir bekleme doğar.
+   *
+   * ⚠️ Bu test kese VEYA Kale tabanı tek başına değişirse kırılır — ikisi birbirine bağlı ve
+   * bağın kendisi görünmez. (Ölçüm: kese 500/500 → 10,9 saat · 750/750 → 6,5 · 1000/1000 → 2,0.)
    */
-  it('Kale bütçesi artık kesenin önüne geçiyor', () => {
-    let gold = 0;
-    let food = 0;
-    for (let l = 2; l <= 5; l++) { const c = buildingCost('farm', l); gold += c.gold; food += c.food; }
-    for (let l = 2; l <= 4; l++) { const c = buildingCost('mine', l); gold += c.gold; food += c.food; }
-
-    // Çiftlik 5 + Maden 4 + Baraka 1 = tam 10 seviye = Kale 1 bütçesinin tamamı.
+  it('⭐ ilk gün ölü durak 3 saati aşmıyor (kese ↔ Kale 2 bağı)', () => {
     expect(castleBudget(1)).toBe(10);
-    expect(gold + food).toBeLessThan(500);              // kesenin %6'sı
-    expect(gold).toBeLessThan(STARTING_RESOURCES.gold);
-    expect(food).toBeLessThan(STARTING_RESOURCES.food);
+    let harcanan = 0;
+    for (let l = 2; l <= 5; l++) {
+      harcanan += buildingCost('farm', l).gold + buildingCost('farm', l).food;
+      harcanan += buildingCost('mine', l).gold + buildingCost('mine', l).food;
+    }
+    // Çiftlik 5 + Maden 5 = tam 10 seviye = Kale 1 bütçesinin tamamı, ve kese onu karşılıyor.
+    const kese = STARTING_RESOURCES.gold + STARTING_RESOURCES.food;
+    expect(harcanan).toBeLessThan(kese);
 
-    // Kalan kese Kale 2-3'e gidiyor (bütçeyi 30 seviyeye çıkarır).
-    let kale = 0;
-    for (let l = 2; l <= 3; l++) { const c = buildingCost('castle', l); kale += c.gold + c.food; }
-    expect(kale).toBeLessThan(STARTING_RESOURCES.gold + STARTING_RESOURCES.food - gold - food);
+    const kale2 = buildingCost('castle', 2);
+    const gelir = farmOutput(5) + mineOutput(5);          // 113 kaynak/saat
+    const eksik = Math.max(0, kale2.gold + kale2.food - (kese - harcanan));
+    expect(eksik / gelir, 'Kale 2 için ölü bekleme (saat)').toBeLessThan(3);
   });
 });
 
@@ -416,10 +444,58 @@ describe('üretim süresi (kurgulanan model)', () => {
  * gelmediğini kilitler.
  */
 describe('yapı ve teknik süresi', () => {
+  /**
+   * ⚠️ Sınırlar 2026-08-10'da yükseldi (üs 0,80 → 0,95 + tabanlar ~5 kat): Kale 20, Mimar Okulu
+   * 10'da **2,4 gün** değil **27 gün**. Bu istenen sonuç — kullanıcı üst seviyelerin haftalarla
+   * ölçülmesini istedi. Testin koruduğu şey hâlâ aynı: eski `10 × maliyet` kuralının 2.869 günlük
+   * çöküşü geri GELMEMELİ ve ilk yükseltmeler dakikalar mertebesinde KALMALI.
+   */
   it('yüksek seviye yapı süresi patlamıyor', () => {
     const kale20 = buildingTimeSeconds('castle', 20, 10);
-    expect(kale20 / 86_400).toBeLessThan(4);         // ~2,4 gün (Mimar Okulu 10)
-    expect(buildingTimeSeconds('castle', 2, 0)).toBeLessThan(600);   // ilk yükseltme dakikalar
+    expect(kale20 / 86_400).toBeGreaterThan(10);     // haftalarla ölçülüyor (istenen)
+    expect(kale20 / 86_400).toBeLessThan(45);        // ~27 gün — ama çökmüş değil
+    expect(buildingTimeSeconds('castle', 2, 0)).toBeLessThan(900);   // ilk yükseltme dakikalar
+  });
+
+  /**
+   * ⭐⭐ **SÜRE EĞRİSİ TAM 1000 KAYNAKTA DÖNER** — erken oyun garantisinin matematiksel kilidi.
+   *
+   * Yapı üssünü 0,80'den 0,95'e çıkarmak, `(değer/1000)^üs` yüzünden **1000'in altındaki**
+   * kalemleri HIZLANDIRIR, üstündekileri yavaşlatır. Kullanıcının *"erken aşama kıtlıkla
+   * geçmesin ama üst seviyeler haftalar sürsün"* şartı bu tek özellikten geliyor; `structureTime‐
+   * Factor` (K) büyütmek aynı işi yapamazdı çünkü o her seviyeyi aynı oranda çarpar.
+   */
+  it('⭐ süre eğrisi 1000 kaynakta döner: ucuz kalem hızlanır, pahalı kalem yavaşlar', () => {
+    const dusukUs = mergeCatalogConfig({ economy: { structureTimeExponent: 0.8 } });
+    const ucuz = { gold: 300, food: 0 };      // 1000'in ALTINDA
+    const pahali = { gold: 5_000_000, food: 0 };
+    expect(timeFromCost(ucuz, 0)).toBeLessThan(timeFromCost(ucuz, 0, dusukUs));
+    expect(timeFromCost(pahali, 0)).toBeGreaterThan(timeFromCost(pahali, 0, dusukUs));
+    // Dönüm noktası: tam 1000'de iki üs de aynı sonucu verir.
+    const pivot = { gold: 1000, food: 0 };
+    expect(timeFromCost(pivot, 0)).toBeCloseTo(timeFromCost(pivot, 0, dusukUs), 9);
+  });
+
+  /**
+   * ⭐⭐ **İKİ ÜS AYRI** (2026-08-10) — `structureTimeExponent` yapısal kalemleri, `timeExponent`
+   * birimleri yönetir. Ayrım olmasaydı yapı sürelerini uzatmak Kaos/Ejderha üretimini de
+   * patlatırdı; üstelik 0,8 `k.java`'nın kendi savaşçı üssü ve ona sadık kalınıyor.
+   *
+   * ⚠️ Bu test olmadan iki üs sessizce tekrar birleşir: `timeCurve`ün yeni bir çağıranı yanlış
+   * üssü geçirirse hiçbir şey patlamaz, yalnız denge kayar.
+   */
+  it('⭐ yapı üssü birim üretimine DOKUNMAZ (ve tersi)', () => {
+    const yapiUssu = mergeCatalogConfig({ economy: { structureTimeExponent: 1.4 } });
+    expect(trainingTimeSeconds('dragon', 10, 'balanced', yapiUssu))
+      .toBeCloseTo(trainingTimeSeconds('dragon', 10), 9);
+    expect(buildingTimeSeconds('castle', 10, 0, yapiUssu))
+      .not.toBeCloseTo(buildingTimeSeconds('castle', 10, 0), 3);
+
+    const birimUssu = mergeCatalogConfig({ economy: { timeExponent: 1.4 } });
+    expect(buildingTimeSeconds('castle', 10, 0, birimUssu))
+      .toBeCloseTo(buildingTimeSeconds('castle', 10, 0), 9);
+    expect(trainingTimeSeconds('dragon', 10, 'balanced', birimUssu))
+      .not.toBeCloseTo(trainingTimeSeconds('dragon', 10), 3);
   });
 
   /**
@@ -432,10 +508,41 @@ describe('yapı ve teknik süresi', () => {
   it('⭐ Mimar Okulu KENDİ yükseltmesinde hızlanma uygulanmaz', () => {
     const c = buildingCost('architect_school', 5);
     // Bölen 4 değil 0: süre, hiç Mimar Okulu yokmuş gibi hesaplanır.
-    expect(buildingTimeSeconds('architect_school', 5, 4)).toBeCloseTo(timeFromCost(c, 0), 10);
+    // ⚠️ Ayrıca `timeFactor 0,1` var (aşağıdaki teste bak) — o yüzden onda biri.
+    expect(buildingTimeSeconds('architect_school', 5, 4)).toBeCloseTo(timeFromCost(c, 0) * 0.1, 10);
     // Mimar Okulu seviyesi ne olursa olsun kendi süresi DEĞİŞMEZ.
     expect(buildingTimeSeconds('architect_school', 5, 12))
       .toBeCloseTo(buildingTimeSeconds('architect_school', 5, 0), 10);
+  });
+
+  /**
+   * ⭐⭐ **MİMAR OKULU'NUN `timeFactor 0,1`'i = JAVA'NIN `×10`'u** (2026-08-10).
+   *
+   * `k.java:1396-1403` yapı süresini iki dalda hesaplıyor: Mimar Okulu'nun KENDİSİ
+   * `(altın+yemek) / 1,2^kendiSeviyesi`, diğer her yapı `10 × (altın+yemek) / 1,4^MimarOkulu`.
+   * Yani orijinalde Mimar Okulu o `×10` çarpanını **hiç almıyor**.
+   *
+   * Ham terimleri kopyalayamayız (biz diğer yapılarda 1,4 değil 1,2 kullanıyoruz), o yüzden
+   * taşınan şey **oran**: Java'da `(1/10) × (1,4/1,2)^L`, bizde `0,1 × 1,2^L`. Sonuç şekli aynı —
+   * erken hızlı, ~sv13-15'te dönüm, sonrasında oyunun en yavaş yapısı:
+   * ```
+   *   L=1  → Java 0,117 · bizde 0,120        L=15 → Java 1,010 · bizde 1,541  ← DÖNÜM
+   *   L=10 → Java 0,467 · bizde 0,619        L=20 → Java 2,182 · bizde 3,834
+   * ```
+   * ⚠️ Bu çarpan kaybolursa Mimar Okulu 20 **36 günden 362 güne** çıkar ve kimse dokunmaz.
+   */
+  it('⭐⭐ Mimar Okulu erken HIZLI, geç YAVAŞ — Java\'nın ×10 dengesi', () => {
+    /** Aynı maliyetteki sıradan bir yapıya göre oran (bölen: o seviyedeki Mimar Okulu). */
+    const oran = (L: number): number => {
+      const c = buildingCost('architect_school', L);
+      return buildingTimeSeconds('architect_school', L, L) / timeFromCost(c, L);
+    };
+    expect(oran(1)).toBeCloseTo(0.1 * 1.2, 6);       // 0,120 — Java 0,117
+    expect(oran(10)).toBeCloseTo(0.1 * 1.2 ** 10, 6); // 0,619 — Java 0,467
+    // Dönüm gerçekten var: bir yerde 1'i geçiyor ve geçtikten sonra geri dönmüyor.
+    expect(oran(12)).toBeLessThan(1);
+    expect(oran(15)).toBeGreaterThan(1);
+    expect(oran(20)).toBeGreaterThan(3);
   });
 
   it('istisna DİĞER yapıları etkilemez — onlar hâlâ hızlanır', () => {
@@ -448,8 +555,9 @@ describe('yapı ve teknik süresi', () => {
   it('istisna panelden kapatılabilir (architectSelfExempt)', () => {
     const cfg = mergeCatalogConfig({ economy: { architectSelfExempt: false } });
     const c = buildingCost('architect_school', 5, cfg);
-    // Kapalıyken eski davranış: kendi seviyesiyle hızlanır.
-    expect(buildingTimeSeconds('architect_school', 5, 4, cfg)).toBeCloseTo(timeFromCost(c, 4, cfg), 10);
+    // Kapalıyken eski davranış: kendi seviyesiyle hızlanır (`timeFactor` yine geçerli).
+    expect(buildingTimeSeconds('architect_school', 5, 4, cfg))
+      .toBeCloseTo(timeFromCost(c, 4, cfg) * 0.1, 10);
   });
 
   /**
@@ -470,11 +578,19 @@ describe('yapı ve teknik süresi', () => {
     expect(teleportCooldownSeconds(3, cfg)).toBeCloseTo(6 * 3600 * 0.9 ** 2, 6);
   });
 
-  it('aynı DEĞERDE yapı, birimin ~2 katı sürer (400/190)', () => {
-    // Cüce'nin değeri 660 → aynı değere sahip bir yapı kalemiyle karşılaştırılıyor.
-    const deger = unitTimeValue('dwarf');
-    expect(timeFromCost({ gold: deger, food: 0 }, 0) / trainingTimeSeconds('dwarf', 0))
-      .toBeCloseTo(400 / 190, 6);
+  /**
+   * ⚠️ Oran artık **tam** 400/190 değil: iki üs ayrıldığı için (yapı 0,95 · birim 0,80) fark
+   * değere bağlı. İkisi yalnız **1000 kaynakta** buluşuyor — orada `(1)^üs = 1` her ikisinde de.
+   * Niyet aynı: aynı değerde bir yapı, bir birimin ~2 katı sürer (yapı kalıcı, birim ölür).
+   */
+  it('aynı DEĞERDE yapı, birimin ~2 katı sürer (1000 kaynakta TAM 400/190)', () => {
+    expect(timeFromCost({ gold: 1000, food: 0 }, 0)).toBeCloseTo(400, 9);
+
+    const deger = unitTimeValue('dwarf');   // 660 → 1000'in altında
+    const oran = timeFromCost({ gold: deger, food: 0 }, 0) / trainingTimeSeconds('dwarf', 0);
+    expect(oran).toBeCloseTo((400 / 190) * (deger / 1000) ** (0.95 - 0.8), 6);
+    expect(oran).toBeGreaterThan(1.9);
+    expect(oran).toBeLessThan(2.2);
   });
 });
 
