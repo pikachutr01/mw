@@ -109,8 +109,8 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
   mangonel: {
     desc: 'Fırlattıkları kaya kütleleri ve ateş toplarıyla düşman şehrinin direncini kırar, '
       + 'ordunun saldırısına destek verirler.',
-    extra: 'Büyü savunmaları yoktur — Tılsım onlara işlemez. Ayrıca düşmanın gnomları tarafından '
-      + 'savaşın ilk turunda sabote edilirler.',
+    extra: 'Büyü savunmaları yoktur, Tılsım onlara işlemez. Ayrıca düşmanın gnomları tarafından '
+      + 'sabote edilebilirler.',
   },
   ogre: {
     desc: 'Ejderhadan sonra gelen en dayanıklı yaratıktır. Devasa tokmaklarıyla yakın dövüşün en '
@@ -120,13 +120,11 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
   shaman: {
     desc: 'Canlıları iyileştiren özel güçleriyle bilinirler. Savaşçılık güçleri yok gibidir; asıl '
       + 'işlevleri çevrelerindeki canlıları ayakta tutmaktır.',
-    extra: 'Saldırı havuzuna katılmazlar; bunun yerine SAVUNMADA ordunun üzerine gelen gücün bir '
-      + 'kısmını emerler — yeterli sayıda şaman küçük bir saldırıyı tamamen durdurabilir. '
-      + 'Büyücülük, şamanın büyü fazındaki emişini de güçlendirir.',
+    extra: 'Yeterli sayıda şaman küçük bir saldırıyı tamamen durdurabilir. ',
   },
   spy_bird: {
     desc: 'Gönderildikleri şehrin üstünde uçarak yapıları, savunmayı ve orduyu rapor ederler.',
-    extra: 'Savaş güçleri yoktur ve saldırıya katılamazlar — yalnız casusluk görevine çıkarlar. '
+    extra: 'Savaş güçleri yoktur ve saldırıya katılamazlar, yalnız casusluk görevine çıkarlar. '
       + 'Casusluk tekniği yükseldikçe hem daha çok bilgi getirir hem daha az kayıp verirler. '
       + 'Düşmanın Okçu Kuleleri ve Elfleri tarafından vurulabilirler.',
   },
@@ -140,8 +138,6 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
   gnome: {
     desc: 'Teknik yetenekleriyle tanınırlar: düşmanın tuzaklarını bozar, savunma ünitelerini '
       + 'sabote ederler. Saldırı ve savunma güçleri diğer savaşçılara göre zayıftır.',
-    extra: 'Ana vuruş havuzuna katılmazlar; işlerini savaşın ilk turunda, düşmanın mancınıklarını '
-      + 'devre dışı bırakarak görürler.',
   },
   chaos: {
     desc: 'Yalnız çok büyük hükümdarlıkların ulaşabildiği, dünyanın en güçlü yaratığıdır. '

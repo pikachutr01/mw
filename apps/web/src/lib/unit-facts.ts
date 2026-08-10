@@ -23,9 +23,7 @@
  *     yapmazdı.
  * Liste elle yazılsaydı popover bu dört yanlışı oyuncuya öğretmeye devam ederdi.
  */
-import {
-  LEVEL_BASED, NO_POOL, TECHS_BY_ID, TECH_BY_UNIT, TECH_ORDER, UNITS_BY_ID,
-} from '@mobilwar/catalog';
+import { NO_POOL, TECHS_BY_ID, TECH_BY_UNIT, TECH_ORDER, UNITS_BY_ID } from '@mobilwar/catalog';
 
 /**
  * Birimi ölçekleyen tekniklerin **Türkçe adları**, Akademi ekranındaki sırayla.
@@ -81,9 +79,23 @@ export function unitStrikeLabel(unitId: string): string | null {
  * ⚠️ **Sıfır satır ÇİZİLMEZ.** Savunma birimlerinin hızı 0 (sefere çıkmazlar), çoğunun taşıma
  * kapasitesi 0. «Hız 0 · Kapasite 0» yazmak bilgi değil gürültü olurdu.
  *
- * ⚠️ **Sur ve Büyü Kalkanı'nda `Alan` YOK** (`LEVEL_BASED`). Onların alanı sabit bir kapasite
- * maliyeti değil, seviyeyle `1,8^sv` büyüyen bir güç tabanı; tek bir sayı yazmak "Sur 20'nin
- * alanı da 300" diye okunurdu. Onlarda kutu açıklama + teknik listesiyle yetiniyor.
+ * ⚠️⚠️ **`Alan` YALNIZ SAVAŞÇILARDA** (kullanıcı, 2026-08-11: *"savunma üniteleri için alan
+ * tanımı olmasın; dokümanda yazıyor ama oyunda efektif olarak kullanmadık"*).
+ *   • Savaşçıda alan **gerçek bir kısıt**: Mağara kapasitesini o tüketiyor ve Yapılar ekranında
+ *     «142 / 800 alan» diye zaten görünüyor.
+ *   • Savunmada ise ölü bir sayı. Tüketeceği bütçe `defenseCapacity` (25.000 × 1,3^(Sur−1)) ve
+ *     o kural **uygulanmıyor**: `capacity.service.ts` → `defenseCapacity.enforced: false`
+ *     (kullanıcı kararı 2026-07-27 — savunma birimleri sınırsız üretilebiliyor). Oyuncunun
+ *     hiçbir kararını değiştirmeyen bir sayıyı göstermek onu boş yere "bir yere sığmalıyım"
+ *     diye düşündürürdü.
+ *   • Sur ve Büyü Kalkanı zaten bu kapsamda; ayrıca onlarınki bir kapasite maliyeti değil,
+ *     seviyeyle `1,8^sv` büyüyen bir güç tabanı — tek bir sayı yazmak "Sur 20'nin alanı da 300"
+ *     diye okunurdu.
+ *
+ * ⚠️ Kural `kind` üzerinden kuruluyor, `LEVEL_BASED` üzerinden DEĞİL: yeni bir adetli savunma
+ * birimi eklendiğinde ayrıca bir listeye yazılması gerekmesin.
+ * ⚠️ `defenseCapacity.enforced` bir gün `true` olursa bu satır geri gelmeli — o zaman alan
+ * yeniden oyuncunun kararını değiştiren bir sayı olur.
  */
 export interface UnitStat { label: string; value: string }
 
@@ -101,7 +113,7 @@ export function unitStats(
   const rows: UnitStat[] = [];
   if (speed > 0) rows.push({ label: 'Hız', value: fmt(speed) });
   if (carry > 0) rows.push({ label: 'Taşıma kapasitesi', value: fmt(carry) });
-  if (!LEVEL_BASED.has(unitId)) rows.push({ label: 'Alan', value: fmt(area) });
+  if (def.kind === 'warrior') rows.push({ label: 'Alan', value: fmt(area) });
   const strike = unitStrikeLabel(unitId);
   if (strike) rows.push({ label: 'Vuruş', value: strike });
   return rows;

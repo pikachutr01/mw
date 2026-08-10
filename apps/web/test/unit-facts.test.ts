@@ -93,16 +93,31 @@ describe('özellik satırları', () => {
   const id = (n: number): string => String(n);
 
   it('sıfır değerli satır ÇİZİLMEZ', () => {
-    // Muhafız: hız 0 (sefere çıkmaz), taşıma 0 → yalnız Alan + Vuruş kalmalı.
-    expect(unitStats('guard', id).map((s) => s.label)).toEqual(['Alan', 'Vuruş']);
+    // Muhafız: hız 0 (sefere çıkmaz), taşıma 0, savunmada alan yok → yalnız Vuruş kalır.
+    expect(unitStats('guard', id).map((s) => s.label)).toEqual(['Vuruş']);
     // Cüce: dördü de dolu.
     expect(unitStats('dwarf', id).map((s) => s.label))
       .toEqual(['Hız', 'Taşıma kapasitesi', 'Alan', 'Vuruş']);
   });
 
-  it('⭐ Sur ve Büyü Kalkanı\'nda «Alan» YOK — seviyeyle üssel büyüyen bir güç tabanı o', () => {
-    for (const s of unitStats('wall', id)) expect(s.label).not.toBe('Alan');
-    for (const s of unitStats('magic_shield', id)) expect(s.label).not.toBe('Alan');
+  /**
+   * ⭐⭐ Kullanıcı kararı (2026-08-11): *"savunma üniteleri için alan tanımı olmasın; dokümanda
+   * yazıyor ama oyunda efektif olarak kullanmadık."*
+   *
+   * Dayanağı ölçülebilir: savunmanın alan bütçesi `defenseCapacity` ve o kural
+   * `capacity.service.ts`te **kapalı** (`enforced: false`) — yani savunma birimi alanı oyuncunun
+   * hiçbir kararını değiştirmiyor. Savaşçıda ise alan Mağara kapasitesini tüketiyor, orada kalıyor.
+   *
+   * ⚠️ Bu test, `defenseCapacity.enforced` bir gün `true` olursa kırılmaz — o zaman satırı geri
+   * getirmek bilinçli bir karar olmalı ve testin de birlikte değişmesi gerekir.
+   */
+  it('⭐⭐ HİÇBİR savunma ünitesinde «Alan» yok, her savaşçıda VAR', () => {
+    for (const unitId of DEFENSE_ORDER) {
+      expect(unitStats(unitId, id).map((s) => s.label), unitId).not.toContain('Alan');
+    }
+    for (const unitId of WARRIOR_ORDER) {
+      expect(unitStats(unitId, id).map((s) => s.label), unitId).toContain('Alan');
+    }
   });
 
   it('⚠️ sunucudan gelen sayı katalogtakini EZER (ekrandaki her sayının tek kaynağı sunucu)', () => {
