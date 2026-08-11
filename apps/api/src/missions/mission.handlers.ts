@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm';
 import { hasCargo, readResources, type Cargo } from './cargo.ts';
 import { routeOf } from './report-route.ts';
 import {
-  BUILDINGS_BY_ID, clampName, colonyName, maxCities,
+  BUILDINGS_BY_ID, clampName, maxCities,
   spyEffectiveDiff, spyLevelAfterLosses, spyLosses, spyLevelFor,
   UNITS_BY_ID, type SpyLevel,
 } from '@mobilwar/catalog';
@@ -607,31 +607,27 @@ export function createFoundCityHandler(cities: CityService): MissionHandler {
  * "Koloni 100"e kadar (10 karakter) sığar; şehir üst sınırı bunun çok altında.
  */
 /**
- * ⭐ Yeni şehrin adı: **kullanıcı adı + sıra** (kullanıcı, 2026-08-09) — «abdullah 2».
+ * ⭐ Yeni şehrin adı: **kullanıcı adının AYNISI** (kullanıcı, 2026-08-11).
  *
- * ⚠️ **Dayanak BAŞKENT ADI değil, KULLANICI ADI.** Kullanıcının cümlesi birebir: *"Şehrin
- * kurulduğu şehrin adı değil, kullanıcı adı."* 2026-08-03 ile 08-09 arasında başkentin adı
- * kullanılıyordu ve başkent yeniden adlandırılabildiği için üretilen adlar zamanla birbirini
- * tutmuyordu; kullanıcı adı ise değiştirilemez.
+ * ⚠️ **Sıra numarası KALKTI** ve bununla birlikte `colonyName` üreteci de emekli oldu
+ * (gerekçe `packages/catalog/src/name-rules.ts`). Kullanıcı adı bir **etiket**: aynı oyuncunun
+ * beş şehri de aynı adı taşıyabilir, ayırt eden şey koordinattır.
  *
- * ⚠️ Sıra = mevcut şehir sayısı + 1, yani BAŞKENT 1 sayılıyor: ilk koloni «… 2» oluyor.
- * Başkentin kendi adı sayısızdır (kayıtta doğrudan kullanıcı adı veriliyor), yani dizi
- * «abdullah · abdullah 2 · abdullah 3…» şeklinde okunuyor.
+ * ⚠️ Şehir sayısını okuyan `COUNT(*)` de gitti — yalnız sıra numarası için vardı. Bir sorgu
+ * eksildi ve buradaki tek yarış koşulu ortadan kalktı: iki koloni aynı anda kurulunca ikisi
+ * de aynı sayıyı okuyup **aynı** adı üretebiliyordu. O ad zaten artık kural.
  *
- * ⚠️ Kırpma `colonyName` içinde: 15 karakteri aşarsa kullanıcı adı SONDAN kırpılır.
+ * ⚠️ Kırpma da gerekmiyor (`USERNAME_MAX === NAME_MAX`), ama `clampName` duruyor: sınırlar bir
+ * gün ayrışırsa üreteç, doğrulamanın reddedeceği bir ad üretmesin.
  */
 async function nextColonyName(tx: Tx, playerId: number): Promise<string> {
   const rows = await tx.execute<Record<string, unknown>>(sql`
-    SELECT (SELECT COUNT(*)::int FROM cities WHERE player_id = ${playerId}) AS n,
-           (SELECT username FROM players WHERE id = ${playerId}) AS owner
+    SELECT username FROM players WHERE id = ${playerId}
   `);
-  const index = Number(rows[0]?.['n'] ?? 1) + 1;
-  const owner = rows[0]?.['owner'];
+  const owner = rows[0]?.['username'];
   /* ⚠️ `players` satırı olmadan buraya gelinemez (görev sahibi o), ama ad üretmek zorunda
      olduğumuz için yine de bir düşüş yolu duruyor. */
-  return owner == null
-    ? clampName(`Koloni ${index}`)
-    : colonyName(String(owner), index);
+  return owner == null ? 'Koloni' : clampName(String(owner));
 }
 
 /* ═══ Ortak yardımcılar ════════════════════════════════════════════════════ */

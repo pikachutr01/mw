@@ -211,7 +211,16 @@ export function World() {
                     <Td className="max-w-[8rem]">
                       {c ? (
                         <span className="flex items-center gap-1">
-                          <span className="min-w-0 truncate">{c.username}</span>
+                          {/*
+                            ⭐ OYUNCU ADI **KALIN** (kullanıcı, 2026-08-11). Şehir adı mobilde
+                            gizlendikten sonra satırın asıl kimliği bu sütun oldu; ağırlık onu
+                            koordinat ve sıra sayılarının arasından öne çıkarıyor.
+                            ⚠️ Renk DEĞİL ağırlık: renk kanalı zaten dolu — `text-own` "benim
+                            şehrim", müttefik rozeti "dostum" diyor. Üçüncü bir anlamı da renge
+                            yıkmak hepsini okunmaz hâle getirirdi (aynı gerekçe: aktif şehir
+                            belirteci de kenarlıkla çizildi).
+                          */}
+                          <span className="min-w-0 truncate font-semibold">{c.username}</span>
                           {c.isAlly ? <AllyBadge /> : null}
                         </span>
                       ) : <span className="text-muted">—</span>}

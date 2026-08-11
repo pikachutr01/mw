@@ -82,35 +82,28 @@ export const clampName = (raw: string): string =>
   normalizeName(raw).slice(0, NAME_MAX).trim();
 
 /**
- * ⭐ KOLONİ ADI — «kullanıcıAdı sıra» (kullanıcı, 2026-08-09).
+ * ⭐ YENİ ŞEHRİN ADI = **KULLANICI ADININ AYNISI** (kullanıcı, 2026-08-11).
  *
- * *"Bir kullanıcı yeni bir şehir oluşturduğunda bu şehrin adı kullanıcı adı + şehrin kaçıncı
- * şehir olduğu olacak. Şehrin kurulduğu şehrin adı değil, kullanıcı adı. Kullanıcı adının
- * sonuna şehir sayısı sığmazsa da sondan kırpılır."*
+ * Kullanıcının cümlesi: *"Yeni bir şehir oluşturulunca şehrin adının sonuna 1,2,3 falan
+ * eklenmesin. Onun yerine yeni şehrin adı kullanıcı adı ile aynı olsun. Yani bir kullanıcının
+ * şehirlerinin adları aynı olabilir, şehir adını bir etiket gibi düşünelim. En kritik bir şey
+ * değil, diğer oyunculara göstermek istediği bir şey. Şehrin koordinatları isminden daha
+ * önemli."*
  *
- * ⚠️ **Dayanak 2026-08-09'da BAŞKENT ADINDAN kullanıcı adına çevrildi.** Öncesi «başkentAdı
- * sıra» idi (2026-08-03) ve tek bir kusuru vardı: başkent **yeniden adlandırılabiliyor**.
- * Oyuncu başkentini «Çığlıktepe» yapınca sonraki koloniler «Çığlıktepe 2» oluyor, sonra
- * başkenti «Kale» yapınca «Kale 3» oluyordu — aynı oyuncunun şehirleri birbirini tutmuyordu.
- * Kullanıcı adı DEĞİŞTİRİLEMEZ (`USERNAME_*` kuralı), yani üretilen adlar kalıcı olarak
- * tutarlı: `abdullah` · `abdullah 2` · `abdullah 3`…
+ * ⚠️ **Bu bir sadeleştirme değil, model değişikliği.** Ad artık bir **kimlik** değil bir
+ * **etiket**: şehri ayırt eden şey koordinattır (`k:d:s`), ad yalnız oyuncunun kendini
+ * gösterme biçimidir. Bu yüzden tekillik aranmıyor — aynı oyuncunun beş şehri de «abdullah»
+ * olabilir, farklı oyuncuların şehirleri de aynı adı taşıyabilir.
  *
- * Daha da öncesi `Koloni 2` idi — oyuncunun kimliğiyle hiçbir bağı yoktu ve iki farklı
- * oyuncunun şehirleri dünya listesinde birbirinin aynı görünüyordu.
+ * ⚠️ **`colonyName` EMEKLİ oldu** (2026-08-11). Üç nesil geçirdi ve hepsi sıra numarası
+ * ekliyordu: `Koloni 2` → `<başkentAdı> 2` (2026-08-03) → `<kullanıcıAdı> 2` (2026-08-09).
+ * Her nesil bir öncekinin kusurunu kapatıyordu ama ortak varsayım hep aynıydı: "ad benzersiz
+ * olmalı". Kullanıcı o varsayımı kaldırdı, dolayısıyla üretecin kendisi de gitti — kırpma
+ * mantığı dâhil, çünkü `USERNAME_MAX === NAME_MAX`: kullanıcı adı ŞEHİR adına **her zaman**
+ * olduğu gibi sığar, kırpacak bir şey yok.
  *
- * ⚠️ **Kırpma SONDAN ve tek seferde yetmeyebilir.** Kullanıcı "son 2 karakteri sil" diyor;
- * bu 15 karakterlik bir başkent adı + " 2" (2 karakter) için tam olarak yeter. Ama sıra
- * numarası iki basamağa çıkarsa (" 10" = 3 karakter) 2 karakter yetmez. Bu yüzden kural
- * "gereken kadar kırp" olarak genelleştirildi: sonuç HER ZAMAN sınırın içinde kalır ve
- * iki basamaklı örnekte kullanıcının verdiği örnekle aynı sonucu verir.
- *
- * ⚠️ Kırpma sonrası oluşabilecek sondaki boşluk temizleniyor: "Çığlık Tepe" → "Çığlık Te"
- * değil "Çığlık T" gibi bir kenar durumda ad boşlukla bitmemeli.
+ * ⚠️ Başkent zaten kullanıcı adını alıyordu (`auth.service.ts`), yani artık **tüm** şehirler
+ * aynı kaynaktan adlanıyor ve kayıt ile koloni arasında ayrım kalmadı.
  */
-export function colonyName(ownerName: string, index: number): string {
-  const suffix = ` ${index}`;
-  const base = normalizeName(ownerName);
-  const room = NAME_MAX - suffix.length;
-  const head = base.length <= room ? base : base.slice(0, room).trimEnd();
-  return `${head}${suffix}`;
-}
+export const NEW_CITY_NAME_NOTE =
+  'Yeni şehrin adı kullanıcı adının aynısıdır; adlar benzersiz DEĞİLDİR.';

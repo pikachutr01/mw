@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildingCost, buildingTimeSeconds, castleBudget, caveCapacity, defenseCapacity,
   dwarvesToBreakCave, farmOutput, heroLevelForXp, heroReviveCost, heroReviveSeconds,
-  colonyName, heroXpForLevel, mergeCatalogConfig, mineOutput, NAME_MAX, STARTING_RESOURCES, teleportCooldownSeconds,
+  clampName, heroXpForLevel, mergeCatalogConfig, mineOutput, NAME_MAX, NAME_MIN,
+  STARTING_RESOURCES, teleportCooldownSeconds, USERNAME_MAX, USERNAME_MIN,
   wallCurrentIntegrity, wallRepairSeconds,
   timeFromCost, trainingTimeSeconds, unitCost, unitTimeValue, UNITS_BY_ID,
 } from '../src/index.ts';
@@ -638,48 +639,31 @@ describe('yapı ve teknik süresi', () => {
 });
 
 /**
- * ⭐ KOLONİ ADI — «kullanıcıAdı sıra» (kullanıcı, 2026-08-09).
+ * ⭐ YENİ ŞEHRİN ADI = KULLANICI ADININ AYNISI (kullanıcı, 2026-08-11).
  *
- * ⚠️ Dayanak 2026-08-09'da BAŞKENT ADINDAN kullanıcı adına çevrildi: başkent yeniden
- * adlandırılabildiği için üretilen adlar zamanla birbirini tutmuyordu (başkent «Çığlıktepe»
- * iken «Çığlıktepe 2», sonra başkent «Kale» olunca «Kale 3»). Kullanıcı adı değiştirilemez.
- * Fonksiyonun kendisi değişmedi — yalnız ÇAĞIRANIN ne geçirdiği değişti
- * (`mission.handlers.ts` → `nextColonyName`), o yüzden buradaki kırpma testleri aynen geçerli.
+ * ⚠️ `colonyName` **emekli edildi** ve testleri buradan kalktı. Üreteç üç nesil geçirmişti
+ * (`Koloni 2` → `<başkentAdı> 2` → `<kullanıcıAdı> 2`) ve hepsinin ortak varsayımı "ad
+ * benzersiz olmalı" idi. Kullanıcı o varsayımı kaldırdı: ad bir **etiket**, şehri ayırt eden
+ * şey koordinat. Dolayısıyla sıra numarası ve onun kırpma mantığı da gitti.
  *
- * Daha öncesi `Koloni 2` idi: oyuncunun kimliğiyle hiçbir bağı yoktu ve iki farklı oyuncunun
- * şehirleri dünya listesinde birbirinin aynı görünüyordu.
+ * Geriye kalan tek şart aşağıda: kullanıcı adı, şehir adı sınırına **her zaman** sığmalı.
+ * Bu bir varsayım değil kanıt gerektiren bir şey — iki sabit bir gün ayrışırsa üreteç,
+ * doğrulamanın reddedeceği bir ad üretmeye başlardı ve bunu kimse fark etmezdi.
  */
-describe('koloni adı', () => {
-  it('kullanıcı adının yanına sıra numarası gelir', () => {
-    expect(colonyName('abdullah', 2)).toBe('abdullah 2');
-    expect(colonyName('Bal', 3)).toBe('Bal 3');
+describe('yeni şehrin adı', () => {
+  it('⭐ kullanıcı adı şehir adı sınırına HER ZAMAN sığar', () => {
+    expect(USERNAME_MAX).toBeLessThanOrEqual(NAME_MAX);
+    expect(USERNAME_MIN).toBeGreaterThanOrEqual(NAME_MIN);
   });
 
-  it('⭐ 15 karakteri aşarsa kullanıcı adı SONDAN kırpılır (kullanıcının kuralı)', () => {
-    // 15 karakterlik ad + " 2" = 17 → sondan 2 karakter kırpılır.
-    const uzun = 'Aaaaabbbbbccccc';            // tam 15
-    expect(uzun.length).toBe(NAME_MAX);
-    expect(colonyName(uzun, 2)).toBe('Aaaaabbbbbccc 2');
-    expect(colonyName(uzun, 2).length).toBeLessThanOrEqual(NAME_MAX);
+  it('en uzun kullanıcı adı kırpılmadan şehir adı olur', () => {
+    const uzun = 'A'.repeat(USERNAME_MAX);
+    expect(clampName(uzun)).toBe(uzun);
+    expect(clampName(uzun).length).toBe(NAME_MAX);
   });
 
-  /**
-   * ⚠️ İki basamaklı sıra numarasında " 10" ÜÇ karakter tutar; kullanıcının verdiği "son 2
-   * karakteri sil" kuralı bu durumda yetmezdi. Kural "gereken kadar kırp" olarak
-   * genelleştirildi — sonuç HER ZAMAN sınırın içinde.
-   */
-  it('iki basamaklı sırada da sınır aşılmaz', () => {
-    const uzun = 'Aaaaabbbbbccccc';
-    expect(colonyName(uzun, 10)).toBe('Aaaaabbbbbcc 10');
-    expect(colonyName(uzun, 10).length).toBe(NAME_MAX);
-  });
-
-  it('kırpma sondaki boşluğu bırakmaz', () => {
-    // "Aaaaabbbbbcc dd" (15) → kırpınca "Aaaaabbbbbcc " olurdu; boşluk temizlenmeli.
-    expect(colonyName('Aaaaabbbbbcc dd', 2)).toBe('Aaaaabbbbbcc 2');
-  });
-
-  it('kısa adlar hiç kırpılmaz', () => {
-    expect(colonyName('Kale', 5)).toBe('Kale 5');
+  it('adlar benzersiz DEĞİL — aynı ad iki kez üretilebilir', () => {
+    // Kural bu: "bir kullanıcının şehirlerinin adları aynı olabilir".
+    expect(clampName('abdullah')).toBe(clampName('abdullah'));
   });
 });

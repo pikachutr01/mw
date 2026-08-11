@@ -16,7 +16,7 @@ export * from './merit.ts';
 export { catalogHash, CATALOG_VERSION } from './hash.ts';
 export { HERO_NAMES, pickHeroName } from './hero-names.ts';
 export {
-  NAME_MAX, NAME_MIN, NAME_PATTERN, NAME_RULE_MESSAGE, clampName, colonyName, normalizeName,
+  NAME_MAX, NAME_MIN, NAME_PATTERN, NAME_RULE_MESSAGE, clampName, normalizeName, NEW_CITY_NAME_NOTE,
   USERNAME_MAX, USERNAME_MIN, USERNAME_PATTERN, USERNAME_RULE_MESSAGE,
   DELETED_NAME_PREFIX, DELETED_NAME_RE, deletedName,
 } from './name-rules.ts';

@@ -875,14 +875,19 @@ describe('şehir kurma', () => {
   });
 
   /**
-   * ⭐⭐ YENİ ŞEHRİN ADI = **KULLANICI ADI + SIRA** (kullanıcı, 2026-08-09).
+   * ⭐⭐ YENİ ŞEHRİN ADI = **KULLANICI ADININ AYNISI** (kullanıcı, 2026-08-11).
    *
-   * ⚠️ *"Şehrin kurulduğu şehrin adı değil, kullanıcı adı."* 2026-08-03 – 08-09 arasında
-   * BAŞKENTİN adı kullanılıyordu; başkent yeniden adlandırılabildiği için üretilen adlar
-   * zamanla birbirini tutmuyordu. Bu test dayanağı kilitliyor: başkent BİLEREK başka bir ada
-   * çevriliyor ve yeni şehir yine kullanıcı adını almalı.
+   * ⚠️ **Sıra numarası KALKTI.** Üreteç üç nesil geçirmişti (`Koloni 2` → `<başkentAdı> 2` →
+   * `<kullanıcıAdı> 2`) ve hepsinin ortak varsayımı "ad benzersiz olmalı" idi. Kullanıcı o
+   * varsayımı kaldırdı: *"şehir adını bir etiket gibi düşünelim… şehrin koordinatları
+   * isminden daha önemli."*
+   *
+   * Test iki şeyi birden kilitliyor:
+   *  1. Ad, **başkentin adından türemiyor** (2026-08-03 – 08-09 arasındaki eski kural).
+   *     Başkent bilerek başka bir ada çevriliyor.
+   *  2. Ad, kullanıcı adının **birebir aynısı** — ek yok, sayı yok.
    */
-  it('⭐ yeni şehrin adı kullanıcı adından türer, başkentin adından DEĞİL', async () => {
+  it('⭐ yeni şehrin adı kullanıcı adının AYNISI olur (ek/sıra yok)', async () => {
     await setTech(me, 'colonization', 6);
     await h.db.execute(sql`UPDATE cities SET name = 'Çığlıktepe' WHERE id = ${home}`);
     await giveUnits(home, 'dwarf', 10);
@@ -900,9 +905,32 @@ describe('şehir kurma', () => {
     `);
     const ad = String(row!['name']);
     expect(ad).not.toContain('Çığlıktepe');
-    // `createPlayer` ada rastgele son ek ekliyor (tekillik) → ön ek eşleşmesi + sıra numarası.
-    expect(ad.startsWith(String(row!['username']).slice(0, 5))).toBe(true);
-    expect(ad).toMatch(/ \d+$/);
+    expect(ad).toBe(String(row!['username']));
+    // ⚠️ Sonda sıra numarası KALMAMALI — eski kuralın geri sızmasını yakalayan asıl şart bu.
+    expect(ad).not.toMatch(/ \d+$/);
+  });
+
+  /**
+   * ⭐ ADLAR ARTIK BENZERSİZ DEĞİL — aynı oyuncunun İKİ şehri de aynı adı taşıyabilir.
+   * Bu, kuralın doğrudan sonucu ve kimse bir tekillik kısıtı eklemesin diye kilitleniyor.
+   */
+  it('⭐ ikinci koloni de AYNI adı alır', async () => {
+    await setTech(me, 'colonization', 9);
+    await giveUnits(home, 'dwarf', 30);
+    for (const s of [7, 9]) {
+      const m = await missions.sendFoundCity({
+        originCityId: home, playerId: me, worldId,
+        target: { k: 1, d: 1, s }, units: { dwarf: 10 }, at: await clock.gameNow(worldId),
+      });
+      await runDue(m.missionId);
+    }
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT c.name FROM cities c
+       WHERE c.world_id = ${worldId} AND c.k = 1 AND c.d = 1 AND c.s IN (7, 9)
+    `);
+    expect(rows).toHaveLength(2);
+    expect(String(rows[0]!['name'])).toBe(String(rows[1]!['name']));
   });
 
   it('⭐ şehir yeri bu arada dolarsa ordu GERİ DÖNER (doküman)', async () => {
