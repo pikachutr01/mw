@@ -3416,6 +3416,23 @@ yetki `ChatAccessService.canRead/canWrite(player, channel)` ile **her olayda** y
 - **Composer:** Enter gönderir / Shift+Enter satır atlar, ≤500 karakter, "yazıyor…" istemcide
   2,5 sn'de bir kısılır. ⚠️ **Gönderirken onay SORULMAZ** (kullanıcı; orijinaldeki *"Mesaj
   gönderilecek. Emin misiniz!"* bilerek kaldırıldı).
+- ⭐ **KUTU İÇERİKLE BÜYÜR (kullanıcı, 2026-08-11 — «özellikle mobil cihazlarda»).** Üç
+  composer da (`lib/auto-grow.ts` → `useAutoGrow`) yazdıkça ~4 satıra kadar **yukarı doğru**
+  uzuyor, sonra tavana çarpıp içeride kayıyor; mesaj gönderilince tek satıra dönüyor.
+  ⚠️ Öncesinde `rows={1}` + `resize-none` ile **hiç büyümüyordu**: uzun mesaj tek satırlık
+  pencerede kayıyor ve oyuncu yalnız son satırı görebiliyordu. `max-h-24` sınıfı oradaydı ama
+  hiç devreye girmiyordu — büyüme diye bir şey yoktu ki tavana çarpsın; sınıf artık **emniyet
+  ağı** (betik koşmazsa kutu listeyi yutmasın).
+  ⚠️ **Üç ayrıntı da zorunlu**, üçü de sessiz hataya açık: *(a)* ölçmeden önce
+  `overflow-y: hidden` — görünür kaydırma çubuğu yatay yer kaplar, metin erken sarar ve kutu
+  her ölçümde biraz daha büyüyen bir geri besleme döngüsüne girer; *(b)* ölçmeden önce
+  `height: auto` — yoksa kutu bir kez büyüyünce bir daha asla küçülmez; *(c)* yüksekliğe
+  **kenarlık payı** eklenir (`box-sizing: border-box`), yoksa içerik tam sığdığı hâlde kalıcı
+  bir kaydırma çubuğu belirir.
+  ⚠️ Kutu büyürken liste **dipte tutulur** (`isAtBottom`, 8px pay): composer `shrink-0`, liste
+  `flex-1` — kutu 40px büyüyünce liste 40px kısalıyor ama `scrollTop` sabit kalıyor, yani
+  cevabını yazdığın mesaj tam o sırada görüş alanından kayardı. Oyuncu yukarı kaydırıp geçmişi
+  okuyorsa dokunulmaz.
 - **Pencere menüsü (⋮):** Oyuncuyu engelle / Engeli kaldır · Şikayet Et · Sohbeti sil —
   üçü de `useConfirm` ile, orijinal *"… Emin misiniz!"* kalıbıyla.
 - **Giriş noktaları:** Dünya modalında **Mesaj** düğmesi (orijinalde de oradaydı, `g.java:1440`

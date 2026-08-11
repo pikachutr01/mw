@@ -19,6 +19,7 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTick } from '../lib/hooks.ts';
+import { useAutoGrow } from '../lib/auto-grow.ts';
 import { closeAllianceChat, openAllianceChat } from '../lib/realtime.ts';
 import { canDeleteAllianceMessage, canMuteAllianceMember } from '../lib/chat-moderation.ts';
 import {
@@ -88,6 +89,9 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
   const input = useRef<HTMLTextAreaElement>(null);
   /** Ters kaydırmada konum korumak için: eski sayfa eklenmeden önceki yükseklik. */
   const prevHeight = useRef(0);
+
+  /* ⭐ Kutu içerikle birlikte yukarı doğru büyür (kullanıcı, 2026-08-11). */
+  useAutoGrow(input, draft, scroller);
 
   const members = useMemo(() => packet.data?.members ?? [], [packet.data]);
   const memberById = useMemo(
@@ -407,6 +411,7 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
               onKeyUp={(e) => syncCaret(e.currentTarget)}
               onClick={(e) => syncCaret(e.currentTarget)}
               onKeyDown={onKeyDown}
+              /* ⚠️ `max-h-24` emniyet ağı — gerekçe `GlobalChat`teki ikizinde. */
               className="max-h-24 min-h-[2.25rem] resize-none"
             />
             <Button size="sm" disabled={draft.trim().length === 0 || send.isPending || !canWrite}

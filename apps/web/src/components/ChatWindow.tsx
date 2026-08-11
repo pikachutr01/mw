@@ -15,6 +15,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmt, useTick } from '../lib/hooks.ts';
+import { useAutoGrow } from '../lib/auto-grow.ts';
 import {
   closeChatChannel, onSocketEvent, openChatChannel, sendTyping,
 } from '../lib/realtime.ts';
@@ -75,9 +76,14 @@ export function ChatWindow({ target, myId, onClose }: {
   const [menuOpen, setMenuOpen] = useState(false);
   const [peerTyping, setPeerTyping] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
+  /** ⭐ 2026-08-11'de eklendi: kutunun içeriğine göre büyümesi için ölçülmesi gerekiyor. */
+  const input = useRef<HTMLTextAreaElement>(null);
   /** Ters kaydırmada konum korumak için: eski sayfa eklenmeden önceki yükseklik. */
   const prevHeight = useRef(0);
   const lastTypingSent = useRef(0);
+
+  /* ⭐ Kutu içerikle birlikte yukarı doğru büyür (kullanıcı, 2026-08-11). */
+  useAutoGrow(input, draft, scroller);
 
   /* Sunucu en YENİ mesajı önce döndürüyor; ekranda eskiden yeniye çizmek için ters çeviriyoruz. */
   const messages: ChatMessage[] = (history.data?.pages ?? [])
@@ -305,12 +311,14 @@ export function ChatWindow({ target, myId, onClose }: {
         ) : null}
         <div className="flex items-end gap-1.5">
           <TextArea
+            ref={input}
             value={draft} rows={1} maxLength={500}
             placeholder={unverified ? 'E-posta doğrulaması gerekli' : 'Mesaj yaz…'}
             aria-label="Mesaj"
             disabled={target.blocked || unverified}
             onChange={(e) => onDraftChange(e.target.value)}
             onKeyDown={onKeyDown}
+            /* ⚠️ `max-h-24` emniyet ağı — gerekçe `GlobalChat`teki ikizinde. */
             className="max-h-24 min-h-[2.25rem] resize-none"
           />
           <Button size="sm"

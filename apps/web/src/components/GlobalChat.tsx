@@ -24,6 +24,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { getSession } from '../lib/api.ts';
 import { useGlobalChatConnection } from '../lib/global-chat-context.tsx';
 import { useDebounced, useTick } from '../lib/hooks.ts';
+import { useAutoGrow } from '../lib/auto-grow.ts';
 import { activeMentionQuery, applyMention, splitMentions } from '../lib/mentions.ts';
 import {
   closeGlobalChat, onSocketEvent, openGlobalChat, sendGlobalTyping,
@@ -113,6 +114,9 @@ function Live({ variant, onClose }: { variant: 'card' | 'sheet'; onClose: () => 
   /** Ters kaydırmada konum korumak için: eski sayfa eklenmeden önceki yükseklik. */
   const prevHeight = useRef(0);
   const lastTypingSent = useRef(0);
+
+  /* ⭐ Kutu içerikle birlikte yukarı doğru büyür (kullanıcı, 2026-08-11). */
+  useAutoGrow(input, draft, scroller);
 
   /* Sunucu en YENİ mesajı önce döndürüyor; ekranda eskiden yeniye çizmek için ters çeviriyoruz. */
   const messages: AllianceChatMessage[] = (history.data?.pages ?? [])
@@ -469,6 +473,8 @@ function Live({ variant, onClose }: { variant: 'card' | 'sheet'; onClose: () => 
             onKeyUp={(e) => syncCaret(e.currentTarget)}
             onClick={(e) => syncCaret(e.currentTarget)}
             onKeyDown={onKeyDown}
+            /* ⚠️ `max-h-24` emniyet ağı: `useAutoGrow` da aynı tavanı yazıyor, ama betik bir
+               sebeple koşmazsa kutu sınırsız uzayıp mesaj listesini yutmasın. */
             className="max-h-24 min-h-[2.25rem] resize-none"
           />
           <Button size="sm" disabled={draft.trim().length === 0 || send.isPending || !canWrite}
