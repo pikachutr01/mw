@@ -39,7 +39,20 @@ import { formatGameTime } from '@mobilwar/contracts';
  */
 const REPORT_TYPE: Record<string, { icon: string | null; title: string }> = {
   'battle_report:attacker': { icon: 'attack', title: 'Saldırı Raporu' },
-  'battle_report:defender': { icon: 'attack_in', title: 'Saldırı Önleme Raporu' },
+  /**
+   * ⭐⭐ **«ŞEHİR SAVUNMA RAPORU» — orijinalin kendi başlığı** (2026-08-11).
+   *
+   * Buraya kadar «Saldırı Önleme Raporu» yazıyordu; kulağa doğru geliyordu çünkü casusluğun
+   * savunan tarafı gerçekten «Casusluk Önleme Raporu» (`k.a[31]`). Ama orijinal istemci saldırı
+   * için **başka bir kelime** kullanıyor: `docs/JAVA_ROENTGEN.md` §6.4 → mesaj kutusu çizici
+   * `o.java:281-283` savunan tarafta başlığı `k.a[159]` = **«Şehir Savunma»** ile değiştiriyor,
+   * sonuna `k.a[12]` = «` Raporu`» ekliyor. Dize tablosunda **«Saldırı Önleme» diye bir kayıt
+   * hiç yok** — uydurmuşuz.
+   *
+   * ⚠️ Ders: «Casusluk Önleme»yi «Saldırı Önleme»ye genellemek makul bir çıkarımdı ama yanlıştı.
+   * Ekranda görünen her metin `k.java` dize tablosunda duruyor; genellemeden önce **aranmalı**.
+   */
+  'battle_report:defender': { icon: 'attack_in', title: 'Şehir Savunma Raporu' },
   'spy_report:spy': { icon: 'spy_out', title: 'Casusluk Raporu' },
   'spy_report:target': { icon: 'spy_back', title: 'Casusluk Önleme Raporu' },
   'transport_report:receiver': { icon: 'transport_back', title: 'Gelen Nakliye Raporu' },

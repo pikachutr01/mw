@@ -102,6 +102,8 @@ Tek harfli anahtarlar bağlama göre yeniden kullanılıyor — **hangi ekranda*
 | `Ekr` | 50 | o anki **ekran kodu** | `g.java:2144` dallanması |
 | `e` | 49 | şehir adı (dünya slotu · arama sonucu) | `j.java:203` · `j.java:281` |
 | `o` | 123 | slotun **sahibi var mı** (null → Sahipsiz) | `j.java:278` |
+| `t` | 162 | mesaj listesinde **rapor/sefer tipi** | `o.java:277` |
+| `v` | 177 | mesaj listesinde **TARAF** (1 gönderen · 2 alan) ⚠️ seviye değil | `o.java:280` |
 
 ⚠️ `long[3]` yükünün `a[2]` gözü ilerleme sayacı olarak kullanılıyor (`j.java:406`: geçen
 süre × 100 / toplam = yüzde).
@@ -286,7 +288,50 @@ var. Yıldız/ikon türünden bir başkent işareti de yok.
 şehir modalında «· başkent» olarak duruyor. Kendi şehir listelerimizde (Komuta Merkezi,
 şehir şeridi) yıldız **korunuyor** — orası harita değil, oyuncunun kendi envanteri.
 
-### 6.4 EKONOMİ FORMÜLLERİ — `k.java:1373-1448`
+### 6.4 MESAJ KUTUSU — rapor başlıkları (2026-08-11)
+
+Soru: *"gelen saldırı raporu mesaj kutusunda nasıl gösteriliyor — Saldırı Önleme Raporu mu,
+Şehir Savunma Raporu mu?"* → **Şehir Savunma Raporu.** «Saldırı Önleme» diye bir dize tabloda
+**hiç yok**.
+
+Çizici `o.java:263 b()`, mesaj listesinin her satırı için:
+
+```java
+int var4 = parseInt(a(k.a[162] /* t = tip */));
+if (var4 > 0 && var4 < 6) {
+   int var5 = parseInt(a(k.a[177] /* v = TARAF: 1 gönderen · 2 alan */));
+   String var8 = k.a(var4);                          // sefer tipi adı (§6.2 tablosu)
+   if      (var5 == 2 && var4 == 1) var8 = k.a[159]; // ⭐ "Şehir Savunma"
+   else if (var5 == 2 && var4 == 2) var8 = k.a[31];  //    "Casusluk Önleme"
+   var3.a = (a.b > 150) ? var8 + k.a[12] /* " Raporu" */ : var8;
+} else if (var4 == 11 || var4 == 12) {
+   var3.a = k.a(var4) + k.a[268];                    // "ma Raporu"
+}
+```
+
+⇒ Başlık = **sefer tipi adı**, savunan tarafta yalnız **iki tip** için değiştiriliyor:
+
+| tip | gönderen tarafta | **alan tarafta** |
+|---|---|---|
+| 1 Saldırı | Saldırı Raporu | ⭐ **Şehir Savunma Raporu** |
+| 2 Casusluk | Casusluk Raporu | Casusluk Önleme Raporu |
+| 3 Nakliye | Nakliye Raporu | Nakliye Raporu (aynı) |
+| 4 Destek | Destek Raporu | Destek Raporu (aynı) |
+| 5 Şehir Kur | Şehir Kurma Raporu | — |
+| 11/12 Mağara | Mağara Doldurma / Boşaltma Raporu | — |
+
+⚠️ **«Raporu» eki KOŞULLU**: ekran genişliği ≤150px ise yalnız ad yazılıyor (`a.b > 150`
+dallanması). Bizde böyle bir daraltma yok ve gerekmiyor — CSS kırpma zaten var.
+
+⚠️ **`v` (177) burada SEVİYE DEĞİL, TARAF.** §4 sözlüğü `v`yi kahraman ekranında «seviye»
+olarak kaydetmişti; mesaj listesinde 1/2 değerli bir yön bayrağı. Sözlüğün en başındaki uyarı
+tam da bu: *"tek harfli anahtarlar bağlama göre yeniden kullanılıyor."*
+
+⭐ **Bizdeki karşılığı:** `Messages.tsx` → `REPORT_TYPE`. Dördünden üçü zaten birebir tutuyordu
+(Saldırı · Casusluk · Casusluk Önleme · Şehir Kurma); yalnız savunan savaş raporu
+«Saldırı Önleme Raporu» diye **uydurulmuştu** ve 2026-08-11'de düzeltildi.
+
+### 6.5 EKONOMİ FORMÜLLERİ — `k.java:1373-1448`
 
 Bu röntgen 2026-08-10 ekonomi turunda yapıldı ve tamamı
 **`MOBIWAR_SISTEM_PLANI.md` §13.9a / §13.11.3**'te duruyor (çarpanlar `k.java:10-15`,
@@ -334,5 +379,6 @@ birebir örtüştü.
 | Tarih | Ne eklendi |
 |---|---|
 | 2026-08-11 | Dosya açıldı. §1 alet + üç tuzak · §4 alan sözlüğü (11 anahtar) · §5 uç kataloğu · §6.1 **Tapınak/Kahraman röntgeni** · §7 **mağarada kahraman** kaydı |
+| 2026-08-11 (4) | §6.4 **Mesaj kutusu rapor başlıkları**: savunan savaş raporu «**Şehir Savunma Raporu**», «Saldırı Önleme» diye bir dize YOK. §4'e `t` ve bağlama bağlı `v` |
 | 2026-08-11 (3) | §6.3 **Dünya ekranı**: başkentin haritada özel gösterimi **YOK** — «Başkent:» yalnız *Oyuncu Ara* ekranında. §4'e `e` ve `o` |
 | 2026-08-11 (2) | §6.2 **Mağara ekranı röntgeni** (kahraman durum süzgeci `i.java:844-852` · mağara = sefer tipi 11/12 · tek istek) · §4'e `B`/`K`/`Ekr` · §5'te `ipMgr` düzeltmesi (iptal BİZDE VAR) · §7 defteri **kapandı**, madde uygulandı |

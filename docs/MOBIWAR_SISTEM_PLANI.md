@@ -281,7 +281,7 @@ Her rapor `kind:side` ikilisiyle tanımlanır; satır başlığı ve ikonu (Ordu
 | kind:side | İkon | Başlık |
 | :-- | :-- | :-- |
 | battle_report:attacker | attack (yeşil kılıç) | Saldırı Raporu |
-| battle_report:defender | attack_in (kırmızı kılıç) | Saldırı Önleme Raporu |
+| battle_report:defender | attack_in (kırmızı kılıç) | **Şehir Savunma Raporu** ⭐ orijinalin kendi başlığı (`k.a[159]` + `k.a[12]`, `o.java:281`); 2026-08-11'e kadar «Saldırı Önleme Raporu» yazıyordu ve **uydurmaydı** — bkz. `JAVA_ROENTGEN.md` §6.4 |
 | spy_report:spy | spy_out (yeşil kuş) | Casusluk Raporu |
 | spy_report:target | spy_back (kırmızı kuş) | Casusluk Önleme Raporu |
 | transport_report:receiver | transport_back (sarı tekerlek) | Gelen Nakliye Raporu |
