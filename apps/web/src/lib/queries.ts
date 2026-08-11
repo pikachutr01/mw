@@ -1514,6 +1514,20 @@ export function useAllianceChatUnmute() {
   });
 }
 
+/**
+ * ⭐ Mesajı kaldır (lider/konsey) — genel sohbetteki `useDeleteGlobalChatMessage`in ikizi.
+ * ⚠️ Uç `AdminGuard` arkasında DEĞİL: yetki oyun yönetimi değil, ittifak rütbesi.
+ */
+export function useDeleteAllianceChatMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    // ⚠️ Gövdesiz DELETE — `api.ts` bu durumda `content-type` GÖNDERMİYOR (Fastify 400 verirdi).
+    mutationFn: (messageId: number) =>
+      api(`/api/v1/alliance/chat/messages/${messageId}`, { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['alliance-chat-history'] }); },
+  });
+}
+
 export function useBlockPlayer() {
   const qc = useQueryClient();
   return useMutation({

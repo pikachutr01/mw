@@ -605,6 +605,129 @@ describe('geçmiş', () => {
   });
 });
 
+/* ══ Mesaj kaldırma ═════════════════════════════════════════════════════════ */
+
+/**
+ * ⭐ MESAJI KALDIR (kullanıcı, 2026-08-11) — genel sohbetteki yeteneğin ittifak ikizi.
+ * Yetki matrisi susturmanın **birebir aynısı** (`assertCanModerate`), iki noktada ayrışıyor:
+ * kendi mesajın ve ayrılmış üyenin mesajı. Bu ikisi asıl bekçiler.
+ */
+describe('mesaj kaldırma', () => {
+  /** Kanalda duran (kaldırılmamış) mesaj gövdeleri, eskiden yeniye. */
+  async function gorunen(playerId: number): Promise<string[]> {
+    const r = await chat.history({ worldId, playerId });
+    return r.items.map((m) => m.body).reverse();
+  }
+
+  it('⭐ ARDIŞIK mesajlardan yalnız SEÇİLEN kalkar (kullanıcının bildirdiği senaryo)', async () => {
+    setLiveSettings({ allianceChat: { duplicateSeconds: 0 } });
+    const ids: number[] = [];
+    for (const t of ['bir', 'iki', 'uc']) {
+      const m = await chat.send({ worldId, playerId: asker, body: t, clientMsgId: uuid() });
+      ids.push(m.id);
+    }
+
+    // Ortadaki — eski arayüzde ulaşılamayan mesaj.
+    await chat.deleteMessage({ worldId, playerId: lider, messageId: ids[1]! });
+
+    expect(await gorunen(lider)).toEqual(['bir', 'uc']);
+  });
+
+  it('⚠️ satır SİLİNMEZ, `deleted_at`/`deleted_by` işaretlenir (kanıt kalır)', async () => {
+    const m = await chat.send({ worldId, playerId: asker, body: 'kufur', clientMsgId: uuid() });
+    await chat.deleteMessage({ worldId, playerId: konsey, messageId: m.id });
+
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT body, deleted_at, deleted_by FROM chat_messages WHERE id = ${m.id}
+    `);
+    expect(row!['body']).toBe('kufur');
+    expect(row!['deleted_at']).not.toBeNull();
+    expect(Number(row!['deleted_by'])).toBe(konsey);
+  });
+
+  it('yetki matrisi susturmanın aynısı: Konsey Asker’i kaldırır, AKRANINI/Lider’i KALDIRAMAZ', async () => {
+    setLiveSettings({ allianceChat: { duplicateSeconds: 0 } });
+    /* ⚠️ İkinci bir Konsey ŞART: hedef olarak `konsey`in KENDİ mesajını kullanmak yanlış
+       ölçüm olurdu — kendi mesajını kaldırmak matristen muaf ve serbest. Bu testin ilk
+       hâli tam bu tuzağa düşüp yeşil bekleyip kırmızı verdi. */
+    await join(asker2, ROLE.COUNCIL);
+    const askerMsg = await chat.send({ worldId, playerId: asker, body: 'a', clientMsgId: uuid() });
+    const akranMsg = await chat.send({ worldId, playerId: asker2, body: 'k', clientMsgId: uuid() });
+    const liderMsg = await chat.send({ worldId, playerId: lider, body: 'l', clientMsgId: uuid() });
+
+    await expect(chat.deleteMessage({ worldId, playerId: konsey, messageId: askerMsg.id }))
+      .resolves.toBeUndefined();
+    await expect(chat.deleteMessage({ worldId, playerId: konsey, messageId: akranMsg.id }))
+      .rejects.toMatchObject({ code: 'delete_hierarchy' });
+    await expect(chat.deleteMessage({ worldId, playerId: konsey, messageId: liderMsg.id }))
+      .rejects.toMatchObject({ code: 'delete_hierarchy' });
+
+    // Lider Konsey'inkini de kaldırabilir.
+    await expect(chat.deleteMessage({ worldId, playerId: lider, messageId: akranMsg.id }))
+      .resolves.toBeUndefined();
+  });
+
+  it('⚠️ ASKER hiçbir mesajı kaldıramaz — kendininki bile', async () => {
+    const m = await chat.send({ worldId, playerId: asker, body: 'benim', clientMsgId: uuid() });
+    await expect(chat.deleteMessage({ worldId, playerId: asker, messageId: m.id }))
+      .rejects.toMatchObject({ code: 'forbidden' });
+  });
+
+  it('⭐ KENDİ mesajını kaldırmak serbest (susturmadan ayrıldığı 1. nokta)', async () => {
+    const m = await chat.send({ worldId, playerId: konsey, body: 'yanlis yazdim', clientMsgId: uuid() });
+    await expect(chat.deleteMessage({ worldId, playerId: konsey, messageId: m.id }))
+      .resolves.toBeUndefined();
+    expect(await gorunen(lider)).toEqual([]);
+  });
+
+  it('⭐ AYRILMIŞ üyenin mesajı kaldırılabilir (susturmadan ayrıldığı 2. nokta)', async () => {
+    const m = await chat.send({ worldId, playerId: asker, body: 'reklam', clientMsgId: uuid() });
+    // Üye ittifaktan ayrıldı; mesajı kanalda kaldı (§13.15c-1).
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = NULL, alliance_role = NULL WHERE id = ${asker}
+    `);
+
+    await expect(chat.deleteMessage({ worldId, playerId: konsey, messageId: m.id }))
+      .resolves.toBeUndefined();
+    // …ama susturma hâlâ reddedilir: susturma ÜYEYE uygulanıyor.
+    await expect(chat.mute({ worldId, playerId: konsey, targetId: asker, minutes: null }))
+      .rejects.toMatchObject({ code: 'not_same_alliance' });
+  });
+
+  it('⚠️⚠️ BAŞKA ittifağın mesajına id tahminiyle uzanılamaz', async () => {
+    const m = await chat.send({ worldId, playerId: asker, body: 'ozel', clientMsgId: uuid() });
+
+    // `disaridan` kendi ittifağını kurup lideri oluyor — rütbesi en yüksek, ama kanalı başka.
+    await giveCastle(disaridan, 5);
+    await alliance.found({ worldId, playerId: disaridan, name: 'oteki' });
+
+    await expect(chat.deleteMessage({ worldId, playerId: disaridan, messageId: m.id }))
+      .rejects.toMatchObject({ code: 'not_found' });
+    expect(await gorunen(lider)).toEqual(['ozel']);
+  });
+
+  it('aynı mesaj İKİ KEZ kaldırılamaz', async () => {
+    const m = await chat.send({ worldId, playerId: asker, body: 'bir kez', clientMsgId: uuid() });
+    await chat.deleteMessage({ worldId, playerId: lider, messageId: m.id });
+    await expect(chat.deleteMessage({ worldId, playerId: lider, messageId: m.id }))
+      .rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('⭐ AYRI outbox konusu yazılır — `chat:alliance` olsaydı silme «yeni mesaj» bildirirdi', async () => {
+    const m = await chat.send({ worldId, playerId: asker, body: 'x', clientMsgId: uuid() });
+    await chat.deleteMessage({ worldId, playerId: lider, messageId: m.id });
+
+    /* ⚠️ `outboxRows` dünya süzgeci taşımıyor ve `outbox` testler arasında temizlenmiyor —
+       bu dünyaya ait satırı ayrıca süzmek gerek (ilk hâli 8 satır bulup kırmızı verdi). */
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM outbox
+       WHERE topic = 'chat:alliance:deleted' AND world_id = ${worldId} ORDER BY id
+    `);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!['payload']).toMatchObject({ messageId: m.id });
+  });
+});
+
 /* ══ Olay ve bildirim eşlemesi ══════════════════════════════════════════════ */
 
 describe('olay eşlemesi', () => {
@@ -638,5 +761,20 @@ describe('olay eşlemesi', () => {
 
   it('⚠️ mention YOKSA hiç bildirim yok (sıradan mesaj sessiz)', () => {
     expect(notificationForOutbox('chat:alliance', { ...payload, mentions: [] }, 1)).toEqual([]);
+  });
+
+  /**
+   * ⭐ SİLME OLAYI (2026-08-11) — mesaj olayıyla aynı kalıp, aynı odaya. ⚠️ Ayrı konu olması
+   * ŞART: `notify.catalog` yalnız `chat:alliance`i tanıyor, yani silme bildirim ÜRETMİYOR.
+   * Aynı konuyu kullansaydık bir mesajın kaldırılması odadakilere «sizden bahsedildi»
+   * bildirimi gönderirdi.
+   */
+  it('⭐ silme olayı kanal odasına gider ve HİÇ bildirim üretmez', () => {
+    const ev = eventForOutbox('chat:alliance:deleted', { channelId: 42, messageId: 99 }, 1)!;
+    expect(ev.topic).toBe('chat:alliance:deleted');
+    expect(ev.chatChannelId).toBe(42);
+    expect(ev.playerIds).toEqual([]);
+    expect(ev.allianceId ?? null).toBeNull();
+    expect(notificationForOutbox('chat:alliance:deleted', payload, 1)).toEqual([]);
   });
 });

@@ -20,11 +20,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatGameHhmm } from '@mobilwar/contracts';
 import { closeAllianceChat, openAllianceChat } from '../lib/realtime.ts';
+import { canDeleteAllianceMessage, canMuteAllianceMember } from '../lib/chat-moderation.ts';
 import {
   activeMentionQuery, applyMention, splitMentions, suggestMentions,
 } from '../lib/mentions.ts';
 import {
   useAllianceChat, useAllianceChatHistory, useAllianceChatMute, useAllianceChatUnmute,
+  useDeleteAllianceChatMessage,
   useSendAllianceChatMessage, type AllianceChatMember, type AllianceChatMessage,
 } from '../lib/queries.ts';
 import { getSession } from '../lib/api.ts';
@@ -32,10 +34,6 @@ import { AllianceChatMuteModal } from './AllianceChatMuteModal.tsx';
 import { MentionAutocomplete, type MentionItem } from './MentionAutocomplete.tsx';
 import { useConfirm } from './Modal.tsx';
 import { Button, ErrorBox, TextArea } from './ui.tsx';
-
-/** İttifak rolleri — `Alliance.tsx`teki `ROLE_LABEL` ile aynı sayılar. */
-const COUNCIL = 2;
-const LEADER = 3;
 
 /** Sunucu hata kodu → oyuncuya gösterilecek metin (`ChatWindow.messageForError` kalıbı). */
 function messageForError(err: unknown): string {
@@ -55,6 +53,9 @@ function messageForError(err: unknown): string {
     case 'mute_hierarchy':
     case 'mute_self':
     case 'not_muted':
+    /* ⭐ Mesaj kaldırmanın iki reddi (2026-08-11): rütbe yetmiyor · mesaj zaten kalkmış. */
+    case 'delete_hierarchy':
+    case 'not_found':
     case 'forbidden':
       return body.message ?? 'Bu işlemi yapamazsın.';
     default:
@@ -69,11 +70,11 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
   const send = useSendAllianceChatMessage();
   const mute = useAllianceChatMute();
   const unmute = useAllianceChatUnmute();
+  const remove = useDeleteAllianceChatMessage();
   const confirm = useConfirm();
 
   const myId = getSession()?.playerId ?? 0;
   const myRole = packet.data?.myRole ?? 0;
-  const canModerate = myRole >= COUNCIL;
 
   const [draft, setDraft] = useState('');
   const [caret, setCaret] = useState(0);
@@ -198,6 +199,16 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
     }).then((ok) => { if (ok) unmute.mutate(m.playerId); });
   };
 
+  /** ⭐ Mesajı kaldır (2026-08-11) — genel sohbetteki `doDelete`in birebir ikizi. */
+  const doDelete = (m: AllianceChatMessage): void => {
+    setMenuFor(null);
+    void confirm({
+      title: 'Mesajı kaldır',
+      danger: true,
+      body: 'Bu mesaj sohbetten kaldırılacak. Kayıt sunucuda kalır. Emin misiniz!',
+    }).then((ok) => { if (ok) remove.mutate(m.id); });
+  };
+
   /* ── Çizim ───────────────────────────────────────────────────────────────── */
 
   const blockedText = packet.data?.blockedText ?? null;
@@ -249,6 +260,12 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
             /* WhatsApp grup mantığı: ardışık aynı gönderende başlık tekrarlanmaz. */
             const sameAsPrev = prev != null && prev.senderId === m.senderId;
             const member = m.senderId == null ? undefined : memberById.get(m.senderId);
+            /* ⭐ Menünün iki kalemi AYRI kapılardan geçiyor: silme mesaja, susturma üyeye
+               uygulanıyor — ayrılmış üyenin mesajı kaldırılabilir ama kendisi susturulamaz. */
+            const canDelete = canDeleteAllianceMessage({
+              myId, myRole, senderId: m.senderId, senderRole: member?.role ?? null,
+            });
+            const canMute = canMuteAllianceMember({ myId, myRole, member });
             /* ⭐ Bana yapılan bahsetme balonun kendisini de vurgular — grup sohbetinde
                kendini bulmak zor, kalın yazı tek başına yetmiyor. */
             const mentionsMe = m.mentions.some((x) => x.id === myId);
@@ -277,35 +294,9 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
                         {/* ⚠️ Ekranda ham `id` ASLA görünmez (§13.14). */}
                         {m.senderName ?? 'kaldırılmış oyuncu'}
                       </span>
-                      {member && canModerate && member.playerId !== myId
-                        && member.role < LEADER && (myRole === LEADER || member.role < COUNCIL) ? (
-                          <button
-                            type="button"
-                            aria-label={`${member.username} için sohbet yönetimi`}
-                            onClick={() => setMenuFor(menuFor === m.id ? null : m.id)}
-                            className="shrink-0 px-0.5 text-xs leading-none text-muted hover:text-ink"
-                          >⋮</button>
-                        ) : null}
                       {member?.muted ? (
                         <span className="shrink-0 text-[10px] text-danger">susturuldu</span>
                       ) : null}
-                    </div>
-                  ) : null}
-
-                  {menuFor === m.id && member ? (
-                    <div className="mb-1 rounded-[var(--radius-sm)] border border-border bg-surface px-1 py-1">
-                      {member.muted ? (
-                        <button type="button" onClick={() => doUnmute(member)}
-                          className="block w-full px-1.5 py-0.5 text-left text-xs text-ink hover:text-accent">
-                          Susturmayı kaldır
-                        </button>
-                      ) : (
-                        <button type="button"
-                          onClick={() => { setMenuFor(null); setMuteTarget(member); }}
-                          className="block w-full px-1.5 py-0.5 text-left text-xs text-danger hover:opacity-80">
-                          Sohbette sustur
-                        </button>
-                      )}
                     </div>
                   ) : null}
 
@@ -322,9 +313,54 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
                         : <span key={k}>{part.text}</span>
                     ))}
                   </div>
-                  <div className={`mt-0.5 text-right text-[10px] ${mine ? 'opacity-75' : 'text-muted'}`}>
-                    {formatGameHhmm(m.createdAt)}
+                  {/**
+                    * ⭐⭐ `⋮` HER BALONDA, SAAT ŞERİDİNDE (kullanıcı bildirimi, 2026-08-11).
+                    *
+                    * ⚠️ Düğme gönderen adı başlığının İÇİNDEydi ve o başlık ardışık mesajlarda
+                    * çizilmiyor (WhatsApp grup mantığı) → peş peşe yazan bir üyenin yalnız İLK
+                    * mesajında menü çıkıyordu. Genel sohbetteki hatanın birebir aynısı.
+                    *
+                    * ⚠️ Saat şeridi seçildi çünkü **koşulsuz çizilen tek satır** o: başlık
+                    * `!mine` ve `!sameAsPrev` ister. Böylece kendi mesajını da kaldırabiliyorsun.
+                    * ⚠️ `opacity` ile soluyor, renkle DEĞİL: kendi balonun `bg-accent` üstünde
+                    * `text-muted` okunmaz olurdu.
+                    */}
+                  <div className={`mt-0.5 flex items-center justify-end gap-1.5 text-[10px] ${
+                    mine ? 'opacity-75' : 'text-muted'}`}>
+                    {canDelete || canMute ? (
+                      <button type="button" title="Sohbet yönetimi"
+                        aria-label={member ? `${member.username} için sohbet yönetimi` : 'Sohbet yönetimi'}
+                        onClick={() => setMenuFor(menuFor === m.id ? null : m.id)}
+                        className="-my-1 shrink-0 px-1 py-1 text-xs leading-none opacity-70 hover:opacity-100"
+                      >⋮</button>
+                    ) : null}
+                    <span>{formatGameHhmm(m.createdAt)}</span>
                   </div>
+
+                  {menuFor === m.id ? (
+                    <div className="mt-1 rounded-[var(--radius-sm)] border border-border bg-surface px-1 py-1">
+                      {canDelete ? (
+                        <button type="button" onClick={() => doDelete(m)}
+                          className="block w-full px-1.5 py-0.5 text-left text-xs text-ink hover:text-accent">
+                          Mesajı kaldır
+                        </button>
+                      ) : null}
+                      {canMute && member ? (
+                        member.muted ? (
+                          <button type="button" onClick={() => doUnmute(member)}
+                            className="block w-full px-1.5 py-0.5 text-left text-xs text-ink hover:text-accent">
+                            Susturmayı kaldır
+                          </button>
+                        ) : (
+                          <button type="button"
+                            onClick={() => { setMenuFor(null); setMuteTarget(member); }}
+                            className="block w-full px-1.5 py-0.5 text-left text-xs text-danger hover:opacity-80">
+                            Sohbette sustur
+                          </button>
+                        )
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );
@@ -335,6 +371,7 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
           {send.isError ? <ErrorBox error={new Error(messageForError(send.error))} /> : null}
           {mute.isError ? <ErrorBox error={new Error(messageForError(mute.error))} /> : null}
           {unmute.isError ? <ErrorBox error={new Error(messageForError(unmute.error))} /> : null}
+          {remove.isError ? <ErrorBox error={new Error(messageForError(remove.error))} /> : null}
 
           {/* ⚠️ Yazamama sebebi ÖNCEDEN söyleniyor. Kutuyu kapatmak, oyuncunun mesajı
               yazıp gönderdikten SONRA reddedilmesinden dürüst (`ChatWindow` ilkesi). */}

@@ -404,8 +404,10 @@ export function notificationForOutbox(
      * oysa pencere ekranda duruyor olabilir. Bu yüzden `channelId` alanı **gönderiliyor**:
      * istemci "bu benim açık odam mı" karşılaştırmasını onunla yapıyor.
      *
-     * ⚠️ `chat:global:deleted` bilerek BURADA YOK → `default` dalına düşüp sessiz kalıyor.
-     * Silinen bir mesaj için bildirim üretmek anlamsız olurdu.
+     * ⚠️ `chat:global:deleted` ve `chat:alliance:deleted` bilerek BURADA YOK → `default`
+     * dalına düşüp sessiz kalıyorlar. Silinen bir mesaj için bildirim üretmek anlamsız olurdu;
+     * dahası silme kendi konusunu tam da bu yüzden taşıyor (mesaj konusunu paylaşsaydı
+     * **kaldırma** işlemi odadakilere «sizden bahsedildi» bildirimi gönderirdi).
      */
     case 'chat:global': {
       const ids = Array.isArray(payload['mentions'])

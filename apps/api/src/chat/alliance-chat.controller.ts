@@ -117,4 +117,23 @@ export class AllianceChatController {
       });
     } catch (err) { throw toHttp(err); }
   }
+
+  /**
+   * Mesajı kaldır — satır silinmez, `deleted_at`/`deleted_by` işaretlenir.
+   *
+   * ⚠️ **`AdminGuard` YOK ve olmamalı** — genel sohbetteki ikizinden ayrıldığı tek nokta bu.
+   * Orada yetki oyun yönetimidir, burada ittifak rütbesidir; kapı `AllianceChatService`te
+   * `assertCanModerate` ile açılıyor. `channelId` istekten gelmediği için başka ittifağın
+   * mesajına id tahmin ederek uzanmak da mümkün değil.
+   */
+  @Delete('messages/:id')
+  @HttpCode(204)
+  async removeMessage(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
+    const p = req.player!;
+    try {
+      await this.service.deleteMessage({
+        worldId: p.worldId, playerId: p.playerId, messageId: idParam.parse(id),
+      });
+    } catch (err) { throw toHttp(err); }
+  }
 }

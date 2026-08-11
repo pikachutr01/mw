@@ -3351,6 +3351,25 @@ yetki `ChatAccessService.canRead/canWrite(player, channel)` ile **her olayda** y
   bağlantılar istemcide `rel="noopener nofollow"` ile linklenir. XSS yüzeyi sıfır.
 - **Susturma/yasak:** `chat_bans` (yönetici) + kanal bazlı bildirim susturma (`muted_until`,
   `notify=false`). Her moderasyon işlemi `audit_log`'a düşer.
+- ⭐ **MESAJ KALDIRMA — İKİ KANALDA DA TEK TEK (kullanıcı, 2026-08-11).**
+  Susturma **sonraki** mesajları durdurur; asılı kalmış bir küfür/reklam ancak kaldırmayla
+  kalkar. İkisi ayrı yetenek ve ikisi de gerekli.
+  - **Genel sohbet:** yetki oyun yönetimi (`AdminGuard`), 2026-07-31'den beri var.
+  - **İttifak sohbeti:** yetki **ittifak rütbesi** — `AdminGuard` YOK. Matris susturmanın
+    birebir aynısı (`assertCanModerate`, tek yerde): Konsey yalnız Asker'in, Lider herkesin
+    mesajını kaldırır; Lider'in mesajına yalnız Lider dokunur. **İki noktada ayrışıyor:**
+    *(a)* kendi mesajını kaldırmak serbest (susturma ileriye, kaldırma geriye bakıyor);
+    *(b)* **ayrılmış üyenin** mesajı kaldırılabilir — kapatsaydık ayrılan bir üyenin küfrü
+    kanalda kalıcı olurdu. Susturmada ikisi de yasak, çünkü o bir ÜYEYE uygulanıyor.
+  - Satır **silinmez**, `deleted_at`/`deleted_by` işaretlenir (kanıt kalır); geçmiş sorgusu
+    `deleted_at IS NULL` süzgecini zaten taşıdığı için mesaj ekrandan anında düşer.
+  - Olay **ayrı konu** (`chat:global:deleted` · `chat:alliance:deleted`): mesaj konusunu
+    paylaşsaydı bir mesajın KALDIRILMASI odadakilere «yeni mesaj» bildirimi gönderirdi.
+  - 🐞 **Arayüz kilidi (2026-08-11'de düzeldi):** `⋮` düğmesi gönderen adı başlığının içindeydi
+    ve o başlık ardışık mesajlarda çizilmiyor (WhatsApp grup mantığı) → peş peşe yazan bir
+    oyuncunun yalnız **ilk** mesajı kaldırılabiliyordu. Sunucu uçtan beri tek tek silebiliyordu;
+    kilit yalnız ekrandaydı. Düğme artık **her balonun saat şeridinde** — koşulsuz çizilen tek
+    satır o. Yan kazanç: kendi mesajını da kaldırabiliyorsun.
 - ⭐ **MÜKERRER MESAJ KORUMASI (2026-07-31'de eklendi):** aynı metin aynı sohbete **15 sn**
   içinde tekrar gönderilemez (`duplicate_message`). Planda yoktu; `mesajlar.txt`'teki rakip
   yapımın beta dökümü bunun gerçek bir ihtiyaç olduğunu gösteriyor (aynı satırın arka arkaya

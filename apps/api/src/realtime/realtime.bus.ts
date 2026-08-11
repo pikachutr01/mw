@@ -316,9 +316,16 @@ export function eventForOutbox(
      * outbox payload'ındaki `mentions` yalnız BİLDİRİM katmanı için (`notify.catalog.ts`) ve
      * WS olayına hiç girmiyor — kimin anıldığı odadaki herkese sızmamalı.
      */
+    /**
+     * ⚠️ `chat:alliance:deleted` (2026-08-11) lider/konsey bir mesajı kaldırınca yazılıyor ve
+     * AYRI bir konu: `chat:alliance` `notify.catalog`ta bildirime dönüşüyor, aynı konuyu
+     * kullansaydık **silme** işlemi odadakilere «yeni mesaj» bildirimi gönderirdi.
+     * `chat:global:deleted` de tam bu sebeple ayrı duruyor.
+     */
     case 'chat:alliance':
+    case 'chat:alliance:deleted':
       return {
-        topic: 'chat:alliance', worldId,
+        topic, worldId,
         playerIds: [],
         chatChannelId: num(payload['channelId']),
         ref: { channelId: num(payload['channelId']), messageId: num(payload['messageId']) },

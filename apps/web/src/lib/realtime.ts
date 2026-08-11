@@ -94,6 +94,8 @@ const INVALIDATES: Record<string, string[]> = {
    * gereksiz trafik olurdu; liste zaten `alliance:changed` ile güncelleniyor.
    */
   'chat:alliance': ['alliance-chat-history'],
+  /* Lider/konsey bir mesajı kaldırdı → geçmiş tazelenir, mesaj ekrandan düşer. */
+  'chat:alliance:deleted': ['alliance-chat-history'],
   /**
    * ⭐ GENEL SOHBET (§13.12) — ittifak sohbetiyle aynı kalıp: olay **kanal odasından** geliyor.
    *

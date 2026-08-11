@@ -64,7 +64,8 @@ export interface ModerationSubject {
 }
 
 /**
- * ⭐ ÜYE ÜZERİNDE MODERASYON YETKİSİ — «At» ve «Sustur» **AYNI** matrise bakar (kullanıcı kararı).
+ * ⭐ MODERASYON YETKİSİ — «At», «Sustur» ve «Mesajı kaldır» **AYNI** matrise bakar
+ * (kullanıcı kararı; silme 2026-08-11'de aynı matrise bağlandı).
  *
  * | Yapan | Hedef Asker | Hedef Konsey | Hedef Lider | Kendisi |
  * |---|---|---|---|---|
@@ -79,25 +80,46 @@ export interface ModerationSubject {
  * "atabildiğim üyeyi susturabilirim de" beklentisini yapısal olarak garanti ediyor.
  */
 export function assertCanModerate(
-  me: ModerationSubject, target: ModerationSubject, verb: 'kick' | 'mute',
+  me: ModerationSubject, target: ModerationSubject,
+  verb: 'kick' | 'mute' | 'delete_message',
 ): void {
-  const noun = verb === 'kick' ? 'atabilir' : 'susturabilir';
-  if (target.allianceId !== me.allianceId) {
-    throw new AllianceError('not_same_alliance', 'Oyuncu ittifağında değil.');
-  }
-  if (target.playerId === me.playerId) {
-    throw new AllianceError(
-      verb === 'kick' ? 'cannot_kick_self' : 'mute_self',
-      verb === 'kick'
-        ? 'Kendini atamazsın — İttifaktan Ayrıl kullan.'
-        : 'Kendini susturamazsın.',
-    );
+  const noun = verb === 'kick' ? 'atabilir'
+    : verb === 'mute' ? 'susturabilir' : 'mesajını kaldırabilir';
+
+  /**
+   * ⭐ MESAJ KALDIRMA İKİ KAPIDA AYRIŞIR (kullanıcı, 2026-08-11: *"susturmayla aynı yetki"*).
+   * Rütbe matrisi birebir aynı kalıyor — ayrışan yalnız «kime uygulanır» sorusu, çünkü ötekiler
+   * bir ÜYEYE, bu bir MESAJA uygulanıyor:
+   *
+   *  • **Kendi mesajı serbest.** «Kendini susturamazsın» anlamlı bir korumaydı; «kendi sözünü
+   *    geri alamazsın» değil. Susturma ileriye, silme geriye bakıyor.
+   *  • **Ayrılmış üyenin mesajı serbest.** Mesajlar üyelikten bağımsız yaşıyor (`sender_id`'de
+   *    FK yok, §13.15c-1). Rütbesi artık bu ittifağın rütbesi olmadığı için hiyerarşi sorusu
+   *    anlamsız; kapatsaydık ayrılan bir üyenin küfrü kanalda **kalıcı** olurdu — tam da
+   *    silmenin var olma sebebi.
+   */
+  if (verb === 'delete_message') {
+    if (target.playerId === me.playerId) return;
+    if (target.allianceId !== me.allianceId) return;
+  } else {
+    if (target.allianceId !== me.allianceId) {
+      throw new AllianceError('not_same_alliance', 'Oyuncu ittifağında değil.');
+    }
+    if (target.playerId === me.playerId) {
+      throw new AllianceError(
+        verb === 'kick' ? 'cannot_kick_self' : 'mute_self',
+        verb === 'kick'
+          ? 'Kendini atamazsın — İttifaktan Ayrıl kullan.'
+          : 'Kendini susturamazsın.',
+      );
+    }
   }
   if (me.role !== ROLE.LEADER && target.role >= ROLE.COUNCIL) {
     throw new AllianceError('hierarchy', `Konsey yalnız Asker rütbesindeki üyeleri ${noun}.`);
   }
   if (target.role === ROLE.LEADER) {
-    throw new AllianceError('hierarchy', verb === 'kick' ? 'Lider atılamaz.' : 'Lider susturulamaz.');
+    throw new AllianceError('hierarchy', verb === 'kick' ? 'Lider atılamaz.'
+      : verb === 'mute' ? 'Lider susturulamaz.' : 'Liderin mesajı kaldırılamaz.');
   }
 }
 

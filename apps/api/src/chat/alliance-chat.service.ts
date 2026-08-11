@@ -568,6 +568,72 @@ export class AllianceChatService {
     });
   }
 
+  /**
+   * ⭐ MESAJI KALDIR (kullanıcı, 2026-08-11) — genel sohbetteki yeteneğin ittifak ikizi.
+   *
+   * ⚠️ Satır **SİLİNMEZ**, `deleted_at`/`deleted_by` işaretlenir; `global-chat.service`teki
+   * gerekçenin aynısı (tartışmada kanıt kalmalı) ve geçmiş sorgusu `deleted_at IS NULL`
+   * süzgecini zaten taşıdığı için mesaj ekrandan anında düşüyor.
+   *
+   * ⚠️ Yetki matrisi susturmanın **birebir aynısı** (`assertCanModerate`): Konsey yalnız
+   * Asker'in, Lider herkesin mesajını kaldırır; Lider'in mesajına yalnız Lider dokunur.
+   * Kendi mesajını ve ayrılmış üyenin mesajını kaldırmak serbest — gerekçe orada yazılı.
+   *
+   * ⚠️ Susturma **sonraki** mesajları durdurur; asılı kalmış bir küfür ancak bununla kalkar.
+   * İkisi ayrı yetenek ve ikisi de gerekli.
+   */
+  async deleteMessage(o: {
+    worldId: number; playerId: number; messageId: number;
+  }): Promise<void> {
+    await this.db.transaction(async (txn) => {
+      const tx = txn as unknown as Tx;
+      const ch = await this.channelFor(tx, o.worldId, o.playerId);
+      const me = await this.lockMember(tx, o.playerId);
+      if (me.role < ROLE.COUNCIL) {
+        throw new ChatError('forbidden', 'Bu işlem için Konsey ya da Lider olmalısın.');
+      }
+
+      /**
+       * ⚠️ Kanal koşulu güvenliğin kendisi: `channelId` istekten GELMİYOR, oyuncunun
+       * `alliance_id`'sinden çözülüyor (§13.15c-2). Başka ittifağın mesajını id tahmin ederek
+       * silmek bu yüzden şema düzeyinde imkânsız.
+       */
+      const [msg] = await tx.execute<Record<string, unknown>>(sql`
+        SELECT sender_id FROM chat_messages
+         WHERE id = ${o.messageId} AND channel_id = ${ch.channelId} AND deleted_at IS NULL
+      `);
+      if (!msg) throw new ChatError('not_found', 'Mesaj bulunamadı ya da zaten kaldırılmış.');
+
+      /* `sender_id` NULL = hesabı tamamen silinmiş oyuncu; sorulacak rütbe yok. */
+      const senderId = msg['sender_id'] == null ? null : Number(msg['sender_id']);
+      if (senderId != null) {
+        const target = await this.lockMember(tx, senderId);
+        try {
+          assertCanModerate(me, target, 'delete_message');
+        } catch (err) {
+          const e = err as AllianceError;
+          throw new ChatError(e.code === 'hierarchy' ? 'delete_hierarchy' : e.code, e.message);
+        }
+      }
+
+      await tx.execute(sql`
+        UPDATE chat_messages SET deleted_at = now(), deleted_by = ${o.playerId}
+         WHERE id = ${o.messageId} AND channel_id = ${ch.channelId} AND deleted_at IS NULL
+      `);
+
+      /**
+       * ⚠️ AYRI KONU (`chat:alliance` değil): mesaj olayı `notify.catalog`ta bildirime
+       * dönüşüyor — aynı konuyu kullansaydık bir mesajın SİLİNMESİ odadakilere «yeni mesaj»
+       * bildirimi gönderirdi. `chat:global:deleted` de tam bu sebeple ayrı duruyor.
+       */
+      await tx.execute(sql`
+        INSERT INTO outbox (world_id, topic, payload)
+        VALUES (${o.worldId}, 'chat:alliance:deleted',
+                ${JSON.stringify({ channelId: ch.channelId, messageId: o.messageId })}::jsonb)
+      `);
+    });
+  }
+
   /* ── Yardımcılar ──────────────────────────────────────────────────────────── */
 
   /**

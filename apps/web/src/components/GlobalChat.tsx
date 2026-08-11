@@ -357,26 +357,6 @@ function Live({ variant, onClose }: { variant: 'card' | 'sheet'; onClose: () => 
                         title="Yanıtla" onClick={() => replyTo(m.senderName)}
                         className="shrink-0 px-0.5 text-xs leading-none text-muted hover:text-accent">↩</button>
                     ) : null}
-                    {isStaff ? (
-                      <button type="button" aria-label="Sohbet yönetimi"
-                        onClick={() => setMenuFor(menuFor === m.id ? null : m.id)}
-                        className="shrink-0 px-0.5 text-xs leading-none text-muted hover:text-ink">⋮</button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {menuFor === m.id ? (
-                  <div className="mb-1 rounded-[var(--radius-sm)] border border-border bg-surface px-1 py-1">
-                    <button type="button" onClick={() => doDelete(m)}
-                      className="block w-full px-1.5 py-0.5 text-left text-xs text-ink hover:text-accent">
-                      Mesajı kaldır
-                    </button>
-                    {m.senderId != null && m.senderId !== myId ? (
-                      <button type="button" onClick={() => doMute(m)}
-                        className="block w-full px-1.5 py-0.5 text-left text-xs text-danger hover:opacity-80">
-                        Sohbette sustur
-                      </button>
-                    ) : null}
                   </div>
                 ) : null}
 
@@ -393,9 +373,47 @@ function Live({ variant, onClose }: { variant: 'card' | 'sheet'; onClose: () => 
                       : <span key={k}>{part.text}</span>
                   ))}
                 </div>
-                <div className={`mt-0.5 text-right text-[10px] ${mine ? 'opacity-75' : 'text-muted'}`}>
-                  {formatGameHhmm(m.createdAt)}
+
+                {/**
+                  * ⭐⭐ `⋮` HER BALONDA, SAAT ŞERİDİNDE (kullanıcı bildirimi, 2026-08-11).
+                  *
+                  * ⚠️ Düğme 2026-08-09'a kadar gönderen adı başlığının İÇİNDEydi ve o başlık
+                  * ardışık mesajlarda çizilmiyor (WhatsApp grup mantığı) — yani peş peşe yazan
+                  * bir oyuncunun yalnız İLK mesajı kaldırılabiliyordu, sonrakilere hiç
+                  * ulaşılamıyordu. Sunucu uçtan beri tek tek silebiliyordu; kilit yalnız buradaydı.
+                  *
+                  * ⚠️ Saat şeridi seçildi çünkü **koşulsuz çizilen tek satır** o: başlık `!mine`
+                  * ve `!sameAsPrev` ister, gövde metne bağlı. Böylece kendi mesajını da
+                  * kaldırabiliyorsun (sunucu zaten izin veriyordu, ekran vermiyordu).
+                  * ⚠️ `opacity` ile soluyor, renkle DEĞİL: kendi balonun `bg-accent` üstünde
+                  * `text-muted` okunmaz olurdu.
+                  */}
+                <div className={`mt-0.5 flex items-center justify-end gap-1.5 text-[10px] ${
+                  mine ? 'opacity-75' : 'text-muted'}`}>
+                  {isStaff ? (
+                    <button type="button" aria-label="Sohbet yönetimi" title="Sohbet yönetimi"
+                      onClick={() => setMenuFor(menuFor === m.id ? null : m.id)}
+                      className="-my-1 shrink-0 px-1 py-1 text-xs leading-none opacity-70 hover:opacity-100">
+                      ⋮
+                    </button>
+                  ) : null}
+                  <span>{formatGameHhmm(m.createdAt)}</span>
                 </div>
+
+                {menuFor === m.id ? (
+                  <div className="mt-1 rounded-[var(--radius-sm)] border border-border bg-surface px-1 py-1">
+                    <button type="button" onClick={() => doDelete(m)}
+                      className="block w-full px-1.5 py-0.5 text-left text-xs text-ink hover:text-accent">
+                      Mesajı kaldır
+                    </button>
+                    {m.senderId != null && m.senderId !== myId ? (
+                      <button type="button" onClick={() => doMute(m)}
+                        className="block w-full px-1.5 py-0.5 text-left text-xs text-danger hover:opacity-80">
+                        Sohbette sustur
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           );
