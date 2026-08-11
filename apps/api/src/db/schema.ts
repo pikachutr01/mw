@@ -327,7 +327,8 @@ export const cities = pgTable('cities', {
    *    hiçbir işe yaramazdı.
    *
    * ⭐ `wallIntegrity = 0` **ve** onarım sürüyorsa sur TAM YIKILMIŞ demektir: o şehirde onarım
-   * bitene kadar savunma birimi üretilemez (§13.21.2).
+   * bitene kadar YENİ savunma birimi emri verilemez (§13.21.2). ⚠️ Süren emirler etkilenmez
+   * (kullanıcı, 2026-08-11) — bu ikisi 2026-08-11'e kadar aynı şeydi.
    */
   wallIntegrity: numeric('wall_integrity', { precision: 6, scale: 4 }).notNull().default('1'),
   wallRepairFrom: timestamp('wall_repair_from', { withTimezone: true }),

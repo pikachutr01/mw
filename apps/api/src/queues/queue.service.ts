@@ -54,7 +54,7 @@ export type QueueErrorCode =
   | 'tech_already_researching'
   | 'invalid_count'
   | 'queue_busy'
-  /** Sur tamamen yıkık ve onarımı sürüyor → savunma birimi üretilemez (§13.21.2). */
+  /** Sur tamamen yıkık ve onarımı sürüyor → YENİ savunma birimi emri verilemez (§13.21.2). */
   | 'wall_destroyed'
   /** Sur onarımdayken (kısmi hasar dahil) seviye yükseltilemez (kullanıcı, 2026-07-30). */
   | 'wall_repairing';
@@ -325,10 +325,13 @@ export class QueueService {
           throw new QueueError('email_unverified', UNVERIFIED_MESSAGE.defenseUnit);
         }
         /**
-         * ⭐ SUR TAM YIKILDIYSA SAVUNMA BİRİMİ ÜRETİLEMEZ (kullanıcı kararı, 2026-07-29).
-         * Savunma birimleri surda yaşar; sur çökmüşken üretilecek yer yok. Kilit yalnız
-         * **tam yıkımda** (bütünlük %0) geçerli — kısmi hasarda sur ayakta, üretim sürer.
+         * ⭐ SUR TAM YIKILDIYSA YENİ SAVUNMA BİRİMİ EMRİ VERİLEMEZ (kullanıcı, 2026-07-29).
+         * Savunma birimleri surda yaşar; sur çökmüşken yeni birim koyacak yer yok. Kilit yalnız
+         * **tam yıkımda** (bütünlük %0) geçerli — kısmi hasarda sur ayakta, emir serbest.
          * Sur/Büyü Kalkanı yükseltmeleri bu daldan geçmez, yani onarım/yükseltme engellenmez.
+         *
+         * ⚠️ Kilit YALNIZ bu kapıda, yani **yeni emirde**. Yıkım anında zaten süren emirlere
+         * dokunulmaz (kullanıcı, 2026-08-11) — bkz. `battle.handlers.ts`teki «kural değişti» notu.
          */
         await this.assertWallStanding(tx as never, opts.cityId, opts.at);
         const wall = Math.max(1, st.defenses['wall'] ?? 1);
@@ -470,11 +473,15 @@ export class QueueService {
   /* ── Ortak yardımcılar ────────────────────────────────────────────────────── */
 
   /**
-   * Sur tam yıkılmış ve onarımı sürüyorsa savunma birimi üretimini reddeder.
+   * Sur tam yıkılmış ve onarımı sürüyorsa **yeni** savunma birimi emrini reddeder.
    *
    * "Tam yıkıldı" = onarım BAŞLARKENki bütünlük 0. Onarım ilerledikçe sur savaşa artan bir
-   * yüzdeyle giriyor ama **üretim yasağı onarımın sonuna kadar sürüyor** — kullanıcının şartı
-   * buydu: *"Surun onarımı tamamen bitene kadar da herhangi bir savunma birimi üretilemez."*
+   * yüzdeyle giriyor ama **yasak onarımın sonuna kadar sürüyor** — kullanıcının şartı buydu:
+   * *"Surun onarımı tamamen bitene kadar da herhangi bir savunma birimi üretilemez."*
+   *
+   * ⚠️ Yasak **emir vermeye** ait, üretimin kendisine değil: yıkım anında kuyrukta olan emirler
+   * kesintisiz devam eder ve biten birimler şehre yazılır (kullanıcı, 2026-08-11). Yani onarım
+   * boyunca savunma **büyümeyi durdurur, geriye gitmez**.
    */
   private async assertWallStanding(tx: Db, cityId: number, at: Date): Promise<void> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
@@ -487,7 +494,8 @@ export class QueueService {
     if (Number(rows[0]?.['wall_integrity'] ?? 1) > 0) return;
     throw new QueueError(
       'wall_destroyed',
-      'Sur tamamen yıkıldı — onarımı bitene kadar savunma birimi üretilemez.',
+      'Sur tamamen yıkıldı — onarımı bitene kadar yeni savunma birimi emri verilemez. '
+      + 'Süren üretim etkilenmez.',
       { repairUntil: untilDate.toISOString() },
     );
   }

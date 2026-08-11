@@ -809,9 +809,12 @@ describe('⭐ kuyruk iptali (orijinalde "Yapımı Durdur" / "İlerletmeyi Durdur
 });
 
 /**
- * ⭐ SUR TAM YIKILDIYSA SAVUNMA BİRİMİ ÜRETİLEMEZ (§13.21.2, kullanıcı kararı 2026-07-29).
+ * ⭐ SUR TAM YIKILDIYSA YENİ SAVUNMA BİRİMİ EMRİ VERİLEMEZ (§13.21.2, kullanıcı 2026-07-29).
  * Kilit yalnız TAM yıkımda (bütünlük %0) ve yalnız birim şeridinde geçerli — kısmi hasarda
- * sur ayakta, üretim sürer; Sur/Büyü Kalkanı yükseltmeleri hiçbir hâlde engellenmez.
+ * sur ayakta, emir serbest; Sur/Büyü Kalkanı yükseltmeleri hiçbir hâlde engellenmez.
+ *
+ * ⚠️ Kilit **emir vermeye** ait, üretimin kendisine değil (kullanıcı, 2026-08-11): yıkım anında
+ * kuyrukta olan emir kesintisiz sürer. Bunun bekçisi aşağıdaki *"süren emir devam eder"* testi.
  */
 describe('yıkık sur savunma üretimini kilitler', () => {
   async function setWall(integrity: number, repairMinutes: number | null): Promise<void> {
@@ -839,6 +842,51 @@ describe('yıkık sur savunma üretimini kilitler', () => {
   it('sur %0 ve onarımdayken savunma birimi reddedilir', async () => {
     const at = await clock.gameNow(worldId);
     await setWall(0, 120);
+    await expect(queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 1, at }))
+      .rejects.toMatchObject({ code: 'wall_destroyed' });
+  });
+
+  /**
+   * ⭐⭐ KURAL DEĞİŞİKLİĞİNİN BEKÇİSİ (kullanıcı, 2026-08-11): *"Sur yıkıldığında üretimi devam
+   * eden savunma üniteleri iptal edilmesin, sadece onarım süresince yeni savunma birimi ünitesi
+   * emri verilemesin."*
+   *
+   * ⚠️ Test iki şeyi AYNI ANDA ölçüyor, çünkü hata ikisinin arasında saklanır: kuyruk hem
+   * hayatta kalmalı hem gerçekten ÜRETMELİ. Yalnız `canceled_at IS NULL` bakmak yetmez —
+   * ileride tik yoluna bir «sur yıkıksa ilerletme» kapısı konursa emir sessizce donardı ve
+   * o test yine yeşil kalırdı. Burada birimlerin şehre yazıldığını görüyoruz.
+   */
+  it('⭐ yıkım SÜREN emri durdurmaz: birimler şehre yazılır, yalnız yeni emir kapanır', async () => {
+    const at = await clock.gameNow(worldId);
+    await setWall(1, null);                                  // emir verilirken sur sağlam
+    const q = await queues.enqueueDefense({
+      cityId, playerId, type: 'archer_tower', count: 5, at,
+    });
+
+    await setWall(0, 120);                                   // savaş sur'u tamamen yıktı
+
+    // Üç birimlik süre geçmiş gibi yap; `snapshot` tembel üretimi maddeleştirir.
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT per_unit_seconds FROM queues WHERE id = ${q.id}
+    `);
+    const gecen = Math.round(Number(row!['per_unit_seconds']) * 3);
+    await h.db.execute(sql`
+      UPDATE queues SET started_at = now() - (${gecen}::int * interval '1 second') WHERE id = ${q.id}
+    `);
+    await cities.snapshot(cityId, new Date());
+
+    const [savunma] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count FROM defenses WHERE city_id = ${cityId} AND type = 'archer_tower'
+    `);
+    expect(Number(savunma?.['count'] ?? 0)).toBe(3);         // ⭐ üretim işledi
+
+    const [kuyruk] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT canceled_at, done FROM queues WHERE id = ${q.id}
+    `);
+    expect(kuyruk!['canceled_at']).toBeNull();               // ⭐ iptal EDİLMEDİ
+    expect(Number(kuyruk!['done'])).toBe(3);
+
+    // …ama onarım sürerken YENİ emir hâlâ kapalı.
     await expect(queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 1, at }))
       .rejects.toMatchObject({ code: 'wall_destroyed' });
   });

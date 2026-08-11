@@ -4044,17 +4044,22 @@ Bu savaşta yeniden hasar alırsa süre **o anki yeni hasara göre baştan** hes
 tam yıkım süresinin tamamını yeniden bekler. Onarım bitince ayrı bir görev gerekmez — süre
 geçmişse bütünlük 1 sayılır (tembel birikim deseni).
 
-#### ⭐ TAM YIKIM = SAVUNMA ÜRETİMİ DURUR (kullanıcı, 2026-07-29 · iade 2026-07-30)
+#### ⭐ TAM YIKIM = SAVUNMA **BÜYÜMESİ** DURUR (kullanıcı, 2026-07-29 · ⭐ yeniden yazıldı 2026-08-11)
 Sur **%0'a** inerse (seviyesi ve üstündeki savunma birimleri kalır, ama sur çökmüştür):
-- süren ve kuyrukta bekleyen **savunma birimi** emirleri **anında iptal edilir**. O ana kadar
-  üretilmiş olanlar şehirde KALIR — iptalden önce `materialize` koşar.
-- ⭐ **İADE VAR (2026-07-30, önceki "iade yok" kararı değişti):** her emirden üretilmemiş
-  birimlerin bedeli, normal iptal kuralıyla — **"1 ünite eksik"** — savunana geri döner.
-  İade kasaya **ganimet düşüldükten SONRA** eklenir: bu savaşın havuzuna girmez, bir SONRAKİ
-  saldırının havuzunda yağmalanabilir (§13.10.4). Skorda `debitRefund` normal iptalle aynı.
-- ⭐ **İptal + iade bilgisi savaş raporunda YALNIZ SAVUNANA görünür** (`wallProduction`):
-  rakibin ne ürettiği casusluk gerektiren bilgidir. Ayrı `defense_band_canceled` mesajı kalktı.
-- **onarım tamamen bitene kadar** yeni savunma birimi üretilemez (`wall_destroyed` hatası).
+- ⭐ **Süren üretim ETKİLENMEZ (2026-08-11 — kural tersine döndü).** Kuyruktaki savunma birimi
+  emirleri kesintisiz devam eder, biten birimler şehre normal şekilde yazılır. Kullanıcının
+  cümlesi: *"Sur yıkıldığında üretimi devam eden savunma üniteleri iptal edilmesin, sadece
+  onarım süresince yeni savunma birimi ünitesi emri verilemesin."*
+- **onarım tamamen bitene kadar** yeni savunma birimi **emri verilemez** (`wall_destroyed`
+  hatası). Tek yaptırım budur: savunma onarım boyunca **büyümeyi durdurur, geriye gitmez**.
+- ⚠️ **EMEKLİ KURAL (2026-07-29 → 2026-08-11):** o dönemde emirler anında **iptal ediliyor** ve
+  üretilmemiş birimlerin bedeli **"1 ünite eksik"** kuralıyla iade ediliyordu; bilgi savaş
+  raporunda yalnız savunana `wallProduction` alanıyla gösteriliyordu. İptal de iade de kalktı
+  (`cancelDefenseBand` silindi). **Gerekçe:** iptal oyuncunun tercihi olmayan bir kayıptı —
+  saldırıya uğramak zaten sur hasarı + ganimet kaybı demek, yarım kalan üretimin silinmesi aynı
+  olayın üçüncü cezasıydı ve iade "1 ünite eksik" olduğu için oyuncu net zarar ediyordu.
+  `wallProduction` alanının **okuma** yolu `battle-report.ts`te duruyor ki o dönemin raporları
+  geçmişi doğru anlatsın; yeni savaşlar bu alanı yazmıyor.
 - ⭐ **Onarımdaki Sur YÜKSELTİLEMEZ (2026-07-30, önceki karar değişti):** tamirat — kısmi hasar
   dahil — bitmeden seviye artırılamaz (`wall_repairing`). Büyü Kalkanı etkilenmez; onarım
   zaten iptal edilemez.

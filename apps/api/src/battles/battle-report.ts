@@ -153,7 +153,12 @@ interface BattleResultShape {
   };
   /** Hayatta kalan saldıran ordunun taşıma kapasitesi. Eski savaşlarda YOK. */
   attackerCarryCapacity?: number;
-  /** ⭐ Sur tam yıkılınca iptal edilen savunma üretimi + iadesi (2026-07-30). Eski savaşlarda YOK. */
+  /**
+   * ⚠️ **EMEKLİ ALAN — yalnız 2026-07-29 ile 2026-08-11 arasındaki savaşlarda var.**
+   * O dönemde sur tam yıkılınca savunma üretimi iptal edilip bedeli iade ediliyordu; kural
+   * kalktı (`battle.handlers.ts`), yeni savaşlar bu alanı YAZMIYOR. Okuma yolu duruyor ki
+   * o dönemin raporları geçmişi doğru anlatmaya devam etsin.
+   */
   wallProduction?: {
     canceled: { type: string; left: number }[];
     refunded: { gold: number; food: number };
@@ -342,7 +347,8 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
   if (integrity != null && integrity < 1 && wallLevel > 0) {
     if (integrity <= 0) {
       notes.push(side === 'defender'
-        ? 'SUR TAMAMEN YIKILDI — onarımı bitene kadar savunma birimi üretilemez.'
+        ? 'SUR TAMAMEN YIKILDI — onarımı bitene kadar yeni savunma birimi emri veremezsin. '
+          + 'Süren üretim kesintisiz devam eder.'
         : 'Rakibin suru TAMAMEN YIKILDI.');
     } else {
       notes.push(side === 'defender'
@@ -352,9 +358,12 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
   }
 
   /**
-   * ⭐ İptal edilen savunma üretimi + iade YALNIZ SAVUNANA görünür (kullanıcı kararı,
-   * 2026-07-30): rakibin ne üretmekte olduğu casusluk gerektiren bir bilgidir, savaş raporu
-   * onu bedava vermemeli.
+   * ⚠️ **ESKİ SAVAŞLARIN NOTU** (2026-07-29 – 2026-08-11). Kural kalktı: sur yıkılınca üretim
+   * artık iptal edilmiyor, yalnız yeni emir kapanıyor. Yeni savaşlarda `wallProduction`
+   * yazılmadığı için bu dal hiç girmez; o dönemin raporları içinse tek doğru anlatım bu.
+   *
+   * İptal + iade YALNIZ SAVUNANA görünürdü (kullanıcı kararı, 2026-07-30): rakibin ne
+   * üretmekte olduğu casusluk gerektiren bir bilgidir, savaş raporu onu bedava vermemeli.
    */
   if (side === 'defender' && r.wallProduction && r.wallProduction.canceled.length > 0) {
     const kalemler = r.wallProduction.canceled
