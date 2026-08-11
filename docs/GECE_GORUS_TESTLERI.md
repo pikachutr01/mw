@@ -115,7 +115,7 @@ Aynı çekirdek kurulum, bu sefer **saldıranın** gece görüşü taranıyor.
 | B3 | 2 / 0 | 2 | 179,4 |2 | 178-180|
 | B4 | 3 / 0 | 2 | 198,5 | 2| 198-199|
 | B5 | 5 / 0 | 2 | 222,5 |2 | 222-223|
-| B6 | 10 / 0 | 2 | 250,4 |2 |249-521 |
+| B6 | 10 / 0 | 2 | 250,4 |2 |249-251 |
 | B7 | 20 / 0 | 2 | 269,5 | 2| 269-270|
 | B8 | **GÜNDÜZ** | 2 | **294,9** | 2| 294-295|
 
@@ -207,14 +207,14 @@ hata değil.
 
 | # | k | GG sal/sav | motor: atkK | motor: defK | motor: kazanan | **gerçek: atkK** | **gerçek: defK** | **gerçek: kazanan** |
 |---|---:|---|---:|---:|---|---|---|---|
-| D7 | 1 | 0 / 0 | 1.001 | 986 | savunan | | | |
-| D8 | 1 | 10 / 0 | 840 | 1.562 | **saldıran** | | | |
-| D9 | 1 | 0 / 10 | 1.641 | 777 | savunan | | | |
-| D10 | 2 | 0 / 0 | 2.002 | 1.973 | savunan | | | |
-| D11 | 2 | 10 / 0 | 1.681 | 3.124 | **saldıran** | | | |
-| D12 | 5 | 0 / 0 | 5.005 | 4.931 | savunan | | | |
-| D13 | 5 | 10 / 0 | 4.203 | 7.811 | **saldıran** | | | |
-| D14 | 1 | **GÜNDÜZ** | 1.535 | 1.361 | savunan | | | |
+| D7 | 1 | 0 / 0 | 1.001 | 986 | savunan |998-1000 | 983-986| savunan|
+| D8 | 1 | 10 / 0 | 840 | 1.562 | **saldıran** | 838-841|1559-1562 | saldıran|
+| D9 | 1 | 0 / 10 | 1.641 | 777 | savunan | 1639-1642|774-777 | savunan|
+| D10 | 2 | 0 / 0 | 2.002 | 1.973 | savunan |2000-2004 |1968-1973 | savunan|
+| D11 | 2 | 10 / 0 | 1.681 | 3.124 | **saldıran** | 1677-1681|3120-3125 | saldıran|
+| D12 | 5 | 0 / 0 | 5.005 | 4.931 | savunan | 4995-5006| 4924-4935|savunan |
+| D13 | 5 | 10 / 0 | 4.203 | 7.811 | **saldıran** | 4199-4207|7802-7818 | saldıran|
+| D14 | 1 | **GÜNDÜZ** | 1.535 | 1.361 | savunan |1532-1536 |1358-1361 | savunan|
 
 ⭐ D7→D10→D12 ve D8→D11→D13 **tam ×2 ve ×5** olmalı. Karışık orduda ve geri besleme açıkken
 bile ölçek değişmezliği bozulmuyorsa gece'nin tek etkisi havuz çarpanıdır.
@@ -353,9 +353,9 @@ B8'e ne yazdıysan buraya kopyala; I2 ve I3 gerçekten yeni.
 
 | # | gece? | GG sal/sav | motor: atkK | motor: defK | **gerçek: atkK** | **gerçek: defK** |
 |---|---|---|---:|---:|---|---|
-| I1 | ⛔ gündüz | 0 / 0 | 100 | 294,9 *(= B8)* | | |
-| I2 | ⛔ gündüz | **20 / 20** | 100 | **294,9 (I1 ile BİREBİR)** | | |
-| I3 | ✅ gece | **20 / 20** | 100 | **269,5 (I1'in ALTINDA)** | | |
+| I1 | ⛔ gündüz | 0 / 0 | 100 | 294,9 *(= B8)* | 100|294-295 |
+| I2 | ⛔ gündüz | **20 / 20** | 100 | **294,9 (I1 ile BİREBİR)** | 100|294-295 |
+| I3 | ✅ gece | **20 / 20** | 100 | **269,5 (I1'in ALTINDA)** |100 |269-270 |
 
 ⭐ **I3 < I1** olmalı: çarpan 1'e yaklaşır ama **asla ulaşmaz** (GG 20 → 0,9609; GG 1.000 → 0,999).
 Yani hiçbir gece görüşü seviyesi geceyi gündüze çevirmez. I3 = I1 çıkarsa formülün üst sınırı
@@ -363,25 +363,114 @@ farklı demektir.
 
 ---
 
-## Sonuç bölümü (ölçümden sonra doldurulacak)
+## ⭐⭐⭐ SONUÇ (2026-08-11, kullanıcı ölçümü tamamlandı — 9 grup, 60+ hücre)
 
 | Grup | Motor ne diyor | Ölçüm ne dedi | Karar |
 |---|---|---|---|
-| A | Savunanın GG'si 2 turluk savaşta kendi kaybına **hiç** dokunmaz | | |
-| B | Eğri `1 − 3/(GG+3)`, logaritmik **değil** | | |
-| C | İki kod yolu aynı sabitleri kullanıyor (ayna birebir) | | |
-| D | Gece saf çarpımsal havuz etkisi → tam ölçek değişmezliği | | |
-| E | Savunanın tek savunma kanalı **Şaman**; büyüklük ham stat çıkarmasıyla uyumlu | | |
-| F | Sur geceden etkilenmez → gece **göreceli olarak güçlenir** | | |
-| G | Saldıranın yüksek GG'si savunana **gündüzden fazla** kayıp verdirir | | |
-| H | Gündüz savunan kazanıyor, gecede GG ≥ 7 ile saldıran kazanıyor | | |
-| I | Gündüz GG etkisiz; gece hiçbir GG ile gündüz olmaz | | |
+| A | Savunanın GG'si 2 turluk savaşta kendi kaybına **hiç** dokunmaz | **6/6 tuttu.** Altı satırın da defK'sı 102-103 — GG 0'dan 20'ye kıpırdamadı | ✅ Motor doğru |
+| B | Eğri `1 − 3/(GG+3)`, logaritmik **değil** | **8/8 tuttu.** ⭐ Çarpanın **yedi değeri de geri çözüldü** (aşağıda); oran testi dört alternatifi de eledi | ✅ Motor doğru |
+| C | İki kod yolu aynı sabitleri kullanıyor | **6/6 birebir.** Ayna sütunu B'ye tam oturdu | ✅ Motor doğru |
+| D | Saf çarpımsal havuz etkisi → tam ölçek değişmezliği | **21/22 tuttu.** ×10'a kadar birebir; karışık orduda ve 5 turluk savaşta da bozulmadı | ✅ Motor doğru |
+| E | Savunanın tek savunma kanalı **Şaman** | **7/7 tuttu.** Aynı kutu şamansızken 102,5'i kıpırdatmıyor, 100 Şaman'la 37 → 15 yapıyor | ✅ Motor doğru |
+| F | Sur geceden etkilenmez → gece **göreceli güçlenir** | **6/6 tuttu.** F4/F5 = F1 (%92,37-92,40) · gündüz %85,55 · oran **0,719** üçüncü kez | ✅ Motor doğru |
+| G | Saldıranın yüksek GG'si savunana **gündüzden fazla** kayıp verdirir | **8/8 tuttu.** G3 = 1322-1325 · G8 (gündüz) = 1068-1072 → 250 birimlik fark | ✅ Motor doğru |
+| H | Gündüz savunan, gecede GG ≥ 7 saldıran kazanıyor | **8/8 tuttu.** Eşik **tam yerinde**: GG 6 savunan, GG 7 saldıran | ✅ Motor doğru |
+| I | Gündüz GG etkisiz; gece hiçbir GG ile gündüz olmaz | **3/3 tuttu.** I1 = I2 (294-295) · I3 = 269-270 | ✅ Motor doğru |
 
-**Nihai karar:**
+### ⭐⭐⭐ Asıl kazanım: çarpan tablosu ÖLÇÜMDEN geri çözüldü
 
-- [ ] `on_bilgiler.txt:25` (*"vuruş **ve savunma** gücü artar"*) — doğru / yanlış?
-- [ ] `on_bilgiler.txt:583` (*"**logaritmik** bir oran"*) — doğru / yanlış?
-- [ ] Motorda düzeltilmesi gereken bir kanal var mı?
+B grubunda kayıp ile çarpan arasındaki bağıntı **tam olarak tersine çevrilebilir**:
+
+```
+defK = (1500 × 100 × çarpan × jitter − 9 × 9.000) / 234
+   ⇒  çarpan = (defK × 234 + 81.000) / (150.000 × jitter)
+```
+
+Yani ölçülen kayıp sayısı doğrudan çarpanı veriyor. Aşağıdaki aralıklar **muhafazakâr**:
+raporlanan tam sayıya ±0,5 yuvarlama **ve** ±%0,1 jitter payı eklendi.
+
+| GG | ölçülen defK | **ölçümden geri çözülen çarpan** | motor | |
+|---:|---|---|---:|:--|
+| 0 | 102-103 | **0,6976 – 0,7022** | 0,7000 | ✅ |
+| 1 | 150-151 | **0,7724 – 0,7771** | 0,7750 | ✅ |
+| 2 | 178-180 | **0,8161 – 0,8224** | 0,8200 | ✅ |
+| 3 | 198-199 | **0,8473 – 0,8521** | 0,8500 | ✅ |
+| 5 | 222-223 | **0,8847 – 0,8895** | 0,8875 | ✅ |
+| 10 | 249-251 | **0,9267 – 0,9333** | 0,9308 | ✅ |
+| 20 | 269-270 | **0,9579 – 0,9629** | 0,9609 | ✅ |
+
+⭐ Bu, Ghidra'dan okunan `3,0 · 1,0 · 0,3 · 0,7` sabitlerinin **ölçümle bağımsız teyidi**.
+Özellikle taban: `0,7` üç ondalık basamağa kadar doğrulandı (0,6976 – 0,7022).
+
+### Eğrinin şekli — dört alternatif de ELENDİ
+
+Oran testi aralık **uçlarıyla** (en kötü durum) koşuldu; hiçbir satırda alternatif model
+ölçülen bandın içine giremedi:
+
+| GG | ölçülen bant | motor `1−3/(L+3)` | `1−1/(L+1)` | `1−5/(L+5)` | **logaritmik** | karekök |
+|---:|---|---|---|---|---|---|
+| 1 | 0,2798 – 0,2952 | **0,2875 ✅** | 0,5250 ⛔ | 0,2083 ⛔ | 0,2277 ⛔ | 0,2236 ⛔ |
+| 2 | 0,4464 – 0,4699 | **0,4600 ✅** | 0,7000 ⛔ | 0,3571 ⛔ | 0,3608 ⛔ | 0,3162 ⛔ |
+| 3 | 0,5655 – 0,5843 | **0,5750 ✅** | 0,7875 ⛔ | 0,4688 ⛔ | 0,4553 ⛔ | 0,3873 ⛔ |
+| 5 | 0,7083 – 0,7289 | **0,7188 ✅** | 0,8750 ⛔ | 0,6250 ⛔ | 0,5885 ⛔ | 0,5000 ⛔ |
+| 10 | 0,8690 – 0,8976 | **0,8846 ✅** | 0,9545 ⛔ | 0,8333 ⛔ | 0,7876 ⛔ | 0,7071 ⛔ |
+
+⭐ Beş satırın **her biri tek başına** dört alternatifi de eliyor.
+
+---
+
+## Nihai karar (2026-08-11)
+
+- [x] ⭐⭐ **`on_bilgiler.txt:25` YANLIŞ.** *"…vuruş **ve savunma** gücü o kadar artar"* — gece
+      görüşünün savunma tarafı **yok**. Belirleyici grup **A**: savunanın GG'si 0'dan 20'ye
+      çıkarken kendi kaybı 102-103'te **hiç kıpırdamıyor**. Kontrol deneyi **E** aynı kutunun
+      gerçekten okunduğunu kanıtlıyor (100 Şaman eklenince aynı kutu 37 → 15 yapıyor), yani
+      A'daki değişmezlik "simülatör kutuyu okumuyor" ile açıklanamaz.
+- [x] ⭐ **`on_bilgiler.txt:583` KISMEN doğru.** *"Ordu ve savunmanın vuruş gücü azalır"* kısmı
+      doğru ve satır 25'i çürütüyor. Ama *"**logaritmik** bir oran"* **yanlış**: eğri
+      `1 − 3/(GG+3)` biçiminde **rasyonel** bir doygunluk eğrisi ve logaritmik model beş satırın
+      beşinde de ölçülen bandın dışında kaldı.
+- [x] **Motorda düzeltilmesi gereken bir gece kanalı YOK.** Dokuz grubun dokuzu da tuttu;
+      `applyNight`'ın yalnız `poolHp`/`poolMagicHp`'ye dokunması binary'nin davranışını
+      birebir üretiyor.
+- [x] **Gece görüşü tamamen ofansif bir stat** — oyun tasarımı açısından da kayda değer:
+      teknik seni korumaz, **düşmanına daha çok kayıp verdirir**. G grubu bunun ucunu gösteriyor
+      (yüksek GG ile savunan **gündüzden fazla** kayıp veriyor).
+
+Kilitlendi: `packages/engine/test/night-vision-golden.test.ts` (17 test) + geri çözülen çarpan
+bandının altın testi.
+
+---
+
+## ⚠️ Tek açık kalem: ≤1 birimlik artık (gece'den BAĞIMSIZ)
+
+60+ hücrenin ~10'unda motorun değeri ölçülenin **bir tam sayı üstünde** kaldı ve sapma hep
+**aynı yönde**:
+
+| hücre | motor seed kümesi | ölçülen | fark |
+|---|---|---|---|
+| E1 defK | 37-38 | 36-37 | ~0,5 |
+| E7 defK | 202-203 | 201-202 | ~0,5 |
+| F1 defK | 95-96 | 94-95 | ~0,5 |
+| H3/H4/H5 atkK | 542-543 / 539-540 / 537-538 | 541-542 / 538-539 / 536-537 | ~0,5 |
+| D7 atkK | 1001-1002 | 998-1000 | ~2 (‰2) |
+
+**Neden bu setin sonucunu etkilemiyor:**
+
+1. ⭐ Sapma **gece görüşü seviyesiyle değişmiyor**. F1 sapıyor ama F2/F3/F6 tam isabet; B'nin
+   sekiz satırının sekizi de tam isabet. Gece görüşü yalnız **eğimi** oynatır — sabit bir
+   kaydırma onun işareti olamaz.
+2. ⭐⭐ Bu setin **bütün iddiaları farksal**: değişmezlik (A · F4/F5 · I2), oran (B · C · F),
+   ölçek (D), işaret değişimi (G3 > G8 · H4 → H5). **Sabit bir kaydırma hepsinden sadeleşir.**
+3. Büyüklük ‰2 – %2,7 arasında ve her hücrede iki dağılım hâlâ **bir tam sayıda örtüşüyor**
+   (tek istisna D7, ‰2).
+
+⚠️ **Mekanizma aramadım — veri ayırmıyor.** İki aday var ve set onları ayırt edemiyor:
+*(a)* binary savunanın **Şaman'ını kayıp toplamına saymıyor** olabilir (E1 ve E7'nin ölçülen
+aralıkları motorun **şamansız** kaybına birebir oturuyor) — ama E3 tersini söylüyor;
+*(b)* kalan sayının yuvarlama geleneği farklı olabilir (yarı-yukarı ↔ aşağı kırpma).
+Ayırmak için **çok daha büyük adetlerle** kurulmuş kendi seti gerekir (±1 birim ‰0,1'e insin).
+Bu turun konusu değil; ⭐ **artık gece'ye ait olmadığı gösterildiği için burada kapatılıyor.**
 
 ---
 

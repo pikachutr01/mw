@@ -5,6 +5,12 @@
 >
 > **Motor sütunlarını yeniden üretmek için:** `node scratchpad/gece_olcum.mjs`
 
+> ✅ **DEVAMI KOŞULDU (2026-08-11): `docs/GECE_GORUS_TESTLERI.md` — 9 grup, 60+ hücre, 9/9 tuttu.**
+> Sonuç: gece görüşü **tamamen ofansif** (kendi seviyen yalnız düşmanın kaybını belirler),
+> eğri **logaritmik değil**, motorda eksik bir gece kanalı **yok**. ⭐ Yan ürün: çarpanın yedi
+> değeri de ölçümden **geri çözüldü** — taban `0,7` artık disassembly okuması değil, ölçülmüş
+> bir sayı (0,6976 – 0,7022).
+>
 > ⭐ **DEVAMI VAR (2026-08-11): `docs/GECE_GORUS_TESTLERI.md`.** Bu dosyanın altı hücresi de
 > **5 turluk** savaşlardı ve 5 turluk savaşta geri besleme her kanalı birbirine karıştırır — yani
 > buradaki ölçüm *"gece görüşü savunmaya da mı işliyor"* sorusunu **soramadı**. Yeni set o soruyu

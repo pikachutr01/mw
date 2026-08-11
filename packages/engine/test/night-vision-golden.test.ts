@@ -6,6 +6,12 @@
  * gece görüş seviyesine göre **iki taraflı** ölçecek testler."*
  * Binary karşılığı: `docs/GECE_GORUS_TESTLERI.md` (kullanıcı simülatörde koşar).
  *
+ * ✅ **ÖLÇÜM TAMAMLANDI (2026-08-11): dokuz grubun DOKUZU da tuttu, 60+ hücre.** Gece görüşünün
+ * ofansif olduğu (doküman satır 25 yanlış), eğrinin logaritmik olmadığı (satır 583'ün ikinci
+ * yarısı yanlış) ve motorda eksik bir gece kanalı bulunmadığı karara bağlandı. ⭐ Yan ürün:
+ * çarpanın **yedi değeri de ölçümden geri çözüldü** — aşağıdaki B2 grubu artık Ghidra okumasına
+ * değil, doğrudan binary ölçümüne dayanıyor.
+ *
  * ── NEDEN YENİ BİR DOSYA (`night.test.ts` zaten var) ────────────────────────────────────────
  * `night.test.ts` **yapıyı** kilitliyor: hangi stat çarpılıyor (Can + Büyü Canı), taşıma
  * çarpılmıyor, Sur/Kalkan listede değil. 2026-07-31 ölçüm seti (`docs/veri/gece-savasi-olcumleri.md`)
@@ -155,6 +161,72 @@ describe('B · eğrinin şekli — parametreden BAĞIMSIZ oran testi', () => {
     const day = mean({ attacker: CORE_ATK, defender: CORE_DEF, night: false });
     expect(day.defLost).toBeCloseTo(294.9, 0);
     expect(day.defLost).toBeGreaterThan(269.5);
+  });
+});
+
+describe('B2 · ⭐⭐⭐ ÇARPAN TABLOSU — binary ölçümünden GERİ ÇÖZÜLDÜ (2026-08-11)', () => {
+  /**
+   * ⭐⭐⭐ Setin en değerli çıktısı. B grubunun kurulumunda kayıp ile çarpan arasındaki bağıntı
+   * **tam olarak tersine çevrilebilir** (tek tip saldıran, tek tip savunan, doyma yok):
+   *
+   *     defK = (1500 × 100 × çarpan × jitter − 9 × 9.000) / 234
+   *       ⇒  çarpan = (defK × 234 + 81.000) / (150.000 × jitter)
+   *
+   * Yani kullanıcının simülatörde okuduğu kayıp sayısı **doğrudan çarpanı veriyor**. Aşağıdaki
+   * bantlar muhafazakâr: raporlanan tam sayıya ±0,5 yuvarlama VE ±%0,1 jitter payı eklenmiş
+   * (`docs/GECE_GORUS_TESTLERI.md` B grubu).
+   *
+   * ⭐ Bu, Ghidra'dan okunan `3,0 · 1,0 · 0,3 · 0,7` sabitlerinin **ölçümle bağımsız teyidi** —
+   * artık disassembly okumasına dayanmıyorlar. Özellikle taban: `0,7` üç ondalık basamağa kadar
+   * ölçüldü (0,6976 – 0,7022).
+   *
+   * ⚠️ Bir gün `cfg.night.base` ya da eğrinin biçimi değişirse bu test **ölçümle** çelişir ve
+   * kırılır. Kırıldığında yapılacak şey testi güncellemek değil, değişikliği gerekçelendirmektir.
+   */
+  const BANT: [number, number, number][] = [
+    // [GG, alt sınır, üst sınır] — kullanıcının binary ölçümünden geri çözüldü
+    [0, 0.6976, 0.7022],
+    [1, 0.7724, 0.7771],
+    [2, 0.8161, 0.8224],
+    [3, 0.8473, 0.8521],
+    [5, 0.8847, 0.8895],
+    [10, 0.9267, 0.9333],
+    [20, 0.9579, 0.9629],
+  ];
+
+  it('⭐⭐⭐ yedi çarpanın yedisi de ölçülen bandın İÇİNDE', () => {
+    for (const [L, alt, ust] of BANT) {
+      expect(m(L), `GG${L} alt sınır`).toBeGreaterThanOrEqual(alt);
+      expect(m(L), `GG${L} üst sınır`).toBeLessThanOrEqual(ust);
+    }
+  });
+
+  /**
+   * ⭐ Eğrinin ŞEKLİ ayrıca ve bağımsız olarak elendi: oran testi `0,7` tabanını sadeleştirdiği
+   * için yalnız biçimi görüyor. Ölçülen bantlar (aralık uçlarıyla, en kötü durum) dört
+   * alternatifin **dördünü de** her satırda dışarıda bıraktı.
+   */
+  it('⭐ rakip eğriler ölçülen oran bandının DIŞINDA kalıyor', () => {
+    const ORAN: [number, number, number][] = [
+      // [GG, ölçülen oranın alt sınırı, üst sınırı]
+      [1, 0.2798, 0.2952], [2, 0.4464, 0.4699], [3, 0.5655, 0.5843],
+      [5, 0.7083, 0.7289], [10, 0.8690, 0.8976],
+    ];
+    const sekil = (L: number): number => (1 - 3 / (L + 3)) / (1 - 3 / 23);
+    const rakipler: Record<string, (L: number) => number> = {
+      '1-1/(L+1)': (L) => (1 - 1 / (L + 1)) / (1 - 1 / 21),
+      '1-5/(L+5)': (L) => (1 - 5 / (L + 5)) / (1 - 5 / 25),
+      logaritmik: (L) => Math.log(1 + L) / Math.log(21),
+      karekök: (L) => Math.sqrt(L / 20),
+    };
+    for (const [L, alt, ust] of ORAN) {
+      expect(sekil(L), `GG${L} motor`).toBeGreaterThanOrEqual(alt);
+      expect(sekil(L), `GG${L} motor`).toBeLessThanOrEqual(ust);
+      for (const [ad, f] of Object.entries(rakipler)) {
+        const v = f(L);
+        expect(v >= alt && v <= ust, `GG${L} · ${ad} elenmedi (${v.toFixed(4)})`).toBe(false);
+      }
+    }
   });
 });
 

@@ -1431,7 +1431,7 @@ ekranları, dahili simülatör sayfası, sıralama/genel durum, rapor kutusu + *
       tavanın gevşetilmesi · iki-taraflı kahraman senaryosu.
 - [ ] Kuşatma bonusu (Mancınık/Ogre → sur/yapı) — Faz 3.
 - [ ] Mağara + cüce yıkma mekaniği (kullanıcı verisi gelince) — Faz 3.
-- [ ] Gece savaşı ~%15 over-kill artığı — Faz 3.
+- [x] ~~Gece savaşı ~%15 over-kill artığı~~ — **2026-08-11'de kapandı** (`docs/GECE_GORUS_TESTLERI.md`: 9 grup, 9/9 tuttu; çarpan tablosu ölçümden geri çözüldü).
 - [ ] Seed'li PRNG'ye geçiş — **Faz 0 (zorunlu)**.
 - [ ] **Savunma tabanı (her tipten min 4) + net-kayıp enkaz zinciri** (§13.11.10) — **Faz 0 (zorunlu)**.
 - [x] ~~Ganimet öncelik sırası: enkaz → kalan kapasiteyle yağma~~ → **HAVUZ modeliyle değişti**
