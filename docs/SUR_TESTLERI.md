@@ -219,11 +219,11 @@ Yani birim kayıpları `Alan` tablosunu **yalnız birbirine göre** ölçebiliyo
 
 | # | Savunan | Alan | P | motor: tur | motor: Sur% | **gerçek: tur** | **gerçek: Sur%** |
 |---|---|---:|---:|---:|---:|---|---|
-| C1 | 27.000 Elf | 12 | 324.000 | 2 | **91,14** | | |
-| C2 | 4.050 Pegasus | 80 | 324.000 | 2 | **91,14** | | |
-| C3 | 432 Ejderha | 750 | 324.000 | 2 | **91,14** | | |
-| C4 | 1.350 Mancınık | 240 | 324.000 | 2 | **91,14** | | |
-| C5 | 360 Balista | 900 | 324.000 | 2 | **91,14** | | |
+| C1 | 27.000 Elf | 12 | 324.000 | 2 | **91,14** |2 |%91,12-91,15 |
+| C2 | 4.050 Pegasus | 80 | 324.000 | 2 | **91,14** |2 |%91,12-91,15 |
+| C3 | 432 Ejderha | 750 | 324.000 | 2 | **91,14** | 2|%91,12-91,15 |
+| C4 | 1.350 Mancınık | 240 | 324.000 | 2 | **91,14** |2 |%91,12-91,15 |
+| C5 | 360 Balista | 900 | 324.000 | 2 | **91,14** |2 | %91,12-91,15|
 
 **Nasıl okunur:**
 
@@ -239,3 +239,75 @@ büyüklük tam olarak bu.
 
 ⚠️ Bu arada Sur, motorda **olması gerekenden dayanıklı** görünüyor: yoğun savaşlarda hiç
 yıpranmıyor. Canlı dengede bunu akılda tut.
+
+### ✅ C grubu sonucu (2026-08-12) — `Alan` tablosu TEMİZ
+
+**Beş satırın beşi de %91,12-91,15**, yani motorun 91,14'üyle birebir. ⇒ `Alan` tablosu mutlak
+ölçekte doğru; **Ejderha da dahil** (C3, asıl savaşta P'nin %51'i). Hipotez elendi, sorun kapanmadı.
+
+---
+
+## 7. ⚠️⚠️ NEREDE OLMADIĞINI BİLİYORUZ — kalan tek aday: TUR/FAZ SAYISI
+
+Büyük savaş hâlâ açık (motor %100 ↔ binary %53,59) ve artık eleme listesi uzun:
+
+| aday | nasıl elendi |
+|---|---|
+| Formülün kendisi | Ghidra, satır satır (§1) |
+| `Alan_sur` / `mDef_sur` / `pAtk_sur` | A grubu **8/8** |
+| Taş Ustalığı oranı | B grubu **5/5** (düzeltildi) |
+| Birimlerin `Alan` tablosu | C grubu **5/5** |
+| Şamanın emmesi | Şamanı **tamamen silsek** bile Sur %98,4 (aşağıya bak) |
+
+### ⭐ Sayısal kısıt: sorun havuz/P'nin BÜYÜKLÜĞÜNDE olamaz
+
+Asıl savaşta faz-1 için ölçülen değerler:
+
+```
+saldıran ham havuz  11.369.480        savunan P  3.241.490
+Şaman emmesi         2.543.380   →    R = 2,72     (Şaman hiç olmasa 3,51)
+
+Sur sv10'un hasar ALMASI için gereken:  R > 3,08
+binary'nin %53,59'u için gereken:       R ≈ 4,4 – 4,9
+```
+
+⚠️ **Şamanı sıfırlamak bile yetmiyor** (R 3,51 → Sur %98,42). Yani kalan fark, bu turda
+incelediğimiz bileşenlerin **hiçbirinden** gelemez.
+
+### ⭐⭐ Kalan tek yapısal fark: tur sayısı
+
+Tutan **bütün** ölçümler (A · B · C) **2 turluk** ve Sur **tek bir düşüş** alıyor. Tutmayan
+tek ölçüm **4 turluk** ve motorumuzda Sur **5 düşüş** alıyor. Yani hiç sınanmamış tek şey,
+**çok turlu savaşta Sur'un kaç kez ve hangi havuzla vurulduğu.**
+
+⚠️ İlginç bir işaret: binary'nin sv8 (%15,19) ve sv10 (%53,59) değerlerini sabit-düşüş modeline
+oturtunca **~7 faz** çıkıyor, motorumuzda 5 var (tur2 faz1 · tur3 faz1+2 · tur4 faz1+2).
+
+### D · TUR KÖPRÜSÜ — 2 turdan 3 tura geçiş
+
+Aynı saldıran, yalnız savunanın **sayısı** değişiyor → savaş uzuyor. Basit ordu, R hesaplanabilir.
+
+> **Saldıran 300 Mancınık · Savunan N Elf + Sur sv · GÜNDÜZ · tüm teknikler 0.**
+
+| # | Savunan | Sur sv | motor: tur | motor: Sur% | motor: defK | **gerçek: tur** | **gerçek: Sur%** | **gerçek: defK** |
+|---|---|---:|---:|---:|---:|---|---|---|
+| D1 | 27.000 Elf | 4 | **2** | 91,14 | 866 | | | |
+| D2 | 11.000 Elf | 4 | **3** | 58,46 | 1.738 | | | |
+| D3 | 9.500 Elf | 4 | **3** | 43,35 | 2.028 | | | |
+| D4 | 9.500 Elf | 6 | **3** | 70,78 | 1.870 | | | |
+| D5 | 9.500 Elf | 8 | **3** | 88,02 | 1.458 | | | |
+| D6 | 11.000 Elf | 8 | **3** | 91,30 | 1.262 | | | |
+
+⚠️ **Tur sayısı bu setin ASIL ölçtüğü şey** — her satırda mutlaka yaz. Motorla binary'nin tur
+sayısı bile ayrışıyorsa mesele Sur değil, savaşın uzunluğudur.
+
+**Nasıl okunur:**
+
+| Gözlem | Sonuç |
+|---|---|
+| Altısı da tutuyor | ⭐ Çok turlu Sur modeli doğru → sorun yalnız **büyük/karışık ordu** rejiminde; sıradaki adım orduyu kademe kademe basitleştirmek |
+| D1 tutuyor ama D2/D3 sapıyor | ⭐⭐ **Bulundu**: fazladan tur, Sur'a modellediğimizden farklı sayıda/şiddette vuruyor. Sapma oranı doğrudan faz sayısını verir |
+| Tur sayıları bile farklı | ⚠️ Sorun Sur'da değil; savaşın bitiş koşulunda (`combatAlive`) — ayrı bir tur konusu |
+
+⭐ D2↔D3 (aynı seviye, farklı savunan) ve D3↔D4↔D5 (aynı savunan, farklı seviye) birbirinin
+kontrolü: biri tutup diğeri sapıyorsa hangi eksende sapıldığı tek bakışta görünür.
