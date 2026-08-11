@@ -278,3 +278,64 @@ describe('indeks', () => {
     await h.db.execute(sql`DELETE FROM accounts WHERE email LIKE 'bulk-' || ${tag} || '-%'`);
   });
 });
+
+/* ═══ SIRALAMA — KAHRAMAN SEKMESİNİN GİZLİLİĞİ ═════════════════════════════ */
+
+/**
+ * ⭐⭐ KAHRAMANIN ÖLÜ OLDUĞU SIRALAMADA GÖRÜNMEZ (kullanıcı, 2026-08-11):
+ * *"Bir oyuncunun kahramanının ölü olduğunu bilmek stratejik bir kayıp olur."*
+ *
+ * ⚠️ Sıralama dünyanın tamamına açık ve günde üç kez yenileniyor; ölü kahraman o şehrin
+ * savunmasında bir eksik demek, yani saldırı zamanlamasını bedava veriyordu. Aynı bilgi
+ * **casuslukla bile alınamıyor** (`gatherIntel` yalnız `status = 'alive'` sayıyor) — sıralama
+ * casusluktan cömert davranıyordu.
+ *
+ * ⚠️ Test JSON'un TAMAMINI tarıyor, tek bir alan adını değil: bilgi `dead` dışında bir adla
+ * (`status`, `state`…) geri sızarsa yine kırmızı vermeli.
+ */
+describe('sıralama · kahraman durumu sızmaz', () => {
+  async function heroRows(status: string): Promise<Record<string, unknown>> {
+    const sahip = await withCity('kahramanci', { k: 2, d: 2, s: 2 });
+    await h.db.execute(sql`
+      INSERT INTO heroes (world_id, player_id, name, level, xp, status)
+      VALUES (${worldId}, ${sahip}, 'Olu Kahraman', 9, 900, ${status})
+    `);
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id FROM heroes WHERE world_id = ${worldId} AND name = 'Olu Kahraman'
+    `);
+    await h.db.execute(sql`
+      INSERT INTO rankings (world_id, kind, subject_id, rank, score, taken_at)
+      VALUES (${worldId}, 'hero', ${hero!['id']}, 1, 900, now())
+    `);
+    return ctl.rankings(asReq(me), 'hero');
+  }
+
+  it('⭐ ölü kahraman satırında durum bilgisi YOK', async () => {
+    const res = await heroRows('dead');
+    const rows = res['rows'] as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+
+    // Satır normal görünüyor: ad, seviye, tecrübe, sahip.
+    expect(rows[0]!['name']).toBe('Olu Kahraman');
+    expect(rows[0]!['level']).toBe(9);
+
+    // ⛔ …ama ölü olduğuna dair HİÇBİR iz yok.
+    expect(rows[0]!['dead']).toBeUndefined();
+    expect(rows[0]!['status']).toBeUndefined();
+    expect(JSON.stringify(rows[0])).not.toContain('dead');
+    expect(JSON.stringify(rows[0])).not.toContain('alive');
+  });
+
+  it('⚠️ SAĞ kahramanın satırı ölüyle AYNI alanları taşır (ayırt edilemez)', async () => {
+    const olu = (await heroRows('dead'))['rows'] as Record<string, unknown>[];
+    const alanlar = Object.keys(olu[0]!).sort();
+
+    // Aynı kurulumu diri bir kahramanla tekrarla.
+    worldId = freshWorldId();
+    await createWorld(h, worldId);
+    me = await withCity('arayan2', { k: 1, d: 1, s: 1 });
+    const diri = (await heroRows('alive'))['rows'] as Record<string, unknown>[];
+
+    expect(Object.keys(diri[0]!).sort()).toEqual(alanlar);
+  });
+});

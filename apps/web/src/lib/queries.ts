@@ -712,7 +712,12 @@ export interface RankingRow {
   owner?: string;
   level?: number;
   xp?: number;
-  dead?: boolean;
+  /**
+   * ⛔ `dead` 2026-08-11'de KALDIRILDI (kullanıcı): *"Bir oyuncunun kahramanının ölü olduğunu
+   * bilmek stratejik bir kayıp olur."* Sunucu alanı artık üretmiyor; tipe geri eklenmesi
+   * ekranda bir rozetin sessizce belirmesine yol açar. Kendi kahramanının durumu **Tapınak**
+   * ekranında (`HeroState`) — orada zaten diriltme akışıyla birlikte duruyor.
+   */
 }
 
 export interface RankingPage {

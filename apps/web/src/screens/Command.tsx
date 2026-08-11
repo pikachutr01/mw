@@ -35,7 +35,7 @@ import { coords } from '../lib/format.ts';
 import { fmt } from '../lib/hooks.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
 import {
-  Badge, Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th, UserText,
+  Button, CatalogIcon, Empty, Panel, Res, Skeleton, Td, Th, UserText,
 } from '../components/ui.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { Modal } from '../components/Modal.tsx';
@@ -388,7 +388,14 @@ function Rankings(): React.ReactElement {
                         {kind === 'hero' ? (
                           <span className="ml-1 text-[11px] text-muted">{r.owner}</span>
                         ) : null}
-                        {r.dead ? <span className="ml-1"><Badge tone="danger">ölü</Badge></span> : null}
+                        {/*
+                          ⛔ «ölü» rozeti 2026-08-11'de KALDIRILDI (kullanıcı): *"Bir oyuncunun
+                          kahramanının ölü olduğunu bilmek stratejik bir kayıp olur."* Sunucu
+                          alanı artık hiç göndermiyor (`command.controller.ts`); burada da
+                          okumuyoruz ki bir gün geri gelirse sessizce ekrana düşmesin.
+                          ⚠️ Kendi kahramanın için de yok: durumu Tapınak ekranında görüyorsun,
+                          orada zaten diriltme akışıyla birlikte duruyor.
+                        */}
                       </Td>
                       {kind === 'hero' ? (
                         <>

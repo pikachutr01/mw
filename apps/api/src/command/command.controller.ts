@@ -366,9 +366,20 @@ export class CommandController {
     const offset = (page - 1) * PAGE_SIZE;
 
     const rows = kind === 'hero'
+      /**
+       * ⛔ `h.status` BİLEREK SEÇİLMİYOR (kullanıcı, 2026-08-11): *"Bir oyuncunun kahramanının
+       * ölü olduğunu bilmek stratejik bir kayıp olur."* Sıralama dünyanın tamamına açık ve
+       * günde üç kez yenileniyor; ölü kahraman = o şehrin savunmasında bir eksik demek, yani
+       * saldırı zamanlamasını bedava veriyordu. Aynı bilgi casuslukla bile alınamıyor:
+       * `gatherIntel` yalnız `status = 'alive'` kahramanları sayıyor (§13.11.6a), yani ölü
+       * kahraman TAM raporda dahi görünmüyordu — sıralama casusluktan daha cömert davranıyordu.
+       *
+       * ⚠️ Alan sorgudan çıkarıldı, yalnız gövdeden değil: JSON'da kalsaydı ekranda görünmese
+       * de ağ sekmesinden okunabilirdi.
+       */
       ? await this.db.execute<Record<string, unknown>>(sql`
           SELECT r.rank, r.prev_rank, r.subject_id, h.name, h.level, h.xp,
-                 h.status, h.player_id, p.username AS owner
+                 h.player_id, p.username AS owner
             FROM rankings r
             JOIN heroes h ON h.id = r.subject_id
             JOIN players p ON p.id = h.player_id
@@ -432,7 +443,7 @@ export class CommandController {
             playerId: Number(r['player_id']),
             level: Number(r['level']),
             xp: Number(r['xp']),
-            dead: r['status'] !== 'alive',
+            /* ⛔ `dead` 2026-08-11'de kalktı — gerekçe yukarıdaki sorgu notunda. */
             isMine: Number(r['player_id']) === player.playerId,
           }
           : kind === 'alliance'

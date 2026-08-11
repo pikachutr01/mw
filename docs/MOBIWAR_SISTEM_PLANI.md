@@ -3763,6 +3763,15 @@ için dünya ekranındaki Şehir Kur seçeneğini kullanabilirsiniz"*) + koordin
   casusluk gerekir (§13.11.6). Satırda asker/kaynak bilgisi **asla** olmaz.
 - **Arama (Komuta Merkezi) yalnız BAŞKENT koordinatını verir** (doküman: *"Diğer şehirlerinin
   değil"*) → koloni avlamak için dünya ekranını taramak gerekir. Bu kasıtlı bir tasarım; koruyoruz.
+- ⭐ **SIRALAMADA KAHRAMANIN ÖLÜ OLDUĞU GÖRÜNMEZ (kullanıcı, 2026-08-11):** *"Bir oyuncunun
+  kahramanının ölü olduğunu bilmek stratejik bir kayıp olur."* Kahraman sekmesindeki «ölü»
+  rozeti ve sunucunun `dead` alanı kaldırıldı; `h.status` sorgudan da çıktı (JSON'da kalsaydı
+  ağ sekmesinden okunurdu). Ölü kahramanın satırı **diri olanla birebir aynı alanları** taşıyor.
+  ⚠️ Asıl gerekçe bir **tutarsızlıktı**: aynı bilgi casuslukla bile alınamıyor — `gatherIntel`
+  yalnız `status = 'alive'` kahramanları sayıyor (§13.11.6a), yani ölü kahraman TAM raporda
+  dahi görünmezken sıralama onu dünyanın tamamına bedava veriyordu. Ölü kahraman = o şehrin
+  savunmasında bir eksik demek; sıralama günde üç kez yenilendiği için saldırı zamanlaması
+  için fazlasıyla taze bir sinyaldi. Kendi kahramanının durumu **Tapınak** ekranında.
 - Gelen saldırılar bu ekranda değil **Komuta Merkezi → Gelen Ordu**'da görünür (§13.10.1).
 - Dünya açılışı **aktif şehrin diyarından** başlar (kullanıcı 2026-07-30); "Kendi diyarıma dön"
   artık seçimi sıfırlar (görünüm aktif şehri izler). "10 şehir" başlık yazısı kaldırıldı.
