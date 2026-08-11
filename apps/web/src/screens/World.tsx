@@ -123,7 +123,13 @@ export function World() {
             <thead>
               <tr className="tex-header border-b-2 border-strong bg-panel-header text-on-panel-header">
                 <Th className="w-8 text-center">#</Th>
-                <Th>Şehir</Th>
+                {/*
+                  ⭐ ŞEHİR ADI **MOBİLDE GİZLİ** (kullanıcı, 2026-08-11). Dar ekranda ad,
+                  oyuncu adı ve sıra/puan üçü birden sığmıyordu; ad kırpılınca da zaten
+                  okunmuyordu. Karar: adı satırdan çıkar, **modalda büyük** göster — çünkü
+                  "kim, ne kadar güçlü" kararı satırda, "hangi şehir" kararı modalda veriliyor.
+                */}
+                <Th className="hidden sm:table-cell">Şehir</Th>
                 <Th>Oyuncu</Th>
                 <Th className="hidden sm:table-cell">İttifak</Th>
                 {/* ⭐ Sıra TEK BAŞINA yetmiyordu (kullanıcı, 2026-08-09): «12.» bir hedefin ne
@@ -141,7 +147,7 @@ export function World() {
                 ? Array.from({ length: 10 }, (_, i) => (
                   <tr key={`sk${i}`} className={`h-9 border-b border-border ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
                     <Td className="tnum text-center text-muted">{i + 1}</Td>
-                    <Td><Skeleton w="7rem" /></Td>
+                    <Td className="hidden sm:table-cell"><Skeleton w="7rem" /></Td>
                     <Td><Skeleton w="5rem" /></Td>
                     <Td className="hidden sm:table-cell"><Skeleton w="4rem" /></Td>
                     <Td className="text-center"><Skeleton w="3.5rem" /></Td>
@@ -184,8 +190,16 @@ export function World() {
                     }`}
                   >
                     <Td className="tnum text-center text-muted">{slot.s}</Td>
-                    <Td className="max-w-[9rem] truncate font-medium">
-                      {c ? `${cityLabel(c.name)}${c.isCapital ? ' ★' : ''}` : <span className="text-muted">—</span>}
+                    {/*
+                      ⛔ **BAŞKENT YILDIZI KALDIRILDI** (kullanıcı, 2026-08-11) — ve orijinal
+                      oyun da bizi doğruluyor: istemcideki tek "Başkent:" dizesi (`k.a[194]`)
+                      YALNIZ **Oyuncu Ara** ekranında kullanılıyor (`g.java` case 41 → `j.java`
+                      mod 5). Dünya ekranının slot çizimi (`j.java d()`) yalnız `Şehir: <ad>` +
+                      `İttifak: <i>` ya da `Durum: Sahipsiz` yazıyor; **başkent işareti yok.**
+                      Bilgi kayıp değil: modalda «· başkent» olarak duruyor.
+                    */}
+                    <Td className="hidden max-w-[9rem] truncate font-medium sm:table-cell">
+                      {c ? cityLabel(c.name) : <span className="text-muted">—</span>}
                     </Td>
                     {/*
                       ⭐ MÜTTEFİK ROZETİ (kullanıcı 2026-08-07) — adın YANINDA, İttifak sütununda

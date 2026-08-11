@@ -100,6 +100,8 @@ Tek harfli anahtarlar bağlama göre yeniden kullanılıyor — **hangi ekranda*
 | `B` | 19 | **birim listesi** ağacı | mağara ekranı + sefer formu (`g.java:1722`) |
 | `K` | 103 | **kahraman listesi** ağacı | aynı + kahraman ekranı (`e.java:624`) |
 | `Ekr` | 50 | o anki **ekran kodu** | `g.java:2144` dallanması |
+| `e` | 49 | şehir adı (dünya slotu · arama sonucu) | `j.java:203` · `j.java:281` |
+| `o` | 123 | slotun **sahibi var mı** (null → Sahipsiz) | `j.java:278` |
 
 ⚠️ `long[3]` yükünün `a[2]` gözü ilerleme sayacı olarak kullanılıyor (`j.java:406`: geçen
 süre × 100 / toplam = yüzde).
@@ -246,7 +248,45 @@ iki bölüm kararımızın kaynağı bu.
 Bu turda çözülen `B` · `K` · `Ekr` anahtarları **§4 sözlüğüne** eklendi (§0 kuralı: alanlar
 tek yerde birikir, özellik bölümleri onları tekrarlamaz).
 
-### 6.3 EKONOMİ FORMÜLLERİ — `k.java:1373-1448`
+### 6.3 DÜNYA EKRANI — başkent gösterimi YOK (2026-08-11)
+
+Soru: *"dünya sayfasından bir oyuncunun başkenti özel olarak gösteriliyor mu?"* → **Hayır.**
+
+Dize tablosunda **tek bir** «Başkent» geçiyor: `k.a[194] = "Başkent: "` (iki nokta üst üste,
+yani bir **etiket**, harita işareti değil). Tek kullanım yeri `j.java:203`, `this.e == 5`
+başlık kipi:
+
+```java
+if (this.a.a(k.a[49] /* "e" */) == null) var2 = k.a[194];   // "Başkent: "
+else                                     var2 = k.a[193];   // "Şehir: "
+append(var2).append(a("e")).append("(").append(a("p") /* puan */).append(")");
+```
+
+O kipi çağıran **tek** yer `g.java:1705-1707`, ekran **case 41**:
+
+```java
+this.a.a = a[67];                  // g.a[67] = "Oyuncu Ara"
+var5.a((String)k.a[13], 5);        // ← mod 5
+```
+
+⇒ «Başkent» yalnız **Oyuncu Ara** (arama sonuçları) ekranında, `Başkent: <ad> (<puan>)`
+biçiminde görünüyor. Dünya haritasında değil.
+
+Dünya slotunun kendi çizimi `j.java d()` ve orada başkentten hiç söz yok:
+
+```java
+if (a("o") != null) { append("Ittifak: ").append(a("i")); append("Şehir: ").append(a("e")); }
+else                { append(k.a[48] /* "Durum: Sahipsiz" */); }
+```
+
+⇒ Dolu slot **her zaman** `Şehir:` diyor — `Başkent:` demiyor. Sahipsiz slot için ayrı etiket
+var. Yıldız/ikon türünden bir başkent işareti de yok.
+
+⭐ **Bizdeki karşılığı (2026-08-11):** dünya tablosundaki `★` kaldırıldı; bilgi kaybolmadı,
+şehir modalında «· başkent» olarak duruyor. Kendi şehir listelerimizde (Komuta Merkezi,
+şehir şeridi) yıldız **korunuyor** — orası harita değil, oyuncunun kendi envanteri.
+
+### 6.4 EKONOMİ FORMÜLLERİ — `k.java:1373-1448`
 
 Bu röntgen 2026-08-10 ekonomi turunda yapıldı ve tamamı
 **`MOBIWAR_SISTEM_PLANI.md` §13.9a / §13.11.3**'te duruyor (çarpanlar `k.java:10-15`,
@@ -294,4 +334,5 @@ birebir örtüştü.
 | Tarih | Ne eklendi |
 |---|---|
 | 2026-08-11 | Dosya açıldı. §1 alet + üç tuzak · §4 alan sözlüğü (11 anahtar) · §5 uç kataloğu · §6.1 **Tapınak/Kahraman röntgeni** · §7 **mağarada kahraman** kaydı |
+| 2026-08-11 (3) | §6.3 **Dünya ekranı**: başkentin haritada özel gösterimi **YOK** — «Başkent:» yalnız *Oyuncu Ara* ekranında. §4'e `e` ve `o` |
 | 2026-08-11 (2) | §6.2 **Mağara ekranı röntgeni** (kahraman durum süzgeci `i.java:844-852` · mağara = sefer tipi 11/12 · tek istek) · §4'e `B`/`K`/`Ekr` · §5'te `ipMgr` düzeltmesi (iptal BİZDE VAR) · §7 defteri **kapandı**, madde uygulandı |

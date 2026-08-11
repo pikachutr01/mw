@@ -61,8 +61,16 @@ export function TargetModal({
   const [picked, setPicked] = useState<string | null>(initialType ?? null);
 
   const data = options.data;
+  /**
+   * ⭐ BAŞLIKTA **AD YOK, KOORDİNAT VAR** (kullanıcı, 2026-08-11). Ad aşağıdaki gövde
+   * bloğunda büyük puntoyla duruyor; ikisinde birden yazmak yer harcardı.
+   *
+   * ⚠️ Asıl sebep başka: `Modal` başlığı `text-sm uppercase tracking-wider` çiziyor. Oyuncunun
+   * seçtiği bir adı BÜYÜK HARFE çevirmek hem küçültür hem Türkçede bozar (`i` → `I`). Modalın
+   * genel başlık üslubunu tek ekran için değiştirmek yerine adı üsluba tabi olmayan yere aldık.
+   */
   const title = slot.city
-    ? <><UserText>{slot.city.name}</UserText> ({target.k}:{target.d}:{target.s})</>
+    ? <>Şehir ({target.k}:{target.d}:{target.s})</>
     : <>Boş şehir ({target.k}:{target.d}:{target.s})</>;
 
   return (
@@ -75,6 +83,19 @@ export function TargetModal({
         : <Button variant="ghost" onClick={onClose}>Kapat</Button>}
     >
       <div>
+        {/*
+          ⭐ ŞEHİR ADI — ekranın en belirgin metni (kullanıcı, 2026-08-11). Dünya tablosunda ad
+          artık mobilde hiç görünmüyor, bu yüzden "hangi şehre bakıyorum" sorusunun tek cevabı
+          burası. `break-words`: ad 10 karaktere kadar olabiliyor ve dar ekranda kutudan taşmasın.
+        */}
+        {slot.city ? (
+          <div className="border-b border-border px-3 pt-2.5 pb-1.5">
+            <h3 className="display text-lg leading-tight font-semibold break-words text-ink">
+              <UserText>{slot.city.name}</UserText>
+            </h3>
+          </div>
+        ) : null}
+
         <div className="border-b border-border px-3 py-1.5 text-xs text-muted">
           {slot.city ? (
             <>
