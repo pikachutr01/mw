@@ -444,10 +444,10 @@ yani iki dünya arasındaki mesafe TU 0'da **kapanıyorsa** suçlu Taş Ustalı�
 
 | # | Sur sv | motor (TU 17) | **motor (TU 0)** | binary TU17 | **gerçek: TU 0 Sur%** | **gerçek: tur** |
 |---|---:|---:|---:|---:|---|---|
-| F1 | 7 | 96,96 | **87,82** | 0 | | |
-| F2 | 8 | 99,34 | **91,56** | 15,19 | | |
-| F3 | 10 | 100,00 | **95,76** | 53,59 | | |
-| F4 | 13 | 100,00 | **99,95** | 96,85 | | |
+| F1 | 7 | 96,96 | **87,82** | 0 | %0,0| 4|
+| F2 | 8 | 99,34 | **91,56** | 15,19 |%0,15-0,40 | 4|
+| F3 | 10 | 100,00 | **95,76** | 53,59 | %42,10-42,6|4 |
+| F4 | 13 | 100,00 | **99,95** | 96,85 | %89,55-89,60|4 |
 
 **Nasıl okunur:**
 
@@ -459,3 +459,58 @@ yani iki dünya arasındaki mesafe TU 0'da **kapanıyorsa** suçlu Taş Ustalı�
 
 ⚠️ Dört satır, ordu girişi yine değişmiyor: Taş Ustalığı kutusunu 0 yap, Sur'a sırayla
 7/8/10/13 yaz.
+
+### ⭐⭐⭐ F grubu sonucu — TAŞ USTALIĞI MASUM
+
+| sv | binary TU17 | binary **TU 0** | motor TU 0 |
+|---:|---:|---:|---:|
+| 7 | 0 | **0** | 87,82 |
+| 8 | 15,19 | **0,15-0,40** | 91,56 |
+| 10 | 53,59 | **42,10-42,60** | 95,76 |
+| 13 | 96,85 | **89,55-89,60** | 99,95 |
+
+Taş Ustalığı 0'da fark **kapanmıyor**, hatta binary daha da sert. Yön doğru (TU azalınca iki
+tarafta da Sur zayıflıyor) ama büyüklük hâlâ uçurum. ⇒ Taş Ustalığı × Sur eşleşmesi **suçlu değil**.
+
+---
+
+## 12. ⚠️⚠️ ÖNCEKİ TURUN ÇERÇEVESİ DÜZELTİLDİ: «tek skaler» DEĞİL
+
+§10'da *"sapma `havuz/P` üzerinde tek bir çarpan (g ≈ 1,8)"* demiştim. **Bu fazla iyimserdi**
+ve düzeltilmesi gerekiyor: o sonuç, düşüşün her fazda **sabit** olduğunu varsayan analitik bir
+modelden geliyordu. Gerçekte `havuz/P` turlar boyunca hızla düşüyor (saldıran 28.000 birimin
+25.654'ünü kaybediyor), yani sabit-düşüş modeli yanlış bir zemin.
+
+Motorun kendisiyle iki ayrı yoldan sınadım — **ikisi de şekli tutturamıyor**:
+
+| deneme | ne yapar | sonuç |
+|---|---|---|
+| `Alan_sur` × g | Sur'un R'sini g katına çıkarır | en iyi g = 3,2'de bile hata **173 puan** |
+| savunanın tüm `Alan`ları ÷ g | birim hasarını bozmadan Sur'un R'sini g katına çıkarır | en iyi g = 3,0'da hata **203 puan** |
+
+⭐ İkisinde de aynı desen: **yüksek seviyede oturuyor, düşük seviyede oturmuyor.** g ne kadar
+büyütülse de motor sv7-8'de Sur'u yıkamıyor (%26-45'te kalıyor), binary ise **tamamen yıkıyor**.
+
+**Asıl imza şu:** motorun sv7'deki hasarı (3,04 puan) binary'nin **sv13**'teki hasarına (3,15)
+denk. Yani fark bir **ölçek** değil, **seviye ekseninde kayma** gibi davranıyor — ama TU 0
+verisinde kayma sabit çıkmıyor (5,9 · 3,6 · 1,0), yani saf kayma da değil.
+
+---
+
+## 13. DURUM ÖZETİ — ne kazanıldı, ne açık
+
+**Kazanılan (kalıcı):**
+- [x] ⭐ **Taş Ustalığı Sur'da %5** (`rateByUnit`), 13/13 hücre. `catalogHash` → `14c061fc`.
+- [x] Sur formül zincirinin tamamı Ghidra'da doğrulandı; `1,8^Sv` ve `durum` sadeleşiyor.
+- [x] ⚠️ **`cfg.wall.base` ölü düğme** — panelden oynatan biri bunu bilmeli.
+- [x] Sur'un `Alan`/`mDef`/`pAtk`'i, birimlerin `Alan` tablosu, çok turlu Sur modeli: hepsi temiz.
+
+**Açık (35 hücrelik 6 grup sonrası):** büyük savaşta Sur, motorda binary'den kat kat dayanıklı.
+Elenenler: formül · Sur statları · Taş Ustalığı · birim `Alan` tablosu · Şaman emmesi ·
+tek-skaler `havuz/P` açıklaması.
+
+⚠️⚠️ **SIRADAKİ ADIM ÖLÇÜM DEĞİL.** Altı set koşuldu ve altısı da elemeyle bitti; yedincisini
+istemek kullanıcının emeğini boşa harcamak olur. Kalan iş **kod okuma**: `FUN_0040e0c4`'ün
+Sur dalı disassembly'den okundu ama **çağıranı** (`FUN_0040dcb4`, tur döngüsü) okunmadı —
+Sur'un hangi turlarda, hangi sırayla ve hangi havuz fotoğrafıyla vurulduğu orada. Bir sonraki
+tur oradan başlamalı.
