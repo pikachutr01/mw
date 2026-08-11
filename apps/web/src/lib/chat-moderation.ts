@@ -57,3 +57,28 @@ export function canMuteAllianceMember(o: {
   if (m.role >= ROLE.LEADER) return false;
   return o.myRole === ROLE.LEADER || m.role < ROLE.COUNCIL;
 }
+
+/**
+ * ⭐ Bu oyuncuya ittifak daveti gönderebilir miyim? (dünya modalı → «İttifağa Davet»)
+ *
+ * Orijinal kapı `g.java:1447`: davet yalnız **Konsey+Lider**e ve yalnız **ittifaksız** hedefe
+ * açıktı. Karar burada saf bir fonksiyon çünkü **ağ trafiğini de o belirliyor**: hedefin zaten
+ * bir ittifağı varsa düğme hiç çizilmeyecek demektir, dolayısıyla kendi rütbemi öğrenmek için
+ * ittifak sorgusunu ATMAYA GEREK YOK (`world-modal.tsx` → `useAlliance(0, !hasAlliance)`).
+ *
+ * ⚠️ Kural bir yerde, sorgu kapısı başka yerde durursa ikisi kaçınılmaz olarak ayrışır:
+ * biri "düğmeyi göster" derken diğeri veriyi hiç çekmemiş olur ve düğme sessizce kaybolur.
+ * Bu yüzden ikisi de aynı fonksiyondan besleniyor.
+ */
+export function canInviteToAlliance(o: {
+  myRole: number | null | undefined;
+  /**
+   * ⚠️ `undefined` = **bilmiyoruz**, "ittifaksız" değil. Alan isteğe bağlı (eski bir sunucuya
+   * bakan istemci onu hiç görmez) ve bilinmezliği "ittifaksız" saymak, zaten ittifakı olan
+   * bir oyuncuya sunucunun reddedeceği bir davet düğmesi gösterirdi. Bilinmiyorsa engellemiyoruz
+   * ama davranış eski hâline dönüyor: sorgu atılır, rütbe okunur, karar sunucuya bırakılır.
+   */
+  targetHasAlliance: boolean | undefined;
+}): boolean {
+  return o.targetHasAlliance !== true && (o.myRole ?? 0) >= ROLE.COUNCIL;
+}

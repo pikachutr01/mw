@@ -442,12 +442,25 @@ export const useCity = (cityId: number | null): UseQueryResult<CityDetail> => {
   });
 };
 
+/**
+ * ⚠️ **`staleTime` UZUN, bilerek** (2026-08-11). Bu uç ağır: şehir anlık görüntüsü + teknikler
+ * + savunmalar okunuyor ve her yapı/birim için maliyet-süre hesaplanıyor. İçeriği ise ancak
+ * yapı/teknik seviyesi ya da doğrulama durumu değişince değişiyor — yani **olay bazlı**.
+ *
+ * Küresel 2 sn'lik varsayılanla her bileşen bağlanışı yeniden çekiyordu; dünya modalını açmak
+ * tek başına bir istek üretiyordu, oysa katalogdan yalnız savaşçı listesi okunuyor.
+ *
+ * ⚠️ Bayat kalma riski YOK çünkü tazeleme **itiliyor**: `city:changed` olayı `catalog`ı
+ * geçersiz kılıyor (`lib/realtime.ts`) ve kuyruk/iptal mutasyonları da öyle. Yani süre uzunluğu
+ * yalnız "hiçbir şey olmadıysa" geçerli.
+ */
 export const useCatalog = (cityId: number | null): UseQueryResult<CityCatalog> => {
   const authed = useAuthed();
   return useQuery({
     queryKey: ['catalog', cityId],
     queryFn: () => get<CityCatalog>(`/api/v1/cities/${cityId}/catalog`),
     enabled: cityId != null && authed,
+    staleTime: 5 * 60_000,
   });
 };
 
@@ -1200,11 +1213,20 @@ export interface AllianceListRow {
   rank: number | null;
 }
 
-export const useAlliance = (page = 0): UseQueryResult<AllianceView> => useQuery({
+/**
+ * ⚠️ **PAHALI SORGU — gerekmedikçe açma.** Sunucu tarafı dört sorgu koşuyor (üyelik · ittifak
+ * satırı + sıralama · üye SAYFASI + sıralama · gerekirse `canFound`) ve tam üye listesini
+ * döndürüyor: ad, puan, dünya sırası, **çevrimiçilik** ve **askerî ünvan**.
+ *
+ * ⭐ `enabled` bu yüzden var (2026-08-11). Dünya modalı her yabancı şehre tıklanışta bu ucu
+ * çağırıyordu — tek bir sayı için (`myRole`), üstelik hedefin zaten bir ittifağı olduğu ve
+ * davet düğmesinin hiç çizilmeyeceği durumlarda bile. Kullanıcı ağ sekmesinde fark etti.
+ */
+export const useAlliance = (page = 0, enabled = true): UseQueryResult<AllianceView> => useQuery({
   queryKey: ['alliance', page],
   queryFn: () => get<AllianceView>(`/api/v1/alliance?page=${page}`),
   refetchInterval: useSafetyNet(),
-  enabled: useAuthed(),
+  enabled: useAuthed() && enabled,
 });
 
 /**

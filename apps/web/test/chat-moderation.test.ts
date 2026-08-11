@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  canDeleteAllianceMessage, canMuteAllianceMember, ROLE,
+  canDeleteAllianceMessage, canInviteToAlliance, canMuteAllianceMember, ROLE,
 } from '../src/lib/chat-moderation.ts';
 
 const ME = 10;
@@ -113,5 +113,36 @@ describe('susturma yetkisi', () => {
     expect(canMuteAllianceMember({
       myId: ME, myRole: ROLE.MEMBER, member: uye(BASKASI, ROLE.MEMBER),
     })).toBe(false);
+  });
+});
+
+/**
+ * ⭐ DAVET KAPISI — hem düğmeyi hem AĞ İSTEĞİNİ belirliyor (2026-08-11).
+ *
+ * ⚠️ Bu testlerin asıl konusu görünürlük değil **trafik**: `world-modal.tsx` aynı fonksiyonun
+ * cevabına bakarak `useAlliance` sorgusunu hiç açmıyor. Kural burada bozulursa dünya modalı
+ * her tıklamada yeniden pahalı bir üye listesi çekmeye başlar ve kimse fark etmez.
+ */
+describe('canInviteToAlliance', () => {
+  it('Konsey ve Lider ittifaksız oyuncuyu davet edebilir', () => {
+    expect(canInviteToAlliance({ myRole: ROLE.COUNCIL, targetHasAlliance: false })).toBe(true);
+    expect(canInviteToAlliance({ myRole: ROLE.LEADER, targetHasAlliance: false })).toBe(true);
+  });
+
+  it('Asker davet edemez; ittifaksız oyuncu da edemez', () => {
+    expect(canInviteToAlliance({ myRole: ROLE.MEMBER, targetHasAlliance: false })).toBe(false);
+    expect(canInviteToAlliance({ myRole: null, targetHasAlliance: false })).toBe(false);
+    expect(canInviteToAlliance({ myRole: undefined, targetHasAlliance: false })).toBe(false);
+  });
+
+  it('⭐ hedefin ZATEN ittifağı varsa rütbe ne olursa olsun davet YOK', () => {
+    // Ağ kazancı buradan geliyor: bu durumda ittifak sorgusu hiç açılmıyor.
+    expect(canInviteToAlliance({ myRole: ROLE.LEADER, targetHasAlliance: true })).toBe(false);
+  });
+
+  it('⚠️ `undefined` "ittifaksız" DEĞİL «bilmiyoruz» demek — engellemez', () => {
+    // Eski bir sunucu alanı hiç göndermez; o zaman eski davranışa dönülür.
+    expect(canInviteToAlliance({ myRole: ROLE.LEADER, targetHasAlliance: undefined })).toBe(true);
+    expect(canInviteToAlliance({ myRole: ROLE.MEMBER, targetHasAlliance: undefined })).toBe(false);
   });
 });

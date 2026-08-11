@@ -26,6 +26,7 @@ import {
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 import { ARMY_OPTIONAL, HERO_MISSIONS, hasCrew } from '../lib/mission-rules.ts';
+import { canInviteToAlliance } from '../lib/chat-moderation.ts';
 
 /**
  * Görev tipi → ekranda görünen ad ve simge (§13.14: İngilizce id görünmez).
@@ -173,10 +174,21 @@ function PlayerActions({
   onClose: () => void;
   openChat: (playerId: number, username: string) => void;
 }) {
-  const my = useAlliance(0);
+  /**
+   * ⭐ İTTİFAK SORGUSU **KOŞULLU** (2026-08-11). Eskiden her yabancı şehre tıklanışta
+   * `/api/v1/alliance?page=0` gidiyordu — tek bir sayı (`myRole`) için tam üye listesi,
+   * çevrimiçilik ve ünvanlar dâhil. Hedefin zaten bir ittifağı varsa davet düğmesi hiç
+   * çizilmiyor, yani o istek **tamamen boşa** gidiyordu.
+   *
+   * ⚠️ Kapı ile kural aynı fonksiyondan besleniyor (`canInviteToAlliance`): ayrı yazılsalardı
+   * biri "düğmeyi göster" derken diğeri veriyi çekmemiş olur ve düğme sessizce kaybolurdu.
+   */
+  const my = useAlliance(0, city.hasAlliance !== true);
   const invite = useAllianceInvite();
   const confirm = useConfirm();
-  const canInvite = (my.data?.alliance?.myRole ?? 0) >= 2 && !city.hasAlliance;
+  const canInvite = canInviteToAlliance({
+    myRole: my.data?.alliance?.myRole, targetHasAlliance: city.hasAlliance,
+  });
 
   return (
     <div className="border-b border-border px-3 py-2">
