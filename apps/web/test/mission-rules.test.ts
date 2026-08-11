@@ -1,0 +1,74 @@
+/**
+ * ⭐ GÖREV FORMUNUN POLİTİKA KÜMELERİ (`lib/mission-rules.ts`).
+ *
+ * ⚠️⚠️ **Bu testlerin varlık sebebi ölçülmüş İKİ kayma.** Kümeler sunucudaki bayraklarla elle
+ * senkron ve ikisi de sessizce ayrıştı:
+ *   • 2026-08-03 — sunucu kahramanı taşıyabiliyordu, form hiç kahraman seçtirmiyordu.
+ *   • 2026-08-11 — sunucuda `allowEmptyArmy` destek/teleport için kapalıydı, buradaki küme de
+ *     yalnız `found_city` diyordu. Oyuncu bildirdi: *"kendi şehirlerimiz arasında sadece
+ *     kahramanı seçip göndermek mümkün değil."*
+ *
+ * ⚠️ Bu testler kümenin **sunucuyla aynı olduğunu ispatlayamaz** — o iş sunucu tarafındaki
+ * `missions.test.ts` bekçilerinde (*«YALNIZ KAHRAMAN destek olarak gönderilebilir»* ve teleport
+ * ikizi). Buradaki testler kümenin **kazara değişmemesini** sağlıyor: bir görev eklenip
+ * çıkarılıyorsa bilinçli olsun ve karşılığı sunucuda da yazılsın.
+ */
+import { describe, expect, it } from 'vitest';
+import { ARMY_OPTIONAL, HERO_MISSIONS, hasCrew } from '../src/lib/mission-rules.ts';
+
+describe('kahraman gönderilebilen görevler', () => {
+  it('dört görev: saldırı · destek · teleport · şehir kurma', () => {
+    expect([...HERO_MISSIONS].sort()).toEqual(['attack', 'found_city', 'support', 'teleport']);
+  });
+
+  it('⚠️ nakliye ve casusluk DIŞARIDA', () => {
+    expect(HERO_MISSIONS.has('transport')).toBe(false);
+    expect(HERO_MISSIONS.has('spy')).toBe(false);
+  });
+});
+
+describe('ordusuz gidilebilen görevler', () => {
+  it('⭐ kendi şehirleri arası taşımanın İKİ yolu da açık (destek + teleport)', () => {
+    expect(ARMY_OPTIONAL.has('support')).toBe(true);
+    expect(ARMY_OPTIONAL.has('teleport')).toBe(true);
+    expect(ARMY_OPTIONAL.has('found_city')).toBe(true);
+  });
+
+  it('⚠️ saldırı ve nakliye DIŞARIDA — sunucu boş orduyu her hâlükârda reddediyor', () => {
+    expect(ARMY_OPTIONAL.has('attack')).toBe(false);
+    expect(ARMY_OPTIONAL.has('transport')).toBe(false);
+    expect(ARMY_OPTIONAL.has('spy')).toBe(false);
+  });
+
+  it('ordusuz gidebilen her görev kahraman da taşıyabilmeli (yoksa küme anlamsız)', () => {
+    for (const type of ARMY_OPTIONAL) {
+      expect(HERO_MISSIONS.has(type), type).toBe(true);
+    }
+  });
+});
+
+describe('hasCrew — «gönder» düğmesinin kapısı', () => {
+  it('birim varsa her görevde geçer', () => {
+    for (const type of ['attack', 'transport', 'spy', 'support', 'teleport', 'found_city']) {
+      expect(hasCrew(type, 1, 0), type).toBe(true);
+    }
+  });
+
+  it('⭐ yalnız kahraman: destek · teleport · şehir kurmada GEÇER', () => {
+    for (const type of ['support', 'teleport', 'found_city']) {
+      expect(hasCrew(type, 0, 1), type).toBe(true);
+    }
+  });
+
+  it('⚠️ yalnız kahraman: saldırı · nakliye · casuslukta GEÇMEZ', () => {
+    for (const type of ['attack', 'transport', 'spy']) {
+      expect(hasCrew(type, 0, 1), type).toBe(false);
+    }
+  });
+
+  it('⚠️ ikisi de yoksa HİÇBİR görevde geçmez', () => {
+    for (const type of ['attack', 'transport', 'spy', 'support', 'teleport', 'found_city']) {
+      expect(hasCrew(type, 0, 0), type).toBe(false);
+    }
+  });
+});

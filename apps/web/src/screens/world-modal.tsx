@@ -25,6 +25,7 @@ import {
   AmountInput, Badge, Button, Empty, ErrorBox, MissionIcon, UserText,
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
+import { ARMY_OPTIONAL, HERO_MISSIONS, hasCrew } from '../lib/mission-rules.ts';
 
 /**
  * Görev tipi → ekranda görünen ad ve simge (§13.14: İngilizce id görünmez).
@@ -259,26 +260,6 @@ const FORM_RULES: Record<string, { units: 'warriors' | 'spy' | 'all' | 'none'; c
   teleport: { units: 'all', cargo: false },
 };
 
-/**
- * ⭐ ORDUSUZ GİDİLEBİLEN GÖREVLER (kullanıcı, 2026-08-07): kahraman **tek başına** şehir
- * kurabilir. Sunucudaki karşılığı `march({ allowEmptyArmy: true })`.
- *
- * ⚠️ Saldırı burada YOK: `sendAttack` ortak yoldan geçmiyor ve boş orduyu reddediyor —
- * listeye eklenseydi form açılır, sunucu `no_units` ile geri çevirirdi.
- */
-const ARMY_OPTIONAL = new Set(['found_city']);
-
-/**
- * ⭐ KAHRAMAN GÖNDERİLEBİLEN GÖREVLER (kullanıcı, 2026-08-03).
- *
- * ⚠️ Sunucu bunların ÜÇÜNÜ DE zaten destekliyordu (`march()` → `reserveHeroes`, teleport da
- * kahraman taşıyor) — eksik olan tek şey formun hiç kahraman seçtirmemesi ve istemcinin daima
- * `heroIds: []` göndermesiydi. Yani özellik aylardır yazılıydı ve **ulaşılamıyordu**.
- *
- * ⚠️ Nakliye ve casusluk DIŞARIDA: nakliye kaynak taşır (kahramanın işi değil), casuslukta
- * yalnız kuş gider.
- */
-const HERO_MISSIONS = new Set(['attack', 'support', 'teleport', 'found_city']);
 
 /**
  * Şehirdeki kahramanlardan sefere katılacakları seçtirir.
@@ -344,7 +325,6 @@ function MissionForm({
     const n = Math.trunc(Number(raw) || 0);
     if (n > 0) units[id] = n;
   }
-  const hasUnits = Object.keys(units).length > 0;
 
   /**
    * ⭐ Önizleme motorun AYNI `travel.ts`'ini kullanır; otorite yine sunucudur.
@@ -361,7 +341,7 @@ function MissionForm({
    * ⚠️ Kahraman sayısı da geçiliyor: kahraman orduyu yavaşlatabilir (`travel.ts` `armySpeed`).
    * Geçmezsek "9 kuş + 1 kahraman" önizlemesi 52 sn yazar, sunucu ise 26 dk hesaplar.
    *
-   * ⚠️ `hasUnits` kapısı 2026-08-07'de KALKTI: kahraman tek başına şehir kurabiliyor ve
+   * ⚠️ «Önce ordu var mı» kapısı 2026-08-07'de KALKTI: kahraman tek başına gidebiliyor ve
    * `armySpeed({}, 1)` zaten `HERO_SPEED`i (200) döndürüyor. Ordu da kahraman da yoksa
    * fonksiyon kendiliğinden `null` veriyor, ayrı bir dala gerek yok.
    */
@@ -397,16 +377,15 @@ function MissionForm({
   const blocked = option != null && !option.enabled;
 
   /**
-   * ⭐ Şehir kurmada ordu İSTEĞE BAĞLI: yalnız kahraman da gidebilir (kullanıcı, 2026-08-07).
+   * ⭐ Bazı görevlerde ordu İSTEĞE BAĞLI: yalnız kahraman da gidebilir (`lib/mission-rules.ts`).
    * ⚠️ İkisi de yoksa gönderilemez — sunucu da aynı kuralı `no_units` ile uyguluyor.
    */
-  const hasCrew = hasUnits
-    || (ARMY_OPTIONAL.has(type) && HERO_MISSIONS.has(type) && heroIds.length > 0);
+  const crewOk = hasCrew(type, Object.keys(units).length, heroIds.length);
 
   // Nakliyede kargo ZORUNLU (boş nakliyenin anlamı yok), destek ve şehir kurmada isteğe bağlı.
   const canSend = cityId != null
     && !blocked
-    && hasCrew
+    && crewOk
     && (!rule.cargo || (cargoFits && affordCargo))
     && (type !== 'transport' || cargoTotal > 0)
     && !send.isPending;
@@ -475,7 +454,7 @@ function MissionForm({
               {rule.units === 'spy'
                 ? 'Şehrinde Casus Kuş yok. Önce Baraka\'dan üret.'
                 : ARMY_OPTIONAL.has(type)
-                  ? 'Şehrinde savaşçı yok — kahraman tek başına da şehir kurabilir.'
+                  ? 'Şehrinde savaşçı yok — kahraman tek başına da gidebilir.'
                   : 'Şehrinde savaşçı yok. Önce Baraka\'dan üret.'}
             </Empty>
           ) : null}

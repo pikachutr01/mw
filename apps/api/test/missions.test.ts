@@ -105,6 +105,19 @@ async function giveHero(playerId: number, cityId: number | null, o: {
             ${o.fAtk ?? 0}, ${o.fDef ?? 0}, ${o.mAtk ?? 0}, ${o.mDef ?? 0}, ${o.status ?? 'alive'})
   `);
 }
+/**
+ * `giveHero`in **kimlik döndüren** kardeşi — `heroIds` geçmek gereken testler için.
+ * ⚠️ Ayrı bir fonksiyon, çünkü `giveHero`in dönüşünü değiştirmek onu çağıran ~10 testi
+ * hiçbir fayda sağlamadan dokundururdu.
+ */
+async function giveHeroAt(playerId: number, cityId: number, name: string): Promise<number> {
+  const r = await h.db.execute<Record<string, unknown>>(sql`
+    INSERT INTO heroes (world_id, player_id, city_id, name, level, status)
+    VALUES (${worldId}, ${playerId}, ${cityId}, ${name}, 3, 'alive')
+    RETURNING id
+  `);
+  return Number(r[0]!['id']);
+}
 async function setTech(playerId: number, type: string, level: number): Promise<void> {
   await h.db.execute(sql`
     INSERT INTO techs (player_id, type, level) VALUES (${playerId}, ${type}, ${level})
@@ -287,6 +300,53 @@ describe('destek', () => {
       originCityId: home, playerId: me, worldId,
       target: { k: 1, d: 1, s: 2 }, units: { dwarf: 5 }, at,
     })).rejects.toThrow(/kendi şehirlerinize/i);
+  });
+
+  /**
+   * ⭐⭐ YALNIZ KAHRAMAN DESTEĞE GİDEBİLİR (oyuncu bildirimi, 2026-08-11:
+   * *"sadece kahramanı seçip göndermek mümkün değil, yanına illa başka bir savaşçı eklenmesi
+   * gerekiyor"*).
+   *
+   * ⚠️ Bu bir eksik özellik DEĞİL, unutulmuş bir bayraktı: `allowEmptyArmy` 2026-08-07'de şehir
+   * kurma için açıldı, destek listeye alınmadı. Altındaki her şey hazırdı — kahraman taşınıyor,
+   * hız `HERO_SPEED` çıkıyor, varışta tapınağa yerleşiyor. Bu test o bayrağın kaybolmadığını
+   * tutuyor; kaybolursa oyuncunun şikâyeti aynen geri gelir.
+   */
+  it('⭐⭐ YALNIZ KAHRAMAN destek olarak gönderilebilir (savaşçı şart değil)', async () => {
+    const heroId = await giveHeroAt(me, home, 'Yalnız Destek');
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendSupport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 3 }, units: {}, heroIds: [heroId], at,
+    });
+    expect(m.speed).toBe(200);                        // HERO_SPEED — ordu boşken kahramanın hızı
+    await runDue(m.missionId);
+
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT city_id FROM heroes WHERE id = ${heroId}
+    `);
+    expect(Number(hero!['city_id'])).toBe(colony);    // hedefin tapınağına yerleşti
+    expect(await openReturn()).toBeNull();            // destek tek yönlü
+  });
+
+  it('⚠️ ordu da kahraman da yoksa yine reddedilir', async () => {
+    const at = await clock.gameNow(worldId);
+    await expect(missions.sendSupport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 3 }, units: {}, at,
+    })).rejects.toMatchObject({ code: 'no_units' });
+  });
+
+  it('⚠️ yalnız kahraman KAYNAK taşıyamaz ve sebebi anlaşılır', async () => {
+    const heroId = await giveHeroAt(me, home, 'Kargocu Değil');
+    await setResources(home, 10_000, 0);
+    const at = await clock.gameNow(worldId);
+    await expect(missions.sendSupport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 3 }, units: {}, heroIds: [heroId],
+      cargo: { gold: 100, food: 0 }, at,
+    })).rejects.toThrow(/taşıyabilecek birim yok/i);
   });
 });
 
@@ -1195,6 +1255,42 @@ describe('teleport', () => {
     // Bekleme süresi seviye başına %2 kısalır.
     expect((r.readyAt.getTime() - at.getTime()) / 1000)
       .toBeCloseTo(teleportCooldownSeconds(3), 0);
+  });
+
+  /**
+   * ⭐⭐ Desteğin ikizi (2026-08-11). Teleport `march()`ten geçmediği için `allowEmptyArmy`
+   * bayrağını okumuyor; kapı `teleport()` içinde elle duruyordu ve aynı şekilde kahramanı
+   * yalnız bırakmıyordu. Kendi şehirleri arasında kahramanı taşımanın iki yolu da (destek ve
+   * teleport) aynı sebeple kapalıydı.
+   */
+  it('⭐⭐ YALNIZ KAHRAMAN teleport edilebilir (savaşçı şart değil)', async () => {
+    await setBuilding(home, 'teleport', 1);
+    await setBuilding(colony, 'teleport', 1);
+    const heroId = await giveHeroAt(me, home, 'Işınlanan');
+    const at = await clock.gameNow(worldId);
+
+    const r = await missions.teleport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 3 }, units: {}, heroIds: [heroId], at,
+    });
+    expect(r.heroIds).toEqual([heroId]);
+
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT city_id FROM heroes WHERE id = ${heroId}
+    `);
+    expect(Number(hero!['city_id'])).toBe(colony);
+    // Bekleme süresi yine işliyor — "bedava taşıma" açığı yok.
+    expect(r.readyAt.getTime()).toBeGreaterThan(at.getTime());
+  });
+
+  it('⚠️ teleportta ordu da kahraman da yoksa reddedilir', async () => {
+    await setBuilding(home, 'teleport', 1);
+    await setBuilding(colony, 'teleport', 1);
+    const at = await clock.gameNow(worldId);
+    await expect(missions.teleport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 3 }, units: {}, at,
+    })).rejects.toMatchObject({ code: 'no_units' });
   });
 
   it('İKİ şehirde de Teleport ≥ 1 olmalı', async () => {

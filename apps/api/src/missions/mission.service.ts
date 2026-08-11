@@ -423,6 +423,20 @@ export class MissionService {
        * ⚠️ Ordu hızı yine en yavaş birimden: kuş (6000) hızı YÜKSELTMEZ.
        */
       allowSpyBird: true,
+      /**
+       * ⭐ KAHRAMAN TEK BAŞINA DESTEĞE GİDEBİLİR (kullanıcı bildirimi, 2026-08-11:
+       * *"sadece kahramanı seçip göndermek mümkün değil, yanına illa başka bir savaşçı
+       * eklenmesi gerekiyor"*).
+       *
+       * ⚠️ Bu bir özellik değil bir **kapının unutulması**ydı: `allowEmptyArmy` 2026-08-07'de
+       * şehir kurma için açıldı ve destek listeye alınmadı. Altındaki her şey zaten hazırdı —
+       * `reserveHeroes` kahramanı taşıyor, `armySpeed({}, 1)` `HERO_SPEED` döndürüyor, varış
+       * handler'ı kahramanı hedefin tapınağına yerleştiriyor. Yani destek de aylardır
+       * yapabiliyordu ve yalnız bu bayrak yüzünden ulaşılamıyordu.
+       * ⚠️ Kargo ile birlikte hâlâ tutarlı: kahramanın `carry`si yok, `assertCarryCapacity`
+       * kapasite 0 için zaten ayrı ve açıklayıcı bir cümle veriyor.
+       */
+      allowEmptyArmy: true,
       payloadExtra: { cargo },
       before: async (t, ctx) => {
         if (cargo.gold + cargo.food > 0) {
@@ -570,10 +584,21 @@ export class MissionService {
     at: Date;
   }): Promise<{ targetCityId: number; units: Record<string, number>; heroIds: number[]; readyAt: Date }> {
     const units = normalizeUnits(opts.units);
-    if (Object.keys(units).length === 0) {
-      throw new MissionError('no_units', 'Teleport ile en az bir savaşçı taşımalısınız.');
-    }
     const heroIds = [...new Set(opts.heroIds ?? [])];
+    /**
+     * ⭐ KAHRAMAN TEK BAŞINA TELEPORT OLABİLİR (2026-08-11).
+     *
+     * ⚠️ Destekteki `allowEmptyArmy` unutulmasının **ikizi** ve aynı turda bulundu. Teleport
+     * `march()`ten geçmediği için o bayrağı okumuyor; kapı burada elle duruyordu. Aşağısı yine
+     * hazırdı: kahramanlar `heroes.city_id` güncellenerek taşınıyor ve savaşçı döngüsü boş
+     * `units` ile hiç dönmüyor.
+     * ⚠️ Kahramansız BOŞ teleport yine reddediliyor — "kimse gitmesin de olur" demiyoruz.
+     */
+    if (Object.keys(units).length === 0 && heroIds.length === 0) {
+      throw new MissionError(
+        'no_units', 'Teleport ile en az bir savaşçı ya da bir kahraman taşımalısınız.',
+      );
+    }
 
     return this.db.transaction(async (tx) => {
       const t = tx as unknown as Tx;
