@@ -206,7 +206,41 @@ describe('D · Büyücülük kalkanı güçlendirmez (doküman yanıltıyor)', (
   const defender = { counts: { dragon: 60, magic_shield: 3 } };
   const attacker = { counts: { dragon: 50 } };   // kalkanı eriten ama silmeyen büyüklük
 
-  it('⭐⭐ Tılsım kalkanı KURTARIR (%2 → %100), Büyücülük neredeyse hiç oynatmaz', () => {
+  /**
+   * ⭐⭐⭐ **ALTIN ÖLÇÜM — Tılsım kalkanda %5, savaşçılarda %6** (kullanıcı binary ölçümü,
+   * 2026-08-11, `docs/SAMAN_KALKAN_TESTLERI.md` D2).
+   *
+   * 20 senaryonun **yalnız bu biri** motorla tutmadı: motor %100,0 derken gerçek **%87,6-88,6**.
+   * Sebep 2026-08-09'da girmiş sessiz bir gerileme: Tılsım oranı Kaos/Ejderha ölçümleriyle
+   * %5 → %6 yapılırken `magic_shield` aynı listede olduğu için **o da** %6'ya çıkmıştı. Oysa
+   * binary'de kalkanın ölçekleyicisi **ayrı bir fonksiyon** (`FUN_00413744`, sabiti 0,05);
+   * savaşçılarınki `FUN_00411988`.
+   *
+   * ⚠️ Neden 19 senaryo bunu göremedi: kalkanın mitigasyonu `Sv × 1,8^Sv` ile, gücü yalnız
+   * `1,8^Sv` ile büyüyor → net hasarın işaret değiştirdiği bir **uçurum** var. %6'da çarpan
+   * 1,36 net hasarı tamamen sıfırlıyor (%100), %5'te 1,30 ve kalkan yıpranıyor. Uçurumun
+   * dışındaki her senaryo bu parametreye duyarsız.
+   *
+   * ⭐ Bu testin görevi oranı **sayıyla** kilitlemek: biri `rateByUnit`i kaldırıp tek orana
+   * dönerse burası kırmızıya döner.
+   */
+  it('⭐⭐⭐ ALTIN: Tılsım 6 → kalkan %87,7 (binary %87,6-88,6)', () => {
+    const r = mean({ attacker, defender: { ...defender, tech: { talisman: 6 } } });
+    expect(r.shieldPct).toBeGreaterThanOrEqual(86.5);
+    expect(r.shieldPct).toBeLessThanOrEqual(89.5);
+  });
+
+  it('⚠️ oran %6 olsaydı kalkan HİÇ yıpranmazdı — gerilemenin imzası', () => {
+    /**
+     * Karşı-olgusal: savaşçı oranı (%6) kalkana da uygulansaydı Tılsım **5**'te çarpan 1,30
+     * olurdu, yani bugünkü Tılsım 6 ile aynı. Test bunu doğrudan gösteriyor: Tılsım 7'de
+     * (çarpan 1,35) kalkan tavana vuruyor.
+     */
+    expect(mean({ attacker, defender: { ...defender, tech: { talisman: 7 } } }).shieldPct)
+      .toBe(100);
+  });
+
+  it('⭐⭐ Tılsım kalkanı KURTARIR (%2 → %88), Büyücülük neredeyse hiç oynatmaz', () => {
     const sade = mean({ attacker, defender }).shieldPct;
     const tilsim = mean({ attacker, defender: { ...defender, tech: { talisman: 6 } } }).shieldPct;
     const buyu = mean({ attacker, defender: { ...defender, tech: { sorcery: 6 } } }).shieldPct;

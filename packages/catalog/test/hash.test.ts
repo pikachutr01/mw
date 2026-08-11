@@ -49,8 +49,14 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * alan hiçbir zaman özeti kaydırmaz — eski savaşların `catalog_hash`i "başka bir katalog"
  * gibi görünmez. Kural: **özet, tabloları ve dünya bazlı sapmaları izler; varsayılan
  * genişlemesini değil.**
+ *
+ * ⚠️⚠️ **AYNI GÜN, İKİNCİ değişiklik ve bu sefer özet KAYDI: `0934c2b4` → `9fce9abf`.** Sebep Tılsım'ın
+ * **Büyü Kalkanı'na özel oranı**: savaşçılarda %6, kalkanda **%5** (`TechDef.rateByUnit`).
+ * Kullanıcının binary ölçümü yakaladı (`docs/SAMAN_KALKAN_TESTLERI.md` D2: motor %100,0,
+ * gerçek %87,6-88,6 → düzeltmeden sonra motor **%87,70**). Bu bir *varsayılan genişlemesi*
+ * değil **tablo değişikliği** olduğu için özetin kayması doğru davranıştır.
  */
-const DEFAULT_HASH = '0934c2b4';
+const DEFAULT_HASH = '9fce9abf';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -68,7 +74,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('94078f3c');
+    expect(catalogHash(cfg)).toBe('05fe2135');
   });
 
   /**

@@ -89,6 +89,14 @@ export interface TechDef {
   stat: TechStat | null;
   /** Etkilediği birim id'leri (doküman "Etkilendiği Teknikler" listelerinden). */
   units: string[];
+  /**
+   * ⭐ BİRİME ÖZEL ORAN — binary'de aynı tekniğin **ayrı uygulayıcıları** varsa.
+   *
+   * Tılsım'ın örneği: savaşçıların `mAtk`ini `FUN_00411988` ölçekliyor (%6, iki ölçümle),
+   * Büyü Kalkanı'nınkini ise **ayrı bir fonksiyon** `FUN_00413744` (%5). İki sabit farklı ve
+   * tek bir `rate` ikisini birden temsil edemiyor.
+   */
+  rateByUnit?: Readonly<Record<string, number>>;
   /** Taban maliyet (maliyet = base × 1.5^(seviye+1)). */
   baseGold: number;
   baseFood: number;

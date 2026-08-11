@@ -139,6 +139,23 @@ export const TECHS: readonly TechDef[] = [
     id: 'talisman', name: { tr: 'Tılsım' }, rate: 0.06, stat: 'mmit',
     units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'ogre', 'gnome', 'shaman',
       'chaos', 'oil_cauldron', 'guard', 'magic_shield'],
+    /**
+     * ⚠️⚠️ **KALKAN %5, SAVAŞÇILAR %6** (kullanıcı ölçümü, 2026-08-11).
+     *
+     * 2026-08-09'da oran Kaos ve Ejderha ölçümleriyle %5 → %6 yapıldı ve bu doğruydu — ama
+     * `magic_shield` aynı listede olduğu için **sessizce** o da %6'ya çıktı. Oysa kalkanın
+     * ölçekleyicisi **ayrı bir fonksiyon**: savaşçılar `FUN_00411988`, kalkan `FUN_00413744`
+     * ve Ghidra'da okunan sabiti **0,05**.
+     *
+     * Ölçüm bunu yakaladı (`docs/SAMAN_KALKAN_TESTLERI.md` D2): 50 Ejderha vs 60 Ejderha +
+     * Kalkan sv3, savunan Tılsım 6 → binary **%87,6-88,6**, motor **%100,0**. %6'da çarpan
+     * 1,36 olup net hasarı tamamen sıfırlıyordu; %5'te 1,30 ve kalkan bir miktar yıpranıyor.
+     *
+     * ⭐ Neden yalnız bu satır yakaladı: kalkanın mitigasyonu `Sv × 1,8^Sv` ile büyürken gücü
+     * yalnız `1,8^Sv` ile büyüyor, yani net hasarın işaret değiştirdiği bir **uçurum** var.
+     * D2 tam o uçurumun üstünde; diğer 19 senaryo bu parametreye duyarsız.
+     */
+    rateByUnit: { magic_shield: 0.05 },
     baseGold: 700, baseFood: 600,
   },
   // ── Savaş statlarına doğrudan etkisi olmayan teknikler ───────────────────────

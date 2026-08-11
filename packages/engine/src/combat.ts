@@ -41,7 +41,9 @@ export function applyTech(base: UnitDef, tech: TechLevels | undefined): ScaledSt
   const bonus = { atk: 0, matk: 0, pmit: 0, mmit: 0 };
   for (const [techId, stat] of TECH_BY_UNIT[base.id] ?? []) {
     const level = Math.max(0, tech?.[techId] ?? 0);
-    bonus[stat] += level * (TECHS_BY_ID[techId]?.rate ?? 0);
+    const def = TECHS_BY_ID[techId];
+    /** ⭐ Birime özel oran varsa o kazanır (bkz. `TechDef.rateByUnit`). */
+    bonus[stat] += level * (def?.rateByUnit?.[base.id] ?? def?.rate ?? 0);
   }
   const hp = base.hp * (1 + bonus.atk);
   const magicHp = base.magicHp * (1 + bonus.matk);
