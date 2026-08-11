@@ -376,9 +376,25 @@ function ResRate({
         ⚠️ Tetikleyici **`<button>`**: `Tooltip`in sarmalayıcısı düz bir `span` ve odak
         alamıyor — klavye kullanıcısı ipucuna hiç ulaşamazdı. `MeritBadge` ve `AllyBadge`
         aynı gerekçeyle `<button>` kullanıyor.
+
+        ⚠️⚠️ **`flex` — `inline-block` DEĞİL** (kullanıcı bildirimi, 2026-08-11: *"altın ve
+        yemek… navbarı dikeyde tam ortalamıyor, yukarı yanaşık duruyor"*). Düğme varsayılan
+        `inline-block` olduğu için içeride bir **satır kutusu** açıyordu ve o kutuya düğmenin
+        kendi yazı tipinden gelen **strut** karışıyordu:
+
+          • `Res` bir `inline-flex` ve taban çizgisi **alt kenarı** (ilk esnek öge `<img>`,
+            resmin taban çizgisi alt kenarıdır) → 22px'in TAMAMI taban çizgisinin ÜSTÜNDE.
+          • Strut ise devralınan 16px gövde yazısından geliyordu ve taban çizgisinin ALTINA
+            ~7-10px iniyordu.
+          • Sonuç: satır kutusu ≈ 30px, içerik yalnız üstteki 22px'i dolduruyor, boşluğun
+            tamamı **altta** kalıyor → ikon ve sayı yukarı yanaşık görünüyor.
+
+        `flex` satır kutusunu tamamen ortadan kaldırıyor: düğmenin yüksekliği artık içeriğin
+        yüksekliği (22px) ve dış ızgaranın `items-center`'ı gerçekten ortalıyor.
+        ⚠️ `leading-none` de belirtiyi bastırırdı ama sebebi değil: strut küçülür, yine kalır.
       */}
       <button type="button" aria-label={`${title} üretimi`}
-        className="cursor-help text-left outline-none">
+        className="flex cursor-help items-center text-left outline-none">
         <Res kind={kind} value={fmt(value)} size={22} numClass="min-w-[9ch]" nativeTitle={false}
           className="text-[12px] font-semibold sm:text-[15px]" />
       </button>
