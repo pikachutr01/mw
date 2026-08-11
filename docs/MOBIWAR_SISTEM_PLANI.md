@@ -3519,8 +3519,31 @@ packages/design-tokens/
 | `warning` | `#B3701A` | `#E08A3C` | gelen saldırı uyarısı |
 | `success` | `#4F6B33` | `#8FB05E` | tamamlanan üretim |
 | `info` | `#2F5D8C` | `#7FA9D4` | tarafsız bildirim |
+| ⭐ `own` | `#2F5D8C` | `#7FA9D4` | **bize ait şehir** (Dünya listesi) — 2026-08-11 |
 | `focusRing` | `#8A5A2B` | `#E8B75F` | klavye odağı (her zaman görünür) |
 | `overlay` | `rgba(43,33,22,.45)` | `rgba(0,0,0,.65)` | sheet arka planı |
+
+#### ⭐ `own` neden AYRI bir token (kullanıcı bildirimi, 2026-08-11)
+
+> *"Açık modda dünya ekranında kendi şehirlerimizin yazısı belli olmuyor."*
+
+Dünya listesi bize ait satırlarda `accent` kullanıyordu. **Gecede sorun yok** (altın `#D6A24A`
+↔ krem mürekkep), **gündüzde var**: `accent` bronz `#8A5A2B`, gövde mürekkebi koyu kahve
+`#2B2116` — ikisi **aynı sıcak ailede** ve yalnız açıklıkla ayrılıyor. 12px'lik bir tablo
+satırında bu, "farklı renk" değil **"biraz solmuş yazı"** gibi okunuyor.
+
+⚠️ **Kazanç açıklıkta DEĞİL, tonda.** Ölçüm: mürekkeple açıklık oranı **2,69 → 2,30**, yani
+hafifçe *düştü*. Gözü ayıran şey sıcak-soğuk zıtlığı; parşömen paletinin tamamı sıcak olduğu
+için lacivert tek bakışta sıyrılıyor. Okunabilirlik ayrıca yükseldi: zeminle kontrast
+**5,3 → 6,2** (satır zebrasında 5,7).
+
+⚠️ Değeri bugün `info` ile **aynı** ve bu bilinçli: aynı dosyada `food`/`success` de aynı zeytin
+yeşilini paylaşıyor. Ayrı token olmasının sebebi değerin farklı olması değil, **anlamın** farklı
+olması — "tarafsız bildirim" ile "bu benim" birbirinden bağımsız değişebilmeli.
+
+⚠️ İki kontrast çifti (`own/surface`, `own/rowAlt`, ikisi de **4,5**) `contrastPairs`e eklendi:
+bu rengi biri ileride açarsa CI kırılır. Diğer vurgu renkleri 3,0 barında; burada 4,5 seçildi
+çünkü bu bir rozet değil **gövde metni**.
 
 Ek token grupları: `radius` (2/6/10/16) · `space` (4'ün katları) · `shadow` (gündüz yumuşak sıcak
 gölge, gecede neredeyse yok — bunun yerine `borderStrong`) · `font`.

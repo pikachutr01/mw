@@ -17,6 +17,7 @@
   --color-warning: var(--mw-color-warning);
   --color-success: var(--mw-color-success);
   --color-info: var(--mw-color-info);
+  --color-own: var(--mw-color-own);
   --color-focus-ring: var(--mw-color-focus-ring);
   --color-panel-header: var(--mw-color-panel-header);
   --color-on-panel-header: var(--mw-color-on-panel-header);

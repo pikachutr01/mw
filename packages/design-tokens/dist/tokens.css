@@ -34,6 +34,7 @@
   --mw-color-warning: #B3701A;
   --mw-color-success: #4F6B33;
   --mw-color-info: #2F5D8C;
+  --mw-color-own: #2F5D8C;
   --mw-color-focus-ring: #8A5A2B;
   --mw-color-panel-header: #C89B5A;
   --mw-color-on-panel-header: #2B2116;
@@ -63,6 +64,7 @@
     --mw-color-warning: #E08A3C;
     --mw-color-success: #8FB05E;
     --mw-color-info: #7FA9D4;
+    --mw-color-own: #7FA9D4;
     --mw-color-focus-ring: #E8B75F;
     --mw-color-panel-header: #8A5A2B;
     --mw-color-on-panel-header: #FAF3E3;
@@ -92,6 +94,7 @@
   --mw-color-warning: #E08A3C;
   --mw-color-success: #8FB05E;
   --mw-color-info: #7FA9D4;
+  --mw-color-own: #7FA9D4;
   --mw-color-focus-ring: #E8B75F;
   --mw-color-panel-header: #8A5A2B;
   --mw-color-on-panel-header: #FAF3E3;
@@ -120,6 +123,7 @@
   --mw-color-warning: #B3701A;
   --mw-color-success: #4F6B33;
   --mw-color-info: #2F5D8C;
+  --mw-color-own: #2F5D8C;
   --mw-color-focus-ring: #8A5A2B;
   --mw-color-panel-header: #C89B5A;
   --mw-color-on-panel-header: #2B2116;

@@ -19,6 +19,7 @@ class MwLightColors {
   static const Color warning = Color(0xFFB3701A);
   static const Color success = Color(0xFF4F6B33);
   static const Color info = Color(0xFF2F5D8C);
+  static const Color own = Color(0xFF2F5D8C);
   static const Color focusRing = Color(0xFF8A5A2B);
   static const Color panelHeader = Color(0xFFC89B5A);
   static const Color onPanelHeader = Color(0xFF2B2116);
@@ -43,6 +44,7 @@ class MwDarkColors {
   static const Color warning = Color(0xFFE08A3C);
   static const Color success = Color(0xFF8FB05E);
   static const Color info = Color(0xFF7FA9D4);
+  static const Color own = Color(0xFF7FA9D4);
   static const Color focusRing = Color(0xFFE8B75F);
   static const Color panelHeader = Color(0xFF8A5A2B);
   static const Color onPanelHeader = Color(0xFFFAF3E3);

@@ -156,11 +156,19 @@ export function World() {
                  * ⭐ AKTİF ŞEHİR BELİRTECİ (kullanıcı, 2026-08-03): *"Bize ait şehirler belirgin
                  * ama aktif şehri de anlamak için bir işaret koyalım."*
                  *
-                 * ⚠️ Renkle DEĞİL kenarla ayrılıyor. "Bize ait" zaten `text-accent` kullanıyor;
+                 * ⚠️ Renkle DEĞİL kenarla ayrılıyor. "Bize ait" zaten `text-own` kullanıyor;
                  * aktif şehri de renkle işaretlemek iki farklı anlamı aynı kanala yığardı ve
                  * ikisi de okunmaz hâle gelirdi.
                  * ⚠️ Yanına «(buradasın)» yazısı da konmuştu; kullanıcı aynı gün kaldırttı —
                  * *"soldaki kenarlık rengi yeterli"*. Satır zaten dar, metin gürültü oluyordu.
+                 *
+                 * ⚠️ **`text-own`, `text-accent` DEĞİL** (kullanıcı bildirimi, 2026-08-11:
+                 * *"açık modda kendi şehirlerimizin yazısı belli olmuyor"*). Gündüz `accent`
+                 * bronz (`#8A5A2B`), gövde mürekkebi ise koyu kahve (`#2B2116`) — ikisi **aynı
+                 * ailede** ve yalnız açıklıkla ayrılıyor, yani 12px'lik bir tablo satırında
+                 * «biraz solmuş yazı» gibi okunuyordu. Yeni `own` token'ı laciverte geçiyor:
+                 * kazanç açıklıkta DEĞİL **tondadır** (ölçüm: mürekkeple açıklık oranı 2,69 →
+                 * 2,30 ile hafifçe DÜŞTÜ; gözü ayıran şey sıcak-soğuk zıtlığı).
                  */
                 const isActive = c != null && c.id === cityId;
                 return (
@@ -171,7 +179,7 @@ export function World() {
                        kaplar, böylece 10 satır her ekranda aynı yüksekliği tutar. */
                     className={`h-9 cursor-pointer border-b border-border transition-colors hover:bg-raised ${
                       i % 2 === 1 ? 'bg-row-alt' : ''
-                    } ${c?.isOwn ? 'text-accent' : 'text-ink'} ${
+                    } ${c?.isOwn ? 'text-own' : 'text-ink'} ${
                       isActive ? 'bg-raised/60 shadow-[inset_3px_0_0_0_var(--color-accent)]' : ''
                     }`}
                   >
