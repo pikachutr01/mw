@@ -654,16 +654,33 @@ export function spyLevelAfterLosses(level: SpyLevel, survivors: number): SpyLeve
 }
 
 /**
- * Kahraman diriltme maliyeti: **(3000, 2000) × 1,5^seviye** (§13.11.4b).
+ * Kahraman diriltme maliyeti: **(3000, 2000) × oran^seviye** (§13.11.4b).
+ * Oran `cfg.economy.heroReviveCostRate` — **varsayılan 1,25**.
  *
- * ⭐ Taban ÖLÇÜLDÜ: oyunun kendi tapınak ekranında seviye 0 bir ölü kahraman için
- * `3000 altın · 2000 yiyecek` yazıyor (`images/scr_itv03`). Yalnız seviye çarpanı bizim.
- * Çarpan bilerek dik — seviye 10'da 173 bin, seviye 15'te 1,3 milyon altın. Süre de aynı yönde
- * uzuyor (bkz. `heroReviveSeconds`): yüksek seviye kahramanı kaybetmek her iki eksende de ağır.
- * ⚠️ Maliyet Tapınak seviyesinden **etkilenmez** (kullanıcı kararı) — Tapınak yalnız süreyi kısaltır.
+ * ⭐ **Taban ÖLÇÜLDÜ, üs ÖLÇÜLMEDİ.** Oyunun kendi tapınak ekranında seviye 0 bir ölü kahraman
+ * için `3000 altın · 2000 yiyecek` yazıyor (`images/scr_itv03`). Üs ise tamamen bizim: orijinal
+ * istemci bedeli hiç hesaplamıyor, onay diyaloğu sunucudan gelen hazır sayıları basıyor
+ * (`l.java:175` → `<ad> <l> Altın <m> Yemek karşılığında diriltilecek`). Kanıt zinciri:
+ * `docs/JAVA_ROENTGEN.md`.
+ *
+ * ⚠️ **1,50 → 1,25 (kullanıcı, 2026-08-11)** — eski üs ıraksıyordu. Seviye 20'de:
+ *   • kahramanın savaş değeri  `(L+1)×1,07^L` →   **81×** sv0
+ *   • biriken XP (emek)                      →    435× sv0
+ *   • diriltme bedeli `1,5^L`                → **3.325×** sv0
+ * Yani bedel değerden **41 kat** hızlı büyüyor, üstelik tavansız. Pratik sonucu: sv15+ bir
+ * kahraman kalıcı ölüydü — Maden 20 ekonomisinde diriltmek **23 günlük** gelir tutuyordu,
+ * oyuncu yenisinin çıkmasını beklemeyi seçiyordu. 1,25 tam olarak güç eğrisinin hızı; aynı
+ * diriltme 1,5 güne indi.
+ *
+ * ⭐ Ceza kalkmadı, **eksen değiştirdi**: kahramanı kaybetmenin bedeli artık altın değil
+ * ZAMAN (48 saate kadar diriltme beklemesi, bkz. `heroReviveSeconds`). Sur onarımındaki
+ * 2026-08-11 kararıyla aynı çizgi.
+ *
+ * ⚠️ Maliyet Tapınak seviyesinden **etkilenmez** (kullanıcı kararı) — Tapınak yalnız süreyi
+ * kısaltır. Doküman da Tapınak'a iki iş veriyor: çıkma ihtimali + diriltme süresi.
  */
-export function heroReviveCost(level: number): Cost {
-  const k = 1.5 ** Math.max(0, level);
+export function heroReviveCost(level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
+  const k = cfg.economy.heroReviveCostRate ** Math.max(0, level);
   return { gold: Math.round(3000 * k), food: Math.round(2000 * k) };
 }
 

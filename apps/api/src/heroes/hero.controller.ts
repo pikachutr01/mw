@@ -27,6 +27,7 @@ import { NAME_RULE_MESSAGE, gameName } from '../cities/city-name.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDateOrNull, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
+import { SettingsService } from '../settings/settings.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 
 const skillsRequest = z.object({
@@ -80,10 +81,16 @@ function mapHero(r: Record<string, unknown>): HeroRow {
 @Controller('api/v1')
 @UseGuards(AuthGuard)
 export class HeroController {
+  /**
+   * ⚠️ `SettingsService` 2026-08-11'de eklendi: diriltme maliyeti artık dünya bazlı ayarlanabilir
+   * (`economy.heroReviveCostRate`). Desen `city.controller.ts` ile aynı — denetleyici servisi
+   * doğrudan enjekte edip `catalog(worldId)` çağırıyor, ayrı bir `catalogFor` fabrikası yok.
+   */
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly cities: CityService,
     private readonly clock: GameClockService,
+    private readonly settings: SettingsService,
   ) {}
 
   /**
@@ -140,7 +147,7 @@ export class HeroController {
       heroCount: Number(countRow?.['n'] ?? 0),
       maxHeroes: DEFAULT_COMBAT_CONFIG.capture.maxHeroes,
       pointsPerLevel: DEFAULT_COMBAT_CONFIG.hero.pointsPerLevel,
-      heroes: rows.map((r) => this.present(mapHero(r), templeLevel, now)),
+      heroes: rows.map((r) => this.present(mapHero(r), templeLevel, now, player.worldId)),
     };
   }
 
@@ -213,7 +220,7 @@ export class HeroController {
     if (hero.cityId == null) throw new BadRequestException('Kahraman henüz şehre dönmedi.');
 
     const temple = await this.templeLevel(hero.cityId);
-    const cost = heroReviveCost(hero.level);
+    const cost = heroReviveCost(hero.level, this.settings.catalog(player.worldId));
     const paid = await this.cities.trySpend(hero.cityId, cost, now);
     if (!paid) throw new BadRequestException('Yeterli kaynak yok.');
 
@@ -242,7 +249,9 @@ export class HeroController {
   /* ── yardımcılar ─────────────────────────────────────────────────────────── */
 
   /** Ekrana giden biçim: durum etiketi + eşikler + diriltme maliyeti. */
-  private present(h: HeroRow, templeLevel: number, now: Date): Record<string, unknown> {
+  private present(
+    h: HeroRow, templeLevel: number, now: Date, worldId: number,
+  ): Record<string, unknown> {
     const nextXp = heroXpForLevel(h.level + 1);
     return {
       id: h.id,
@@ -267,7 +276,8 @@ export class HeroController {
       returningAt: h.status === 'dead' && h.cityId == null
         ? h.missionAt?.toISOString() ?? null : null,
       /** ⚠️ Maliyet/süre şehre VARMIŞ ölü kahramanda gösterilir — yolda henüz diriltilemez. */
-      reviveCost: h.status === 'dead' && h.cityId != null ? heroReviveCost(h.level) : null,
+      reviveCost: h.status === 'dead' && h.cityId != null
+        ? heroReviveCost(h.level, this.settings.catalog(worldId)) : null,
       reviveSeconds: h.status === 'dead' && h.cityId != null
         ? heroReviveSeconds(h.level, templeLevel) : null,
       _now: now.toISOString(),

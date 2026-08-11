@@ -61,6 +61,22 @@ export interface EconomyConfig {
   carryTimeWeight: number;
 
   /**
+   * ⭐ KAHRAMAN DİRİLTME MALİYET ÜSSÜ — `(3000, 2000) × oran^seviye` (§13.11.4b).
+   *
+   * ⚠️ **Yalnız taban ölçülmüştür, üs DEĞİL.** Orijinal istemci diriltme bedelini hiç
+   * hesaplamıyor: onay diyaloğu sunucudan gelen hazır `l`/`m` alanlarını basıyor
+   * (`l.java:175`) ve `k.java`'nın ekonomi fonksiyonu yalnız bina tip kodlarına bakıyor.
+   * Yani bu sayı tamamen bizim tasarım düğmemiz — değiştirmek hiçbir orijinal veriyi ihlal
+   * etmiyor. Ayrıntılı kanıt: `docs/JAVA_ROENTGEN.md` → Tapınak/Kahraman röntgeni.
+   *
+   * ⚠️ **1,50'den 1,25'e indirildi (kullanıcı, 2026-08-11).** 1,50 ıraksıyordu: seviye 20'de
+   * kahramanın savaş değeri sv0'ın 81 katıyken bedel 3.325 katıydı — bedel değerden **41 kat**
+   * hızlı büyüyor ve tavanı yoktu. 1,25 tam olarak `(L+1)×1,07^L` güç eğrisinin hızı.
+   * Sonuç: sv15 diriltme, Maden 20 ekonomisinde 23 günlük gelirden 1,5 güne indi.
+   */
+  heroReviveCostRate: number;
+
+  /**
    * ⭐ FİYAT ÇARPANLARI (Faz 5) — kataloğun taban fiyatlarını topluca ölçekler.
    *
    * Bu üç çarpan **topluca** ölçekler: "fiyatlar genel olarak yüksek mi" sorusunun düğmesi.
@@ -254,6 +270,7 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     trainTimeAreaDecay: 0.95,
     originalTrainFactor: 65,
     originalDivisorRate: 1.4,
+    heroReviveCostRate: 1.25,
   },
   // ⚠️ Taban 20 değil **24** saat (kullanıcı, 2026-08-03). Doküman süreyi vermiyor; 20 kurguydu.
   teleport: {

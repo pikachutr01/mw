@@ -51,7 +51,40 @@ describe('kahraman tecrübesi', () => {
 describe('kahraman diriltme', () => {
   it('maliyet tabanı oyunun ekranından: seviye 0 → 3000 altın / 2000 yiyecek', () => {
     expect(heroReviveCost(0)).toEqual({ gold: 3000, food: 2000 });
-    expect(heroReviveCost(5)).toEqual({ gold: 22_781, food: 15_188 });
+    /* ⚠️ Üs 2026-08-11'de 1,50 → 1,25 (eski beklenti 22.781/15.188). Gerekçe alttaki
+     * «ıraksamaz» testinde ve `formulas.ts` yorumunda; taban ölçülü olduğu için değişmedi. */
+    expect(heroReviveCost(5)).toEqual({ gold: 9155, food: 6104 });
+    expect(heroReviveCost(10)).toEqual({ gold: 27_940, food: 18_626 });
+  });
+
+  /**
+   * ⭐⭐ ASIL DEĞİŞMEZ: **bedel, kahramanın SAVAŞ DEĞERİNDEN ıraksamaz** (kullanıcı, 2026-08-11).
+   *
+   * Sayıyı değil İLKEYİ kilitliyor. Kahramanın seviyeden gelen güç ölçeği `(L+1)×1,07^L`
+   * (`engine/combat.ts` → `heroStats`, `cfg.hero.levelBase`). Diriltme bedeli bunun çok
+   * önüne geçerse yüksek seviye kahraman **kalıcı ölü** olur: oyuncu diriltmek yerine
+   * yenisinin çıkmasını bekler ve oyunun en kişiselleştirilmiş varlığı çöpe gider.
+   *
+   * ⚠️ Bu tam olarak 2026-08-11 öncesinin durumuydu: 1,50 üssüyle sv20'de sapma **41 katıydı**
+   * (bedel 3.325× · güç 81×). 1,25 ile ~3,2'ye indi. Üssü biri 1,5'e geri çekerse bu test
+   * kırmızı verir — bandı büyütmeden önce yukarıdaki gerekçe yeniden tartışılmalı.
+   */
+  it('⭐⭐ bedel, kahramanın savaş değerinden IRAKSAMAZ', () => {
+    const guc = (L: number): number => (L + 1) * 1.07 ** L;         // heroStats'ın seviye terimi
+    const sapma = (L: number): number =>
+      (heroReviveCost(L).gold / heroReviveCost(0).gold) / (guc(L) / guc(0));
+
+    expect(sapma(10)).toBeLessThan(2);
+    expect(sapma(20)).toBeLessThan(4);
+    /* Alt sınır da var: bedel değerin GERİSİNDE kalırsa kahraman ölümü bedava olur. */
+    expect(sapma(20)).toBeGreaterThan(1);
+  });
+
+  /** Panel düğmesi gerçekten bağlı mı — `economy.heroReviveCostRate`. */
+  it('üs katalog config\'inden okunur (panelden ayarlanabilir)', () => {
+    const eski = mergeCatalogConfig({ economy: { heroReviveCostRate: 1.5 } });
+    expect(heroReviveCost(5, eski)).toEqual({ gold: 22_781, food: 15_188 });
+    expect(heroReviveCost(0, eski)).toEqual({ gold: 3000, food: 2000 });   // taban sabit
   });
 
   /**
@@ -70,8 +103,18 @@ describe('kahraman diriltme', () => {
 
   it('maliyet seviyeyle artar ama tapınaktan ETKİLENMEZ', () => {
     expect(heroReviveCost(3).gold).toBeGreaterThan(heroReviveCost(0).gold);
-    // İmza zaten tapınak almıyor — kural burada belgeleniyor ki ileride yanlışlıkla eklenmesin.
-    expect(heroReviveCost.length).toBe(1);
+    /**
+     * ⚠️ Eskiden burada `heroReviveCost.length === 1` yazıyordu ve niyeti *"tapınak parametresi
+     * yok"* demekti. 2026-08-11'de ikinci parametre (config) eklendi; varsayılanlı parametreler
+     * `.length`e sayılmadığı için o iddia **yanlış sebeple** yeşil kalıyordu. Yerine kuralı
+     * doğrudan ölçüyoruz: tapınak seviyesi ne olursa olsun bedel aynı.
+     */
+    const t0 = heroReviveCost(7);
+    for (const tapinak of [0, 5, 20]) {
+      // Tapınak yalnız SÜREYE girer; maliyet imzasında tapınak diye bir kavram yok.
+      expect(heroReviveSeconds(7, tapinak)).toBeLessThanOrEqual(heroReviveSeconds(7, 0));
+      expect(heroReviveCost(7)).toEqual(t0);
+    }
   });
 
   it('alt sınır 15 dk, üst sınır 48 saat', () => {

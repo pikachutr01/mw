@@ -41,6 +41,14 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * yeni `structureTimeExponent` alanı ve `buildingTuning`e giren tek kayıt. Savaş STATLARINA
  * dokunulmadı; özet yine de kaymalı çünkü ekonomi de kataloğun bir parçası ve bir savaşın hangi
  * denge sürümünde oynandığı sorusuna fiyatlar da giriyor.
+ *
+ * ⭐ **2026-08-11'de DEĞİŞMEDİ ve bu öğretici.** O gün kataloğa yeni bir alan girdi
+ * (`economy.heroReviveCostRate`, kahraman diriltme üssü 1,50 → 1,25) ama özet aynı kaldı.
+ * Sebep `hash.ts:59`: taban yük yalnız `UNITS`/`TECHS`/`BUILDINGS` + sürüm; config'ten
+ * **yalnız varsayılandan SAPMA** (`diffFromDefault`) karışıyor. Yani yeni bir *varsayılan*
+ * alan hiçbir zaman özeti kaydırmaz — eski savaşların `catalog_hash`i "başka bir katalog"
+ * gibi görünmez. Kural: **özet, tabloları ve dünya bazlı sapmaları izler; varsayılan
+ * genişlemesini değil.**
  */
 const DEFAULT_HASH = '0934c2b4';
 

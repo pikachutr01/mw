@@ -515,6 +515,22 @@ da aynı ölçüde cezalandırır.
 ⚠️ İkisi 2026-08-10'a kadar **tek bir alandı** (0,8). Yapı sürelerini uzatmak için o tek üssü
 büyütmek Kaos ve Ejderha üretimini de patlatıyordu; ayrım bunun için açıldı.
 
+### ⭐ `economy.heroReviveCostRate` — kahraman diriltme üssü (2026-08-11)
+
+`maliyet = (3.000 altın, 2.000 yemek) × oran^kahramanSeviyesi`. **Varsayılan 1,25.**
+⚠️ Taban ölçülmüştür (oyunun kendi ekranı), oran **bizim tasarım düğmemizdir**: orijinal
+istemci bedeli hiç hesaplamıyor, sunucudan hazır alıyordu (`JAVA_ROENTGEN.md` §6.1).
+
+| Bu düğmeyi büyütürsen | Küçültürsen |
+| :-- | :-- |
+| Ceza **altına** kayar; yüksek seviye kahramanı diriltmek ekonomik bir karar olur | Ceza **zamana** kayar; asıl bedel 48 saate kadar diriltme beklemesi olur |
+
+⚠️ **1,50'yi geri koymadan önce oku.** 2026-08-11'de tam da oradan indirildi: sv20'de
+kahramanın savaş değeri sv0'ın 81 katıyken bedel **3.325** katıydı — bedel değerden 41 kat
+hızlı büyüyor ve tavanı yoktu, sv15+ kahraman pratikte **kalıcı ölü** oluyordu (Maden 20
+ekonomisinde 23 günlük gelir). `formulas.test.ts`'teki *«bedel savaş değerinden ıraksamaz»*
+testi 1,5'te **kırmızı verir** — bandı gevşetmeden önce o gerekçeyi yeniden tartış.
+
 ### ⚠️ `buildingTuning`de bir tane varsayılan kayıt VAR — ve olması gerekiyor
 
 Seyreklik sözleşmesi (aşağıda) *"dokunulmamış varlık için kayıt olmaz"* diyor ve hâlâ geçerli.

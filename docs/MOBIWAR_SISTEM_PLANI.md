@@ -2686,15 +2686,54 @@ sunucudaydı → biz tasarlıyoruz. Elimizdeki tek çıpa: doküman notu **"0 se
 2.000 yemek"**.
 
 ```
-diriltMaliyeti = (3.000 altın , 2.000 yemek) × 1,5^kahramanSeviyesi     // Tapınaktan ETKİLENMEZ
+diriltMaliyeti = (3.000 altın , 2.000 yemek) × 1,25^kahramanSeviyesi    // Tapınaktan ETKİLENMEZ
 diriltSüresi   = 9 saat × 1,10^kahramanSeviyesi × 0,93^Tapınak          // 15 dk – 48 sa arası
 ```
-| Kahraman sv | Maliyet (altın/yemek) | Süre @Tapınak 0 | @Tapınak 5 | @Tapınak 20 |
+⚠️ Üs **2026-08-11'de 1,50 → 1,25** oldu (gerekçe hemen aşağıda). Panelden ayarlanabilir:
+`economy.heroReviveCostRate`.
+
+| Kahraman sv | Maliyet (altın/yemek) | Süre @Tapınak 0 | @Tapınak 10 | @Tapınak 20 |
 | --: | --: | --: | --: | --: |
-| 0 | 3.000 / 2.000 | **9 sa 00 dk** | 6 sa 16 dk | 2 sa 06 dk |
-| 5 | 22.781 / 15.188 | 14 sa 29 dk | 10 sa 05 dk | 3 sa 24 dk |
-| 10 | 173.005 / 115.337 | 23 sa 20 dk | 16 sa 14 dk | 5 sa 28 dk |
-| 13 | 583.859 / 389.239 | 31 sa 03 dk | 21 sa 37 dk | 7 sa 17 dk |
+| 0 | 3.000 / 2.000 | **9,0 sa** | 4,4 sa | 2,1 sa |
+| 5 | 9.155 / 6.104 | 14,5 sa | 7,0 sa | 3,4 sa |
+| 10 | 27.940 / 18.626 | 23,3 sa | 11,3 sa | 5,5 sa |
+| 15 | 85.265 / 56.843 | 1,6 gün | 18,2 sa | 8,8 sa |
+| 20 | 260.209 / 173.472 | 2,0 gün | 1,2 gün | 14,2 sa |
+| 25 | 794.093 / 529.396 | 2,0 gün | 2,0 gün | 22,8 sa |
+
+#### ⭐⭐ ÜS NEDEN 1,50'DEN 1,25'E İNDİ (kullanıcı, 2026-08-11)
+
+Üç eğri seviye 20'de sv0'a oranlandı:
+
+| | sv20 / sv0 |
+|---|---:|
+| Kahramanın **savaş değeri** `(L+1)×1,07^L` | **81×** |
+| Biriken **XP** (harcanan emek) | 435× |
+| Diriltme bedeli `1,50^L` | **3.325×** |
+
+⚠️ Bedel, kahramanın değerinden **41 kat hızlı** büyüyordu ve **tavanı yoktu**. İkinci kanıt
+eğrilerin şeklinde: `heroXpForLevel` **yavaşlıyor** (`×(1+1/√(L−1))`, seviye başına çarpan
+2,00 → 1,20), maliyet ise sabit ×1,50. «Bir seviyenin XP'si başına diriltme bedeli» sv4'te
+5,6 iken sv25'te **132** — aynı emeğin kurtarma bedeli 24 kat ağırlaşıyor, açı sonsuza kadar
+açılıyor.
+
+**Pratik sonucu:** Maden/Çiftlik 20 ekonomisinde (2.335 altın/sa) sv15 bir kahramanı
+diriltmek **23 günlük** toplam gelir tutuyordu, sv20 için **178 gün**. Yani sv15+ kahraman
+pratikte **kalıcı ölüydü** — oyuncu diriltmek yerine yenisinin çıkmasını bekliyor, oyunun en
+kişiselleştirilmiş varlığı çöpe gidiyordu. Üstelik kahraman seviyesi **savaşla**, ekonomi
+**zamanla** büyüdüğü için aktif savaşan oyuncu, ekonomisi yetişmeden diriltemeyeceği bir
+kahramana sahip oluyordu.
+
+1,25 tam olarak **savaş değeri eğrisinin hızı**. Aynı diriltme 1,5 güne indi.
+
+⭐ **Ceza kalkmadı, EKSEN değiştirdi:** kahramanı kaybetmenin bedeli artık altın değil
+**zaman** — 48 saate kadar diriltme beklemesi ve o süre boyunca kahramansız savaşmak. Sur
+onarımında aynı gün verilen kararla (*"cezayı zamana çevir"*, §13.21.2) aynı çizgi.
+
+⚠️ **Bilinen bedeli:** alt uç da ucuzladı (sv5: 22.781 → 9.155) ve geç oyunda (Maden 30)
+sv20 diriltme ~17 saatlik gelire denk — zengin oyuncu için maliyet neredeyse simgesel.
+Denge bozuk gelirse panelden 1,30-1,35'e çekmek artık kod değişikliği gerektirmiyor.
+Bekçi: `formulas.test.ts` → *«bedel, kahramanın savaş değerinden IRAKSAMAZ»*.
 
 ⭐ **İki eksen TERS yönde (kullanıcı, 2026-07-29):**
  • **Kahraman seviyesi** hem süreyi hem maliyeti **artırır** — yüksek seviye kahramanı kaybetmek
@@ -2708,7 +2747,11 @@ diriltSüresi   = 9 saat × 1,10^kahramanSeviyesi × 0,93^Tapınak          // 1
 > *"Kahramanın seviyesi arttıkça dirilme süresi uzasın, mantıklı olan da."*
 
 **Maliyet tabanı ÖLÇÜLDÜ:** oyunun tapınak ekranında seviye 0 ölü kahraman için
-`3000 altın · 2000 yemek` yazıyor (`images/scr_itv03`); yalnız `1,5^seviye` çarpanı bizim.
+`3000 altın · 2000 yemek` yazıyor (`images/scr_itv03`); yalnız seviye çarpanı bizim.
+⭐ 2026-08-11 röntgeni bunu **kesinleştirdi**: diriltme onay diyaloğu (`l.java:175`) sunucudan
+gelen hazır `l`/`m` alanlarını basıyor ve `k.java`'nın ekonomi fonksiyonu yalnız bina tip
+kodlarına bakıyor — istemcide kahraman dalı **yok**. Yani üssü değiştirmek hiçbir orijinal
+veriyi ihlal etmiyor. Tam kanıt zinciri: `docs/JAVA_ROENTGEN.md` §6.1.
 **Süre kalibrasyonu:** aynı ekranda `2:04:27` (7467 sn) görünüyor, tapınak seviyesi yazmıyor.
 Model Tapınak 20 / seviye 0 için 7589 sn veriyor — 2 dakika farkla oturuyor.
 Hepsi `world_config.economy`'de.

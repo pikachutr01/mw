@@ -409,6 +409,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | **`CASUSLUK_SISTEMI.md`** | ⭐ **Casusluk röntgeni.** ⚠️ Sistem 2026-08-09'da **baştan sadeleştirildi**: duvar/engelleme kaldırıldı, model dört satır (`E = seviye + min(log2(kuş), 8) − rakip` · kayıp = `P/(1+2^E)`). Savunma bilgiyi ENGELLEMEZ, kuş vergilendirir. Kademe tablosu · panelden ayarlanabilir 7 sabit · kalibrasyon tabloları · sadeleştirmenin gerekçesi olan 1:17:5 → 1:28:5 vakası |
 | **`MOBIWAR_SISTEM_PLANI.md`** | **Projenin beyni.** Kural, formül ve gerekçe (§13.5 harita · §13.9 ekonomi · §13.11 şehir/üretim · §13.12 sohbet · §13.13 tema · §13.16 dünya). ⚠️ Yalnız **kural değişince** güncellenir, özellik bitince değil |
 | **`EKSIK_OZELLIKLER.md`** | **Tek backlog.** Yeni iş seçerken açılır (arayüz listesi de buraya katlandı) |
+| ⭐ **`JAVA_ROENTGEN.md`** | **Java istemcisine bakmadan ÖNCE aç** (2026-08-11). Orijinal koddan çözülmüş bilginin kalıcı arşivi: dize tablosu çözücüsü (`araclar/java-dize.py`) + **üç kodlama/kabuk tuzağı** · sunucu **alan sözlüğü** (`u`=durum, `v`=seviye, `l`/`m`=altın/yemek…) · uç kataloğu · özellik röntgenleri (ilk giriş: Tapınak/Kahraman menüsü) · ⭐ **«uygulamadıklarımız» defteri**. Her yeni Java analizinde **buraya eklenir**, baştan analiz edilmez |
 | **`DAGITIM.md`** | ⭐ **«Bunu canlıya nasıl alırım?»** — değişiklik türüne göre akış (cevap: hepsi aynı), göç kuralları (expand-contract), **servis başlat/durdur/log komutları**, ilk admin, ileride Flutter CI/CD |
 | **`YAYINA_ALMA.md`** | Sunucu künyesi · ilk kurulumda ne yapıldı · canlıya çıkışın kalan adımları · **kararların gerekçesi** |
 | `VPS_DURUM_RAPORU.md` | Sunucunun 2026-07-26 tarihli genel denetimi (temizlik, MySQL, diğer siteler). ⚠️ §0 ve §1 bayat — güncel künye `YAYINA_ALMA.md`'de |
@@ -420,6 +421,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | `veri/` | Kalibrasyon çıkarımları (birim statları, üretim tabloları, mağara kapasitesi) |
 | `DecompiledSrc/src/` | Orijinal J2ME java kaynağı — `g.java` menüler, `k.java` protokol |
 | `araclar/harita.html` | Sefer süresini elle denemek için — tarayıcıda aç, oyna. ⚠️ Kendi sayı kutuları var (koddan bağımsız); oyuncuya açık sürüm **Yardım → Sefer Cetveli** ve o sabitleri sunucudan alıyor |
+| `araclar/java-dize.py` | `k.java` dize tablosunu indeksler — Java analizinin ilk adımı. Kullanımı ve tuzakları `JAVA_ROENTGEN.md` §1'de |
 
 **⚫ `arsiv/` — açma.** Tarihsel ölçüm kayıtları ve eski oturumların dökümü. İçerik korunuyor
 ama hiçbiri güncel değil; bir şeyi doğrulamak için değil, **ne yaptığımızı hatırlamak** için var.

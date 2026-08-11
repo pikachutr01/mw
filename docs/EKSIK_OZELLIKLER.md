@@ -180,6 +180,7 @@ bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görünt
 
 | Konu | Kanıt | Durum |
 | :-- | :-- | :-- |
+| ⭐ **Kahraman mağaraya saklanabiliyor** | `k.java` dize tablosu `231+durum`: **Mağarada · Mağaraya Giriyor · Mağaradan Çıkıyor** (kod 3-4-5), `j.java:401` durum tablosu | ⛔ **YOK.** `cave_units` yalnız `(city_id, type)` taşıyor; `apps/api/src/cave/` içinde tek bir `hero` geçmiyor. ⏸️ Kullanıcı 2026-08-11'de **erteledi** (*"şimdilik yalnız kaydet"*). Tam künye ve açık sorular: **`JAVA_ROENTGEN.md` §7.1** — mağara, kahraman kaybına karşı bir sigortaya dönüşeceği için diriltme dengesini de etkiler |
 | **Askerî unvanlar** | `k.java:1214-1245`: Asker/**Subay/Komutan/Başkomutan/Mareşal** (1-5) — ittifak rolünden (Konsey/Lider) AYRI alan. Verilme şartı istemcide YOK, sunucudaydı | Bizde yalnız 3 rol. Kullanıcı: *"savaşlardaki başarılarına göre veriliyordu, muhtemelen süreli"* → şart bilinmiyor; gösterim rozeti ucuz |
 | **Yardım sayfası** | `grYrd.do`; içerik zaten `teknik_ve_yapi_dokumantasyonu.md`'de duruyor | `Placeholders.tsx:26-31` iki satır "yakında" |
 | ~~**Şehir adı değiştirme**~~ | `dgSad.do?a=` (`g.java:1892`) | ✅ **yapıldı** (Tur B). ⚠️ Sınır 2026-08-01'de **15** karaktere çıktı; orijinalin 10'u hesap silmenin ürettiği `hükümdarN` adlarına yetmiyordu |

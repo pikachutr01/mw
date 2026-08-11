@@ -1020,6 +1020,20 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + '2.869 güne fırlatıyordu.',
   },
   {
+    key: 'economy.heroReviveCostRate',
+    label: 'Kahraman diriltme üssü',
+    type: 'number', default: 1.25, min: 1, max: 2, tag: 'design',
+    description: 'Ölü kahramanı diriltmenin bedeli: (3.000 altın, 2.000 yemek) × bu oran^seviye. '
+      + 'Taban ölçülmüştür, oran bizim tasarım düğmemizdir — orijinal istemci bedeli hiç '
+      + 'hesaplamıyor, sunucudan hazır alıyordu. ⚠️ Tapınak bu maliyeti ETKİLEMEZ, yalnız süreyi '
+      + 'kısaltır.',
+    note: '⚠️ 2026-08-11\'de 1,50\'den indirildi: eski oran ıraksıyordu. Seviye 20\'de kahramanın '
+      + 'savaş değeri sv0\'ın 81 katıyken bedel 3.325 katıydı — bedel değerden 41 kat hızlı '
+      + 'büyüyor ve tavanı yoktu, yani sv15+ kahraman pratikte kalıcı ölü oluyordu (Maden 20 '
+      + 'ekonomisinde 23 günlük gelir). 1,25 tam olarak kahramanın güç eğrisinin hızıdır. '
+      + 'Büyütürsen ceza altına, küçültürsen zamana kayar.',
+  },
+  {
     key: 'economy.unitTimeFactor',
     label: 'Birim süre katsayısı',
     type: 'number', default: 190, min: 1, max: 10000, tag: 'design',
