@@ -5,6 +5,12 @@
 >
 > **Motor sütunlarını yeniden üretmek için:** `node scratchpad/gece_olcum.mjs`
 
+> ⭐ **DEVAMI VAR (2026-08-11): `docs/GECE_GORUS_TESTLERI.md`.** Bu dosyanın altı hücresi de
+> **5 turluk** savaşlardı ve 5 turluk savaşta geri besleme her kanalı birbirine karıştırır — yani
+> buradaki ölçüm *"gece görüşü savunmaya da mı işliyor"* sorusunu **soramadı**. Yeni set o soruyu
+> **2 turluk savaşlarla** izole ediyor (tur 2'den sonra tur yoksa geri besleme de yok) ve eğrinin
+> şeklini parametreden bağımsız bir **oran testiyle** sınıyor.
+
 ---
 
 ## ⭐ SONUÇ (2026-07-31, kullanıcı ölçümü tamamlandı)

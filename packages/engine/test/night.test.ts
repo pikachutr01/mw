@@ -12,6 +12,11 @@
  *
  * Bu dosyanın işi o yapıyı **kilitlemek**: hangi statın etkilendiği bir daha ampirik tahminle
  * değişmesin. Sayısal büyüklük ölçümleri ayrı (`docs/veri/gece-savasi-olcumleri.md`).
+ *
+ * ⭐ **Kardeş dosya: `night-vision-golden.test.ts` (2026-08-11).** Buradaki testler «gece hangi
+ * statları çarpıyor» sorusunu tutuyor; o dosya **«gece görüşü hangi YÖNDE çalışıyor»** sorusunu:
+ * çarpan yalnız havuza (saldırıya) mı işliyor, yoksa dayanıklılığa da mı. Ayrımı **2 turluk**
+ * savaşlarla izole ediyor, çünkü 5 turluk savaşta geri besleme iki kanalı ayırt edilemez kılıyor.
  */
 import { describe, expect, it } from 'vitest';
 import { nightMultiplier, simulate } from '../src/index.ts';
