@@ -342,6 +342,45 @@ Kesinleştirmek için `javap -c` ile bytecode taraması gerekir.
 
 ---
 
+### 6.6 ⭐⭐⭐ TEKNİK UYGULAYICILARI — İKİ AİLE, TEK SATIRLIK FARK (2026-08-12, PE/Ghidra)
+
+⚠️ Bu bölüm Java istemcisinin değil **savaş binary'sinin** röntgeni; buraya konuyor çünkü
+"bir teknik hangi birime işler" sorusu her denge turunda yeniden soruluyor. Tam analiz ve
+ölçüm: `docs/TILSIM_SUZGEC_TESTLERI.md`.
+
+```
+atk AİLESİ (Okçuluk · Demircilik · Kimya · İçgüdü)   →  GRUP SÜZGECİ VAR
+    FUN_004123fc  if (FUN_0041279c(birim) == 4) …      (Kimya, savaşçı)
+    FUN_00412fa8  if (FUN_00413190(yapı)  == 4) …      (Kimya, yapı)
+    FUN_00412464  if (FUN_0041279c(birim) == 7) …      (İçgüdü)
+
+Zırh · Büyücülük · Tılsım                            →  SÜZGEÇ YOK
+    FUN_00412528  if (seviye != 0) …   (Zırh — İKİ stat çifti)
+    FUN_004124cc  if (seviye != 0) …   (Büyücülük)
+    FUN_004125c8  if (seviye != 0) …   (Tılsım, savaşçı)
+    FUN_004130c4  if (seviye != 0) …   (Tılsım, yapı)
+    FUN_00413744                        (Tılsım, Büyü Kalkanı — ayrı, oran %5)
+```
+
+**`FUN_0041279c` grup tablosu** (birim indeksi → grup):
+
+| grup | indeksler | teknik |
+|---:|---|---|
+| 0 | 1 Elf · 3 Pegasus | Okçuluk |
+| 1 | 0 Cüce · 2 Süvari · **7 Şaman** · 8 Casus Kuş · 9 Yük Arabası · 10 Gnom · 12 Kahraman | Demircilik |
+| 4 | 5 Mancınık | Kimya |
+| 7 | 4 Ejderha · 6 Ogre · 11 Kaos | İçgüdü |
+
+**Getter → stat sözlüğü (altısı da doğrulandı):** `b5c` +0x00 Can · `b9c` +0x08 BüyüCan ·
+`b7c` +0x10 FizSald · `afc` +0x18 FizSav · `b1c` +0x20 BüyüSald · `b3c` +0x28 BüyüSav.
+⭐ `b3c`yi **hiçbir** teknik çağırmıyor → `mDef` lineer tekniklerden bağımsız.
+
+⚠️⚠️ **Dokümanın birim başına «Etkilendiği Teknikler» listeleri SÜZGEÇ DEĞİL, betimleme.**
+Dördü de bu tek gerçeğin belirtisiydi: Zırh'ta *"Kaos hariç"*, Büyücülük'te *"Büyü Kalkanı"*,
+Mancınık'ta *"yalnız Zırh + Kimya"*, Demircilik'te *"Ogre var, Şaman yok"*.
+
+---
+
 ## 7. ⭐ UYGULAMADIKLARIMIZ DEFTERİ
 
 > Orijinalde **var**, bizde **yok**. Kullanıcı: *"java kodlarından çıkan ve bizim

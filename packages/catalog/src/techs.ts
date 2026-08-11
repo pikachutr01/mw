@@ -60,15 +60,45 @@ export const TECHS: readonly TechDef[] = [
      * aşağıdaki `TECH_BY_UNIT` yorumundaki "toplanır" kuralının tek örneği Ogre'ydi ve o örnek
      * yanlışmış. Kural yine de duruyor — savunma yapıları için geçerliliği ayrıca sınanmadı.
      *
-     * ⚠️ **Şaman** binary'de bu grupta (id 7) görünüyor ama motora EKLENMEDİ — denendi ve
-     * ÖLÇÜLEBİLİR HİÇBİR ETKİSİ YOK: motorda Şaman `hp` üzerinden hasar vermiyor (kalkan gibi
-     * davranıyor, `shieldCal`), dolayısıyla `atk` ölçeklemesi ona hiç dokunmuyor. Gerçek savaşta
-     * eklemek kaybı 29.448 → 29.450 yaptı. Eklemek, ölçülemeyen bir farkı katalog kütüğüne
-     * yazmak olurdu; ölçülebilir bir sonda bulunursa (Şaman'ın hasar verdiği bir kurulum) tekrar
-     * bakılmalı.
+     * ⭐⭐⭐ **ŞAMAN 2026-08-12'de EKLENDİ — ve bu, 2026-08-09'da verilmiş YANLIŞ bir kararın
+     * geri alınmasıdır.** O gün aynı `FUN_0041279c` okunmuş, Şaman'ın id 7 ile bu grupta olduğu
+     * GÖRÜLMÜŞ, ama şu gerekçeyle eklenmemişti:
+     *
+     *   > *"motorda Şaman `hp` üzerinden hasar vermiyor, dolayısıyla `atk` ölçeklemesi ona hiç
+     *   > dokunmaz; gerçek savaşta eklemek kaybı 29.448 → 29.450 yaptı"*
+     *
+     * ⚠️ **Gerekçedeki hata:** Şaman `hp`si hasar VERMEK için okunmuyor, **EMMEK** için okunuyor.
+     * `combat.ts` → `dealType`: `pool -= shamanShield(def, ...)` ve `shamanShield` faz 1-2'de tam
+     * olarak `sh.stats.poolHp × adet` çıkarıyor. Yani `atk` ölçeklemesi Şaman'ın **emme gücünü**
+     * doğrudan büyütüyor — motordaki tek okuma yeri orası. O günkü sonda da bu yüzden sessiz
+     * kaldı: aradığı şey *"Şaman'ın hasar verdiği bir kurulum"*du, oysa aranması gereken
+     * *"Şaman'ın emdiği miktarın gelen havuza oranla BÜYÜK olduğu bir kurulum"*.
+     *
+     * ── Ölçüm (kullanıcının rastgele kurduğu gerçek savaş, 2026-08-12) ───────────────────────
+     * Saldıranda **1.200 Şaman**, Demircilik 14 → emme `200 × 1,7 × 1.200 = 408.000`
+     * (eskiden 240.000; savunanın faz-1 havuzu ~1,9M, yani fark havuzun **%9'u** ve bu beş tur
+     * boyunca birikiyor).
+     *
+     * | | binary | eski motor | **yeni motor** |
+     * |---|---|---|---|
+     * | saldıran kaybı | 4.512 | 5.316 (+%17,8) | **4.541 (+%0,6)** |
+     * | savunan kaybı | 8.760 | 8.807 (+%0,5) | **8.708 (−%0,6)** |
+     * | kahraman XP | 8.404 | 10.695 (+%27,3) | **8.574 (+%2,0)** |
+     *
+     * ⭐ **Ders:** "denendi, etkisi yok" kaydı, sondanın **yanlış kanalı** araması yüzünden
+     * kurulmuş olabilir. Bir eşlemeyi binary'den okuduysan, sonda etkisiz çıktığında önce
+     * *"bu stat motorda NEREDE okunuyor"* sorusunu yeniden sor.
+     *
+     * ⚠️ Dokümanın Demircilik listesi (*"Cüce, Süvari, Ogre, Gnom, Tuzak, Muhafız"*) bu grupta
+     * **ikinci kez** yanlış çıkıyor: Ogre 2026-08-09'da çıkarıldı, Şaman şimdi eklendi. Metnin
+     * *"yakın vuruş yapan üniteler"* tanımı Şaman'ı dışarıda bırakıyor (Şaman tip 1) ama binary
+     * anahtarı tip'e değil **birim indeksine** bakıyor.
+     *
+     * ⚠️ Casus Kuş (8) ve Yük Arabası (9) de aynı grupta ama `hp`leri 0 → ölçeklenecek bir şey
+     * yok. Katalog listesine yazılmadılar; yazılsa `catalogHash` boşuna kayardı.
      */
     id: 'blacksmithing', name: { tr: 'Demircilik' }, rate: 0.05, stat: 'atk',
-    units: ['dwarf', 'cavalry', 'gnome', 'trap', 'guard'],
+    units: ['dwarf', 'cavalry', 'gnome', 'shaman', 'trap', 'guard'],
     baseGold: 400, baseFood: 350,
   },
   {
@@ -136,9 +166,53 @@ export const TECHS: readonly TechDef[] = [
      * Tek bir oran iki farklı birimi birden tutturuyor — tesadüf değil. Kardeşi Zırh de zaten
      * %6 ve o ölçümde ilk denemede tutmuştu; ikisi aynı aileden.
      */
+    /**
+     * ⭐⭐⭐ **MANCINIK 2026-08-12'de EKLENDİ — binary'de Tılsım'ın SÜZGECİ YOK.**
+     *
+     * Kullanıcının rastgele kurduğu gerçek savaşta Şaman düzeltmesinden sonra geriye **tek**
+     * yapısal aykırı kaldı: her birim ±%1,8 içindeyken Mancınık saldıranda −%8,2, savunanda
+     * −%16,4 sapıyordu. Ghidra bunu doğrudan açıkladı — teknik uygulayıcılarının **iki ayrı
+     * ailesi** var:
+     *
+     * ```
+     *   atk aileleri (Okçuluk · Demircilik · Kimya · İçgüdü)
+     *       FUN_004123fc / FUN_00412464 / …   →  if (FUN_0041279c(birim) == <grup>) { ölçekle }
+     *                                             ⇧ GRUP SÜZGECİ VAR
+     *   Zırh · Büyücülük · Tılsım
+     *       FUN_00412528 / FUN_004124cc / FUN_004125c8  →  if (seviye != 0) { ölçekle }
+     *                                                        ⇧ SÜZGEÇ YOK, HERKESE UYGULANIR
+     * ```
+     *
+     * `FUN_00411988` (Tılsım) hem savaşçı listesini (`FUN_004125c8`) hem savunma yapılarını
+     * (`FUN_004130c4`) baştan sona geziyor ve ikisinde de birim kontrolü yok.
+     *
+     * ⭐ **Altı getter'ın altısı da bu turda yerine oturdu** ve her tekniğin dokunduğu stat
+     * bağımsızca doğrulandı:
+     * `b5c` = +0x00 Can (atk aileleri) · `b9c` = +0x08 BüyüCan (Büyücülük) ·
+     * `b7c`+`afc` = +0x10/+0x18 (Zırh, **iki** çift) · `b1c` = +0x20 (Tılsım) ·
+     * `b3c` = +0x28 (hiçbir teknik).
+     *
+     * ⚠️ **Dokümanın birim başına «Etkilendiği Teknikler» listeleri SÜZGEÇ DEĞİL, betimleme.**
+     * Mancınık maddesi *"Zırh, Kimya"* diyor ve *"Büyü güçleri yoktur"* — ikincisi doğru ama
+     * `magicHp` hakkında (Mancınık büyü havuzuna katkı vermez). Tılsım'ın ölçeklediği stat ise
+     * `mAtk` = **faz-3 mitigasyonu** ve Mancınık'ta 240. Klasik ⚠️ *stat adları yanılsaması*.
+     * Aynı doküman aynı biçimde iki kez daha yanılmıştı (Zırh'ta *"Kaos hariç"*, Büyücülük'te
+     * *"Büyü Kalkanı"*) — ikisi de aynı «süzgeç yok» gerçeğinin belirtisiydi.
+     *
+     * Ölçüm: Mancınık kalanı saldıranda 159 → **172** (binary 173), savunanda 51 → **61**
+     * (binary 61). Savaşın tamamında ortalama sapma %2,18 → **%0,24**.
+     *
+     * ⚠️ **KAPSAM DIŞI BIRAKILDI (ölçülmedi):** aynı okuma savunma YAPILARININ tamamına da
+     * Tılsım verilmesini gerektiriyor (`archer_tower` · `trap` · `mangonel_tower` · `ballista`);
+     * listede yalnız `oil_cauldron` ve `guard` var. Bu savaşta savunma yapısı YOKTU, yani
+     * ölçülmedi ve savunma dengesini kör bir okumayla değiştirmek istemedim.
+     * Ayrılmış ölçüm seti: `docs/TILSIM_SUZGEC_TESTLERI.md`.
+     * ⚠️ Casus Kuş ve Yük Arabası da süzgeçsiz kapsamda ama `NO_ROUND_LOSS` oldukları için
+     * `mAtk`leri hiç okunmuyor → ölçülemez, listeye yazılmadı (özet boşuna kaymasın).
+     */
     id: 'talisman', name: { tr: 'Tılsım' }, rate: 0.06, stat: 'mmit',
-    units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'ogre', 'gnome', 'shaman',
-      'chaos', 'oil_cauldron', 'guard', 'magic_shield'],
+    units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'mangonel', 'ogre', 'gnome',
+      'shaman', 'chaos', 'oil_cauldron', 'guard', 'magic_shield'],
     /**
      * ⚠️⚠️ **KALKAN %5, SAVAŞÇILAR %6** (kullanıcı ölçümü, 2026-08-11).
      *

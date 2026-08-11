@@ -54,9 +54,23 @@ describe('etkilendiği teknikler — motordan türetiliyor', () => {
     expect(unitTechNames('magic_shield')).toEqual(['Tılsım (%5)']);
   });
 
-  it('Mancınık Tılsım listesinde YOK (kutudaki «büyü savunması yok» notunun dayanağı)', () => {
-    expect(unitTechNames('mangonel')).not.toContain('Tılsım');
-    expect(unitTechNames('mangonel')).toEqual(['Zırh', 'Kimya']);
+  /**
+   * ⚠️⚠️ **BEKLENTİ 2026-08-12'de TERSİNE DÖNDÜ: `['Zırh','Kimya']` → `['Zırh','Kimya','Tılsım']`.**
+   *
+   * Eski hâli oyunun kendi dokümanının Mancınık maddesine (*"Etkilendiği Teknikler: Zırh,
+   * Kimya"*) dayanıyordu ve **bu setin baştaki uyarısının dördüncü örneği** oldu. Ghidra:
+   * Tılsım'ın uygulayıcısı `FUN_004125c8` yalnız `seviye != 0`'a bakıyor, `atk` ailelerindeki
+   * `FUN_0041279c` grup süzgeci onda **yok** → Tılsım her savaşçıya işliyor.
+   * Ölçüm de doğruladı (gerçek savaşta Mancınık kalanı 159 → 172, binary 173).
+   *
+   * ⭐ Dokümanın *"Büyü güçleri yoktur"* ifadesi yanlış değil — ama `magicHp` hakkında
+   * (Mancınık büyü havuzuna katkı vermez). Tılsım'ın ölçeklediği `mAtk` ise faz-3
+   * **mitigasyonu** ve Mancınık'ta 240. Klasik stat-adı yanılsaması.
+   */
+  it('⭐ Mancınık Tılsım listesinde VAR — «süzgeç yok» mimarisi (2026-08-12)', () => {
+    expect(unitTechNames('mangonel')).toEqual(['Zırh', 'Kimya', 'Tılsım']);
+    expect(UNITS_BY_ID['mangonel']!.magicHp, 'büyü SALDIRISI yok — doküman burada haklı').toBe(0);
+    expect(UNITS_BY_ID['mangonel']!.mAtk, 'ama faz-3 mitigasyonu var').toBeGreaterThan(0);
   });
 
   it('savaş statına dokunmayan teknikler listede GÖRÜNMEZ', () => {

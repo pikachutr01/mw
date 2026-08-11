@@ -109,8 +109,11 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
   mangonel: {
     desc: 'Fırlattıkları kaya kütleleri ve ateş toplarıyla düşman şehrinin direncini kırar, '
       + 'ordunun saldırısına destek verirler.',
-    extra: 'Büyü savunmaları yoktur, Tılsım onlara işlemez. Ayrıca düşmanın gnomları tarafından '
-      + 'sabote edilebilirler.',
+    /* ⚠️ 2026-08-12: «Tılsım onlara işlemez» ifadesi KALDIRILDI — binary'de Tılsım'ın birim
+     * süzgeci yok (`FUN_004125c8`), Mancınık da faz-3 mitigasyonunu ondan alıyor. Doğru olan
+     * kısım büyü SALDIRISI: Mancınık büyü havuzuna katkı vermez (`magicHp` = 0). */
+    extra: 'Büyü vuruşları yoktur; büyü fazında saldıramaz, yalnız hasar alırlar. Ayrıca '
+      + 'düşmanın gnomları tarafından sabote edilebilirler.',
   },
   ogre: {
     desc: 'Ejderhadan sonra gelen en dayanıklı yaratıktır. Devasa tokmaklarıyla yakın dövüşün en '

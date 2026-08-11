@@ -465,6 +465,13 @@ bandının altın testi.
 3. Büyüklük ‰2 – %2,7 arasında ve her hücrede iki dağılım hâlâ **bir tam sayıda örtüşüyor**
    (tek istisna D7, ‰2).
 
+> ✅ **2026-08-12'DE KAPANDI — `docs/TILSIM_SUZGEC_TESTLERI.md` §7.** Kullanıcının binlerce
+> birimlik rastgele savaşı, gereken çözünürlüğü verdi: artık **mutlak** (birim türü başına
+> ~1-2 birim), **oransal değil** — 2.144'lük Elf'te −2,9 (%0,13), 76'lık Ejderha'da −1,0
+> (%1,32). Oransal olsaydı Elf ~28 sapardı. ⇒ **Yuvarlama sınıfı bir fark, model hatası değil.**
+> Aşağıdaki iki adaydan *"Şaman sayılmıyor"* da elendi (o savaşta Şaman kalanı 820,5 ↔ 822 ile
+> diğer birimlerle aynı hassasiyette).
+
 ⚠️ **Mekanizma aramadım — veri ayırmıyor.** İki aday var ve set onları ayırt edemiyor:
 *(a)* binary savunanın **Şaman'ını kayıp toplamına saymıyor** olabilir (E1 ve E7'nin ölçülen
 aralıkları motorun **şamansız** kaybına birebir oturuyor) — ama E3 tersini söylüyor;

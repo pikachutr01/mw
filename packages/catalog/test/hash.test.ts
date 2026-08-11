@@ -55,8 +55,25 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * Kullanıcının binary ölçümü yakaladı (`docs/SAMAN_KALKAN_TESTLERI.md` D2: motor %100,0,
  * gerçek %87,6-88,6 → düzeltmeden sonra motor **%87,70**). Bu bir *varsayılan genişlemesi*
  * değil **tablo değişikliği** olduğu için özetin kayması doğru davranıştır.
+ *
+ * ⚠️⚠️ **2026-08-12'de yine BİLEREK değişti: `9fce9abf` → `76e00eb7`.** Sebep **Şaman'ın
+ * Demircilik listesine eklenmesi** (`techs.ts`, gerekçe orada). Binary'nin `FUN_0041279c`
+ * anahtarı Şaman'ı (id 7) Cüce/Süvari/Gnom ile aynı `atk` grubuna koyuyor; bu 2026-08-09'da
+ * görülmüş ama *"Şaman hp üzerinden hasar vermiyor"* gerekçesiyle eklenmemişti. Gerekçe
+ * yanlıştı: Şaman'ın `hp`si hasar vermek için değil **emmek** için okunuyor
+ * (`shamanShield` → `pool -= poolHp × adet`). Kullanıcının rastgele kurduğu gerçek savaşta
+ * saldıran kaybı **5.316 → 4.541** (binary 4.512), XP **10.695 → 8.574** (binary 8.404).
+ * Yine bir tablo değişikliği → özetin kayması doğru.
+ *
+ * ⚠️⚠️ **AYNI GÜN, İKİNCİ değişiklik: `76e00eb7` → `3a8b2be4`.** Sebep **Mancınık'ın Tılsım
+ * listesine eklenmesi**. Ghidra: teknik uygulayıcılarının iki ailesi var — `atk` aileleri
+ * `FUN_0041279c` ile **grup süzgeci** uyguluyor, Zırh/Büyücülük/**Tılsım** ise
+ * (`FUN_00412528` · `FUN_004124cc` · `FUN_004125c8`) yalnız `seviye != 0`'a bakıp **herkese**
+ * uyguluyor. Dokümanın birim başına listeleri süzgeç değil betimleme.
+ * Aynı savaşta Mancınık kalanı 159 → **172** (binary 173) ve savaşın ortalama sapması
+ * %2,18 → **%0,24**.
  */
-const DEFAULT_HASH = '9fce9abf';
+const DEFAULT_HASH = '3a8b2be4';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -74,7 +91,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('05fe2135');
+    expect(catalogHash(cfg)).toBe('b4de43cc');
   });
 
   /**
