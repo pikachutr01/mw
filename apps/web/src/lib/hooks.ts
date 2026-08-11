@@ -210,6 +210,46 @@ export function remainingClock(iso: string | null | undefined, now = gameNow()):
 }
 
 /**
+ * ⭐ GEÇMİŞE BAKAN GÖRECELİ SÜRE: `3 saniye önce` · `12 dakika önce` · `4 gün önce` · `2 ay önce`.
+ *
+ * ⚠️ Yukarıdaki `remaining*` ailesinin **tersi**: onlar geleceğe bakar ve geçmiş bir damgaya
+ * `null` döner. Bu, geçmişe bakar ve GELECEK bir damgayı «az önce» sayar — sunucu ile tarayıcı
+ * saati arasındaki küçük kayma yüzünden yeni gönderilmiş bir mesaj birkaç saniye ileride
+ * görünebiliyor ve *"-2 saniye önce"* yazmak kabul edilemez.
+ *
+ * ⚠️⚠️ **Çıpa `serverNow()`, `gameNow()` DEĞİL** — ve bu, ekranın geri kalanının tam tersi.
+ * Sebebi `chat_messages.created_at`in `NON_TIMELINE_COLUMNS` içinde olması: sohbet damgası bir
+ * oyun olayı değil, **geçmiş kaydıdır** ve bakım kaydırmasından etkilenmez. `gameNow()`
+ * kullansaydık bakım boyunca bütün mesajların yaşı DONARDI — üstelik `BASLANGIC.md`'deki
+ * tuzağın tam aynası (orada oyun damgası gerçek saatle kıyaslanıyordu, burada tersi).
+ *
+ * ⚠️ Ay = 30 gün, yıl = 365 gün (yaklaşık). Takvim doğruluğu gerekmiyor: «2 ay önce» zaten kaba
+ * bir ifade ve tam tarih `title` özniteliğinde duruyor.
+ */
+export function timeAgo(iso: string | null | undefined, now = serverNow()): string {
+  if (!iso) return '—';
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '—';
+
+  const s = Math.max(0, Math.round((now - t) / 1000));
+  if (s < 60) return `${Math.max(1, s)} saniye önce`;
+
+  const dk = Math.floor(s / 60);
+  if (dk < 60) return `${dk} dakika önce`;
+
+  const sa = Math.floor(dk / 60);
+  if (sa < 24) return `${sa} saat önce`;
+
+  const gun = Math.floor(sa / 24);
+  if (gun < 30) return `${gun} gün önce`;
+
+  const ay = Math.floor(gun / 30);
+  if (ay < 12) return `${ay} ay önce`;
+
+  return `${Math.floor(gun / 365)} yıl önce`;
+}
+
+/**
  * Değeri `ms` boyunca sakinleşene kadar geciktirir — arama kutuları için.
  *
  * ⚠️ Bu olmadan hızlı yazan oyuncu her tuşta bir HTTP isteği atıyor (ittifak aramasında uzun

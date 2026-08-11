@@ -13,7 +13,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   formatClock, formatDuration, formatLongDuration, gameNow, noteMaintenance,
-  noteServerTime, remaining, remainingClock, remainingLong, serverNow,
+  noteServerTime, remaining, remainingClock, remainingLong, serverNow, timeAgo,
 } from '../src/lib/hooks.ts';
 
 /** Sabit bir "tarayıcı şimdisi" — sapma ölçümü ancak böyle deterministik olur. */
@@ -158,6 +158,63 @@ describe('remaining — varsayılan çıpa OYUN saati', () => {
     noteServerTime(iso(BROWSER_NOW), iso(BROWSER_NOW - 196_563));
     const gunler = iso(serverNow() + 3 * 86_400_000);
     expect(remainingLong(gunler)).toBe('3 gün');
+  });
+});
+
+/**
+ * ⭐ GEÇMİŞE BAKAN DAMGA — sohbetlerin zaman gösterimi (kullanıcı, 2026-08-11).
+ *
+ * ⚠️ Eskiden yalnız `SS:dd` yazıyordu: üç gün önce 13:06'da gelen mesajla bugün 13:06'da
+ * gelen mesaj ekranda AYNI görünüyordu (kullanıcının bildirdiği hata).
+ */
+describe('timeAgo — geçmişe bakan süre', () => {
+  const gecmis = (ms: number): string => iso(BROWSER_NOW - ms);
+
+  it('eşikleri sırayla geçer: saniye → dakika → saat → gün → ay → yıl', () => {
+    expect(timeAgo(gecmis(3_000))).toBe('3 saniye önce');
+    expect(timeAgo(gecmis(59_000))).toBe('59 saniye önce');
+    expect(timeAgo(gecmis(60_000))).toBe('1 dakika önce');
+    expect(timeAgo(gecmis(45 * 60_000))).toBe('45 dakika önce');
+    expect(timeAgo(gecmis(3_600_000))).toBe('1 saat önce');
+    expect(timeAgo(gecmis(23 * 3_600_000))).toBe('23 saat önce');
+    expect(timeAgo(gecmis(86_400_000))).toBe('1 gün önce');
+    expect(timeAgo(gecmis(29 * 86_400_000))).toBe('29 gün önce');
+    expect(timeAgo(gecmis(30 * 86_400_000))).toBe('1 ay önce');
+    expect(timeAgo(gecmis(200 * 86_400_000))).toBe('6 ay önce');
+    expect(timeAgo(gecmis(400 * 86_400_000))).toBe('1 yıl önce');
+  });
+
+  /**
+   * ⚠️⚠️ ÇIPA `serverNow()` — ve bu, `remaining` ailesinin TERSİ. Sebebi
+   * `chat_messages.created_at`in `NON_TIMELINE_COLUMNS` içinde olması: sohbet damgası bir oyun
+   * olayı değil, geçmiş kaydıdır ve bakım kaydırmasından etkilenmez. `gameNow()` kullansaydık
+   * bakım boyunca bütün mesajların yaşı donardı.
+   */
+  it('⭐ bakımda bile YAŞLANMAYA DEVAM eder (gameNow değil serverNow)', () => {
+    const pausedAt = BROWSER_NOW - 10 * 60_000;
+    noteServerTime(iso(BROWSER_NOW), iso(pausedAt));
+    expect(gameNow()).not.toBe(serverNow());          // saatler gerçekten ayrışmış
+
+    const mesaj = iso(BROWSER_NOW - 5 * 60_000);
+    expect(timeAgo(mesaj)).toBe('5 dakika önce');
+    // ⛔ Oyun saatiyle bakılsaydı mesaj «gelecekte» kalır ve «1 saniye önce» donardı:
+    expect(timeAgo(mesaj, gameNow())).toBe('1 saniye önce');
+  });
+
+  /**
+   * ⚠️ GELECEK damga «1 saniye önce» sayılır, negatif YAZILMAZ: sunucu ile tarayıcı saati
+   * arasındaki küçük kayma yüzünden yeni gönderilmiş bir mesaj birkaç saniye ileride
+   * görünebiliyor ve *"-2 saniye önce"* kabul edilemez.
+   */
+  it('⚠️ gelecek damga ve 0 saniye «1 saniye önce» olur, negatife düşmez', () => {
+    expect(timeAgo(iso(BROWSER_NOW))).toBe('1 saniye önce');
+    expect(timeAgo(iso(BROWSER_NOW + 4_000))).toBe('1 saniye önce');
+  });
+
+  it('boş/geçersiz girdi tire döner (geri sayımlardaki `null` DEĞİL)', () => {
+    expect(timeAgo(null)).toBe('—');
+    expect(timeAgo(undefined)).toBe('—');
+    expect(timeAgo('çöp')).toBe('—');
   });
 });
 

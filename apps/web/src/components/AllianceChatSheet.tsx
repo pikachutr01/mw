@@ -18,7 +18,7 @@
  * değişen değerler KONMAZ (`Modal.tsx`teki odak-çalma hatası tam olarak buydu).
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { formatGameHhmm } from '@mobilwar/contracts';
+import { useTick } from '../lib/hooks.ts';
 import { closeAllianceChat, openAllianceChat } from '../lib/realtime.ts';
 import { canDeleteAllianceMessage, canMuteAllianceMember } from '../lib/chat-moderation.ts';
 import {
@@ -33,7 +33,7 @@ import { getSession } from '../lib/api.ts';
 import { AllianceChatMuteModal } from './AllianceChatMuteModal.tsx';
 import { MentionAutocomplete, type MentionItem } from './MentionAutocomplete.tsx';
 import { useConfirm } from './Modal.tsx';
-import { Button, ErrorBox, TextArea } from './ui.tsx';
+import { Button, ErrorBox, TextArea, TimeAgo } from './ui.tsx';
 
 /** Sunucu hata kodu → oyuncuya gösterilecek metin (`ChatWindow.messageForError` kalıbı). */
 function messageForError(err: unknown): string {
@@ -64,6 +64,8 @@ function messageForError(err: unknown): string {
 }
 
 export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
+  /* ⭐ «12 dakika önce» damgalarının tazelenmesi için TEK zamanlayıcı (bkz. `TimeAgo`). */
+  useTick();
   const packet = useAllianceChat(true);
   const channelId = packet.data?.channelId ?? null;
   const history = useAllianceChatHistory(channelId);
@@ -334,7 +336,7 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
                         className="-my-1 shrink-0 px-1 py-1 text-xs leading-none opacity-70 hover:opacity-100"
                       >⋮</button>
                     ) : null}
-                    <span>{formatGameHhmm(m.createdAt)}</span>
+                    <TimeAgo at={m.createdAt} />
                   </div>
 
                   {menuFor === m.id ? (

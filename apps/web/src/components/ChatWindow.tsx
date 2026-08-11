@@ -14,7 +14,7 @@
  * tam olarak buydu.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { fmt } from '../lib/hooks.ts';
+import { fmt, useTick } from '../lib/hooks.ts';
 import {
   closeChatChannel, onSocketEvent, openChatChannel, sendTyping,
 } from '../lib/realtime.ts';
@@ -22,9 +22,8 @@ import {
   useAccount, useBlockPlayer, useChatHistory, useClearConversation, useMarkChatRead,
   useReportChat, useSendChatMessage, type ChatMessage,
 } from '../lib/queries.ts';
-import { Button, ErrorBox, TextArea } from './ui.tsx';
+import { Button, ErrorBox, TextArea, TimeAgo } from './ui.tsx';
 import { useConfirm } from './Modal.tsx';
-import { formatGameHhmm } from '@mobilwar/contracts';
 
 export interface ChatTarget {
   channelId: number;
@@ -33,9 +32,6 @@ export interface ChatTarget {
   /** Bu oyuncuyu BEN engelledim mi? Liste sorgusundan gelir. */
   blocked?: boolean;
 }
-
-const timeOf = (iso: string): string =>
-  formatGameHhmm(iso);
 
 /** Sunucu hata kodu → oyuncuya gösterilecek metin. */
 function messageForError(err: unknown): string {
@@ -62,6 +58,8 @@ export function ChatWindow({ target, myId, onClose }: {
   onClose: () => void;
 }) {
   const { channelId } = target;
+  /* ⭐ «12 dakika önce» damgalarının tazelenmesi için TEK zamanlayıcı (bkz. `TimeAgo`). */
+  useTick();
   const history = useChatHistory(channelId);
   const send = useSendChatMessage(channelId);
   const markRead = useMarkChatRead();
@@ -260,7 +258,7 @@ export function ChatWindow({ target, myId, onClose }: {
               }`}>
                 <div className="break-words whitespace-pre-wrap">{m.body}</div>
                 <div className={`mt-0.5 text-right text-[10px] ${mine ? 'opacity-75' : 'text-muted'}`}>
-                  {timeOf(m.createdAt)}
+                  <TimeAgo at={m.createdAt} />
                 </div>
               </div>
             </div>

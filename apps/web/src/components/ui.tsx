@@ -4,6 +4,8 @@
  */
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { formatGameTime } from '@mobilwar/contracts';
+import { timeAgo } from '../lib/hooks.ts';
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
@@ -469,6 +471,24 @@ export function ErrorBox({ error }: { error: unknown }) {
 
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="px-3 py-6 text-center text-sm text-muted">{children}</div>;
+}
+
+/**
+ * ⭐ SOHBET DAMGASI — «12 dakika önce» (kullanıcı, 2026-08-11).
+ *
+ * ⚠️ Eskiden yalnız `SS:dd` yazıyordu ve **gün bilgisi hiç yoktu**: üç gün önce 13:06'da
+ * gelen mesajla bugün 13:06'da gelen mesaj ekranda birbirinin aynıydı.
+ *
+ * ⚠️ **Kendi zamanlayıcısı YOK.** Metin bir saniyede bir tazelenmeli ama `useTick` çağrı
+ * BAŞINA bir `setInterval` açıyor — her balonda çağırsaydık 200 mesajlık bir sohbette 200
+ * zamanlayıcı olurdu. Bunun yerine tik her sohbet ekranının **kökünde bir kez** çağrılıyor
+ * (`GlobalChat` · `AllianceChatSheet` · `ChatWindow`), bu bileşen saf kalıyor.
+ *
+ * ⚠️ Tam tarih `title`da duruyor: göreceli ifade kolay okunur ama *"tam olarak ne zaman"*
+ * sorusunun cevabını da kaybetmemek gerek.
+ */
+export function TimeAgo({ at, className = '' }: { at: string; className?: string }) {
+  return <span className={className} title={formatGameTime(at)}>{timeAgo(at)}</span>;
 }
 
 export function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'danger' | 'success' | 'warning' }) {

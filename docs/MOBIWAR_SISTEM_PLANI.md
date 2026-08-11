@@ -3995,6 +3995,26 @@ yazdığı saatle oyuncunun saatinin uyuşmaması dengeden önce bir **doğruluk
 kuralların yazdığı saatlerden farklı sayılar görseydi destek konuşmaları anlamsızlaşırdı —
 "saldırı 03:00'te iniyor" diyen iki kişinin farklı anları kastetmesi.
 
+#### ⭐ SOHBET DAMGALARI GÖRECELİ (kullanıcı, 2026-08-11)
+
+Üç sohbet de (genel · DM · ittifak) balonun altında **«12 dakika önce»** yazıyor (`timeAgo`).
+⚠️ Öncesinde yalnız `SS:dd` vardı ve **gün bilgisi hiç yoktu**: kullanıcının bildirdiği hata
+tam olarak buydu — üç gün önce 13:06'da gelen mesajla bugün 13:06'da gelen mesaj ekranda
+birbirinin aynıydı. Tam tarih kaybolmadı, `title` özniteliğinde duruyor.
+
+Eşikler: saniye → dakika → saat → gün → **ay** (30 gün) → yıl (365 gün). Yaklaşıklık bilinçli;
+«2 ay önce» zaten kaba bir ifade ve kesin tarih bir imleç ötede.
+
+⚠️⚠️ **Çıpa `serverNow()`, `gameNow()` DEĞİL** — ekranın geri kalanının tersi. Sebep
+`chat_messages.created_at`in `NON_TIMELINE_COLUMNS` içinde olması: sohbet damgası bir oyun
+olayı değil, geçmiş kaydıdır ve bakım kaydırmasından etkilenmez. `gameNow()` kullansaydık
+bakım boyunca bütün mesajların yaşı donardı. **Kural:** damga `TIME_SHIFT_REGISTRY`'deyse
+`gameNow()`, `NON_TIMELINE_COLUMNS`'taysa `serverNow()`.
+
+⚠️ Metin saniyede bir tazeleniyor ama `TimeAgo` bileşeninin **kendi zamanlayıcısı yok**:
+`useTick` çağrı başına bir `setInterval` açıyor, her balonda çağrılsaydı 200 mesajlık bir
+sohbette 200 zamanlayıcı olurdu. Tik her sohbet ekranının kökünde **bir kez** çağrılıyor.
+
 ## 13.21 ⭐ SUR ve BÜYÜ KALKANI (2026-07-29 binary analizi)
 
 ### 13.21.1 BÜYÜ KALKANININ SIRRI — çözüldü

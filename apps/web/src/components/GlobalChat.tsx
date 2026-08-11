@@ -21,10 +21,9 @@
  * KONMAZ (`Modal.tsx`teki odak-çalma hatası tam olarak buydu).
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { formatGameHhmm } from '@mobilwar/contracts';
 import { getSession } from '../lib/api.ts';
 import { useGlobalChatConnection } from '../lib/global-chat-context.tsx';
-import { useDebounced } from '../lib/hooks.ts';
+import { useDebounced, useTick } from '../lib/hooks.ts';
 import { activeMentionQuery, applyMention, splitMentions } from '../lib/mentions.ts';
 import {
   closeGlobalChat, onSocketEvent, openGlobalChat, sendGlobalTyping,
@@ -36,7 +35,7 @@ import {
 } from '../lib/queries.ts';
 import { MentionAutocomplete, type MentionItem } from './MentionAutocomplete.tsx';
 import { useConfirm } from './Modal.tsx';
-import { Button, ErrorBox, Panel, TextArea } from './ui.tsx';
+import { Button, ErrorBox, Panel, TextArea, TimeAgo } from './ui.tsx';
 
 /** «Yazıyor» kaydının ömrü — `ChatWindow` ile aynı sayı (istemci 2,5 sn'de bir yayınlıyor). */
 const TYPING_TTL_MS = 3000;
@@ -87,6 +86,8 @@ export function GlobalChat({ variant }: { variant: 'card' | 'sheet' }) {
  * kapalıyken de kurulmuş (ve her bağlantı durumunda yeniden değerlendirilen) bir kanca olurdu.
  */
 function Live({ variant, onClose }: { variant: 'card' | 'sheet'; onClose: () => void }) {
+  /* ⭐ «12 dakika önce» damgalarının tazelenmesi için TEK zamanlayıcı (bkz. `TimeAgo`). */
+  useTick();
   const packet = useGlobalChat(true);
   const channelId = packet.data?.channelId ?? null;
   const history = useGlobalChatHistory(channelId);
@@ -397,7 +398,7 @@ function Live({ variant, onClose }: { variant: 'card' | 'sheet'; onClose: () => 
                       ⋮
                     </button>
                   ) : null}
-                  <span>{formatGameHhmm(m.createdAt)}</span>
+                  <TimeAgo at={m.createdAt} />
                 </div>
 
                 {menuFor === m.id ? (
