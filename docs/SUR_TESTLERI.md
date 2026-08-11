@@ -291,12 +291,12 @@ Aynı saldıran, yalnız savunanın **sayısı** değişiyor → savaş uzuyor. 
 
 | # | Savunan | Sur sv | motor: tur | motor: Sur% | motor: defK | **gerçek: tur** | **gerçek: Sur%** | **gerçek: defK** |
 |---|---|---:|---:|---:|---:|---|---|---|
-| D1 | 27.000 Elf | 4 | **2** | 91,14 | 866 | | | |
-| D2 | 11.000 Elf | 4 | **3** | 58,46 | 1.738 | | | |
-| D3 | 9.500 Elf | 4 | **3** | 43,35 | 2.028 | | | |
-| D4 | 9.500 Elf | 6 | **3** | 70,78 | 1.870 | | | |
-| D5 | 9.500 Elf | 8 | **3** | 88,02 | 1.458 | | | |
-| D6 | 11.000 Elf | 8 | **3** | 91,30 | 1.262 | | | |
+| D1 | 27.000 Elf | 4 | **2** | 91,14 | 866 | 2|%91,12-91,15 | 864-868|
+| D2 | 11.000 Elf | 4 | **3** | 58,46 | 1.738 |3 |%58,37-58,56 |1734-1741 |
+| D3 | 9.500 Elf | 4 | **3** | 43,35 | 2.028 | 3| %43,29-43,46| 2024-2031|
+| D4 | 9.500 Elf | 6 | **3** | 70,78 | 1.870 |3 | %70,71-70,84|1866-1872|
+| D5 | 9.500 Elf | 8 | **3** | 88,02 | 1.458 | 3|%87,99-88,5 |1454-1460 |
+| D6 | 11.000 Elf | 8 | **3** | 91,30 | 1.262 | 3| %91,27-91,31|1258-1263 |
 
 ⚠️ **Tur sayısı bu setin ASIL ölçtüğü şey** — her satırda mutlaka yaz. Motorla binary'nin tur
 sayısı bile ayrışıyorsa mesele Sur değil, savaşın uzunluğudur.
@@ -311,3 +311,73 @@ sayısı bile ayrışıyorsa mesele Sur değil, savaşın uzunluğudur.
 
 ⭐ D2↔D3 (aynı seviye, farklı savunan) ve D3↔D4↔D5 (aynı savunan, farklı seviye) birbirinin
 kontrolü: biri tutup diğeri sapıyorsa hangi eksende sapıldığı tek bakışta görünür.
+
+### ✅ D grubu sonucu — çok turlu Sur modeli de TEMİZ
+
+**6/6 tuttu**, 3 turluk satırlar dahil. Tur sayıları da birebir.
+
+---
+
+## 8. ⚠️⚠️ DURUM: 24/24 sonda tutuyor, büyük savaş hâlâ tutmuyor
+
+| grup | ne sınadı | sonuç |
+|---|---|---|
+| A (8) | `Alan_sur` · `mDef_sur` · `pAtk_sur` | ✅ birebir |
+| B (5) | Taş Ustalığı oranı | ✅ **düzeltildi** (%6 → %5) |
+| C (5) | birimlerin `Alan` tablosu, mutlak ölçekte | ✅ birebir |
+| D (6) | çok turlu Sur modeli (2 ve 3 tur) | ✅ birebir |
+
+**Yine de büyük savaş: motor %100 ↔ binary %53,59.**
+
+⭐ Bu sonucun kendisi bilgi: sapma **sınadığımız hiçbir eksende değil**. Dört sondanın ortak
+noktası da tam olarak burada belli oluyor — hepsinde saldıran **300 Mancınık, teknikler 0**'dı.
+⚠️ **Hiç değiştirilmemiş tek boyut: saldıranın bileşimi ve teknikleri, yani `havuz` tarafı.**
+
+### Sayısal çerçeve
+
+Sur'un yıpranmayı bıraktığı seviye kapalı formda:
+
+```
+Sv*  =  Alan_sur × R / pAtk_ölçekli  =  300 × R / 92,5  =  3,24 × R
+```
+
+Motorda büyük savaşta Sv* = **9** → `R = 2,78`. Binary sv10'da hâlâ hasar aldığına göre
+`Sv* > 10` → `R > 3,1`; %53,59'u üretmek için `R ≈ 4,4-4,9`.
+
+⭐ **Yöntem değişikliği:** dört sentetik sonda da tuttuğuna göre sıradaki adım yeni sonda
+üretmek değil, **başarısız savaştan geriye doğru daraltmak.**
+
+---
+
+## 9. E · TEK SATIRLIK ÖLÇÜM — orduyu yeniden girmene gerek yok
+
+> **Büyük savaşın TAM AYNISI. Tek değişen: Sur kutusundaki sayı.**
+
+Motor sv9'dan itibaren %100 diyor. **Binary'nin ilk %100 verdiği seviye `R`'yi doğrudan verir**
+(`R = Sv*/3,24`) — tek bir sayı, bütün belirsizliği kapatıyor.
+
+| # | Sur sv | motor: tur | motor: Sur% | **gerçek: tur** | **gerçek: Sur%** |
+|---|---:|---:|---:|---|---|
+| E1 | 12 | 4 | **100,00** | | |
+| E2 | 14 | 4 | **100,00** | | |
+| E3 | 16 | 4 | **100,00** | | |
+| E4 | 20 | 4 | **100,00** | | |
+
+*(sv7 %0 · sv8 %15,19 · sv10 %53,59 zaten ölçüldü; motor sv7 %96,95 · sv8 %99,33 · sv10 %100.)*
+
+**Nasıl okunur:**
+
+| Binary'nin ilk %100'ü | `R` | motora göre |
+|---|---:|---:|
+| sv12 | 3,7 | 1,3 kat |
+| sv14 | 4,3 | 1,6 kat |
+| sv16 | 4,9 | 1,8 kat |
+| sv20 | 6,2 | 2,2 kat |
+| hiçbiri (sv20'de de hasarlı) | > 6,2 | > 2,2 kat |
+
+⭐ Bu oran, `havuz/P`'deki farkın **büyüklüğünü** kesinleştirir ve bir sonraki turda neyin
+peşine düşeceğimizi belirler: 1,3 kat ise küçük bir bileşen (Şaman emmesi, Kaos, savaş-dışı
+birimler), 2 kat ise yapısal bir şey (havuza kimin katıldığı ya da P'ye kimin girdiği).
+
+⚠️ E grubu **dört satır ve ordu girişi hiç değişmiyor** — Sur kutusuna sırayla 12/14/16/20 yazıp
+Savaştır'a basman yeterli.
