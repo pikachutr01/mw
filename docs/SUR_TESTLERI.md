@@ -358,10 +358,10 @@ Motor sv9'dan itibaren %100 diyor. **Binary'nin ilk %100 verdiği seviye `R`'yi 
 
 | # | Sur sv | motor: tur | motor: Sur% | **gerçek: tur** | **gerçek: Sur%** |
 |---|---:|---:|---:|---|---|
-| E1 | 12 | 4 | **100,00** | | |
-| E2 | 14 | 4 | **100,00** | | |
-| E3 | 16 | 4 | **100,00** | | |
-| E4 | 20 | 4 | **100,00** | | |
+| E1 | 12 | 4 | **100,00** | 2| %85,50-85,56|
+| E2 | 14 | 4 | **100,00** | 4| %100,0|
+| E3 | 16 | 4 | **100,00** | 4| %100,0|
+| E4 | 20 | 4 | **100,00** | 4| %100,0|
 
 *(sv7 %0 · sv8 %15,19 · sv10 %53,59 zaten ölçüldü; motor sv7 %96,95 · sv8 %99,33 · sv10 %100.)*
 
@@ -381,3 +381,81 @@ birimler), 2 kat ise yapısal bir şey (havuza kimin katıldığı ya da P'ye ki
 
 ⚠️ E grubu **dört satır ve ordu girişi hiç değişmiyor** — Sur kutusuna sırayla 12/14/16/20 yazıp
 Savaştır'a basman yeterli.
+
+### ✅ E grubu sonucu (2026-08-12) — EŞİK BULUNDU
+
+| sv | 7 | 8 | 10 | 12 | **13** | 14 | 16 | 20 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **binary** | 0 | 15,19 | 53,59 | 85,53 | **96,85** | **100** | 100 | 100 |
+| **motor** | 96,95 | 99,33 | 100 | 100 | 100 | 100 | 100 | 100 |
+
+⚠️ E1'de (sv12) **tur 2** yazılmış; sv10 ve sv13/14 hepsi 4 tur. Tek başına monoton olmayan bu
+satır ya bir yazım kayması ya da ayrı bir ipucu — **yeniden koşulmalı.**
+
+---
+
+## 10. ⭐⭐⭐ SAPMA TEK BİR SKALER: `havuz/P` × 1,8
+
+### n'den BAĞIMSIZ kıskaç
+
+Eşik koşulu (`düşüş > 0`) faz sayısını **içermiyor**, yani yalnız "sv13 hasarlı, sv14 hasarsız"
+bilgisinden kesin bir aralık çıkıyor:
+
+```
+g > 15,417 × 13 / (50 × R(13))  =  1,756
+g < 15,417 × 14 / (50 × R(14))  =  2,135          ⇒   g ∈ (1,76 ; 2,14)
+```
+
+### Tek sabit BÜTÜN eğriyi üretiyor
+
+`havuz/P`yi tek bir `g` ile çarpıp faz sayısını serbest bırakınca:
+
+| sv | 7 | 8 | 10 | 12 | 13 | 14+ |
+|---|---:|---:|---:|---:|---:|---:|
+| binary | 0 | 15,19 | 53,59 | 85,53 | 96,85 | 100 |
+| **g = 1,74 · n = 6,1** | 0,00 | 15,24 | 54,16 | 85,27 | 100 | 100 |
+| motor (g = 1) | 96,95 | 99,33 | 100 | 100 | 100 | 100 |
+
+⭐ Sekiz seviyenin toplam hatası **4 puan** (yalnız sv13 kaçıyor). Yani sapma bir **şekil** hatası
+değil, **tek bir çarpan**.
+
+### ⚠️⚠️ Ve bu bir PARADOKS yaratıyor
+
+Aynı `havuz` ve `P`, birim hasarında da kullanılıyor ve **orada %0,1-0,5 tutuyor**. İkisi birden
+doğruysa fark Sur'un **kendi terimlerinde** olmalı — ama A/C/D onları (Taş Ustalığı 0'da)
+birebir sabitledi.
+
+⭐ **Hiç sınanmamış tek bileşim: yüksek Taş Ustalığı + yüksek Sur seviyesi + çok tur.**
+A · C · D hepsi TU 0; B ise TU'yu taradı ama **sv4 ve 2 turda**.
+
+⚠️ Dikkat çekici sayı: **1 + 17 × 0,05 = 1,85** — Taş Ustalığı 17'nin çarpanı, kıskacın
+(1,76-2,14) tam ortasında. Basit biçimleri (masonry'nin `Alan`ı ya da `mDef`i ölçeklemesi)
+B grubu **çürütüyor** (o durumda Sur% TU ile DÜŞERDİ, ölçümde ARTIYOR) — ama tesadüf olamayacak
+kadar iyi oturuyor.
+
+---
+
+## 11. F · SON ÖLÇÜM — aynı savaş, Taş Ustalığı kutusu 0
+
+> **Büyük savaşın TAM AYNISI. Tek değişen: savunanın Taş Ustalığı 17 → 0.**
+
+Bu, kalan tek değişkeni kaldırıyor. Motor TU 0'da Sur'u belirgin biçimde daha çok yıpratıyor —
+yani iki dünya arasındaki mesafe TU 0'da **kapanıyorsa** suçlu Taş Ustalığı×Sur eşleşmesidir.
+
+| # | Sur sv | motor (TU 17) | **motor (TU 0)** | binary TU17 | **gerçek: TU 0 Sur%** | **gerçek: tur** |
+|---|---:|---:|---:|---:|---|---|
+| F1 | 7 | 96,96 | **87,82** | 0 | | |
+| F2 | 8 | 99,34 | **91,56** | 15,19 | | |
+| F3 | 10 | 100,00 | **95,76** | 53,59 | | |
+| F4 | 13 | 100,00 | **99,95** | 96,85 | | |
+
+**Nasıl okunur:**
+
+| Gözlem | Sonuç |
+|---|---|
+| TU 0'da binary ≈ motor | ⭐⭐⭐ **Bulundu:** suçlu Taş Ustalığı'nın Sur'a etkisi; B grubunun göremediği ikinci bir kanalı var |
+| TU 0'da fark hâlâ ~1,8 kat | Taş Ustalığı masum → sapma `havuz` tarafında, tekniklerin `Can` ölçeklemesinde aranmalı |
+| TU 0'da fark BÜYÜYOR | Model TU'yu ters yönde uyguluyor — B grubu yeniden okunmalı |
+
+⚠️ Dört satır, ordu girişi yine değişmiyor: Taş Ustalığı kutusunu 0 yap, Sur'a sırayla
+7/8/10/13 yaz.
