@@ -20,8 +20,9 @@
  */
 import { useState } from 'react';
 import { HERO_AREA, UNITS_BY_ID, WARRIOR_ORDER, caveTransferSeconds } from '@mobilwar/catalog';
-import type { CaveState, CityDetail, HeroRow } from '../lib/queries.ts';
+import type { CaveState, CityDetail } from '../lib/queries.ts';
 import { useCancelCaveJob, useCaveJob, useTemple } from '../lib/queries.ts';
+import { caveHeroPool, keepPickedHeroes } from '../lib/cave-picker.ts';
 import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
 import { nameOf } from '../lib/names.ts';
 import { Modal } from '../components/Modal.tsx';
@@ -71,12 +72,13 @@ export function CaveModal({
     if (n > 0) units[id] = Math.min(n, have);
   }
 
-  /** Sekmeye göre seçilebilir kahramanlar: doldururken ŞEHİRDEKİLER, boşaltırken MAĞARADAKİLER. */
-  const heroPool: { id: number; name: string; level: number }[] = tab === 'store'
-    ? (temple.data?.heroes ?? []).filter((h: HeroRow) => h.state === 'in_city')
-      .map((h: HeroRow) => ({ id: h.id, name: h.name, level: h.level }))
-    : cave.heroes;
-  const heroIds = pickedHeroes.filter((id) => heroPool.some((h) => h.id === id));
+  /**
+   * Sekmeye göre seçilebilir kahramanlar: doldururken ŞEHİRDEKİLER, boşaltırken MAĞARADAKİLER.
+   * ⚠️ Kural `lib/cave-picker.ts`'te — orada **eksik diziye dayanıklı**; bir kez `cave.heroes`
+   * yanıtta olmadığı için ekranı çökertti.
+   */
+  const heroPool = caveHeroPool(tab, temple.data?.heroes, cave.heroes);
+  const heroIds = keepPickedHeroes(pickedHeroes, heroPool);
 
   const area = Object.entries(units).reduce((s, [id, n]) => s + areaOf(id) * n, 0)
     + HERO_AREA * heroIds.length;
