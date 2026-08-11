@@ -10,3 +10,7 @@ coverage/
 # design-tokens/dist ÜRETİLİR ama depoya İŞLENİR (tokens:check sürüklenmeyi yakalar) — bkz. §13.13.1
 !packages/design-tokens/dist/
 !packages/design-tokens/dist/**
+
+# java-dize.py cikti dosyalari (gecici, docs/JAVA_ROENTGEN.md ureticisi)
+kall.txt
+kbul.txt

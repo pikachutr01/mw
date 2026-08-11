@@ -4318,6 +4318,71 @@ Ayrıca savaştan hemen sonra bekleyen emir **uzlaştırılır** (`reconcileCave
   (bir sonraki saldırıyı planlanabilir kılan tek bilgi). **Kaç asker kaçtığı hiçbir koşulda
   saldırana gitmez** — casusluğun bile veremediği bilgiyi bedava vermek olurdu.
 
+### 13.20.2c ⭐⭐ REZERVASYON — mağara emrindeki asker başka göreve gidemez (2026-08-11)
+
+§13.20.2b'nin *"askerler sefere de gönderilebilir"* sonucu **kullanıcı tarafından geri alındı.**
+Verdiği örnek boşluğu tek cümlede gösteriyor: şehirde **50 Cüce** varken **30'u** mağaraya
+işaretliyse, **40 Cüceyle sefere çıkmak kabul edilmemeli** — mağara emrinin dışında yalnız
+20 Cüce serbesttir. 10 ile çıkmak hâlâ serbest.
+
+| | Kalan | Değişen |
+| :-- | :-- | :-- |
+| Askerlerin yeri | **Şehirde** — savaşa katılır, ölebilir | — |
+| İptal | Serbest, anlık, yan etkisiz | — |
+| Başka görev | ⛔ artık **yasak**: `serbest = baraka − mağaraya söz verilen` | ⭐ YENİ |
+| Savaşta kayıp | Emir **küçülür**, süresi aynen sürer | ⭐ Kullanıcı vurgusu: **iptal OLMAZ** |
+
+**Gerekçe:** aynı askere iki iş birden söz vermek, oyuncunun ekranda gördüğü mağara emrini
+sessizce boşa düşürüyordu. Kullanıcının şartı buydu: *"hata ve sürpriz oluşmayacak."*
+
+⚠️ Kural **tek boğazda** duruyor: `MissionService.reserveUnits` — sefer de teleport da oradan
+geçiyor. Ayrı ayrı yazılsaydı biri unutulurdu. Denetim ayrı bir ön sorgu değil, düşüm
+sorgusunun kendi şartı (`count >= istenen + rezerve`); araya giren eşzamanlı bir istek iki
+denetim arasından sızabilirdi.
+
+⚠️ Sefer ekranı da **serbest adedi** gösterir (ham mevcudu değil), yoksa oyuncu sunucunun
+reddedeceği bir emri kurardı — reddi önce söylemek daha dürüst.
+
+### 13.20.6 ⭐⭐ KAHRAMAN DA SAKLANIR (2026-08-11) — orijinalde vardı
+
+Kanıt `docs/JAVA_ROENTGEN.md` §6.2: mağara ekranının "tümünü seç" işlevi (`i.java:844-852`)
+kahramanları **durum koduyla** eliyor — doldururken yalnız `u == 2` («Şehirde»), boşaltırken
+yalnız `u == 3` («Mağarada»). Durum tablosunda üç mağara durumu var (`k.a[234..236]`).
+
+⭐ Kullanıcının kuralı Java'nınkiyle örtüştü ama **daha darı doğru**: «canlı» yetmez, çünkü
+seferdeki kahraman da `alive`. Doğru kapı **`status='alive' AND city_id = <şehir>`**.
+
+| Karar | Değer | Gerekçe |
+| :-- | :-- | :-- |
+| Kahramanın alanı | **5** | **ÖLÇÜLMÜŞ** — `teknik_ve_yapi_dokumantasyonu.md:209` (*Hız 200 · Kapasite 0 · Alan 5*) |
+| Konum saklama | `heroes.status = 'in_cave'` | Yeni tablo/bayrak **YOK** (aşağıdaki gerekçe) |
+| Geçiş durumları | **Türetilir** | Süren emrin yönü + kahraman listesi |
+| Ekran | Askerlerle **aynı modal**, iki bölüm | Kullanıcı şartı; orijinalde de tek ekran, tek istek |
+| Mağara yıkılırsa | Kaçış görevine **katılır** | Kullanıcı kararı; yol boyunca `in_cave` kalır |
+
+⭐⭐ **Neden `status` ve neden ayrı bayrak DEĞİL.** §13.20.4 `cave_units`'i ayrı tablo yaparken
+aynı gerekçeyi kurmuştu: "ve mağarada değil" koşulunu N ayrı sorguya eklemek, birini unutunca
+**sessiz** bir hata üretir. Kahraman için `status='alive'` süzgeci **zaten beş yerde** duruyor —
+savunma ordusu · casus `heroCount` · sefere çıkarma · teleport · diriltme — ve `in_cave` hepsinin
+dışında kalıyor. Ayrı bir `in_cave` bayrağı seçilseydi beşini de elle güncellemek gerekirdi.
+Ekran süzgeci bile bedava geldi: sefer formu `state === 'in_city'` filtreliyor, `in_cave` ve
+`entering_cave` oraya zaten düşmüyor.
+
+⚠️ **Kahraman `mission_heroes`'a yazılmaz**, `payload.heroIds`e yazılır. Bu kod tabanında
+`mission_heroes` "kahraman şehirden ÇIKTI" demek (ekran ondan `Görevde` üretiyor, savaş kodu
+orduyu ondan yüklüyor); oysa mağara emri sürerken kahraman hâlâ şehirdedir ve savunmaya katılır.
+
+⚠️ **Alan 0 tuzağı:** mağarada yalnız kahraman varken yıkılırsa, kahraman alana sayılmazsa
+toplam 0 çıkar ve `scheduleCaveEscape`'in `area <= 0` dalı kaçış görevini **hiç yazmaz** —
+kahraman yıkık mağarada asılı kalırdı. Bu yüzden alan hesabı `unitsArea` değil `caveArea`.
+
+⚠️ **Bilinen denge sonucu, bilerek kabul edildi:** alan 5 çok küçük olduğu için tek kahramanı
+saklamak 1. seviye mağarada ~56 sn, 10. seviyede ~24 sn sürer. Savunan gelen saldırıyı varış
+saatiyle görebildiğine göre kahramanı **refleksle** saklayabilir — yani kahraman kaybı dikkatli
+oyuncu için büyük ölçüde isteğe bağlı hâle gelir ve 2026-08-11'de indirilen diriltme bedelini
+(§13.11.4b) daha da yumuşatır. Ölçülmüş sayı kurgunun önünde gelir; denge bozulursa kaldıraç
+`cave.transferFactor`, bu sabit değil.
+
 ### 13.20.4 Şema kararı: `cave_units` AYRI tablo
 `units` içinde bir bayrakla ayırsaydık savaş, casusluk, sefer ve ekran sorgularının **hepsine**
 "ve mağarada değil" koşulu eklemek gerekirdi; biri unutulduğunda hata **sessiz** olurdu —

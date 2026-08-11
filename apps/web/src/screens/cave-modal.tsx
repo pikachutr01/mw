@@ -11,11 +11,17 @@
  *     beklerken şehirdedirler ve gelen saldırıya **katılırlar**. Bu yüzden iptal serbesttir ve
  *     hiçbir telafi hesabı gerektirmez — geri alınacak bir taşıma yok.
  *  3. **Onarımdayken hiçbir işlem yapılamaz**; modal açılır ama sebebini ve kalan süreyi yazar.
+ *
+ * ⭐⭐ **KAHRAMAN DA BURADAN** (kullanıcı, 2026-08-11): *"Kahramanın ve askerlerin mağara
+ * doldurma ekranları aynı olsun, sadece asker ve kahraman şeklinde bölünebilirler."* Orijinal
+ * istemci de böyleydi — mağara ekranı birim listesinin ardına kahraman satırlarını ekliyor ve
+ * ikisini **tek istekte** gönderiyordu (`docs/JAVA_ROENTGEN.md` §6.2). Ayrı bir "kahramanı
+ * sakla" ekranı açmak hem oyunun kendi akışından hem tek-emir kuralından sapardı.
  */
 import { useState } from 'react';
-import { UNITS_BY_ID, WARRIOR_ORDER, caveTransferSeconds } from '@mobilwar/catalog';
-import type { CaveState, CityDetail } from '../lib/queries.ts';
-import { useCancelCaveJob, useCaveJob } from '../lib/queries.ts';
+import { HERO_AREA, UNITS_BY_ID, WARRIOR_ORDER, caveTransferSeconds } from '@mobilwar/catalog';
+import type { CaveState, CityDetail, HeroRow } from '../lib/queries.ts';
+import { useCancelCaveJob, useCaveJob, useTemple } from '../lib/queries.ts';
 import { fmt, formatDuration, remaining, useTick } from '../lib/hooks.ts';
 import { nameOf } from '../lib/names.ts';
 import { Modal } from '../components/Modal.tsx';
@@ -28,8 +34,15 @@ export function CaveModal({
 }: { city: CityDetail; cave: CaveState; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('store');
   const [picked, setPicked] = useState<Record<string, string>>({});
+  const [pickedHeroes, setPickedHeroes] = useState<number[]>([]);
   const job = useCaveJob(city.id);
   const cancel = useCancelCaveJob(city.id);
+  /**
+   * ⚠️ Kahraman listesi `CityDetail`de yok, tapınak sorgusunda. Doldurmada **yalnız `in_city`**
+   * olanlar seçilebilir — Java'nın kuralının birebiri (`i.java:846`, `u == 2` "Şehirde"):
+   * seferdeki, ölü, dirilen ve zaten mağarayla işi olan kahraman listeye hiç girmez.
+   */
+  const temple = useTemple(city.id);
 
   /**
    * ⚠️ Aşağıda iki geri sayım çiziliyor (onarım ve süren iş) ama saniyelik tetik YOKTU:
@@ -57,8 +70,17 @@ export function CaveModal({
     const have = source[id] ?? 0;
     if (n > 0) units[id] = Math.min(n, have);
   }
-  const area = Object.entries(units).reduce((s, [id, n]) => s + areaOf(id) * n, 0);
-  const hasPick = Object.keys(units).length > 0;
+
+  /** Sekmeye göre seçilebilir kahramanlar: doldururken ŞEHİRDEKİLER, boşaltırken MAĞARADAKİLER. */
+  const heroPool: { id: number; name: string; level: number }[] = tab === 'store'
+    ? (temple.data?.heroes ?? []).filter((h: HeroRow) => h.state === 'in_city')
+      .map((h: HeroRow) => ({ id: h.id, name: h.name, level: h.level }))
+    : cave.heroes;
+  const heroIds = pickedHeroes.filter((id) => heroPool.some((h) => h.id === id));
+
+  const area = Object.entries(units).reduce((s, [id, n]) => s + areaOf(id) * n, 0)
+    + HERO_AREA * heroIds.length;
+  const hasPick = Object.keys(units).length > 0 || heroIds.length > 0;
 
   // Doldurmada boş alanı aşmak yasak; boşaltmada böyle bir sınır yok.
   const fits = tab === 'withdraw' || area <= cave.freeArea;
@@ -66,7 +88,10 @@ export function CaveModal({
   const blocked = cave.repairing || cave.job != null;
   const canSend = hasPick && fits && !blocked && !job.isPending;
 
-  const switchTab = (t: Tab): void => { setTab(t); setPicked({}); };
+  const switchTab = (t: Tab): void => { setTab(t); setPicked({}); setPickedHeroes([]); };
+  const toggleHero = (id: number): void => setPickedHeroes(
+    (prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+  );
 
   return (
     <Modal
@@ -83,7 +108,7 @@ export function CaveModal({
             </Button>
           ) : null}
           <Button disabled={!canSend}
-            onClick={() => job.mutate({ direction: tab, units }, { onSuccess: onClose })}>
+            onClick={() => job.mutate({ direction: tab, units, heroIds }, { onSuccess: onClose })}>
             {tab === 'store' ? 'Mağaraya gönder' : 'Şehre çağır'}
           </Button>
         </>
@@ -108,7 +133,7 @@ export function CaveModal({
         ) : null}
 
         <div className="flex gap-1">
-          {([['store', 'Asker Doldur'], ['withdraw', 'Asker Boşalt']] as [Tab, string][]).map(([id, label]) => (
+          {([['store', 'Mağara Doldur'], ['withdraw', 'Mağara Boşalt']] as [Tab, string][]).map(([id, label]) => (
             <button key={id} onClick={() => switchTab(id)}
               className={`flex-1 rounded-[var(--radius-sm)] border-2 px-2 py-1.5 text-xs ${
                 tab === id
@@ -123,14 +148,18 @@ export function CaveModal({
         <ErrorBox error={job.error} />
         <ErrorBox error={cancel.error} />
 
-        {rows.length === 0 ? (
+        {rows.length === 0 && heroPool.length === 0 ? (
           <Empty>
             {tab === 'store'
-              ? 'Şehrinde savaşçı yok. Önce Baraka\'dan üret.'
-              : 'Mağarada asker yok.'}
+              ? 'Şehrinde saklanacak savaşçı ya da kahraman yok.'
+              : 'Mağara boş.'}
           </Empty>
-        ) : (
-          <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
+        ) : null}
+
+        {rows.length > 0 ? (
+          <>
+            <SectionTitle>Askerler</SectionTitle>
+            <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
             {rows.map(([id, have]) => {
               const left = Math.max(0, have - (units[id] ?? 0));
               return (
@@ -154,8 +183,37 @@ export function CaveModal({
                 </li>
               );
             })}
-          </ul>
-        )}
+            </ul>
+          </>
+        ) : null}
+
+        {heroPool.length > 0 ? (
+          <>
+            <SectionTitle>Kahramanlar</SectionTitle>
+            <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
+              {heroPool.map((h) => {
+                const on = heroIds.includes(h.id);
+                return (
+                  <li key={h.id}>
+                    {/*
+                      ⚠️ Kahraman ADET değil VARLIK: `AmountInput` yerine onay kutusu. Satırın
+                      tamamı tıklanabilir — mobilde 32px'lik kutuyu hedeflemek zor.
+                    */}
+                    <label className="flex cursor-pointer items-center gap-2 px-2.5 py-1.5">
+                      <input type="checkbox" checked={on} onChange={() => toggleHero(h.id)}
+                        className="size-4 shrink-0 accent-[var(--color-accent)]" />
+                      <div className="min-w-0 flex-1 text-sm text-ink">
+                        {h.name}
+                        <span className="tnum ml-1 text-muted">(seviye {h.level})</span>
+                        <span className="tnum ml-2 text-[11px] text-muted">{HERO_AREA} alan</span>
+                      </div>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : null}
 
         {hasPick ? (
           <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[var(--radius-sm)]
@@ -167,9 +225,10 @@ export function CaveModal({
         ) : null}
 
 <p className="text-[11px] text-muted">
-          Askerler süre dolana kadar bulundukları yerde kalır: mağaraya girmeyi bekleyenler
-          şehirdedir ve <b>gelen saldırıya katılırlar</b>. Mağaradaki askerler savaşa katılmaz,
-          casus kuşlar onları göremez.
+          Askerler ve kahramanlar süre dolana kadar bulundukları yerde kalır: mağaraya girmeyi
+          bekleyenler şehirdedir ve <b>gelen saldırıya katılırlar</b> — savaşta eksilirlerse emir
+          kalanlarla tamamlanır, iptal olmaz. Emirdeki asker ve kahramanlar <b>başka bir göreve
+          gönderilemez</b>. Mağaradakiler savaşa katılmaz, casus kuşlar onları göremez.
         </p>
       </div>
     </Modal>
@@ -196,6 +255,15 @@ function CapacityBar({ cave, pendingArea }: { cave: CaveState; pendingArea: numb
           style={{ width: `${afterPct}%` }} />
         <div className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${usedPct}%` }} />
       </div>
+    </div>
+  );
+}
+
+/** İki bölümü ayıran başlık — «asker» ve «kahraman» tek ekranda ama karışmadan dursun. */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+      {children}
     </div>
   );
 }

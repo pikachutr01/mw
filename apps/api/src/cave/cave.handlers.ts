@@ -10,10 +10,13 @@
  * şehrin içinde işleyen bir sayaç var. Yalnız `cave_return` bir "gelen destek" olarak görünür.
  */
 import { sql } from 'drizzle-orm';
-import { caveTransferSeconds, unitsArea } from '@mobilwar/catalog';
+import { caveArea, caveTransferSeconds } from '@mobilwar/catalog';
 import type { HandlerContext, MissionHandler, Tx } from '../missions/handler-registry.ts';
 import { routeOf } from '../missions/report-route.ts';
-import { addCaveUnits, addCityUnits, drainCave, takeUnits } from './cave.service.ts';
+import {
+  addCaveUnits, addCityUnits, drainCave, heroIdArray, moveHeroesToCave, moveHeroesToCity,
+  payloadHeroIds, readCaveHeroes, takeUnits,
+} from './cave.service.ts';
 
 /** Görevin taşıdığı birlikler. */
 async function loadUnits(tx: Tx, missionId: number): Promise<Record<string, number>> {
@@ -23,6 +26,17 @@ async function loadUnits(tx: Tx, missionId: number): Promise<Record<string, numb
   const out: Record<string, number> = {};
   for (const r of rows) out[String(r['unit_type'])] = Number(r['count']);
   return out;
+}
+
+/**
+ * Görevin taşıdığı kahramanlar. ⚠️ `mission_heroes`'ta DEĞİL `payload.heroIds`te dururlar —
+ * gerekçesi `cave.service.ts` `schedule()` yorumunda.
+ */
+async function loadHeroIds(tx: Tx, missionId: number): Promise<number[]> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    SELECT payload FROM missions WHERE id = ${missionId}
+  `);
+  return payloadHeroIds(rows[0]?.['payload']);
 }
 
 /**
@@ -41,12 +55,20 @@ const storeHandler: MissionHandler = async (ctx) => {
   const moved = await takeUnits(ctx.tx, 'units', cityId, ordered);
   await addCaveUnits(ctx.tx, cityId, moved);
 
+  /**
+   * ⭐ Kahraman da aynı clamp'ten geçer: yalnız **hâlâ canlı ve bu şehirde** olan girer.
+   * Kullanıcı kuralı (2026-08-11): *"Kahraman da savaş sonunda ölmezse mağaraya girer."*
+   */
+  const orderedHeroes = await loadHeroIds(ctx.tx, ctx.mission.id);
+  const movedHeroes = await moveHeroesToCave(ctx.tx, cityId, orderedHeroes);
+
   await ctx.emit('city:changed', {
     cityId, playerId: ctx.mission.ownerPlayerId, reason: 'cave_store',
   });
   await ctx.audit({
     action: 'cave.stored', entity: 'city', entityId: cityId,
-    playerId: ctx.mission.ownerPlayerId, after: { ordered, moved },
+    playerId: ctx.mission.ownerPlayerId,
+    after: { ordered, moved, orderedHeroes, movedHeroes },
   });
 };
 
@@ -60,12 +82,16 @@ const withdrawHandler: MissionHandler = async (ctx) => {
   const moved = await takeUnits(ctx.tx, 'cave_units', cityId, ordered);
   await addCityUnits(ctx.tx, cityId, moved);
 
+  const orderedHeroes = await loadHeroIds(ctx.tx, ctx.mission.id);
+  const movedHeroes = await moveHeroesToCity(ctx.tx, cityId, orderedHeroes);
+
   await ctx.emit('city:changed', {
     cityId, playerId: ctx.mission.ownerPlayerId, reason: 'cave_withdraw',
   });
   await ctx.audit({
     action: 'cave.withdrawn', entity: 'city', entityId: cityId,
-    playerId: ctx.mission.ownerPlayerId, after: { ordered, moved },
+    playerId: ctx.mission.ownerPlayerId,
+    after: { ordered, moved, orderedHeroes, movedHeroes },
   });
 };
 
@@ -77,6 +103,14 @@ const returnHandler: MissionHandler = async (ctx) => {
 
   const units = await loadUnits(ctx.tx, ctx.mission.id);
   await addCityUnits(ctx.tx, cityId, units);
+
+  /**
+   * ⭐ Kaçan kahraman **yol boyunca `in_cave` kaldı** — bu bir hile değil, tam da istenen:
+   * o durum "savaşa katılmaz, casus göremez" demek ve doküman kaçış için de aynısını söylüyor
+   * (*"mağaralar yıkıldıktan sonra ordu savaşa yine katılmaz ve şehre kaçar"*). Şehre varınca
+   * yeniden `alive` olur.
+   */
+  await moveHeroesToCity(ctx.tx, cityId, await loadHeroIds(ctx.tx, ctx.mission.id));
 
   await ctx.emit('city:changed', {
     cityId, playerId: ctx.mission.ownerPlayerId, reason: 'cave_collapsed_return',
@@ -132,7 +166,15 @@ export async function scheduleCaveEscape(ctx: HandlerContext, o: {
   `);
 
   const inside = await drainCave(ctx.tx, o.cityId);
-  const area = unitsArea(inside);
+  /**
+   * ⚠️ Kahramanlar `drainCave`e girmez (ayrı tablo değil, `heroes.status`). Kaçış görevine
+   * kimliklerini yazıp durumlarını **`in_cave` bırakıyoruz** — varışta `cave_return` indiriyor.
+   * ⚠️ Alan hesabına da katılmaları şart: mağarada YALNIZ kahraman varsa `unitsArea` 0 döner ve
+   * aşağıdaki `area <= 0` dalı kaçış görevini hiç yazmazdı — kahraman yıkık mağarada asılı
+   * kalırdı.
+   */
+  const insideHeroes = (await readCaveHeroes(ctx.tx, o.cityId)).map((h) => h.id);
+  const area = caveArea(inside, insideHeroes.length);
   if (area <= 0) return {};
 
   /**
@@ -150,7 +192,7 @@ export async function scheduleCaveEscape(ctx: HandlerContext, o: {
                           execute_at, payload, idempotency_key)
     VALUES (${ctx.worldId}, 'cave_return', 'scheduled', ${o.playerId}, ${o.cityId}, ${o.cityId},
             ${executeAt.toISOString()}::timestamptz,
-            ${JSON.stringify({ seconds, area })}::jsonb,
+            ${JSON.stringify({ seconds, area, heroIds: insideHeroes })}::jsonb,
             ${`cave_return:${ctx.mission.id}`})
     RETURNING id
   `);
@@ -169,7 +211,11 @@ export interface CaveStoreReconcile {
   ordered: Record<string, number>;
   /** Savaştan sonra gerçekten girebilecek adetler. */
   remaining: Record<string, number>;
-  /** Hepsi öldü → emir iptal edildi. */
+  /** Savaştan önce işaretli kahramanlar. */
+  orderedHeroes: number[];
+  /** Savaştan sağ çıkıp mağaraya girebilecek kahramanlar. */
+  remainingHeroes: number[];
+  /** Emirde kimse kalmadı → iptal edildi. */
   canceled: boolean;
 }
 
@@ -202,6 +248,7 @@ export async function reconcileCaveStore(
 
   const missionId = Number(job['id']);
   const ordered = await loadUnits(ctx.tx, missionId);
+  const orderedHeroes = await loadHeroIds(ctx.tx, missionId);
 
   // Savaştan SONRAKİ şehir mevcudu — `applySurvivors` çoktan yazdı.
   const alive = await ctx.tx.execute<Record<string, unknown>>(sql`
@@ -216,11 +263,36 @@ export async function reconcileCaveStore(
     if (left > 0) remaining[type] = left;
   }
 
-  if (Object.keys(remaining).length === 0) {
+  /**
+   * ⭐ Kahraman "sağ mı" ölçümü askerinkiyle aynı ilkeden: savaştan sonra hâlâ `alive` ve bu
+   * şehirdeyse emirde kalır. `settleHeroes` ölenleri çoktan `dead` yaptı.
+   */
+  const remainingHeroes = orderedHeroes.length === 0 ? [] : (
+    await ctx.tx.execute<Record<string, unknown>>(sql`
+      SELECT id FROM heroes
+       WHERE id = ANY(${heroIdArray(orderedHeroes)})
+         AND city_id = ${cityId} AND status = 'alive'
+    `)
+  ).map((r: Record<string, unknown>) => Number(r['id']));
+
+  /**
+   * ⚠️ İptal şartı **ikisine birden** bakar. Yalnız askerlere baksaydı, tek kahramanı sağ kalan
+   * bir emir "kimse kalmadı" diye iptal edilir ve kahraman mağaraya hiç giremezdi.
+   */
+  if (Object.keys(remaining).length === 0 && remainingHeroes.length === 0) {
     await ctx.tx.execute(sql`
       UPDATE missions SET status = 'canceled', finished_at = now() WHERE id = ${missionId}
     `);
-    return { ordered, remaining, canceled: true };
+    return { ordered, remaining, orderedHeroes, remainingHeroes, canceled: true };
+  }
+
+  if (remainingHeroes.length !== orderedHeroes.length) {
+    await ctx.tx.execute(sql`
+      UPDATE missions
+         SET payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{heroIds}',
+                                 ${JSON.stringify(remainingHeroes)}::jsonb)
+       WHERE id = ${missionId}
+    `);
   }
 
   // Emri küçült: silinen tür satırları da temizlenir.
@@ -237,7 +309,7 @@ export async function reconcileCaveStore(
       `);
     }
   }
-  return { ordered, remaining, canceled: false };
+  return { ordered, remaining, orderedHeroes, remainingHeroes, canceled: false };
 }
 
 /** Worker'a kaydedilecek tipler. */

@@ -48,6 +48,14 @@ const STATE_LABEL: Record<HeroRow['state'], { text: string; tone: 'muted' | 'suc
   returning: { text: 'Yok Edildi', tone: 'danger' },
   dead: { text: 'Yok Edildi', tone: 'danger' },
   reviving: { text: 'Diriltiliyor', tone: 'warning' },
+  /**
+   * ⭐ Üç mağara etiketi de **orijinalin kendi metinleri** (`k.a[234..236]`) — çevrilmedi,
+   * uydurulmadı. `Mağarada` yeşil çünkü kahraman en güvenli hâlinde: savaşa girmiyor,
+   * casus göremiyor. Geçişler nötr: henüz bir şey olmadı, yalnız sayaç işliyor.
+   */
+  in_cave: { text: 'Mağarada', tone: 'success' },
+  entering_cave: { text: 'Mağaraya Giriyor', tone: 'muted' },
+  leaving_cave: { text: 'Mağaradan Çıkıyor', tone: 'muted' },
 };
 
 function XpBar({ hero }: { hero: HeroRow }) {

@@ -267,6 +267,11 @@ const FORM_RULES: Record<string, { units: 'warriors' | 'spy' | 'all' | 'none'; c
  * ⚠️ Yalnız `in_city` olanlar listelenir: ölü, dirilen, seferde ya da dönüş yolundaki bir
  * kahraman seçilirse sunucu `hero_unavailable` ile reddeder ve oyuncu formu doldurduktan
  * SONRA hatayı görür — reddi önce söylemek daha dürüst (aynı kalıp görev seçeneklerinde de var).
+ *
+ * ⭐ Mağara durumları (2026-08-11) bu süzgece **kendiliğinden** takılıyor: mağaradaki kahraman
+ * `in_cave`, mağaraya girmek üzere işaretlenmiş olan ise `entering_cave` — ikisi de `in_city`
+ * değil. Yani "mağara emrindeki kahraman başka göreve gidemez" kuralı için ekrana ayrı bir
+ * süzgeç yazmak gerekmedi; durum adı kuralı zaten taşıyor.
  */
 function HeroPicker({ cityId, picked, onChange }: {
   cityId: number | null;
@@ -373,6 +378,23 @@ function MissionForm({
     return false;
   });
 
+  /**
+   * ⭐⭐ SERBEST ORDU = baraka − mağaraya söz verilenler (kullanıcı kuralı 2026-08-11).
+   *
+   * Kullanıcının örneği: 50 Cüce var, 30'u mağaraya işaretli → sefere en çok 20 Cüce çıkabilir.
+   * Sunucu bunu `reserveUnits` içinde zorluyor; burası aynı sayıyı **ekranda** gösteriyor ki
+   * oyuncu reddedilecek bir emri hiç kuramasın.
+   * ⚠️ Yalnız `store` yönü düşülür — `withdraw` emrindeki askerler mağaradadır, zaten barakada
+   * görünmezler; onları da düşmek aynı askeri iki kez saymak olurdu.
+   */
+  const freeUnits: Record<string, number> = { ...(city.data?.units ?? {}) };
+  const caveJob = city.data?.cave?.job;
+  if (caveJob?.direction === 'store') {
+    for (const [id, n] of Object.entries(caveJob.units)) {
+      freeUnits[id] = Math.max(0, (freeUnits[id] ?? 0) - n);
+    }
+  }
+
   // ⭐ Sunucu bu görevi kapattıysa form gönderilemez (acemi koruması, teleport bekleme süresi…).
   const blocked = option != null && !option.enabled;
 
@@ -424,7 +446,13 @@ function MissionForm({
         <>
           <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
             {list.map((u) => {
-              const have = city.data?.units[u.id] ?? 0;
+              /**
+               * ⭐ SERBEST adet gösterilir, ham mevcut değil (2026-08-11): mağaraya girmek üzere
+               * işaretli askerler hâlâ barakadadır ama **söz verilmiştir** ve sunucu onlarla
+               * sefere çıkmayı reddeder. Ham sayıyı göstermek oyuncuya sunucunun kabul etmeyeceği
+               * bir seçim yaptırırdı — tam da kaçınmak istediğimiz sürpriz.
+               */
+              const have = freeUnits[u.id] ?? 0;
               if (have <= 0) return null;
               // ⭐ Parantezdeki sayı ŞEHİRDE KALAN adet: input arttıkça canlı azalır, böylece
               //    oyuncu "kaç tanesi evde kalıyor" sorusunu ayrıca hesaplamak zorunda kalmaz.
@@ -449,7 +477,7 @@ function MissionForm({
               );
             })}
           </ul>
-          {list.every((u) => (city.data?.units[u.id] ?? 0) <= 0) ? (
+          {list.every((u) => (freeUnits[u.id] ?? 0) <= 0) ? (
             <Empty>
               {rule.units === 'spy'
                 ? 'Şehrinde Casus Kuş yok. Önce Baraka\'dan üret.'

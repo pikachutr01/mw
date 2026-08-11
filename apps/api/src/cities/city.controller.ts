@@ -33,9 +33,16 @@ import { CapacityService } from './capacity.service.ts';
 import { NAME_RULE_MESSAGE, renameRequest } from './city-name.ts';
 import { AbandonError, CityService } from './city.service.ts';
 
-/** Mağara emri: `{ units: { dwarf: 100, elf: 20 } }`. Tür süzgeci servistedir. */
+/**
+ * Mağara emri: `{ units: { dwarf: 100 }, heroIds: [7] }`. Tür süzgeci ve kahraman uygunluk
+ * denetimi servistedir.
+ *
+ * ⚠️ `heroIds` **isteğe bağlı**: eski istemciler yalnız `units` gönderiyor ve göndermeye
+ * devam edebilmeli.
+ */
 const caveJobRequest = z.object({
   units: z.record(z.string(), z.number().int().nonnegative()),
+  heroIds: z.array(z.number().int().positive()).optional(),
 });
 
 /** Mağara durumunu JSON'a çevirir (tarihleri ISO). */
@@ -64,6 +71,8 @@ function toCaveHttp(err: unknown): Error {
   // Kapasite/meşgul/onarım: istek geçerli ama şu an yapılamaz → 409.
   if (err.code === 'cave_busy' || err.code === 'cave_repairing'
     || err.code === 'capacity_exceeded' || err.code === 'not_enough_units'
+    /* ⭐ Kahraman da aynı aile: istek geçerli, o an uygun değil (öldü · sefere çıktı). */
+    || err.code === 'hero_unavailable'
     || err.code === 'no_job') {
     return new ConflictException(body);
   }
@@ -367,8 +376,14 @@ export class CityController {
 
     try {
       const res = direction === 'store'
-        ? await this.cave.store({ cityId, playerId: player.playerId, units: parsed.data.units, at })
-        : await this.cave.withdraw({ cityId, playerId: player.playerId, units: parsed.data.units, at });
+        ? await this.cave.store({
+          cityId, playerId: player.playerId,
+          units: parsed.data.units, heroIds: parsed.data.heroIds, at,
+        })
+        : await this.cave.withdraw({
+          cityId, playerId: player.playerId,
+          units: parsed.data.units, heroIds: parsed.data.heroIds, at,
+        });
       return {
         ...res,
         finishAt: new Date(at.getTime() + res.seconds * 1000).toISOString(),

@@ -135,13 +135,17 @@ export interface CaveState {
   freeArea: number;
   /** Mağaranın İÇİNDEKİLER — yalnız sahibi görür (casus göremez). */
   units: Record<string, number>;
+  /** ⭐ Mağarada saklanan kahramanlar (2026-08-11). Her biri `HERO_AREA` kadar yer kaplar. */
+  heroes: { id: number; name: string; level: number }[];
   repairUntil: string | null;
   repairing: boolean;
-  /** Süren doldurma/boşaltma. ⚠️ İptal edilemez. */
+  /** Süren doldurma/boşaltma. */
   job: {
     missionId: number;
     direction: 'store' | 'withdraw';
     units: Record<string, number>;
+    /** Emirdeki kahramanlar — bunlar başka göreve gönderilemez (rezerve). */
+    heroIds: number[];
     area: number;
     startedAt: string;
     finishAt: string;
@@ -896,12 +900,15 @@ export function useCancelQueue() {
 export function useCaveJob(cityId: number | null) {
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: (input: { direction: 'store' | 'withdraw'; units: Record<string, number> }) =>
+    mutationFn: (input: {
+      direction: 'store' | 'withdraw'; units: Record<string, number>; heroIds?: number[];
+    }) =>
       api<{ seconds: number; area: number; finishAt: string }>(
         `/api/v1/cities/${cityId}/cave/${input.direction}`,
-        { method: 'POST', body: { units: input.units } },
+        { method: 'POST', body: { units: input.units, heroIds: input.heroIds ?? [] } },
       ),
-    onSuccess: () => invalidate(['city', 'missions']),
+    /** ⚠️ `temple` de tazelenir: kahraman durumu (Mağaraya Giriyor…) o sorgudan geliyor. */
+    onSuccess: () => invalidate(['city', 'missions', 'temple']),
   });
 }
 
@@ -913,7 +920,7 @@ export function useCancelCaveJob(cityId: number | null) {
   const invalidate = useInvalidate();
   return useMutation({
     mutationFn: () => api(`/api/v1/cities/${cityId}/cave/job`, { method: 'DELETE' }),
-    onSuccess: () => invalidate(['city', 'missions']),
+    onSuccess: () => invalidate(['city', 'missions', 'temple']),
   });
 }
 
@@ -1077,7 +1084,14 @@ export interface HeroSkills { fAtk: number; fDef: number; mAtk: number; mDef: nu
  * ⭐ `returning` = savaşta öldü, henüz eve varmadı. Etiketi de «Yok Edildi» ama Dirilt kapalı.
  * ⚠️ `destroyed` **KALKTI** (2026-08-01): kahraman artık hiç silinmiyor.
  */
-export type HeroState = 'in_city' | 'on_mission' | 'dead' | 'returning' | 'reviving';
+export type HeroState =
+  | 'in_city' | 'on_mission' | 'dead' | 'returning' | 'reviving'
+  /**
+   * ⭐ MAĞARA (2026-08-11) — orijinalin üç durumu (`k.a[234..236]`, bkz. `docs/JAVA_ROENTGEN.md`).
+   * `in_cave` savaşa katılmaz ve casusa görünmez; `entering_cave` HÂLÂ ŞEHİRDEDİR (savunmaya
+   * katılır, ölebilir) ama başka bir göreve gönderilemez — mağaraya söz verilmiştir.
+   */
+  | 'in_cave' | 'entering_cave' | 'leaving_cave';
 
 export interface HeroRow {
   id: number;
@@ -1094,6 +1108,8 @@ export interface HeroRow {
   reviveUntil: string | null;
   /** `returning` iken şehre varış anı — geri sayım bunu gösterir. */
   returningAt: string | null;
+  /** Mağara geçişinin biteceği an — yalnız `entering_cave` / `leaving_cave` iken dolu. */
+  caveAt: string | null;
   reviveCost: { gold: number; food: number } | null;
   reviveSeconds: number | null;
 }

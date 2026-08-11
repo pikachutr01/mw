@@ -89,6 +89,35 @@ export function unitsArea(counts: Record<string, number>): number {
 }
 
 /**
+ * ⭐ ÖLÇÜLMÜŞ: bir kahramanın kapladığı ALAN = **5**.
+ *
+ * Kaynak `docs/referans/teknik_ve_yapi_dokumantasyonu.md:209` — kahramanın özellik künyesi
+ * *"Hız: 200 · Kapasite: 0 · Alan: 5"*. Yani kahraman diğer savaşçılar gibi bir alan değerine
+ * sahip; katalogdaki `UNITS` tablosunda yok çünkü kahraman ADET değil VARLIK (`heroes` tablosu),
+ * ama alanı ölçülmüş bir sabittir ve **uydurulmamalıdır**.
+ *
+ * ⚠️ Ne kadar küçük olduğuna dikkat: Cüce 9, Elf 12 — kahraman ikisinden de az yer kaplar.
+ * Sonucu, mağaraya kahraman saklamanın kapasite maliyetinin **simgesel** olması (1. seviye
+ * mağaranın 50 alanının onda biri) ve tek başına bir kahramanı sokmanın 1. seviyede
+ * `25×√5 ≈ 56 sn`, 10. seviyede 24 sn sürmesi. Yani kahraman saklamak **refleksle**
+ * yapılabilir: savunan gelen saldırıyı varış saatiyle görüyor (§13.5.7).
+ * ⭐ Bu bilinçli kabul edildi (kullanıcı, 2026-08-11): ölçülmüş sayı kurgunun önünde gelir.
+ * Denge sorun çıkarırsa kaldıraç `cave.transferFactor`tır, bu sabit değil.
+ */
+export const HERO_AREA = 5;
+
+/**
+ * Mağaranın DOLU alanı: savaşçılar + saklanan kahramanlar.
+ *
+ * ⚠️ Kahramanı unutmak sessiz bir hataydı: `unitsArea` yalnız `cave_units`'i görüyor, oysa
+ * kahraman `heroes.status='in_cave'` ile saklanıyor (ayrı tablo YOK). Kapasite denetimi,
+ * süre hesabı ve mağara yıkılınca kaçış — üçü de bu fonksiyondan geçmeli.
+ */
+export function caveArea(counts: Record<string, number>, heroCount = 0): number {
+  return unitsArea(counts) + HERO_AREA * Math.max(0, Math.trunc(heroCount));
+}
+
+/**
  * ⭐ KURGU: mağarayı doldurma / boşaltma süresi.
  *
  * Doküman iki şey söylüyor: *"gereken süre, savaşçıların toplam kapladığı alana göre değişir"*

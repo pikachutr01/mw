@@ -97,6 +97,9 @@ Tek harfli anahtarlar bağlama göre yeniden kullanılıyor — **hangi ekranda*
 | `u` | 170 | **durum kodu** | `j.java:382` + `k.a[231+u]` |
 | `v` | 177 | **seviye** | `j.java:391` → `Seviye: <v>` |
 | `x` | 178 | **kalan yetenek puanı** | `g.java:654` puan harcandıkça elle azaltılıyor |
+| `B` | 19 | **birim listesi** ağacı | mağara ekranı + sefer formu (`g.java:1722`) |
+| `K` | 103 | **kahraman listesi** ağacı | aynı + kahraman ekranı (`e.java:624`) |
+| `Ekr` | 50 | o anki **ekran kodu** | `g.java:2144` dallanması |
 
 ⚠️ `long[3]` yükünün `a[2]` gözü ilerleme sayacı olarak kullanılıyor (`j.java:406`: geçen
 süre × 100 / toplam = yüzde).
@@ -119,7 +122,7 @@ Aşağıda **bu arşivde çözülmüş** olanlar; tam liste için aleti çalış
 | `drKah.do?k=<kahraman>&o=1` | **Dirilt** | ✅ `POST /heroes/:id/revive` |
 | `drKah.do?k=<kahraman>&o=2` | **Diriltmeyi Durdur** | ✅ `.../revive/cancel` |
 | `isKhr.do?s=` | kahraman sıralaması | ✅ |
-| `ipMgr.do?u=` | mağara işlemini iptal | ⚠️ bizde mağara iptali yok |
+| `ipMgr.do?u=` | mağara işlemini iptal | ✅ `DELETE /cities/:id/cave/job` |
 | `msBlk.do?` | oyuncuyu blokla | ⚠️ bkz. `EKSIK_OZELLIKLER.md` |
 
 ---
@@ -149,9 +152,9 @@ else           append(k.a[239]);                          // "Diriltiliyor"
 |---:|---|---|
 | 1 | Görevde | ✅ `on_mission` |
 | 2 | Şehirde | ✅ `in_city` |
-| 3 | **Mağarada** | ⛔ **YOK** (§7) |
-| 4 | **Mağaradan Çıkıyor** | ⛔ **YOK** (§7) |
-| 5 | **Mağaraya Giriyor** | ⛔ **YOK** (§7) |
+| 3 | **Mağarada** | ✅ `in_cave` (2026-08-11, §6.2) |
+| 4 | **Mağaradan Çıkıyor** | ✅ `leaving_cave` — **türetilir**, kolonu yok |
+| 5 | **Mağaraya Giriyor** | ✅ `entering_cave` — **türetilir**, kolonu yok |
 | 6 | Yok Edildi ! | ✅ `dead` |
 | 7 | Diriltiliyor (+ ilerleme çubuğu) | ✅ `reviving` |
 
@@ -189,7 +192,61 @@ mekanizmayla birebir örtüşüyor.
   zaten sağlanıyor**: `maybeCaptureHero`, `settleHeroes`'tan SONRA koşuyor, yeni kahraman XP
   dizilerinde hiç yok. Eksik değil.
 
-### 6.2 EKONOMİ FORMÜLLERİ — `k.java:1373-1448`
+### 6.2 MAĞARA EKRANI — asker + kahraman (2026-08-11)
+
+#### ⭐⭐ EN ÖNEMLİ BULGU: kahraman durum koduyla eleniyor
+
+`i.java:815 g(int)` = **"tümünü seç"**. Önce birim satırlarını (`B` ağacı) doldurur, sonra
+**kahraman listesini** (`n.a.e`, `K` ağacı) gezer:
+
+```java
+int var8 = var2.a - 1;                         // birim satırı sayısı
+for (int var6 = 1; var6 < n.a.e.a; ++var6) {   // ← KAHRAMANLAR, birimlerin ARDINDAN
+   if (var1 == 1) {                                                  // Mağara Doldur
+      if (parseInt(n.a.e.a(var6).a(k.a[170])) == 2 …) { … }           // u == 2 «Şehirde»
+   } else if (parseInt(n.a.e.a(var6).a(k.a[170])) == 3 …) { … }       // u == 3 «Mağarada»
+}
+```
+
+| işlem | kabul edilen durum | elenenler |
+|---|---|---|
+| **Mağara Doldur** | `u == 2` **Şehirde** | Görevde(1) · Mağarada(3) · geçişler(4,5) · **Yok Edildi(6)** · **Diriltiliyor(7)** |
+| **Mağara Boşalt** | `u == 3` **Mağarada** | diğer hepsi |
+
+⭐ Bizim karşılığımız `status='alive' AND city_id = <şehir>`. ⚠️ Yalnız `alive` demek **yetmez**:
+seferdeki kahraman da `alive`, onu `city_id IS NULL` ayırıyor.
+
+#### Mağara işlemleri SEFER TİPİDİR
+
+`k.java:886-894` görev tipi → etiket tablosu:
+
+| kod | etiket | kod | etiket |
+|---:|---|---:|---|
+| 1 | Saldırı | 4 | Destek |
+| 2 | Casusluk | 5 | Şehir Kur |
+| 3 | Nakliye | **11** | **Mağara Doldur** |
+| | | **12** | **Mağara Boşalt** |
+
+⇒ Mağara doldur/boşalt orijinalde saldırıyla **aynı numaralandırmada**. Bizdeki
+`cave_store`/`cave_withdraw` görev tipleri bununla birebir örtüşüyor.
+
+#### Tek ekran, tek istek
+
+`g.java:1716-1734` (ekran 42 = Doldur, 43 = Boşalt) formu **iki ağaçla birden** kuruyor:
+
+```java
+var5.a(this.a.b().a(k.a[19]) /* B = birimler */,
+       this.a.b().a(k.a[103]) /* K = kahramanlar */, k.a[129] /* "O11" */);
+```
+
+Gönderim `gnOrd.do` (`g.java:1016-1024`) ve başarılı olunca istemci **her iki ağacı da**
+temizliyor. ⇒ Orijinalde asker ve kahraman **aynı emirde** seçiliyordu — bizim tek modal /
+iki bölüm kararımızın kaynağı bu.
+
+Bu turda çözülen `B` · `K` · `Ekr` anahtarları **§4 sözlüğüne** eklendi (§0 kuralı: alanlar
+tek yerde birikir, özellik bölümleri onları tekrarlamaz).
+
+### 6.3 EKONOMİ FORMÜLLERİ — `k.java:1373-1448`
 
 Bu röntgen 2026-08-10 ekonomi turunda yapıldı ve tamamı
 **`MOBIWAR_SISTEM_PLANI.md` §13.9a / §13.11.3**'te duruyor (çarpanlar `k.java:10-15`,
@@ -207,24 +264,28 @@ Kesinleştirmek için `javap -c` ile bytecode taraması gerekir.
 
 | # | Özellik | Orijinal kanıt | Bizdeki durum | Karar |
 |---:|---|---|---|---|
-| 1 | **Kahraman mağaraya saklanabiliyor** | `k.a[234..236]` = Mağarada · Mağaraya Giriyor · Mağaradan Çıkıyor; `j.java:401` durum tablosu | `cave_units` yalnız `(city_id, type)` taşıyor; `apps/api/src/cave/` içinde **tek bir `hero` geçmiyor** | ⏸️ **Ertelendi** (kullanıcı, 2026-08-11: *"şimdilik yalnız kaydet"*) |
+| 1 | **Kahraman mağaraya saklanabiliyor** | `k.a[234..236]` = Mağarada · Mağaraya Giriyor · Mağaradan Çıkıyor; `i.java:844-852` durum süzgeci | ✅ **UYGULANDI** (2026-08-11) | Künye §7.1'de |
 
-### 7.1 Kahraman mağarada — ertelenen işin künyesi
+> Defter şu an boş — bulunan tek madde uygulandı. Yeni bir röntgende orijinalde olup bizde
+> olmayan bir şey çıkarsa **buraya** yazılır (kullanıcı: *"bu çok değerli"*).
 
-Bir sonraki tur bu bölümden başlar:
+### 7.1 Kahraman mağarada — UYGULANDI (2026-08-11)
 
-- **Şema:** `cave_heroes(city_id, hero_id)` ya da `heroes.in_cave` bayrağı. ⚠️ `heroes.city_id`
-  zaten görevdeyken NULL oluyor — üçüncü bir konum kavramı doğuyor, durum makinesi
-  (`in_city` / `on_mission` / `in_cave`) yeniden düşünülmeli.
-- **Geçiş süresi:** orijinalde giriş ve çıkış **anlık değil** (iki ayrı durum var). Askerlerde
-  bu süre bizde `cave.transferFactor` ile modellenmiş; kahraman için aynısı mı, sabit mi?
-- **Savaş etkileşimi:** mağaradaki kahraman savaşa **girmemeli** (mağaranın bütün varlık sebebi
-  orduyu saklamak). O hâlde ölmez de — yani mağara, kahraman kaybına karşı bir **sigorta**
-  olur ve diriltme dengesini doğrudan etkiler.
-- **Casusluk:** `gatherIntel` mağaranın içini zaten göremiyor; kahraman sayısı `heroCount`
-  ile sızıyor. Mağaradaki kahraman o sayıdan da düşmeli.
-- **Mağara yıkılması:** cüceler mağarayı kırınca içerideki askerler kaçıyor
-  (`scheduleCaveEscape`). Kahraman ne olacak?
+Tasarımın tamamı `MOBIWAR_SISTEM_PLANI.md` **§13.20.6**'da; burada yalnız röntgenden çıkan
+kararlar ve **ertelenirken sorulan soruların cevapları** duruyor.
+
+| Açık soruydu | Cevap |
+|---|---|
+| Şema: `cave_heroes` tablosu mu, bayrak mı? | **İkisi de değil** — `heroes.status = 'in_cave'`. `status='alive'` süzgeci zaten beş yerde duruyor, hepsi kendiliğinden doğru çalıştı |
+| Geçiş süresi kahramana özel mi? | Hayır, askerlerle **aynı formül**. Kahramanın alanı **5** (ölçülmüş, `teknik_ve_yapi_dokumantasyonu.md:209`) |
+| İki geçiş durumu nasıl saklanacak? | **Saklanmıyor, türetiliyor**: süren emrin yönü + `payload.heroIds` |
+| Savaşa katılır mı? | Hayır → ölmez de. Mağara, kahraman kaybına karşı **sigorta**; §13.20.6'da bilinen denge sonucu olarak yazıldı |
+| Casusluk görür mü? | Hayır — `heroCount` sorgusu `status='alive'` süzüyor, ek kod gerekmedi |
+| Mağara yıkılınca kahraman? | Kullanıcı kararı: **kaçış görevine katılır**, yol boyunca `in_cave` kalır, varınca `alive` olur |
+
+⚠️ Röntgenin **beklenmedik yan çıktısı**: mağara ekranının asker ve kahramanı tek istekte
+göndermesi (§6.2), kullanıcının bağımsız olarak istediği "tek ekran, iki bölüm" kararıyla
+birebir örtüştü.
 
 ---
 
@@ -233,3 +294,4 @@ Bir sonraki tur bu bölümden başlar:
 | Tarih | Ne eklendi |
 |---|---|
 | 2026-08-11 | Dosya açıldı. §1 alet + üç tuzak · §4 alan sözlüğü (11 anahtar) · §5 uç kataloğu · §6.1 **Tapınak/Kahraman röntgeni** · §7 **mağarada kahraman** kaydı |
+| 2026-08-11 (2) | §6.2 **Mağara ekranı röntgeni** (kahraman durum süzgeci `i.java:844-852` · mağara = sefer tipi 11/12 · tek istek) · §4'e `B`/`K`/`Ekr` · §5'te `ipMgr` düzeltmesi (iptal BİZDE VAR) · §7 defteri **kapandı**, madde uygulandı |

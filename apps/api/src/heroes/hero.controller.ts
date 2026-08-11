@@ -23,6 +23,7 @@ import { heroLevelForXp, heroReviveCost, heroReviveSeconds, heroXpForLevel } fro
 import { DEFAULT_COMBAT_CONFIG } from '@mobilwar/engine';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
+import { payloadHeroIds } from '../cave/cave.service.ts';
 import { NAME_RULE_MESSAGE, gameName } from '../cities/city-name.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDateOrNull, type Db } from '../db/client.ts';
@@ -58,6 +59,52 @@ interface HeroRow {
   onMission: boolean;
   /** Görevdeyse o görevin varış anı — «dönüyor» geri sayımı bunu kullanır. */
   missionAt: Date | null;
+}
+
+/**
+ * ⭐ MAĞARA GEÇİŞLERİ (2026-08-11) — orijinalin üç durumu, **yeni kolon olmadan**.
+ *
+ * `docs/JAVA_ROENTGEN.md` §6.1: istemcinin durum tablosunda `Mağarada` · `Mağaraya Giriyor` ·
+ * `Mağaradan Çıkıyor` var (`k.a[234..236]`). Bizde kalıcı durum yalnız **biri** —
+ * `heroes.status = 'in_cave'`. Diğer ikisi **türetiliyor**: süren mağara emrinin yönü + o
+ * emrin kahraman listesi. Böylece kahramanın "nerede olduğu" tek yerde (status) durur,
+ * "ne yapıyor olduğu" ise zaten var olan görev satırından okunur — iki kaynak çelişemez.
+ */
+interface CaveHint {
+  /** Bu kahraman mağaraya girmek üzere işaretli (emir sürüyor, kendisi hâlâ şehirde). */
+  entering: Set<number>;
+  /** Bu kahraman mağaradan çıkmak üzere: boşaltma emri ya da yıkılan mağaradan kaçış. */
+  leaving: Set<number>;
+  /** Geçişin biteceği an — ekrandaki geri sayım. */
+  at: Date | null;
+}
+
+const NO_CAVE_HINT: CaveHint = { entering: new Set(), leaving: new Set(), at: null };
+
+/**
+ * Şehrin süren mağara görevinden geçiş ipuçlarını çıkarır.
+ *
+ * ⚠️ `cave_return` de okunuyor: mağara yıkıldığında kahraman **`in_cave` kalıyor** ve şehre
+ * kaçıyor. Yalnız `cave_withdraw`a bakılsaydı, kaçış sırasında ekranda «Mağarada» yazardı ve
+ * oyuncu ortada mağara kalmadığı hâlde kahramanını içeride sanırdı.
+ */
+async function readCaveHint(db: Db, cityId: number): Promise<CaveHint> {
+  const rows = await db.execute<Record<string, unknown>>(sql`
+    SELECT type, payload, execute_at FROM missions
+     WHERE target_city_id = ${cityId}
+       AND type IN ('cave_store', 'cave_withdraw', 'cave_return')
+       AND status IN ('scheduled', 'running')
+     ORDER BY execute_at LIMIT 1
+  `);
+  const row = rows[0];
+  if (!row) return NO_CAVE_HINT;
+  const ids = new Set(payloadHeroIds(row['payload']));
+  const store = String(row['type']) === 'cave_store';
+  return {
+    entering: store ? ids : new Set(),
+    leaving: store ? new Set() : ids,
+    at: toDateOrNull(row['execute_at']),
+  };
 }
 
 function mapHero(r: Record<string, unknown>): HeroRow {
@@ -127,6 +174,8 @@ export class HeroController {
        ORDER BY h.level DESC, h.id
     `);
 
+    const cave = await readCaveHint(this.db, cityId);
+
     const [templeRow] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT level FROM buildings WHERE city_id = ${cityId} AND type = 'temple'
     `);
@@ -147,7 +196,7 @@ export class HeroController {
       heroCount: Number(countRow?.['n'] ?? 0),
       maxHeroes: DEFAULT_COMBAT_CONFIG.capture.maxHeroes,
       pointsPerLevel: DEFAULT_COMBAT_CONFIG.hero.pointsPerLevel,
-      heroes: rows.map((r) => this.present(mapHero(r), templeLevel, now, player.worldId)),
+      heroes: rows.map((r) => this.present(mapHero(r), templeLevel, now, player.worldId, cave)),
     };
   }
 
@@ -251,6 +300,7 @@ export class HeroController {
   /** Ekrana giden biçim: durum etiketi + eşikler + diriltme maliyeti. */
   private present(
     h: HeroRow, templeLevel: number, now: Date, worldId: number,
+    cave: CaveHint = NO_CAVE_HINT,
   ): Record<string, unknown> {
     const nextXp = heroXpForLevel(h.level + 1);
     return {
@@ -270,7 +320,12 @@ export class HeroController {
        */
       state: h.status === 'reviving' ? 'reviving'
         : h.status === 'dead' ? (h.cityId == null ? 'returning' : 'dead')
-          : h.onMission ? 'on_mission' : 'in_city',
+          : h.status === 'in_cave' ? (cave.leaving.has(h.id) ? 'leaving_cave' : 'in_cave')
+            : cave.entering.has(h.id) ? 'entering_cave'
+              : h.onMission ? 'on_mission' : 'in_city',
+      /** Mağara geçişinin biteceği an — yalnız `entering_cave` / `leaving_cave` doluyken anlamlı. */
+      caveAt: cave.entering.has(h.id) || cave.leaving.has(h.id)
+        ? cave.at?.toISOString() ?? null : null,
       reviveUntil: h.reviveUntil?.toISOString() ?? null,
       /** Dönüş yolundaki kahramanın şehre varış anı (yalnız `returning` durumunda dolu). */
       returningAt: h.status === 'dead' && h.cityId == null

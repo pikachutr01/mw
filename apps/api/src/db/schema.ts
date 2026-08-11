@@ -802,6 +802,13 @@ export const heroes = pgTable('heroes', {
    *   `dead`      — savaşta öldü. `cityId` doluysa evdedir ve ÜCRET ödenip diriltilebilir;
    *                  NULL ise hâlâ dönüş yolundadır (ekranda «Yok Edildi · dönüyor»)
    *   `reviving`  — diriltme başladı, `reviveUntil`da canlanır ("Diriltiliyor" · iptal edilebilir)
+   *   `in_cave`   — ⭐ MAĞARADA saklanıyor (2026-08-11). Savaşa katılmaz, casus göremez, sefere
+   *                  çıkamaz — üçü de `status = 'alive'` süzgecinden **kendiliğinden** düşüyor.
+   *                  Orijinalde de vardı (`JAVA_ROENTGEN.md` §6.2, `k.a[234]`).
+   *
+   * ⚠️ «Mağaraya Giriyor» / «Mağaradan Çıkıyor» (orijinal `k.a[235..236]`) **kolon DEĞİL**:
+   * süren mağara görevinin yönünden ve `payload.heroIds`inden türetiliyor (§13.20.6). Kalıcı
+   * durum tek: kahraman ya şehirde ya mağarada.
    *
    * ⚠️ **`destroyed` EMEKLİ** (kullanıcı, 2026-08-01 · `0033_hero_no_destroy.sql`). Ordunun
    * tamamı ölse bile kahraman silinmiyor; kendi hızıyla yalnız dönüyor. Eski satırlar

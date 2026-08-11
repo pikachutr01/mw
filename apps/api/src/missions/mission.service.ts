@@ -24,6 +24,7 @@ import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { liveNumberFor } from '../settings/live.ts';
 import { WORLD_SHAPE } from '../world/world-shape.ts';
+import { caveReservedHeroes, caveReservedUnits } from '../cave/cave.service.ts';
 import { hasCargo, normalizeCargo, readResources, type Cargo } from './cargo.ts';
 import type { Tx } from './handler-registry.ts';
 
@@ -143,6 +144,31 @@ interface OriginRow {
   d: number;
   s: number;
   name: string;
+}
+
+/**
+ * ⭐ Mağaraya girmek üzere işaretli kahraman **başka göreve gidemez** (kullanıcı, 2026-08-11).
+ *
+ * Askerlerdeki rezervasyon kuralının (`reserveUnits`) kahraman karşılığı. Kahraman adet değil
+ * varlık olduğu için kural daha basit: rezerve listesinde varsa reddedilir, kısmi durum yok.
+ *
+ * ⚠️ Sefer VE teleport, ikisinden de çağrılmalı — teleport `march()`ten geçmiyor, kahramanı
+ * kendi `UPDATE`iyle taşıyor. Diriltme turunda (2026-08-11) aynı ikizlik bir hata üretmişti.
+ */
+async function assertHeroesNotCaveReserved(
+  tx: Db, cityId: number, heroIds: readonly number[],
+): Promise<void> {
+  if (heroIds.length === 0) return;
+  const reserved = await caveReservedHeroes(tx, cityId);
+  if (reserved.size === 0) return;
+  const clash = heroIds.filter((id) => reserved.has(id));
+  if (clash.length > 0) {
+    throw new MissionError(
+      'hero_unavailable',
+      'Kahraman mağaraya girmek üzere ayrıldı — önce mağara emrini iptal edin.',
+      { heroIds: clash },
+    );
+  }
 }
 
 interface TargetRow {
@@ -634,6 +660,9 @@ export class MissionService {
           readyAt: ready.toISOString(),
         });
       }
+
+      /** ⭐ Kahramanlar da mağara rezervasyonuna takılır — bkz. {@link assertHeroesNotCaveReserved}. */
+      await assertHeroesNotCaveReserved(t as never, opts.originCityId, heroIds);
 
       // Birlikler kaynaktan düşer, hedefe ANINDA eklenir — arada "yolda" durumu yok.
       await this.reserveUnits(t, opts.originCityId, units);
@@ -1389,18 +1418,40 @@ export class MissionService {
    * Birlikleri şehirden düşer. Koşullu tek UPDATE → iki eşzamanlı sefer aynı orduyu gönderemez
    * (satır kilidi Postgres tarafında, `count >= n` koşulu ikinci isteği boş döndürür).
    */
+  /**
+   * Birlikleri şehirden düşer (sefer ve teleport buradan geçer — **tek boğaz**).
+   *
+   * ⭐⭐ MAĞARA REZERVASYONU (kullanıcı kararı 2026-08-11). Mağaraya girmek üzere işaretli
+   * askerler hâlâ barakadadır ama **söz verilmiştir**: başka bir göreve gönderilemezler.
+   * Kullanıcının örneği: şehirde 50 Cüce, 30'u mağaraya işaretli → sefere en çok **20** Cüce
+   * çıkabilir; 40 istenirse emir reddedilir.
+   *
+   * ⚠️ Bu, 2026-07-28 modelinin *"süre boyunca sefere de gönderilebilirler"* cümlesini
+   * **bilerek geçersiz kılıyor**. Gerekçe: aynı askeri iki işe birden söz vermek, oyuncunun
+   * ekranda gördüğü mağara emrini sessizce boşa düşürüyordu — sürpriz üretiyordu.
+   * ⭐ Değişmeyen: askerler hâlâ şehirde, gelen saldırıya **katılıyor** ve ölebiliyorlar;
+   * savaşta eksilirlerse emir küçülür (`reconcileCaveStore`), İPTAL OLMAZ.
+   *
+   * ⚠️ Rezerve **tek sorguda** düşülüyor (`count >= istenen + rezerve`), ayrı bir ön kontrol
+   * olarak değil: araya giren eşzamanlı bir istek iki denetim arasından sızabilirdi.
+   */
   private async reserveUnits(tx: Tx, cityId: number, units: Record<string, number>): Promise<void> {
+    const reserved = await caveReservedUnits(tx as never, cityId);
     for (const [type, count] of Object.entries(units)) {
+      const hold = reserved[type] ?? 0;
       const rows = await tx.execute<Record<string, unknown>>(sql`
         UPDATE units SET count = count - ${count}
-         WHERE city_id = ${cityId} AND type = ${type} AND count >= ${count}
+         WHERE city_id = ${cityId} AND type = ${type} AND count >= ${count + hold}
         RETURNING count
       `);
       if (rows.length === 0) {
+        const name = UNITS_BY_ID[type]?.name.tr ?? type;
         throw new MissionError(
           'insufficient_units',
-          `Şehirde yeterli ${UNITS_BY_ID[type]?.name.tr ?? type} yok.`,
-          { type, requested: count },
+          hold > 0
+            ? `Şehirde yeterli serbest ${name} yok — ${hold} tanesi mağaraya girmek üzere ayrıldı.`
+            : `Şehirde yeterli ${name} yok.`,
+          { type, requested: count, caveReserved: hold },
         );
       }
     }
@@ -1413,8 +1464,9 @@ export class MissionService {
    */
   private async reserveHeroes(
     tx: Tx, missionId: number, heroIds: number[],
-    opts: { playerId: number; worldId: number; at: Date }, _origin: OriginRow,
+    opts: { playerId: number; worldId: number; at: Date; originCityId: number }, _origin: OriginRow,
   ): Promise<void> {
+    await assertHeroesNotCaveReserved(tx as never, opts.originCityId, heroIds);
     for (const heroId of heroIds) {
       const rows = await tx.execute<Record<string, unknown>>(sql`
         UPDATE heroes SET city_id = NULL

@@ -241,8 +241,13 @@ export function createAttackHandler(cities: CityService): MissionHandler {
     const caveOrder = cave.broken ? null : await reconcileCaveStore(ctx, targetCityId);
     if (caveOrder?.canceled) {
       /**
-       * Hepsi öldü → oyuncuya savaş raporundan **AYRI** bir mesaj (kullanıcı isteği).
+       * Emirde kimse kalmadı → oyuncuya savaş raporundan **AYRI** bir mesaj (kullanıcı isteği).
        * Rapor "savaşta ne oldu"yu anlatır; bu mesaj "planın ne oldu"yu.
+       *
+       * ⚠️ Bu dal yalnız **hiç kimse** kalmadığında çalışır. Bir kısmı ölürse emir küçülür ve
+       * KALANLARLA tamamlanır (kullanıcı kuralı 2026-08-11: *"ne kadar asker geriye kaldıysa
+       * görev o kadar askerle tamamlanır… iptal olmaz"*) — o durumda mesaj da gitmez, çünkü
+       * ortada iptal edilen bir plan yok.
        */
       await writeMessage(ctx, {
         playerId: defenderCity.playerId,
@@ -254,6 +259,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
           cityId: targetCityId,
           reason: 'all_units_lost',
           ordered: caveOrder.ordered,
+          orderedHeroes: caveOrder.orderedHeroes.length,
           at: ctx.at.toISOString(),
         },
       });
