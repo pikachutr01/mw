@@ -81,12 +81,12 @@ savunma gücünü büyütür ve **kendi kaybını düşürür**. Motor bunu tama
 
 | # | GG sal/sav | motor: tur | motor: atkK | motor: defK | **gerçek: tur** | **gerçek: atkK** | **gerçek: defK** |
 |---|---|---:|---:|---:|---|---|---|
-| A1 | 0 / 0 | 2 | 100 | **102,5** | | | |
-| A2 | 0 / 1 | 2 | 100 | **102,5** | | | |
-| A3 | 0 / 3 | 2 | 100 | **102,5** | | | |
-| A4 | 0 / 5 | 2 | 100 | **102,5** | | | |
-| A5 | 0 / 10 | 2 | 100 | **102,5** | | | |
-| A6 | 0 / 20 | 2 | 100 | **102,5** | | | |
+| A1 | 0 / 0 | 2 | 100 | **102,5** |2 | 100|102-103 |
+| A2 | 0 / 1 | 2 | 100 | **102,5** |2 |100 |102-103 |
+| A3 | 0 / 3 | 2 | 100 | **102,5** |2 |100 |102-103 |
+| A4 | 0 / 5 | 2 | 100 | **102,5** |2 | 100|102-103 |
+| A5 | 0 / 10 | 2 | 100 | **102,5** | 2|100 |102-103 |
+| A6 | 0 / 20 | 2 | 100 | **102,5** |2 |100 |102-103 |
 
 ### Nasıl okunur
 
@@ -110,14 +110,14 @@ Aynı çekirdek kurulum, bu sefer **saldıranın** gece görüşü taranıyor.
 
 | # | GG sal/sav | motor: tur | motor: defK | **gerçek: tur** | **gerçek: defK** |
 |---|---|---:|---:|---|---|
-| B1 | 0 / 0 | 2 | 102,5 | | |
-| B2 | 1 / 0 | 2 | 150,5 | | |
-| B3 | 2 / 0 | 2 | 179,4 | | |
-| B4 | 3 / 0 | 2 | 198,5 | | |
-| B5 | 5 / 0 | 2 | 222,5 | | |
-| B6 | 10 / 0 | 2 | 250,4 | | |
-| B7 | 20 / 0 | 2 | 269,5 | | |
-| B8 | **GÜNDÜZ** | 2 | **294,9** | | |
+| B1 | 0 / 0 | 2 | 102,5 |2 |102-103 |
+| B2 | 1 / 0 | 2 | 150,5 |2 |150-151 |
+| B3 | 2 / 0 | 2 | 179,4 |2 | 178-180|
+| B4 | 3 / 0 | 2 | 198,5 | 2| 198-199|
+| B5 | 5 / 0 | 2 | 222,5 |2 | 222-223|
+| B6 | 10 / 0 | 2 | 250,4 |2 |249-521 |
+| B7 | 20 / 0 | 2 | 269,5 | 2| 269-270|
+| B8 | **GÜNDÜZ** | 2 | **294,9** | 2| 294-295|
 
 ### ⭐⭐ Oran testi — ordu boyundan, birimden ve tabandan BAĞIMSIZ
 
@@ -159,12 +159,12 @@ Kurulum tam ayna: **aynı iki ordu, roller ters.** Saldıran **9.000 Elf** · Sa
 
 | # | GG sal/sav | motor: tur | motor: atkK | B'deki karşılığı | **gerçek: tur** | **gerçek: atkK** |
 |---|---|---:|---:|---:|---|---|
-| C1 | 0 / 0 | 2 | 102,6 | B1 = 102,5 | | |
-| C2 | 0 / 1 | 2 | 150,6 | B2 = 150,5 | | |
-| C3 | 0 / 3 | 2 | 198,6 | B4 = 198,5 | | |
-| C4 | 0 / 5 | 2 | 222,6 | B5 = 222,5 | | |
-| C5 | 0 / 10 | 2 | 250,4 | B6 = 250,4 | | |
-| C6 | 0 / 20 | 2 | 269,6 | B7 = 269,5 | | |
+| C1 | 0 / 0 | 2 | 102,6 | B1 = 102,5 |2 | 102-103|
+| C2 | 0 / 1 | 2 | 150,6 | B2 = 150,5 |2 |150-151 |
+| C3 | 0 / 3 | 2 | 198,6 | B4 = 198,5 | 2| 198-199|
+| C4 | 0 / 5 | 2 | 222,6 | B5 = 222,5 | 2|222-223 |
+| C5 | 0 / 10 | 2 | 250,4 | B6 = 250,4 | 2|249-251 |
+| C6 | 0 / 20 | 2 | 269,6 | B7 = 269,5 |2 | 269-270|
 
 **Nasıl okunur:** C sütunu B sütununa **birebir** oturmalı. Sistematik bir sapma (örneğin
 savunan tarafta hep daha yüksek/düşük) iki kod yolunun **farklı sabitler** kullandığı anlamına
@@ -182,16 +182,28 @@ katına çıkarır (havuz ∝ k, güç toplamı P ∝ k → `havuz/P` sabit). Ge
 
 | # | ordu | GG sal/sav | motor: defK | motor: defK ÷ k | **gerçek: defK** |
 |---|---|---|---:|---:|---|
-| D1 | 100 Manc. / 9.000 Elf | 0 / 0 | 102,5 | 102,5 | |
-| D2 | 300 Manc. / 27.000 Elf | 0 / 0 | 307,4 | 102,5 | |
-| D3 | 1.000 Manc. / 90.000 Elf | 0 / 0 | 1.025,0 | 102,5 | |
-| D4 | 100 Manc. / 9.000 Elf | 20 / 0 | 269,5 | 269,5 | |
-| D5 | 300 Manc. / 27.000 Elf | 20 / 0 | 809,3 | 269,8 | |
-| D6 | 1.000 Manc. / 90.000 Elf | 20 / 0 | 2.697,3 | 269,7 | |
+| D1 | 100 Manc. / 9.000 Elf | 0 / 0 | 102,5 | 102,5 | 102-103|
+| D2 | 300 Manc. / 27.000 Elf | 0 / 0 | 307,4 | 102,5 | 306-309|
+| D3 | 1.000 Manc. / 90.000 Elf | 0 / 0 | 1.025,0 | 102,5 |1021-1030 |
+| D4 | 100 Manc. / 9.000 Elf | 20 / 0 | 269,5 | 269,5 | 269-270|
+| D5 | 300 Manc. / 27.000 Elf | 20 / 0 | 809,3 | 269,8 |807-811 |
+| D6 | 1.000 Manc. / 90.000 Elf | 20 / 0 | 2.697,3 | 269,7 | 2691-2704|
 
 ### D-2 · karışık ordu, 5 turluk savaş (geri besleme AÇIK)
 
-Saldıran `800k Elf + 1.200k Cüce + 150k Süvari` · Savunan `600k Elf + 1.800k Cüce + 80k Pegasus`.
+⚠️ Burada **üç farklı boy** var ve `k` yalnız satırları etiketleyen bir çarpan — kutulara
+girilecek sayılar aşağıdaki tabloda **tam olarak** yazıyor. Her boyda **oran aynı**, yalnız
+adetler büyüyor.
+
+| k | **Saldıran kutusuna** | **Savunan kutusuna** |
+|---:|---|---|
+| **1** | 800 Elf · 1.200 Cüce · 150 Süvari | 600 Elf · 1.800 Cüce · 80 Pegasus |
+| **2** | 1.600 Elf · 2.400 Cüce · 300 Süvari | 1.200 Elf · 3.600 Cüce · 160 Pegasus |
+| **5** | 4.000 Elf · 6.000 Cüce · 750 Süvari | 3.000 Elf · 9.000 Cüce · 400 Pegasus |
+
+⚠️ Bu grup **5 tur sürmeli** (çekirdek kurulumun tersine) — ordularda Cüce ve Süvari var, yani
+yakın dövüş fazı da devrede ve iki taraf da ayakta kalıyor. Burada `tur = 5` beklenen davranıştır,
+hata değil.
 
 | # | k | GG sal/sav | motor: atkK | motor: defK | motor: kazanan | **gerçek: atkK** | **gerçek: defK** | **gerçek: kazanan** |
 |---|---:|---|---:|---:|---|---|---|---|
@@ -221,13 +233,13 @@ Kurulum: çekirdek + savunmaya **100 Şaman** (`9.000 Elf + 100 Şaman`).
 
 | # | GG sal/sav | motor: tur | motor: defK | A'daki eşi (şamansız) | **gerçek: tur** | **gerçek: defK** |
 |---|---|---:|---:|---:|---|---|
-| E1 | 0 / 0 | 2 | **37,4** | 102,5 | | |
-| E2 | 0 / 1 | 2 | **31,0** | 102,5 | | |
-| E3 | 0 / 3 | 2 | **24,5** | 102,5 | | |
-| E4 | 0 / 5 | 2 | **21,5** | 102,5 | | |
-| E5 | 0 / 10 | 2 | **18,0** | 102,5 | | |
-| E6 | 0 / 20 | 2 | **15,4** | 102,5 | | |
-| E7 | **GÜNDÜZ** | 2 | 202,4 | 294,9 | | |
+| E1 | 0 / 0 | 2 | **37,4** | 102,5 |2 | 36-37|
+| E2 | 0 / 1 | 2 | **31,0** | 102,5 |2 | 30-31|
+| E3 | 0 / 3 | 2 | **24,5** | 102,5 |2 |24-25 |
+| E4 | 0 / 5 | 2 | **21,5** | 102,5 |2 |21 |
+| E5 | 0 / 10 | 2 | **18,0** | 102,5 |2 | 17-18|
+| E6 | 0 / 20 | 2 | **15,4** | 102,5 | 2| 15|
+| E7 | **GÜNDÜZ** | 2 | 202,4 | 294,9 |2 | 201-202|
 
 ### Nasıl okunur
 
@@ -259,12 +271,12 @@ Kurulum: çekirdek + savunmada **Sur 3** (`9.000 Elf + Sur sv3`).
 
 | # | GG sal/sav | motor: tur | motor: **Sur %** | motor: defK | **gerçek: tur** | **gerçek: Sur %** | **gerçek: defK** |
 |---|---|---:|---:|---:|---|---|---|
-| F1 | 0 / 0 | 2 | **92,39** | 95,4 | | | |
-| F2 | 5 / 0 | 2 | **88,11** | 213,5 | | | |
-| F3 | 20 / 0 | 2 | **86,44** | 259,9 | | | |
-| F4 | 0 / 5 | 2 | **92,39 (F1 ile BİREBİR)** | 95,4 | | | |
-| F5 | 0 / 20 | 2 | **92,39 (F1 ile BİREBİR)** | 95,4 | | | |
-| F6 | **GÜNDÜZ** | 2 | **85,55** | 284,5 | | | |
+| F1 | 0 / 0 | 2 | **92,39** | 95,4 |2 |%92,37-92,40 | 94-95|
+| F2 | 5 / 0 | 2 | **88,11** | 213,5 | 2| %88,10-88,14| 213-214|
+| F3 | 20 / 0 | 2 | **86,44** | 259,9 |2 | %86,43-86,47| 259-260|
+| F4 | 0 / 5 | 2 | **92,39 (F1 ile BİREBİR)** | 95,4 |2 | %92,37-92,40| 94-95|
+| F5 | 0 / 20 | 2 | **92,39 (F1 ile BİREBİR)** | 95,4 |2 |%92,37-92,40 | 94-95|
+| F6 | **GÜNDÜZ** | 2 | **85,55** | 284,5 | 2|%85,53-85,58 | 284-285|
 
 ⭐ İki iddia birden sınanıyor:
 
@@ -287,14 +299,14 @@ Kurulum: **2.500 Cüce vs 3.500 Cüce** (2026-07-31 setinin aynısı — çapa s
 
 | # | GG sal/sav | motor: atkK | motor: defK | not | **gerçek: atkK** | **gerçek: defK** |
 |---|---|---:|---:|---|---|---|
-| G1 | 0 / 0 | 1.903 | 805 | ✅ 2026-07-31 çapası (1901-1903 / 802-806) | | |
-| G2 | 5 / 0 | 1.803 | 1.177 | ✅ 2026-07-31 çapası (1175-1178) | | |
-| G3 | **20 / 0** | 1.763 | **1.324** | ⭐ **gündüzden FAZLA** | | |
-| G4 | 0 / 5 | 2.500 | 656 | ✅ 2026-07-31 çapası (654-657) | | |
-| G5 | 0 / 20 | 2.500 | 600 | | | |
-| G6 | 10 / 10 | 2.500 | 1.024 | ✅ 2026-07-31 çapası (1021-1025) | | |
-| G7 | 20 / 20 | 2.500 | 1.045 | ✅ 2026-07-31 çapası (1042-1047) | | |
-| G8 | **GÜNDÜZ** | 2.500 | **1.070** | ✅ 2026-07-31 çapası (1068-1072) | | |
+| G1 | 0 / 0 | 1.903 | 805 | ✅ 2026-07-31 çapası (1901-1903 / 802-806) |1900-1904 |803-805 |
+| G2 | 5 / 0 | 1.803 | 1.177 | ✅ 2026-07-31 çapası (1175-1178) |1800-1802 | 1175-1178|
+| G3 | **20 / 0** | 1.763 | **1.324** | ⭐ **gündüzden FAZLA** |1760-1765 | 1322-1325|
+| G4 | 0 / 5 | 2.500 | 656 | ✅ 2026-07-31 çapası (654-657) |2500 |654-657 |
+| G5 | 0 / 20 | 2.500 | 600 | |2500 | 599-601|
+| G6 | 10 / 10 | 2.500 | 1.024 | ✅ 2026-07-31 çapası (1021-1025) | 2500| 1021-1025|
+| G7 | 20 / 20 | 2.500 | 1.045 | ✅ 2026-07-31 çapası (1042-1047) |2500 | 1042-1046|
+| G8 | **GÜNDÜZ** | 2.500 | **1.070** | ✅ 2026-07-31 çapası (1068-1072) | 2500| 1068-1072|
 
 ⭐ **G3 > G8** olmalı: saldıranın gece görüşü 20 iken savunan, **gündüzkünden daha çok** kayıp
 verir. Sebep gece'nin iki taraflı ve bağımsız olması — gündüz savunan da tam güçte vurup saldıranı
@@ -314,14 +326,14 @@ Kurulum: **900 Süvari vs 5.200 Cüce**.
 
 | # | GG sal/sav | motor: kazanan | motor: atkK | motor: defK | **gerçek: kazanan** | **gerçek: atkK / defK** |
 |---|---|---|---:|---:|---|---|
-| H1 | 0 / 0 | savunan | 582 | 1.722 | | |
-| H2 | 3 / 0 | savunan | 550 | 2.279 | | |
-| H3 | 5 / 0 | savunan | 542 | 2.420 | | |
-| H4 | **6 / 0** | **savunan** | 540 | 2.467 | | |
-| H5 | **7 / 0** | **SALDIRAN** | 537 | 2.504 | | |
-| H6 | 10 / 0 | saldıran | 533 | 2.582 | | |
-| H7 | 20 / 0 | saldıran | 527 | 2.695 | | |
-| H8 | **GÜNDÜZ** | **savunan** | 805 | 2.321 | | |
+| H1 | 0 / 0 | savunan | 582 | 1.722 | savunan|580-582/1719-1722 |
+| H2 | 3 / 0 | savunan | 550 | 2.279 | savunan| 549-550/2275-2280|
+| H3 | 5 / 0 | savunan | 542 | 2.420 |savunan |541-542/2416-2422 |
+| H4 | **6 / 0** | **savunan** | 540 | 2.467 | savunan|538-539/2464-2470 |
+| H5 | **7 / 0** | **SALDIRAN** | 537 | 2.504 |saldıran | 536-537/2501-2506|
+| H6 | 10 / 0 | saldıran | 533 | 2.582 |saldıran |532-533/2578-2585 |
+| H7 | 20 / 0 | saldıran | 527 | 2.695 | saldıran|525-527/2691-2697 |
+| H8 | **GÜNDÜZ** | **savunan** | 805 | 2.321 |savunan |804-806/2317-2324 |
 
 ⚠️ Eşik **keskin** (6 → savunan, 7 → saldıran) çünkü kazanan `lossMag` karşılaştırmasıyla
 belirleniyor ve iki taraf burada başa baş. Eşiğin bir-iki kademe kayması bile gece eğrisinde
@@ -333,11 +345,17 @@ küçük bir sapmanın habercisidir; **H4 ve H5'i mutlaka 3'er kez koş.**
 
 Ucuz ama atlanmaması gereken kontrol: simülatörün GG kutularını yanlış anlamadığımızı doğrular.
 
-| # | | motor: atkK | motor: defK | **gerçek: atkK** | **gerçek: defK** |
-|---|---|---:|---:|---|---|
-| I1 | GÜNDÜZ, GG 0/0 | 100 | 294,9 | | |
-| I2 | GÜNDÜZ, GG 20/20 | 100 | **294,9 (I1 ile BİREBİR)** | | |
-| I3 | GECE, GG 20/20 | 100 | **269,5 (I1'in ALTINDA)** | | |
+> **Ordular çekirdek kurulumun AYNISI: Saldıran 100 Mancınık · Savunan 9.000 Elf.**
+> Değişen tek şey gece kutusu ve iki GG kutusu.
+
+⭐ **I1'i yeniden koşmana gerek yok — o satır B8 ile aynı savaş** (gündüz, GG kutuları boş).
+B8'e ne yazdıysan buraya kopyala; I2 ve I3 gerçekten yeni.
+
+| # | gece? | GG sal/sav | motor: atkK | motor: defK | **gerçek: atkK** | **gerçek: defK** |
+|---|---|---|---:|---:|---|---|
+| I1 | ⛔ gündüz | 0 / 0 | 100 | 294,9 *(= B8)* | | |
+| I2 | ⛔ gündüz | **20 / 20** | 100 | **294,9 (I1 ile BİREBİR)** | | |
+| I3 | ✅ gece | **20 / 20** | 100 | **269,5 (I1'in ALTINDA)** | | |
 
 ⭐ **I3 < I1** olmalı: çarpan 1'e yaklaşır ama **asla ulaşmaz** (GG 20 → 0,9609; GG 1.000 → 0,999).
 Yani hiçbir gece görüşü seviyesi geceyi gündüze çevirmez. I3 = I1 çıkarsa formülün üst sınırı
