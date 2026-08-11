@@ -197,3 +197,73 @@ describe('sur + büyü kalkanı — ikinci altın set', () => {
   });
 });
 
+
+/**
+ * ⭐⭐⭐ SUR'UN İKİ ORANI — `1,8^Sv` ve `durum` SADELEŞİYOR (2026-08-12).
+ *
+ * Ghidra'da zincirin tamamı okundu (`FUN_00413610` güç · `FUN_0041338c` stat ·
+ * `FUN_0040e0c4`@0x40e628 net/bölücü · `FUN_00413534` düşüş) ve motorla **birebir** aynı çıktı.
+ * Bunun beklenmedik bir sonucu var: pay ve payda ikisi de `Sv × 1,8^Sv × durum` taşıdığı için
+ *
+ *     düşüş = 100 × (Alan/mDef) × (havuz/P) / Sv  −  100 × (pAtk_ölçekli/mDef)
+ *
+ * ⇒ Sur'un yıpranmasını **yalnız iki oran** belirliyor. ⚠️ `cfg.wall.base` bu denklemde YOK,
+ * yani Sur bütünlüğü için **ölü bir düğme** — panelden oynatan biri hiçbir şey değiştirmediğini
+ * bilmeli. (Surun P'ye kattığı güç üzerinden birim kayıplarını dolaylı etkiler, o ayrı.)
+ *
+ * ⚠️ Kullanıcının binary ölçümü bu iki oranın YANLIŞ olduğunu gösterdi (sv10: binary %53,59,
+ * motor %100). Sur, katalogda statlarının kaynağı belgelenmemiş tek satır. Düzeltme, iki oranı
+ * birbirinden ayıran ölçüm gelince yapılacak: `docs/SUR_TESTLERI.md`.
+ */
+describe('⭐ SUR — base ölü düğme, iki oran belirleyici', () => {
+  const side = (counts: Record<string, number>, tech: Record<string, number> = {}) => ({
+    counts, tech, heroes: [], temple: 0, heroCount: 0,
+  });
+  const wallPct = (lv: number, tech: Record<string, number>, base?: number): number => {
+    let s = 0;
+    for (let i = 0; i < 8; i++) {
+      const r = simulate({
+        attacker: side({ mangonel: 300 }),
+        defender: side({ elf: 27_000, wall: lv }, tech),
+        night: false, nightVisionAttacker: 0, nightVisionDefender: 0, seed: `sur-${i}`,
+      }, base == null ? undefined : { wall: { base, durumMax: 100 } });
+      s += ((r.defender.wallIntegrity ?? 0) * 100) / 8;
+    }
+    return s;
+  };
+
+  /**
+   * ⚠️ Sadeleşme **tam değil**: `base` Sur'un P'ye kattığı gücü de büyütüyor, o da `havuz/P`yi
+   * biraz oynatıyor (bir de `gradePower`daki yuvarlama var). Ölçülen artık ~0,5 puan.
+   * Testin iddiası bu yüzden "hiç değişmez" değil, **"kat kat değişmesi gerekirken kıpırdamıyor"**:
+   * base 1,5 → 2,5 Sur'un ham gücünü sv4'te **3,7 KAT** büyütüyor (10,5 → 39,1) ama bütünlük
+   * 1 puandan az oynuyor. Aynı büyüklükte bir `Alan/mDef` değişimi eğriyi baştan sona kaydırır.
+   */
+  it('⭐⭐ `wall.base` 3,7 kat değişse bile Sur bütünlüğü 1 puandan az oynuyor', () => {
+    const a = wallPct(4, {}, 1.5);
+    const b = wallPct(4, {}, 1.8);
+    const c = wallPct(4, {}, 2.5);
+    expect(Math.abs(b - a), 'base 1,5 ↔ 1,8').toBeLessThan(1);
+    expect(Math.abs(c - a), 'base 1,5 ↔ 2,5').toBeLessThan(1);
+    // Kontrol: ham güç gerçekten 3,7 kat değişiyor — yani test boş bir şey ölçmüyor.
+    expect((2.5 ** 4) / (1.5 ** 4)).toBeGreaterThan(3.5);
+  });
+
+  it('⭐ Taş Ustalığı Sur`u güçlendiriyor ama eğri DOĞRUSAL (ikinci terim)', () => {
+    const t0 = wallPct(4, {});
+    const t5 = wallPct(4, { masonry: 5 });
+    const t10 = wallPct(4, { masonry: 10 });
+    expect(t5 - t0).toBeCloseTo(t10 - t5, 0);   // eşit aralık → doğrusal
+  });
+
+  /**
+   * ⚠️ ALTIN KAYIT — bugünkü (yanlış olduğu bilinen) eğri. Sur statları ölçümle düzeltilince
+   * bu sayılar değişecek ve test kırılacak; kırıldığında güncellemek DOĞRU davranış.
+   * Binary karşılığı aynı savaşta: sv7'ye kadar %0, sv8 %15,19, sv10 %53,59.
+   */
+  it('⚠️ bugünkü seviye eğrisi (binary ile ÇELİŞİYOR — bkz. docs/SUR_TESTLERI.md)', () => {
+    expect(wallPct(2, {})).toBeCloseTo(73.7, 0);
+    expect(wallPct(4, {})).toBeCloseTo(91.2, 0);
+    expect(wallPct(8, {})).toBe(100);
+  });
+});
