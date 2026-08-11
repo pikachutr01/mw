@@ -37,8 +37,23 @@ import { NO_POOL, TECHS_BY_ID, TECH_BY_UNIT, TECH_ORDER, UNITS_BY_ID } from '@mo
  */
 export function unitTechNames(unitId: string): string[] {
   const ids = new Set((TECH_BY_UNIT[unitId] ?? []).map(([techId]) => techId));
-  return TECH_ORDER.filter((t) => ids.has(t as never))
-    .map((t) => TECHS_BY_ID[t]?.name.tr ?? t);
+  return TECH_ORDER.filter((t) => ids.has(t as never)).map((t) => {
+    const def = TECHS_BY_ID[t];
+    const name = def?.name.tr ?? t;
+    /**
+     * ⭐ **BİRİME ÖZEL ORAN YANINA YAZILIR** (2026-08-11). Tılsım savaşçılarda %6 ama
+     * **Büyü Kalkanı'nda %5**; binary'de iki ayrı ölçekleyici var ve fark kullanıcının
+     * ölçümüyle doğrulandı (`docs/SAMAN_KALKAN_TESTLERI.md` D2).
+     *
+     * ⚠️ Yalnız **istisnalı** birimde yazılıyor: her satıra oran koymak listeyi gürültüye
+     * çevirirdi ve genel oran zaten Akademi kutusunda duruyor. Burada tek soru şu: *"bu birim
+     * için farklı mı?"* — cevabı «evet» olan tek yerde görünüyor.
+     * ⚠️ Sayı `rateByUnit`ten türetiliyor, elle yazılmıyor: oran değişirse metin kendiliğinden
+     * düzelir (`info-texts.ts`in *"metin ne yaptığını anlatır, kaç yaptığını değil"* kuralı).
+     */
+    const own = def?.rateByUnit?.[unitId];
+    return own == null ? name : `${name} (%${+(own * 100).toFixed(2)})`;
+  });
 }
 
 /** Savaş fazı → oyuncunun gördüğü ad. Motorda `type` birimin hangi fazda VURDUĞUdur. */

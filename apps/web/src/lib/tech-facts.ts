@@ -7,7 +7,9 @@
  *
  * ⚠️⚠️ **Referans dokümanın oranları YANLIŞ, motorunki doğru.** `tekniklere_ve_yapilara_iliskin_
  * on_bilgiler.txt` şöyle diyor ve iki yerde ölçümle çürütüldü (`techs.ts`):
- *   • *"Tılsım … %5"* → gerçekte **%6** (Kaos ve Ejderha ölçümleri bağımsız olarak tutturuyor).
+ *   • *"Tılsım … %5"* → savaşçılarda gerçekte **%6** (Kaos ve Ejderha ölçümleri bağımsız
+ *     olarak tutturuyor). ⚠️ **Büyü Kalkanı'nda ise gerçekten %5** — binary'de ayrı bir
+ *     ölçekleyici var (2026-08-11 ölçümü). Kutu bu istisnayı `rateByUnit`ten türetip yazıyor.
  *   • *"Zırh … Kaos hariç"*, *"Tılsım … Mancınık hariç tüm üniteler"* → gerçek liste farklı.
  * Oranı ve listeyi elle yazsaydık kutu bu yanlışları oyuncuya öğretmeye devam ederdi.
  *
@@ -50,7 +52,22 @@ export function techEffectLine(techId: string): string | null {
   if (!def?.stat) return null;
   const what = STAT_EFFECT[def.stat];
   if (!what) return null;
-  return `Her seviye, etkilediği birimlerin ${what} ${pct(def.rate)} artırır.`;
+  const base = `Her seviye, etkilediği birimlerin ${what} ${pct(def.rate)} artırır.`;
+
+  /**
+   * ⭐ **BİRİME ÖZEL ORAN İSTİSNASI** (2026-08-11). Tılsım savaşçılarda %6 ama **Büyü
+   * Kalkanı'nda %5** — binary'de iki ayrı ölçekleyici var (`FUN_00411988` ↔ `FUN_00413744`)
+   * ve bu, kullanıcının binary ölçümüyle doğrulandı (`docs/SAMAN_KALKAN_TESTLERI.md` D2).
+   *
+   * ⚠️ İstisna **yazılmak zorunda**: kutu tek bir oran gösterip Kalkan'ı da o listeye koyunca
+   * oyuncuya yanlış öğretiyor — üstelik Kalkan pahalı bir yapı, oyuncu %6 sanıp yatırım
+   * kararını ona göre veriyor. Metin elle değil `rateByUnit`ten türetiliyor ki yeni bir
+   * istisna eklendiğinde kutu kendiliğinden doğrulansın.
+   */
+  const overrides = Object.entries(def.rateByUnit ?? {});
+  if (overrides.length === 0) return base;
+  const parts = overrides.map(([id, r]) => `${UNITS_BY_ID[id]?.name.tr ?? id} ${pct(r)}`);
+  return `${base} İstisna: ${parts.join(' · ')}.`;
 }
 
 /**

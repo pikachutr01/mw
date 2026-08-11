@@ -196,8 +196,10 @@ export const UNIT_INFO: Readonly<Record<string, UnitInfoText>> = {
  * vermeden, oyuncuların anlayabileceği türden"*.
  *
  * ⚠️ **Oran ve etkilenen birim listesi burada YOK**, `lib/tech-facts.ts` üzerinden savaş
- * motorunun kataloğundan geliyor. Referans dokümanın oranları iki yerde yanlış (Tılsım'ı %5
- * diyor, gerçekte %6) ve elle yazsaydık kutu o yanlışı öğretirdi.
+ * motorunun kataloğundan geliyor. Referans dokümanın oranları yanlış (Tılsım'ı %5 diyor,
+ * savaşçılarda gerçekte %6) ve elle yazsaydık kutu o yanlışı öğretirdi. ⚠️ Üstelik tek bir
+ * oran da yetmiyor: Tılsım **Büyü Kalkanı'nda gerçekten %5** (ayrı ölçekleyici, 2026-08-11
+ * ölçümü) — istisna `TechDef.rateByUnit`ten türetiliyor.
  *
  * ⚠️ Metinler **ne yaptığını** anlatır, **kaç yaptığını** değil: sayı hep türetilmiş bölümde
  * durur. Bir teknik yeniden dengelenince metne dokunulması gerekmesin.

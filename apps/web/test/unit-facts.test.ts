@@ -46,7 +46,12 @@ describe('etkilendiği teknikler — motordan türetiliyor', () => {
   });
 
   it('⭐ Büyü Kalkanı\'nı TILSIM ölçekler, Büyücülük değil', () => {
-    expect(unitTechNames('magic_shield')).toEqual(['Tılsım']);
+    /**
+     * ⚠️ Beklenti 2026-08-11'de `['Tılsım']` → `['Tılsım (%5)']` oldu: Tılsım'ın Kalkan'daki
+     * oranı savaşçılardan (%6) FARKLI ve popover artık onu yazıyor. Listenin **tek üyeli**
+     * kalması bu testin asıl iddiası — Büyücülük'ün girmemesi.
+     */
+    expect(unitTechNames('magic_shield')).toEqual(['Tılsım (%5)']);
   });
 
   it('Mancınık Tılsım listesinde YOK (kutudaki «büyü savunması yok» notunun dayanağı)', () => {
@@ -139,5 +144,23 @@ describe('kapsam', () => {
     for (const unitId of Object.keys(UNIT_INFO)) {
       expect(UNITS_BY_ID[unitId], `katalogda yok: ${unitId}`).toBeTruthy();
     }
+  });
+});
+
+/**
+ * ⭐⭐ BİRİME ÖZEL TEKNİK ORANI (2026-08-11) — Savunma sayfasındaki Büyü Kalkanı popover'ı.
+ *
+ * Tılsım savaşçılarda %6, Kalkan'da **%5**. Popover yalnız teknik ADINI yazdığı sürece oyuncu
+ * Akademi'deki %6'yı Kalkan'a da uyguluyordu. Oran `rateByUnit`ten türetiliyor; elle yazılmıyor.
+ */
+describe('birime özel teknik oranı', () => {
+  it('⭐ Büyü Kalkanı listesinde Tılsım kendi oranıyla görünür', () => {
+    expect(unitTechNames('magic_shield')).toContain('Tılsım (%5)');
+  });
+
+  it('⚠️ istisnası olmayan birimde oran YAZILMAZ — liste gürültüye dönmesin', () => {
+    // Ejderha da Tılsım'dan etkileniyor ama genel oranla (%6) → yalnız ad.
+    expect(unitTechNames('dragon')).toContain('Tılsım');
+    expect(unitTechNames('dragon')).not.toContain('Tılsım (%6)');
   });
 });

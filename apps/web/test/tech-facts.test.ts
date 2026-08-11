@@ -135,3 +135,33 @@ describe('kapsam', () => {
     }
   });
 });
+
+/**
+ * ⭐⭐ BİRİME ÖZEL ORAN İSTİSNASI (2026-08-11) — kullanıcının binary ölçümünden geldi.
+ *
+ * Tılsım savaşçılarda %6, **Büyü Kalkanı'nda %5**. Akademi kutusu tek oran yazıp Kalkan'ı da
+ * etkilenen birimler listesine koyduğu sürece oyuncuya **yanlış** öğretiyordu; üstelik Kalkan
+ * pahalı bir yapı ve oyuncu yatırım kararını o sayıya bakarak veriyor.
+ *
+ * ⚠️ Metin elle yazılmıyor, `TechDef.rateByUnit`ten türetiliyor — yeni bir istisna eklendiğinde
+ * kutu kendiliğinden doğru kalsın diye. Bu testler o türetmeyi kilitliyor.
+ */
+describe('birime özel oran istisnası', () => {
+  it('⭐ Tılsım satırı hem %6 hem Büyü Kalkanı %5 istisnasını yazar', () => {
+    const line = techEffectLine('talisman')!;
+    expect(line).toContain('%6');
+    expect(line).toContain('İstisna');
+    expect(line).toContain('Büyü Kalkanı %5');
+  });
+
+  it('katalogla tutarlı: istisna gerçekten %5 ve taban %6', () => {
+    expect(TECHS_BY_ID['talisman']!.rateByUnit?.['magic_shield']).toBe(0.05);
+    expect(TECHS_BY_ID['talisman']!.rate).toBe(0.06);
+  });
+
+  it('istisnası OLMAYAN teknikte fazladan cümle yok', () => {
+    for (const id of ['armor', 'masonry', 'archery', 'sorcery']) {
+      expect(techEffectLine(id), id).not.toContain('İstisna');
+    }
+  });
+});
