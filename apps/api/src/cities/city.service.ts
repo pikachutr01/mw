@@ -284,7 +284,10 @@ export class CityService {
     `);
     const cityId = Number(rows[0]!.id);
 
-    // Başlangıç yapıları: Kale 1 · Baraka 1 · Çiftlik 1 · Maden 1 (§13.11.1)
+    /* Başlangıç yapıları: **Kale 1 · Çiftlik 1 · Maden 1** (§13.11.1).
+     * ⚠️ Baraka bu listede YOK — 2026-08-09'da (`92fd09e`) 0'dan başlamaya çevrildi; bu yorum
+     * "Baraka 1" demeye devam ediyordu ve 2026-08-12'de bir sıfırlama planını yanlış kurdurdu.
+     * Listeyi burada tekrarlamak yerine tek kaynağa bakmak gerekiyordu: `STARTING_BUILDINGS`. */
     for (const [type, level] of Object.entries(STARTING_BUILDINGS)) {
       await runner.execute(sql`
         INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, ${type}, ${level})
