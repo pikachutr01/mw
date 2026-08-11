@@ -14,7 +14,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_CATALOG_CONFIG, mergeCatalogConfig, spyEffectiveDiff, spyLevelFor, spyLosses,
+  DEFAULT_CATALOG_CONFIG, mergeCatalogConfig, spyEffectiveDiff, spyLevelAfterLosses,
+  spyLevelFor, spyLosses, SPY_LEVELS,
 } from '../src/index.ts';
 
 /** Kullanıcının örneğindeki ağır savunma: 100 okçu kulesi + 300 casus kuş. */
@@ -43,6 +44,41 @@ describe('bilgi kademesi (doküman-birebir, GÖNDERİLEN kuştan)', () => {
     expect(spyLevelFor(3)).toBe('armyCounts');
     expect(spyLevelFor(4)).toBe('full');
     expect(spyLevelFor(9.2)).toBe('full');
+  });
+
+  /**
+   * ⭐⭐ CASUSLUK HİÇBİR HÂLDE BOŞA GİTMEZ (kullanıcı, 2026-08-11):
+   * *"tüm kuşlar öldürülse bile rakibin sadece altın ve yemek miktarı alınabilsin."*
+   */
+  it('⭐⭐ sağ dönen kuş yoksa kademe `resources`e iner — HANGİ kademeden olursa olsun', () => {
+    for (const level of SPY_LEVELS) {
+      expect(spyLevelAfterLosses(level, 0), level).toBe('resources');
+    }
+  });
+
+  it('tek bir kuş bile dönerse kademe olduğu gibi kalır', () => {
+    for (const level of SPY_LEVELS) {
+      expect(spyLevelAfterLosses(level, 1), level).toBe(level);
+      expect(spyLevelAfterLosses(level, 64), level).toBe(level);
+    }
+  });
+
+  /**
+   * ⚠️⚠️ **ÖLÇÜLMÜŞ SINIR — kullanıcının ikinci örneği bugün ULAŞILAMAZ.** Kullanıcı
+   * *"casusluk seviyesi yüksek olsa bile savunmadaki birimler yüzünden tüm kuşları ölse bile"*
+   * dedi; bugünkü sabitlerle (`lossMax 0,95` · `balancePoint 0`) fark ≥ 0 iken savunma SONSUZ
+   * olsa bile en az bir kuş daima dönüyor. Kural yine de kademeye bakmadan yazıldı
+   * (`spyLevelAfterLosses`); bu test o sınırın **bilinçli** olduğunu kayda geçiriyor —
+   * `lossMax`/`balancePoint` oynarsa burada görünür.
+   */
+  it('⚠️ fark ≥ 0 iken SONSUZ savunmada bile en az bir kuş döner (bugünkü sabitler)', () => {
+    const sonsuz = { towers: 1e6, elves: 1e6, defenderBirds: 1e6 };
+    for (const diff of [0, 1, 2, 4, 8]) {
+      for (const birds of [1, 2, 4, 16, 64]) {
+        expect(spyLosses({ birds, effectiveDiff: diff, ...sonsuz }).survivors, `${diff}/${birds}`)
+          .toBeGreaterThanOrEqual(1);
+      }
+    }
   });
 
   /**

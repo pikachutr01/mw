@@ -749,6 +749,12 @@ function SpyDefenseBody({ body }: { body: Record<string, unknown> }) {
           Rakip bilgi SIZDIRDI: {LEAK_LABEL[leaked] ?? leaked}.
         </div>
       ) : (
+        /*
+          ⚠️ **ESKİ RAPORLARIN DALI.** 2026-08-11'den beri kasa her hâlükârda sızıyor
+          (`mission.handlers.ts`), yani `leakedLevel` asla null gelmiyor ve bu kutu yeni
+          raporlarda HİÇ çizilmiyor. Silmedik: o tarihten önceki raporlar için doğru cümle
+          hâlâ bu.
+        */
         <div className="rounded-[var(--radius-sm)] border border-success bg-success/10 px-2.5 py-2 text-xs text-success">
           Hiçbir bilgi sızmadı — casus kuşların hepsi vuruldu.
         </div>
@@ -787,9 +793,11 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
         */}
       </div>
 
-      {/* ⚠️ Sebep AÇIKLANMIYOR (kullanıcı, 2026-08-03) — ama artık tek ihtimal var: bilgi
-          gelmediyse kuşların hepsi vurulmuştur (engelleme diye bir sonuç 2026-08-09'da
-          kaldırıldı). Üstteki satır kaç kuşun vurulduğunu zaten yazıyor. */}
+      {/*
+        ⚠️ **ESKİ RAPORLARIN DALI.** 2026-08-11'den beri `level` asla null gelmiyor: kuşların
+        hepsi vurulsa bile kasa görülüyor, yani "bilgi alınamadı" diye bir sonuç kalmadı
+        (kullanıcı kararı). Dal yalnız o tarihten ÖNCEKİ raporlar doğru okunsun diye duruyor.
+      */}
       {body['level'] == null ? (
         <div className="text-danger">Bilgi alınamadı.</div>
       ) : null}
@@ -881,12 +889,13 @@ function SpyBody({ body }: { body: Record<string, unknown> }) {
         </Section>
       ) : null}
 
-      {body['level'] != null && body['level'] !== 'full' ? (
-        <div className="rounded-[var(--radius-sm)] border border-border px-2.5 py-2 text-[11px] text-muted">
-          Daha fazla bilgi için <b>daha çok casus kuş</b> gönder ya da <b>Casusluk</b> tekniğini
-          yükselt. Kuş sayısı ikinin kuvvetiyle sayılır: 8 kuş = +3 seviye, 16 kuş = +4.
-        </div>
-      ) : null}
+      {/*
+        ⛔ «Daha fazla bilgi için daha çok kuş gönder / Casusluk'u yükselt — 8 kuş = +3 seviye»
+        ipucu 2026-08-11'de KALDIRILDI (kullanıcı). ⚠️ Yeniden eklenmesin: 2026-08-09'da
+        `diff` aynı gerekçeyle gövdeden çıkarılmıştı — oyuncu kendi seviyesini ve gönderdiği
+        kuşu bildiği için formülü ekrana yazmak `rakip = benim + log2(kuş) − fark` denklemini
+        çözülebilir kılıyor, yani rakibin casusluk seviyesini bedava veriyor.
+      */}
     </div>
   );
 }

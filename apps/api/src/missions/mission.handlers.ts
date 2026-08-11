@@ -11,7 +11,8 @@ import { sql } from 'drizzle-orm';
 import { hasCargo, readResources, type Cargo } from './cargo.ts';
 import { routeOf } from './report-route.ts';
 import {
-  BUILDINGS_BY_ID, clampName, colonyName, maxCities, spyEffectiveDiff, spyLosses, spyLevelFor,
+  BUILDINGS_BY_ID, clampName, colonyName, maxCities,
+  spyEffectiveDiff, spyLevelAfterLosses, spyLosses, spyLevelFor,
   UNITS_BY_ID, type SpyLevel,
 } from '@mobilwar/catalog';
 import type { CityService } from '../cities/city.service.ts';
@@ -162,9 +163,15 @@ export function createSupportHandler(cities: CityService): MissionHandler {
  * Bugünkü akış üç satır:
  *   1. `spyEffectiveDiff` → **kademe** (doküman-birebir; `log2(kuş)` bonusu artık tavanlı).
  *   2. `spyLosses`        → **kaç kuş öldü**. Bilgiyi ENGELLEMEZ, yalnız vergilendirir.
- *   3. Sağ dönen ≥ 1 ise bilgi gelir.
+ *   3. Kademe yazılır; sağ dönen kuş yoksa kademe **`resources`e kısılır** (2026-08-11).
  *
- * ⚠️ **Savunma artık bilgiyi engellemiyor** ve bu bilinçli: kullanıcı *"yeterli kuş gönderilip
+ * ⚠️ **CASUSLUK ARTIK HİÇBİR HÂLDE BOŞA GİTMEZ (kullanıcı, 2026-08-11).** Kuşların tamamı
+ * vurulsa bile rakibin **altın ve yemek miktarı** görülür. Kullanıcının iki örneği: seviyesi
+ * çok düşük bir oyuncu tek kuşla kasa bilgisini alabilmeli; seviyesi yüksek ama savunmaya
+ * takılan bir oyuncu da aynı asgarîyi alabilmeli. Yani savunmanın ödülü bilgiyi **kesmek**
+ * değil, en alt kademeye **indirmek**.
+ *
+ * ⚠️ **Savunma bilgiyi engellemiyor** ve bu bilinçli: kullanıcı *"yeterli kuş gönderilip
  * casusluk seviyesi farkı kapatılırsa gerekli bilgiler alınır"* dedi. Savunmanın karşılığı üç
  * yerde duruyor: kuş kaybı · alçak seviyeli casusun zaten düşük kalan kademesi · kuşlar
  * yoldayken savunanın aldığı `city:incoming_spy` ön uyarısı.
@@ -199,7 +206,8 @@ export function createSpyHandler(): MissionHandler {
     const mine = await techLevel(ctx.tx, spyPlayerId, 'espionage');
     const theirs = await techLevel(ctx.tx, target.playerId, 'espionage');
     const diff = spyEffectiveDiff(mine, birds, theirs);
-    const level = spyLevelFor(diff);
+    /** Casusluk farkının verdiği kademe. Kuşların hepsi vurulursa aşağıda kısılıyor. */
+    const fullLevel = spyLevelFor(diff);
 
     /**
      * ── Kayıp: savunmanın anti-hava ağırlığı × casusluk farkı ─────────────────
@@ -220,10 +228,27 @@ export function createSpyHandler(): MissionHandler {
       elves: Number(defense[0]?.['elf'] ?? 0),
       defenderBirds: Number(defense[0]?.['birds'] ?? 0),
     });
-    const gotIntel = hit.survivors >= 1;
+    /**
+     * ⭐⭐ KASA HER HÂLÜKÂRDA GÖRÜLÜR (kullanıcı, 2026-08-11).
+     *
+     * ⚠️ **KURAL DEĞİŞTİ.** Önceden `survivors === 0` ise casusluk **tamamen boşa** gidiyordu:
+     * ne kademe ne tek bir sayı. Kullanıcının şartı: *"tüm kuşlar öldürülse bile rakibin
+     * sadece altın ve yemek miktarı alınabilsin"* — hem seviyesi çok düşük bir oyuncu tek
+     * kuşla, hem seviyesi yüksek ama savunmaya takılan bir oyuncu.
+     *
+     * Yani savunmanın ödülü artık **bilgiyi tamamen kesmek** değil, onu **en alt kademeye
+     * indirmek** (+ kuş öldürmek). Kademe iki kapıdan geçiyor:
+     *   • `level`  → casusluk farkının verdiği kademe,
+     *   • hayatta kalan kuş yoksa → zorla `resources`.
+     *
+     * ⚠️ `gatherIntel` `resources`ı zaten KOŞULSUZ dolduruyor (kademe yalnız üstüne ekliyor),
+     * bu yüzden burada `'resources'` geçmek tam olarak "yalnız altın ve yemek" demek.
+     */
+    const survived = hit.survivors >= 1;
+    const level = spyLevelAfterLosses(fullLevel, hit.survivors);
 
     // ── Gönderenin raporu — çözüm ANINDA (kuşlar daha yolda) ──────────────────
-    const intel = gotIntel ? await gatherIntel(ctx.tx, targetCityId!, target.playerId, level) : null;
+    const intel = await gatherIntel(ctx.tx, targetCityId!, target.playerId, level);
     await writeMessage(ctx, {
       playerId: spyPlayerId, kind: 'spy_report', side: 'spy',
       /**
@@ -234,10 +259,12 @@ export function createSpyHandler(): MissionHandler {
        * kullandığı işaret (aynı oyuncunun beş şehri olabilir), kullanıcı adı ise kimliği.
        */
       /**
-       * ⚠️ «Casusluk engellendi» başlığı KALKTI: engelleme diye bir sonuç artık yok. Bilgi
-       * gelmemesinin tek sebebi kalabilir — kuşların tamamının vurulmuş olması.
+       * ⚠️ «Casusluk engellendi» başlığı KALKTI: engelleme diye bir sonuç artık yok.
+       * ⚠️ 2026-08-11'den beri kuşların hepsi vurulsa da rapor **boş değil** (kasa görünür);
+       * başlık yine de vuruluşu duyuruyor, çünkü posta listesinde oyuncunun görmesi gereken
+       * asıl haber odur — ordusunu kaybetti ve elinde yalnız kasa var.
        */
-      subject: gotIntel
+      subject: survived
         ? `Casusluk raporu · ${target.name} (${target.username})`
         : `Casus kuşların vuruldu · ${target.username}`,
       /**
@@ -251,7 +278,8 @@ export function createSpyHandler(): MissionHandler {
       body: {
         targetCityId, targetCityName: target.name, targetPlayer: target.username,
         birdsSent: birds, birdsLost: hit.killed, birdsReturned: hit.survivors,
-        level: gotIntel ? level : null,
+        /** ⚠️ Artık ASLA null değil — en kötü ihtimalle `resources` (bkz. yukarıdaki not). */
+        level,
         intel, at: ctx.at.toISOString(),
       },
     });
@@ -277,8 +305,12 @@ export function createSpyHandler(): MissionHandler {
         /** Casusluğu yapan — gövdede de dursun ki ekran başlığı ayrıştırmak zorunda kalmasın. */
         spyPlayer: spyName,
         birdsSent: birds, birdsShot: hit.killed,
-        /** Rakibin aldığı bilgi kademesi — sızma yoksa null. */
-        leakedLevel: gotIntel ? level : null,
+        /**
+         * Rakibin aldığı bilgi kademesi.
+         * ⚠️ 2026-08-11'den beri **asla null değil**: kuşların hepsi vurulsa bile kasa sızıyor.
+         * Savunan bunu görmeli — "hiçbir şey sızmadı" demek artık yalan olurdu.
+         */
+        leakedLevel: level,
         at: ctx.at.toISOString(),
       },
     });
@@ -294,7 +326,12 @@ export function createSpyHandler(): MissionHandler {
     }
     await ctx.audit({
       action: 'mission.spy.resolved', entity: 'city', entityId: targetCityId!,
-      after: { birds, killed: hit.killed, lossRate: hit.lossRate, level: gotIntel ? level : null, diff },
+      /* ⚠️ `fullLevel` de yazılıyor: denge çalışmasında "fark neyi verirdi" ile "kuş kaybı
+         yüzünden neye düştü" ayrımı ancak ikisi yan yanayken görülüyor. */
+      after: {
+        birds, killed: hit.killed, lossRate: hit.lossRate,
+        level, fullLevel, survived, diff,
+      },
     });
   };
 }

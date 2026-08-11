@@ -1,7 +1,9 @@
 # CASUSLUK SİSTEMİ — RÖNTGEN
 
-**Son değişiklik:** 2026-08-09 — sistem **baştan sadeleştirildi** (kullanıcı: *"çok karışık ve
-çok zor… daha basite indirgenmiş bir mantık kurmalıyız"*).
+**Son değişiklik:** ⭐ 2026-08-11 — **casusluk artık hiçbir hâlde boşa gitmiyor**: tüm kuşlar
+vurulsa bile rakibin **altın ve yemek** miktarı görülüyor (§0a).
+Öncesi: 2026-08-09 — sistem **baştan sadeleştirildi** (kullanıcı: *"çok karışık ve çok
+zor… daha basite indirgenmiş bir mantık kurmalıyız"*).
 
 **Kaynak:** `packages/catalog/src/formulas.ts` (`spyEffectiveDiff`, `spyLevelFor`, `spyLosses`) ·
 `packages/catalog/src/config.ts` (`SpyConfig`) · `apps/api/src/missions/mission.handlers.ts`
@@ -22,11 +24,42 @@ kayıpOranı      = P / (1 + 2^E)
 ölen            = round(kuş × kayıpOranı)   ·   dönen = kuş − ölen
 ```
 
-**Bilgi gelmesinin tek şartı: sağ dönen ≥ 1 kuş.**
+**Kademe kadar bilgi gelmesinin şartı: sağ dönen ≥ 1 kuş.** Sağ dönen yoksa kademe
+`resources`e iner — **hiçbir hâlde sıfır bilgi yok** (§0a).
 
 ⚠️ **Savunma bilgiyi ENGELLEMEZ, vergilendirir.** Kademe yalnız `E`'den çıkar; kule/elf/kuş
 sayısı yalnız kaç kuşun öleceğini belirler. Bu bilinçli bir karar (kullanıcı: *"yeterli kuş
 gönderilip casusluk seviyesi farkı kapatılırsa gerekli bilgiler alınır"*).
+
+---
+
+## 0a. ⭐⭐ KASA TABANI — casusluk boşa gitmez (kullanıcı, 2026-08-11)
+
+```
+kademe = tier(E)                       ← farkın verdiği kademe
+son    = dönen ≥ 1 ? kademe : 'resources'      ← spyLevelAfterLosses
+```
+
+> *"Tüm kuşlar öldürülse bile rakibin sadece altın ve yemek miktarı alınabilsin. Casusluk
+> seviyesi çok düşük bir oyuncu yüksek olan birisine casusluk gönderince tek gönderdiği kuş
+> ölse bile altın ve yemek bilgisini alabilir."*
+
+⚠️ **KURAL DEĞİŞTİ.** Önceden `dönen === 0` casusluğu **tamamen** boşa çıkarıyordu: ne kademe
+ne tek bir sayı, üstelik kuşlar da ölmüştü. Savunmanın ödülü artık bilgiyi **kesmek** değil,
+en alt kademeye **indirmek** (+ kuş öldürmek).
+
+- Kural **kademeden bağımsız** yazıldı (`spyLevelAfterLosses`, `formulas.ts`) — kullanıcının
+  ikinci örneği *"casusluk seviyesi yüksek olsa bile savunmadaki birimler yüzünden tüm kuşları
+  ölse bile"* bunu gerektiriyor.
+- ⚠️ **Ama o ikinci örnek bugün ULAŞILAMAZ** (ölçüldü): `lossMax 0,95` ve `balancePoint 0` ile
+  `E ≥ 0` olan bir casusun kuşlarının TAMAMI, savunma sonsuz olsa bile asla ölmüyor. Sınır
+  bilinçli ve `spy.test.ts`te kilitli; `lossMax`/`balancePoint` oynarsa orada görünür.
+- **Dönüş görevi kuralı değişmedi:** tüm kuşlar ölürse eve dönen olmaz.
+- **Savunanın raporu da dürüst kaldı:** `leakedLevel` artık asla null değil — *"hiçbir bilgi
+  sızmadı"* demek yalan olurdu. O cümle yalnız 2026-08-11 öncesi raporlarda görünüyor.
+- ⚠️ Kasa **zaten en alt kademeydi** (`gatherIntel` `resources`ı koşulsuz dolduruyor); bu
+  değişiklik yeni bir bilgi türü açmıyor, var olan en alt kademeyi **erişilemez olmaktan
+  çıkarıyor**.
 
 ### Neden bu şekil
 
@@ -103,6 +136,12 @@ saati ve **kaç kuş geldiği**. Savunma dikmek için zamanı var — §5'teki v
 kaldırıldı): oyuncu kendi seviyesini ve gönderdiği kuşu bildiği için o sayıdan rakibin
 seviyesini birebir çözerdi. Aynı gerekçeyle *"bir üst kademe için ≈N kuş"* ipucu da
 **bilerek eklenmedi** (kullanıcı kararı).
+
+⛔ **Rapor modalındaki formül ipucu 2026-08-11'de KALDIRILDI** (kullanıcı): *"Daha fazla bilgi
+için daha çok casus kuş gönder ya da Casusluk tekniğini yükselt. Kuş sayısı ikinin kuvvetiyle
+sayılır: 8 kuş = +3 seviye, 16 kuş = +4."* ⚠️ Geri eklenmesin — aynı sızıntı: formülü ekrana
+yazmak `rakip = benim + log2(kuş) − fark` denklemini çözülebilir kılıyor, yani `diff`i
+gövdeden çıkarmakla kapatılan kapıyı arayüzden yeniden açardı.
 
 ---
 

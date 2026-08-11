@@ -633,6 +633,27 @@ export function spyLevelFor(diff: number): SpyLevel {
 }
 
 /**
+ * ⭐⭐ KUŞ KAYBININ KADEMEYE ETKİSİ — **casusluk hiçbir hâlde boşa gitmez** (kullanıcı, 2026-08-11).
+ *
+ * Sağ dönen kuş yoksa kademe en alta, `resources`e iner: rakibin **altın ve yemek miktarı**
+ * yine görülür. Kullanıcının iki örneği: seviyesi çok düşük biri tek kuşla kasayı görebilmeli;
+ * seviyesi yüksek ama savunmaya takılıp bütün kuşlarını kaybeden biri de aynı asgarîyi almalı.
+ *
+ * ⚠️ **KURAL DEĞİŞTİ.** 2026-08-11 öncesinde `survivors === 0` casusluğu tamamen boşa
+ * çıkarıyordu — ne kademe ne tek bir sayı. Savunmanın ödülü artık bilgiyi **kesmek** değil,
+ * en alt kademeye **indirmek** (+ kuş öldürmek).
+ *
+ * ⚠️ **Kural SEVİYEDEN BAĞIMSIZ** ve fonksiyonun ayrı durmasının sebebi bu. Ölçüm: bugünkü
+ * `spy` sabitleriyle (`lossMax 0,95` · `balancePoint 0`) fark ≥ 0 olan bir casusun kuşlarının
+ * TAMAMI, savunma sonsuz olsa bile asla ölmüyor — yani kullanıcının ikinci örneği bugün
+ * ulaşılamaz durumda. Kuralı yine de kademeye bakmadan yazıyoruz: `lossMax` ya da
+ * `balancePoint` bir gün oynarsa davranışın sessizce değişmemesi gerek.
+ */
+export function spyLevelAfterLosses(level: SpyLevel, survivors: number): SpyLevel {
+  return survivors >= 1 ? level : 'resources';
+}
+
+/**
  * Kahraman diriltme maliyeti: **(3000, 2000) × 1,5^seviye** (§13.11.4b).
  *
  * ⭐ Taban ÖLÇÜLDÜ: oyunun kendi tapınak ekranında seviye 0 bir ölü kahraman için

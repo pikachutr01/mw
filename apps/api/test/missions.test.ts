@@ -637,6 +637,57 @@ describe('casusluk', () => {
   });
 
   /**
+   * ⭐⭐ CASUSLUK HİÇBİR HÂLDE BOŞA GİTMEZ (kullanıcı, 2026-08-11):
+   * *"tüm kuşlar öldürülse bile rakibin sadece altın ve yemek miktarı alınabilsin… casusluk
+   * seviyesi çok düşük bir oyuncu tek gönderdiği kuş ölse bile altın ve yemek bilgisini
+   * alabilir."*
+   *
+   * ⚠️ Bu senaryo 2026-08-11'e kadar **tamamen boşa** gidiyordu: ne kademe ne tek bir sayı.
+   *
+   * ⚠️ **Bu test KISMANIN kendisini ispatlamaz**, akışı ispatlar: burada fark −13 olduğu için
+   * kademe zaten `resources` çıkıyor, yani kısma bir işe yaramıyor. Kısmanın kademeden bağımsız
+   * olduğunu `packages/catalog/test/spy.test.ts` kilitliyor (*«HANGİ kademeden olursa olsun»*).
+   * Sebep ölçülmüş bir sınır: bugünkü sabitlerle fark ≥ 0 olan bir casusun TÜM kuşları asla
+   * ölmüyor, dolayısıyla «yüksek kademe + sıfır sağ kalan» uçtan uca kurulamıyor.
+   */
+  it('⭐⭐ TÜM kuşlar vurulsa bile ALTIN ve YEMEK gelir — ama YALNIZ onlar', async () => {
+    await giveDefenses(enemy, 'archer_tower', 100);
+    await setResources(enemy, 12_345, 6_789);
+    await setBuilding(enemy, 'mine', 7);          // üst kademe bilgisi — sızmamalı
+    await giveUnits(enemy, 'dwarf', 50);          // üst kademe bilgisi — sızmamalı
+    await giveUnits(home, 'spy_bird', 1);
+    await setTech(rival, 'espionage', 13);        // benim 0 → fark = −13, tek kuş vurulur
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 1 }, at,
+    });
+    await runDue(m.missionId);
+
+    const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    expect(body['birdsLost']).toBe(1);
+    expect(body['birdsReturned']).toBe(0);        // hepsi öldü
+    expect(body['level']).toBe('resources');      // ⭐ eskiden null'dı
+
+    const intel = body['intel'] as Record<string, unknown>;
+    expect(intel['resources']).toEqual({ gold: 12_345, food: 6_789 });
+    // ⚠️ …ve BAŞKA HİÇBİR ŞEY: savunmanın ödülü bilgiyi kesmek değil, en alta indirmek.
+    expect(intel['economy']).toBeUndefined();
+    expect(intel['totals']).toBeUndefined();
+    expect(intel['warriors']).toBeUndefined();
+    expect(intel['structures']).toBeUndefined();
+
+    // Kuşların hepsi öldüğü için dönüş görevi YOK — bu kural değişmedi.
+    expect(await openReturn()).toBeNull();
+
+    /* ⭐ Savunan da doğru bilgilendirilir: «hiçbir şey sızmadı» demek artık yalan olurdu. */
+    const savunan = (await messagesOf(rival)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+    expect(savunan['birdsShot']).toBe(1);
+    expect(savunan['leakedLevel']).toBe('resources');
+  });
+
+  /**
    * ⭐ *"Casusluk seviyesi fazla ise 1 kuşla bile rakibin her şeyini görüp kuş ölmeden
    * geri gelebilir. Rakipte 100 casus kuş, 100 elf olsa bile."* (kullanıcı, 2026-08-09)
    */
