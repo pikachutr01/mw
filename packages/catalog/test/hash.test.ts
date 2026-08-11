@@ -72,8 +72,16 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * uyguluyor. Dokümanın birim başına listeleri süzgeç değil betimleme.
  * Aynı savaşta Mancınık kalanı 159 → **172** (binary 173) ve savaşın ortalama sapması
  * %2,18 → **%0,24**.
+ *
+ * ⚠️⚠️ **2026-08-12, ÜÇÜNCÜ değişiklik: `3a8b2be4` → `14c061fc`.** Sebep **Taş Ustalığı'nın
+ * Sur'a özel oranı: %6 → %5** (`TechDef.rateByUnit`, gerekçe `techs.ts`te). Kullanıcının
+ * ölçümü tek bir sayıya indirgedi: Sur bütünlüğü Taş Ustalığı ile DOĞRUSAL ve eğimi
+ * `8,3333 × oran`; dört bağımsız tahmin 0,4167-0,4170 (yayılım 0,00025) → **oran 0,05003**.
+ * Motorun %6'sı 0,5 eğim veriyordu. ⭐ Aynı ölçümün A grubu (seviye taraması) 8/8 birebir
+ * tuttuğu için `Alan/mDef` ve `pAtk/mDef` doğrulanmış oldu — geriye tek serbest sayı kalmıştı.
+ * ⚠️ Kule/Balista ölçülmedi, bilerek %6'da bırakıldı (bkz. `docs/SUR_TESTLERI.md`).
  */
-const DEFAULT_HASH = '3a8b2be4';
+const DEFAULT_HASH = '14c061fc';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -91,7 +99,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('b4de43cc');
+    expect(catalogHash(cfg)).toBe('e8aefb74');
   });
 
   /**

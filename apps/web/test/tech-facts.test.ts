@@ -159,8 +159,24 @@ describe('birime özel oran istisnası', () => {
     expect(TECHS_BY_ID['talisman']!.rate).toBe(0.06);
   });
 
+  /**
+   * ⭐⭐ İKİNCİ İSTİSNA: **Taş Ustalığı Sur'da %5** (2026-08-12, kullanıcı ölçümü).
+   * `docs/SUR_TESTLERI.md` B grubu: Sur bütünlüğü Taş Ustalığı ile doğrusal, eğim
+   * `8,3333 × oran` ve dört bağımsız tahmin 0,4167-0,4170 → oran **0,05003**.
+   * ⚠️ Kule/Balista ölçülmedi, %6'da bırakıldı — kutu da bunu böyle yazmalı.
+   */
+  it('⭐ Taş Ustalığı satırı Sur istisnasını yazar (%6 taban, Sur %5)', () => {
+    const line = techEffectLine('masonry')!;
+    expect(line).toContain('%6');
+    expect(line).toContain('İstisna');
+    expect(line).toContain('Sur %5');
+    expect(TECHS_BY_ID['masonry']!.rateByUnit?.['wall']).toBe(0.05);
+    expect(TECHS_BY_ID['masonry']!.rate).toBe(0.06);
+  });
+
   it('istisnası OLMAYAN teknikte fazladan cümle yok', () => {
-    for (const id of ['armor', 'masonry', 'archery', 'sorcery']) {
+    // ⚠️ `masonry` bu listeden 2026-08-12'de ÇIKARILDI — artık istisnası var (yukarı bak).
+    for (const id of ['armor', 'archery', 'sorcery', 'blacksmithing']) {
       expect(techEffectLine(id), id).not.toContain('İstisna');
     }
   });

@@ -113,14 +113,14 @@ Düşüş `1/Sv` ile doğrusal olmalı; eğim doğrudan `Alan/mDef` oranıdır.
 
 | # | Sur sv | motor: tur | motor: Sur% | motor: düşüş | **gerçek: tur** | **gerçek: Sur%** |
 |---|---:|---:|---:|---:|---|---|
-| A1 | 2 | 2 | 73,72 | 26,28 | | |
-| A2 | 3 | 2 | 85,31 | 14,69 | | |
-| A3 | 4 | 2 | 91,15 | 8,85 | | |
-| A4 | 5 | 2 | 94,69 | 5,31 | | |
-| A5 | 6 | 2 | 97,12 | 2,88 | | |
-| A6 | 8 | 2 | **100,00** | 0 | | |
-| A7 | 10 | 2 | **100,00** | 0 | | |
-| A8 | 12 | 2 | **100,00** | 0 | | |
+| A1 | 2 | 2 | 73,72 | 26,28 |2 |%73,68-73,74 |
+| A2 | 3 | 2 | 85,31 | 14,69 | 2|%85,29-85,34 |
+| A3 | 4 | 2 | 91,15 | 8,85 |2 |%91,12-91,15 |
+| A4 | 5 | 2 | 94,69 | 5,31 |2 | %94,67-94,69|
+| A5 | 6 | 2 | 97,12 | 2,88 | 2| %97,10,97,12|
+| A6 | 8 | 2 | **100,00** | 0 |2 |%100,0 |
+| A7 | 10 | 2 | **100,00** | 0 |2 |%100,0 |
+| A8 | 12 | 2 | **100,00** | 0 | 2|%100,0 |
 
 **Nasıl okunur:** düşüşleri `1/Sv`ye karşı çiz — düz bir doğru çıkmalı. Motorun doğrusu
 A1→A5'te eğim ~52; binary'nin eğimi **5 kat büyükse** `Alan/mDef` 2,5 demektir. ⭐ Ayrıca
@@ -133,11 +133,11 @@ Sur% ile TU arasında **düz bir doğru** beklenir; eğim `100 × pAtk × 0,06 /
 
 | # | Taş Ustalığı | motor: tur | motor: Sur% | **gerçek: tur** | **gerçek: Sur%** |
 |---|---:|---:|---:|---|---|
-| B1 | 0 | 2 | 91,15 | | |
-| B2 | 5 | 2 | 93,65 | | |
-| B3 | 10 | 2 | 96,15 | | |
-| B4 | 17 | 2 | 99,65 | | |
-| B5 | 20 | 2 | **100,00** | | |
+| B1 | 0 | 2 | 91,15 | 2| %91,12-91,15|
+| B2 | 5 | 2 | 93,65 |2 |%93,20-93,24 |
+| B3 | 10 | 2 | 96,15 | 2|%95,29-95,32 |
+| B4 | 17 | 2 | 99,65 | 2|%98,20-98,24 |
+| B5 | 20 | 2 | **100,00** | 2| %99,45-99,49|
 
 **Nasıl okunur:**
 
@@ -153,12 +153,89 @@ bu projede **dört kez** yakalandı (`docs/TILSIM_SUZGEC_TESTLERI.md` §2).
 
 ---
 
-## 5. Neden şimdi değiştirmedim
+## 5. ⭐⭐⭐ SONUÇ (2026-08-12, ölçüm geldi) — §3'teki hipotezim ÇÜRÜDÜ
 
-`packages/catalog/src/units.ts`teki Sur satırı **olduğu gibi duruyor**. Gerekçe geçen turunkiyle
-aynı: iki serbest parametreyi üç çapaya oturtan bir uydurma, savunma dengesini değiştirmek için
-yeterli kanıt değil. Yukarıdaki set iki oranı **ayrı ayrı** ölçüyor; geldiğinde stat satırı
-ölçümle yazılır ve `catalogHash` bilerek kayar.
+**A grubu 8/8 BİREBİR tuttu.** Yani Sur'un statlarını suçlamam **yanlıştı**: `Alan/mDef` = 0,5
+ve `pAtk/mDef` = 0,0833 **doğru** (A grubu Taş Ustalığı 0'da koşuluyor, yani ikisini birden
+sabitliyor). §3'ün "Alan/mDef 5 kat küçük" uyumu, iki serbest parametreli bir uydurmanın nasıl
+yanlış bir yere oturabileceğinin ders niteliğinde örneği — ⭐ **iyi ki kataloğa yazmamışım.**
 
-⚠️ Bu arada Sur, motorda **olması gerekenden çok daha dayanıklı**: sv8+ hiç yıpranmıyor.
-Canlı dengede surun bedava bir kalkan gibi davrandığını akılda tut.
+**B grubu sapıyor ve sapma Taş Ustalığı ile DOĞRUSAL büyüyor** — bu, oranın kendisinin yanlış
+olduğunun imzası. Sur% ile TU arasındaki eğim `100 × pAtk × oran / mDef` = `8,3333 × oran`:
+
+| TU | 5 | 10 | 17 | 20 |
+|---|---:|---:|---:|---:|
+| ölçülen eğim | 0,4170 | 0,4170 | 0,4168 | 0,4167 |
+
+Dört bağımsız tahmin, yayılım **0,00025** → **`oran = 0,05003`**. Motorun %6'sı 0,5 eğim
+veriyordu; oran tam olarak **5/6** kadar fazlaydı.
+
+- [x] ⭐ **Taş Ustalığı Sur'da %5, %6 değil.** `masonry.rateByUnit = { wall: 0.05 }` olarak
+      girildi. Düzeltmeden sonra **13/13 hücre** ölçülen aralığın içinde (A 8/8 + B 5/5).
+- [x] ⚠️ Dokümanın *"fiziksel savunma gücünü **%6** arttırır"* ifadesi yanlış — ve bu Tılsım'ın
+      **aynadaki hâli**: orada doküman %5 derken savaşçılarda %6 çıkmıştı. Metnin oran sayıları
+      bu projede güvenilmez.
+- [x] ⚠️ **Kule/Balista ölçülmedi**, bilerek %6'da bırakıldı. Sur binary'de ayrı bir kod
+      yolundan geçiyor (`gradeStat`, kademeli yapı) — tıpkı Kalkan'ın Tılsım'da kendi
+      ölçekleyicisi olması gibi. Ölçülmemiş dengeyi kaydırmamak için status quo korundu.
+
+`catalogHash` `3a8b2be4` → **`14c061fc`**.
+
+---
+
+## 6. ⚠️ AÇIK KALAN: asıl savaştaki Sur farkı
+
+Taş Ustalığı düzeltmesi B grubunu kapattı ama **asıl savaşı kapatmadı**: sv10'da motor hâlâ
+%100 diyor (binary %53,59), sv8'de %99,34 (binary %15,19).
+
+⭐ Artık bunun **ne OLMADIĞINI** kesin biliyoruz: formül değil (Ghidra), Sur'un statları değil
+(A grubu 8/8), Taş Ustalığı'nın oranı değil (B grubu 5/5). Geriye tek büyüklük kalıyor: **`havuz/P`**.
+
+### Neden Sur bu kadar hassas
+
+`düşüş = 50 × (havuz/P)/Sv − pAtk_ölçekli/6` — yani **iki büyük terimin FARKI**. sv10'da
+`5×R` ile `15,4` yarışıyor; R 2,5 iken fark negatif (hiç hasar), R 4,9 iken +9,3. Birim
+kayıplarında ise `pay ≫ mitigasyon` olduğu için aynı hata görünmez.
+
+> ⭐⭐ **Sur, `havuz/P` hatalarının AMPLİFİKATÖRÜDÜR.** Birim kayıpları %0,5 tutarken Sur %100
+> ↔ %53 ayrışabilir. Bu bir kusur değil, **elimizdeki en hassas sonda**.
+
+Ablasyon bunu doğruluyor: savunanın **Ejderhasını** çıkarınca (P'nin %51'i) Sur %100 → **%0**.
+
+### ⭐⭐⭐ Yeni set — Sur'u `Alan` TABLOSUNUN sondası olarak kullan
+
+Kritik gözlem: birim kayıpları `pay = Alan_e × adet × havuz/P` ile hesaplanıyor ve **bütün
+Alan'lar aynı katsayıyla çarpılsa hiçbir şey değişmez** (P de aynı katsayıyla büyür, sadeleşir).
+Yani birim kayıpları `Alan` tablosunu **yalnız birbirine göre** ölçebiliyor. Sur'un gücü ise
+`1,8^Sv × Alan_sur` ile **ayrı** bir formülden geliyor → Sur, `Alan` tablosunu **mutlak ölçekte**
+ölçebilen tek araç.
+
+> **Kurulum: Saldıran 300 Mancınık · Savunan tek tip birim + Sur sv4 · GÜNDÜZ ·
+> tüm teknikler 0 · kahraman/tapınak yok.**
+> Adetler, savunanın **P'si her satırda 324.000** olacak şekilde seçildi.
+
+⭐ Motor beş satırın beşinde de **aynı** Sur%'ini veriyor — çünkü P eşit. **Binary'de farklı
+çıkan satır, o birimin `Alan`ının yanlış olduğunu söyler** ve oranı doğrudan verir.
+
+| # | Savunan | Alan | P | motor: tur | motor: Sur% | **gerçek: tur** | **gerçek: Sur%** |
+|---|---|---:|---:|---:|---:|---|---|
+| C1 | 27.000 Elf | 12 | 324.000 | 2 | **91,14** | | |
+| C2 | 4.050 Pegasus | 80 | 324.000 | 2 | **91,14** | | |
+| C3 | 432 Ejderha | 750 | 324.000 | 2 | **91,14** | | |
+| C4 | 1.350 Mancınık | 240 | 324.000 | 2 | **91,14** | | |
+| C5 | 360 Balista | 900 | 324.000 | 2 | **91,14** | | |
+
+**Nasıl okunur:**
+
+| Gözlem | Sonuç |
+|---|---|
+| Beşi de eşit (≈%91,1) | ✅ `Alan` tablosu doğru → fark başka yerde (havuz tarafı) |
+| Bir satır **yüksek** | O birimin gerçek Alan'ı bizimkinden **büyük** (P büyük → R küçük) |
+| Bir satır **düşük** | O birimin gerçek Alan'ı **küçük**; oran = ölçülen düşüş / motor düşüşü |
+
+⚠️ Asıl savaşta savunanın P'sinin **%51'i Ejderha** → **C3 en kritik satır.** Ejderha'nın
+Alan'ı gerçekte ~yarısıysa, asıl savaştaki R iki katına çıkar ve Sur %53'e oturur — aradığımız
+büyüklük tam olarak bu.
+
+⚠️ Bu arada Sur, motorda **olması gerekenden dayanıklı** görünüyor: yoğun savaşlarda hiç
+yıpranmıyor. Canlı dengede bunu akılda tut.

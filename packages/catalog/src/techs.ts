@@ -140,7 +140,37 @@ export const TECHS: readonly TechDef[] = [
   },
   {
     // "Savunma ünitelerinin fiziksel savunma gücünü %6 arttırır" (Okçu Kulesi, Mangonel, Balista, Sur)
+    /**
+     * ⭐⭐⭐ **SUR'DA ORAN %5** (kullanıcı ölçümü, 2026-08-12) — `docs/SUR_TESTLERI.md` B grubu.
+     *
+     * Sur'un yıpranması, `1,8^Sv` ve `durum` sadeleştiği için yalnız iki orana bağlı:
+     *   `düşüş = 100 × (Alan/mDef) × (havuz/P)/Sv − 100 × (pAtk_ölçekli/mDef)`
+     * A grubu (seviye taraması, Taş Ustalığı 0) **8/8 birebir** tuttu → `Alan/mDef` ve
+     * `pAtk/mDef` doğru. Geriye tek serbest sayı kaldı: Taş Ustalığı'nın oranı.
+     *
+     * B grubu onu **doğrudan** ölçtü. Sur sv4 sabit, yalnız Taş Ustalığı değişiyor; Sur%
+     * teknikle DOĞRUSAL ve eğim = `100 × pAtk × oran / mDef` = `8,3333 × oran`:
+     *
+     * | TU | 5 | 10 | 17 | 20 |
+     * |---|---|---|---|---|
+     * | ölçülen eğim | 0,4170 | 0,4170 | 0,4168 | 0,4167 |
+     *
+     * Dört bağımsız tahmin, yayılım **0,00025** → `oran = 0,4169 / 8,3333 = `**`0,05003`**.
+     * Motorun %6'sı 0,5 eğim veriyordu; oran tam olarak **5/6** kadar fazlaydı.
+     *
+     * ⚠️ Dokümanın *"fiziksel savunma gücünü **%6** arttırır"* ifadesi Sur için **yanlış** —
+     * ve bu, Tılsım'daki durumun aynadaki hâli: orada doküman %5 derken savaşçılarda %6 çıkmıştı.
+     * Metnin oran sayıları bu projede güvenilmez; ölçüm kazanıyor.
+     *
+     * ⚠️⚠️ **KULE/BALİSTA ÖLÇÜLMEDİ — bilerek %6'da bırakıldı.** Ölçüm yalnız Sur'u kapsıyor ve
+     * Sur binary'de ayrı bir kod yolundan geçiyor (`gradeStat`, kademeli yapı) — tıpkı Büyü
+     * Kalkanı'nın Tılsım'da kendi ölçekleyicisi (`FUN_00413744`, %5) olması gibi. Okçu Kulesi ·
+     * Mangonel Kulesi · Balista normal `applyTech` yolundan geçiyor ve onların oranı **hiç
+     * ölçülmedi**; ölçülmemiş bir dengeyi kaydırmamak için status quo korundu.
+     * Kapatan ölçüm satırı: `docs/SUR_TESTLERI.md` §6.
+     */
     id: 'masonry', name: { tr: 'Taş Ustalığı' }, rate: 0.06, stat: 'pmit',
+    rateByUnit: { wall: 0.05 },
     units: ['archer_tower', 'mangonel_tower', 'ballista', 'wall'],
     baseGold: 550, baseFood: 450,
   },
