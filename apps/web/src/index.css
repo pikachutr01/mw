@@ -120,6 +120,15 @@ body {
   margin: 0;
   color: var(--mw-color-text-primary);
   font-family: var(--mw-font-body);
+  /**
+   * ⭐ KESİK SIFIR — **yazı tipini DEĞİŞTİRMEZ**, yalnız `0` glifini etkiler.
+   *
+   * `zero` bir OpenType özelliği: fontun kendi kesik/noktalı sıfır çizimi varsa onu seçer,
+   * yoksa hiçbir şey yapmaz. Yani gövde Spectral olarak kalıyor, sadece sıfırlar 8'den
+   * ayrılıyor (oyuncu bildirimi, 2026-08-12).
+   * ⚠️ `.tnum` almayan, cümle içine gömülü sayılar için tek koruma bu satır.
+   */
+  font-feature-settings: 'zero' 1;
   background-color: var(--mw-color-bg);
   /* Tanecik zemin katmanının en üstünde: "düz renk" hissini kıran şey bu. */
   background-image: var(--tex-grain), var(--tex-page);
@@ -141,10 +150,25 @@ h1, h2, h3, .display {
   outline-offset: 2px;
 }
 
-/* Sayısal sütunlar kaymasın — kaynak ve geri sayım okunurluğu için. */
+/**
+ * ⭐⭐ SAYI OKUNURLUĞU (oyuncu bildirimi, 2026-08-12: *"0 rakamı 8 ile karıştırılabiliyor"*).
+ *
+ * Sütunlar kaymasın diye `tabular-nums`, rakamlar karışmasın diye **kesik/noktalı sıfır**:
+ * `font-feature-settings: "zero" 1`. JetBrains Mono'nun sıfırı zaten noktalı, yani asıl
+ * güvence fontun KENDİSİNDE — bu satır ikinci savunma ve fallback fontlarında da devreye girer.
+ *
+ * ⚠️ `zero` desteklemeyen bir fonta düşersek satır **sessizce hiçbir şey yapmaz** (hata değil,
+ * yok sayılır). Bu yüzden koruma tek başına buna bırakılmadı: `--mw-font-mono` zincirindeki
+ * yedekler de (Cascadia Mono · Segoe UI Mono · Menlo · Consolas) ayırt edilebilir sıfır taşıyan
+ * fontlardan seçildi. Zincirin sonundaki genel `monospace` en kötü ihtimal.
+ */
 .tnum {
   font-family: var(--mw-font-mono);
   font-variant-numeric: tabular-nums;
+  /* ⚠️ `tnum` BURADA DA adlandırılıyor: `font-feature-settings` düşük seviyeli özellik ve bazı
+     tarayıcılarda `font-variant-numeric`in kurduğu özellikleri sıfırlıyor. İkisini birlikte
+     yazmak, "sütunlar kaydı" diye geri dönecek bir regresyonu baştan kapatıyor. */
+  font-feature-settings: 'zero' 1, 'tnum' 1;
   letter-spacing: -0.01em;
 }
 

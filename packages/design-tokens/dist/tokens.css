@@ -17,7 +17,7 @@
   --mw-space-8: 48px;
   --mw-font-display: 'Cinzel', 'EB Garamond', Georgia, serif;
   --mw-font-body: 'Spectral', 'EB Garamond', Georgia, serif;
-  --mw-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --mw-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
   --mw-color-bg: #F3E9D6;
   --mw-color-surface: #FAF3E3;
   --mw-color-surface-raised: #FFFBF0;

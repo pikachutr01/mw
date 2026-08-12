@@ -58,10 +58,17 @@ body {
   color: var(--mw-color-text-primary);
 }
 
-/** Sayı sütunları kaymasın — kaynak, süre ve kimlik sütunlarının hepsi tabular. */
+/**
+ * Sayı sütunları kaymasın — kaynak, süre ve kimlik sütunlarının hepsi tabular.
+ * ⭐ `zero` = kesik/noktalı sıfır (oyuncu bildirimi 2026-08-12: 0 ile 8 karışıyor).
+ * Gerekçenin tamamı `apps/web/src/index.css`teki kardeş kuralda.
+ */
 .tnum {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  /* ⚠️ `tnum` burada da adlandırılıyor — `font-feature-settings` bazı tarayıcılarda
+     `font-variant-numeric`i sıfırlıyor ve sütun hizası sessizce bozulurdu. */
+  font-feature-settings: 'zero' 1, 'tnum' 1;
 }
 
 .display {

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rakam Fontu Denemesi — MobilWar</title>
+<!--
+  ⭐ NEDEN BU DOSYA VAR (oyuncu bildirimi, 2026-08-12: "0 rakamı 8 ile karıştırılabiliyor").
+
+  Glif şekli koddan görülemez. Bir kez gövde fontunu değiştirmeyi denedik, kullanıcı beğenmedi
+  ve geri alındı — bu sayfa o turu tekrar etmemek için: kararı GÖZLE vermek.
+
+  ⚠️ Admin panelindeki artifact/CSP ortamına konamaz: Google Fonts dış kaynak ve orada engelli.
+  Bu yüzden `docs/araclar/` altında bağımsız bir sayfa (harita.html ile aynı gelenek) —
+  tarayıcıda çift tıkla aç, internet varken çalışır.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Mono:wght@400;600&family=Source+Code+Pro:wght@400;600&family=Roboto+Mono:wght@400;600&family=Inconsolata:wght@400;600&family=Cinzel:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4ECDC; --panel:#FBF6EA; --ink:#2B2116; --muted:#7A6A55; --line:#D9C9AC;
+  --accent:#8A5A2B; --danger:#A33; --ok:#3B7A57;
+  --body:'Spectral','EB Garamond',Georgia,serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);padding:20px;line-height:1.5}
+h1{font-family:'Cinzel',serif;font-size:22px;margin-bottom:4px}
+h2{font-family:'Cinzel',serif;font-size:15px;margin:22px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:8px}
+.wrap{max-width:1100px;margin:0 auto}
+.bar{position:sticky;top:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+     padding:10px 12px;margin:12px 0 18px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;z-index:5}
+label{font-size:13px;display:flex;align-items:center;gap:6px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:none}
+.name{font-family:var(--body);font-size:13px;white-space:nowrap}
+.cur{color:var(--accent);font-weight:700}
+.tag{font-size:10px;background:var(--accent);color:#fff;border-radius:99px;padding:1px 7px;margin-left:6px;vertical-align:middle}
+.num{font-variant-numeric:tabular-nums}
+.pair{letter-spacing:.12em}
+.big{font-size:26px}
+.mid{font-size:15px}
+.sm{font-size:12px}
+.xs{font-size:11px}
+.note{background:#FFF8E6;border:1px solid #E5D28E;border-radius:8px;padding:10px 12px;font-size:13px;margin:10px 0}
+.warn{background:#FDEEEA;border-color:#E7B3A5}
+.ctx{display:flex;gap:18px;flex-wrap:wrap;align-items:center;padding:8px 10px;border:1px solid var(--line);
+     border-radius:8px;background:var(--panel);margin-bottom:8px}
+.ctx b{font-weight:600}
+.zero-on{font-feature-settings:'zero' 1,'tnum' 1}
+.zero-off{font-feature-settings:'tnum' 1}
+code{background:#EDE2CC;border-radius:4px;padding:1px 5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Rakam Fontu Denemesi</h1>
+<p class="sub">
+  Oyuncu bildirimi: <b>“0 rakamı 8 ile karıştırılabiliyor.”</b>
+  Amaç yalnız rakamları düzeltmek — gövde yazısı <b>Spectral</b> olarak kalıyor.
+</p>
+
+<div class="bar">
+  <label><input type="checkbox" id="zero" checked> <code>zero</code> özelliği (kesik/noktalı sıfır)</label>
+  <label>Boyut
+    <select id="size">
+      <option value="11">11px — kaynak çubuğu</option>
+      <option value="12" selected>12px — tablo hücresi</option>
+      <option value="13">13px</option>
+      <option value="15">15px — başlık satırı</option>
+      <option value="20">20px</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="dark"> Gece teması</label>
+</div>
+
+<div class="note">
+  ⚠️ <b>Ne yapıp ne yapmadığını bilerek bak.</b> <code>zero</code> bir OpenType özelliği:
+  fontun kendi <i>kesik/noktalı sıfır</i> çizimi varsa onu seçer, yoksa <b>hiçbir şey yapmaz</b>.
+  Yani üstteki kutuyu kapatıp açtığında değişmeyen fontlar, o özelliği taşımıyor demektir —
+  onlarda güvence fontun kendi varsayılan sıfırından gelmeli.
+</div>
+
+<h2>1. Karıştırılan çiftler</h2>
+<p class="sub">Asıl mesele <b>0/8</b>, ama <b>1/l/I</b> ve <b>5/S</b> de oyunda sık yan yana geliyor.</p>
+<table>
+  <thead><tr><th>Font</th><th>0 8 0 8</th><th>1 l I</th><th>5 S 6 b 3 8</th><th>Tüm rakamlar</th></tr></thead>
+  <tbody id="pairs"></tbody>
+</table>
+
+<h2>2. Gerçek oyun sayıları</h2>
+<p class="sub">Seçilen boyutta, oyunda geçen tipik değerlerle.</p>
+<table>
+  <thead><tr><th>Font</th><th>Ganimet</th><th>Ordu</th><th>Süre</th><th>Koordinat</th></tr></thead>
+  <tbody id="real"></tbody>
+</table>
+
+<h2>3. Cümle içinde (gövde fontuyla yan yana)</h2>
+<p class="sub">
+  ⚠️ Asıl sınav bu: rakam fontu <b>Spectral'in yanında</b> yamalı durmamalı. Etiketler Spectral,
+  yalnız sayılar aday fontta.
+</p>
+<div id="ctx"></div>
+
+<div class="note warn">
+  ⚠️ <b>Karar verirken:</b> mono fontlar sayı sütunlarını hizalar (tablolarda şart) ama cümle
+  içinde göze çarpar. Oyunda sayıların büyük çoğunluğu zaten <code>.tnum</code> ile mono —
+  bu sayfa o fontun hangisi olacağını seçmek için.
+</div>
+
+</div>
+
+<script>
+const FONTS = [
+  { css:"'JetBrains Mono',monospace", ad:'JetBrains Mono', not:'şu anki — noktalı sıfır', cur:true },
+  { css:"'IBM Plex Mono',monospace",  ad:'IBM Plex Mono',  not:'kesik sıfır' },
+  { css:"'Source Code Pro',monospace",ad:'Source Code Pro',not:'kesik sıfır (zero ile)' },
+  { css:"'Inconsolata',monospace",    ad:'Inconsolata',    not:'dar, çok sayı sığar' },
+  { css:"'Roboto Mono',monospace",    ad:'Roboto Mono',    not:'düz sıfır — karşıt örnek' },
+  { css:"'Spectral',serif",           ad:'Spectral (gövde)', not:'⚠️ sorunun kaynağı: tnum almayan sayılar burada' },
+];
+const $ = (id) => document.getElementById(id);
+const zeroCls = () => $('zero').checked ? 'zero-on' : 'zero-off';
+const px = () => $('size').value;
+
+function row(f, cells) {
+  const z = zeroCls(), s = px();
+  const tds = cells.map((c) =>
+    `<td><span class="num ${z}" style="font-family:${f.css};font-size:${s}px">${c}</span></td>`).join('');
+  return `<tr><td class="name ${f.cur?'cur':''}">${f.ad}${f.cur?'<span class="tag">şu an</span>':''}
+            <div style="color:var(--muted);font-size:11px">${f.not}</div></td>${tds}</tr>`;
+}
+
+function draw() {
+  $('pairs').innerHTML = FONTS.map((f) => {
+    const z = zeroCls();
+    const big = (t) => `<span class="num pair big ${z}" style="font-family:${f.css}">${t}</span>`;
+    return `<tr><td class="name ${f.cur?'cur':''}">${f.ad}${f.cur?'<span class="tag">şu an</span>':''}
+              <div style="color:var(--muted);font-size:11px">${f.not}</div></td>
+            <td>${big('0808')}</td><td>${big('1lI')}</td><td>${big('5S6b38')}</td>
+            <td><span class="num mid ${z}" style="font-family:${f.css}">0123456789</span></td></tr>`;
+  }).join('');
+
+  $('real').innerHTML = FONTS.map((f) => row(f, [
+    '1.280.640', '80.008 Cüce', '2 sa 08 dk 30 sn', '1:80:8',
+  ])).join('');
+
+  const z = zeroCls(), s = px();
+  $('ctx').innerHTML = FONTS.map((f) => `
+    <div class="ctx" style="font-size:${s}px">
+      <span style="min-width:150px;color:var(--muted);font-size:12px">${f.ad}</span>
+      <span>Ganimet: <b class="num ${z}" style="font-family:${f.css}">308.080</b> altın</span>
+      <span>Sur bütünlüğü <b class="num ${z}" style="font-family:${f.css}">%80,8</b></span>
+      <span><b class="num ${z}" style="font-family:${f.css}">1.008</b> Elf kaybedildi</span>
+      <span>Baraka <b class="num ${z}" style="font-family:${f.css}">08</b> → <b class="num ${z}" style="font-family:${f.css}">10</b></span>
+    </div>`).join('');
+}
+
+['zero','size'].forEach((id) => $(id).addEventListener('input', draw));
+$('dark').addEventListener('input', (e) => {
+  const d = e.target.checked;
+  document.documentElement.style.setProperty('--bg', d ? '#181410' : '#F4ECDC');
+  document.documentElement.style.setProperty('--panel', d ? '#221C15' : '#FBF6EA');
+  document.documentElement.style.setProperty('--ink', d ? '#EDE3CE' : '#2B2116');
+  document.documentElement.style.setProperty('--muted', d ? '#A2937C' : '#7A6A55');
+  document.documentElement.style.setProperty('--line', d ? '#3A3025' : '#D9C9AC');
+});
+draw();
+</script>
+</body>
+</html>

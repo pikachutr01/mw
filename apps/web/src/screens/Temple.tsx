@@ -62,7 +62,9 @@ function XpBar({ hero }: { hero: HeroRow }) {
   const pct = hero.xpForNext > 0 ? Math.min(100, (hero.xp / hero.xpForNext) * 100) : 0;
   return (
     <div className="min-w-[9rem]">
-      <div className="text-xs tabular-nums text-muted">
+      {/* ⚠️ Tailwind'in `tabular-nums`u DEĞİL, projenin `tnum`u: ilki yalnız sütun hizası verir
+          ve sayı gövde serifinde kalırdı. `tnum` ayrıca sayı fontunu ve kesik sıfırı getiriyor. */}
+      <div className="tnum text-xs text-muted">
         {fmt(hero.xp)} / {fmt(hero.xpForNext)}
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-black/20">
@@ -100,7 +102,7 @@ function SkillEditor({ hero, onClose }: { hero: HeroRow; onClose: () => void }) 
                 onClick={() => setDraft({ ...draft, [s.key]: cur - 1 })}
                 aria-label={`${s.label} azalt`}
               >−</button>
-              <span className="w-8 text-center text-sm tabular-nums">{cur}</span>
+              <span className="tnum w-8 text-center text-sm">{cur}</span>
               <button
                 type="button"
                 className="h-6 w-6 rounded border border-line disabled:opacity-30"
@@ -174,7 +176,7 @@ function HeroCard({ hero, temple }: { hero: HeroRow; temple: TempleView }) {
             {SKILLS.map((s) => (
               <span key={s.key} className="flex items-center gap-1" title={`${s.label} — ${s.hint}`}>
                 <img src={`/assets/hero/${s.icon}.png`} alt={s.label} width={18} height={18} />
-                <span className="text-sm tabular-nums">{hero.skills[s.key]}</span>
+                <span className="tnum text-sm">{hero.skills[s.key]}</span>
               </span>
             ))}
           </div>
@@ -183,10 +185,10 @@ function HeroCard({ hero, temple }: { hero: HeroRow; temple: TempleView }) {
         <div className="flex flex-col items-end gap-1">
           <Badge tone={state.tone}>{state.text}</Badge>
           {hero.state === 'reviving' && hero.reviveUntil && (
-            <span className="text-xs tabular-nums text-muted">{remaining(hero.reviveUntil)}</span>
+            <span className="tnum text-xs text-muted">{remaining(hero.reviveUntil)}</span>
           )}
           {hero.state === 'returning' && hero.returningAt && (
-            <span className="text-xs tabular-nums text-muted">
+            <span className="tnum text-xs text-muted">
               {remaining(hero.returningAt)} sonra şehirde
             </span>
           )}

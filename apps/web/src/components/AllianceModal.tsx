@@ -40,9 +40,9 @@ export function AllianceModal({ id, onClose }: { id: number; onClose: () => void
           {/* ── Künye ──────────────────────────────────────────────────────── */}
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-4">
             <Row label="Lider" value={a.leader} />
-            <Row label="Üye" value={fmt(a.memberCount)} />
-            <Row label="Puan" value={fmt(a.score)} />
-            <Row label="Sıra" value={a.rank == null ? '-' : `${a.rank}`} />
+            <Row label="Üye" value={fmt(a.memberCount)} num />
+            <Row label="Puan" value={fmt(a.score)} num />
+            <Row label="Sıra" value={a.rank == null ? '-' : `${a.rank}`} num />
           </dl>
 
           {/* ── İttifak metni — asıl istenen ────────────────────────────────── */}
@@ -82,11 +82,16 @@ export function AllianceModal({ id, onClose }: { id: number; onClose: () => void
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+/**
+ * ⚠️ `num` bayrağı ŞART: bu satır hem sayı (Üye · Puan · Sıra) hem metin (Lider adı) taşıyor.
+ * `tnum`u koşulsuz uygulasaydık oyuncu adı da mono fontta çizilirdi — sayı okunurluğu için
+ * yapılan düzeltme, adları bozardı.
+ */
+function Row({ label, value, num = false }: { label: string; value: string; num?: boolean }) {
   return (
     <div className="min-w-0">
       <dt className="text-[11px] text-muted">{label}</dt>
-      <dd className="truncate font-semibold text-ink">{value}</dd>
+      <dd className={`truncate font-semibold text-ink ${num ? 'tnum' : ''}`}>{value}</dd>
     </div>
   );
 }
