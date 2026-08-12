@@ -26,8 +26,27 @@ export interface EconomyConfig {
   /** Teknik maliyeti: `base × rate^(seviye+1)`. */
   techCostRate: number;
   timeDivisorRate: number;
-  /** Her hızlandırıcı yapı seviyesi süreyi böler: `rate^seviye`. */
+  /**
+   * ⚠️ **YALNIZ SAVAŞÇI ve SAVUNMA BİRİMİ** — Baraka'nın (savunmada Mimar Okulu'nun) her
+   * seviyesi üretim süresini böler: `rate^seviye`.
+   *
+   * ⚠️⚠️ **2026-08-12'de AYRILDI; öncesinde yapı/teknik süreleriyle ORTAKTI.** Kullanıcı
+   * *"Cüce ile Elf'in üretim süresi daha düşük bir Baraka seviyesinde 1 saniyeye insin"*
+   * dedi ve düğme buydu — ama ortak olduğu için çevrilemiyordu: oranı 1,2'den 1,4'e çekmek
+   * askerleri hızlandırırken **Mimar Okulu 20'nin yapı hızlandırmasını 38 kattan 837 kata**
+   * çıkarıyor, yani bütün inşaat ekonomisini yok ediyordu. `timeExponent` /
+   * `structureTimeExponent` 2026-08-10'da aynı sebeple ayrılmıştı; bu onun kardeşi.
+   *
+   * Ölçek: 1,20 → Cüce Baraka **27**'de 1 sn · 1,25 → **23** · 1,30 → **19** · 1,35 → **17** ·
+   * 1,40 → **15**. (Elf her zaman 1-3 seviye geride: tabanı 205,7 sn, Cüce'ninki 136,3 sn.)
+   */
   timeDecayRate: number;
+  /**
+   * ⭐ **YAPI · TEKNİK · SUR · BÜYÜ KALKANI** süre böleni (2026-08-12'de ayrıldı).
+   * Hızlandıran yapı: Mimar Okulu (tekniklerde Akademi). Varsayılanı `timeDecayRate` ile
+   * aynı (1,2) tutuldu → **ayrım davranışı değiştirmedi**, yalnız iki düğmeyi bağımsızlaştırdı.
+   */
+  structureTimeDecayRate: number;
   /**
    * ⚠️ **YALNIZ SAVAŞÇI ve SAVUNMA BİRİMİ** üretim süresinin üssü (`k.java:10`'un kendi 0,8'i).
    * Pahalı birimi saniye başına daha verimli yapar. Yapı/teknik/Sur/Kalkan için
@@ -221,6 +240,17 @@ export interface CatalogConfig {
   spy: SpyConfig;
   /** `castle:gold` · `castle:rate` · `castle:timeFactor` … — bkz. `TuningConfig`. */
   buildingTuning: TuningConfig;
+  /**
+   * ⭐ `dwarf:gold` · `dwarf:food` · `dwarf:timeFactor` (2026-08-12).
+   *
+   * ⚠️ **`rate` ekseni YOK — birimlerin seviyesi yok.** Yapı/teknikte `rate` "her seviye kaç
+   * kat pahalı" demek; bir Cüce her zaman aynı fiyat. Üç eksen bilinçli olarak eksik bırakıldı,
+   * unutulmadı: dördüncüsü panelde anlamsız bir kutu olarak görünürdü.
+   *
+   * ⚠️ `gold`/`food` **hem fiyatı hem süreyi** değiştirir (süre `unitTimeValue`den, o da
+   * fiyattan türüyor). Yalnız süreyi oynatmak isteyen `timeFactor` kullanmalı.
+   */
+  unitTuning: TuningConfig;
   /** `blacksmithing:gold` · `blacksmithing:rate` … */
   techTuning: TuningConfig;
 }
@@ -255,6 +285,7 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     techCostRate: 1.5,
     timeDivisorRate: 1.4,
     timeDecayRate: 1.2,
+    structureTimeDecayRate: 1.2,
     timeExponent: 0.8,
     structureTimeExponent: 0.95,
     unitTimeFactor: 190,
@@ -341,6 +372,9 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
    * olan tek parça `×10`'du. Bu çarpan olmadan yeni tabanlarla Mimar Okulu 20 **362 güne** çıkıyor.
    */
   buildingTuning: { 'architect_school:timeFactor': 0.1 },
+  // ⚠️ BOŞ — seyreklik sözleşmesi: buraya bir kayıt yazmak onu «varsayılan» yapar ve
+  //    `hash.ts` `diffFromDefault` onu artık fark olarak görmez.
+  unitTuning: {},
   techTuning: {},
 };
 
@@ -365,6 +399,7 @@ export function mergeCatalogConfig(overrides?: DeepPartialCatalog): CatalogConfi
     spy: { ...DEFAULT_CATALOG_CONFIG.spy, ...overrides.spy },
     // ⚠️ Seyreklik korunuyor: override yoksa boş nesne kalır (bkz. `TuningConfig` yorumu).
     buildingTuning: { ...DEFAULT_CATALOG_CONFIG.buildingTuning, ...overrides.buildingTuning },
+    unitTuning: { ...DEFAULT_CATALOG_CONFIG.unitTuning, ...overrides.unitTuning },
     techTuning: { ...DEFAULT_CATALOG_CONFIG.techTuning, ...overrides.techTuning },
   };
 }

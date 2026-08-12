@@ -16,7 +16,7 @@ import { SETTINGS, applySettings } from '@mobilwar/settings';
 import {
   BUILDINGS_BY_ID, DEFAULT_CATALOG_CONFIG, TECHS_BY_ID, buildingCost, buildingTimeSeconds,
   catalogHash, farmOutput, mergeCatalogConfig, mineOutput, techCost, trainingTimeSeconds,
-  unitCost,
+  unitCost, UNITS_BY_ID,
 } from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
@@ -115,7 +115,7 @@ describe('varsayılan davranış', () => {
        * sessizce işlevsizleşirdi. Şema varsayılanı ise ETKİN değeri (katalogdaki taban)
        * gösteriyor — ikisi kasıtlı olarak farklı ve aşağıdaki test bunu ayrıca kilitliyor.
        */
-      if (group === 'buildingTuning' || group === 'techTuning') continue;
+      if (group === 'buildingTuning' || group === 'techTuning' || group === 'unitTuning') continue;
       const fromSchema = eff[group] ?? {};
       const fromCatalog = DEFAULT_CATALOG_CONFIG[group] as Record<string, number>;
       for (const [key, value] of Object.entries(fromSchema)) {
@@ -148,12 +148,37 @@ describe('varsayılan davranış', () => {
   });
 
   it('⭐ türetilmiş her ayarın karşılığı katalogda GERÇEKTEN var', () => {
+    const table = { building: BUILDINGS_BY_ID, tech: TECHS_BY_ID, unit: UNITS_BY_ID } as const;
     for (const d of SETTINGS) {
       if (!d.entity) continue;
-      const known = d.entity.kind === 'building'
-        ? BUILDINGS_BY_ID[d.entity.id] : TECHS_BY_ID[d.entity.id];
-      expect(known, `katalogda yok: ${d.key}`).toBeTruthy();
+      expect(table[d.entity.kind][d.entity.id], `katalogda yok: ${d.key}`).toBeTruthy();
     }
+  });
+
+  /**
+   * ⭐⭐ BİRİM AYARLARININ ŞEKLİ (2026-08-12). İki iddia:
+   *   1. **`rate` ekseni YOK** — askerlerin seviyesi yok, "her seviye kaç kat pahalı" anlamsız.
+   *      Eklenmiş olsaydı panelde hiçbir şeye bağlı olmayan bir kutu görünürdü.
+   *   2. **Sur/Büyü Kalkanı burada DEĞİL** — onlar `LEVEL_BASED`, fiyatları `unitCost`tan
+   *      değil `defenseStructureCost`ten geliyor; buraya konsalar panel etkisiz bir düğme
+   *      gösterirdi (yazarsın, hiçbir şey olmaz — bulunması en zor hata sınıfı).
+   */
+  it('⭐⭐ birim ayarları: rate ekseni YOK, seviye taşıyan yapılar DIŞARIDA', () => {
+    const unitDefs = SETTINGS.filter((d) => d.entity?.kind === 'unit');
+    expect(unitDefs.length).toBeGreaterThan(0);
+    expect(new Set(unitDefs.map((d) => d.entity!.axis)))
+      .toEqual(new Set(['gold', 'food', 'timeFactor']));
+    for (const id of ['wall', 'magic_shield', 'temple']) {
+      expect(unitDefs.some((d) => d.entity!.id === id), id).toBe(false);
+    }
+    // Savaşçılar ve seviye taşımayan savunma birimleri VAR.
+    for (const id of ['dwarf', 'elf', 'chaos', 'archer_tower', 'ballista']) {
+      expect(unitDefs.some((d) => d.entity!.id === id), id).toBe(true);
+    }
+    // Şema varsayılanı etkin fiyatı göstermeli (panel boş hücrede gerçek sayıyı yazar).
+    const byKey = new Map(SETTINGS.map((d) => [d.key, d]));
+    expect(byKey.get('unitTuning.dwarf:gold')?.default).toBe(UNITS_BY_ID['dwarf']!.gold);
+    expect(byKey.get('unitTuning.dwarf:timeFactor')?.default).toBe(1);
   });
 
   /** Ters yön: config'te olup şemada olmayan alan kalmasın (fiyat çarpanları hariç değil). */
@@ -206,9 +231,52 @@ describe('ayar formüllere ulaşıyor', () => {
     expect(mineOutput(20, cfg)).toBe(mineOutput(20));
   });
 
-  it('süre kısaltma oranı yapı süresini değiştirir', () => {
-    const cfg = mergeCatalogConfig({ economy: { timeDecayRate: 1.5 } });
-    expect(buildingTimeSeconds('farm', 10, 5, cfg)).toBeLessThan(buildingTimeSeconds('farm', 10, 5));
+  /**
+   * ⭐⭐⭐ İKİ SÜRE BÖLENİ BİRBİRİNE KARIŞMAZ (2026-08-12).
+   *
+   * ⚠️ Bu testin eski hâli `economy.timeDecayRate` ile YAPI süresini ölçüyordu ve doğruydu —
+   * çünkü tek bir ortak bölen vardı. Kullanıcı *"Cüce/Elf daha düşük Baraka seviyesinde 1
+   * saniyeye insin"* deyince o ortaklık engel oldu: oranı büyütmek askerlerle birlikte bütün
+   * inşaatı da hızlandırıyordu (1,2→1,4: Mimar Okulu 20'nin kazancı 38 kattan **837 kata**).
+   *
+   * Ayrımın sınavı çapraz olmalı: her düğme **kendi** kalemini değiştirmeli ve **ötekine
+   * dokunmamalı**. Tek yönlü baksaydık, iki alanın aynı değeri okuduğu bir hata yeşil geçerdi.
+   */
+  it('⭐⭐⭐ asker böleni yapıya, yapı böleni askere DOKUNMAZ', () => {
+    const asker = mergeCatalogConfig({ economy: { timeDecayRate: 1.5 } });
+    expect(trainingTimeSeconds('dwarf', 5, 'balanced', asker))
+      .toBeLessThan(trainingTimeSeconds('dwarf', 5));
+    expect(buildingTimeSeconds('farm', 10, 5, asker), 'asker düğmesi yapıyı oynatmamalı')
+      .toBe(buildingTimeSeconds('farm', 10, 5));
+
+    const yapi = mergeCatalogConfig({ economy: { structureTimeDecayRate: 1.5 } });
+    expect(buildingTimeSeconds('farm', 10, 5, yapi))
+      .toBeLessThan(buildingTimeSeconds('farm', 10, 5));
+    expect(trainingTimeSeconds('dwarf', 5, 'balanced', yapi), 'yapı düğmesi askeri oynatmamalı')
+      .toBe(trainingTimeSeconds('dwarf', 5));
+  });
+
+  /**
+   * ⭐⭐ BİRİM BAŞINA AYAR FORMÜLLERE ULAŞIYOR mu — panelin gerçekten bağlı olduğunun kanıtı.
+   *
+   * ⚠️ `gold`/`food` **hem fiyatı hem süreyi** değiştirmeli: oyunda ayrı bir «taban süre» yok,
+   * süre `unitTimeValue`den (altın + yemek + taşıma) türüyor. İkisi ayrı okusaydı *"fiyatı
+   * değiştirdim ama süre değişmedi"* sessiz hatası doğardı — `unitBase` tam bunun için tek yer.
+   */
+  it('⭐⭐ birim taban fiyatı HEM fiyatı HEM süreyi değiştirir', () => {
+    const cfg = mergeCatalogConfig({ unitTuning: { 'dwarf:gold': 400 } });
+    expect(unitCost('dwarf', 1, cfg).gold).toBe(400);
+    expect(trainingTimeSeconds('dwarf', 5, 'balanced', cfg))
+      .toBeGreaterThan(trainingTimeSeconds('dwarf', 5));
+    // ⚠️ Sızma yok: başka birim etkilenmemeli.
+    expect(unitCost('elf', 1, cfg)).toEqual(unitCost('elf', 1));
+  });
+
+  it('⭐⭐ süre çarpanı YALNIZ süreyi değiştirir, fiyata dokunmaz', () => {
+    const cfg = mergeCatalogConfig({ unitTuning: { 'dwarf:timeFactor': 0.5 } });
+    expect(trainingTimeSeconds('dwarf', 5, 'balanced', cfg))
+      .toBeCloseTo(trainingTimeSeconds('dwarf', 5) / 2, 6);
+    expect(unitCost('dwarf', 10, cfg)).toEqual(unitCost('dwarf', 10));
   });
 
   it('override DÜNYA BAZLI ve özet DEĞİŞİR', async () => {

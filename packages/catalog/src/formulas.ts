@@ -302,16 +302,31 @@ export function defenseStructureTimeSeconds(
   return timeFromCost(defenseStructureCost(id, level, cfg), architectSchool, cfg);
 }
 
-/** Birim maliyeti sabittir (adet başına). */
-export function unitCost(unitId: string, count = 1, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
+/**
+ * Birim taban fiyatı — **panelden birim başına ezilebilir** (`unitTuning.<id>:gold|food`).
+ *
+ * ⚠️ Tek yerde: `unitCost` ve `unitTimeValue` ikisi de buradan okuyor. Ayrı ayrı okusalardı
+ * biri güncellenip diğeri unutulur ve *"fiyatı değiştirdim ama süre değişmedi"* hatası doğardı.
+ */
+function unitBase(unitId: string, cfg: CatalogConfig): { gold: number; food: number; carry: number } {
   const def = UNITS_BY_ID[unitId];
   if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
+  return {
+    gold: cfg.unitTuning[`${unitId}:gold`] ?? def.gold,
+    food: cfg.unitTuning[`${unitId}:food`] ?? def.food,
+    carry: def.carry,
+  };
+}
+
+/** Birim maliyeti sabittir (adet başına). */
+export function unitCost(unitId: string, count = 1, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
+  const base = unitBase(unitId, cfg);
   /**
    * ⚠️ Yuvarlama ADET ile çarpımdan SONRA: birim başına yuvarlasaydık 100 birimlik sipariş
    * ile 100 kez 1 birimlik sipariş farklı tutar öderdi ve oyuncu ucuz olanı bulurdu.
    */
   const m = cfg.economy.unitCostMultiplier;
-  return { gold: Math.round(def.gold * count * m), food: Math.round(def.food * count * m) };
+  return { gold: Math.round(base.gold * count * m), food: Math.round(base.food * count * m) };
 }
 
 /**
@@ -336,14 +351,20 @@ export function unitCost(unitId: string, count = 1, cfg: CatalogConfig = DEFAULT
  * **Bölen neden 1,2 (orijinaldeki 1,4 değil)?** 1,4 yirmi seviyede **836 kat** demek; Baraka tek
  * başına oyunun kaderini belirler ve seviye 1'deki oyuncu hiçbir şey üretemez. 1,2 ile yirmi
  * seviye **32 kat** kazandırır — hissedilir ama tek eksenli değil.
+ *
+ * ⚠️⚠️ **BÖLEN DE TEK DEĞİL, İKİ TANE** (2026-08-12) — üsse yapılanın aynısı bölene de yapıldı:
+ * birimler `timeDecayRate`, yapısal kalemler `structureTimeDecayRate`. Ortakken oranı büyütmek
+ * askerleri hızlandırırken **bütün inşaatı da** hızlandırıyordu (1,2→1,4: Mimar Okulu 20'nin
+ * kazancı 38 kattan 837 kata). ⭐ Bu yüzden `decay` artık `cfg`den okunmuyor, **çağıran açıkça
+ * geçiriyor**: yeni bir çağıran eklendiğinde derleyici sormaya zorluyor — yukarıdaki üs
+ * uyarısının ("yanlış olan sessizce çalışır") tekrarlanmaması için.
  */
 function timeCurve(
-  value: number, factor: number, level: number, exponent: number,
-  cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG,
+  value: number, factor: number, level: number, exponent: number, decay: number,
 ): number {
   return (
     (factor * (Math.max(0, value) / 1000) ** exponent)
-    / cfg.economy.timeDecayRate ** Math.max(0, level)
+    / Math.max(1, decay) ** Math.max(0, level)
   );
 }
 
@@ -351,7 +372,7 @@ function timeCurve(
 export function timeFromCost(cost: Cost, divisorLevel: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
   return timeCurve(
     cost.gold + cost.food, cfg.economy.structureTimeFactor, divisorLevel,
-    cfg.economy.structureTimeExponent, cfg,
+    cfg.economy.structureTimeExponent, cfg.economy.structureTimeDecayRate,
   );
 }
 
@@ -415,9 +436,9 @@ export function techTimeSeconds(
  * Diğer birimlerde etki ihmal edilebilir (Ejderha +%0,5) — kasıtlı olarak **hedefli** bir düzeltme.
  */
 export function unitTimeValue(unitId: string, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): number {
-  const def = UNITS_BY_ID[unitId];
-  if (!def) throw new Error(`Bilinmeyen birim: ${unitId}`);
-  return def.gold + def.food + cfg.economy.carryTimeWeight * def.carry;
+  // ⚠️ Taban `unitBase`ten: panelden fiyatı değiştirilen birimin SÜRESİ de değişmeli.
+  const base = unitBase(unitId, cfg);
+  return base.gold + base.food + cfg.economy.carryTimeWeight * base.carry;
 }
 
 /** `balanced` = yürürlükteki model. Diğer ikisi ⛔ emekli, yalnız karşılaştırma için (§13.11.3). */
@@ -465,10 +486,19 @@ export function trainingTimeSeconds(
       / cfg.economy.originalDivisorRate ** lvl
     );
   }
-  // ⚠️ Birim üssü `timeExponent` (0,8 — Java'nın kendi sayısı), yapısal kalemlerinki DEĞİL.
-  return timeCurve(
-    unitTimeValue(unitId, cfg), cfg.economy.unitTimeFactor, lvl, cfg.economy.timeExponent, cfg,
+  // ⚠️ Birim üssü `timeExponent` (0,8 — Java'nın kendi sayısı) ve birim böleni
+  //    `timeDecayRate`; ikisi de yapısal kalemlerinkinden AYRI (bkz. `timeCurve`).
+  const raw = timeCurve(
+    unitTimeValue(unitId, cfg), cfg.economy.unitTimeFactor, lvl,
+    cfg.economy.timeExponent, cfg.economy.timeDecayRate,
   );
+  /**
+   * ⭐ BİRİM BAŞINA SÜRE ÇARPANI (`unitTuning.<id>:timeFactor`, 2026-08-12).
+   * Yapı/teknikteki `timeFactor` ile birebir aynı sözleşme: **fiyata dokunmadan** yalnız
+   * süreyi çarpar. Oyunda ayrı bir "taban süre" alanı yok — süre fiyattan türüyor — o yüzden
+   * tek bir birimi hızlandırmanın/yavaşlatmanın yolu budur.
+   */
+  return raw * (cfg.unitTuning[`${unitId}:timeFactor`] ?? 1);
 }
 
 /**

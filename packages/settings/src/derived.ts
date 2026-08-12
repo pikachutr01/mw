@@ -18,7 +18,8 @@
  * Döngü riski yok; `turbo.json` sıralamayı `^build` ile zaten çözüyor.
  */
 import {
-  BUILDINGS, BUILDING_ORDER, TECHS, TECH_ORDER, orderBy,
+  BUILDINGS, BUILDING_ORDER, DEFENSE_ORDER, LEVEL_BASED, TECHS, TECH_ORDER,
+  UNITS, WARRIOR_ORDER, orderBy,
 } from '@mobilwar/catalog';
 import type { SettingDef } from './types.ts';
 
@@ -38,11 +39,17 @@ const AXIS_LABEL: Record<string, string> = {
 };
 
 function defsFor(
-  kind: 'building' | 'tech',
+  kind: 'building' | 'tech' | 'unit',
   group: string,
   items: readonly { id: string; name: { tr: string }; baseGold: number; baseFood: number }[],
   defaultRate: (id: string) => number,
   defaultTimeFactor: (id: string) => number = () => 1,
+  /**
+   * ⚠️ **Birimlerde `rate` YOK.** Yapı/teknikte `rate` "her seviye kaç kat pahalı" demek;
+   * birimin seviyesi olmadığı için orada anlamsız bir kutu olurdu. Eksen listesi bu yüzden
+   * parametre — eksik bırakılmış değil, bilerek daraltılmış.
+   */
+  axes: readonly ('gold' | 'food' | 'rate' | 'timeFactor')[] = ['gold', 'food', 'rate', 'timeFactor'],
 ): SettingDef[] {
   const out: SettingDef[] = [];
   for (const it of items) {
@@ -50,7 +57,7 @@ function defsFor(
       gold: it.baseGold, food: it.baseFood,
       rate: defaultRate(it.id), timeFactor: defaultTimeFactor(it.id),
     };
-    for (const axis of ['gold', 'food', 'rate', 'timeFactor'] as const) {
+    for (const axis of axes) {
       const base = bases[axis]!;
       out.push({
         key: `${group}.${it.id}:${axis}`,
@@ -94,6 +101,26 @@ const BUILDING_RATE_DEFAULT = (id: string): number =>
 const BUILDING_TIME_FACTOR_DEFAULT = (id: string): number =>
   (id === 'architect_school' ? 0.1 : 1);
 
+/**
+ * ⭐ BİRİM AYARLARI (2026-08-12) — kullanıcı: *"askerlerin taban üretim süreleri de admin
+ * panelden değiştirilebilir olsun."*
+ *
+ * ⚠️ Oyunda **ayrı bir «taban süre» alanı YOK**: süre fiyattan türüyor
+ * (`unitTimeValue = altın + yemek + taşıma`). Bu yüzden iki ayrı düğme var ve farkları önemli:
+ *   • `gold`/`food` → **hem fiyatı hem süreyi** değiştirir (gerçek taban),
+ *   • `timeFactor`  → **yalnız süreyi** çarpar, fiyat sabit kalır.
+ * Yapı/teknikteki `timeFactor` ile birebir aynı sözleşme.
+ *
+ * ⚠️ Sıra Baraka/Savunma ekranlarıyla aynı (`WARRIOR_ORDER` → `DEFENSE_ORDER`), panelde
+ * oyuncunun gördüğü sırayla dolaşılabilsin diye. ⚠️ `LEVEL_BASED` (Sur · Büyü Kalkanı ·
+ * Tapınak) DIŞARIDA: onlar adet değil SEVİYE taşıyor ve fiyatları `defenseStructureCost`ten
+ * geliyor, `unitCost`tan değil — buraya konsalardı panel etkisiz bir kutu gösterirdi.
+ */
+const TUNABLE_UNITS = [
+  ...orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER),
+  ...orderBy(UNITS.filter((u) => u.kind === 'defense' && !LEVEL_BASED.has(u.id)), DEFENSE_ORDER),
+].map((u) => ({ id: u.id, name: u.name, baseGold: u.gold, baseFood: u.food }));
+
 export function derivedCatalogSettings(): SettingDef[] {
   return [
     ...defsFor(
@@ -101,5 +128,9 @@ export function derivedCatalogSettings(): SettingDef[] {
       BUILDING_RATE_DEFAULT, BUILDING_TIME_FACTOR_DEFAULT,
     ),
     ...defsFor('tech', 'techTuning', orderBy(TECHS, TECH_ORDER), () => 1.5),
+    ...defsFor(
+      'unit', 'unitTuning', TUNABLE_UNITS, () => 1, () => 1,
+      ['gold', 'food', 'timeFactor'],
+    ),
   ];
 }

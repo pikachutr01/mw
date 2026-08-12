@@ -515,6 +515,37 @@ export class AdminWorldController {
     };
   }
 
+  /**
+   * ⭐⭐ ÜRETİM SÜRESİ TABLOSU (kullanıcı, 2026-08-12) — birim × Baraka seviyesi.
+   *
+   * *"Admin paneline her askerin her baraka seviyesine göre, seçili oranlarda ne kadar sürede
+   * üretildiğini gösteren bir şey ekleyelim. Dinamik olarak kontrol edilsin."*
+   *
+   * ⭐ **Uç tabloyu HESAPLAMIYOR, yalnız etkin `CatalogConfig`i veriyor.** Panel hesabı
+   * `trainingTimeSeconds` ile kendi yapıyor — `apps/admin` zaten `@mobilwar/catalog`a bağlı.
+   * Sebep "dinamik" şartı: yönetici oranı sürüklerken tablo **anında** güncellenmeli; her
+   * tuş vuruşunda bir HTTP turu hem yavaş olur hem de sunucuya gereksiz yük bindirirdi.
+   * ⚠️ Formülü panelde YENİDEN YAZMIYORUZ — aynı fonksiyon çağrılıyor; kopyalasaydık iki
+   * uygulama bir gün ayrışır ve panel yalan söylemeye başlardı.
+   *
+   * ⚠️ Yıkıcı değil, salt okuma → step-up istemiyor (sınıftaki `AdminGuard` yeterli).
+   */
+  @Get('settings/:worldId/catalog-config')
+  catalogConfigOf(@Param('worldId') worldId: string): Record<string, unknown> {
+    const id = Number(worldId);
+    return {
+      worldId: id,
+      config: this.settings.catalog(id),
+      hash: this.settings.catalogHash(id),
+      /**
+       * ⚠️ **1 SANİYE TABANI SUNUCUDAN BİLDİRİLİYOR, PANELDE SABİT YAZILMIYOR.** Taban
+       * `queue.service.ts` `scaled` ve `city.controller.ts` `dur` içinde; panel onu kendi
+       * bilseydi biri değiştiğinde tablo sessizce yanlış olurdu.
+       */
+      minSeconds: 1,
+    };
+  }
+
   @Put('settings/:worldId')
   @UseGuards(AdminStepUpGuard)
   async saveSettings(

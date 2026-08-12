@@ -22,6 +22,8 @@ type Values = Readonly<Record<string, Record<string, number | boolean> | undefin
  */
 export const CATALOG_GROUPS = [
   'economy', 'cave', 'wall', 'teleport', 'spy', 'buildingTuning', 'techTuning',
+  // ⭐ 2026-08-12 — asker başına taban fiyat + süre çarpanı. Yine tek satır: gövde değişmedi.
+  'unitTuning',
 ] as const;
 
 export function catalogOverrides(

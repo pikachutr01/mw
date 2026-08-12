@@ -211,6 +211,16 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'Teknikte seviye tavanı yoktur, o yüzden büyüme oranı burada en sert düğme.',
   },
   {
+    id: 'unitTuning',
+    label: 'Asker fiyatları ve süreleri (tek tek)',
+    description: '⭐ Her askerin/savunma biriminin kendi taban fiyatı ve süre çarpanı. '
+      + '⚠️ Oyunda ayrı bir «taban süre» YOK — süre fiyattan türüyor (altın + yemek + taşıma). '
+      + 'Yani fiyatı değiştirmek süreyi de değiştirir; FİYATA DOKUNMADAN yalnız süreyi '
+      + 'oynatmak için «Süre çarpanı» sütununu kullan. ⚠️ Büyüme oranı sütunu yok, çünkü '
+      + 'askerlerin seviyesi yok — bir Cüce her zaman aynı fiyat. Sur ve Büyü Kalkanı burada '
+      + 'değil (onlar adet değil seviye taşıyor, «Yapı fiyatları»na bak).',
+  },
+  {
     id: 'abuse',
     label: 'Çoklu hesap tespiti',
     description: '⭐ İki hesabın **aynı kişiye ait olma** şüphesini puanlayan ağırlıklar (§9.1). '
@@ -977,13 +987,27 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   },
   {
     key: 'economy.timeDecayRate',
-    label: 'Süre kısaltma oranı',
+    label: 'Asker süre kısaltma oranı',
     type: 'number', default: 1.2, min: 1, max: 3, tag: 'design',
-    description: 'Hızlandırıcı yapının (Mimar Okulu, Akademi, Baraka) her seviyesi süreyi kaça böler. 1,2 '
-      + '= her seviye %20 hızlandırır.',
+    description: '⚠️ YALNIZ asker ve savunma birimi. Baraka\'nın (savunmada Mimar Okulu\'nun) her '
+      + 'seviyesi üretim süresini kaça böler. 1,2 = her seviye %20 hızlandırır. '
+      + 'Yapı/teknik için «Yapı süre kısaltma oranı» ayrı.',
+    note: '⭐ Cüce/Elf 1 saniyeye şu seviyelerde iner: 1,20 → Baraka 27/30 · 1,25 → 23/24 · '
+      + '1,30 → 19/21 · 1,35 → 17/18 · 1,40 → 15/16. (1 sn sert tabandır; formül daha da '
+      + 'düşer ama kuyruk ve ekran orada durur.) ⚠️ 2026-08-12\'ye kadar bu oran YAPI '
+      + 'süreleriyle ORTAKTI: askerleri hızlandırmak için büyütmek, Mimar Okulu 20\'nin yapı '
+      + 'kazancını 38 kattan 837 kata çıkarıp inşaat ekonomisini yok ediyordu.',
+  },
+  {
+    key: 'economy.structureTimeDecayRate',
+    label: 'Yapı süre kısaltma oranı',
+    type: 'number', default: 1.2, min: 1, max: 3, tag: 'design',
+    description: 'Yapı, teknik, Sur ve Büyü Kalkanı süreleri için: Mimar Okulu\'nun (teknikte '
+      + 'Akademi\'nin) her seviyesi süreyi kaça böler.',
     note: 'Orijinalde 1,4\'tü ve bu yirmi seviyede 836 kat demekti — tek bir yapı oyunun kaderini '
       + 'belirliyor, seviye 1\'deki oyuncu hiçbir şey üretemiyordu. 1,2 ile yirmi seviye 32 kat: '
-      + 'hissedilir ama tek eksenli değil.',
+      + 'hissedilir ama tek eksenli değil. ⭐ 2026-08-12\'de asker oranından ayrıldı; varsayılanı '
+      + 'aynı tutulduğu için ayrım hiçbir süreyi değiştirmedi.',
   },
   {
     key: 'economy.architectSelfExempt',

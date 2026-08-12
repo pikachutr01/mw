@@ -26,6 +26,7 @@ import { BulkScreen } from './screens/Bulk.tsx';
 import { ModerationScreen } from './screens/Moderation.tsx';
 import { PlayersScreen } from './screens/Players.tsx';
 import { SettingsScreen } from './screens/Settings.tsx';
+import { TrainingScreen } from './screens/Training.tsx';
 import { WorldsScreen } from './screens/Worlds.tsx';
 
 /**
@@ -42,6 +43,13 @@ const NAV: [string, string][] = [
   // ⭐ «Görevler» Dünya'dan ayrı: orası dünyanın AYARLARI, bu ise o an akan trafik.
   ['/gorevler', 'Görevler'],
   ['/ayarlar', 'Ayarlar'],
+  /**
+   * ⭐ «Üretim» Ayarlar'dan AYRI sekme (kullanıcı, 2026-08-12). Ayarlar ekranı bir FORM —
+   * ne yazdığını gösterir, ne olacağını değil. Bu ekran ise sonucu gösteriyor: düğmeyi
+   * çevirdiğinde Cüce'nin hangi Baraka seviyesinde 1 saniyeye indiği anında görünüyor.
+   * Formun içine gömülseydi, tablo 84 ayarın arasında kaybolurdu.
+   */
+  ['/uretim', 'Üretim'],
   ['/toplu', 'Toplu işlem'],
   ['/moderasyon', 'Moderasyon'],
   // ⭐ «Duyuru» Moderasyon'dan AYRI: orası bir oyuncuya KARŞI yapılan işi topluyor (yasak,
@@ -121,6 +129,10 @@ export function App() {
               <Route
                 path="/ayarlar"
                 element={<SettingsScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
+              />
+              <Route
+                path="/uretim"
+                element={<TrainingScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}
               />
               <Route path="/toplu" element={<BulkScreen onNeedStepUp={openStepUp} />} />
               <Route path="/moderasyon" element={<ModerationScreen onNeedStepUp={openStepUp} />} />

@@ -1026,6 +1026,59 @@ yalnız "şu an") ve **`players.last_seen_at`** (yalnız giriş ve token yenilem
 her istekte değil; yenileme jeton ömrü kadar seyrek olduğu için kaba bir değer, "3 dakika önce
 oynuyordu"yu göstermez).
 
+### ⭐⭐ «Üretim» sekmesi — birim × Baraka seviyesi süre tablosu (2026-08-12)
+
+Kullanıcı: *"Her askerin her baraka seviyesine göre, seçili oranlarda ne kadar sürede
+üretildiğini gösteren bir şey ekleyelim. **Dinamik** olarak kontrol edilsin."*
+
+Ekran iki panelden oluşuyor: üstte dört süre düğmesi (kaydırıcı + sayı), altında tablo.
+⭐ **Düğmeyi oynatmak tabloyu anında günceller — kaydetmeden.** Yönetici asker oranını
+1,20'den 1,35'e çekince Cüce'nin 1 saniyeye indiği seviyenin 27'den 17'ye kaydığını o an
+görüyor; kaydetmek ayrı ve bilinçli bir adım.
+
+⚠️ **Hesap panelde, formül panelin DEĞİL.** `trainingTimeSeconds` doğrudan
+`@mobilwar/catalog`tan çağrılıyor. Formülü panelde yeniden yazmak en cazip ve en yanlış
+seçenekti: iki uygulama bir gün ayrışır ve panel, sunucunun ürettiğinden başka bir sayı
+göstermeye başlardı. Uç (`GET /admin/settings/:worldId/catalog-config`) tabloyu değil yalnız
+etkin `CatalogConfig`i veriyor — her tuş vuruşunda HTTP turu atmamak için.
+
+⚠️ **1 saniye sert taban** tabloda soluk hücreyle işaretli ve sunucudan `minSeconds` olarak
+geliyor, panelde sabit yazılmıyor (taban `queue.service.ts` `scaled` + `city.controller.ts`
+`dur` içinde; biri değişirse tablo sessizce yalan söylemesin).
+
+⭐ Sekme «Ayarlar»dan **ayrı**: Ayarlar bir FORM, ne yazdığını gösterir; bu ekran sonucu
+gösteriyor. Formun içine gömülseydi tablo 84 ayarın arasında kaybolurdu.
+
+### ⭐ «Asker fiyatları ve süreleri (tek tek)» ayar grubu (2026-08-12)
+
+`unitTuning` — `buildingTuning`/`techTuning`in kardeşi. Her asker ve savunma birimi için
+**taban altın · taban yemek · süre çarpanı**.
+
+| eksen | ne değişir |
+| :-- | :-- |
+| `gold` · `food` | **hem fiyat hem süre** — oyunda ayrı bir «taban süre» YOK, süre fiyattan türüyor (`unitTimeValue` = altın + yemek + taşıma) |
+| `timeFactor` | **yalnız süre**, fiyat sabit |
+
+⚠️ **`rate` ekseni yok** — askerlerin seviyesi yok, "her seviye kaç kat pahalı" anlamsız olurdu.
+⚠️ **Sur ve Büyü Kalkanı bu grupta değil**: onlar `LEVEL_BASED`, fiyatları `defenseStructureCost`ten
+geliyor. Buraya konsalardı panel yazılan ama hiçbir şeye bağlı olmayan bir düğme gösterirdi.
+
+⭐ Ayarlar ekranında **kod yazılmadan matris olarak belirdi**: `Settings.tsx` grubu `entity`
+künyesi dolu olduğu için otomatik matrise çeviriyor.
+
+### ⚠️ İki ayrı süre kısaltma oranı (2026-08-12)
+
+`economy.timeDecayRate` artık **yalnız asker/savunma birimi**; yapı, teknik, Sur ve Kalkan
+`economy.structureTimeDecayRate` kullanıyor. Varsayılanları aynı (1,2) → ayrım hiçbir süreyi
+değiştirmedi.
+
+⚠️ Ayrım şart oldu: ortakken askerleri hızlandırmak için oranı 1,2'den 1,4'e çekmek, Mimar
+Okulu 20'nin **yapı** hızlandırmasını 38 kattan **837 kata** çıkarıp inşaat ekonomisini yok
+ediyordu. `timeExponent`/`structureTimeExponent` 2026-08-10'da aynı sebeple ayrılmıştı.
+
+**Cüce/Elf 1 saniyeye inme seviyesi:** 1,20 → 27/30 · 1,25 → 23/24 · 1,30 → 19/21 ·
+1,35 → 17/18 · 1,40 → 15/16.
+
 ### Tek cihazı düşürme
 
 `AuthService.revokeChain` Faz 3'ten beri hazırdı ama admin tarafında yalnız "hepsini düşür"
