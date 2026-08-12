@@ -59,16 +59,14 @@ body {
 }
 
 /**
- * Sayı sütunları kaymasın — kaynak, süre ve kimlik sütunlarının hepsi tabular.
- * ⭐ `zero` = kesik/noktalı sıfır (oyuncu bildirimi 2026-08-12: 0 ile 8 karışıyor).
- * Gerekçenin tamamı `apps/web/src/index.css`teki kardeş kuralda.
+ * Sayılar gövde fontunda, sütunlar kaymasın diye tabular.
+ * ⚠️ Mono KALDIRILDI: JetBrains Mono'nun noktalı sıfırı küçük boyutta 8 gibi okunuyordu —
+ * şikâyetin asıl sebebi oydu. Tam gerekçe `apps/web/src/index.css`teki kardeş kuralda.
+ * ⚠️ `--font-mono` duruyor: SQL, kimlik ve özet alanları (`font-mono` sınıfı) hâlâ ona bağlı.
  */
 .tnum {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-variant-numeric: tabular-nums;
-  /* ⚠️ `tnum` burada da adlandırılıyor — `font-feature-settings` bazı tarayıcılarda
-     `font-variant-numeric`i sıfırlıyor ve sütun hizası sessizce bozulurdu. */
-  font-feature-settings: 'zero' 1, 'tnum' 1;
 }
 
 .display {

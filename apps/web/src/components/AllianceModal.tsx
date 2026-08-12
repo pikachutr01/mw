@@ -83,9 +83,10 @@ export function AllianceModal({ id, onClose }: { id: number; onClose: () => void
 }
 
 /**
- * ⚠️ `num` bayrağı ŞART: bu satır hem sayı (Üye · Puan · Sıra) hem metin (Lider adı) taşıyor.
- * `tnum`u koşulsuz uygulasaydık oyuncu adı da mono fontta çizilirdi — sayı okunurluğu için
- * yapılan düzeltme, adları bozardı.
+ * ⚠️ `num` bayrağı: bu satır hem sayı (Üye · Puan · Sıra) hem metin (Lider adı) taşıyor.
+ * `tnum` artık yalnız **tabular rakam** demek (font gövdeyle aynı), yani adlara uygulanması
+ * görünürde bir şey bozmazdı — ama anlamı yanlış olurdu: "bu hücre sayı" bilgisini taşıyan
+ * tek işaret bu ve sıralama/hizalama kararları ona bakıyor.
  */
 function Row({ label, value, num = false }: { label: string; value: string; num?: boolean }) {
   return (

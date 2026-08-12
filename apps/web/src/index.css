@@ -34,6 +34,15 @@
 
   --font-display: var(--mw-font-display);
   --font-body: var(--mw-font-body);
+  /**
+   * ⚠️ **JetBrains Mono OYUN TARAFINDA ARTIK YÜKLENMİYOR** (2026-08-12) — `index.html`teki
+   * Google Fonts isteğinden çıkarıldı. Sayılar gövde fontuna geçince web'de tek bir mono
+   * kullanımı kalmadı; oyuncu boşuna bir font dosyası indiriyordu.
+   *
+   * Takma ad DURUYOR: `font-mono` sınıfı bir gün kullanılırsa sistemin kendi monospace'ine
+   * düşer (zincirin ilk adı yüklenmediği için sessizce atlanır) — kırılmaz, yalnız farklı
+   * görünür. Yönetim paneli mono'yu gerçekten kullanıyor ve onu yüklemeye devam ediyor.
+   */
   --font-mono: var(--mw-font-mono);
 
   --radius-sm: var(--mw-radius-sm);
@@ -120,15 +129,6 @@ body {
   margin: 0;
   color: var(--mw-color-text-primary);
   font-family: var(--mw-font-body);
-  /**
-   * ⭐ KESİK SIFIR — **yazı tipini DEĞİŞTİRMEZ**, yalnız `0` glifini etkiler.
-   *
-   * `zero` bir OpenType özelliği: fontun kendi kesik/noktalı sıfır çizimi varsa onu seçer,
-   * yoksa hiçbir şey yapmaz. Yani gövde Spectral olarak kalıyor, sadece sıfırlar 8'den
-   * ayrılıyor (oyuncu bildirimi, 2026-08-12).
-   * ⚠️ `.tnum` almayan, cümle içine gömülü sayılar için tek koruma bu satır.
-   */
-  font-feature-settings: 'zero' 1;
   background-color: var(--mw-color-bg);
   /* Tanecik zemin katmanının en üstünde: "düz renk" hissini kıran şey bu. */
   background-image: var(--tex-grain), var(--tex-page);
@@ -151,25 +151,28 @@ h1, h2, h3, .display {
 }
 
 /**
- * ⭐⭐ SAYI OKUNURLUĞU (oyuncu bildirimi, 2026-08-12: *"0 rakamı 8 ile karıştırılabiliyor"*).
+ * ⭐⭐ SAYILAR GÖVDE FONTUNDA (oyuncu bildirimi + kullanıcı kararı, 2026-08-12).
  *
- * Sütunlar kaymasın diye `tabular-nums`, rakamlar karışmasın diye **kesik/noktalı sıfır**:
- * `font-feature-settings: "zero" 1`. JetBrains Mono'nun sıfırı zaten noktalı, yani asıl
- * güvence fontun KENDİSİNDE — bu satır ikinci savunma ve fallback fontlarında da devreye girer.
+ * ⚠️⚠️ **ŞİKÂYET YANLIŞ OKUNDU, İKİ KEZ.** Oyuncu *"0 rakamı 8 ile karıştırılabiliyor"* dedi;
+ * bunu "sıfır yeterince ayırt edilebilir değil" diye anlayıp önce gövde fontunu değiştirmeyi,
+ * sonra `font-feature-settings: 'zero' 1` ile **kesik/noktalı sıfırı zorlamayı** denedim.
+ * İkisi de yanlıştı. Asıl sebep tam tersiydi: `.tnum` JetBrains Mono kullanıyordu ve o fontun
+ * sıfırı **ortasında noktalı** — küçük boyutta o nokta 8'in belini taklit ediyor. Yani rahatsız
+ * eden şey, ayırt edicilik sanıp güçlendirdiğim özelliğin ta kendisiydi.
  *
- * ⚠️ `zero` desteklemeyen bir fonta düşersek satır **sessizce hiçbir şey yapmaz** (hata değil,
- * yok sayılır). Bu yüzden koruma tek başına buna bırakılmadı: `--mw-font-mono` zincirindeki
- * yedekler de (Cascadia Mono · Segoe UI Mono · Menlo · Consolas) ayırt edilebilir sıfır taşıyan
- * fontlardan seçildi. Zincirin sonundaki genel `monospace` en kötü ihtimal.
+ * ⭐ Çözüm sayıları gövde fontuna almak: Spectral'in sıfırı **düz ve boş**, 8 ile karışmıyor,
+ * ayrıca rakam artık etiketiyle aynı yazı tipinde olduğu için cümle içinde yamalı durmuyor.
+ * Kullanıcı karşılaştırma sayfasında (`docs/araclar/font-denemesi.html`) bu satırı seçti.
+ *
+ * ⚠️ `--mw-font-mono` SİLİNMEDİ: yönetim panelinde SQL, kimlik ve özet gibi gerçek monospace
+ * ihtiyaçları var (`font-mono` sınıfı). Kaldırılan tek şey, onun SAYILARA uygulanması.
+ * ⚠️ `font-family` açıkça yazılıyor (miras değil): `.tnum` bir `.display` başlığının içinde
+ * kullanılırsa Cinzel'i miras alır ve rakamlar yine bozulurdu.
  */
 .tnum {
-  font-family: var(--mw-font-mono);
+  font-family: var(--mw-font-body);
+  /* Sütunlar kaymasın — kaynak ve geri sayım sütunlarının hepsi tabular. */
   font-variant-numeric: tabular-nums;
-  /* ⚠️ `tnum` BURADA DA adlandırılıyor: `font-feature-settings` düşük seviyeli özellik ve bazı
-     tarayıcılarda `font-variant-numeric`in kurduğu özellikleri sıfırlıyor. İkisini birlikte
-     yazmak, "sütunlar kaydı" diye geri dönecek bir regresyonu baştan kapatıyor. */
-  font-feature-settings: 'zero' 1, 'tnum' 1;
-  letter-spacing: -0.01em;
 }
 
 /**

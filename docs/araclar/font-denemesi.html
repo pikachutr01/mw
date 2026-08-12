@@ -106,10 +106,24 @@ code{background:#EDE2CC;border-radius:4px;padding:1px 5px;font-size:12px}
 </p>
 <div id="ctx"></div>
 
-<div class="note warn">
-  ⚠️ <b>Karar verirken:</b> mono fontlar sayı sütunlarını hizalar (tablolarda şart) ama cümle
-  içinde göze çarpar. Oyunda sayıların büyük çoğunluğu zaten <code>.tnum</code> ile mono —
-  bu sayfa o fontun hangisi olacağını seçmek için.
+<h2>4. Sütun hizası — <span style="color:var(--danger)">bu değişikliğin tek riski</span></h2>
+<p class="sub">
+  Rakamlar mono fonttan gövde fontuna alınınca sorulacak tek soru bu: <b>Spectral tabular
+  (eşit genişlikli) rakam taşıyor mu?</b> Taşıyorsa aşağıdaki sayılar sağdan <b>tam
+  hizalanır</b>; taşımıyorsa satırlar birbirine göre <b>oynar</b> ve tablolarda tırtıklı görünür.
+</p>
+<p class="sub">⚠️ Gözle bak: her sütundaki noktalar ve rakamlar alt alta aynı yerde mi?</p>
+<table>
+  <thead><tr><th>Font</th><th>tabular AÇIK (kullanılan)</th><th>tabular kapalı (karşılaştırma)</th></tr></thead>
+  <tbody id="align"></tbody>
+</table>
+
+<div class="note">
+  ⭐ <b>Karar (2026-08-12):</b> sayılar <b>Spectral</b>'e alındı — yani gövdeyle aynı font.
+  Sebep: JetBrains Mono'nun sıfırı <b>ortasında noktalı</b> ve küçük boyutta 8 gibi okunuyordu;
+  oyuncunun rahatsız olduğu şey buydu. Spectral'in sıfırı düz ve boş.
+  <br>⚠️ <code>zero</code> özelliği <b>kullanılmıyor</b>: o özellik tam da o noktayı/çizgiyi
+  <i>zorluyor</i>, yani sorunu çözmek yerine büyütüyordu.
 </div>
 
 </div>
@@ -148,6 +162,16 @@ function draw() {
   $('real').innerHTML = FONTS.map((f) => row(f, [
     '1.280.640', '80.008 Cüce', '2 sa 08 dk 30 sn', '1:80:8',
   ])).join('');
+
+  /* Hiza sınavı: aynı basamak sayısında ama farklı rakamlarda satırlar. `1` ve `7` dar,
+     `0` ve `8` geniş çizilir; tabular yoksa fark burada gözle görülür. */
+  const ORNEK = ['1.111.111', '8.888.888', '1.088.017', '7.100.888', '4.722.648'];
+  $('align').innerHTML = FONTS.map((f) => {
+    const kolon = (cls) => `<div style="font-family:${f.css};font-size:${px()}px;line-height:1.6"
+      class="${cls}">${ORNEK.map((n) => `<div>${n}</div>`).join('')}</div>`;
+    return `<tr><td class="name ${f.cur?'cur':''}">${f.ad}</td>
+            <td>${kolon('num')}</td><td>${kolon('')}</td></tr>`;
+  }).join('');
 
   const z = zeroCls(), s = px();
   $('ctx').innerHTML = FONTS.map((f) => `
