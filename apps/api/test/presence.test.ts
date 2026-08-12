@@ -13,7 +13,9 @@ import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
-import { PresenceService, singleDeviceEnforced } from '../src/auth/presence.service.ts';
+import {
+  PresenceService, releaseRevokedPresence, singleDeviceEnforced,
+} from '../src/auth/presence.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
 import { setLiveSettings } from '../src/settings/live.ts';
 import type { DbHandle } from '../src/db/client.ts';
@@ -59,7 +61,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   setLiveSettings({});
-  delete process.env['SINGLE_SESSION_FORCE'];
+  delete process.env['SINGLE_SESSION_OFF'];
 });
 
 describe('sahiplik (account_presence)', () => {
@@ -261,35 +263,147 @@ describe('sahiplik (account_presence)', () => {
 });
 
 /**
- * ⭐ DEV MUAFİYETİ — kullanıcının açık şartı:
- * *"Altyapı hazır olsun ama çalıştığını onayladıktan sonra sadece prod ortamında aktif olsun.
- * Çünkü hem sen tarayıcıdan kontrol ederken ben de kendi tarayıcım üzerinden açık olabiliyorum."*
+ * ⭐⭐ OTURUM İPTALİ SAHİPLİĞİ DE DÜŞÜRÜR (2026-08-12).
+ *
+ * ⚠️ Kural açılırken bulunan gerçek boşluk: `sessions` iptali satırı SİLMİYOR, yalnız
+ * `revoked_at` yazıyor → `account_presence`in FK CASCADE'i tetiklenmiyor → sahiplik
+ * `claimGraceSeconds` (90 sn) boyunca asılı kalıyordu. En kötüsü, tam da hesabını geri almaya
+ * çalışan oyuncuyu vuruyordu.
  */
-describe('zorlama kapısı', () => {
-  it('geliştirmede ayar AÇIK olsa bile uygulanmaz', () => {
-    setLiveSettings({ session: { singleDevice: true } });
-    expect(process.env['NODE_ENV']).not.toBe('production');
-    expect(singleDeviceEnforced()).toBe(false);
+describe('⭐⭐ iptal edilen oturumun sahipliği', () => {
+  it('⭐⭐⭐ «tüm oturumları düşür» sahipliği de bırakır (parola değişimi senaryosu)', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId, instanceId: 'saldirgan', worldId,
+    });
+    expect(await presence.holder(a.accountId)).not.toBeNull();
+
+    // Oyuncu parolasını değiştirdi → tüm oturumlar düşer.
+    await auth.revokeAllIds(a.accountId);
+
+    // ⭐ Asıl ölçüm: sahiplik ANINDA boş — oyuncu 90 saniye beklemek zorunda değil.
+    expect(await presence.holder(a.accountId)).toBeNull();
   });
 
-  it('üretimde ayar KAPALIYSA uygulanmaz (panelden açılana kadar sessiz)', () => {
+  it('GEÇERLİ oturumun sahipliğine dokunulmaz', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId, instanceId: 'sekme-1', worldId,
+    });
+    await releaseRevokedPresence(h.db, a.accountId);
+    expect((await presence.holder(a.accountId))?.instanceId).toBe('sekme-1');
+  });
+
+  it('çıkış (logout) da sahipliği bırakır', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId, instanceId: 'sekme-1', worldId,
+    });
+    await auth.logout(a.sessionId);
+    expect(await presence.holder(a.accountId)).toBeNull();
+  });
+});
+
+/**
+ * ⭐⭐ MOBİL (FLUTTER) SÖZLEŞMESİ — `instanceId` neden KALICI olmalı.
+ *
+ * Bu iki test bir davranışı değil bir **tasarım kararını** kilitliyor. Flutter uygulaması
+ * `instanceId`i her açılışta yeniden üretirse (bellekte tutarsa), aşağıdaki ikinci testin
+ * anlattığı duvara çarpar: mobil uygulamalar sürekli öldürülüp açıldığı için oyuncu, her
+ * yeniden açılışta ~90 saniye **kendi hesabına** giremez — üstelik ekranda "hesabın başka bir
+ * cihazda açık" yazar. Kalıcı kimlikle bu hiç yaşanmaz.
+ */
+describe('⭐⭐ mobil: instanceId kalıcı olmalı', () => {
+  it('⭐ KALICI kimlik: uygulama yeniden açılınca sahiplik anında geri alınır', async () => {
+    const a = await newAccount();
+    const kurulumKimligi = 'flutter-kurulum-abc';
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: kurulumKimligi, worldId, platform: 'android',
+    });
+
+    // Uygulama öldürüldü ve yeniden açıldı — AYNI kalıcı kimlikle geliyor.
+    const tekrar = await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: kurulumKimligi, worldId, platform: 'android',
+    });
+    expect(tekrar.ok, 'kalıcı kimlik kendini asla kilitlemez').toBe(true);
+  });
+
+  /** ⚠️ Yanlış uygulamanın bedeli — yapılmaması gerekenin kanıtı. */
+  it('⚠️ HER AÇILIŞTA YENİ kimlik üretilirse oyuncu KENDİ hesabından kilitlenir', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'acilis-1', worldId, platform: 'android',
+    });
+
+    const yenidenAcilis = await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'acilis-2', worldId, platform: 'android',
+    });
+
+    expect(yenidenAcilis.ok, 'yeni kimlik, taze sahibe takılır').toBe(false);
+    if (!yenidenAcilis.ok) expect(yenidenAcilis.holder.instanceId).toBe('acilis-1');
+  });
+});
+
+/**
+ * ⭐⭐ ZORLAMA KAPISI — 2026-08-12'de YENİDEN YAZILDI.
+ *
+ * ⚠️⚠️ **Bu blokun eski hâli, kuralın hiç çalışmamasını KİLİTLEYEN testti.** Üç test vardı ve
+ * üçü de doğru çalışıyordu; ölçtükleri davranış yanlıştı:
+ *   • *"geliştirmede ayar AÇIK olsa bile uygulanmaz"* — yani kural dev'de hiç denenemez,
+ *   • *"üretimde ayar KAPALIYSA uygulanmaz"* — varsayılan kapalı olduğu için hiç açılmadı.
+ * İkisi birleşince kural yalnız üretimde doğrulanabiliyordu ve kimse doğrulanmamış bir kuralı
+ * üretimde açmadı. Testler yeşildi, kural ölüydü — **yeşil test, doğru davranışın kanıtı değil.**
+ *
+ * Yeni iddia tek cümle: **kapı ortamı değil YALNIZ anahtarı bilir.**
+ */
+describe('⭐⭐ zorlama kapısı', () => {
+  it('⭐ varsayılan AÇIK — hiç ayar yazılmamışken bile kural işler', () => {
+    setLiveSettings({});
+    expect(singleDeviceEnforced()).toBe(true);
+  });
+
+  it('⭐ panelden kapatılabilir / açılabilir', () => {
+    setLiveSettings({ session: { singleDevice: false } });
+    expect(singleDeviceEnforced()).toBe(false);
+    setLiveSettings({ session: { singleDevice: true } });
+    expect(singleDeviceEnforced()).toBe(true);
+  });
+
+  /**
+   * ⭐⭐⭐ ASIL REGRESYON TESTİ. Ortam artık karara GİRMEZ; `NODE_ENV`i ne yaparsak yapalım
+   * sonuç yalnız anahtardan gelmeli. Eski kod bu testte iki satırda birden kırılır.
+   */
+  it('⭐⭐⭐ NODE_ENV karara girmez — dev ile prod aynı sonucu verir', () => {
     const before = process.env['NODE_ENV'];
-    process.env['NODE_ENV'] = 'production';
     try {
-      setLiveSettings({ session: { singleDevice: false } });
-      expect(singleDeviceEnforced()).toBe(false);
       setLiveSettings({ session: { singleDevice: true } });
-      expect(singleDeviceEnforced()).toBe(true);
+      for (const env of ['development', 'test', 'production']) {
+        process.env['NODE_ENV'] = env;
+        expect(singleDeviceEnforced(), `${env}: açıkken uygulanmalı`).toBe(true);
+      }
+      setLiveSettings({ session: { singleDevice: false } });
+      for (const env of ['development', 'test', 'production']) {
+        process.env['NODE_ENV'] = env;
+        expect(singleDeviceEnforced(), `${env}: kapalıyken uygulanmamalı`).toBe(false);
+      }
     } finally {
       if (before === undefined) delete process.env['NODE_ENV'];
       else process.env['NODE_ENV'] = before;
     }
   });
 
-  it('SINGLE_SESSION_FORCE dev\'de sınamayı açar', () => {
-    setLiveSettings({});
-    expect(singleDeviceEnforced()).toBe(false);
-    process.env['SINGLE_SESSION_FORCE'] = '1';
-    expect(singleDeviceEnforced()).toBe(true);
+  /** Acil vana: panel erişilemezken süreç değişkeniyle kapatılabilmeli. */
+  it('SINGLE_SESSION_OFF=1 anahtarı EZER', () => {
+    setLiveSettings({ session: { singleDevice: true } });
+    process.env['SINGLE_SESSION_OFF'] = '1';
+    try {
+      expect(singleDeviceEnforced()).toBe(false);
+    } finally {
+      delete process.env['SINGLE_SESSION_OFF'];
+    }
   });
 });

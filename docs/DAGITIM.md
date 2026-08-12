@@ -202,6 +202,30 @@ web dağıtımını mağazanın hızına indirger.
 | Play Store | `r0adkll/upload-google-play` — servis hesabı JSON'u secret'ta. `internal` track'e otomatik, üretime **elle terfi** |
 | iOS | ⚠️ **macOS runner** gerekir (dakika ücreti ~10×) + sertifika/provisioning secret'ları. İlk sürümlerde Xcode'dan manuel yükleme daha ucuz |
 
+### ⭐⭐ Tek cihaz kuralı — mobilin uyması gereken sözleşme
+
+Oyun, bir hesabın aynı anda tek yerde açık olmasını zorluyor (`session.singleDevice`,
+varsayılan AÇIK). İstemci her istekte üç başlık gönderiyor; mobil de aynısını yapmalı:
+
+| başlık | değer | nerede saklanır |
+|---|---|---|
+| `X-Device-Id` | kurulum başına UUID | kalıcı depo |
+| **`X-Client-Instance`** | **kurulum başına UUID** (aşağıdaki uyarı!) | **kalıcı depo** |
+| `X-Platform` | `android` / `ios` | — |
+
+⚠️⚠️ **`X-Client-Instance` bellekte üretilmez, kalıcı saklanır.** Başlığın anlamı «uygulamanın
+çalışan tek kopyası»; web'de bu bir **sekme** olduğu için orada `sessionStorage` kullanılıyor.
+Mobilde sekme yok, kopya = **kurulum**. Her açılışta yeni kimlik üretilirse şu yaşanır: mobil
+uygulamalar sürekli öldürülüp açılır, önceki kimliğin sahipliği `session.claimGraceSeconds`
+(90 sn) boyunca taze kalır ve oyuncu **kendi hesabına giremez** — ekranda *"hesabın başka bir
+cihazda açık"* yazar. Kalıcı kimlikle yeniden açılış aynı sahipliği anında geri alır.
+
+⚠️ Mobilde `X-Client-Instance` ile `X-Device-Id`in **aynı değer olması tamamen doğrudur**;
+ikisini ayırmak yalnız web'de (sekmeler yüzünden) anlamlı.
+
+Bu davranış `apps/api/test/presence.test.ts` → *«mobil: instanceId kalıcı olmalı»* bloğunda
+kilitli; yanlış uygulamanın sonucu da orada bir test olarak duruyor.
+
 ### ⚠️ Mobilin getirdiği tek gerçek kısıt: API sürüm uyumu
 
 Web'de eski istemci yoktur — sayfa yenilenir, herkes yeni sürümdedir. Mobilde **öyle değil**:

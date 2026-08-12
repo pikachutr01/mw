@@ -273,6 +273,15 @@ async function refresh(): Promise<boolean> {
         headers: {
           'content-type': 'application/json',
           'x-device-id': deviceId(),
+          /**
+           * ⚠️ Örnek kimliği de gönderiliyor (2026-08-12). Bugün etkisi YOK — `/auth/**`
+           * tek cihaz kuralından muaf (`auth.guard.ts` `PRESENCE_EXEMPT`). Yine de
+           * eklendi: başlığı atlayan bir istek sunucuda `s:<sessionId>`ye düşüyor ve
+           * muafiyet listesi bir gün daraltılırsa yenileme, oyuncuyu **kendi sekmesinden
+           * farklı bir örnek** gibi gösterip sahipliği kendi kendine çalardı. Asimetriyi
+           * bulunduğu yerde kapatmak, o günü beklemekten ucuz.
+           */
+          'x-client-instance': instanceId(),
           'x-platform': 'web',
           ...clientHints,
         },

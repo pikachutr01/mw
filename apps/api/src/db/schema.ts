@@ -488,13 +488,19 @@ export const sessions = pgTable('sessions', {
  *
  * ⚠️ Anahtar `sessions.id` DEĞİL `instance_id`. Aynı tarayıcının iki sekmesi aynı
  * `localStorage`ı ve dolayısıyla aynı oturum satırını paylaşır; `sessions` sekmeleri ayırt
- * edemez. `instance_id` istemcide **`sessionStorage`**ta üretilir → yeni sekme yeni kimlik,
- * sayfa yenileme aynı kimlik. Kimlik doğrulamada ASLA kullanılmaz (taklit edilebilir); yalnız
- * "bu istek sahibinden mi geliyor" karşılaştırması için.
+ * edemez. `instance_id` **web'de `sessionStorage`**ta üretilir → yeni sekme yeni kimlik, sayfa
+ * yenileme aynı kimlik. Mobilde (Flutter) sekme kavramı yok, orada **kalıcı** bir kimlik
+ * kullanılır — tam sözleşme `presence.service.ts` başlığında. Kimlik doğrulamada ASLA
+ * kullanılmaz (taklit edilebilir); yalnız "bu istek sahibinden mi geliyor" karşılaştırması için.
  *
- * ⚠️ Zorlama şarta bağlı: `session.singleDevice` ayarı AÇIK **ve** üretim ortamı. Tablo her
- * ortamda yazılır — kural kapalıyken bile "kim nerede" bilgisi doğru kalsın ve açıldığı gün
- * boş bir tabloya bakılmasın.
+ * ⚠️ Zorlama tek koşula bağlı: `session.singleDevice` (varsayılan AÇIK, panelden kapatılabilir).
+ *
+ * ⚠️⚠️ **Buradaki eski not YANLIŞTI** ve kuralın hiç çalışmadığının fark edilmesini geciktirdi:
+ * *"Tablo her ortamda yazılır — kural kapalıyken bile kim nerede bilgisi doğru kalsın"* diyordu.
+ * Oysa her iki yazma yolu da (`auth.guard.ts`, `realtime.gateway.ts`) bayrağın ARKASINDAYDI →
+ * kural kapalıyken tablo **tamamen boş** kalıyordu. Nitekim 2026-08-12'de canlıda ölçüldü:
+ * sıfır satır. Yani "açıldığı gün boş bir tabloya bakılmasın" tam olarak gerçekleşen şeydi.
+ * Bugün de tablo yalnız kural AÇIKKEN yazılıyor; fark, kuralın artık varsayılan olarak açık olması.
  */
 export const accountPresence = pgTable('account_presence', {
   accountId: bigint('account_id', { mode: 'number' }).primaryKey()

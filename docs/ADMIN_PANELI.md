@@ -1032,6 +1032,28 @@ oynuyordu"yu göstermez).
 vardı: *"şu bilinmeyen telefonu at"* demenin yolu, oyuncunun tüm oturumlarını kapatmaktan
 geçiyordu. Artık zincir başına düşürme var ve her ikisi de onay adımı istiyor.
 
+⭐ **2026-08-12:** oturum iptalinin dördü de (çıkış · zincir · diğerleri · hepsi) artık
+`account_presence` satırını da düşürüyor (`releaseRevokedPresence`). Öncesinde iptal yalnız
+`revoked_at` yazdığı için sahiplik **90 saniye asılı kalıyordu** — yani "diğer tüm cihazlardan
+çık" diyen oyuncu kendi cihazından o süre boyunca giremiyordu; hesabı ele geçirilip parolasını
+değiştiren oyuncu için ise sahiplik saldırganın örneğinde kalıyordu.
+
+### ⭐⭐ Tek cihaz kuralı — `Oturum → Tek cihaz kuralı`
+
+Bir hesabın aynı anda yalnız TEK yerde açık olabilmesi (ikinci sekme dâhil). **Varsayılan
+AÇIK** ve panelden kapatılabilir.
+
+⚠️ Anahtar 2026-08-03'te eklendi ama **2026-08-12'ye kadar hiçbir işe yaramadı**: kod ayrıca
+`NODE_ENV === 'production'` arıyordu ve varsayılan kapalıydı; ikisi birleşince kural
+doğrulanabileceği tek yerin üretim olduğu bir kısır döngüye giriyordu. Ortam kontrolü kaldırıldı,
+varsayılan açıldı. Ayrıntı ve ölçüm `presence.service.ts` başlığında.
+
+⚠️ Panel **muaf** (`PRESENCE_EXEMPT`): yönetici oyunla aynı hesaba ayrı bir oturumla giriyor,
+muaf olmasaydı paneli açmak yöneticiyi kendi oyunundan atardı.
+
+⚠️ Acil vana: kural canlıda beklenmedik biçimde oyuncuları kilitlerse ve panele erişilemiyorsa,
+sürece `SINGLE_SESSION_OFF=1` verip yeniden başlatmak anahtarı ezer.
+
 ### Router ve React Query açıldı
 
 İkisi de Faz 0'dan beri `package.json`'da duruyordu ama **hiç import edilmemişti**.

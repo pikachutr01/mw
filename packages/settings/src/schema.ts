@@ -1634,12 +1634,16 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'session.singleDevice',
     label: 'Tek cihaz kuralı',
-    type: 'boolean', default: false, tag: 'design',
+    type: 'boolean', default: true, tag: 'design',
     description: 'Açıkken bir hesap aynı anda yalnız TEK yerde açık olabilir (ikinci sekme '
       + 'dâhil). İkinci cihaz tam ekran uyarı görür ve isterse oyunu oraya devralır. '
-      + '⚠️ Yalnız üretim ortamında uygulanır; geliştirmede daima kapalıdır.',
-    note: 'Altyapı Tur 2\'de kuruldu ama varsayılan KAPALI: kural canlıda gözle '
-      + 'doğrulanmadan açılmamalı, yanlış çalışırsa oyuncuları kendi hesaplarından kilitler.',
+      + 'Amaç veri bütünlüğü: aynı hesabı iki yerden oynamak, aynı orduyu iki kez '
+      + 'harcamaya çalışan istekler üretir.',
+    note: '⭐ 2026-08-12: varsayılan AÇIK oldu ve ortam kontrolü KALDIRILDI. Eskiden yalnız '
+      + 'üretimde uygulanıyordu ve varsayılanı kapalıydı; ikisi birleşince kural, '
+      + 'doğrulanabileceği tek yerin üretim olduğu bir kısır döngüye giriyordu ve dokuz ay '
+      + 'boyunca HİÇ çalışmadı (canlıda `account_presence` sıfır satırdı). Artık geliştirmede '
+      + 'de bu anahtara bakılıyor. Acil vana: `SINGLE_SESSION_OFF=1`.',
   },
   {
     key: 'session.claimGraceSeconds',

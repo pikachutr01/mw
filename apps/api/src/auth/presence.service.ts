@@ -14,6 +14,28 @@
  * ⚠️ `instanceId` kimlik doğrulamasında ASLA kullanılmaz — istemci üretiyor, taklit edilebilir.
  * Kimlik hâlâ imzalı jetonda; bu yalnız "aynı hesabın hangi kopyası" ayrımı.
  *
+ * ─ ⭐⭐ `instanceId` SÖZLEŞMESİ: «çalışan tek kopya» ────────────────────────────────────────
+ * Tanım platformdan bağımsız: **uygulamanın aynı anda çalışan bir kopyası ne ise o.**
+ * Uygulaması platforma göre değişiyor ve yanlış seçim oyuncuyu KENDİ hesabından kilitler:
+ *
+ * | istemci | kopya nedir | nerede saklanır | yaşam süresi |
+ * | :-- | :-- | :-- | :-- |
+ * | Web | **sekme** | `sessionStorage` | sekme kapanana kadar (F5 korur) |
+ * | Flutter (Android/iOS) | **kurulum** | kalıcı depo (`shared_preferences` vb.) | uygulama silinene kadar |
+ *
+ * ⚠️⚠️ **Mobilde kimlik OTURUM BOYU (bellekte) ÜRETİLMEZ.** Mobil uygulamalar sürekli
+ * öldürülüp yeniden açılır (arka plan, bellek baskısı, kullanıcı kaydırması). Her açılışta
+ * yeni kimlik üretilseydi, önceki kimliğin sahipliği `claimGraceSeconds` (90 sn) boyunca taze
+ * kaldığı için oyuncu **kendi hesabına ~90 saniye giremezdi** — üstelik hatanın sebebi ekranda
+ * "hesabın başka bir cihazda açık" diye görünürdü. Kalıcı kimlikle yeniden açılış aynı
+ * `instanceId`i sahiplenir ve `claim`in 2. kuralı ("sahip zaten biziz") anında geçirir.
+ *
+ * ⚠️ Mobilde sekme kavramı olmadığı için `instanceId`in `deviceId` ile aynı değer olması
+ * tamamen doğrudur; ikisini ayrı tutmak yalnız web'de anlamlı.
+ *
+ * ⚠️ Başlığı hiç göndermeyen istemci `s:<sessionId>`ye düşer (`auth.guard.ts` `instanceOf`) —
+ * yani tek kopya gibi davranır. Kuralı atlatmaz ama sekmeleri ayırt edilemez.
+ *
  * ─ Neden bellek değil veritabanı ──────────────────────────────────────────────────────────
  * `RealtimeGateway`in `online` haritası yalnız kendi sürecinin soketlerini biliyor. Bugün tek
  * süreç var (`ROLE=all`) ama kilidi belleğe koymak, ikinci bir API süreci açıldığı gün kuralın
@@ -49,21 +71,34 @@ export type ClaimResult =
   | { ok: false; holder: PresenceHolder };
 
 /**
- * ⭐ ZORLAMA KAPISI — kullanıcının açık şartı:
- * *"Altyapı hazır olsun ama çalıştığını onayladıktan sonra sadece prod ortamında aktif olsun."*
+ * ⭐⭐ ZORLAMA KAPISI — **tek koşul: panel anahtarı** (kullanıcı, 2026-08-12).
  *
- * İki koşul birden: panel anahtarı AÇIK **ve** üretim ortamı. Böylece
- *   • geliştirmede (ben tarayıcıdan bakarken kullanıcı da kendi tarayıcısında açıkken)
- *     kural asla devreye girmez,
- *   • canlıda da panelden açılana kadar sessiz kalır.
+ * ⚠️⚠️ **BU KAPI, KURALIN DOKUZ AY BOYUNCA HİÇ ÇALIŞMAMASININ SEBEBİYDİ.** Eski hâli:
  *
- * `SINGLE_SESSION_FORCE=1` yalnız dev'de kuralı SINAMAK için; üretimde okunmaz çünkü orada
- * zaten `NODE_ENV === 'production'`.
+ * ```
+ * if (process.env['SINGLE_SESSION_FORCE'] === '1') return true;
+ * if (process.env['NODE_ENV'] !== 'production') return false;   // ← dev'de KOŞULSUZ ölüm
+ * return liveBool('session', 'singleDevice', false);            // ← prod varsayılanı KAPALI
+ * ```
+ *
+ * Üç kilit üst üste binmişti ve üçüncüsü hiç açılmadı. Ama asıl kusur mekanizmada değil,
+ * **kilitlerin birbirini kilitlemesinde**: kural *"canlıda gözle doğrulanmadan açılmamalı"*
+ * diyordu, dev'de ise **hiçbir koşulda** koşamıyordu. Yani doğrulanabileceği tek yer üretimdi
+ * ve kimse doğrulanmamış bir kuralı üretimde açmaya cesaret edemedi. Kısır döngü.
+ * 2026-08-12 ölçümü bunu kanıtladı: canlıda `settings` tablosunda tek bir `session.*` satırı
+ * yok ve `account_presence` **sıfır satır** — kural üretimde de hiç koşmamış.
+ *
+ * ⭐ Çözüm ortam kontrolünü **kaldırmak**: kural artık her yerde aynı anahtara bakıyor, yani
+ * dev'de de koşuyor ve gözle doğrulanabiliyor. Varsayılan **AÇIK** — veri bütünlüğünü koruyan
+ * bir kuralın varsayılanının kapalı olması, tam olarak buraya nasıl gelindiğinin hikâyesi.
+ *
+ * ⚠️ `SINGLE_SESSION_OFF=1` acil durum vanası: kural canlıda beklenmedik biçimde oyuncuları
+ * kilitlerse, panele erişmeden (ya da panel de kilitliyse) süreç yeniden başlatılarak
+ * kapatılabilir. Eski `SINGLE_SESSION_FORCE`ın amacı kalmadı — dev artık anahtara uyuyor.
  */
 export function singleDeviceEnforced(): boolean {
-  if (process.env['SINGLE_SESSION_FORCE'] === '1') return true;
-  if (process.env['NODE_ENV'] !== 'production') return false;
-  return liveBool('session', 'singleDevice', false);
+  if (process.env['SINGLE_SESSION_OFF'] === '1') return false;
+  return liveBool('session', 'singleDevice', true);
 }
 
 /** Sahiplik bu süre boyunca ses vermezse serbest kalır. */
@@ -76,6 +111,32 @@ export function claimGraceSeconds(): number {
  * Sayfa yenilemesini kapsayacak kadar uzun, kapanan tarayıcıyı bekletmeyecek kadar kısa.
  */
 const RELEASE_GRACE_SECONDS = 20;
+
+/**
+ * ⭐⭐ İPTAL EDİLMİŞ OTURUMUN SAHİPLİĞİNİ DÜŞÜR (2026-08-12).
+ *
+ * ⚠️ **Kuralı açarken bulunan gerçek boşluk.** `account_presence.session_id` `sessions(id)`e
+ * `ON DELETE CASCADE` bağlı, ama oturum iptali satırı SİLMİYOR — yalnız `revoked_at` yazıyor.
+ * Yani sahiplik iptalden sonra `claimGraceSeconds` (90 sn) boyunca asılı kalıyordu ve tam da
+ * en kötü anda:
+ *   • "Diğer tüm cihazlardan çık" diyen oyuncu, kendi cihazından 90 saniye giremiyordu;
+ *   • hesabı ele geçirilen oyuncu parolayı değiştirip saldırganı atıyor, ama sahiplik
+ *     saldırganın örneğinde kaldığı için **kendi hesabına giremiyordu.**
+ *
+ * ⚠️ Ölçüt "şu oturumlar iptal edildi" değil **"sahipliği tutan oturum hâlâ geçerli mi"** —
+ * çağıranın hangi kimlikleri düşürdüğünü bilmesine gerek yok, dört iptal yolu (çıkış · zincir ·
+ * diğerleri · hepsi) tek bir ifadeyle kapanıyor.
+ */
+export async function releaseRevokedPresence(db: Db, accountId: number): Promise<void> {
+  await db.execute(sql`
+    DELETE FROM account_presence ap
+     WHERE ap.account_id = ${accountId}
+       AND NOT EXISTS (
+         SELECT 1 FROM sessions s
+          WHERE s.id = ap.session_id AND s.revoked_at IS NULL AND s.expires_at > now()
+       )
+  `);
+}
 
 const rowToHolder = (r: Record<string, unknown>): PresenceHolder => ({
   instanceId: String(r['instance_id']),

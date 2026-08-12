@@ -17,6 +17,7 @@ import type { GameClockService } from '../world/game-clock.service.ts';
 import { PLACEMENT_LOCK } from '../world/placement-lock.ts';
 import { PlacementService } from '../world/placement.service.ts';
 import { PasswordService } from './password.service.ts';
+import { releaseRevokedPresence } from './presence.service.ts';
 import { hashRefreshToken, type TokenPair, type TokenService } from './token.service.ts';
 import { log } from '../common/logger.ts';
 const AUTH_LOG = log('auth');
@@ -364,11 +365,14 @@ export class AuthService {
    * eski bir refresh token'ı çıkıştan sonra oturumu diriltememeli.
    */
   async logout(sessionId: string): Promise<void> {
-    await this.db.execute(sql`
+    const rows = await this.db.execute<Record<string, unknown>>(sql`
       UPDATE sessions SET revoked_at = now()
        WHERE chain_id = (SELECT chain_id FROM sessions WHERE id = ${sessionId}::uuid)
          AND revoked_at IS NULL
+      RETURNING account_id
     `);
+    const accountId = rows[0]?.['account_id'];
+    if (accountId != null) await releaseRevokedPresence(this.db, Number(accountId));
   }
 
   /* ── Oturum ve cihaz listesi (§admin Faz 3) ─────────────────────────────────── */
@@ -427,6 +431,7 @@ export class AuthService {
        WHERE account_id = ${accountId} AND chain_id = ${chainId}::uuid AND revoked_at IS NULL
       RETURNING id
     `);
+    await releaseRevokedPresence(this.db, accountId);
     return rows.map((r) => String(r['id']));
   }
 
@@ -438,6 +443,7 @@ export class AuthService {
          AND chain_id <> (SELECT chain_id FROM sessions WHERE id = ${currentSessionId}::uuid)
       RETURNING id
     `);
+    await releaseRevokedPresence(this.db, accountId);
     return rows.map((r) => String(r['id']));
   }
 
@@ -453,6 +459,9 @@ export class AuthService {
        WHERE account_id = ${accountId} AND revoked_at IS NULL
       RETURNING id
     `);
+    /* ⚠️ Parola değişiminin asıl amacı "davetsiz misafiri ŞİMDİ at". Sahiplik saldırganın
+     * örneğinde kalsaydı, hesabını geri alan oyuncu 90 saniye kendi hesabına giremezdi. */
+    await releaseRevokedPresence(this.db, accountId);
     return rows.map((r) => String(r['id']));
   }
 
