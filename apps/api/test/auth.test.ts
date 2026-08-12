@@ -89,10 +89,11 @@ describe('kayıt', () => {
     expect(snap!.food).toBe(STARTING_RESOURCES.food);
     /**
      * §13.11.1 başlangıç seviyeleri.
-     * ⚠️ **Baraka 2026-08-09'da listeden ÇIKTI** (kullanıcı: *"Baraka da 0 başlar"*), yani
-     * yeni oyuncu barakasız doğuyor ve ilk askerini üretmek için önce onu inşa ediyor.
+     * ⚠️ **Baraka 2026-08-12'de listeye GERİ DÖNDÜ** (kullanıcı). 2026-08-09'da çıkarılmıştı
+     * (*"Baraka da 0 başlar"*) ve yeni oyuncu barakasız doğuyordu; karar geri alındı, yeni
+     * oyuncu yine seviye 1 barakayla başlıyor.
      */
-    expect(snap!.buildings).toEqual({ castle: 1, farm: 1, mine: 1 });
+    expect(snap!.buildings).toEqual({ castle: 1, barracks: 1, farm: 1, mine: 1 });
     // §13.11.1a gerekçesi: saatte 11 kaynak
     expect(snap!.goldPerHour + snap!.foodPerHour).toBe(11);
   });

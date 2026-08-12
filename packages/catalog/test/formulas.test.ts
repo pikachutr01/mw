@@ -365,9 +365,9 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
    * onlarda bu **1→2**'dir. Bu test o yorumu kilitler: bozulursa ekranda görünen ilk fiyat
    * kullanıcının verdiği sayı olmaktan çıkar.
    *
-   * ⚠️ **Baraka 2026-08-09'da SEVİYE 0'a indi** (kullanıcı: "Baraka da 0 başlar"), yani artık
-   * ilk ödenen seviyesi 1. Taban ona kaydı: sv1 = 120/80. Bu, kuralın ihlali değil AYNEN
-   * uygulanması — Baraka artık "seviye 0'dan başlayan yapılar" grubunda.
+   * ⚠️ **Baraka iki kez taraf değiştirdi** ve kural her seferinde AYNEN uygulandı:
+   * 2026-08-09'da seviye 0'a indi (taban sv1'e kaydı), 2026-08-12'de geri 1'e çekildi
+   * (taban sv2'ye döndü). Yani baraka artık yine "seviye 1 başlayan yapılar" grubunda.
    */
   it('taban fiyat = ilk ÖDENEN yükseltme', () => {
     expect(buildingCost('farm', 2)).toEqual({ gold: 9, food: 12 });   // yemek ağırlıklı
@@ -375,9 +375,10 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
     expect(buildingCost('castle', 2)).toEqual({ gold: 900, food: 700 });
     // Seviye 0'dan başlayan yapılarda taban seviye 1'in fiyatıdır (ölçekleme yok).
     expect(buildingCost('academy', 1)).toEqual({ gold: 1400, food: 1000 });
-    expect(buildingCost('barracks', 1)).toEqual({ gold: 700, food: 500 });
-    // ⚠️ Bedelini burada ödüyor: sv2 artık 700/500 değil 1,8 katı.
-    expect(buildingCost('barracks', 2)).toEqual({ gold: 1260, food: 900 });
+    // ⭐ Baraka seviye 1 başlıyor → ilk ödenen sv2 ve taban oraya oturuyor.
+    expect(buildingCost('barracks', 2)).toEqual({ gold: 700, food: 500 });
+    // sv1 oyuncunun hiç ödemediği seviye — yine de eğrinin ölçeği kilitleniyor.
+    expect(buildingCost('barracks', 1)).toEqual({ gold: 389, food: 278 });
     // Eğri: seviye × 1,45^(seviye−1), sv2'ye göre ölçekli.
     expect(buildingCost('farm', 4)).toEqual({ gold: 38, food: 50 });
     expect(buildingCost('mine', 4)).toEqual({ gold: 50, food: 38 });

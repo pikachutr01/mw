@@ -30,12 +30,18 @@ const BUILDING_GOLDEN: Record<string, readonly Row[]> = {
   castle: [[1, 500, 389, 358], [2, 900, 700, 625], [5, 5249, 4082, 3338],
     [10, 99180, 77140, 54456], [20, 35411767, 27542486, 14492183]],
   /**
-   * ⚠️ **Baraka satırı 2026-08-09'da kaydı** — tesisat değişmedi, BAŞLANGIÇ SEVİYESİ değişti.
-   * Kullanıcı barakanın 0'dan başlamasını istedi (`STARTING_BUILDINGS`), böylece taban fiyat
-   * sv2'den sv1'e oturdu ve tüm eğri 1,8 katına çıktı.
+   * ⚠️⚠️ **Baraka satırı İKİ KEZ kaydı ve her ikisinde de tesisat değişmedi** — kayan tek şey
+   * `STARTING_BUILDINGS`teki başlangıç seviyesi:
+   *   • 2026-08-09: baraka 0'dan başlasın → taban sv2'den **sv1'e** indi, eğri 1,8 katına çıktı.
+   *   • 2026-08-12: karar geri alındı, baraka yine 1 → taban **sv2'ye** döndü, eğri 1/1,8'e indi.
+   * ⭐ İkisinde de tek bir sayı elle düzeltilmedi: `buildingCost` `firstPaid`i
+   * `STARTING_BUILDINGS`ten türetiyor. Bu satır o türetmenin bekçisi — bozulursa oyuncunun
+   * ekranda gördüğü ilk fiyat, tasarımda kararlaştırılan sayı olmaktan çıkar.
+   * ⚠️ sv1 artık oyuncunun HİÇ ödemediği seviye (Kale/Çiftlik/Maden gibi); yine de kilitli ki
+   * ölçekleme sessizce kaymasın.
    */
-  barracks: [[1, 700, 500, 476], [2, 1260, 900, 831], [5, 7348, 5249, 4439],
-    [10, 138852, 99180, 72421], [20, 49576474, 35411767, 19273070]],
+  barracks: [[1, 389, 278, 272], [2, 700, 500, 476], [5, 4082, 2916, 2540],
+    [10, 77140, 55100, 41434], [20, 27542486, 19673204, 11026610]],
   /**
    * ⚠️ Çiftlik/Maden sv1 satırı oyunda GÖRÜNMEZ (ikisi de seviye 1 başlıyor); taban `sv1→2`nin
    * fiyatı, yani gerçek ilk satır sv2. sv1 yine de kilitleniyor ki `firstPaid` ölçeklemesi

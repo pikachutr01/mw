@@ -109,19 +109,25 @@ export const BUILDINGS_BY_ID: Readonly<Record<string, BuildingDef>> = Object.fro
 /**
  * Yeni şehrin başlangıç yapı seviyeleri (§13.11.1) — **başkent ve koloni için AYNI**.
  *
- * ⚠️ **Baraka 2026-08-09'da listeden ÇIKARILDI** (kullanıcı): *"çiftlik ve maden seviyesi 1,
- * kale seviyesi 1, diğer tüm yapıların seviyesi 0 … Baraka da 0 başlar."* Öncesinde `barracks: 1`
- * yazıyordu, yani hem yeni kayıtta hem yeni kurulan şehirde baraka bedava geliyordu.
+ * ⚠️⚠️ **BARAKA GERİ GELDİ: 1** (kullanıcı, 2026-08-12). 2026-08-09'da listeden çıkarılmıştı
+ * (*"diğer tüm yapıların seviyesi 0 … Baraka da 0 başlar"*); karar geri alındı ve baraka yine
+ * seviye 1 doğuyor. Canlıdaki 29 şehrin barakası aynı turda 0'dan 1'e çekildi.
  *
- * ⚠️ İki yan etkisi var ve ikisi de kuralın doğal sonucu, ayrıca ele alınmadı:
- *   • **Fiyat**: `baseGold/baseFood` "oyuncunun ödediği İLK yükseltmenin fiyatı" demek
- *     (`buildingCost`). Baraka artık 0'dan başladığı için taban **seviye 1'e** oturdu: sv1 =
- *     120/80 (yeni, eskiden bedavaydı), sv2 = 216/144 (eskiden 120/80). Sayılara dokunulmadı.
- *   • **Sefer limiti**: `assertMarchLimit` `Math.max(1, barakaSeviyesi)` kullanıyor, yani
- *     barakasız şehir bile 1 sefer çıkarabiliyor — yeni oyuncu kilitlenmiyor.
+ * ⚠️ **Fiyat kendiliğinden kayar, ayrıca elle düzeltilmez.** `baseGold`/`baseFood` "oyuncunun
+ * ödediği İLK yükseltmenin fiyatı" demek (`buildingCost` → `firstPaid`). Baraka listeye
+ * girdiği için ilk ödenen seviye 2 oldu ve taban oraya oturdu:
+ *   • sv1 → oyuncunun hiç ödemediği seviye (Kale/Çiftlik/Maden gibi),
+ *   • sv2 → **700/500** (baraka 0'dan başlarken 1.260/900 idi).
+ * Yani baraka yalnız bedavaya gelmiyor, ikinci seviyesi de ucuzluyor. Bu bilinçli: taban
+ * sayısının anlamı "ilk ödenen seviye" ve o seviye değişti.
+ *
+ * ⚠️ **Sefer limiti**: `assertMarchLimit` hâlâ `Math.max(1, barakaSeviyesi)` kullanıyor.
+ * Artık gereksiz görünüyor ama DURUYOR: barakası yıkılan/eksik bir şehrin oyuncuyu
+ * kilitlememesi bu tek satıra bağlı ve varsayımı koda gömmek yerine korumak ucuz.
  */
 export const STARTING_BUILDINGS: Readonly<Record<string, number>> = {
   castle: 1,
+  barracks: 1,
   farm: 1,
   mine: 1,
 };

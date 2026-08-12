@@ -18,8 +18,8 @@ import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { QueueService } from '../src/queues/queue.service.ts';
 import {
-  lossValue, pointsFromBase, recomputeScoreBaseFromHoldings, rederiveScores, resourcePerPoint,
-  scoreValue,
+  cumulativeBuildingValue, lossValue, pointsFromBase, recomputeScoreBaseFromHoldings,
+  rederiveScores, resourcePerPoint, scoreValue,
 } from '../src/scoring/score.service.ts';
 import { setLiveSettings } from '../src/settings/live.ts';
 import {
@@ -65,13 +65,16 @@ beforeEach(async () => {
 });
 
 /**
- * Cüce üretebilmek için Baraka 1 (ön-şart). Şehirler 2026-08-09'dan beri Baraka **0** ile
- * doğuyor (kullanıcı kararı, `STARTING_BUILDINGS`).
+ * Cüce üretebilmek için Baraka 1 (ön-şart).
  *
- * ⚠️ **Genel `beforeEach`e KONULAMAZ**, denendi ve kırdı: Baraka artık 0'dan başladığı için
- * seviye 1 *ödenmiş* bir seviye sayılıyor ve `recomputeScoreBaseFromHoldings` ona 200 puan
- * yazıyor. Bu da «hiç oynamamış oyuncu 0 kalır» testini düşürüyordu. Yani yardımcı, YALNIZ
- * asker üreten testlerde çağrılmalı.
+ * ⚠️ **2026-08-12'de yardımcı ETKİSİZ hâle geldi ama SİLİNMEDİ.** Baraka o gün
+ * `STARTING_BUILDINGS`e geri döndü (seviye 1), yani şehirler zaten barakayla doğuyor ve bu
+ * `ON CONFLICT` yalnız mevcut değeri tazeliyor. Duruyor çünkü çağıranların niyeti
+ * *"bu testin barakaya ihtiyacı var"* ve o niyet başlangıç seviyesinden bağımsız.
+ *
+ * ⚠️ Eski uyarı ("genel `beforeEach`e konulamaz, hiç oynamamış oyuncuya 200 puan yazıyor")
+ * artık geçersiz: baraka seviye 1 **hediye** olduğu için `cumulativeBuildingValue` onu
+ * saymıyor (`STARTING_BUILDINGS[type] + 1`'den başlıyor). Aşağıdaki test tam bunu kilitliyor.
  */
 async function giveBarracks(): Promise<void> {
   await h.db.execute(sql`
@@ -176,6 +179,31 @@ describe('sahip olunanlardan geriye dönük doldurma', () => {
     const base = await recomputeScoreBaseFromHoldings(h.db, worldId, playerId);
     expect(base).toBe((dwarf.gold + dwarf.food) * 10);
     expect((await scoreOf()).score).toBe(Math.floor(base / 1000));
+  });
+
+  /**
+   * ⭐⭐⭐ **BARAKA SEVİYE 1 PUAN VERMEZ** (kullanıcı, 2026-08-12).
+   *
+   * Baraka `STARTING_BUILDINGS`e geri döndüğü gün kullanıcı şunu fark etti: seviye 1'in eski
+   * fiyatı 700 altın + 500 yemek = **1.200 kaynak** ve puan bölen 1.000 → barakasını yükselten
+   * oyuncular **1 puan** kazanmıştı. Seviye artık hediye olduğuna göre o puanın dayanağı yok.
+   *
+   * ⭐ Kod bunu ayrıca ele almıyor, `cumulativeBuildingValue` döngüsü
+   * `STARTING_BUILDINGS[type] + 1`'den başladığı için **kendiliğinden** doğru — ve bu test tam
+   * o bağın bekçisi. Baraka bir gün yine listeden çıkarılırsa burada kırmızı yanar.
+   *
+   * ⚠️ Canlıdaki saklı puanlar ayrı bir iş: `players.score_base` yalnız harcama anında
+   * güncelleniyor, yani beş oyuncunun tabanı elle düşülmeden eski puanıyla kalır.
+   */
+  it('⭐⭐⭐ Baraka sv1 puana YAZILMAZ (hediye), sv2 kendi bedelini yazar', () => {
+    expect(cumulativeBuildingValue('barracks', 1)).toBe(0);
+    // Kale/Çiftlik/Maden ile aynı davranış — baraka artık onların grubunda.
+    for (const t of ['castle', 'farm', 'mine']) expect(cumulativeBuildingValue(t, 1), t).toBe(0);
+    // İlk ÖDENEN seviye 2 ve bedeli tam olarak onun fiyatı.
+    const sv2 = buildingCost('barracks', 2);
+    expect(cumulativeBuildingValue('barracks', 2)).toBe(sv2.gold + sv2.food);
+    // ⚠️ Akademi 0'dan başlıyor → onda seviye 1 ÖDENMİŞ sayılır (karşıt örnek).
+    expect(cumulativeBuildingValue('academy', 1)).toBeGreaterThan(0);
   });
 });
 

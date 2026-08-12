@@ -113,20 +113,30 @@ export function TrainingScreen({ worldId, onNeedStepUp }: {
     return { ...base, economy };
   }, [q.data, draft]);
 
-  const rows = useMemo(() => {
-    const warriors = orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER);
-    const defenses = orderBy(
+  const warriors = useMemo(
+    () => orderBy(UNITS.filter((u) => u.kind === 'warrior'), WARRIOR_ORDER), [],
+  );
+  const defenses = useMemo(
+    () => orderBy(
       UNITS.filter((u) => u.kind === 'defense' && !LEVEL_BASED.has(u.id)), DEFENSE_ORDER,
-    );
-    return [...warriors, ...defenses];
-  }, []);
+    ), [],
+  );
 
-  const levels = useMemo(() => {
+  /**
+   * ⭐⭐ **BARAKA 1'DEN BAŞLAR, MİMAR OKULU 0'DAN** (kullanıcı, 2026-08-12).
+   *
+   * ⚠️ Bu yüzden tablo İKİYE ayrıldı. Önceki tek tablo, tek bir seviye ekseninde iki farklı
+   * hızlandırıcıyı gösteriyordu ve bu, baraka 0'dan başlarken zararsız bir sadeleştirmeydi.
+   * Baraka artık `STARTING_BUILDINGS`te seviye 1 doğduğu için «Baraka 0» sütunu **var olmayan
+   * bir durumu** gösterir hâle geldi; savunma birimleri içinse Mimar Okulu 0 hâlâ en yaygın
+   * hâl (o yapı 0'dan başlıyor). Tek eksende birleştirmek ikisinden birine yalan söylemekti.
+   */
+  const levelsFrom = (min: number): number[] => {
     const out: number[] = [];
-    for (let l = 0; l <= maxLevel; l += step) out.push(l);
+    for (let l = min; l <= maxLevel; l += step) out.push(l);
     if (out[out.length - 1] !== maxLevel) out.push(maxLevel);
     return out;
-  }, [maxLevel, step]);
+  };
 
   if (q.isPending) return <p className="text-xs text-muted">Yükleniyor…</p>;
   if (q.error) return <ErrorBox error={q.error} />;
@@ -135,12 +145,76 @@ export function TrainingScreen({ worldId, onNeedStepUp }: {
   const floor = q.data.minSeconds;
   const dirty = Object.keys(draft).length > 0;
 
-  /** Bir birimin tabana ilk çakıldığı Baraka seviyesi (yoksa null). */
-  const floorLevel = (unitId: string): number | null => {
-    for (let l = 0; l <= maxLevel; l++) {
+  /** Bir birimin tabana ilk çakıldığı seviye (yoksa null). ⚠️ Arama `min`den başlar. */
+  const floorLevel = (unitId: string, min: number): number | null => {
+    for (let l = min; l <= maxLevel; l++) {
       if (trainingTimeSeconds(unitId, l, 'balanced', effective) <= floor) return l;
     }
     return null;
+  };
+
+  const table = (
+    baslik: string, aciklama: React.ReactNode,
+    units: typeof warriors, min: number, sutunBasi: string,
+  ): React.ReactElement => {
+    const levels = levelsFrom(min);
+    return (
+      <Panel
+        title={baslik}
+        right={
+          <span className="flex items-center gap-2">
+            <Select className="w-28" value={maxLevel}
+              onChange={(e) => setMaxLevel(Number(e.target.value))}>
+              {[20, 30, 40].map((n) => <option key={n} value={n}>{`${min}-${n}`}</option>)}
+            </Select>
+            <Select className="w-28" value={step}
+              onChange={(e) => setStep(Number(e.target.value))}>
+              {STEPS.map((n) => <option key={n} value={n}>{`${n} adım`}</option>)}
+            </Select>
+          </span>
+        }
+      >
+        <p className="border-b border-border px-3 py-2 text-xs text-muted">{aciklama}</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-muted">
+              <tr className="text-left">
+                <th className="sticky left-0 bg-surface px-3 py-1.5 font-normal">Birim</th>
+                {levels.map((l) => (
+                  <th key={l} className="tnum px-2 py-1.5 text-right font-normal">{l}</th>
+                ))}
+                <th className="px-2 py-1.5 text-right font-normal" title={sutunBasi}>1 sn ⤓</th>
+              </tr>
+            </thead>
+            <tbody className="text-ink">
+              {units.map((u, i) => {
+                const fl = floorLevel(u.id, min);
+                return (
+                  <tr key={u.id} className={i % 2 === 1 ? 'bg-row-alt' : ''}>
+                    <td className={`sticky left-0 px-3 py-1 ${i % 2 === 1 ? 'bg-row-alt' : 'bg-surface'}`}>
+                      {u.name.tr}
+                    </td>
+                    {levels.map((l) => {
+                      const raw = trainingTimeSeconds(u.id, l, 'balanced', effective);
+                      const shown = Math.max(floor, raw);
+                      const capped = raw <= floor;
+                      return (
+                        <td key={l}
+                          className={`tnum px-2 py-1 text-right ${capped ? 'text-muted/60' : ''}`}
+                          title={capped ? `formül: ${raw.toFixed(3)} sn — taban ${floor} sn` : undefined}>
+                          {fmt(shown)}
+                        </td>
+                      );
+                    })}
+                    <td className="tnum px-2 py-1 text-right text-accent">{fl ?? '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    );
   };
 
   return (
@@ -192,70 +266,28 @@ export function TrainingScreen({ worldId, onNeedStepUp }: {
         </div>
       </Panel>
 
-      <Panel
-        title="Üretim süreleri — birim × Baraka seviyesi"
-        right={
-          <span className="flex items-center gap-2">
-            <Select className="w-28" value={maxLevel}
-              onChange={(e) => setMaxLevel(Number(e.target.value))}>
-              {[20, 30, 40].map((n) => <option key={n} value={n}>{`0-${n}`}</option>)}
-            </Select>
-            <Select className="w-28" value={step}
-              onChange={(e) => setStep(Number(e.target.value))}>
-              {STEPS.map((n) => <option key={n} value={n}>{`${n} adım`}</option>)}
-            </Select>
-          </span>
-        }
-      >
-        <p className="border-b border-border px-3 py-2 text-xs text-muted">
-          Savunma birimlerini <strong className="text-ink">Mimar Okulu</strong> hızlandırır,
-          savaşçıları <strong className="text-ink">Baraka</strong> — ikisi de aynı oranı kullanır,
-          o yüzden tek tablo. ⚠️ <strong className="text-warning">{floor} saniye sert tabandır</strong>:
-          formül daha da düşer ama oyun orada durur. Tabana çakılan hücreler soluk gösteriliyor;
-          bir birimin ilk çakıldığı seviye sağdaki sütunda.
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="text-muted">
-              <tr className="text-left">
-                <th className="sticky left-0 bg-surface px-3 py-1.5 font-normal">Birim</th>
-                {levels.map((l) => (
-                  <th key={l} className="tnum px-2 py-1.5 text-right font-normal">{l}</th>
-                ))}
-                <th className="px-2 py-1.5 text-right font-normal">1 sn ⤓</th>
-              </tr>
-            </thead>
-            <tbody className="text-ink">
-              {rows.map((u, i) => {
-                const fl = floorLevel(u.id);
-                return (
-                  <tr key={u.id} className={i % 2 === 1 ? 'bg-row-alt' : ''}>
-                    <td className={`sticky left-0 px-3 py-1 ${i % 2 === 1 ? 'bg-row-alt' : 'bg-surface'}`}>
-                      {u.name.tr}
-                      {u.kind === 'defense' ? <span className="ml-1 text-muted">(sav.)</span> : null}
-                    </td>
-                    {levels.map((l) => {
-                      const raw = trainingTimeSeconds(u.id, l, 'balanced', effective);
-                      const shown = Math.max(floor, raw);
-                      const capped = raw <= floor;
-                      return (
-                        <td key={l}
-                          className={`tnum px-2 py-1 text-right ${capped ? 'text-muted/60' : ''}`}
-                          title={capped ? `formül: ${raw.toFixed(3)} sn — taban ${floor} sn` : undefined}>
-                          {fmt(shown)}
-                        </td>
-                      );
-                    })}
-                    <td className="tnum px-2 py-1 text-right text-accent">
-                      {fl == null ? '—' : fl}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
+      {table(
+        'Savaşçılar — Baraka seviyesine göre',
+        <>
+          ⚠️ <strong className="text-ink">Baraka seviye 1&apos;den başlar</strong>{' '}
+          (<code>STARTING_BUILDINGS</code>, 2026-08-12) — «Baraka 0» diye bir durum yok, tablo
+          da 1&apos;den başlıyor. ⚠️{' '}
+          <strong className="text-warning">{floor} saniye sert tabandır</strong>: formül daha da
+          düşer ama kuyruk ve oyun ekranı orada durur. Tabana çakılan hücreler soluk; bir birimin
+          ilk çakıldığı seviye en sağdaki sütunda.
+        </>,
+        warriors, 1, 'Bu birimin 1 saniyeye indiği ilk Baraka seviyesi',
+      )}
+
+      {table(
+        'Savunma birimleri — Mimar Okulu seviyesine göre',
+        <>
+          ⚠️ Bunları Baraka değil <strong className="text-ink">Mimar Okulu</strong> hızlandırır
+          ve o yapı <strong className="text-ink">0&apos;dan başlar</strong> — bu yüzden ayrı tablo
+          ve 0 sütunu burada gerçek bir durum. Oran savaşçılarla aynı düğmeden geliyor.
+        </>,
+        defenses, 0, 'Bu birimin 1 saniyeye indiği ilk Mimar Okulu seviyesi',
+      )}
     </div>
   );
 }
