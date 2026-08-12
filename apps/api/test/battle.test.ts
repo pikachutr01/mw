@@ -16,7 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { UNITS_BY_ID, wallRepairSeconds } from '@mobilwar/catalog';
+import { DEFENSE_ORDER, UNITS_BY_ID, wallRepairSeconds, WARRIOR_ORDER } from '@mobilwar/catalog';
 import { distance, ENGINE_VERSION, travelSeconds } from '@mobilwar/engine';
 import { buildBattleReport, type BattleRow } from '../src/battles/battle-report.ts';
 import { CityService } from '../src/cities/city.service.ts';
@@ -1052,6 +1052,96 @@ describe('⭐ ortaya çıkan ganimet: ölü olmasa da yağma görünür', () => 
     expect(atk.lootBreakdown!.revealed.gold)
       .toBeGreaterThan(atk.lootBreakdown!.carried!.gold);
     expect(atk.text).toMatch(/Taşıma kapasiten yetmedi/);
+  });
+});
+
+/**
+ * ⭐⭐ RAPORDAKİ BİRİM SIRASI = BARAKA/SAVUNMA EKRANI SIRASI (kullanıcı, 2026-08-12).
+ *
+ * Eskiden satırlar «en çok kaybedilen üstte» diziliyordu. Bunun bedeli, kaybın kendisinden
+ * ağırdı: **sıra her savaşta değişiyordu**. Aynı orduyu iki kez gönderen oyuncu iki farklı
+ * dizilim görüyor, iki raporu yan yana koyup okuyamıyordu.
+ *
+ * ⚠️ DB gerekmiyor — `buildBattleReport` saf bir dönüşüm. Gerçek savaş koşturmak sıraya
+ * ölçümsüz bir rastgelelik katardı; burada kayıplar bilerek elle seçildi ki **iki sıralama
+ * kesinlikle ayrışsın** (aksi hâlde test, eski kodla da yeşil kalırdı).
+ */
+describe('⭐⭐ savaş raporu birim sırası', () => {
+  /** Kayıp miktarları katalog sırasıyla ÇAKIŞMAYACAK biçimde seçildi. */
+  const row = (losses: {
+    cavalry: number; dwarf: number; elf: number; archer_tower: number; guard: number;
+  }): BattleRow => ({
+    id: 1, at: new Date(), night: false, winner: 'attacker',
+    input: {
+      attacker: { counts: { cavalry: 900, dwarf: 100, shaman: 50 } },
+      defender: { counts: { elf: 60, dwarf: 30, archer_tower: 30, guard: 25 } },
+    },
+    result: {
+      winner: 'attacker', turns: 3,
+      attacker: {
+        alive: 0, lost: 0, floorRestored: {}, heroes: [], wallIntegrity: null,
+        counts: { cavalry: 900 - losses.cavalry, dwarf: 100 - losses.dwarf, shaman: 50 },
+      },
+      defender: {
+        alive: 0, lost: 0, floorRestored: {}, heroes: [], wallIntegrity: null,
+        counts: {
+          elf: 60 - losses.elf, dwarf: 30 - losses.dwarf,
+          archer_tower: 30 - losses.archer_tower, guard: 25 - losses.guard,
+        },
+      },
+      debris: { gold: 0, food: 0 },
+    },
+  });
+
+  /** Süvari cüceden çok, Muhafız Okçu Kulesi'nden çok kaybediyor → eski sıra tersine dönerdi. */
+  const A = { cavalry: 600, dwarf: 10, elf: 40, archer_tower: 2, guard: 20 };
+  const ids = (r: ReturnType<typeof buildBattleReport>, key: string): string[] =>
+    r.sections.find((s) => s.key === key)?.lines.map((l) => l.id) ?? [];
+
+  it('⭐ savaşçılar Baraka sırasında (cüce → elf → süvari → … → şaman)', () => {
+    const atk = buildBattleReport(row(A), 'attacker');
+    // Kayıp sırası cüce(10) < süvari(600) olmasına rağmen CÜCE üstte.
+    expect(ids(atk, 'myArmy')).toEqual(['dwarf', 'cavalry', 'shaman']);
+    expect(ids(atk, 'enemyArmy')).toEqual(['dwarf', 'elf']);
+  });
+
+  it('⭐ savunma yapıları Savunma ekranı sırasında (Okçu Kulesi → Muhafız)', () => {
+    const atk = buildBattleReport(row(A), 'attacker');
+    // Muhafız 20, Okçu Kulesi 2 kaybetti — eski sıralamada Muhafız üstte olurdu.
+    expect(ids(atk, 'defenderStructs')).toEqual(['archer_tower', 'guard']);
+  });
+
+  /**
+   * ⭐⭐⭐ DEĞİŞİKLİĞİN ASIL SEBEBİ. Sayıya göre dizilen bir liste, aynı orduyla yapılan iki
+   * savaşta iki farklı sıra üretiyordu. Bu test tam olarak o davranışı yasaklıyor: kayıplar
+   * baştan aşağı değişse bile satır sırası **aynı** kalmalı.
+   */
+  it('⭐⭐⭐ sıra KAYIPTAN bağımsız — aynı ordu iki savaşta aynı dizilimi verir', () => {
+    const B = { cavalry: 5, dwarf: 95, elf: 1, archer_tower: 29, guard: 1 };
+    for (const key of ['myArmy', 'enemyArmy', 'defenderStructs']) {
+      expect(ids(buildBattleReport(row(B), 'attacker'), key), key)
+        .toEqual(ids(buildBattleReport(row(A), 'attacker'), key));
+    }
+  });
+
+  /**
+   * İlke kilidi: yukarıdaki altın diziler elle yazıldı, bu test onların **kaynağını** bağlıyor.
+   * Biri `WARRIOR_ORDER`ı değiştirirse rapor da onunla birlikte değişmeli — ayrışmamalı.
+   */
+  it('sıra, Baraka/Savunma ekranlarıyla AYNI sabitten geliyor', () => {
+    const atk = buildBattleReport(row(A), 'attacker');
+    for (const [key, order] of [
+      ['myArmy', WARRIOR_ORDER], ['enemyArmy', WARRIOR_ORDER], ['defenderStructs', DEFENSE_ORDER],
+    ] as const) {
+      const got = ids(atk, key);
+      expect(got, key).toEqual(order.filter((id) => got.includes(id)));
+    }
+  });
+
+  /** Metin dökümü aynı diziyi bastığı için bildirim/e-posta da kendiliğinden düzeliyor. */
+  it('metin dökümünde de Cüce, Süvari’den önce yazıyor', () => {
+    const text = buildBattleReport(row(A), 'attacker').text;
+    expect(text.indexOf('Cüce')).toBeLessThan(text.indexOf('Süvari'));
   });
 });
 

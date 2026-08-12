@@ -19,7 +19,7 @@
  * koordinatlar, mağara dökümü) ÖNCEKİ savaş satırlarında yeni alanlar YOKTUR — hepsi
  * opsiyoneldir ve yoksa rapor eski davranışına düşer (ör. "N kahraman düştü" notu).
  */
-import { LEVEL_BASED, UNITS_BY_ID } from '@mobilwar/catalog';
+import { DEFENSE_ORDER, LEVEL_BASED, orderBy, UNITS_BY_ID, WARRIOR_ORDER } from '@mobilwar/catalog';
 
 export type ReportSide = 'attacker' | 'defender';
 
@@ -223,8 +223,20 @@ function linesFor(
     if (restored > 0) line.restoredByFloor = restored;
     lines.push(line);
   }
-  // En çok kaybedilen üstte — oyuncu önce "neyi kaybettim" sorusunun cevabını görür.
-  return lines.sort((x, y) => y.lost - x.lost || x.id.localeCompare(y.id));
+  /**
+   * ⭐ **KATALOG SIRASI** (kullanıcı kararı, 2026-08-12) — Baraka/Savunma ekranlarındaki sıra.
+   *
+   * ⚠️ Eskiden «en çok kaybedilen üstte» (`y.lost - x.lost`) idi. Gerekçesi *"oyuncu önce neyi
+   * kaybettim sorusunun cevabını görür"* olsa da bedeli ağırdı: **satır sırası her savaşta
+   * değişiyordu.** Aynı orduyu iki kez gönderen oyuncu iki farklı dizilim görüyor, iki raporu
+   * yan yana koyup karşılaştıramıyordu. Sabit sıra, kayıp sütunu zaten `−N` olarak kırmızı
+   * basıldığı için hiçbir bilgi kaybettirmiyor; taranabilirlik ise tamamen kazanılıyor.
+   *
+   * ⚠️ Rapor, birim sıralayan **tek ayrıksı yerdi**: Baraka (`city.controller.ts`), Ordular,
+   * mağara kipi (`cave-modal.tsx`), simülatör ve mesajlardaki birim kartları (`Messages.tsx`
+   * `UnitChips`) hep bu iki sabiti kullanıyordu. Artık ayrık kalmadı.
+   */
+  return orderBy(lines, kind === 'warrior' ? WARRIOR_ORDER : DEFENSE_ORDER);
 }
 
 const toHeroLine = (h: RawHeroLine, mine: boolean): ReportHeroLine => ({

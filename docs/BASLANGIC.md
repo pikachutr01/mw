@@ -274,7 +274,7 @@ Koda dokunmadan önce ilgili §'yi aç.
 | **Tuzak salvosu** | Tur 1'de, **koşulsuz**, tek kullanımlık; onarılmaz, savunma tabanı korumaz. `tetiklenen = min(Σ(yakınSav+dayanıklılık)×adet / tuzakVuruşGücü, tuzakAdedi × %75-99)`. ⚠️ Ölçü ADET değil **AĞIRLIK**; hasara **mitigasyon uygulanır** (yakın dövüş). Uçanlar hem baskıya hem hasara girmez | §13.11.12 |
 | **Dünya hız çarpanları** | 4 kolon: resource/speed/training/construction — **hepsi 1** (kullanıcı). Kaçış dönüşü sefer sayılır; onarımlar ve mağara doldur/boşalt çarpan DIŞI. Casus seferi kuş tabanında (120 sn) | §13.7.0 |
 | ⭐⭐ **Oyun saati (TEK ZAMAN ÇİZGİSİ)** | `gameNow == now() == UTC`, istisnasız. `clock_offset_ms` **emekli** (0043). Bakım saati geri bırakmıyor, **vadeleri ileri kaydırıyor**: `resume` → drenaj bariyeri (running=0 + nabız onayı) → tek transaction'da tüm bekleyen vadeler `+D` → `paused_at=NULL` aynı transaction'da EN SON. Kapsam `world/time-registry.ts`, motor `world/time-shift.ts`, defter `time_shifts` tablosu. Vade yazan ve vadeyi kıyaslayan **iki taraf da DB saatinden** | 0043 |
-| **Savaş raporu detayı** | `myArmy/enemyArmy/defenderStructs` + kahraman kartları (ad/resim/Yok Edildi !/XP) + Sur/Mağara kartı + ganimet dökümü (ortaya çıkan/taşınan) · savunana özel blok `defenderPrivate` iki katman maskeli · eski kayıtlar degrade | §7.1b |
+| **Savaş raporu detayı** | `myArmy/enemyArmy/defenderStructs` + kahraman kartları (ad/resim/Yok Edildi !/XP) + Sur/Mağara kartı + ganimet dökümü (ortaya çıkan/taşınan) · savunana özel blok `defenderPrivate` iki katman maskeli · eski kayıtlar degrade. ⭐ **Satır sırası = Baraka/Savunma ekranı sırası** (`WARRIOR_ORDER`/`DEFENSE_ORDER`, 2026-08-12); eskiden «en çok kaybedilen üstte» idi ve sıra her savaşta değiştiği için iki rapor karşılaştırılamıyordu | §7.1b |
 | **Şehir kurma yarışı** | Koordinatı önce kapan, yoldaki kuruluş seferini **gelen saldırı** olarak görür (tip maskeli, **içerik açık**); varışta savaşsız dönüş; satır anında düşer | §13.16.6 |
 | **Gelen ordu görünürlüğü** | Gelen saldırı/casuslukta **tam döküm**: birim sayıları + kahraman ad/seviye + kaç kuş. Casusluk şartı YOK (2026-07-31). Gizli kalan tek şey ganimet: dönüş bacağını savunan görmez (`OUT_ICON`'da `return` yok — gizlilik sınırı) | §13.10.1 |
 | **Özel mesajlaşma (DM)** | Sohbet balonları, WS ile anlık · masaüstünde sağ alt köşe penceresi / mobilde bottom sheet, aynı anda TEK kişi · lazy loading (30'ar, kaydırma korumalı) · tek taraflı silme (veri sunucuda kalır) · engelleme TEK YÖNLÜ + açık uyarı · şikayet kaydı · flood (10sn/5, aynı metin 15sn) · acemi kısıtı 12 sa | §13.12 |
@@ -310,6 +310,10 @@ Koda dokunmadan önce ilgili §'yi aç.
    görünmez** (`ranking_excluded` + kahraman sıralamasında `deleted_at` süzgeci) · ittifak
    **üyeliği sürer** ama puan takım toplamına yazılmaz (`alliance_score_excluded`) ve konsey
    Asker'e iner · tatil bitirilir · bekleyen davet/başvurular iptal edilip mesajları silinir
+   ⭐ **2026-08-12: silme İSTEĞİ de oturumsuz oldu.** `/hesap-sil` jetonsuz açıldığında artık
+   e-posta formu gösteriyor (`POST auth/delete-account/request-by-email`, **daima 204**) —
+   sayfa tek başına hem isteği başlatıyor hem onayı alıyor. Oyuna giremeyen oyuncu (parola
+   unutulmuş, cihaz değişmiş) eskiden hesabını hiç silemiyordu
 5. **Orijinal Java metin taraması** — bildirim/uyarı/rapor adlarının sistematik uygulanması
 6. **Askerî unvanlar** (Subay/Komutan/Başkomutan/Mareşal) — kazanma şartı orijinalde
    sunucudaydı, bilinmiyor; kullanıcı "büyük savaş başarısı + süreli" diyor
