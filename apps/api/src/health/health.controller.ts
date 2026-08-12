@@ -98,14 +98,28 @@ export class HealthController {
        * profilinde scheduler bu süreçte hiç çalışmıyor. Yalnız satır VARSA yaşına bakılıyor —
        * ölçemediğimiz bir şey için 503 dönmek, gerçek arızayı gürültüye boğardı.
        */
+      /**
+       * ⚠️⚠️ **NEGATİF YAŞ DA ARIZADIR** (2026-08-12 canlı olayı).
+       *
+       * Kontrol yalnız `yaş > eşik` bakıyordu. Sunucunun saati ~9,5 saat ileri kayıp NTP onu
+       * geriye adımlayınca nabız satırları **gelecekte** kaldı → `age` negatife düştü →
+       * `age > staleAfter` hep yanlış → **ölü worker "taze" göründü.** `healthz` dört saat
+       * boyunca `{"scheduler":{"ok":true,"ageS":-18739}}` dedi; iki `ops_event` açık kaldı ve
+       * kimse fark etmedi. Nabzı yazan guard (`heartbeat.ts`: `t - lastWrite < minInterval`)
+       * da aynı sıçramada negatife düşüp yazmayı 5 saat boyunca atlıyordu.
+       *
+       * ⭐ Ders: bir "yaş" ölçüsünde **tek taraflı** eşik yetmez. Negatif yaş fiziksel olarak
+       * imkânsız; gördüğümüz an ya saat sıçramıştır ya da satır bozuktur — ikisi de arıza.
+       */
       const staleAfter = t.staleHeartbeatS * 3;
-      if (schedAge != null && schedAge > staleAfter) {
-        fail('scheduler', { ageS: schedAge, staleAfterS: staleAfter });
-      } else checks['scheduler'] = { ok: true, ageS: schedAge };
-
-      if (dispAge != null && dispAge > staleAfter) {
-        fail('dispatcher', { ageS: dispAge, staleAfterS: staleAfter });
-      } else checks['dispatcher'] = { ok: true, ageS: dispAge };
+      const beat = (name: 'scheduler' | 'dispatcher', age: number | null): void => {
+        if (age == null) { checks[name] = { ok: true, ageS: null }; return; }
+        if (age > staleAfter) { fail(name, { ageS: age, staleAfterS: staleAfter }); return; }
+        if (age < 0) { fail(name, { ageS: age, reason: 'clock_skew' }); return; }
+        checks[name] = { ok: true, ageS: age };
+      };
+      beat('scheduler', schedAge);
+      beat('dispatcher', dispAge);
 
       if (lagS > t.alertLagS) fail('queue', { lagS, thresholdS: t.alertLagS });
       else checks['queue'] = { ok: true, lagS };

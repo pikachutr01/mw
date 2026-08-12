@@ -57,7 +57,19 @@ export class Heartbeat {
   async beat(detail: Record<string, unknown>, force = false): Promise<void> {
     this.ticks++;
     const t = this.now();
-    if (!force && t - this.lastWrite < (this.opts.minIntervalMs ?? 5_000)) return;
+    /**
+     * ⚠️⚠️ **SAAT GERİYE SIÇRARSA KISITLAMA KİLİTLENİR** (2026-08-12 canlı olayı).
+     *
+     * Guard eskiden yalnız `t - lastWrite < minInterval` bakıyordu. Sunucunun saati ~9,5 saat
+     * ileri kayıp NTP onu geriye adımlayınca fark **negatife** düştü ve koşul 5 saat boyunca
+     * doğru kaldı → nabız hiç yazılmadı. Worker turlarını atmaya devam etti (`ticks` arttı)
+     * ama DB'deki satır donmuş kaldı; `healthz` de negatif yaşı "taze" sayınca arıza
+     * görünmez oldu (bkz. `health.controller.ts`).
+     *
+     * Negatif fark fiziksel olarak imkânsız → saat sıçramıştır → **hemen yaz ve toparlan**.
+     */
+    const since = t - this.lastWrite;
+    if (!force && since >= 0 && since < (this.opts.minIntervalMs ?? 5_000)) return;
     this.lastWrite = t;
     try {
       await this.db.execute(sql`
@@ -71,7 +83,10 @@ export class Heartbeat {
                started_at = EXCLUDED.started_at, at = EXCLUDED.at,
                ticks = EXCLUDED.ticks, detail = EXCLUDED.detail
       `);
-      if (t - this.lastSweep >= (this.opts.sweepEveryMs ?? 300_000)) {
+      /* ⚠️ Yukarıdakiyle aynı kusur: saat geriye sıçrayınca fark negatife düşer ve süpürme de
+       * kilitlenirdi (ölü worker satırları temizlenmeden kalırdı). Negatif → hemen süpür. */
+      const sinceSweep = t - this.lastSweep;
+      if (sinceSweep < 0 || sinceSweep >= (this.opts.sweepEveryMs ?? 300_000)) {
         this.lastSweep = t;
         await this.sweep();
       }
