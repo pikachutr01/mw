@@ -9,13 +9,21 @@
  * gelir ve o hâlde yönerge gösterir. Jetonsuz açılışta hata ekranı göstermek, mağaza
  * incelemesinde "sayfa çalışmıyor" olarak okunurdu.
  *
+ * ⭐⭐ **TEK SAYFA, İKİ İŞ** (kullanıcı, 2026-08-12): jetonsuz açılışta artık yalnız yönerge
+ * değil, **silme isteği formu** da var. Eskiden buradaki tek yol *"oyuna gir → Seçenekler →
+ * Hesap"* idi ve bu, sayfayı tam da en çok ihtiyaç duyulan durumda işe yaramaz kılıyordu:
+ * parolasını unutmuş, cihazını değiştirmiş ya da uygulamayı silmiş oyuncu oyuna **giremediği
+ * için** hesabını da silemiyordu. Mağaza incelemelerinin aradığı "giriş yapmadan silme talebi"
+ * şartı da tam olarak bu.
+ *
  * ⚠️ İKİ AŞAMA: önce özet (`preview`, jetonu TÜKETMEZ), sonra onay (`delete`, tüketir).
- * Tek aşamalı yapsaydık bağlantıya tıklayan oyuncu ne olacağını görmeden silinirdi.
+ * Tek aşamalı yapsaydık bağlantıya tıklayan oyuncu ne olacağını görmeden silinirdi. Form bu
+ * iki aşamayı **atlatmaz** — yalnız birinci aşamanın bağlantısını üretir.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.ts';
-import { Button, Card, ErrorBox } from '../components/ui.tsx';
+import { Button, Card, ErrorBox, Field, Input } from '../components/ui.tsx';
 
 interface Preview {
   username: string;
@@ -50,6 +58,11 @@ export function DeleteAccountScreen(): React.ReactElement {
   /** ⚠️ StrictMode çift etkisi: özet çağrısı jetonu tüketmiyor ama iki kez sorgulamak da gereksiz. */
   const asked = useRef<string | null>(null);
 
+  /* ── Jetonsuz açılışın silme isteği formu (2026-08-12) ────────────────────── */
+  const [email, setEmail] = useState('');
+  const [mail, setMail] = useState<'idle' | 'busy' | 'sent'>('idle');
+  const [mailError, setMailError] = useState<unknown>(null);
+
   useEffect(() => {
     if (!token) { setState('idle'); return; }
     if (asked.current === token) return;
@@ -59,16 +72,73 @@ export function DeleteAccountScreen(): React.ReactElement {
       .catch((err: unknown) => { setError(err); setState('fail'); });
   }, [token]);
 
-  /* ── Jetonsuz açılış: mağaza için yönerge ─────────────────────────────────── */
+  /**
+   * Silme bağlantısı iste — **oturum gerekmez**.
+   *
+   * ⚠️ Sunucu bu uçta DAİMA 204 döner (adres kayıtlı olmasa, doğrulanmamış olsa ya da kota
+   * dolmuş olsa bile). Bu yüzden ekrandaki cevap da **koşulsuz aynı**: aksi hâlde arayüz,
+   * sunucunun bilerek sızdırmadığı "bu adres kayıtlı mı" bilgisini ele verirdi.
+   */
+  const requestLink = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    setMailError(null);
+    setMail('busy');
+    try {
+      await api('/api/v1/auth/delete-account/request-by-email', {
+        method: 'POST', body: { email },
+      });
+      setMail('sent');
+    } catch (err) {
+      // ⚠️ Buraya yalnız ağ/429 düşer — "adres yok" hatası tanımı gereği gelmiyor.
+      setMailError(err);
+      setMail('idle');
+    }
+  };
+
+  /* ── Jetonsuz açılış: silme isteği formu + mağaza yönergesi ───────────────── */
   if (!token) {
     return (
       <Frame title="Hesap silme">
         <div className="space-y-3 text-sm text-ink">
-          <p>
-            MobilWar hesabını silmek için oyuna gir ve <strong>Seçenekler → Hesap → Hesabımı
-            Sil</strong> adımını izle. E-posta adresine tek kullanımlık bir onay bağlantısı
-            göndeririz; bağlantı <strong>12 saat</strong> geçerlidir.
-          </p>
+          {mail === 'sent' ? (
+            <div className="rounded-[var(--radius-sm)] border border-border bg-raised p-3">
+              <p className="mb-1 font-semibold text-ink">E-postanı kontrol et.</p>
+              {/* ⚠️ «Gönderdik» DEĞİL «varsa gönderdik» — sayım sızdırmama kuralı arayüzde de
+                  sürüyor. Kesin konuşan bir cümle, ucu hesap sorgulama aracına çevirirdi. */}
+              <p className="text-xs text-muted">
+                <strong className="text-ink">{email}</strong> adresine kayıtlı ve
+                doğrulanmış bir hesap varsa silme bağlantısını gönderdik. Bağlantı{' '}
+                <strong className="text-ink">12 saat</strong> geçerli ve tek kullanımlık.
+                Bağlantıya tıkladığında neyin silineceğini gösteren bir onay ekranı açılır —
+                <strong className="text-ink"> hesabın o ekranda onaylamadan silinmez</strong>.
+              </p>
+              <button type="button"
+                className="mt-2 text-xs text-muted underline hover:text-ink"
+                onClick={() => { setMail('idle'); setEmail(''); }}>
+                Başka bir adres dene
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={requestLink} className="space-y-3">
+              <p>
+                Hesabını silmek için e-posta adresini yaz, sana tek kullanımlık bir onay
+                bağlantısı gönderelim.
+              </p>
+              <Field label="E-posta adresin">
+                <Input type="email" required maxLength={320} autoComplete="email"
+                  placeholder="ornek@eposta.com"
+                  value={email} onChange={(ev) => setEmail(ev.target.value)} />
+              </Field>
+              <ErrorBox error={mailError} />
+              <Button type="submit" variant="danger" className="w-full" disabled={mail === 'busy'}>
+                {mail === 'busy' ? 'Gönderiliyor…' : 'Silme bağlantısı gönder'}
+              </Button>
+              <p className="text-[11px] text-muted">
+                Bu düğme hesabını <strong>silmez</strong>; yalnız onay bağlantısını yollar.
+              </p>
+            </form>
+          )}
+
           <div className="rounded-[var(--radius-sm)] border border-border bg-raised p-3 text-xs text-muted">
             <p className="mb-1 font-semibold text-ink">Silme onaylandığında ne oluyor?</p>
             <ul className="list-disc space-y-0.5 pl-4">
@@ -77,15 +147,16 @@ export function DeleteAccountScreen(): React.ReactElement {
               <li><strong>Yıkılan:</strong> başkentin dışındaki tüm şehirlerin (içlerinde ordu
                 olsa bile).</li>
               <li><strong>Kalan:</strong> başkentin <strong>şu anki adıyla</strong> dünyada
-                durur — böylece diğer oyuncuların savaş geçmişinde delik oluşmaz. Yalnız
+                durur, böylece diğer oyuncuların savaş geçmişinde delik oluşmaz. Yalnız
                 <strong> oyuncu adın</strong> anonim bir adla değiştirilir.</li>
               <li><strong>Sıralamalar:</strong> şehrin oyuncu, ittifak ve kahraman
                 sıralamalarının hiçbirinde görünmez; puanın ittifakının toplamına da eklenmez.</li>
             </ul>
           </div>
           <p className="text-xs text-muted">
-            E-posta adresini doğrulamadıysan önce onu doğrulaman gerekir; doğrulanmamış bir
-            adrese hesap silme yetkisi göndermeyiz.
+            Oyuna girebiliyorsan <strong>Seçenekler → Hesap → Hesabımı Sil</strong> adımı da
+            aynı bağlantıyı gönderir. E-posta adresini hiç doğrulamadıysan silme bağlantısı
+            gönderemeyiz.
           </p>
         </div>
       </Frame>
@@ -105,7 +176,7 @@ export function DeleteAccountScreen(): React.ReactElement {
           bundan sonra <strong>{result.username}</strong>.
         </p>
         <p className="text-xs text-muted">
-          E-posta adresin serbest bırakıldı — istersen aynı adresle yeniden kayıt olabilirsin.
+          E-posta adresin serbest bırakıldı, istersen aynı adresle yeniden kayıt olabilirsin.
         </p>
       </Frame>
     );
@@ -115,10 +186,15 @@ export function DeleteAccountScreen(): React.ReactElement {
     return (
       <Frame title="Olmadı.">
         <p className="mb-3 text-sm text-ink">
-          Bağlantı geçersiz, süresi dolmuş ya da zaten kullanılmış. Oyuna girip Seçenekler →
-          Hesap bölümünden yeni bir silme bağlantısı isteyebilirsin.
+          Bağlantı geçersiz, süresi dolmuş ya da zaten kullanılmış.
         </p>
         <ErrorBox error={error} />
+        {/* ⚠️ Eskiden burada tek çare *"oyuna girip Seçenekler → Hesap"* yazıyordu; oysa
+            bağlantısı ölmüş oyuncu çoğu zaman oyuna zaten giremiyor. Artık aynı sayfanın
+            jetonsuz hâli yenisini üretebiliyor — `?token` olmadan açmak yeterli. */}
+        <Button className="mt-3 w-full" onClick={() => { window.location.href = '/hesap-sil'; }}>
+          Yeni bağlantı iste
+        </Button>
       </Frame>
     );
   }

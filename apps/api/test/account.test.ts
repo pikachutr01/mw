@@ -410,6 +410,124 @@ describe('silme jetonu', () => {
   });
 });
 
+/* ── SİLME: OTURUMSUZ istek (kullanıcı, 2026-08-12) ──────────────────────────── */
+
+/**
+ * ⭐⭐ `/hesap-sil` sayfası artık yalnız e-posta adresiyle silme bağlantısı isteyebiliyor.
+ *
+ * ⚠️ Bu akışın `requestDeletion`dan **tek ama belirleyici** farkı sessizliği: oturumlu çağrı
+ * hata fırlatabilir (arayan kim olduğunu kanıtlamıştır), oturumsuz çağrı **asla** fırlatmaz.
+ * Aksi hâlde uç, "bu e-posta bu oyunda kayıtlı mı" sorusunu cevaplayan bir sorgulama aracına
+ * dönerdi — üstelik silme bağlamında, yani hedefli oltalama için biçilmiş kaftan.
+ *
+ * Testlerin çoğu bu yüzden **iki şeyi birden** ölçüyor: hata fırlatmadığını VE gerçekten bir
+ * şey yapmadığını. Yalnız birincisine bakan bir test, sessizce her adrese mail yollayan bir
+ * hatayı yeşil geçerdi.
+ */
+describe('⭐⭐ oturumsuz silme isteği (e-posta ile)', () => {
+  /**
+   * ⚠️ **Hesaba göre daraltılmış.** `email_tokens` `beforeEach`te temizlenmiyor (yalnız
+   * `outbox` temizleniyor) → tablo genelinde saymak, önceki `describe`ların bıraktığı
+   * jetonları da toplayıp sayıyı her testte bir artırıyordu.
+   */
+  const tokenCount = async (): Promise<number> => {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM email_tokens
+       WHERE purpose = 'delete' AND account_id = ${accountId}
+    `);
+    return Number(r!['n']);
+  };
+  /** ⚠️ Alıcıya göre daraltılmış — `outbox` da bu worker'ın diğer test dosyalarıyla ortak. */
+  const mailCount = async (): Promise<number> => {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM outbox
+       WHERE topic = 'mail:send' AND payload->>'to' = ${email}
+    `);
+    return Number(r!['n']);
+  };
+
+  /**
+   * ⚠️⚠️ **HER TESTE TAZE IP.** `assertQuota` IP başına günde 30 jeton sayıyor ve `email_tokens`
+   * bu worker'ın TÜM test dosyalarıyla ortak (worker başına veritabanı — bkz. `helpers/db.ts`).
+   * Sabit bir IP yazıldığında testler tek başına yeşil, tam koşuda kırmızı oluyordu: komşu
+   * dosyaların aynı IP'yle yazdığı satırlar tavanı doldurup isteği **sessizce** düşürüyordu —
+   * yani ucun doğru davranışı, testi yanlış yere düşürüyordu.
+   */
+  let ipSeq = 0;
+  const freshIp = (): string => `203.0.113.${(ipSeq += 1)}`;
+
+  it('⭐ doğrulanmış adres bağlantı alır — hem jeton hem mail satırı yazılır', async () => {
+    await emails.requestDeletionByEmail(email, freshIp());
+    expect(await tokenCount()).toBe(1);
+    expect(await mailCount()).toBe(1);
+  });
+
+  /**
+   * ⭐⭐⭐ ASIL DEĞİŞMEZ: üretilen jeton, oyun içi düğmeninkiyle **aynı sınıftan**. Yalnız
+   * "bir satır yazıldı" demek yetmez — bağlantının gerçekten silme akışını açtığını görmeliyiz.
+   */
+  it('⭐⭐⭐ gelen bağlantı GERÇEKTEN çalışıyor (önizleme onu kabul ediyor)', async () => {
+    await emails.requestDeletionByEmail(email, freshIp());
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM outbox WHERE topic = 'mail:send' ORDER BY id DESC LIMIT 1
+    `);
+    const text = String((row!['payload'] as Record<string, unknown>)['text']);
+    // Bağlantı `/hesap-sil` sayfasına gitmeli — sıfırlama sayfasına değil.
+    expect(text).toMatch(/\/hesap-sil\?token=/);
+    const token = /token=([A-Za-z0-9_-]+)/.exec(text)![1]!;
+    await expect(emails.peekDeletion(token)).resolves.toMatchObject({ accountId });
+  });
+
+  it('kayıtlı olmayan adres: hata YOK, jeton da YOK', async () => {
+    await expect(emails.requestDeletionByEmail('yok-boyle-biri@test.local')).resolves
+      .toBeUndefined();
+    expect(await tokenCount()).toBe(0);
+    expect(await mailCount()).toBe(0);
+  });
+
+  /**
+   * ⭐ Oturumlu akışla KARŞITLIK burada görünüyor: aynı hesap durumu, iki farklı davranış.
+   * Kural aynı (doğrulanmamış adrese silme yetkisi gitmez), yalnız haber verme biçimi farklı.
+   */
+  it('⭐ doğrulanmamış hesap: SESSİZCE durulur (oturumlu akış ise hata fırlatır)', async () => {
+    await h.db.execute(sql`UPDATE accounts SET email_verified_at = NULL WHERE id = ${accountId}`);
+
+    await expect(emails.requestDeletionByEmail(email)).resolves.toBeUndefined();
+    expect(await tokenCount()).toBe(0);
+
+    // Aynı hesap, oturumlu yol → açık hata. İki yolun ayrıştığı tek nokta bu.
+    await expect(emails.requestDeletion(accountId)).rejects.toMatchObject({ code: 'not_verified' });
+  });
+
+  /** Kota bilgisi de sızmaz: ikinci istek cooldown'a takılır ama çağıran bunu ANLAYAMAZ. */
+  it('cooldown\'a takılan ikinci istek de sessiz — ikinci mail çıkmaz', async () => {
+    await emails.requestDeletionByEmail(email, freshIp());
+    await expect(emails.requestDeletionByEmail(email, freshIp())).resolves.toBeUndefined();
+    expect(await tokenCount(), 'ikinci jeton üretilmemeli').toBe(1);
+    expect(await mailCount()).toBe(1);
+  });
+
+  it('adres büyük harfli/boşluklu yazılsa da bulunur', async () => {
+    await emails.requestDeletionByEmail(`  ${email.toUpperCase()}  `);
+    expect(await tokenCount()).toBe(1);
+  });
+
+  /**
+   * ⚠️ Cooldown **amaç başına** sayılıyor. Bu uç eklendikten sonra da öyle kalmalı: az önce
+   * doğrulama maili almış oyuncunun silme isteği sessizce yutulursa, oyuncu hiçbir açıklama
+   * göremediği için sayfayı bozuk sanır.
+   */
+  it('⚠️ başka amaçtaki taze mail silme isteğini ENGELLEMEZ', async () => {
+    // Az önce gidilmiş bir DOĞRULAMA maili taklidi (cooldown penceresinin içinde).
+    await h.db.execute(sql`
+      INSERT INTO email_tokens (account_id, purpose, token_hash, email, expires_at)
+      VALUES (${accountId}, 'verify', ${`h-${randomUUID()}`}, ${email}, now() + interval '1 day')
+    `);
+    await emails.requestDeletionByEmail(email);
+    expect(await tokenCount()).toBe(1);
+  });
+});
+
 /* ── E-POSTA ADRESİ DEĞİŞTİRME ───────────────────────────────────────────────── */
 
 describe('e-posta adresi değiştirme', () => {

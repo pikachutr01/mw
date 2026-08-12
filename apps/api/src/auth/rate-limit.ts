@@ -41,6 +41,23 @@ export const LIMITED: ReadonlyArray<{ path: string; bucket: 'simulate' | 'auth' 
    * istek atmak sunucuyu bedavaya yorardı — `simulate` ucundaki gerekçenin aynısı.
    */
   { path: '/api/v1/auth/reset-password', bucket: 'auth' },
+  /**
+   * ⭐ 2026-08-12'de eklendi — `/hesap-sil` sayfasının oturumsuz istek formu.
+   *
+   * ⚠️ Buradaki gerekçe CPU değil **POSTA**: uç, verilen adrese silme bağlantısı yolluyor.
+   * `email-token.service.ts`teki kota (amaç başına 60 sn + hesap/IP günlük tavanı) asıl
+   * frendir; ama o fren **hesap başına** çalışıyor. Sınırsız bırakılırsa saldırgan farklı
+   * adreslerle saniyede yüzlerce istek atıp DB'yi sorgulatabilir ve gerçek olan her adres
+   * için bir mail çıkartabilirdi. `forgot-password`un listede olma sebebinin aynısı.
+   */
+  { path: '/api/v1/auth/delete-account/request-by-email', bucket: 'auth' },
+  /**
+   * ⚠️ **Mevcut bir açıktı** (2026-08-12'de fark edildi, yukarıdaki uç eklenirken).
+   * `reset-password` CPU gerekçesiyle listeye alınmıştı; `delete-account` de tam olarak aynı
+   * şeyi yapıyor — `AccountDeleteService.execute()` anonimleştirme sırasında bir argon2id
+   * hash'i çalıştırıyor. Uydurma jetonla dövülebilen, sınırsız bir argon2id ucu kalmasın.
+   */
+  { path: '/api/v1/auth/delete-account', bucket: 'auth' },
 ];
 
 interface Counter { count: number; resetAt: number }

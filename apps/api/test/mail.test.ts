@@ -409,4 +409,53 @@ describe('şifre sıfırlama uçları', () => {
     await expect(ctl.resetPassword({ token: 'kisa', password: 'yeterince-uzun' })).rejects.toThrow();
     await expect(ctl.resetPassword({ token: 'a'.repeat(40), password: 'kisa' })).rejects.toThrow();
   });
+
+  /**
+   * ⭐⭐ OTURUMSUZ SİLME İSTEĞİ UCU (kullanıcı, 2026-08-12) — `/hesap-sil` sayfasının formu.
+   *
+   * ⚠️ Denetleyiciyi doğrudan kuruyoruz, yani **`AuthGuard` bu testte hiç koşmuyor**. Bu bir
+   * kapsam boşluğu değil, tam da ölçmek istediğimiz şeyin bir parçası: kardeş uç
+   * (`requestDeletion`) `@UseGuards(AuthGuard)` taşıyor ve `req.player!.accountId` okuyor —
+   * yani oturumsuz çağrıldığında ÇÖKERDİ. Buradaki çağrının sorunsuz geçmesi, yeni ucun
+   * gerçekten oturumdan bağımsız olduğunun kanıtı.
+   */
+  it('⭐⭐ oturumsuz silme isteği: oturum YOKken çalışır ve gerçekten mail yazar', async () => {
+    const acc = await makeAccount({ verified: true });
+    // ⚠️ `req.player` YOK — oturumlu kardeş uç burada `undefined` okuyup çökerdi.
+    await expect(ctl.requestDeletionByEmail({ email: acc.email }, ipReq)).resolves.toBeUndefined();
+    expect(await mailRowCount()).toBe(1);
+    // Bağlantı silme sayfasına gitmeli; jeton `delete` amaçlı olmalı.
+    const token = await lastToken();
+    await expect(svc.peekDeletion(token)).resolves.toMatchObject({ accountId: acc.accountId });
+  });
+
+  it('⭐ var olmayan adres: 204 ve HİÇ mail yok (sayım sızdırmaz)', async () => {
+    await expect(ctl.requestDeletionByEmail({ email: 'yok@test.local' }, ipReq))
+      .resolves.toBeUndefined();
+    expect(await mailRowCount()).toBe(0);
+  });
+
+  it('⭐ doğrulanmamış hesap da SESSİZ — hata değil, 204', async () => {
+    const acc = await makeAccount({ verified: false });
+    await expect(ctl.requestDeletionByEmail({ email: acc.email }, ipReq))
+      .resolves.toBeUndefined();
+    expect(await mailRowCount()).toBe(0);
+  });
+
+  it('biçimi bozuk gövde bile SIZDIRMAZ (zod hatası → sessiz dönüş)', async () => {
+    await expect(ctl.requestDeletionByEmail({ email: 'eposta-degil' }, ipReq))
+      .resolves.toBeUndefined();
+    await expect(ctl.requestDeletionByEmail({}, ipReq)).resolves.toBeUndefined();
+    expect(await mailRowCount()).toBe(0);
+  });
+
+  /** ⚠️ İstek ucu hesabı SİLMEZ — yıkıcı adım hâlâ jetonlu `delete-account`ta. */
+  it('⚠️ istek ucu hesabı silmez, yalnız posta yollar', async () => {
+    const acc = await makeAccount({ verified: true });
+    await ctl.requestDeletionByEmail({ email: acc.email }, ipReq);
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT deleted_at FROM players WHERE id = ${acc.playerId}
+    `);
+    expect(p!['deleted_at']).toBeNull();
+  });
 });

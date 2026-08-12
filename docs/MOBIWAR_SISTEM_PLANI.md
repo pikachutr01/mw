@@ -954,6 +954,23 @@ Google Play, hesap silme için **oturum gerektirmeyen herkese açık bir sayfa**
 Seçenekler → Hesabı Sil → e-postaya **12 saatlik, tek kullanımlık** bağlantı → `/hesap-sil`
 sayfası ne olacağını tek tek gösterir → onay.
 
+⭐⭐ **2026-08-12: isteğin kendisi de artık oturumsuz** (kullanıcı). `/hesap-sil` jetonsuz
+açıldığında yalnız yönerge değil, **e-posta formu** da gösteriyor; yani sayfa tek başına hem
+isteği başlatıyor hem onayı alıyor. Eskiden tek yol *"oyuna gir → Seçenekler → Hesap"* idi ve
+bu, sayfayı **en çok gerekli olduğu anda** işe yaramaz kılıyordu: parolasını unutmuş, cihazını
+değiştirmiş ya da uygulamayı silmiş oyuncu oyuna giremediği için hesabını da silemiyordu.
+
+| uç | oturum | hata davranışı |
+| :-- | :-- | :-- |
+| `POST delete-account/request` | ✅ gerekir | **açık hata** — arayan kim olduğunu kanıtlamış, "önce e-postanı doğrula" diyebiliriz |
+| `POST delete-account/request-by-email` | ⛔ gerekmez | ⚠️ **daima 204** — adres yok, doğrulanmamış ya da kota dolu: üçünde de sessiz |
+
+⚠️ Sessizliğin gerekçesi `forgot-password`unkiyle aynı ama **daha ağır**: uç konuşsaydı "bu
+e-posta bu oyunda kayıtlı mı" sorusunu cevaplardı ve bu bilgi, *silme* bağlamında hedefli
+oltalama için biçilmiş kaftan olurdu. ⚠️ İki uç da hız sınırı listesinde
+(`rate-limit.ts`); aynı turda `delete-account`un kendisinin de listede olmadığı fark edildi
+ve eklendi — `reset-password` gibi o da bir argon2id hash'i koşturuyor.
+
 **K1 — Silme değil ANONİMLEŞTİRME + STERİLİZASYON.**
 
 | ne olur | neden |

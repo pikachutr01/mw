@@ -324,6 +324,29 @@ export class AuthController {
   }
 
   /**
+   * ⭐⭐ **OTURUMSUZ silme isteği** (kullanıcı, 2026-08-12) — `/hesap-sil` sayfasındaki form.
+   *
+   * Üstteki uç oyun içi düğmenin yolu ve oturum ister; bu ise oyuna hiç giremeyen oyuncunun
+   * (parolasını unutmuş, cihazını değiştirmiş, uygulamayı silmiş) tek kapısı. Böylece
+   * `/hesap-sil` tek başına **hem isteği başlatan hem onayı alan** bir sayfa oluyor —
+   * mağaza incelemelerinin aradığı «giriş yapmadan silme talebi» şartı da bu ucla karşılanıyor.
+   *
+   * ⚠️ **DAİMA 204** — `forgot-password` ile birebir aynı gerekçe: adres kayıtlı olmasa da,
+   * doğrulanmamış olsa da, kota dolmuş olsa da. Aksi hâlde uç "bu e-posta bu oyunda kayıtlı mı"
+   * sorusunu cevaplardı ve bu, silme bağlamında sıfırlamadan daha kötü olurdu.
+   *
+   * ⚠️ Bu uç **hesabı silmez**, yalnız posta yollar. Yıkıcı adım hâlâ jetonlu `delete-account`
+   * ve engel kontrolü orada tekrar koşuyor.
+   */
+  @Post('delete-account/request-by-email')
+  @HttpCode(204)
+  async requestDeletionByEmail(@Body() body: unknown, @Req() req: AuthedRequest): Promise<void> {
+    const parsed = forgotBody.safeParse(body);
+    if (!parsed.success) return;          // biçim hatası bile sızdırılmaz
+    await this.emails.requestDeletionByEmail(parsed.data.email, extractDeviceContext(req).ip);
+  }
+
+  /**
    * ⭐ ONAY EKRANININ ÖZETİ — **oturum GEREKTİRMEZ** (Google Play'in istediği herkese açık
    * sayfa; bağlantı çoğu zaman telefonun posta uygulamasından, oturumsuz bir tarayıcıda açılır).
    *

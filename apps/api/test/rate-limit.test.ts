@@ -24,6 +24,28 @@ describe('sınırlanan yollar', () => {
     expect(paths).toContain('/api/v1/auth/reset-password');
   });
 
+  /**
+   * ⭐ 2026-08-12 — `/hesap-sil` sayfası oturumsuz silme isteği alabiliyor.
+   *
+   * ⚠️ İkisi ayrı gerekçeyle listede: `request-by-email` **posta** üretiyor (adres başına
+   * kota var ama farklı adreslerle dövülebilir), `delete-account` ise `reset-password` ile
+   * aynı **argon2id** maliyetini taşıyor. İkincisi 2026-08-12'ye kadar sınırsızdı.
+   */
+  it('⭐ hesap silmenin oturumsuz uçları sınırlı', () => {
+    const paths = LIMITED.map((r) => r.path);
+    expect(paths).toContain('/api/v1/auth/delete-account/request-by-email');
+    expect(paths).toContain('/api/v1/auth/delete-account');
+  });
+
+  /**
+   * ⚠️ Eşleşme TAM YOL (`r.path === path`), önek değil. `delete-account`ı listeye eklemek
+   * `delete-account/preview`i sessizce sınırlamamalı: önizleme jeton tüketmiyor, ucuz ve
+   * sayfa açılışında koşuyor — bir oyuncunun bağlantıyı iki kez açması onu kilitlememeli.
+   */
+  it('⚠️ önizleme ucu sınırlı DEĞİL (tam yol eşleşmesi, önek değil)', () => {
+    expect(LIMITED.map((r) => r.path)).not.toContain('/api/v1/auth/delete-account/preview');
+  });
+
   it('⚠️ oyun içi trafik sınırlı DEĞİL', () => {
     for (const r of LIMITED) {
       expect(r.path.startsWith('/api/v1/auth/') || r.path === '/api/v1/simulate', r.path)

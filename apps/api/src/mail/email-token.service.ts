@@ -240,6 +240,50 @@ export class EmailTokenService {
   }
 
   /**
+   * ⭐⭐ **OTURUMSUZ silme isteği** (kullanıcı, 2026-08-12) — `/hesap-sil` sayfasından, yalnız
+   * e-posta adresiyle. Üstteki `requestDeletion` oyun içi düğmenin yolu; bu ise oyuna hiç
+   * giremeyen oyuncunun (parolasını unutmuş, telefonunu değiştirmiş, uygulamayı silmiş) tek
+   * kapısı. Aynı sayfa hem isteği başlatıyor hem de gelen bağlantıyı onaylıyor.
+   *
+   * ⚠️⚠️ **`requestDeletion`ın AKSİNE daima sessizce başarılı** — `requestReset` ile aynı
+   * kural. Oturumlu çağrıda hata açıkça dönebilirdi (arayan kim olduğunu zaten kanıtlamıştı);
+   * burada arayan **herhangi biri**. "Bu adres kayıtlı değil" demek, ucu bir hesap sorgulama
+   * aracına çevirirdi ve bu, silme bağlamında sıfırlamadan daha kötü: saldırgan hangi
+   * adreslerin var olduğunu öğrenip hedefli oltalama yazardı.
+   *
+   * ⚠️ Doğrulanmamış adrese silme bağlantısı yine YOK (üstteki kuralın aynısı) — ama artık
+   * **sessizce** durulur. Bu, oyun içi düğmeden farkı olan tek yer: orada oyuncuya
+   * "önce e-postanı doğrula" denebiliyor, burada denemez.
+   *
+   * ⚠️ Kota `assertQuota` üzerinden aynen işliyor (amaç başına 60 sn cooldown + hesap/IP
+   * günlük tavanı); yalnız sonucu **yutuluyor**, çünkü "kotan doldu" cevabı da adresin
+   * kayıtlı olduğunu ele verirdi.
+   */
+  async requestDeletionByEmail(email: string, ip?: string | null): Promise<void> {
+    const normalized = email.trim().toLowerCase();
+    const [acc] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT a.id, a.email, a.email_verified_at,
+             (SELECT p.username FROM players p WHERE p.account_id = a.id ORDER BY p.id LIMIT 1) AS username
+        FROM accounts a WHERE a.email = ${normalized}
+    `);
+    if (!acc) return;
+    if (acc['email_verified_at'] == null) return;
+
+    try {
+      await this.assertQuota(Number(acc['id']), 'delete', ip);
+    } catch {
+      return;   // kota bilgisi de sızdırılmaz
+    }
+    await this.issue({
+      accountId: Number(acc['id']),
+      email: String(acc['email']),
+      username: String(acc['username'] ?? 'oyuncu'),
+      purpose: 'delete',
+      ip,
+    });
+  }
+
+  /**
    * Silme jetonunu **okur ama TÜKETMEZ** — onay ekranı özeti için.
    * ⚠️ Tüketmek burada yanlış olurdu: oyuncu sayfayı açıp vazgeçerse jeton yanmamalı.
    */
