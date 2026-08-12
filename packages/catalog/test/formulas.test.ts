@@ -10,7 +10,58 @@ import {
   STARTING_RESOURCES, teleportCooldownSeconds, USERNAME_MAX, USERNAME_MIN,
   wallCurrentIntegrity, wallRepairSeconds,
   timeFromCost, trainingTimeSeconds, unitCost, unitTimeValue, UNITS_BY_ID,
+  BUILDINGS, BUILDINGS_BY_ID,
 } from '../src/index.ts';
+
+/**
+ * ⭐⭐ SEVİYE TAVANI — **her yapıda 40** (kullanıcı, 2026-08-12).
+ *
+ * Eskiden yalnız Çiftlik/Maden 40, diğerleri 20 idi. Oyunu oynamış bir oyuncu barakasının
+ * 20'den yüksek olduğunu net hatırlıyor; orijinalde diğer yapılar da 20'de durmuyormuş.
+ */
+describe('⭐⭐ yapı seviye tavanları', () => {
+  /** ⚠️ Teleport TEK İSTİSNA (kullanıcı) — gerekçesi sayı taşması, aşağıdaki testte ölçülü. */
+  it('Teleport dışında hepsi 40, Teleport 20', () => {
+    for (const b of BUILDINGS) {
+      expect(b.maxLevel, b.id).toBe(b.id === 'teleport' ? 20 : 40);
+    }
+  });
+
+  /**
+   * ⚠️ Tavan yükselince Kale bütçesi (Σ seviye ≤ Kale × 10) bağlayıcı hâle GELMEMELİ — yoksa
+   * oyuncu tavana çıkmış bir yapıyı ancak başka bir yapıyı yıkarak taşıyabilirdi ve "tavan 40"
+   * kâğıt üstünde kalırdı. Kale'nin kendisi bütçeye girmiyor.
+   */
+  it('⚠️ Kale 40 bütçesi, bütün yapıları tavana çıkarmaya YETİYOR', () => {
+    const tuketen = BUILDINGS.filter((b) => b.consumesCastleBudget);
+    expect(tuketen.reduce((t, b) => t + b.maxLevel, 0)).toBeLessThanOrEqual(castleBudget(40));
+    // Kale bütçeyi tüketenlerden biri DEĞİL (kendi kendini finanse etmez).
+    expect(BUILDINGS_BY_ID['castle']!.consumesCastleBudget).toBe(false);
+  });
+
+  /**
+   * ⭐⭐⭐ **SAYI TAŞMASI BEKÇİSİ — Teleport'un 20'de kalmasının gerekçesi budur.**
+   *
+   * Maliyet `1,8^(sv−1)` ile büyüyor: 20 seviye eklemek fiyatı **~1,3 milyon katına** çıkarıyor.
+   * Teleport'un tabanı diğer yapıların ~250 katı olduğu için 40 tavanında maliyeti
+   * **9,03×10¹⁵** oluyordu ve `Number.MAX_SAFE_INTEGER`'ı (9,007×10¹⁵) **aşıyordu** — fiyat
+   * artık tam sayı olarak temsil edilemiyor, `Math.round` sessizce kayıyordu.
+   *
+   * ⚠️ Bu test sayıyı değil **sınırın kendisini** kilitliyor: hiçbir yapının tavan maliyeti
+   * güvenli tam sayı aralığını aşmamalı. Biri Teleport'u 40'a çıkarırsa ya da eğriyi/tabanları
+   * büyütürse burada kırmızı yanar — bulunması en zor hata sınıfı olan sessiz duyarlılık
+   * kaybının, sessiz kalmadığı tek yer.
+   */
+  it('⭐⭐⭐ hiçbir tavan maliyeti güvenli tam sayı sınırını AŞMAZ', () => {
+    for (const b of BUILDINGS) {
+      const c = buildingCost(b.id, b.maxLevel);
+      const toplam = c.gold + c.food;
+      expect(Number.isFinite(toplam), `${b.id}: sonsuz`).toBe(true);
+      expect(toplam, `${b.id}: güvenli tam sayı sınırı aşıldı`)
+        .toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+    }
+  });
+});
 
 describe('üretim formülleri', () => {
   it('çiftlik: floor(6·L·1,16^L)', () => {
@@ -428,6 +479,36 @@ describe('üretim süresi (kurgulanan model)', () => {
     expect(trainingTimeSeconds('dwarf', 1)).toBeCloseTo(113.6, 1);
     expect(trainingTimeSeconds('dwarf', 5)).toBeCloseTo(54.8, 1);
     expect(trainingTimeSeconds('dwarf', 20)).toBeLessThan(5);
+  });
+
+  /**
+   * ⭐⭐ 1 SANİYE TABANI — tavan 40'a çıkınca İLK KEZ ulaşılabilir oldu (2026-08-12).
+   *
+   * ⚠️ Formülün kendisinde taban YOK: `190 × (değer/1000)^0,8 / 1,2^sv` sınırsız düşer ve
+   * Baraka 40'ta Cüce **0,09 saniyeye** iner. Taban iki tüketicide duruyor ve **ikisi de
+   * 1'e sabitliyor**: kuyruk (`queue.service.ts` `scaled`) ve ekran (`city.controller.ts`
+   * `dur`). İkisinin ayrışması, oyuncuya gösterilen süre ile gerçekte üretilen sürenin
+   * farklı olması demekti — bu test onları formülün ham çıktısı üzerinden hizada tutuyor.
+   *
+   * Tavan 20 iken bu hiç yaşanmıyordu (Cüce sv20 = 3,55 sn), o yüzden ölçen bir test de yoktu.
+   */
+  it('⭐⭐ ham formül 1 saniyenin ALTINA iner — taban tüketicide, formülde değil', () => {
+    expect(trainingTimeSeconds('dwarf', 20)).toBeGreaterThan(1);
+    // Cüce Baraka 27'de, Elf 30'da 1 saniyeye iner; tavanda ikisi de saniye altı.
+    expect(trainingTimeSeconds('dwarf', 27)).toBeLessThanOrEqual(1);
+    expect(trainingTimeSeconds('dwarf', 26)).toBeGreaterThan(1);
+    expect(trainingTimeSeconds('elf', 30)).toBeLessThanOrEqual(1);
+    expect(trainingTimeSeconds('elf', 29)).toBeGreaterThan(1);
+    expect(trainingTimeSeconds('dwarf', 40)).toBeLessThan(0.2);
+  });
+
+  /**
+   * ⚠️ Tavandaki en pahalı birim hâlâ ANLAMLI sürede kalmalı — yoksa 40 tavanı, geç oyunun
+   * bütün üretim ekonomisini tek bir yapıya bağlar ve ordu kurmak bedavaya gelir.
+   */
+  it('en pahalı birimler tavanda bile taban süreye çakılmaz', () => {
+    expect(trainingTimeSeconds('chaos', 40)).toBeGreaterThan(60);
+    expect(trainingTimeSeconds('dragon', 40)).toBeGreaterThan(3);
   });
 
   it('her Baraka seviyesi süreyi %16,7 kısaltır (20 seviyede 32 kat)', () => {

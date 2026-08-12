@@ -368,7 +368,7 @@ sağ **ittifak + sohbet**. Boydan boya navbar YOK; alt gezinti barı **yalnız m
 | **Taşıma kapasitesi** | Kaynak = oyunun kendi dokümanı, binary DEĞİL. Yük Arabası **5.000** (3.000 yazılıydı) |
 | Yapı/teknik tabanları | §13.9 tablosu + Teleport sv1 = 500.000/500.000 |
 | Başlangıç | Kale 1 · Baraka 1 · Çiftlik 1 · Maden 1 · **4.000 altın + 4.000 yemek** (yalnız başkente) |
-| Seviye tavanları | Çiftlik/Maden **40** · diğer yapılar + Sur/Kalkan **20** · teknik sınırsız |
+| Seviye tavanları | Yapılar **40** — ⚠️ **Teleport 20** (tek istisna, sayı taşması) · Sur/Kalkan **20** · teknik sınırsız. ⭐ 2026-08-12'de 20→40 (eski oyuncu: barakası 20'den yüksekmiş). ⚠️ Baraka 27'den sonra Cüce, 30'dan sonra Elf hızlanmaz — üretim süresi **1 sn'de tabanlı** |
 | Kale bütçesi | Σ(bina seviyeleri) ≤ Kale×10 · **Sur/Büyü Kalkanı HARİÇ** |
 | **Sur kapasitesi** | ⛔ **UYGULANMIYOR** — savunma birimi ön-şart varsa sınırsız (`enforced: false`) |
 | İptal iadesi | Yapı/teknik **süreye göre**, savaşçı **kalan adetten bir birim eksik** |

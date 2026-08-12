@@ -80,8 +80,18 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * Motorun %6'sı 0,5 eğim veriyordu. ⭐ Aynı ölçümün A grubu (seviye taraması) 8/8 birebir
  * tuttuğu için `Alan/mDef` ve `pAtk/mDef` doğrulanmış oldu — geriye tek serbest sayı kalmıştı.
  * ⚠️ Kule/Balista ölçülmedi, bilerek %6'da bırakıldı (bkz. `docs/SUR_TESTLERI.md`).
+ *
+ * ⚠️⚠️ **2026-08-12, DÖRDÜNCÜ değişiklik: `14c061fc` → `000c68dc`.** Sebep **seviye tavanı**:
+ * altı yapı 20 → **40** (Kale · Baraka · Akademi · Mimar Okulu · Mağara · Tapınak). Oyunu
+ * oynamış bir oyuncu barakasının 20'den yüksek olduğunu hatırlıyor. ⚠️ **Teleport 20'de kaldı**
+ * (kullanıcı): tabanı diğerlerinin ~250 katı olduğu için sv40 maliyeti `MAX_SAFE_INTEGER`'ı
+ * aşıyordu — bekçisi `formulas.test.ts`te.
+ *
+ * ⭐ Bu, hash'in **denge dışı** bir alandan kaydığı ilk örnek: `maxLevel` savaş matematiğine
+ * hiç girmiyor ama `BUILDINGS` tablosunun parçası olduğu için özete dâhil — ve dâhil olması
+ * doğru, çünkü aynı savaşın iki farklı tavanla üretilmiş orduları kıyaslanamaz.
  */
-const DEFAULT_HASH = '14c061fc';
+const DEFAULT_HASH = '000c68dc';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -99,7 +109,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('e8aefb74');
+    expect(catalogHash(cfg)).toBe('ce32cb94');
   });
 
   /**

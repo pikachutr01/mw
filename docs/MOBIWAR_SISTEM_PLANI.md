@@ -1070,8 +1070,25 @@ Dokuz metnin dokuzu da koda karşı okundu. **Tek gerçek çelişki Mimar Okulu'
 | **Baraka** | ✅ eğitim hızı. Eksik: seviye aynı zamanda **eşzamanlı sefer ve sipariş sayısını** da sınırlıyor (`queue.service.ts:178`). |
 | **Kale** | ✅ ×10 bütçe. Eksik: Kale'nin kendisi ile Sur/Büyü Kalkanı bütçeyi **tüketmiyor**. |
 | **Mağara** | ✅ alan bazlı süre, kaynak depolanmaz, savunmaya katılmaz. Eksik: yıkılan mağaranın onarım süresi **bizde seviyeyle kısalıyor** (oyunun kendi dokümanı sabit 24 saat diyordu; bilerek değiştirildi). |
-| **Çiftlik · Maden** | ✅ birebir. Eksik: ikisi **40. seviyeye** çıkıyor (diğerleri 20'de duruyor). |
-| **Akademi · Teleport** | ✅ birebir, ekleyecek bir şey yok. |
+| **Çiftlik · Maden** | ✅ birebir. ⭐ 2026-08-12'den beri **her yapı 40'a** çıkıyor, bu ikisi artık istisna değil. |
+| **Akademi · Teleport** | ✅ birebir. ⚠️ Teleport tavanı **20'de kaldı** — tabanı diğerlerinin ~250 katı olduğu için `1,8^(sv−1)` eğrisiyle sv40 maliyeti `Number.MAX_SAFE_INTEGER`'ı aşıyordu (kullanıcı kararı, bekçisi `formulas.test.ts`). |
+
+⭐⭐ **2026-08-12 — SEVİYE TAVANI 20 → 40** (kullanıcı, eski bir oyuncunun bildirimi: barakasının
+20'den yüksek olduğunu net hatırlıyor). Kale · Baraka · Akademi · Mimar Okulu · Mağara · Tapınak.
+Kale bütçesi kendiliğinden ölçekleniyor (7×40 + Teleport 20 = 300 ≤ Kale 40'ın 400'ü).
+
+⚠️⚠️ **Tavanı yükseltmek tek başına yetmiyor — asıl kısıt MALİYET EĞRİSİ.** Ölçüm: on şehri de
+Çiftlik/Maden 40 olan bir imparatorluk (34,7 M kaynak/gün, yağma hariç), gelirinin **tamamını**
+barakaya harcasa bile Baraka 27'ye **338 günde**, 30'a **5,4 yılda**, 40'a **1.926 yılda** ulaşıyor.
+Yani gerçek içerik olarak açılan aralık ≈ **21-28**; ötesi kâğıt üstünde. Eğriyi (`1,8`) ya da
+tabanları düşürmek ayrı bir karar, bu turda yapılmadı.
+
+⚠️ **Baraka'nın hız faydası 27'de duruyor.** `trainingTimeSeconds` `1,2^sv` ile bölüyor ve
+formülde taban yok (Baraka 40'ta Cüce 0,09 sn), ama üretim süresi hem kuyrukta
+(`queue.service.ts` `scaled`) hem ekranda (`city.controller.ts` `dur`) **1 saniyede tabanlı**.
+Cüce Baraka **27**'de, Elf **30**'da bu tabana çakılıyor. Tavan 20 iken tabana hiç
+ulaşılamıyordu (Cüce sv20 = 3,55 sn). Yüksek seviyeler yine de ölü değil: Baraka aynı anda
+verilebilecek emir sayısını ve sefer limitini de belirliyor.
 
 ### ⛔ `Tooltip`e dokunma desteği eklenmesi de geri alındı
 

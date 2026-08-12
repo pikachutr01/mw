@@ -12,8 +12,22 @@ import type { BuildingDef } from './types.ts';
  * 2026-08-09'dan beri) seviye 1'in.
  * Ölçekleme `buildingCost()` içinde tek yerde yapılıyor.
  *
- * Seviye tavanları (§13.11.2): Çiftlik/Maden 40 · diğer yapılar 20 · teknikler sınırsız.
- * Kale bütçesi (§13.11.1): Σ(bina seviyeleri) ≤ Kale × 10 — Kale kendisi ve Sur/Büyü Kalkanı hariç.
+ * ⭐⭐ Seviye tavanı **40 — Teleport hariç, o 20'de kaldı** (kullanıcı, 2026-08-12 · eski
+ * oyuncu bildirimi). Öncesinde yalnız Çiftlik/Maden 40, diğerleri 20 idi; oyunu oynamış bir
+ * oyuncu barakasının 20'den yüksek olduğunu net hatırlıyor. Tekniklerde tavan yok.
+ * Teleport'un istisna olma gerekçesi kendi satırında (sayı taşması).
+ *
+ * ⚠️ Kale bütçesi (§13.11.1): Σ(bina seviyeleri) ≤ Kale × 10 — Kale kendisi ve Sur/Büyü Kalkanı
+ * hariç. Tavan yükselince bu kural **kendiliğinden ölçekleniyor** ve hâlâ bağlayıcı değil:
+ * bütçeyi tüketen sekiz yapı tavanda 7×40 + Teleport 20 = **300**, Kale 40'ın bütçesi ise
+ * **400**. Yani her şeyi tavana çıkarmak mümkün; kural yalnız SIRAYI zorluyor (Kale'yi önden
+ * yükseltmek gerekiyor).
+ *
+ * ⚠️⚠️ **Baraka 27'den sonra Cüce, 30'dan sonra Elf hızlanmıyor** — `trainingTimeSeconds`
+ * `1,2^seviye` ile bölüyor ama üretim süresi hem kuyrukta (`queue.service.ts` `scaled`) hem
+ * ekranda (`city.controller.ts` `dur`) **1 saniyede tabanlı**. Tavan 20 iken bu tabana hiç
+ * ulaşılamıyordu (Cüce sv20 = 3,55 sn); 40'a çıkınca ilk kez ulaşılıyor. Yüksek seviyeler yine
+ * de ölü değil: Baraka aynı anda verilebilecek **emir sayısını** ve sefer limitini de belirliyor.
  *
  * ══════════════════════════════════════════════════════════════════════════════════════════
  * ⭐⭐ 2026-08-10 — TABANLAR ~5-6 KAT YÜKSELTİLDİ. Ölçüm ve iki bağımsız çapa.
@@ -42,8 +56,8 @@ import type { BuildingDef } from './types.ts';
  * Akademi, 8. sıradaki Tapınak'tan ucuz.
  */
 export const BUILDINGS: readonly BuildingDef[] = [
-  b('castle', 'Kale', 900, 700, 20, false, false),
-  b('barracks', 'Baraka', 700, 500, 20, false, true),
+  b('castle', 'Kale', 900, 700, 40, false, false),
+  b('barracks', 'Baraka', 700, 500, 40, false, true),
   /**
    * ⭐ EKONOMİ YAPILARI — kullanıcı kararı (2026-07-27): ürettiği kaynaktan AĞIR yer.
    * Maden altın üretir → altın ağırlıklı (12/9); Çiftlik yemek üretir → yemek ağırlıklı (9/12).
@@ -63,12 +77,21 @@ export const BUILDINGS: readonly BuildingDef[] = [
    */
   b('farm', 'Çiftlik', 9, 12, 40, true, true),
   b('mine', 'Maden', 12, 9, 40, true, true),
-  b('academy', 'Akademi', 1400, 1000, 20, false, true),
+  b('academy', 'Akademi', 1400, 1000, 40, false, true),
   // ⭐ ÇAPA 1 (yukarıda) — kullanıcı hatırası, tüm ölçeği bu sayı belirliyor.
-  b('architect_school', 'Mimar Okulu', 1000, 1000, 20, false, true),
-  b('cave', 'Mağara', 900, 600, 20, false, true),
-  b('temple', 'Tapınak', 2000, 1500, 20, false, true),
-  // Teleport sv1 = 500.000/500.000 (kullanıcı hatırası, §13.11.4) → taban doğrudan bu.
+  b('architect_school', 'Mimar Okulu', 1000, 1000, 40, false, true),
+  b('cave', 'Mağara', 900, 600, 40, false, true),
+  b('temple', 'Tapınak', 2000, 1500, 40, false, true),
+  /**
+   * Teleport sv1 = 500.000/500.000 (kullanıcı hatırası, §13.11.4) → taban doğrudan bu.
+   *
+   * ⚠️⚠️ **TAVAN 20'DE KALDI — tek istisna** (kullanıcı, 2026-08-12). Diğer yapılar 40'a
+   * çıkarken Teleport dışarıda bırakıldı ve bunun ölçülmüş bir gerekçesi var: tabanı diğer
+   * yapıların ~250 katı, `1,8^(sv−1)` eğrisiyle birleşince sv40 maliyeti **9,03×10¹⁵** oluyor
+   * ve `Number.MAX_SAFE_INTEGER`'ı (9,007×10¹⁵) **aşıyor** — yani fiyat artık tam sayı olarak
+   * temsil edilemiyordu. 20'de kalınca en pahalı tavan maliyeti 3,16×10¹⁰'a iniyor, sınırın
+   * beş kat altında.
+   */
   b('teleport', 'Teleport', 500_000, 500_000, 20, false, true),
 ] as const;
 
