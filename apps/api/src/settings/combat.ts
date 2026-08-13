@@ -48,7 +48,7 @@ const COMBAT_MAP: Readonly<Record<string, Setter>> = {
   'combat.trapTriggerMin': nest('trap', 'triggerMin'),
   'combat.trapTriggerMax': nest('trap', 'triggerMax'),
   'combat.trapPressureScale': nest('trap', 'pressureScale'),
-  'combat.trapGnomeDisarm': nest('trap', 'gnomeDisarm'),
+  // ⭐ `combat.trapGnomeDisarm` KALDIRILDI (2026-08-13) — motorda böyle bir katsayı kalmadı.
   'combat.trapPower': nest('trap', 'power'),
   'combat.gnomeSabotagePerStruct': nest('gnomeSabotage', 'perStruct'),
   'combat.gnomeSabotageMax': nest('gnomeSabotage', 'max'),

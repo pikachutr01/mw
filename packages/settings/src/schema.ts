@@ -740,13 +740,11 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'yetmez. Eski «doygunluk» ayarı adetle çarpıyordu ve tek birimlik ordu hiç tuzak '
       + 'patlatamıyordu (2026-08-03 düzeltmesi).',
   },
-  {
-    key: 'combat.trapGnomeDisarm',
-    label: 'Gnom başına etkisiz tuzak',
-    type: 'number', default: 1.5, min: 0, max: 20, tag: 'design', unit: 'adet',
-    description: 'Bir Gnom\'un etkisiz hâle getirdiği tuzak sayısı. Büyütmek Gnom\'u tuzağa karşı daha '
-      + 'değerli yapar.',
-  },
+  /* ⭐ `combat.trapGnomeDisarm` KALDIRILDI (2026-08-13). Gnomun tuzak sökmesi ayarlanabilir bir
+   * katsayı değilmiş: gnom tuzağı da diğer savunma yapıları gibi Tur 1'de yıkıyor ve tuzağa
+   * düşen pay ALAN oranından geliyor (`combat.ts` · `gnomeStructStrike`). Ölçüm eğrinin lineer
+   * bile olmadığını gösterdi — 50 gnom 0 tuzak söküyor, 100 gnom 47, 250 gnom 761.
+   * Ayrıntı: `docs/SAVUNMA_BINARY_KONTROL.md` K bloğu. */
   {
     key: 'combat.trapPower',
     label: 'Tuzak salvo şiddeti',

@@ -12,7 +12,7 @@
  * dağıtımı, enkaz, XP, kahraman, ±%0.1 jitter, 5 tur tavanı.
  * ========================================================================== */
 import {
-  FLYING, NONCOMBAT, NO_POOL, NO_ROUND_LOSS, OUT_OF_BATTLE, PASSIVE_STRUCTS, SETTLE_ON_LOSS,
+  NONCOMBAT, NO_POOL, NO_ROUND_LOSS, OUT_OF_BATTLE, PASSIVE_STRUCTS, SETTLE_ON_LOSS,
   LEVEL_BASED, SETTLE_ON_LOSS_DEFENDER, TECHS_BY_ID, TECH_BY_UNIT, UNITS, UNITS_BY_ID, catalogHash,
   type TechLevels, type UnitDef,
 } from '@mobilwar/catalog';
@@ -574,7 +574,104 @@ function dealTargeted(
 function turn1GnomeSkirmish(atk: Army, def: Army, _rng: Rng, cfg: CombatConfig): void {
   // Sıra binary'deki gibi: önce savunan gnom mancınığı vurur, sonra gnom yok olur.
   gnomeStrike(def, atk, 'mangonel', cfg);
+  // ⭐ Saldıranın gnomu savunma yapılarını yıkar; ardından SAĞ KALAN yapı gnoma karşılık verir.
+  gnomeStructStrike(atk, def);
+  structGnomeCounter(def, atk);
   gnomeStrike(atk, def, 'gnome', cfg);
+}
+
+/**
+ * ⭐⭐ §G2 SALDIRANIN GNOMU → SAVUNMA YAPILARI (ölçüm 2026-08-13,
+ * `docs/SAVUNMA_BINARY_KONTROL.md` L/K blokları — 12/12 birebir).
+ *
+ * `gnomeStrike`in **alan-paylı** kardeşi: tek hedefe değil, savunanın SAYILI bütün savunma
+ * birimlerine aynı anda vurur ve pay `dealType`teki standart formülün aynısıdır:
+ * ```
+ *   havuz  = gnom.poolHp (200) × gnomAdedi
+ *   pay_i  = (alan_i × adet_i / Σ alan×adet) × havuz
+ *   net_i  = pay_i − pDef_i × adet_i
+ *   yıkılan_i = ⌊net_i / mDef_i⌋            (hedef adediyle sınırlı)
+ * ```
+ *
+ * ⚠️ **Bu mekanizma motorda HİÇ YOKTU** ve tek başına dört ölçümü birden açıklıyordu:
+ * binary'de 1000 gnom, 500 okçu kulesinin hepsini yıkıyor (onarım 380-401 geri getiriyor) —
+ * bizde kuleye hiç dokunulmuyordu. Gnom `OUT_OF_BATTLE` olduğu için "savaşmaz" sanılmıştı;
+ * oysa savaşmıyor, **sabotaj yapıyor** — ters yönü (`gnomeStrike(def, atk, 'mangonel')`)
+ * zaten 2026-08-07'de ölçülüp yazılmıştı, eksik olan simetriğiydi.
+ *
+ * ⭐ **TUZAK DA HEDEF** — bu yüzden ayrı bir "gnom tuzak söker" katsayısı YOK
+ * (`cfg.trap.gnomeDisarm` bu ölçümle kaldırıldı). Sökme eğrisinin lineer olmamasının sebebi
+ * `net` teriminin işareti: 50 gnom → net **negatif** → 0 tuzak · 100 → 47 · 250 → 761 ·
+ * 500+ → hepsi. Eski `1,5 × gnom` modeli hem şekil hem büyüklük olarak yanlıştı.
+ *
+ * ⭐ **PAY PAYLAŞIMI, K5/L2 "çelişkisini" çözen şey:** 1000 gnom tek başına 1000 tuzağın
+ * hepsini siler, ama yanında 500 okçu kulesi varsa alan oranı `kule 12.000 / tuzak 3.000`
+ * olur, tuzağa havuzun yalnız %20'si düşer → 523 tuzak gider (ölçüm: 475-477 kalır).
+ * İki ölçüm çelişmiyordu; aynı formülün iki noktasıydı.
+ *
+ * ⚠️ `LEVEL_BASED` (Sur · Büyü Kalkanı · Tapınak) hedef DEĞİL: onlar adet değil SEVİYE taşır.
+ * `PASSIVE_STRUCTS` olan Tuzak ise hedef — pasiflik "vurmaz" demek, "vurulmaz" demek değil.
+ */
+function gnomeStructStrike(atk: Army, def: Army): void {
+  const gn = atk.units.find((e) => e.id === 'gnome');
+  if (!gn || gn.count <= 0) return;
+
+  const targets = def.units.filter(
+    (e) => e.kind === 'defense' && !LEVEL_BASED.has(e.id) && e.count > 0,
+  );
+  const P = targets.reduce((s, e) => s + e.stats.unitPower * e.count, 0);
+  if (P <= 0) return;
+
+  const pool = gn.stats.poolHp * gn.count;
+  for (const e of targets) {
+    const net = (e.stats.unitPower * e.count * pool) / P - e.stats.pDef * e.count;
+    if (net <= 0) continue;
+    const mDef = e.stats.mDef > 0 ? e.stats.mDef : 1;
+    const kill = Math.min(e.count, Math.floor(net / mDef));
+    if (kill <= 0) continue;
+    e.count -= kill;
+    if (e.id === 'trap') e.spent = true;
+    def.lossMag += kill * mDef;
+  }
+}
+
+/**
+ * ⭐ §G3 SAĞ KALAN SAVUNMA YAPISI → SALDIRANIN GNOMU (ölçüm L6 — birebir).
+ *
+ * `gnomeStructStrike`in karşılığı. Havuz **vuruştan SONRAKİ** adetten hesaplanır; sıra ölçümle
+ * sabit: 1000 gnom 200 muhafızın 53'ünü yıkıyor, geriye kalan **147** muhafız
+ * `⌊(200×147 − 12×1000)/260⌋ = 66` gnom öldürüyor → 934 gnom kalıyor (ölçüm: 934).
+ * 200 muhafızla hesaplasaydık 107 çıkardı; yani sıra gözlemlenebilir.
+ *
+ * ⚠️ **İKİ SÜZGEÇ DE ÖLÇÜMDEN:**
+ *  • **tip 2 şartı** — Okçu Kulesi ve Balista tip 1 → L1/L5'te gnom hiç ölmüyor (1000/1000);
+ *    tip 2 olan Muhafız öldürüyor. (`gnomeStrike`teki tip-2 şartının aynısı.)
+ *  • **`PASSIVE_STRUCTS` hariç** — Tuzak tip 2 ama K3'te 239 tuzak sağ kalmasına rağmen
+ *    250 gnomun hiçbiri ölmüyor. Tuzak vurulur, vurmaz.
+ *
+ * ⚠️ Bu yön yalnız YAPILARA özgü: savunanın SAVAŞÇILARI saldıranın gnomunu öldürmez
+ * (D4: 500 gnom → 120 cüce, gnom kaybı 0). Bu yüzden `kind === 'defense'` şartı var.
+ */
+function structGnomeCounter(def: Army, atk: Army): void {
+  const gn = atk.units.find((e) => e.id === 'gnome');
+  if (!gn || gn.count <= 0) return;
+
+  const pool = def.units.reduce(
+    (s, e) => (e.kind === 'defense' && e.type === 2 && !PASSIVE_STRUCTS.has(e.id)
+      ? s + e.stats.poolHp * Math.max(0, e.count)
+      : s),
+    0,
+  );
+  if (pool <= 0) return;
+
+  const net = pool - gn.stats.pDef * gn.count;
+  if (net <= 0) return;
+  const mDef = gn.stats.mDef > 0 ? gn.stats.mDef : 1;
+  const kill = Math.min(gn.count, Math.floor(net / mDef));
+  if (kill <= 0) return;
+
+  gn.count -= kill;
+  atk.lossMag += kill * mDef;
 }
 
 /**
@@ -637,24 +734,38 @@ function gnomeStrike(from: Army, to: Army, targetId: string, cfg: CombatConfig):
  *     patlar (ölçüm: 121 patladı, 2 kaldı)
  *   • 1200 Elf ↔ 1000 Tuzak → ESİK baskın → kalan **10…250** (arşiv ölçümü: 30-250)
  *
- * ⚠️ **Uçanlar hâlâ dışarıda.** Binary'nin toplamında böyle bir süzgeç GÖRÜNMÜYOR (iki liste
- * ham toplanıyor), ama oyunun kendi dokümanı tuzağın *"yer ünitelerine"* zarar verdiğini
- * söylüyor (`teknik_ve_yapi_dokumantasyonu.md`). Doküman lehine korundu; ölçümle çürütülürse
- * `ground` filtresinden `FLYING`i çıkarmak tek satır.
+ * ✅ **UÇAN SÜZGECİ KALDIRILDI (2026-08-13).** Buraya bir `FLYING` süzgeci konmuştu çünkü oyunun
+ * kendi dokümanı tuzağın *"yer ünitelerine"* zarar verdiğini söylüyordu; yorumun kendisi bunun
+ * [REKON] olduğunu ve *"binary'nin toplamında böyle bir süzgeç GÖRÜNMÜYOR"*u kaydediyordu.
+ * Ölçüm binary'yi haklı çıkardı (`docs/SAVUNMA_BINARY_KONTROL.md` M bloğu): süzgeç kalkınca
+ * çıkan sayılar üç bağımsız satırda birden tutuyor —
+ * Ejderha 100 → **78-85** kalır (ölçüm 79-85) · Pegasus 500 → **273-336** (ölçüm 274-334) ·
+ * kontrol olarak Cüce 3000 → **1299-1747** (ölçüm 1301-1749). Doküman ifadesi anlatı düzeyindeymiş.
  */
 function trapVolley(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): void {
   const tr = def.units.find((e) => e.id === 'trap');
   if (!tr || tr.count <= 0) return;
 
-  const gn = atk.units.find((e) => e.id === 'gnome');
-  const disarmed = gn && gn.count > 0
-    ? Math.min(tr.count, gn.count * cfg.trap.gnomeDisarm * (0.7 + 0.6 * rng.next()))
-    : 0;
-  const armed = tr.count - disarmed;
+  /**
+   * ⭐ Gnomun tuzağı "sökmesi" ARTIK BURADA DEĞİL (2026-08-13). Sökme diye ayrı bir mekanizma
+   * yokmuş: gnom tuzağı da diğer savunma yapıları gibi `gnomeStructStrike` ile yıkıyor ve o
+   * Tur 1'de bu salvodan ÖNCE çalışıyor — yani buraya gelen `tr.count` zaten sökülmüş hâli.
+   * Kaldırılan `cfg.trap.gnomeDisarm` (1,5 ± %30) hem şekil hem büyüklük olarak yanlıştı.
+   */
+  const armed = tr.count;
 
-  const ground = atk.units.filter((e) => e.count > 0 && !FLYING.has(e.id) && !NO_ROUND_LOSS.has(e.id));
+  /**
+   * ⚠️ **UÇANLAR ARTIK SÜZÜLMÜYOR (2026-08-13 ölçümü).** Buradaki `FLYING` süzgeci bir [REKON]
+   * varsayımdı ve yorumun kendisi *"binary'nin toplamında böyle bir süzgeç GÖRÜNMÜYOR"* diyip
+   * çürütülmesi hâlinde tek satır olduğunu yazıyordu. Ölçüm çürüttü: Ejderha 100 → Tuzak 1000
+   * savaşında binary **15-21 ejderha** öldürüyor ve tuzakları harcıyor (kalan 10-250), yani
+   * tuzak tarlası uçanı da vuruyor. Oyunun kendi dokümanının *"yer ünitelerine zarar verir"*
+   * ifadesi anlatı düzeyindeymiş.
+   * `NO_ROUND_LOSS` (yük arabası · casus kuş · gnom) süzgeci DURUYOR — M3 ölçümü onu doğruluyor
+   * (100 casus kuş 50 tuzağa hiç dokunmuyor).
+   */
+  const ground = atk.units.filter((e) => e.count > 0 && !NO_ROUND_LOSS.has(e.id));
   if (armed <= 0 || ground.length === 0) {
-    tr.count = Math.max(0, tr.count - disarmed);
     tr.spent = true;
     return;
   }
@@ -667,7 +778,13 @@ function trapVolley(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): void {
   const resistance = Math.max(1e-9, tr.stats.poolHp);
   const pressure = ground.reduce((s, e) => s + (e.stats.pDef + e.stats.mDef) * e.count, 0);
   const cap = armed * rng.range(cfg.trap.triggerMin, cfg.trap.triggerMax);
-  const fired = Math.min((pressure * cfg.trap.pressureScale) / resistance, cap);
+  /**
+   * ⭐ **TETİKLENEN TUZAK TAM SAYI (2026-08-13).** Tuzak bölünmez; binary de kesirli patlatmıyor.
+   * K8 bunu tek başına gösteriyor: `Cüce 500 → Tuzak 1000` savaşında kesirli 280,9 tuzak
+   * **719** kalan verirken, aşağı yuvarlanmış 280 tuzak ölçümün tam sayısını veriyor (**720**)
+   * ve zincirleme olarak ölen cüce de doğruya oturuyor (498 → 2 cüce kalır; ölçüm 2-3).
+   */
+  const fired = Math.floor(Math.min((pressure * cfg.trap.pressureScale) / resistance, cap));
   if (fired > 0) {
     const pool = tr.stats.poolHp * fired * cfg.trap.power * jitter(rng);
     const P = ground.reduce((s, e) => s + e.stats.unitPower * e.count, 0);
@@ -688,14 +805,26 @@ function trapVolley(atk: Army, def: Army, rng: Rng, cfg: CombatConfig): void {
          * Binary de aynı yolu izliyor: tuzak salvosu standart hasar çekirdeğinden
          * (`FUN_0040e0c4`) geçiyor ve o çekirdek `net = pay − mitigasyon × adet` yapıyor.
          */
+        /**
+         * ⭐ **ÖLDÜRÜLEN AŞAĞI YUVARLANIR (2026-08-13)** — ortak `applyLoss` yerine `gnomeStrike`
+         * ile aynı tam sayılı hesap. Salvo Tur 1'e ait ve binary Tur 1'de `floor`luyor; kesirli
+         * kalan yüzünden son birim ölmüş sayılıyordu: K7'de 119,97 cüce → bizde 0, binary'de **1**
+         * kalıyordu. Bu, kazananı da değiştiriyordu (savunanda yalnız tuzak varsa ayakta kimse
+         * kalmıyor → BERABERE; binary'de son cüce sağ kaldığı için SALDIRAN).
+         * ⚠️ `applyLoss`a DOKUNULMADI — referans savaş ve Sur/Kalkan altın testleri ona sabit.
+         */
         const share = (e.stats.unitPower * e.count * pool) / P;
         const net = share - e.stats.pDef * e.count;
         if (net <= 0) continue;
-        atk.lossMag += applyLoss(e, net);
+        const mDef = e.stats.mDef > 0 ? e.stats.mDef : 1;
+        const kill = Math.min(e.count, Math.floor(net / mDef));
+        if (kill <= 0) continue;
+        e.count -= kill;
+        atk.lossMag += kill * mDef;
       }
     }
   }
-  tr.count = Math.max(0, tr.count - disarmed - fired);
+  tr.count = Math.max(0, tr.count - fired);
   tr.spent = true;
 }
 
@@ -843,9 +972,15 @@ export function simulate(
   let turns = 1;
   for (const e of atk.units) e.snap = e.count;
   for (const e of def.units) e.snap = e.count;
+  /**
+   * ⭐ SIRA DEĞİŞTİ (2026-08-13): gnom sabotajı tuzak salvosundan **ÖNCE**.
+   * Ghidra'da Tur 1 (`FUN_0040e794`) hasar çekirdeği çağrılarını salvodan önce yapıyor ve
+   * ölçüm de bunu gerektiriyor: L2'de 1000 gnom 523 tuzağı yıkıyor, **geriye kalan 477 tuzak
+   * patlamıyor** (ölçüm: 475-477 kalır). Ters sırada salvo önce dolu tarlayla tetiklenirdi.
+   */
+  if (cfg.turn1GnomeSkirmish) turn1GnomeSkirmish(atk, def, rng, cfg);
   // §Z Tuzak salvosu: ordu şehre yaklaşırken, karşılıklı vuruşma başlamadan.
   trapVolley(atk, def, rng, cfg);
-  if (cfg.turn1GnomeSkirmish) turn1GnomeSkirmish(atk, def, rng, cfg);
 
   for (let r = 2; r <= 5; r++) {
     if (combatAlive(atk, cfg) <= 0 || combatAlive(def, cfg) <= 0) break;
@@ -913,6 +1048,23 @@ export function simulate(
    */
   const atkStanding = combatAlive(atk, cfg);
   const defStanding = combatAlive(def, cfg);
+  /**
+   * ⛔ **`draw` BİLİNÇLİ BİR SAPMADIR — binary'ye uydurmak için KALDIRMA** (kullanıcı kararı,
+   * 2026-08-14). Binary'de beraberlik diye bir sonuç yok; iki taraf da 0 olduğunda doğrudan
+   * aşağıdaki *"eşitlikte savunan"* kuralına düşüyor ve "Savunan kazandı" yazıyor. Bunu artık
+   * **on ölçüm** birden gösteriyor (`docs/SAVUNMA_BINARY_KONTROL.md` K1-K6 · L1 · L4 · M3 +
+   * `SAVAS_BINARY_KONTROL.md` satır 6). MobilWar yine de beraberliği **oyun mekaniği olarak
+   * tutuyor**: kimsenin ayakta kalmadığı bir savaşı savunanın zaferi saymak yanlış okunuyor.
+   *
+   * ⚠️ Sonuçları bilerek kabul edildi: berabere biten savaşta **iki tarafa da 0 XP**, kahraman
+   * çıkma şansı 0 ve saldırana ganimet yok (enkazın tamamı savunanın şehrine yazılır —
+   * `loot.ts`, `winner !== 'attacker'`). Yani ganimet açısından savunan galibiyetiyle aynı,
+   * yalnız kimse ödül almıyor.
+   *
+   * ⚠️ Ulaşılabilirliği ölçüldü: **yalnız hiç vuruşma olmayan** savaşlarda çıkıyor (iki tarafın
+   * da savaşçısı yok). Karşılıklı imhayla beraberlik ARANDI ve 12.811 senaryoda bulunamadı —
+   * tur tavanı 5 olduğu için iki ordunun aynı turda silinmesine vakit yok (2026-08-13 taraması).
+   */
   let winner: 'attacker' | 'defender' | 'draw';
   if (atkStanding <= 0 && defStanding <= 0) winner = 'draw';
   else if (defStanding <= 0) winner = 'attacker';

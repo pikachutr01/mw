@@ -70,16 +70,36 @@ describe('tuzak salvosu', () => {
     expect(r.defender.counts['trap'] ?? 0).toBeLessThan(123);
   });
 
-  it('UÇAN ordu tuzağa basmaz', () => {
-    const r = simulate(vs({ dragon: 200 }, { trap: 123 }));
-    expect(r.defender.counts['trap']).toBe(123);
+  it('⭐ ÖLÇÜM: UÇAN ordu da tuzağa basar — "uçanlar muaf" varsayımı çürüdü', () => {
+    /* `docs/SAVUNMA_BINARY_KONTROL.md` M1: binary'de Ejderha 100 → Tuzak 1000 savaşı
+     * **79-85 ejderha** bırakıyor ve tuzakları harcıyor (kalan 10-250). Eski motor `FLYING`
+     * süzgeci yüzünden 100/100 + 1000/1000 veriyordu — yani uçan ordu tuzak tarlasını
+     * bedavaya geçiyordu. Süzgeç kalktı; bu test geri gelmesini engelliyor. */
+    const ejderha: number[] = [];
+    const tuzak: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const r = simulate(vs({ dragon: 100 }, { trap: 1000 }, `ucan-${i}`));
+      ejderha.push(r.attacker.counts['dragon'] ?? 0);
+      tuzak.push(r.defender.counts['trap'] ?? 0);
+    }
+    expect(Math.min(...ejderha), 'ejderha kaybı ölçümün altına düşmemeli').toBeGreaterThanOrEqual(75);
+    expect(Math.max(...ejderha), 'uçanlar tuzaktan zarar GÖRMELİ').toBeLessThanOrEqual(89);
+    expect(Math.max(...tuzak), 'uçan ordu tuzakları harcamalı').toBeLessThan(300);
   });
 
-  it('Gnom sabotajı hâlâ tuzak eksiltir (saldıran yer birimi olmasa bile)', () => {
-    // Gnom `NO_ROUND_LOSS` → tuzağa BASMAZ ama sabote eder; yanında Ejderha uçtuğu için
-    // basınç sıfır → düşen tek şey sabotaj.
-    const r = simulate(vs({ gnome: 40, dragon: 100 }, { trap: 123 }));
-    expect(r.defender.counts['trap']).toBeLessThan(123);
+  it('⭐ ÖLÇÜM: gnom tuzağı "sökmez", hasar çekirdeğiyle yıkar — eğri LİNEER DEĞİL', () => {
+    /* `docs/SAVUNMA_BINARY_KONTROL.md` K bloğu. Eski motorda `gnomeDisarm = 1,5 × gnom` vardı,
+     * yani doğrusal. Gerçekte gnom tuzağı da bir savunma yapısı gibi yıkıyor ve `net` terimi
+     * (`havuz − pDef × adet`) eğriyi büküyor: 50 gnom tarlaya HİÇ dokunamıyor. */
+    const giden = (n: number): number =>
+      1000 - (simulate(vs({ gnome: n }, { trap: 1000 }, 'gnom')).defender.counts['trap'] ?? 0);
+
+    expect(giden(50), '50 gnom: net negatif → tek tuzak bile gitmez').toBe(0);
+    expect(giden(100)).toBeGreaterThanOrEqual(40);
+    expect(giden(100)).toBeLessThanOrEqual(55);
+    expect(giden(250)).toBeGreaterThanOrEqual(750);
+    expect(giden(250)).toBeLessThanOrEqual(775);
+    expect(giden(500), '500 gnom tarlanın tamamını süpürür').toBe(1000);
   });
 
   it('`pressureScale` panelden kısılınca daha az tuzak patlar', () => {
