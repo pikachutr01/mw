@@ -258,7 +258,8 @@ export class AuthService {
     const username = input.username.trim();
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT a.id AS account_id, a.password_hash, a.locked_until, a.failed_logins,
-             p.id AS player_id, p.username, p.banned_at, p.ban_until, p.ban_reason
+             p.id AS player_id, p.username, p.banned_at, p.ban_until, p.ban_reason,
+             p.deleted_at
         FROM players p
         JOIN accounts a ON a.id = p.account_id
        WHERE p.world_id = ${input.worldId} AND lower(p.username) = ${username.toLowerCase()}
@@ -267,6 +268,25 @@ export class AuthService {
 
     // Kullanıcı yoksa da parola doğrulaması kadar zaman harca (kullanıcı-var-mı sızıntısını kapatır).
     if (!row) {
+      await this.passwords.verify('$argon2id$v=19$m=19456,t=2,p=1$aaaaaaaaaaaaaaaa$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', input.password);
+      throw new AuthError('invalid_credentials', 'Kullanıcı adı veya parola hatalı.');
+    }
+
+    /**
+     * ⭐ SİLİNMİŞ HESAP GİRİŞ YAPAMAZ (2026-08-13, `auth/account-delete.service.ts`).
+     *
+     * ⚠️ Bu kapı **kullanıcı adı artık anonimleşmediği için** gerekli: silinmiş bir hesabın adı
+     * giriş formunda hâlâ aranabiliyor. Parola zaten rastgeleye çevriliyor, yani kapı olmasa da
+     * giriş olmazdı — ama "silinmiş" durumunu parolanın rastgeleliğine bırakmak, niyeti koda
+     * yazmamak olurdu.
+     *
+     * ⚠️⚠️ İki şey **bilerek** yukarıdaki `!row` dalıyla birebir aynı: (1) hata kodu ve metni —
+     * ayrı bir mesaj ("bu hesap silinmiş") uçları *"bu ad silinmiş bir hesaba mı ait"* sorusunu
+     * cevaplayan bir araca çevirirdi ve silmenin ana şartı tam da bunun bilinmemesi; (2) kukla
+     * hash doğrulaması — atlanırsa erken dönüş ölçülebilir bir **zamanlama** farkı üretir ve
+     * mesajla kapattığımız sızıntıyı saniyenin binde biriyle geri açar.
+     */
+    if (row['deleted_at']) {
       await this.passwords.verify('$argon2id$v=19$m=19456,t=2,p=1$aaaaaaaaaaaaaaaa$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', input.password);
       throw new AuthError('invalid_credentials', 'Kullanıcı adı veya parola hatalı.');
     }

@@ -645,9 +645,10 @@ export class AdminActionsController {
    *     CASCADE ama `players` satırı silinmediği için kendiliğinden gitmezler.
    *   • **Ad ANONİMLEŞTİRİLMEZ.** Gizlilik talebi değil; adı silmek savaş geçmişindeki
    *     denetim izini yönetici için okunmaz hâle getirirdi.
-   *   • **KALICI CEZA + oturum düşürme.** ⚠️ `players.deleted_at` hiçbir yerde OKUNMUYOR —
-   *     yalnız bir işaret. Ceza vermeseydik kaldırılan oyuncu girişe devam eder ve şehirsiz,
-   *     bozuk bir dünyaya düşerdi.
+   *   • **KALICI CEZA + oturum düşürme.** ⚠️ `players.deleted_at` oyun sorgularının hiçbiri
+   *     tarafından okunmuyor; tek okuyucusu 2026-08-13'ten beri `auth.service` → `login`
+   *     (silinmiş hesap giremesin diye). Ceza vermeseydik kaldırılan oyuncu şehirsiz, bozuk
+   *     bir dünyaya düşerdi — `deleted_at` tek başına onu durdurur ama sebebini yazmaz.
    *
    * ⚠️ **`players` satırı SİLİNMEZ**: `cities.player_id` NO ACTION, `battles`/`rankings` ise
    * FK'sız referans tutuyor. Satırı yok etmek savaş geçmişinde ve komşuların raporlarında

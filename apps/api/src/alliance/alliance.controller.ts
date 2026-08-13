@@ -75,11 +75,27 @@ export class AllianceController {
       };
     }
 
+    /**
+     * ⚠️⚠️ **TOPLAM PUAN SÜZGECİ, SIRALAMAYLA AYNI OLMAK ZORUNDA** (2026-08-13'te düzeltildi).
+     *
+     * Bu üç ekran (panel · arama listesi · herkese açık künye) toplamı `players.score`tan
+     * kendisi hesaplıyor; ittifak SIRALAMASI ise anlık görüntüde
+     * `banned_at IS NULL AND alliance_score_excluded = false` süzüyor
+     * (`ranking/ranking.service.ts` → `takeSnapshot`). Süzgeç burada YOKTU: yönetici bir hesabı
+     * panelden ittifak puanından muaf tuttuğunda ekran bir sayı, sıralama başka bir sayı
+     * gösteriyordu — hangisinin doğru olduğunu söylemenin de yolu yoktu.
+     *
+     * ⚠️ İfade `ranking.service.ts`teki **birebir aynısı**; iki yerde iki farklı biçimde
+     * yazılırsa biri kaçınılmaz olarak bayatlar. ⚠️ Aşağıdaki ÜYE listesindeki tekil `m.score`
+     * süzülmüyor ve süzülmemeli: o "bu üyenin puanı", takım toplamı değil.
+     */
     const [a] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT a.id, a.name, a.text, a.leader_id, p.username AS leader_name,
              r.rank, r.prev_rank,
              (SELECT COUNT(*)::int FROM players m WHERE m.alliance_id = a.id) AS member_count,
-             (SELECT COALESCE(SUM(m.score), 0) FROM players m WHERE m.alliance_id = a.id) AS score
+             (SELECT COALESCE(SUM(m.score), 0) FROM players m
+               WHERE m.alliance_id = a.id
+                 AND m.banned_at IS NULL AND m.alliance_score_excluded = false) AS score
         FROM alliances a
         JOIN players p ON p.id = a.leader_id
         LEFT JOIN rankings r ON r.world_id = a.world_id AND r.kind = 'alliance' AND r.subject_id = a.id
@@ -167,7 +183,10 @@ export class AllianceController {
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT a.id, a.name,
              (SELECT COUNT(*)::int FROM players m WHERE m.alliance_id = a.id) AS member_count,
-             (SELECT COALESCE(SUM(m.score), 0) FROM players m WHERE m.alliance_id = a.id) AS score,
+             -- Süzgeç, /alliance ucundaki notun aynısı: toplam ittifak SIRALAMASIYLA eşit olmalı.
+             (SELECT COALESCE(SUM(m.score), 0) FROM players m
+               WHERE m.alliance_id = a.id
+                 AND m.banned_at IS NULL AND m.alliance_score_excluded = false) AS score,
              r.rank
         FROM alliances a
         LEFT JOIN rankings r ON r.world_id = a.world_id AND r.kind = 'alliance' AND r.subject_id = a.id
@@ -215,7 +234,10 @@ export class AllianceController {
       SELECT a.id, a.name, a.text, a.created_at, p.username AS leader_name,
              r.rank, r.prev_rank,
              (SELECT COUNT(*)::int FROM players m WHERE m.alliance_id = a.id) AS member_count,
-             (SELECT COALESCE(SUM(m.score), 0) FROM players m WHERE m.alliance_id = a.id) AS score
+             -- Süzgeç, /alliance ucundaki notun aynısı: toplam ittifak SIRALAMASIYLA eşit olmalı.
+             (SELECT COALESCE(SUM(m.score), 0) FROM players m
+               WHERE m.alliance_id = a.id
+                 AND m.banned_at IS NULL AND m.alliance_score_excluded = false) AS score
         FROM alliances a
         JOIN players p ON p.id = a.leader_id
         LEFT JOIN rankings r ON r.world_id = a.world_id AND r.kind = 'alliance' AND r.subject_id = a.id

@@ -136,8 +136,9 @@ function DeleteAccountBody({ verified }: { verified: boolean }): React.ReactElem
             bağlantısı göndereceğiz. Hesap o bağlantıya tıklayana kadar <strong>silinmez</strong>.
           </p>
           <p>
-            Onayladığında e-postan, şifren ve oturumların silinir; başkentin dışındaki
-            şehirlerin <strong>yıkılır</strong> ve bu işlem <strong>geri alınamaz</strong>.
+            Onayladığında e-postan, şifren ve oturumların silinir; hesabına{' '}
+            <strong>bir daha giriş yapamazsın</strong>. Şehirlerin, oyuncu adın ve puanın
+            dünyada olduğu gibi kalır. Bu işlem <strong>geri alınamaz</strong>.
           </p>
         </div>
       ),
@@ -163,9 +164,11 @@ function DeleteAccountBody({ verified }: { verified: boolean }): React.ReactElem
           bağlantısı göndeririz; bağlantı <strong>12 saat</strong> geçerlidir.
         </p>
         <p>
-          Onayladığında e-postan, şifren ve oturumların silinir; <strong>başkentin dışındaki
-          şehirlerin yıkılır</strong>. Başkentin <strong>şu anki adıyla</strong> dünyada kalır;
-          oyuncu adın anonimleşir ve şehrin hiçbir sıralamada görünmez.
+          Onayladığında e-postan, şifren, oturumların ve bildirim aboneliklerin silinir;
+          hesabına <strong>bir daha giriş yapamazsın</strong>. Şehirlerin adlarıyla,{' '}
+          <strong>oyuncu adın</strong> ve <strong>puanın</strong> dünyada olduğu gibi kalır —
+          sıralamalarda görünmeye devam eder. Aynı e-postayla yeniden kayıt olabilirsin ama
+          eski oyuncu adını alamazsın.
         </p>
         {!verified ? (
           <p className="text-warning">

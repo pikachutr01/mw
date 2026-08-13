@@ -640,6 +640,52 @@ describe('ittifak sıralaması (snapshot)', () => {
 });
 
 /**
+ * ⭐⭐ TOPLAM PUAN: EKRAN İLE SIRALAMA AYNI SAYIYI SÖYLEMELİ (2026-08-13'te düzeltildi).
+ *
+ * İttifak toplamı iki ayrı yerde hesaplanıyor: sıralama anlık görüntüsü (`takeSnapshot`) ve üç
+ * ekran ucu (panel · arama listesi · herkese açık künye). Anlık görüntü `banned_at` ve
+ * `alliance_score_excluded` süzüyordu, uçlar **süzmüyordu** — yönetici bir hesabı ittifak
+ * puanından muaf tuttuğunda ekran bir sayı, sıralama başka bir sayı gösteriyordu.
+ *
+ * ⚠️ Test iki sayının **eşitliğini** ölçüyor, tek bir beklenen değeri değil: kural ileride
+ * değişirse (yeni bir muafiyet kolonu) bu test hangi tarafın güncellenmediğini gösterir.
+ */
+describe('⭐ ittifak toplam puanı: ekran = sıralama', () => {
+  const ctl = (): AllianceController => new AllianceController(h.db);
+  const asPlayer = (playerId: number): never => ({ player: { playerId, worldId } }) as never;
+
+  it('⭐ muaf üyenin puanı NE ekranda NE sıralamada toplama girer', async () => {
+    const id = await foundedAlliance();
+    await h.db.execute(sql`UPDATE players SET score = 100 WHERE id = ${lider}`);
+    await h.db.execute(sql`UPDATE players SET score = 60 WHERE id = ${konsey}`);
+    await h.db.execute(sql`UPDATE players SET score = 40 WHERE id = ${asker}`);
+
+    // Muafiyet YOKken üç ekran da 200 demeli.
+    await takeSnapshot(h.db, worldId, new Date());
+    expect(Number((await ctl().profile(asPlayer(disaridan), String(id)))['score'])).toBe(200);
+
+    await h.db.execute(sql`
+      UPDATE players SET alliance_score_excluded = true WHERE id = ${asker}
+    `);
+    await takeSnapshot(h.db, worldId, new Date());
+
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT score FROM rankings
+       WHERE world_id = ${worldId} AND kind = 'alliance' AND subject_id = ${id}
+    `);
+    const sirala = Number(row!['score']);
+    expect(sirala, 'muaf üyenin 40 puanı toplamdan düşmeli').toBe(160);
+
+    const kunye = Number((await ctl().profile(asPlayer(disaridan), String(id)))['score']);
+    const panel = Number(
+      ((await ctl().mine(asPlayer(lider)))['alliance'] as Record<string, unknown>)['score'],
+    );
+    expect(kunye, 'künye sıralamayla aynı sayıyı söylemeli').toBe(sirala);
+    expect(panel, 'panel sıralamayla aynı sayıyı söylemeli').toBe(sirala);
+  });
+});
+
+/**
  * ⭐⭐ HERKESE AÇIK İTTİFAK KÜNYESİ (kullanıcı, 2026-08-09).
  *
  * *"Başka bir ittifağa üye olsak bile diğer ittifakların ittifak metinlerini görebilelim."*

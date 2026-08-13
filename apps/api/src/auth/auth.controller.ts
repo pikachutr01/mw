@@ -362,10 +362,13 @@ export class AuthController {
   }
 
   /**
-   * ⭐ SİLMEYİ UYGULA — jeton burada tüketilir ve engeller **yeniden** bakılır.
+   * ⭐ SİLMEYİ UYGULA — jeton burada tüketilir ve engel **yeniden** bakılır.
    *
-   * ⚠️ Engelleri önizlemedeki cevaba güvenerek atlamak, bağlantının 12 saatlik ömrü boyunca
-   * oyuncunun ordu yollamış olabileceğini yok saymak olurdu.
+   * ⚠️ Engeli önizlemedeki cevaba güvenerek atlamak, bağlantının 12 saatlik ömrü boyunca
+   * oyuncunun ittifak liderliğini almış olabileceğini yok saymak olurdu.
+   *
+   * ⚠️ Dönüş **yalnız `{ ok: true }`**: 2026-08-13'e kadar `{ username, razed }` da vardı, ama
+   * silme artık ne ad değiştiriyor ne şehir yıkıyor — söyleyecek bir sonuç kalmadı.
    */
   @Post('delete-account')
   async deleteAccount(@Body() body: unknown): Promise<Record<string, unknown>> {
@@ -381,7 +384,7 @@ export class AuthController {
     }
 
     await this.mail(() => this.emails.consumeDeletion(parsed.data.token));
-    const result = await this.deletes.execute({
+    await this.deletes.execute({
       accountId: peek.accountId,
       playerId: player.playerId,
       worldId: player.worldId,
@@ -391,7 +394,7 @@ export class AuthController {
         return ids;
       },
     });
-    return { ok: true, ...result };
+    return { ok: true };
   }
 
   /** Hesabın (tek) oyuncusu. ⚠️ Hesap ↔ dünya bugün birebir; kayıt aynı e-postayı reddediyor. */

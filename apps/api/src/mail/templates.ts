@@ -110,9 +110,13 @@ export function passwordChanged(o: { username: string; worldName: string }): Tem
 /**
  * ⭐ HESAP SİLME BAĞLANTISI (kullanıcı, 2026-08-01) — 12 saat, tek kullanımlık.
  *
- * ⚠️ Metin **ne olacağını sayar**, "hesabın silinecek" demekle yetinmez: başkent dünyada
- * kalıyor ve adı değişiyor, diğer şehirler yıkılıyor. Oyuncunun bunu bağlantıya tıklamadan
- * ÖNCE bilmesi gerekiyor; onay sayfası da aynı listeyi tekrar gösteriyor.
+ * ⚠️ Metin **ne olacağını sayar**, "hesabın silinecek" demekle yetinmez. 2026-08-13'ten beri
+ * sayılacak şey değişti: artık oyun dünyasında **hiçbir şey** olmuyor, olan biten yalnız hesap
+ * tarafında. Oyuncunun bunu bağlantıya tıklamadan ÖNCE bilmesi gerekiyor; onay sayfası da aynı
+ * listeyi tekrar gösteriyor.
+ *
+ * ⚠️ "Eski adını alamazsın" maddesi süs değil: ad dünyada kaldığı için aynı e-postayla dönen
+ * oyuncu yeni bir ad seçmek zorunda ve bunu **kararı vermeden önce** bilmeli.
  */
 export function deleteAccount(o: { username: string; url: string }): Template {
   const text = [
@@ -125,9 +129,10 @@ export function deleteAccount(o: { username: string; url: string }): Template {
     '',
     'Silme onaylandığında:',
     '• tüm oturumların kapanır ve bir daha giriş yapamazsın',
-    '• e-posta adresin ve şifren hesaptan silinir',
-    '• başkentin DIŞINDAKİ tüm şehirlerin — içlerinde ordu olsa bile — yıkılır',
-    '• başkentin dünyada kalır ama adın ve şehrin adı anonim bir adla değiştirilir',
+    '• e-posta adresin, şifren ve bildirim aboneliklerin hesaptan silinir',
+    '• ŞEHİRLERİN adlarıyla birlikte dünyada kalır: saldırılabilir ve ganimet üretmeyi sürdürür',
+    '• oyuncu adın ve puanın da değişmez, sıralamalarda görünmeye devam eder',
+    '• aynı e-posta adresiyle yeniden kayıt olabilirsin ama ESKİ OYUNCU ADINI ALAMAZSIN',
     '',
     'Bu isteği sen yapmadıysan dikkate alma; hesabında hiçbir şey değişmez.',
   ].join('\n');
@@ -142,9 +147,10 @@ export function deleteAccount(o: { username: string; url: string }): Template {
        <p style="margin:0 0 8px;font-size:13px;color:#6b6153">Onayladığında:</p>
        <ul style="margin:0 0 10px;padding-left:18px;font-size:13px;color:#6b6153;line-height:1.6">
          <li>tüm oturumların kapanır ve <strong>bir daha giriş yapamazsın</strong></li>
-         <li>e-posta adresin ve şifren hesaptan silinir</li>
-         <li>başkentin <strong>dışındaki</strong> tüm şehirlerin — içlerinde ordu olsa bile — yıkılır</li>
-         <li>başkentin dünyada kalır ama adın ve şehrin adı anonim bir adla değiştirilir</li>
+         <li>e-posta adresin, şifren ve bildirim aboneliklerin hesaptan silinir</li>
+         <li><strong>şehirlerin adlarıyla birlikte dünyada kalır</strong>: saldırılabilir ve ganimet üretmeyi sürdürür</li>
+         <li>oyuncu adın ve puanın da değişmez, sıralamalarda görünmeye devam eder</li>
+         <li>aynı adresle yeniden kayıt olabilirsin ama <strong>eski oyuncu adını alamazsın</strong></li>
        </ul>
        <p style="margin:0;font-size:13px;color:#8a2b2b">Bağlantı <strong>12 saat</strong> geçerli
        ve yalnız <strong>bir kez</strong> kullanılabilir. Bu işlem <strong>geri alınamaz</strong>.</p>`,
