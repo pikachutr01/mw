@@ -174,6 +174,25 @@ bakım/performans ekranı ve temizlik görevleri (Faz 8) · `audit_log` görünt
 
 §9.1.1 aynen geçerli ve her katmanda korundu: **otomatik ceza YOK**, çıktı yalnız skorlu rapor.
 
+### 1.9 Mobil uygulama + çoklu hesap ÖNLEME katmanı — 📋 PLANLANDI (2026-08-13)
+
+> §1.8'deki **tespit** katmanı bitti; sıra **önleme**de. Tasarımın tamamı ve gerekçeleri
+> **`MOBIL_UYGULAMA.md`**'de (sistem planındaki girişi §9.1.8). Flutter'a başlamadan önce
+> okunacak belge odur; burası yalnız backlog girişi.
+>
+> Tek cümlelik ilke: **doğrulanmamış hesap oynayabilir ama besleyemez.**
+>
+> **Sıra (belgedeki §9):**
+> 1. Cihaz başına hesap sayacı — `player_devices` zaten dolu, panelden eşik. Bugün yapılabilir
+> 2. Flutter ilk sürümü: Play Integrity + DeviceCheck sinyalini **topla**, kapı koyma
+>    (⚠️ §9.1.0 argümanı: veri sonradan toplanamaz)
+> 3. K0/K1/K2 doğrulama kademeleri — henüz SMS'siz
+> 4. SMS'i tek dar kapıda aç (nakliye + ittifak), tek ülkede
+> 5. Eşikleri huni verisiyle ayarla
+>
+> **Karar bekleyenler:** TR SMS birim fiyatı · device recall beta durumu · K2'nin tam eylem
+> listesi · yem hesabından alınan ganimetin azaltılıp azaltılmayacağı · web K0 sınırı.
+
 ---
 
 ## 2. 🟡 ORTA

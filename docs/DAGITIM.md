@@ -184,6 +184,11 @@ Aradaki bir anda elle almak: panel → Dünya → **«Sıralamayı şimdi günce
 
 ## 6. İleride: Flutter mobil uygulaması
 
+> ⭐ **Bu bölüm uygulamanın NASIL derlenip dağıtılacağını anlatıyor.** Uygulamanın hesap
+> tarafında NE yapacağı — kayıt/doğrulama kademeleri, telefon doğrulaması, Play Integrity ve
+> DeviceCheck attestation'ı, çoklu hesap önleme — ayrı bir belgede: **`MOBIL_UYGULAMA.md`**.
+> Kodlamaya başlamadan önce o belge okunmalı; buradaki CI/CD adımları ondan sonra gelir.
+
 ### Depo yerleşimi
 `apps/mobile/` — aynı monorepo. Paylaşılan kural ve metinler için `packages/catalog` ve
 `packages/contracts` **kaynak olarak** kullanılmalı (`design-tokens` zaten `tokens.dart`
