@@ -817,6 +817,26 @@ kanıt «aynı cihaz» (+40) ve «sıra sıra oturum» (+15). Üçü de aynı ta
 test hesapları, yani beklenen sonuç. IP sinyalleri **doğru şekilde** düştü: dev'de 67 oyuncunun
 tamamı `127.0.0.1`de ve grup sınırı bunu eliyor.
 
+### 9.1.8 ⭐ ÖNLEME KATMANI → `MOBIL_UYGULAMA.md` (kullanıcı, 2026-08-13)
+
+§9.1'in tamamı **tespit** katmanı: sinyal toplar, skorlar, insana rapor eder. Kullanıcının
+2026-08-13'teki sorusu bir sonraki katmanı açtı — *"insanların çoklu hesap açmasını
+**engelleyecek** yöntemler"* — ve cevabı mobil uygulamanın kendisinden geçiyor: telefon
+doğrulaması, Play Integrity / DeviceCheck attestation'ı, doğrulama kademeleri (K0/K1/K2).
+
+⚠️ **Ayrı belgede, çünkü ayrı bir soruya cevap veriyor.** §9.1 *"kim çoklu hesap kullanıyor"*
+diye soruyor ve cevabı bir moderasyon ekranı. Yeni katman *"aktarımı kim yapabilir"* diye
+soruyor ve cevabı bir kapı. İkisini aynı bölüme koymak, §9.1.1'in "sinyal ceza değildir"
+ilkesini bulanıklaştırırdı — kapı bir ceza değil, ama sinyal listesinin içinde durursa öyle
+okunur.
+
+⭐ **Değişmeyen tek şey:** §9.1.1 ve §9.1.5 orada da geçerli. Otomatik ceza yok, canvas/WebGL
+parmak izi yok. Attestation bunun istisnası değil — cihaz kimliği okumuyor, yalnız kendi
+koyduğumuz bayrağı geri okuyor.
+
+Tek cümlelik özet, ayrıntısı `MOBIL_UYGULAMA.md`'de: **doğrulanmamış hesap oynayabilir ama
+besleyemez.**
+
 ## 9.2 ⭐ E-POSTA (Resend) — doğrulama + şifre sıfırlama (kullanıcı, 2026-07-31) ✅ YAPILDI
 
 `accounts.email_verified_at` kolonu 0000'dan beri duruyordu ama hiçbir kod dokunmuyordu; bu
