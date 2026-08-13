@@ -110,3 +110,82 @@ describe('savunma yapısı → gnom (ters yön)', () => {
     expect(r.attacker.counts['gnome']).toBe(1000);
   });
 });
+
+/**
+ * ⭐⭐⭐ TUR 1 GNOM FAZI SUR'U YIKAR — `docs/SUR_TESTLERI.md` §21.
+ *
+ * Bu, altı ölçüm seti (50+ hücre) boyunca bulunamayan sapmanın kökeniydi ve sonunda
+ * **x32dbg ile canlı okunarak** çözüldü: binary bu fazı standart hasar çekirdeğinden geçiriyor
+ * ve `[EBP+0x2c]` bayrağını 1 veriyor, yani Sur hem `P`'ye giriyor hem hasar alıyor.
+ *
+ * Yıkımın devasa olmasının sebebi `P`'nin minicik olması — normal turlarda savunanın bütün
+ * ordusu (~4.000.000), burada yalnız **gnomlar + Sur**:
+ * ```
+ *   P = 624.689 (Sur sv13) + 6.661×25 (gnom) = 791.213    ← x32dbg'den birebir okundu
+ *   R = 15.434.621 / 791.213 = 19,5                        ← normal turlarda ~4
+ *   düşüş = %60,86  →  Sur tek vuruşta 100 → 39,14
+ * ```
+ *
+ * ⚠️ Sondaların hepsi bunu kaçırdı çünkü A·B·C·D·E·F setlerinde **iki tarafta da gnom yoktu**;
+ * G grubunda vardı ama saldıranda. Bu faz **savunanın** gnomlarını hedefler.
+ */
+describe('⭐ Tur 1 gnom fazı — Sur o çağrıda da vurulur', () => {
+  const ATK = {
+    counts: {
+      dwarf: 7542, elf: 6211, cavalry: 4128, pegasus: 2654, dragon: 647, mangonel: 450,
+      ogre: 2544, shaman: 5000, cargo_wagon: 5478, gnome: 6841, chaos: 3,
+    },
+    tech: { archery: 16, blacksmithing: 17, sorcery: 20, armor: 14, chemistry: 16, instinct: 15, talisman: 18 },
+    heroes: [], temple: 0, heroCount: 0,
+  };
+  const def = (wall: number, gnome = 6661) => ({
+    counts: {
+      dwarf: 6541, elf: 5127, cavalry: 4125, pegasus: 3249, dragon: 419, mangonel: 674,
+      ogre: 3697, shaman: 6000, spy_bird: 4125, cargo_wagon: 6543, gnome, chaos: 2, wall,
+    },
+    wallIntegrity: 1,
+    tech: { archery: 16, blacksmithing: 17, sorcery: 20, armor: 19, chemistry: 14, masonry: 14, instinct: 16, talisman: 15 },
+    heroes: [], temple: 0, heroCount: 0,
+  });
+  const surPct = (wall: number, gnome = 6661): number => {
+    let s = 0;
+    for (let i = 0; i < 8; i++) {
+      const r = simulate({ attacker: ATK, defender: def(wall, gnome), night: false, seed: `b${i}` });
+      s += ((r.defender.wallIntegrity ?? 0) * 100) / 8;
+    }
+    return s;
+  };
+
+  /** Binary ölçümü (v0.5.5, kullanıcı — `sim-sur-buyuk.mjs` savaşı). */
+  it('⭐ seviye eğrisi binary ile örtüşüyor (10 seviye)', () => {
+    for (const sv of [7, 8, 9, 10, 11, 12]) {
+      expect(surPct(sv), `sv${sv} tamamen yıkılmalı`).toBeLessThan(0.5);
+    }
+    expect(surPct(13)).toBeGreaterThan(36);   // binary 38,5
+    expect(surPct(13)).toBeLessThan(41);
+    expect(surPct(14)).toBeGreaterThan(69);   // binary 71,5
+    expect(surPct(14)).toBeLessThan(74);
+    expect(surPct(15)).toBeGreaterThan(88);   // binary 90,6
+    expect(surPct(15)).toBeLessThan(93);
+    expect(surPct(16), 'sv16: net negatife döner, Sur hiç hasar almaz').toBe(100);
+  });
+
+  it('⭐⭐ SEBEP GNOM: savunanın gnomu yoksa aynı savaşta Sur sağlam kalır', () => {
+    /* Aynı ordu, tek fark savunanda gnom yok → Tur 1 gnom fazı hiç çalışmaz → Sur o dev
+     * vuruşu yemez. Sondaların (A-F) neden hep tuttuğunun testi bu. */
+    expect(surPct(13, 0), 'gnomsuz: Sur neredeyse hiç yıpranmamalı').toBeGreaterThan(95);
+    expect(surPct(13), 'gnomlu: aynı savaşta yıkılmalı').toBeLessThan(45);
+  });
+
+  it('⚠️ havuzdan ŞAMAN EMMESİ düşülür (çekirdekle aynı satır)', () => {
+    /* Emme düşülmezse Tur 1 havuzu %14 şişiyor ve Sur sv13'te %38 yerine %27'ye iniyordu.
+     * Savunanın şamanını kaldırınca Sur DAHA ÇOK yıpranmalı — emmenin gerçekten işlediğinin ölçüsü. */
+    const sasiz = { ...def(13), counts: { ...def(13).counts, shaman: 0 } };
+    let s = 0;
+    for (let i = 0; i < 8; i++) {
+      s += ((simulate({ attacker: ATK, defender: sasiz, night: false, seed: `b${i}` })
+        .defender.wallIntegrity ?? 0) * 100) / 8;
+    }
+    expect(s, 'şaman yokken Sur daha çok yıpranır').toBeLessThan(surPct(13));
+  });
+});

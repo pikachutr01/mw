@@ -691,15 +691,65 @@ function gnomeStrike(from: Army, to: Army, targetId: string, cfg: CombatConfig):
   } else {
     pool = combatPool(from, 2, true, 0, cfg);
   }
+  /**
+   * ⭐ **ŞAMAN EMMESİ BURADA DA DÜŞÜLÜR (2026-08-14).** Vuruş standart hasar çekirdeğinden
+   * geçtiği için `[EBP+0x24]` (hedefin şaman nesnesi) havuzdan çıkarılıyor — `dealType`teki
+   * ile aynı satır. Eksikti: x32dbg'de binary'nin havuzu **15.434.621** okunurken motor
+   * **17.639.202** veriyordu; aradaki fark tam olarak savunanın 6.000 şamanının emmesi.
+   * ⚠️ Eski 11 gnom ölçümünde savunanda şaman yok → emme 0 → o hücreler etkilenmiyor.
+   */
+  pool -= shamanShield(to, 2, cfg);
+  if (pool <= 0) return;
 
-  const net = pool - target.stats.pDef * target.count;
-  if (net <= 0) return;
-  const mDef = target.stats.mDef > 0 ? target.stats.mDef : 1;
-  const kill = Math.min(target.count, Math.floor(net / mDef));
-  if (kill <= 0) return;
+  /**
+   * ⭐⭐⭐ **SUR BU FAZIN HEDEF LİSTESİNDE (2026-08-14, x32dbg ile canlı okundu).**
+   *
+   * Binary bu vuruşu ayrı bir fonksiyonla değil, **standart hasar çekirdeğiyle**
+   * (`FUN_0040e0c4`) yapıyor ve `[EBP+0x2c]` bayrağını **1** geçiyor — yani Sur hem `P`'ye
+   * giriyor hem hasar alıyor. Motorda bu faz elle yazılmış olduğu için Sur'a hiç dokunmuyordu.
+   *
+   * ⚠️⚠️ **Sonucu devasa, çünkü `P` minicik.** Normal turlarda `P` savunanın bütün ordusu
+   * (~4.000.000) ama burada yalnız **gnomlar + Sur**. Ölçülen savaşta:
+   * ```
+   *   P = 624.689 (Sur sv13) + 6.661×25 (gnomlar) = 791.213     ← x32dbg'den birebir
+   *   R = havuz/P = 15.434.621 / 791.213 = 19,5                  ← normal turlarda ~4
+   *   net = 624.689 × 19,5 − 2.300.938 = 9.885.190
+   *   düşüş = 100 × net / gradeStat(mDef) = %60,86  →  Sur 100 → 39,14 TEK VURUŞTA
+   * ```
+   * Kalan altı vuruş yalnız +0,69 ekliyor → **%38,45** (ölçüm: %38,4-38,6).
+   *
+   * ⭐ Bu tek mekanizma seviye eğrisinin **onda onunu** veriyor (`docs/SUR_TESTLERI.md` §21):
+   * sv≤12 → 0 (düşüş 100'ü aşıp kırpılıyor) · 13 → 39,1 · 14 → 71,5 · 15 → 90,7 · 16 → 100.
+   * sv16'daki dönüş de buradan: `gradePower` `P`'yi domine edip `R`'yi düşürürken
+   * `gradeStat(pDef)` `Sv×1,8^Sv` ile daha hızlı büyüyüp `net`i negatife çeviriyor.
+   *
+   * ⚠️ **50+ sonda hücresi bunu neden kaçırdı:** A·B·C·D·E·F setlerinin hepsinde saldıran
+   * `300 Mancınık`, savunan tek tip Elf'ti — **iki tarafta da gnom yoktu**, dolayısıyla bu faz
+   * hiç çalışmıyordu. G grubunda gnom vardı ama **saldıranda**; bu faz savunanın gnomlarını
+   * hedefler. Sapma yalnız *savunanda gnom olan* savaşlarda doğuyor.
+   *
+   * ⚠️ Eski 11 gnom ölçümü BOZULMUYOR: hiçbirinde sur yok → `gradePower(null) = 0` → `P` yalnız
+   * gnomlar → `pay = havuz` → formül bugünküyle birebir aynıya iniyor.
+   */
+  const targetP = target.stats.unitPower * target.count;
+  const wall = to.wall;                       // saldıranda sur yok → gradePower 0 → etkisiz
+  const P = targetP + gradePower(wall);
+  if (P <= 0) return;
 
-  target.count -= kill;
-  to.lossMag += kill * mDef;
+  // Sur, çekirdekte birim hasarından SONRA vuruluyor; `P` ikisinde de aynı olduğu için sıra
+  // sonucu değiştirmiyor. Faz tipi 2 (yakın) — durak `0040E6D4`'te yakalandı.
+  const wallAbsorbed = gradeTakeHit(wall, pool, P, 2);
+
+  const net = (targetP * pool) / P - target.stats.pDef * target.count;
+  if (net > 0) {
+    const mDef = target.stats.mDef > 0 ? target.stats.mDef : 1;
+    const kill = Math.min(target.count, Math.floor(net / mDef));
+    if (kill > 0) {
+      target.count -= kill;
+      to.lossMag += kill * mDef;
+    }
+  }
+  to.lossMag += wallAbsorbed;
 }
 
 /**

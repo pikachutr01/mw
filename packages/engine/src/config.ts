@@ -13,8 +13,14 @@
  * Sürüm geçmişi: **1.0.0** temiz başlangıç · **1.1.0** (2026-07-31) ganimet taban oranı
  * %5 → %20. Denge sabiti değiştiği için ara sürüm artışı: eski savaş kayıtları künyesinde
  * 1.0.0 kalır, "bu savaş hangi dengeyle çözüldü" sorusu künyeden cevaplanabilir.
+ *
+ * ⚠️ **1.2.0** (2026-08-14) — binary'ye yaklaştıran dört savaş davranışı değişikliği:
+ * gnom savunma yapılarını yıkıyor · tuzak uçanı da vuruyor · Tur 1 kayıpları `floor`lanıyor ·
+ * **Tur 1 gnom fazı Sur'u yıkıyor** (+ o fazda şaman emmesi de düşülüyor).
+ * Ayrıntı: `docs/SAVUNMA_BINARY_KONTROL.md` ve `docs/SUR_TESTLERI.md` §21.
+ * ⚠️ Bu damga olmadan 1.1.0 kaydedilmiş savaşlar bugünkü motorla **farklı** çözülür.
  */
-export const ENGINE_VERSION = '1.1.0';
+export const ENGINE_VERSION = '1.2.0';
 
 export interface CombatConfig {
   engineVersion: string;

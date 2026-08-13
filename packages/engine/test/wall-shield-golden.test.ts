@@ -211,9 +211,12 @@ describe('sur + büyü kalkanı — ikinci altın set', () => {
  * yani Sur bütünlüğü için **ölü bir düğme** — panelden oynatan biri hiçbir şey değiştirmediğini
  * bilmeli. (Surun P'ye kattığı güç üzerinden birim kayıplarını dolaylı etkiler, o ayrı.)
  *
- * ⚠️ Kullanıcının binary ölçümü bu iki oranın YANLIŞ olduğunu gösterdi (sv10: binary %53,59,
- * motor %100). Sur, katalogda statlarının kaynağı belgelenmemiş tek satır. Düzeltme, iki oranı
- * birbirinden ayıran ölçüm gelince yapılacak: `docs/SUR_TESTLERI.md`.
+ * ✅ **ÇÖZÜLDÜ (2026-08-14).** Bu iki oran DOĞRUYMUŞ; Sur'un statlarını suçlamak yanlıştı.
+ * Sapmanın kaynağı **Tur 1'in gnom fazıydı**: binary orada da Sur'u vuruyor ve `P` yalnız
+ * *gnomlar + Sur* olduğu için `R` ~19'a fırlayıp Sur'u tek vuruşta yıkıyor
+ * (`docs/SUR_TESTLERI.md` §21 · `combat.ts` · `gnomeStrike`).
+ * ⚠️ Aşağıdaki sondaların **hiçbirinde gnom yok**, dolayısıyla o faz hiç çalışmıyor ve bu
+ * dosyadaki eğri değişmedi — zaten bu yüzden 50+ hücrelik sonda seti sapmayı görememişti.
  */
 describe('⭐ SUR — base ölü düğme, iki oran belirleyici', () => {
   const side = (counts: Record<string, number>, tech: Record<string, number> = {}) => ({
@@ -257,11 +260,11 @@ describe('⭐ SUR — base ölü düğme, iki oran belirleyici', () => {
   });
 
   /**
-   * ⚠️ ALTIN KAYIT — bugünkü (yanlış olduğu bilinen) eğri. Sur statları ölçümle düzeltilince
-   * bu sayılar değişecek ve test kırılacak; kırıldığında güncellemek DOĞRU davranış.
-   * Binary karşılığı aynı savaşta: sv7'ye kadar %0, sv8 %15,19, sv10 %53,59.
+   * ✅ ALTIN KAYIT — ve artık binary ile ÇELİŞMİYOR. Bu sonda **gnomsuz** olduğu için Tur 1
+   * gnom fazı çalışmıyor; A grubu ölçümü de aynı sayıları veriyor (sv2 %73,68-73,74 ·
+   * sv4 %91,12-91,15 · sv8 %100). Gnomlu savaşın eğrisi `gnome-struct.test.ts`te.
    */
-  it('⚠️ bugünkü seviye eğrisi (binary ile ÇELİŞİYOR — bkz. docs/SUR_TESTLERI.md)', () => {
+  it('⭐ seviye eğrisi — gnomsuz sonda, binary ile birebir (A grubu 8/8)', () => {
     expect(wallPct(2, {})).toBeCloseTo(73.7, 0);
     expect(wallPct(4, {})).toBeCloseTo(91.2, 0);
     expect(wallPct(8, {})).toBe(100);
