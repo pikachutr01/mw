@@ -971,35 +971,59 @@ oltalama için biçilmiş kaftan olurdu. ⚠️ İki uç da hız sınırı liste
 (`rate-limit.ts`); aynı turda `delete-account`un kendisinin de listede olmadığı fark edildi
 ve eklendi — `reset-password` gibi o da bir argon2id hash'i koşturuyor.
 
-**K1 — Silme değil ANONİMLEŞTİRME + STERİLİZASYON.**
+**K1 — ⭐⭐⭐ SİLME OYUN DÜNYASINA HİÇ DOKUNMAZ** (kullanıcı, 2026-08-13).
+
+*"Oyuncu hesabını sildiği takdirde artık başkenti dışındaki şehirleri de yıkılmasın. Böyle
+yaparak diğer oyuncuların yağma yapabileceği potansiyel şehirleri yok etmiş oluyoruz…
+Şehirler aynen kalsın, isimleri de kullanıcı adı da değişmesin. Hatta puan sıralamalarından
+da ittifak puanı sıralamalarından da çıkarılmasın. Diğer oyuncular bu hesabın silindiğini
+anlayamasın."*
 
 | ne olur | neden |
 | :-- | :-- |
-| `players` satırı **KALIR**, adı `hükümdarN` | başkent dünyada duran gerçek bir şehir; satırı yok etmek savaş geçmişinde, sıralamada ve komşuların raporlarında delik açardı |
-| başkent **KALIR**, adı oyuncuyla **AYNI** | kullanıcı şartı |
-| başkent dışı şehirler **YIKILIR** (ordu olsa bile) | kullanıcı şartı |
-| `accounts` sterilize: e-posta `silinmis+<id>@mobiwar.invalid`, parola rastgele | ⭐ gerçek adres **serbest kalır** → aynı e-postayla yeniden kayıt mümkün |
-| oturum · push aboneliği · jeton **SİLİNİR** | kişisel veri gerçekten gider |
+| **tüm şehirler** adlarıyla KALIR | kullanıcı şartı — yıkım, dünyadaki yağma hedeflerini yok ediyordu |
+| **kullanıcı adı** ve **puan** DEĞİŞMEZ, sıralamalarda görünmeye devam eder | kullanıcı şartı — dışarıdan hiçbir fark görünmemeli |
+| ittifak üyeliği, **rütbesi**, bekleyen davet/başvurular, tatil, kahramanlar, kuyruklar ve yoldaki ordular DOKUNULMAZ | her biri dışarıdan görülebilen bir değişiklik üretiyordu |
+| `accounts` sterilize: e-posta `silinmis+<id>@mobilwar.invalid`, parola rastgele | ⭐ gerçek adres **serbest kalır** → aynı e-postayla yeniden kayıt mümkün |
+| oturum · push aboneliği · jeton **SİLİNİR**, `players.deleted_at` yazılır | kişisel veri gerçekten gider; `deleted_at` yalnız iç işaret (giriş kapısı + denetim) |
+
+⚠️ Dışarıdan görüntüsü **uzun süredir oyuna girmeyen bir oyuncu**. Bu gizli bir davranış değil:
+kullanıcı bunu kullanım ve silme koşullarına yazacak, oyuncu kayıtta beyan edecek.
+
+⚠️⚠️ **ESKİ TASARIM (2026-08-01 → 2026-08-13) NEDEN BIRAKILDI.** Eskiden başkent dışı şehirler
+yıkılıyor, ad `hükümdarN` oluyor, oyuncu sıralamalardan çıkarılıyordu. İki sonucu vardı:
+1. ⭐ **Hayatta bırakılan başkent pratikte DOKUNULMAZDI.** 10 kat kuralı puanı son sıralama
+   satırından okuyor ve satırı olmayanı 0 (kelepçeyle 1) sayıyor; sıralama muafiyeti satırı
+   düşürdüğü için 10 puandan büyük hiç kimse saldıramıyordu. "Yağmalanabilsin" diye bırakılan
+   şehir çifte kilitliydi.
+2. Ad değişikliği **sohbet geçmişini geriye dönük** anonimleştiriyordu (`sender_name`
+   `players.username`den canlı JOIN ediliyor).
 
 ⚠️ Parola **boş bırakılmıyor, rastgeleye çevriliyor**: geçersiz bir hash `argon2.verify`i
 patlatır ve giriş "sunucu hatası" verir; rastgele hash sessizce ve doğru şekilde
-"parola yanlış" der.
+"parola yanlış" der. ⚠️ Girişi kapatan asıl kapı yine de `players.deleted_at` (`auth.service`
+→ `login`) ve hata **sıradan kimlik hatasıyla birebir aynı**: ayrı bir mesaj, ucu *"bu ad
+silinmiş bir hesaba mı ait"* sorusunu cevaplayan bir araca çevirirdi.
 
-**K2 — Üç engel.** Başkent DIŞI şehre değen hareket (kullanıcının kuralı) · başkentten
-**çıkmış** ordu (kullanıcı seçimi: yoksa silinmiş hesabın ordusu saatler sonra birine saldırır
-ve dönüşte anonim şehre girer) · **ittifak liderliği** (kullanıcı seçimi: lider silinirse
-ittifak başsız kalır). ⚠️ Başkente **gelen** saldırı engel DEĞİL — kullanıcının açık kuralı.
+**K2 — TEK engel: ittifak liderliği.** Lider silinirse ittifak başsız kalır (davet · atma · ad
+· dağıtma hepsi lider kapısının arkasında); önce devretmesi ya da dağıtması isteniyor.
 
-⚠️ **Engeller onay anında YENİDEN bakılır.** Bağlantı 12 saat geçerli; önizlemedeki "temiz"
+⚠️⚠️ **Ordu hareketi engelleri 2026-08-13'te kalktı** ve bu bir kusur düzeltmesiydi: sorgu görev
+TÜRÜNE bakmıyordu, kuyruk bitişleri de `missions` satırı ve `origin_city_id = target_city_id`
+taşıyor. Başkentinde bina yükselten oyuncu **"Başkentinden çıkmış bir ordun var"** diye
+silinemiyordu — ortada ordu yokken, üstelik başkent zaten yıkılmazken.
+
+⚠️ **Engel onay anında YENİDEN bakılır.** Bağlantı 12 saat geçerli; önizlemedeki "temiz"
 cevaba güvenmek, silmeyi tam da yasakladığımız durumda yapmak olurdu.
 
-**K3 — Kahramanlar ÖNCE başkente taşınır.** `heroes.city_id` şehre `ON DELETE SET NULL` bağlı:
-yıkılan şehirdeki kahraman şehirsiz kalır ve hiçbir tapınakta görünmez. Sıra load-bearing.
+**K3 — Eski kullanıcı adı SERBEST KALMAZ.** Ad dünyada durduğu için aynı e-postayla dönen
+oyuncu yeni bir ad seçmek zorunda. Onay ekranı ve silme e-postası bunu açıkça söylüyor —
+oyuncunun geri dönüşü olmayan kararı bunu bilerek vermesi gerekiyor.
 
-**K4 — `hükümdarN` sayacı `worlds.deleted_player_seq`te**, dünya başına ve `FOR UPDATE` ile
-kilitli. Kayıt bu deseni **REZERVE eder** (`DELETED_NAME_RE`): gerçek bir oyuncu "hükümdar1"
-alırsa sonraki silme aynı adı üretmek isteyip tekillik kısıtına çarpar ve **silme başarısız
-olurdu**.
+**K4 — `hükümdarN` artık ÜRETİLMİYOR** ama kayıt bu deseni **REZERVE etmeye devam ediyor**
+(`DELETED_NAME_RE`) ve `worlds.deleted_player_seq` yerinde duruyor: canlıda eski silmelerden
+kalma `hükümdar1`, `hükümdar2`… adlı oyuncular var ve o adları yeni bir oyuncunun alması
+geçmiş kayıtlardaki kimliği bulanıklaştırırdı.
 
 **K5 — Dünya kapsamı kendiliğinden çalışıyor.** Hesap ↔ dünya birebir (kayıt aynı e-postayı
 ikinci kez kabul etmiyor), yani *"bir dünyadaki hesabını sil, başka dünyada devam et"* için

@@ -2,10 +2,12 @@
  * ⭐ HESAP YÖNETİMİ (kullanıcı, 2026-08-01): silme · e-posta değiştirme · şifre değiştirme.
  *
  * Kilitlenen iddialar:
- *   • silme = **anonimleştirme + sterilizasyon**; başkent dünyada kalır, diğer şehirler yıkılır
- *   • üç engel (başkent dışı hareket · başkentten çıkmış ordu · ittifak liderliği) ayrı ayrı
- *   • başkente GELEN saldırı engel DEĞİL (kullanıcının açık kuralı)
- *   • `hükümdarN` sayacı dünya başına artar ve kayıt bu deseni REZERVE eder
+ *   • ⭐ silme oyun dünyasına **HİÇ DOKUNMAZ** (2026-08-13): şehirler, adlar, puan, sıralamalar,
+ *     ittifak rütbesi, tatil ve bekleyen başvurular aynen kalır
+ *   • silinen yalnız hesap tarafı; oyuncu bir daha **giriş yapamaz**
+ *   • tek engel **ittifak liderliği**; ordu hareketi ve üretim kuyruğu engel DEĞİL
+ *   • `hükümdarN` deseni artık üretilmiyor ama kayıt onu REZERVE etmeye devam ediyor
+ *     (canlıda eski silmelerden kalma `hükümdarN` adlı oyuncular var)
  *   • e-posta serbest kalır → aynı adresle yeniden kayıt olunabilir
  *   • adres değişince doğrulama düşer, eski reset jetonu ölür, iki mail gider
  *   • şifre değişince **aktif oturum ayakta kalır**, diğerleri düşer
@@ -20,6 +22,8 @@ import { TokenService } from '../src/auth/token.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { EmailError, EmailTokenService } from '../src/mail/email-token.service.ts';
+import { MissionService } from '../src/missions/mission.service.ts';
+import { takeSnapshot } from '../src/ranking/ranking.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
 import { createPlayer, createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
 
@@ -79,7 +83,7 @@ const revokeAll = async (id: number): Promise<string[]> => {
   `);
   return rows.map((r) => String(r['id']));
 };
-const run = (): Promise<{ username: string; razed: number }> =>
+const run = (): Promise<void> =>
   deletes.execute({ accountId, playerId, worldId, revokeAll });
 
 /**
@@ -114,14 +118,18 @@ async function addColony(s: number): Promise<number> {
   });
 }
 async function addMission(o: {
-  origin: number | null; target: number | null; owner?: number;
+  origin: number | null; target: number | null; owner?: number; type?: string;
 }): Promise<void> {
   await h.db.execute(sql`
     INSERT INTO missions (world_id, type, status, owner_player_id, origin_city_id, target_city_id,
                           target_k, target_d, target_s, execute_at)
-    VALUES (${worldId}, 'attack', 'scheduled', ${o.owner ?? playerId},
+    VALUES (${worldId}, ${o.type ?? 'attack'}, 'scheduled', ${o.owner ?? playerId},
             ${o.origin}, ${o.target}, 1, 1, 9, now() + interval '1 hour')
   `);
+}
+/** Bir oyuncunun canlı puanını kurar — sıralama anlık görüntüsü bunu donduruyor. */
+async function setScore(pid: number, score: number): Promise<void> {
+  await h.db.execute(sql`UPDATE players SET score = ${score} WHERE id = ${pid}`);
 }
 async function outboxMails(): Promise<Record<string, unknown>[]> {
   return h.db.execute<Record<string, unknown>>(sql`
@@ -131,40 +139,158 @@ async function outboxMails(): Promise<Record<string, unknown>[]> {
 
 /* ── SİLME: temel akış ───────────────────────────────────────────────────────── */
 
-describe('hesap silme', () => {
-  it('⭐ başkent KALIR, diğer şehirler YIKILIR, oyuncu anonimleşir', async () => {
+describe('hesap silme — dünyada iz bırakmaz', () => {
+  /**
+   * ⭐⭐⭐ **YENİ SÖZLEŞMENİN TAMAMI TEK TESTTE** (kullanıcı, 2026-08-13): *"Şehirler aynen
+   * kalsın, isimleri de kullanıcı adı da değişmesin… Diğer oyuncular bu hesabın silindiğini
+   * anlayamasın."*
+   *
+   * ⚠️ Bu testin eski hâli tam TERSİNİ kilitliyordu (`razed === 1`, `username === 'hükümdar1'`).
+   */
+  it('⭐⭐ TÜM şehirler adlarıyla durur, oyuncu adı DEĞİŞMEZ', async () => {
     const colony = await addColony(3);
-    const r = await run();
+    const [before] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT name FROM cities WHERE id = ${colony}
+    `);
+    const [me] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT username FROM players WHERE id = ${playerId}
+    `);
 
-    expect(r.username).toBe('hükümdar1');
-    expect(r.razed).toBe(1);
+    await run();
+
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, name FROM cities WHERE player_id = ${playerId} ORDER BY id
+    `);
+    expect(rows, 'hiçbir şehir yıkılmamalı').toHaveLength(2);
+    const byId = new Map(rows.map((r) => [Number(r['id']), String(r['name'])]));
+    expect(byId.get(capitalId)).toBe(CAPITAL_NAME);
+    expect(byId.get(colony)).toBe(String(before!['name']));
 
     const [p] = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT username, deleted_at, alliance_id FROM players WHERE id = ${playerId}
+      SELECT username, deleted_at FROM players WHERE id = ${playerId}
     `);
-    expect(p!['username']).toBe('hükümdar1');
+    expect(p!['username'], 'oyuncu adı DEĞİŞMEMELİ').toBe(String(me!['username']));
+    // ⚠️ `deleted_at` yine yazılıyor — ama artık yalnız İÇ işaret (giriş kapısı + denetim).
     expect(p!['deleted_at']).not.toBeNull();
+  });
 
-    /**
-     * ⭐⭐ BAŞKENTİN ADI **DEĞİŞMİYOR** (kullanıcı, 2026-08-09: *"bu sistemden tamamen
-     * vazgeçtim, başkentin o andaki mevcut adı neyse öyle kalsın"*).
-     *
-     * ⚠️ Bu testin eski hâli tam tersini kilitliyordu (`cap.name === 'hükümdar1'`).
-     * Anonimleşen tek şey OYUNCU adı: o kişisel veri, şehir adı ise bir yer adı.
-     */
-    const [cap] = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT name FROM cities WHERE id = ${capitalId}
+  /** ⚠️ Şehrin içi de duruyor: yapı/birim/kuyruk `cities.id`ye CASCADE bağlı, şehir gidince giderdi. */
+  it('şehrin İÇİ de durur: yapılar, birlikler, kuyruk', async () => {
+    const colony = await addColony(7);
+    await h.db.execute(sql`
+      INSERT INTO buildings (city_id, type, level) VALUES (${colony}, 'barracks', 3)
+      ON CONFLICT (city_id, type) DO UPDATE SET level = 3
     `);
-    expect(cap!['name']).toBe(CAPITAL_NAME);
-    expect(cap!['name']).not.toBe('hükümdar1');
+    await h.db.execute(sql`
+      INSERT INTO units (city_id, type, count) VALUES (${colony}, 'swordsman', 40)
+      ON CONFLICT (city_id, type) DO UPDATE SET count = 40
+    `);
 
-    const gone = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT id FROM cities WHERE id = ${colony}
+    await run();
+
+    const [b] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT level FROM buildings WHERE city_id = ${colony} AND type = 'barracks'
     `);
-    expect(gone).toHaveLength(0);
+    const [u] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count FROM units WHERE city_id = ${colony} AND type = 'swordsman'
+    `);
+    expect(Number(b!['level'])).toBe(3);
+    expect(Number(u!['count'])).toBe(40);
+  });
+
+  /**
+   * ⭐ SIRALAMA MUAFİYETİ ARTIK YAZILMIYOR (kullanıcı: *"puan sıralamalarından da ittifak puanı
+   * sıralamalarından da çıkarılmasın"*). Ölçü canlı bayrak DEĞİL, anlık görüntünün kendisi:
+   * bayrağı doğru bırakıp süzgeci yanlış yazmak da mümkündü.
+   */
+  it('⭐ oyuncu sıralamasında KALIR ve puanı ittifak toplamına yazılır', async () => {
+    const other = await createPlayer(h, worldId, 'ortak');
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO alliances (world_id, name, leader_id) VALUES (${worldId}, 'Kartal', ${other})
+      RETURNING id
+    `);
+    const allianceId = Number(a!['id']);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${allianceId}, alliance_role = 3 WHERE id = ${other}
+    `);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${allianceId}, alliance_role = 1 WHERE id = ${playerId}
+    `);
+    await setScore(playerId, 500);
+    await setScore(other, 300);
+
+    await run();
+
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT ranking_excluded, alliance_score_excluded FROM players WHERE id = ${playerId}
+    `);
+    expect(p!['ranking_excluded']).toBe(false);
+    expect(p!['alliance_score_excluded']).toBe(false);
+
+    await takeSnapshot(h.db as never, worldId, await clock.gameNow(worldId));
+
+    const [mine] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT score FROM rankings
+       WHERE world_id = ${worldId} AND kind = 'player' AND subject_id = ${playerId}
+    `);
+    expect(Number(mine?.['score']), 'oyuncu sıralamasında durmalı').toBe(500);
+
+    const [team] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT score FROM rankings
+       WHERE world_id = ${worldId} AND kind = 'alliance' AND subject_id = ${allianceId}
+    `);
+    expect(Number(team?.['score']), 'puanı takım toplamına yazılmalı').toBe(800);
+  });
+
+  /**
+   * ⭐ KAHRAMAN SIRALAMASI — 2026-08-13'e kadar `p.deleted_at IS NULL` süzgeci vardı ve silinmiş
+   * hesabın kahramanını listeden düşürüyordu. Oyuncu/ittifak sekmelerinden hiç düşmeyen bir
+   * hesabın yalnız kahraman sekmesinden kaybolması, silinmişliği tek başına ele verirdi.
+   */
+  it('⭐ kahraman sıralamada KALIR', async () => {
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level, status)
+      VALUES (${worldId}, ${playerId}, ${capitalId}, 'Kahra', 5, 'alive')
+      RETURNING id
+    `);
+
+    await run();
+    await takeSnapshot(h.db as never, worldId, await clock.gameNow(worldId));
+
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT rank FROM rankings
+       WHERE world_id = ${worldId} AND kind = 'hero' AND subject_id = ${Number(hero!['id'])}
+    `);
+    expect(r, 'kahraman listede kalmalı').toBeTruthy();
+  });
+
+  /**
+   * ⭐⭐⭐ **ASIL GEREKÇE: ŞEHİR YAĞMALANABİLİR KALMALI** (kullanıcı: *"diğer oyuncuların yağma
+   * yapabileceği potansiyel şehirleri yok etmiş oluyoruz"*).
+   *
+   * ⚠️⚠️ Eski tasarımda hayatta bırakılan başkent bile pratikte DOKUNULMAZDI: 10 kat kuralı
+   * puanı sıralama satırından okuyor ve satırı olmayanı 0 (kelepçeyle 1) sayıyor, sıralama
+   * muafiyeti de satırı düşürüyordu → 10+ puanlı hiç kimse saldıramıyordu. Bu test tam olarak
+   * o kilidin açıldığını ölçüyor; muafiyet geri konursa kırmızıya döner.
+   */
+  it('⭐⭐⭐ 10 kat kuralı silinmiş hesabı ARTIK korumuyor', async () => {
+    const attacker = await createPlayer(h, worldId, 'saldiran');
+    await setScore(playerId, 500);
+    await setScore(attacker, 1000);
+
+    await run();
+    await takeSnapshot(h.db as never, worldId, await clock.gameNow(worldId));
+
+    const missions = new MissionService(h.db, cities);
+    const gap = await missions.scoreGap(worldId, attacker, playerId);
+    expect(gap?.defenderScore, 'savunanın puanı sıralamadan okunabilmeli').toBe(500);
+    expect(gap?.blocked, 'silinmiş hesaba saldırı engellenmemeli').toBe(false);
   });
 
   it('⭐ hesap sterilize edilir: e-posta SERBEST, parola kullanılamaz, oturum yok', async () => {
+    const [me] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT username FROM players WHERE id = ${playerId}
+    `);
     await run();
 
     const [a] = await h.db.execute<Record<string, unknown>>(sql`
@@ -173,8 +299,8 @@ describe('hesap silme', () => {
     expect(String(a!['email'])).toBe(`silinmis+${accountId}@mobilwar.invalid`);
     expect(a!['email_verified_at']).toBeNull();
 
-    // Eski parolayla giriş ARTIK ÇALIŞMIYOR (hash rastgeleye çevrildi).
-    await expect(auth.login({ username: 'hükümdar1', password: PW, worldId },
+    // Eski parolayla giriş ARTIK ÇALIŞMIYOR (hash rastgeleye çevrildi + `deleted_at` kapısı).
+    await expect(auth.login({ username: String(me!['username']), password: PW, worldId },
       { deviceId: randomUUID(), ip: '1.1.1.1', userAgent: 't', platform: 'web' }))
       .rejects.toBeInstanceOf(AuthError);
 
@@ -182,6 +308,27 @@ describe('hesap silme', () => {
       SELECT id FROM sessions WHERE account_id = ${accountId}
     `);
     expect(sess).toHaveLength(0);
+  });
+
+  /**
+   * ⭐⭐ GİRİŞ KAPISI — ad artık anonimleşmediği için silinmiş bir hesabın adı giriş formunda
+   * hâlâ aranabiliyor.
+   *
+   * ⚠️ Hata **sıradan kimlik hatasıyla birebir aynı** olmalı: ayrı bir kod/mesaj, ucu *"bu ad
+   * silinmiş bir hesaba mı ait"* sorusunu cevaplayan bir araca çevirir ve silmenin ana şartını
+   * (kimse anlamasın) doğrudan çiğnerdi. Bu yüzden test **kodu** ölçüyor, yalnız reddi değil.
+   */
+  it('⭐⭐ silinmiş hesap giriş yapamaz ve hata SIRADAN kimlik hatası', async () => {
+    const [me] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT username FROM players WHERE id = ${playerId}
+    `);
+    const username = String(me!['username']);
+    // ⚠️ Parolayı bilerek DOĞRU veriyoruz: yalnız `deleted_at` kapısı reddedebilir.
+    await h.db.execute(sql`UPDATE players SET deleted_at = now() WHERE id = ${playerId}`);
+
+    await expect(auth.login({ username, password: PW, worldId },
+      { deviceId: randomUUID(), ip: '1.1.1.1', userAgent: 't', platform: 'web' }))
+      .rejects.toMatchObject({ code: 'invalid_credentials' });
   });
 
   it('⭐ serbest kalan e-posta ile YENİDEN kayıt olunabilir', async () => {
@@ -194,25 +341,28 @@ describe('hesap silme', () => {
     expect(again.accountId).not.toBe(accountId);
   });
 
-  it('sayaç DÜNYA BAŞINA artar: ikinci silme hükümdar2 olur', async () => {
+  /**
+   * ⚠️ Eski kullanıcı adı SERBEST KALMIYOR — silme artık adı bırakmıyor. Aynı e-postayla dönen
+   * oyuncu yeni bir ad seçmek zorunda; arayüz ve silme e-postası bunu açıkça söylüyor.
+   */
+  it('⚠️ eski oyuncu adı ALINAMAZ (dünyada duruyor)', async () => {
+    const [me] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT username FROM players WHERE id = ${playerId}
+    `);
     await run();
-    const t = randomUUID().slice(0, 8);
-    const r2 = await auth.register(
-      { email: `b-${t}@test.local`, password: PW, username: `b${t}`, worldId },
+    await expect(auth.register(
+      { email: `x-${randomUUID().slice(0, 8)}@test.local`, password: PW,
+        username: String(me!['username']), worldId },
       { deviceId: randomUUID(), ip: '9.9.9.9', userAgent: 'test', platform: 'web' },
-    );
-    await verifyEmail(h, r2.playerId);
-    const out = await deletes.execute({
-      accountId: r2.accountId, playerId: r2.playerId, worldId, revokeAll,
-    });
-    expect(out.username).toBe('hükümdar2');
+    )).rejects.toMatchObject({ code: 'username_taken' });
   });
 
   /**
-   * ⚠️ Kayıt kapısı olmadan: gerçek bir oyuncu "hükümdar1" alır, sonraki silme aynı adı
-   * üretmek isteyip `players_world_username` tekilliğine çarpar ve **silme başarısız olur**.
+   * ⚠️ `hükümdarN` ARTIK ÜRETİLMİYOR ama rezervasyon DURUYOR: canlıda eski silmelerden kalma
+   * `hükümdar1`, `hükümdar2`… adlı oyuncular var. Rezervasyon kalksaydı yeni bir oyuncu o adı
+   * alıp geçmiş kayıtlardaki kimliği bulanıklaştırabilirdi.
    */
-  it('⭐ kayıt `hükümdarN` desenini REZERVE eder', async () => {
+  it('kayıt `hükümdarN` desenini REZERVE etmeye devam eder', async () => {
     const t = randomUUID().slice(0, 8);
     await expect(auth.register(
       { email: `x-${t}@test.local`, password: PW, username: 'hükümdar1', worldId },
@@ -220,89 +370,25 @@ describe('hesap silme', () => {
     )).rejects.toMatchObject({ code: 'username_taken' });
   });
 
-  it('kahramanlar başkente taşınır (şehirsiz kalmazlar)', async () => {
-    const colony = await addColony(4);
-    await h.db.execute(sql`
-      INSERT INTO heroes (world_id, player_id, city_id, name, level, status)
-      VALUES (${worldId}, ${playerId}, ${colony}, 'Kahra', 3, 'alive')
-    `);
+  it('denetim kaydı yazılır (silinmişliğin tek izi)', async () => {
     await run();
-    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT city_id FROM heroes WHERE player_id = ${playerId}
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT action FROM audit_log WHERE player_id = ${playerId} AND action = 'account.deleted'
     `);
-    // ⚠️ `heroes.city_id` şehre ON DELETE SET NULL bağlı — taşınmasaydı NULL olurdu.
-    expect(Number(hero!['city_id'])).toBe(capitalId);
+    expect(row).toBeTruthy();
   });
 });
 
-/* ── SİLME: engeller ─────────────────────────────────────────────────────────── */
+/* ── SİLME: dokunulmayanlar ──────────────────────────────────────────────────── */
 
-describe('silme engelleri', () => {
-  it('başkent DIŞI şehirde hareket varsa engellenir', async () => {
-    const colony = await addColony(5);
-    await addMission({ origin: colony, target: null });
-    const pre = await deletes.preview(playerId);
-    expect(pre.blockers.join(' ')).toMatch(/Başkentin dışındaki/);
-    await expect(run()).rejects.toBeInstanceOf(AccountDeleteError);
-  });
-
-  it('başkent DIŞI şehre GELEN hareket de engeller (şehir yıkılacak)', async () => {
-    const colony = await addColony(6);
-    await addMission({ origin: null, target: colony, owner: playerId });
-    expect((await deletes.preview(playerId)).blockers).not.toHaveLength(0);
-  });
-
-  it('başkentten ÇIKMIŞ ordu varsa engellenir', async () => {
-    await addMission({ origin: capitalId, target: null });
-    const pre = await deletes.preview(playerId);
-    expect(pre.blockers.join(' ')).toMatch(/Başkentinden çıkmış/);
-  });
-
-  /** ⭐ Kullanıcının açık kuralı: *"Başkenti kalacağı için buraya saldırı da olsa fark etmez."* */
-  it('⭐ başkente GELEN saldırı engel DEĞİL', async () => {
-    await addMission({ origin: null, target: capitalId, owner: playerId });
-    const pre = await deletes.preview(playerId);
-    expect(pre.blockers).toHaveLength(0);
-    await expect(run()).resolves.toMatchObject({ username: 'hükümdar1' });
-  });
-
-  it('ittifak LİDERİ ise engellenir, üye ise engellenmez', async () => {
-    const [a] = await h.db.execute<Record<string, unknown>>(sql`
-      INSERT INTO alliances (world_id, name, leader_id) VALUES (${worldId}, 'Kartal', ${playerId})
-      RETURNING id
-    `);
-    await h.db.execute(sql`
-      UPDATE players SET alliance_id = ${Number(a!['id'])}, alliance_role = 3 WHERE id = ${playerId}
-    `);
-    expect((await deletes.preview(playerId)).blockers.join(' ')).toMatch(/lideri/);
-
-    /**
-     * ⭐ Askere indirilince engel kalkar ve üyelik **KORUNUR** (kullanıcı, 2026-08-09).
-     * ⚠️ Eski hâli `alliance_id`nin NULL olmasını bekliyordu — kullanıcı bunu değiştirdi:
-     * *"Asker olarak hesabını sildiğinde ittifakta kalmaya devam edebilir ama puanı
-     * ittifağın toplam puanına eklenmesin."*
-     */
-    await h.db.execute(sql`UPDATE players SET alliance_role = 1 WHERE id = ${playerId}`);
-    expect((await deletes.preview(playerId)).blockers).toHaveLength(0);
-    await run();
-    const [p] = await h.db.execute<Record<string, unknown>>(sql`
-      SELECT alliance_id, alliance_role, alliance_score_excluded, ranking_excluded
-        FROM players WHERE id = ${playerId}
-    `);
-    // ⚠️ `alliance_id` bigint → postgres.js DİZE döndürüyor; sayıya çevirmeden kıyaslanmaz.
-    expect(Number(p!['alliance_id']), 'üyelik korunmalı').toBe(Number(a!['id']));
-    expect(p!['alliance_score_excluded'], 'puan takım toplamına yazılmamalı').toBe(true);
-    expect(p!['ranking_excluded'], 'sıralamada görünmemeli').toBe(true);
-  });
-
+describe('silme neye DOKUNMUYOR', () => {
   /**
-   * ⭐ KONSEY ÜYESİ ASKER'E İNER (2026-08-09 kararı, kullanıcının cümlesinin gereği).
-   *
-   * ⚠️ Konsey daveti kabul edebilir, başvuru sonuçlandırabilir ve asker atabilir. Sahibi
-   * olmayan bir satırın üstünde bu yetkileri bırakmak, ittifak adına iş yapan her gelecek
-   * özellik için açık kapı olurdu.
+   * ⚠️ 2026-08-13'e kadar konsey ASKER'e indiriliyordu. Gerekçe makuldü (hayalet üstünde yetki
+   * bırakmamak) ama rütbe düşüşü ittifak panelinde HERKESE görünüyor — yani silinmişliği ele
+   * veren bir iz. Kullanıcı bu izin kalkmasını seçti; yetki, giriş yapamayan bir hesapta zaten
+   * kullanılamıyor.
    */
-  it('⭐ KONSEY üyesi silince Asker rütbesine iner ama ittifakta kalır', async () => {
+  it('⭐ KONSEY rütbesi aynen kalır', async () => {
     const [a] = await h.db.execute<Record<string, unknown>>(sql`
       INSERT INTO alliances (world_id, name, leader_id) VALUES (${worldId}, 'Şahin', ${playerId})
       RETURNING id
@@ -316,17 +402,15 @@ describe('silme engelleri', () => {
       SELECT alliance_id, alliance_role FROM players WHERE id = ${playerId}
     `);
     expect(Number(p!['alliance_id'])).toBe(Number(a!['id']));
-    expect(Number(p!['alliance_role'])).toBe(1);
+    expect(Number(p!['alliance_role']), 'rütbe düşürülmemeli').toBe(2);
   });
 
   /**
-   * ⭐ TATİL MODU BİTİRİLİR (2026-08-09'da bulunan boşluk).
-   *
-   * ⚠️ Tatildeki oyuncu **saldırılamaz** ve kaynağı akmaz. Tatildeyken silen biri arkasında
-   * 30 güne kadar dokunulamaz, donmuş bir hayalet şehir bırakıyordu — üstelik tatili
-   * bitirebilecek tek kişi artık giriş yapamıyor.
+   * ⭐ TATİL MODU BİTİRİLMİYOR (2026-08-13). Rozetin aniden düşmesi dışarıdan görülen bir olay.
+   * ⚠️ Kalıcı dokunulmazlık riski yok: tatile girişte `vacation_end` görevi zaten zamanlanıyor
+   * (`vacation.service.ts`), yani tatil en geç süresi dolunca kendiliğinden bitiyor.
    */
-  it('⭐ tatildeyken silinirse tatil BİTİRİLİR (şehir dokunulmaz kalmasın)', async () => {
+  it('⭐ tatil modu SÜRER', async () => {
     const [m] = await h.db.execute<Record<string, unknown>>(sql`
       INSERT INTO missions (world_id, type, status, execute_at, owner_player_id)
       VALUES (${worldId}, 'vacation_end', 'scheduled', now() + interval '10 days', ${playerId})
@@ -344,17 +428,16 @@ describe('silme engelleri', () => {
     const [p] = await h.db.execute<Record<string, unknown>>(sql`
       SELECT vacation_until, vacation_since FROM players WHERE id = ${playerId}
     `);
-    expect(p!['vacation_until'], 'tatil bitmeliydi').toBeNull();
-    expect(p!['vacation_since']).toBeNull();
+    expect(p!['vacation_until'], 'tatil sürmeliydi').not.toBeNull();
+    expect(p!['vacation_since']).not.toBeNull();
   });
 
   /**
-   * ⭐ BEKLEYEN İTTİFAK İSTEKLERİ İPTAL EDİLİR (2026-08-09'da bulunan boşluk).
-   *
-   * ⚠️ Yoksa bir lider «Kabul»e bastığında **silinmiş bir hesap ittifağa girerdi** ve kimse
-   * onun silinmiş olduğunu görmezdi. Mesaj satırı da gidiyor (`dropInviteMessages`).
+   * ⭐ BEKLEYEN BAŞVURU/DAVETLER İPTAL EDİLMİYOR (2026-08-13). İptal, karşı tarafın kutusundan
+   * bir satırın kaybolması demekti — görülebilir bir iz. Başvuru kabul edilirse hesap ittifağa
+   * girer; hiç oynamayan bir üyeden ayırt edilemez, istenen de bu.
    */
-  it('⭐ bekleyen başvuru/davetler iptal olur ve mesajları silinir', async () => {
+  it('⭐ bekleyen başvuru PENDING kalır ve mesajı durur', async () => {
     const other = await createPlayer(h, worldId, 'lider');
     const [a] = await h.db.execute<Record<string, unknown>>(sql`
       INSERT INTO alliances (world_id, name, leader_id) VALUES (${worldId}, 'Kartal', ${other})
@@ -367,22 +450,85 @@ describe('silme engelleri', () => {
     const alliances = new AllianceService(h.db);
     await alliances.apply({ worldId, playerId, allianceId: Number(a!['id']) });
 
-    const boxOf = async (pid: number): Promise<number> => {
-      const [r] = await h.db.execute<Record<string, unknown>>(sql`
-        SELECT count(*)::int AS n FROM messages
-         WHERE player_id = ${pid} AND kind = 'alliance_application'
-      `);
-      return Number(r!['n']);
-    };
-    expect(await boxOf(other)).toBe(1);
-
     await run();
 
     const [inv] = await h.db.execute<Record<string, unknown>>(sql`
       SELECT status FROM alliance_invites WHERE player_id = ${playerId}
     `);
-    expect(inv!['status']).toBe('canceled');
-    expect(await boxOf(other), 'liderin kutusundaki ölü satır kalmamalı').toBe(0);
+    expect(inv!['status']).toBe('pending');
+    const [box] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS n FROM messages
+       WHERE player_id = ${other} AND kind = 'alliance_application'
+    `);
+    expect(Number(box!['n']), 'liderin kutusundaki başvuru durmalı').toBe(1);
+  });
+
+  /** ⚠️ Kahraman taşınmıyor: taşınacak bir yıkım yok, şehir olduğu yerde duruyor. */
+  it('kahraman bulunduğu şehirde kalır', async () => {
+    const colony = await addColony(4);
+    await h.db.execute(sql`
+      INSERT INTO heroes (world_id, player_id, city_id, name, level, status)
+      VALUES (${worldId}, ${playerId}, ${colony}, 'Kahra', 3, 'alive')
+    `);
+    await run();
+    const [hero] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT city_id FROM heroes WHERE player_id = ${playerId}
+    `);
+    expect(Number(hero!['city_id'])).toBe(colony);
+  });
+});
+
+/* ── SİLME: engeller ─────────────────────────────────────────────────────────── */
+
+describe('silme engelleri', () => {
+  it('ittifak LİDERİ ise engellenir, üye ise engellenmez', async () => {
+    const [a] = await h.db.execute<Record<string, unknown>>(sql`
+      INSERT INTO alliances (world_id, name, leader_id) VALUES (${worldId}, 'Kartal', ${playerId})
+      RETURNING id
+    `);
+    await h.db.execute(sql`
+      UPDATE players SET alliance_id = ${Number(a!['id'])}, alliance_role = 3 WHERE id = ${playerId}
+    `);
+    expect((await deletes.preview(playerId)).blockers.join(' ')).toMatch(/lideri/);
+    await expect(run()).rejects.toBeInstanceOf(AccountDeleteError);
+
+    await h.db.execute(sql`UPDATE players SET alliance_role = 1 WHERE id = ${playerId}`);
+    expect((await deletes.preview(playerId)).blockers).toHaveLength(0);
+    await run();
+    const [p] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT alliance_id FROM players WHERE id = ${playerId}
+    `);
+    // ⚠️ `alliance_id` bigint → postgres.js DİZE döndürüyor; sayıya çevirmeden kıyaslanmaz.
+    expect(Number(p!['alliance_id']), 'üyelik korunmalı').toBe(Number(a!['id']));
+  });
+
+  /**
+   * ⭐ ORDU HAREKETİ ARTIK ENGEL DEĞİL — dayanağı olan şehir yıkımı kalktı. Yoldaki ordu
+   * görevini tamamlar; dışarıdan görüntüsü, oyuna girmeyi bırakmış bir oyuncunun ordusudur.
+   */
+  it('⭐ yoldaki ordu (başkentten çıkmış ya da koloniye değen) engel DEĞİL', async () => {
+    const colony = await addColony(5);
+    await addMission({ origin: capitalId, target: null });
+    await addMission({ origin: null, target: colony, owner: playerId });
+
+    expect((await deletes.preview(playerId)).blockers).toHaveLength(0);
+    await expect(run()).resolves.toBeUndefined();
+  });
+
+  /**
+   * ⭐⭐⭐ **ÜRETİM KUYRUĞU ENGEL DEĞİL — 2026-08-13'te düzeltilen canlı kusur.**
+   *
+   * Eski engel sorgusu görev TÜRÜNE bakmıyordu; kuyruk bitişleri de `missions` satırı ve
+   * `origin_city_id = target_city_id = şehir` taşıyor (`queues/queue.service.ts`). Sonuç:
+   * başkentinde bina yükselten oyuncuya **"Başkentinden çıkmış bir ordun var"** deniyor ve
+   * hesabını silemiyordu — ortada ordu yokken, üstelik başkent zaten yıkılmazken. Uzun bir
+   * yükseltme 12 saatlik silme bağlantısını rahatça geçebiliyordu.
+   */
+  it('⭐⭐⭐ başkentte süren üretim kuyruğu silmeyi ENGELLEMEZ', async () => {
+    await addMission({ origin: capitalId, target: capitalId, type: 'building_finish' });
+
+    expect((await deletes.preview(playerId)).blockers).toHaveLength(0);
+    await expect(run()).resolves.toBeUndefined();
   });
 });
 

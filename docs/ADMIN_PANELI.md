@@ -1555,10 +1555,17 @@ matris           9 yapı × 4 eksen, devralınan değerler placeholder olarak do
 | | Hesap silme | Dünyadan kaldırma |
 | :-- | :-- | :-- |
 | Kim başlatır | oyuncunun kendisi (mağaza şartı) | yönetici (moderasyon) |
-| Başkent | **KALIR**, adı anonimleşir | **SİLİNİR** |
-| Kahramanlar | başkente taşınır | **silinir** — taşınacak şehir kalmıyor |
-| Kullanıcı adı | `hükümdarN` olur | **korunur** — denetim izi |
+| Şehirler | **HEPSİ KALIR**, adlarıyla (2026-08-13) | **HEPSİ SİLİNİR**, başkent dahil |
+| Kahramanlar | oldukları şehirde kalır | **silinir** — taşınacak şehir kalmıyor |
+| Kullanıcı adı | **korunur** (2026-08-13) | **korunur** — denetim izi |
+| Puan / sıralamalar | **dokunulmaz**, listelerde kalır | puan sıfırlanır, `ranking_excluded` |
 | Hesap | sterilize edilir | dokunulmaz; oyuncuya **kalıcı ceza** |
+
+⚠️ **Hesap silme 2026-08-13'te oyun dünyasına dokunmayı tamamen bıraktı** (kullanıcı): şehirler,
+ad, puan ve sıralamalar aynen kalıyor, *"diğer oyuncular bu hesabın silindiğini anlayamasın."*
+İki akış artık yalnız `players.deleted_at` işaretinde ortak. ⚠️ Eski tasarımda hayatta bırakılan
+başkent, sıralama muafiyeti yüzünden 10 kat kuralına takılıp **saldırılamaz** hâle geliyordu;
+değişikliğin asıl gerekçesi buydu.
 
 **Ne yapar:** ittifak bağını koparır (⚠️ **LİDERSE ittifak DAĞITILIR** — lidersiz ittifak
 onarılamaz olurdu, çünkü davet/at/ad/dağıt hepsi lider kapısının arkasında ve kaldırılan lider
@@ -1575,9 +1582,10 @@ boşlukta kalırdı.
 ⚠️ **`players` satırı SİLİNMEZ**: `cities.player_id` NO ACTION, `battles`/`rankings` ise
 FK'sız referans tutuyor.
 
-⚠️ **Ceza şart, işaret yetmez.** `players.deleted_at` kodda hiçbir yerde OKUNMUYOR — yalnız
-bir işaret. Ceza verilmeseydi kaldırılan oyuncu girişe devam eder ve şehirsiz, bozuk bir
-dünyaya düşerdi.
+⚠️ **Ceza şart, işaret yetmez.** `players.deleted_at` yalnız bir işaret; oyun sorgularının
+hiçbiri onu okumuyor. Tek okuyucusu 2026-08-13'ten beri girişin kendisi (`auth.service` →
+`login`) ve o kapı da "parola yanlış" diyerek reddediyor, yani kaldırılan oyuncuya ne olduğunu
+anlatmıyor. Ceza verilmeseydi kaldırılan oyuncu şehirsiz, bozuk bir dünyaya düşerdi.
 
 **İki ayrı onay:** step-up parolası *"bu gerçekten sen misin"*, `confirm` alanı *"doğru
 oyuncuyu mu seçtin"* sorusunu cevaplıyor — yanlış satıra tıklamak parolayla yakalanmıyor.

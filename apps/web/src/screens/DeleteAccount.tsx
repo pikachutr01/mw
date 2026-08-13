@@ -19,6 +19,16 @@
  * ⚠️ İKİ AŞAMA: önce özet (`preview`, jetonu TÜKETMEZ), sonra onay (`delete`, tüketir).
  * Tek aşamalı yapsaydık bağlantıya tıklayan oyuncu ne olacağını görmeden silinirdi. Form bu
  * iki aşamayı **atlatmaz** — yalnız birinci aşamanın bağlantısını üretir.
+ *
+ * ⭐⭐⭐ **2026-08-13: SİLME ARTIK OYUN DÜNYASINA DOKUNMUYOR** (kullanıcı). Şehirler, oyuncu adı,
+ * puan ve sıralamalar aynen kalıyor; silinen yalnız hesap tarafı. Bu sayfadaki her metin buna
+ * göre yeniden yazıldı — eskiden "şehirlerin yıkılır", "adın anonimleşir", "hiçbir sıralamada
+ * görünmez" yazıyordu ve üçü de artık **yanlış vaat** olurdu.
+ *
+ * ⚠️ Metnin söylemek ZORUNDA olduğu üç şey (mağaza şartı kadar dürüstlük şartı da):
+ * (1) bir daha giriş yapamazsın; (2) şehirlerin ve adın dünyada kalır, saldırıya açıktır;
+ * (3) eski oyuncu adını yeniden alamazsın. Üçüncüsü kolayca atlanır ama oyuncunun kararını
+ * doğrudan etkiler — aynı e-postayla dönen oyuncu yeni bir ad seçmek zorunda.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -28,8 +38,8 @@ import { Button, Card, ErrorBox, Field, Input } from '../components/ui.tsx';
 interface Preview {
   username: string;
   worldName: string;
-  capital: { id: number; name: string; k: number; d: number; s: number } | null;
-  razed: { id: number; name: string; k: number; d: number; s: number }[];
+  /** ⚠️ Yalnız bilgi: hiçbiri yıkılmıyor, hiçbirinin adı değişmiyor (2026-08-13). */
+  cities: { id: number; name: string; k: number; d: number; s: number; isCapital: boolean }[];
   blockers: string[];
 }
 
@@ -54,7 +64,6 @@ export function DeleteAccountScreen(): React.ReactElement {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [state, setState] = useState<'idle' | 'busy' | 'done' | 'fail'>('busy');
   const [error, setError] = useState<unknown>(null);
-  const [result, setResult] = useState<{ username: string; razed: number } | null>(null);
   /** ⚠️ StrictMode çift etkisi: özet çağrısı jetonu tüketmiyor ama iki kez sorgulamak da gereksiz. */
   const asked = useRef<string | null>(null);
 
@@ -143,14 +152,14 @@ export function DeleteAccountScreen(): React.ReactElement {
             <p className="mb-1 font-semibold text-ink">Silme onaylandığında ne oluyor?</p>
             <ul className="list-disc space-y-0.5 pl-4">
               <li><strong>Silinen:</strong> e-posta adresin, şifren, tüm oturumların ve
-                bildirim aboneliklerin.</li>
-              <li><strong>Yıkılan:</strong> başkentin dışındaki tüm şehirlerin (içlerinde ordu
-                olsa bile).</li>
-              <li><strong>Kalan:</strong> başkentin <strong>şu anki adıyla</strong> dünyada
-                durur, böylece diğer oyuncuların savaş geçmişinde delik oluşmaz. Yalnız
-                <strong> oyuncu adın</strong> anonim bir adla değiştirilir.</li>
-              <li><strong>Sıralamalar:</strong> şehrin oyuncu, ittifak ve kahraman
-                sıralamalarının hiçbirinde görünmez; puanın ittifakının toplamına da eklenmez.</li>
+                bildirim aboneliklerin. Hesabına <strong>bir daha giriş yapamazsın</strong>.</li>
+              <li><strong>Kalan:</strong> <strong>tüm şehirlerin</strong> adlarıyla birlikte,{' '}
+                <strong>oyuncu adın</strong> ve <strong>puanın</strong> dünyada olduğu gibi
+                durur; sıralamalarda görünmeye devam eder.</li>
+              <li><strong>Şehirlerin oyunun bir parçası kalır:</strong> saldırılabilir, ganimet
+                üretir, kuyrukları biter — ama artık kimse emir veremez.</li>
+              <li><strong>Oyuncu adın serbest kalmaz:</strong> aynı e-posta adresiyle yeniden
+                kayıt olabilirsin, fakat eski adını alamazsın.</li>
             </ul>
           </div>
           <p className="text-xs text-muted">
@@ -163,20 +172,19 @@ export function DeleteAccountScreen(): React.ReactElement {
     );
   }
 
-  if (state === 'done' && result) {
+  if (state === 'done') {
     return (
       <Frame title="Hesabın silindi.">
-        {/* ⚠️ `result.username` artık OYUNCU adı; şehrin adı değişmediği için burada şehir
-            adı yazılmıyor — oyuncu onu zaten biliyor ve "adıyla duruyor" cümlesi eski
-            davranışta iki şeyi birden anlatıyordu. */}
+        {/* ⚠️ Sonuç ucundan artık ad/şehir sayısı DÖNMÜYOR (2026-08-13): dünyada hiçbir şey
+            değişmediği için sayılacak bir sonuç da yok. */}
         <p className="mb-3 text-sm text-ink">
-          Kişisel bilgilerin kaldırıldı ve tüm oturumların kapatıldı. Başkentin{' '}
-          <strong>adı değişmeden</strong> dünyada duruyor
-          {result.razed > 0 ? `; diğer ${result.razed} şehrin yıkıldı` : ''}. Oyuncu adın
-          bundan sonra <strong>{result.username}</strong>.
+          Kişisel bilgilerin kaldırıldı ve tüm oturumların kapatıldı. Bu hesaba{' '}
+          <strong>bir daha giriş yapamazsın</strong>. Şehirlerin, oyuncu adın ve puanın
+          dünyada <strong>olduğu gibi kalır</strong>.
         </p>
         <p className="text-xs text-muted">
-          E-posta adresin serbest bırakıldı, istersen aynı adresle yeniden kayıt olabilirsin.
+          E-posta adresin serbest bırakıldı, istersen aynı adresle yeniden kayıt olabilirsin —
+          ancak eski oyuncu adın dünyada durduğu için yeni bir ad seçmen gerekir.
         </p>
       </Frame>
     );
@@ -207,10 +215,7 @@ export function DeleteAccountScreen(): React.ReactElement {
     setState('busy');
     setError(null);
     try {
-      const r = await api<{ username: string; razed: number }>(
-        '/api/v1/auth/delete-account', { method: 'POST', body: { token } },
-      );
-      setResult(r);
+      await api<{ ok: true }>('/api/v1/auth/delete-account', { method: 'POST', body: { token } });
       setState('done');
       // ⚠️ Bu tarayıcıda oturum varsa artık ölü — kalıntıyı temizle, yoksa istemci ölü
       //    token'la çalışmaya çalışıp "beklenmedik hata" gösterir.
@@ -234,36 +239,38 @@ export function DeleteAccountScreen(): React.ReactElement {
             <li>e-posta adresin, şifren ve tüm oturumların</li>
             <li>bildirim aboneliklerin</li>
           </ul>
-          {preview.razed.length > 0 ? (
-            <>
-              <p className="mt-2 mb-1 font-semibold text-danger">
-                Yıkılacak şehirler ({preview.razed.length})
-              </p>
-              <ul className="list-disc space-y-0.5 pl-4 text-ink">
-                {preview.razed.map((c) => (
-                  <li key={c.id}>{c.name} <span className="tnum text-muted">({coords(c)})</span></li>
-                ))}
-              </ul>
-              <p className="mt-1 text-muted">⚠️ İçlerinde ordu olsa bile yıkılır.</p>
-            </>
-          ) : null}
+          <p className="mt-1 text-muted">
+            ⚠️ Bu hesaba <strong className="text-ink">bir daha giriş yapamazsın</strong>.
+          </p>
         </div>
 
-        {preview.capital ? (
+        {/* ⚠️⚠️ Bu kutu 2026-08-13'te tersine döndü: eskiden "yıkılacak şehirler" listesiydi.
+            Silme artık oyun dünyasına hiç dokunmuyor, o yüzden liste **kalacakları** sayıyor. */}
+        {preview.cities.length > 0 ? (
           <div className="rounded-[var(--radius-sm)] border border-border bg-raised p-3 text-xs">
-            <p className="mb-1 font-semibold text-ink">Kalacak</p>
-            <p className="text-ink">
-              Başkentin <strong>{preview.capital.name}</strong>{' '}
-              <span className="tnum text-muted">({coords(preview.capital)})</span> dünyada
-              <strong> bu adıyla</strong> kalır — şehrin adı değişmez. Yalnız{' '}
-              <strong>oyuncu adın</strong> anonim bir adla değiştirilir.
+            <p className="mb-1 font-semibold text-ink">
+              Dünyada kalacak ({preview.cities.length} şehir)
             </p>
-            {/* ⚠️ Sıralama cümlesi burada çünkü oyuncunun asıl merak ettiği "puanım ne olacak".
-                Şehir kalıyor ve ganimet üretmeye devam ediyor; ama vitrinden tamamen çıkıyor. */}
+            <ul className="list-disc space-y-0.5 pl-4 text-ink">
+              {preview.cities.map((c) => (
+                <li key={c.id}>
+                  {c.name} <span className="tnum text-muted">({coords(c)})</span>
+                  {c.isCapital ? <span className="text-muted"> · başkent</span> : null}
+                </li>
+              ))}
+            </ul>
             <p className="mt-1 text-muted">
-              Şehrin dünyada gerçek bir şehir olarak durur (saldırılabilir, kaynak üretir) ama{' '}
-              <strong>hiçbir sıralamada görünmez</strong>; ittifakındaysan üyeliğin sürer, puanın
-              ittifakının toplamına eklenmez.
+              Şehirlerin <strong className="text-ink">adlarıyla birlikte</strong> durur;{' '}
+              <strong className="text-ink">oyuncu adın</strong> ve{' '}
+              <strong className="text-ink">puanın</strong> da değişmez, sıralamalarda görünmeye
+              devam eder. Şehirlerine saldırılabilir ve ganimet üretmeyi sürdürür — ama artık
+              kimse onlara emir veremez.
+            </p>
+            {/* ⚠️ Bu cümle onay ekranından ÇIKARILAMAZ: oyuncunun geri dönüşü olmayan bir
+                kararı, adının dünyada kalacağını bilerek vermesi gerekiyor. */}
+            <p className="mt-1 text-muted">
+              Aynı e-posta adresiyle yeniden kayıt olabilirsin, fakat{' '}
+              <strong className="text-ink">eski oyuncu adını alamazsın</strong>.
             </p>
           </div>
         ) : null}

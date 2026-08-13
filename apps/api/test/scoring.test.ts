@@ -348,18 +348,22 @@ describe('sıralama anlık görüntüsü', () => {
   });
 
   /**
-   * ⭐⭐ SİLİNMİŞ HESABIN KAHRAMANI LİSTEDEN DÜŞER (kullanıcı, 2026-08-09).
+   * ⭐⭐ **SİLİNMİŞ HESABIN KAHRAMANI DA LİSTEDE KALIR** (kullanıcı, 2026-08-13).
    *
-   * ⚠️ Bir ÜSTTEKİ testin ikizi ve **kasten farklı sonuç veriyor**: muafiyet bayrağı kahramanı
-   * listede bırakır (2026-08-03 şartı), hesabın silinmiş olması ise düşürür. İki soru ayrı:
-   * "gizlensin mi" ile "bu hesap artık yok mu". Biri diğerine bağlanırsa ikisinden biri
-   * sessizce ihlal edilir — ikisi de test edilmeden bırakılmamalı.
+   * ⚠️⚠️ Bu test 2026-08-09'da tam TERSİNİ kilitliyordu: o gün silme, oyuncuyu bütün
+   * sıralamalardan çıkarıyordu ve kahraman sekmesi tek kaçak deliğiydi. Yeni kuralda silme
+   * oyun dünyasına hiç dokunmuyor — *"puan sıralamalarından da ittifak puanı sıralamalarından
+   * da çıkarılmasın… diğer oyuncular bu hesabın silindiğini anlayamasın."*
    *
-   * ⚠️ Kahraman satırı sahibinin ADINI da yazıyor (`command.controller` → `owner`), yani bu
-   * süzgeç olmadan silinmiş hesap oyuncu ve ittifak sekmelerinden düşse bile kahraman
-   * sekmesinden vitrine geri sızıyordu.
+   * ⭐ Süzgecin kalkması **mecburiydi, tercih değil**: oyuncu ve ittifak sekmelerinden hiç
+   * düşmeyen bir hesabın yalnız kahraman sekmesinden kaybolması, silinmişliği tek başına ele
+   * verirdi — üstelik kahraman satırı sahibinin adını da yazıyor (`command.controller` →
+   * `owner`).
+   *
+   * ⚠️ `purge-player` (yönetici) bundan etkilenmiyor: orada kahraman SATIRLARI siliniyor, yani
+   * `NOT EXISTS (heroes)` temizliği onları düşürmeye devam ediyor — bir alttaki iddia bu.
    */
-  it('⭐ SİLİNMİŞ hesabın kahramanı sıralamadan düşer (muafiyetten farklı)', async () => {
+  it('⭐⭐ SİLİNMİŞ hesabın kahramanı sıralamada KALIR', async () => {
     const [hero] = await h.db.execute<Record<string, unknown>>(sql`
       INSERT INTO heroes (world_id, player_id, name, level, xp, status)
       VALUES (${worldId}, ${playerId}, 'Hayalet', 7, 250, 'alive') RETURNING id
@@ -376,11 +380,14 @@ describe('sıralama anlık görüntüsü', () => {
     await takeSnapshot(h.db, worldId, new Date('2026-07-30T08:00:00.000Z'));
     expect(await inRanking(), 'silinmeden önce listede olmalı').toBe(1);
 
-    // ⚠️ Hesap silinince satır ARTIK VAR olan bir kahramana ait; `NOT EXISTS (heroes)`
-    //    temizliği onu bulamaz. Silme dalı `deleted_at`e de bakmazsa satır tabloda kalır.
     await h.db.execute(sql`UPDATE players SET deleted_at = now() WHERE id = ${playerId}`);
     await takeSnapshot(h.db, worldId, new Date('2026-07-30T16:00:00.000Z'));
-    expect(await inRanking(), 'silinmiş hesabın kahramanı düşmeliydi').toBe(0);
+    expect(await inRanking(), 'silme sıralamayı ETKİLEMEMELİ').toBe(1);
+
+    // ⚠️ Kahraman gerçekten yok olduğunda (ölüm / `purge-player`) satır YİNE düşmeli.
+    await h.db.execute(sql`DELETE FROM heroes WHERE id = ${heroId}`);
+    await takeSnapshot(h.db, worldId, new Date('2026-07-31T08:00:00.000Z'));
+    expect(await inRanking(), 'var olmayan kahraman listede kalmamalı').toBe(0);
   });
 
   it('bir sonraki görevi yazar ve aynı ana İKİNCİ görev yazılamaz', async () => {

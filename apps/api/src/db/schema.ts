@@ -206,10 +206,14 @@ export const players = pgTable('players', {
   meritExpiresAt: timestamp('merit_expires_at', { withTimezone: true }),
   bannedAt: timestamp('banned_at', { withTimezone: true }),
   /**
-   * ⭐ HESABINI SİLDİ (2026-08-01). Satır **kalıyor**: başkent dünyada duran gerçek bir şehir
-   * ve sahibi olmadan savaş geçmişinde, sıralamada ve komşuların raporlarında delik açardı.
-   * Kişisel veri (`accounts.email`, parola, oturum, push) gerçekten siliniyor; oyuncu adı
-   * `hükümdarN` oluyor. Bu kolon olmadan panel bu kalıntıları normal oyuncu sanardı.
+   * ⭐ HESABINI SİLDİ (2026-08-01). Satır **kalıyor** ve 2026-08-13'ten beri satırın etrafındaki
+   * her şey de kalıyor: şehirler, oyuncu adı, puan, sıralamalar, ittifak rütbesi. Silinen
+   * yalnız hesap tarafı (`accounts.email`, parola, oturum, jeton, push).
+   *
+   * ⚠️ Bu kolon bir **iç işaret**: oyun sorgularının hiçbiri okumuyor — okusaydı zaten
+   * kullanıcının şartını çiğnerdi (*"diğer oyuncular bu hesabın silindiğini anlayamasın"*).
+   * İki okuyucusu var: giriş kapısı (`auth.service` → `login`) ve yönetici paneli.
+   * ⚠️ `purge-player` de bunu yazıyor ama oradaki anlamı farklı — orada şehirler gerçekten yok.
    */
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
