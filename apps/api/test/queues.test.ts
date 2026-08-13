@@ -202,6 +202,73 @@ describe('yapı yükseltme', () => {
     expect(b.total).toBe(50);
     expect(b.used).toBe(20);     // yalnız çiftlik + maden
   });
+
+  /**
+   * ⭐⭐⭐ **ÇIKIŞSIZ DÖNGÜ — 2026-08-13 canlı olayı.**
+   *
+   * Oyuncu: *"20/20 kale durumundaydım, Baraka +1 gelince 21/20 oldu, şu an kaleye
+   * basamıyorum."* Ekrandaki hata *"Kale seviyeniz yetersiz: 21/20. **Kale'yi yükseltin.**"*
+   * diyordu — mesaj çözümü söylüyor, kod tam da onu yasaklıyordu.
+   *
+   * Bütçeyi artırmanın tek yolu kaleyi yükseltmek; kale yükseltmesi de bütçeye takılıyorsa
+   * oyuncunun çıkışı yok. Bu testler o kapıyı kalıcı olarak açık tutuyor.
+   */
+  describe('⭐⭐⭐ kale yükseltmesi bütçeye TAKILMAZ', () => {
+    const cap = new CapacityService();
+    /** Canlıdaki şehir: Kale 2 (bütçe 20), tüketiciler toplamı 21. */
+    const kilitli = { castle: 2, farm: 9, mine: 9, barracks: 1, academy: 1, cave: 1 };
+
+    it('⭐⭐⭐ bütçe AŞILMIŞKEN bile kale yükseltilebilir', () => {
+      const b = cap.buildingBudget(kilitli, { type: 'castle', levels: 1 });
+      expect(b.fits, 'kale yükseltmesi reddedilemez — tek çıkış yolu bu').toBe(true);
+    });
+
+    it('kale yükseltmesi bütçeyi TÜKETMEZ, BÜYÜTÜR', () => {
+      const b = cap.buildingBudget(kilitli, { type: 'castle', levels: 1 });
+      expect(b.used, 'kale used’a eklenmemeli').toBe(21);
+      expect(b.total, 'total yeni kale seviyesinden hesaplanmalı').toBe(30);
+    });
+
+    /** ⚠️ Kapı yalnız KALE için açıldı; diğer yapılar aşılmış bütçede hâlâ reddedilir. */
+    it('⚠️ aşılmış bütçede DİĞER yapılar hâlâ reddedilir', () => {
+      for (const type of ['farm', 'mine', 'barracks', 'academy']) {
+        expect(cap.buildingBudget(kilitli, { type, levels: 1 }).fits, type).toBe(false);
+      }
+    });
+
+    /** ⚠️ Gösterge (extra yok) DÜRÜST kalmalı: 21/20 hâlâ "bütçe dışı" demeli. */
+    it('⚠️ arayüz göstergesi değişmedi — 21/20 hâlâ sığmıyor', () => {
+      const b = cap.buildingBudget(kilitli);
+      expect(b.used).toBe(21);
+      expect(b.total).toBe(20);
+      expect(b.fits).toBe(false);
+    });
+
+    it('normal durumda kale yükseltmesi zaten geçiyordu (regresyon yok)', () => {
+      const b = cap.buildingBudget({ castle: 5, farm: 3, mine: 3 }, { type: 'castle', levels: 1 });
+      expect(b.fits).toBe(true);
+      expect(b.total).toBe(60);
+    });
+  });
+
+  /** Uçtan uca: gerçek kuyruk üzerinden, canlıdaki kilitlenmenin birebir kopyası. */
+  it('⭐⭐⭐ kilitlenmiş şehir kaleyi GERÇEKTEN yükseltebiliyor (uçtan uca)', async () => {
+    const at = await clock.gameNow(worldId);
+    await setLevel('castle', 2);
+    await setLevel('farm', 9);
+    await setLevel('mine', 9);
+    await setLevel('barracks', 3);      // toplam 21 > bütçe 20
+    await giveResources(500_000_000, 500_000_000);
+
+    // Diğer yapılar kapalı…
+    const err = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at })
+      .catch((e: unknown) => e as QueueError);
+    expect((err as QueueError).code).toBe('castle_budget_full');
+
+    // …ama çıkış yolu AÇIK.
+    await expect(queues.enqueueBuilding({ cityId, playerId, type: 'castle', at }))
+      .resolves.toBeTruthy();
+  });
 });
 
 describe('savaşçı üretimi', () => {

@@ -62,19 +62,52 @@ export class CapacityService {
   constructor(private readonly rules: AreaRules = DEFAULT_AREA_RULES) {}
 
   /**
-   * Kale bütçesi. `extraLevels` ile "bu yükseltmeyi yaparsam sığar mı?" sorulur.
+   * Kale bütçesi. `extra` ile "bu yükseltmeyi yaparsam sığar mı?" sorulur.
    * Kale'nin KENDİ seviyesi sayılmaz; Sur/Büyü Kalkanı `consumers` listesinde olmadığı için girmez.
+   *
+   * ⚠️⚠️ **KALE YÜKSELTMESİ BU BÜTÇEYE TAKILMAZ — 2026-08-13 canlı kilitlenmesi.**
+   *
+   * Oyuncu bildirimi: *"20/20 kale durumundaydım ve kale basmayı bekliyordum, Baraka +1 gelince
+   * 21/20 oldu. Şu an kaleye basamıyorum."* Ekranda `Kale seviyeniz yetersiz: 21/20. Kale'yi
+   * yükseltin.` yazıyordu — yani hata mesajı çözümü söylüyor ve **tam da onu yasaklıyordu.**
+   *
+   * Sebep: `total` KALENİN O ANKİ seviyesinden hesaplanıyordu. Kale yükseltmesinde `extra`,
+   * `consumers` listesinde olmadığı için `used`a eklenmiyordu (doğru) ama `total`ı da
+   * büyütmüyordu (yanlış) → `used > total` olan bir şehirde kale yükseltmesi de reddediliyordu.
+   * Bütçeyi artırmanın TEK yolu kaleyi yükseltmek olduğu için bu bir **çıkışsız döngü**.
+   *
+   * ⭐ Kural düzeltmesi tek cümle: **bu bütçe TÜKETİCİLERİ kısıtlar, kaynağını değil.** Kale
+   * `consumesCastleBudget: false` taşıyor, yani zaten tüketici değil; onu kendi ürettiği
+   * bütçeye karşı sınamak baştan kategori hatasıydı. Kale'nin kendi tavanı `maxBuildingLevel`
+   * ile ayrıca korunuyor — burada serbest bırakmak sınırsızlık demek değil.
+   *
+   * ⚠️ `used > total` durumu normalde doğamaz (kapı zaten kapalı); bu şehirlere veri göçüyle
+   * girildi (baraka seviye 1 eklenmesi, 2026-08-12). Yani kusur göçün değil, göçün ORTAYA
+   * ÇIKARDIĞI eski bir kilitlenmenin. Düzeltme her iki yolu da kapatıyor.
    */
   buildingBudget(
     buildings: Record<string, number>,
     extra: { type: string; levels: number } | null = null,
   ): BudgetStatus {
     const { sourceBuilding, perLevel, consumers } = this.rules.buildingBudget;
-    const total = Math.max(0, buildings[sourceBuilding] ?? 0) * perLevel;
+    const current = Math.max(0, buildings[sourceBuilding] ?? 0);
+    /** Kaynak yapının yükseltmesi bütçeyi TÜKETMEZ, BÜYÜTÜR → `total` yeni seviyeye göre. */
+    const gain = extra && extra.type === sourceBuilding ? Math.max(0, extra.levels) : 0;
+    const total = (current + gain) * perLevel;
+
     let used = 0;
     for (const type of consumers) used += Math.max(0, buildings[type] ?? 0);
     if (extra && consumers.includes(extra.type)) used += extra.levels;
-    return { used, total, free: total - used, fits: used <= total };
+
+    /**
+     * ⭐ Kaynak yapının kendi yükseltmesi **koşulsuz** geçer. `gain` tek başına yetmezdi:
+     * bütçeyi bir seviyelik kazançtan (10) daha fazla aşmış bir şehir yine kilitli kalırdı.
+     * ⚠️ `extra` yokken (arayüzün "kalan bütçe" göstergesi) davranış DEĞİŞMEDİ — orada `fits`
+     * hâlâ "şu an bütçe içinde miyim" sorusunun dürüst cevabı ve 21/20 kırmızı görünmeye
+     * devam ediyor. Değişen yalnız "şunu yapabilir miyim" sorusunun kale için verdiği cevap.
+     */
+    const fits = extra != null && extra.type === sourceBuilding ? true : used <= total;
+    return { used, total, free: total - used, fits };
   }
 
   /** Savunma kapasitesi: her birim katalogdaki `area` kadar tüketir. */
