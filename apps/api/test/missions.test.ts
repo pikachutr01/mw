@@ -7,7 +7,9 @@
  */
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { maxCities, spyEffectiveDiff, spyLevelFor, teleportCooldownSeconds } from '@mobilwar/catalog';
+import {
+  farmOutput, maxCities, mineOutput, spyEffectiveDiff, spyLevelFor, teleportCooldownSeconds,
+} from '@mobilwar/catalog';
 import { travelSeconds } from '@mobilwar/engine';
 import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
@@ -128,6 +130,31 @@ async function setResources(cityId: number, gold: number, food: number): Promise
   await h.db.execute(sql`
     UPDATE cities SET gold = ${gold}::numeric, food = ${food}::numeric, resources_at = now()
      WHERE id = ${cityId}
+  `);
+}
+/**
+ * Kaynak çıpasını geriye çeker → oyuncunun `hours` saattir oyuna hiç girmediği, yani
+ * satırına kimsenin dokunmadığı durumu taklit eder. "Tick YOK" mimarisinde bayatlığın
+ * TEK üreticisi budur (`city.service.ts` başlığı).
+ */
+async function ageResources(cityId: number, hours: number): Promise<void> {
+  await h.db.execute(sql`
+    UPDATE cities SET resources_at = resources_at - (${hours} * interval '1 hour')
+     WHERE id = ${cityId}
+  `);
+}
+/** `hoursAgo` saat önce başlamış, süren bir üretim emri kurar (henüz hiçbiri yazılmamış). */
+async function enqueue(
+  cityId: number, playerId: number, category: 'unit' | 'defense',
+  itemType: string, count: number, perUnitSeconds: number, hoursAgo: number,
+): Promise<void> {
+  await h.db.execute(sql`
+    INSERT INTO queues (world_id, city_id, player_id, category, item_type, count, done,
+                        per_unit_seconds, position, started_at, finish_at)
+    VALUES (${worldId}, ${cityId}, ${playerId}, ${category}, ${itemType}, ${count}, 0,
+            ${perUnitSeconds}, 1,
+            now() - (${hoursAgo} * interval '1 hour'),
+            now() - (${hoursAgo} * interval '1 hour') + (${count * perUnitSeconds} * interval '1 second'))
   `);
 }
 async function unitsOf(cityId: number): Promise<Record<string, number>> {
@@ -538,6 +565,103 @@ describe('casusluk', () => {
     expect(intel['warriors']).toBeUndefined();
   });
 
+  /**
+   * ⭐⭐ BAYAT İSTİHBARAT REGRESYONU (kullanıcı, 2026-08-14).
+   *
+   * Kullanıcının bildirdiği hata: *"birkaç saat önce görülen ganimet ile şimdi casusluk
+   * atınca görülen ganimet aynı oluyor"*. Sebep `createSpyHandler`in hedef şehri
+   * `materialize` etmemesiydi — kaynak DB'de birikmediği, `resources_at` çıpasından okuma
+   * anında hesaplandığı için çevrimdışı oyuncunun kasası satırda **donuk** duruyordu.
+   *
+   * ⚠️ Üç testin üçü de düzeltmeden ÖNCE kırmızıydı ve üçü ayrı sütun ailesini koruyor:
+   * kasa · asker kuyruğu · savunma kuyruğu. Tek testle yetinmek yanlış olurdu, çünkü
+   * `materialize` üç işi birden yapıyor ve biri kaldırılırsa diğer ikisi hatayı gizler.
+   */
+  describe('⭐ bayat istihbarat', () => {
+    it('kasa casusluk ANINA kadar biriktirilir (donmuş satır raporlanmaz)', async () => {
+      await setBuilding(enemy, 'mine', 10);
+      await setBuilding(enemy, 'farm', 10);
+      await setResources(enemy, 1000, 2000);   // çıpa = now()
+      await ageResources(enemy, 5);            // …ve 5 saat geriye çekilir
+      await giveUnits(home, 'spy_bird', 16);
+      await setTech(me, 'espionage', 5);
+      const at = await clock.gameNow(worldId);
+
+      const m = await missions.sendSpy({
+        originCityId: home, playerId: me, worldId,
+        target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 16 }, at,
+      });
+      await runDue(m.missionId);
+
+      const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+      const res = ((body['intel'] as Record<string, unknown>)['resources']) as Record<string, number>;
+
+      /* 1) Donmuş değer DEĞİL — hatanın kendisi tam olarak buydu. */
+      expect(res['gold']).toBeGreaterThan(1000);
+      expect(res['food']).toBeGreaterThan(2000);
+
+      /* 2) Büyüklük de doğru: 5 saatlik üretim. Bant dar ama sıfır değil — testin kendi
+       *    koşma süresi çıpaya birkaç yüz ms ekliyor. Bu kontrol olmasa "biraz ilerlemiş
+       *    ama yanlış `at` ile ilerlemiş" bir düzeltme de testi geçerdi. */
+      expect(res['gold']).toBeGreaterThan(1000 + mineOutput(10) * 4.9);
+      expect(res['gold']).toBeLessThan(1000 + mineOutput(10) * 5.2);
+      expect(res['food']).toBeGreaterThan(2000 + farmOutput(10) * 4.9);
+      expect(res['food']).toBeLessThan(2000 + farmOutput(10) * 5.2);
+
+      /* 3) Rapor ile şehrin GERÇEK hâli birebir aynı: casus artık kendine ait bir hesap
+       *    yapmıyor, şehri ilerletip okuyor. */
+      const after = await resourcesOf(enemy);
+      expect(res['gold']).toBe(Math.floor(after.gold));
+      expect(res['food']).toBe(Math.floor(after.food));
+    });
+
+    /**
+     * ⚠️ Savunanın ALEYHİNE olan ikinci yüz: kuyruktan düşmüş askerler raporda yoktu, yani
+     * casus rakibi olduğundan **zayıf** görüyordu. Saldırı kararı bu sayıdan veriliyor.
+     */
+    it('kuyrukta üretilmiş askerler raporda görünür', async () => {
+      await enqueue(enemy, rival, 'unit', 'dwarf', 100, 60, 2);   // 2 saat × 60 sn = 120 üretilebilir → 100 tavanı
+      await giveUnits(home, 'spy_bird', 16);
+      await setTech(me, 'espionage', 5);
+      const at = await clock.gameNow(worldId);
+
+      const m = await missions.sendSpy({
+        originCityId: home, playerId: me, worldId,
+        target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 16 }, at,
+      });
+      await runDue(m.missionId);
+
+      const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+      const intel = body['intel'] as Record<string, unknown>;
+      expect(body['level']).toBe('full');
+      // Düzeltmeden önce: sipariş `queues`ta duruyor, `units` boş → rapor "ordu yok" diyordu.
+      expect((intel['warriors'] as Record<string, number>)['dwarf']).toBe(100);
+      expect((intel['totals'] as Record<string, number>)['warriors']).toBe(100);
+    });
+
+    /**
+     * ⚠️ Üçüncü yüz ve en sinsisi: kuş KAYBI hesabı da ham satır okuyordu. Savunan Okçu
+     * Kulesi üretmiş olsa bile casus onları görmüyor, dolayısıyla savunan hak ettiği
+     * savunmayı **alamıyordu**. Bu, raporun içeriğinden bağımsız ayrı bir hata.
+     */
+    it('kuyrukta üretilmiş Okçu Kulesi casus kaybına dâhil olur', async () => {
+      await enqueue(enemy, rival, 'defense', 'archer_tower', 40, 60, 2);
+      await setTech(rival, 'espionage', 6);    // fark düşük → kayıp oranı anlamlı
+      await giveUnits(home, 'spy_bird', 32);
+      const at = await clock.gameNow(worldId);
+
+      const m = await missions.sendSpy({
+        originCityId: home, playerId: me, worldId,
+        target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 32 }, at,
+      });
+      await runDue(m.missionId);
+
+      const body = (await messagesOf(me)).find((x) => x['kind'] === 'spy_report')!['body'] as Record<string, unknown>;
+      // Düzeltmeden önce kule sayısı 0 okunuyordu → `birdsLost` de 0'dı.
+      expect(Number(body['birdsLost'])).toBeGreaterThan(0);
+    });
+  });
+
   it('⭐ savunanda Elf/Okçu Kulesi YOKSA kuş vurulmaz', async () => {
     await giveUnits(home, 'spy_bird', 10);
     await setTech(rival, 'espionage', 20);   // fark çok düşük ama vuracak birim yok
@@ -763,6 +887,36 @@ describe('casusluk', () => {
     // ⭐ Rapor çözüm ANINDA yazıldı — dönüş görevi hâlâ açıkken.
     const ret = await openReturn();
     expect(ret).not.toBeNull();
+  });
+});
+
+/* ═══ BAYAT BARAKA — SEFERE ÇIKIŞ ══════════════════════════════════════════ */
+
+/**
+ * ⭐⭐ EKRANDA GÖRÜNEN ORDU SEFERE ÇIKABİLMELİ (2026-08-14).
+ *
+ * Casusluk bayatlığıyla aynı sınıf, ama simetriği: orada BAŞKASININ şehri bayat okunuyordu,
+ * burada oyuncunun KENDİ şehri. Baraka üretimi tembel ilerlediği için biten askerler `units`
+ * tablosuna ancak şehir okunduğunda yazılıyor. Ekran `snapshot()` üzerinden (materialize eden
+ * yol) okuduğundan askerleri **gösteriyordu**; sefer emri ham satırı okuduğu için sunucu
+ * onları **yok** sayıyor ve emri reddediyordu.
+ */
+describe('⭐ bayat baraka', () => {
+  it('barakadan yeni düşmüş askerler sefere çıkabilir', async () => {
+    /* `units` tablosunda HİÇ kuş yok — 8 kuşun tamamı 2 saat önce başlamış kuyrukta bitti. */
+    await enqueue(home, me, 'unit', 'spy_bird', 8, 60, 2);
+    expect(await unitsOf(home)).toEqual({});          // kurulumun gerçekten "boş tablo" olduğu
+    const at = await clock.gameNow(worldId);
+
+    /* Düzeltmeden önce: MissionError('insufficient_units') — "Şehirde yeterli Casus Kuş yok." */
+    const m = await missions.sendSpy({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { spy_bird: 8 }, at,
+    });
+    expect(m.missionId).toBeGreaterThan(0);
+
+    /* Ve muhasebe tutarlı: 8 üretildi, 8'i sefere gitti → barakada 0 kaldı (satır silinmez). */
+    expect((await unitsOf(home))['spy_bird'] ?? 0).toBe(0);
   });
 });
 

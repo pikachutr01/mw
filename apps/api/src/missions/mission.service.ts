@@ -294,7 +294,7 @@ export class MissionService {
          WHERE id = ${opts.playerId} AND protected_until IS NOT NULL
       `);
 
-      await this.reserveUnits(t, opts.originCityId, units);
+      await this.reserveUnits(t, opts.originCityId, units, opts.at);
       const cartography = await this.cartographyLevel(t, opts.playerId);
       const speedMultiplier = await this.speedMultiplier(t, opts.worldId);
 
@@ -678,7 +678,7 @@ export class MissionService {
       await assertHeroesNotCaveReserved(t as never, opts.originCityId, heroIds);
 
       // Birlikler kaynaktan düşer, hedefe ANINDA eklenir — arada "yolda" durumu yok.
-      await this.reserveUnits(t, opts.originCityId, units);
+      await this.reserveUnits(t, opts.originCityId, units, opts.at);
       for (const [type, count] of Object.entries(units)) {
         await t.execute(sql`
           INSERT INTO units (city_id, type, count) VALUES (${target.id}, ${type}, ${count})
@@ -1004,7 +1004,7 @@ export class MissionService {
       await this.assertVerified(t, o.playerId, o.type);
       await this.assertMarchLimit(t, o.originCityId, o.playerId);
       await o.before?.(t, { units });
-      await this.reserveUnits(t, o.originCityId, units);
+      await this.reserveUnits(t, o.originCityId, units, o.at);
 
       const cartography = await this.cartographyLevel(t, o.playerId);
       const speedMultiplier = await this.speedMultiplier(t, o.worldId);
@@ -1471,7 +1471,26 @@ export class MissionService {
    * ⚠️ Rezerve **tek sorguda** düşülüyor (`count >= istenen + rezerve`), ayrı bir ön kontrol
    * olarak değil: araya giren eşzamanlı bir istek iki denetim arasından sızabilirdi.
    */
-  private async reserveUnits(tx: Tx, cityId: number, units: Record<string, number>): Promise<void> {
+  private async reserveUnits(
+    tx: Tx, cityId: number, units: Record<string, number>, at: Date,
+  ): Promise<void> {
+    /**
+     * ⭐⭐ ÖNCE ŞEHRİ ŞİMDİYE GETİR (2026-08-14, casusluk bayatlığıyla aynı sınıf hata).
+     *
+     * ⚠️ Baraka üretimi TEMBEL: biten askerler `units` tablosuna ancak şehir okunduğunda
+     * yazılıyor (`materializeUnitQueues`). Bu satır yokken sunucu **ekranın gösterdiğinden
+     * az** asker görüyordu: oyuncu barakada 50 Cüce görüp sefere yollamak isteyince
+     * *"Şehirde yeterli Cüce yok."* hatası alıyordu — çünkü ekran `snapshot()` üzerinden
+     * (materialize eden yol) okurken, sefer emri ham `units` satırını okuyordu.
+     *
+     * ⚠️ Buraya konuldu, çağıranlara DEĞİL: yorumun kendisi bu fonksiyonu "**tek boğaz**"
+     * ilan ediyor (sefer ve teleport buradan geçer). Üç çağrı yerine tek yer düzeltilince
+     * yarın eklenecek dördüncü sefer tipi de kendiliğinden doğru olur.
+     *
+     * ⚠️ `caveReservedUnits`ten ÖNCE: rezerve hesabı da güncel adede göre yapılmalı.
+     */
+    await this.cities.materialize(cityId, at, tx as never);
+
     const reserved = await caveReservedUnits(tx as never, cityId);
     for (const [type, count] of Object.entries(units)) {
       const hold = reserved[type] ?? 0;

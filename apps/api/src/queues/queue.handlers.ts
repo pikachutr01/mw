@@ -6,6 +6,7 @@
  * = `queue:<id>` olduğu için aynı kuyruk iki kez uygulanamaz.
  */
 import { sql } from 'drizzle-orm';
+import type { CityService } from '../cities/city.service.ts';
 import type { HandlerContext, MissionHandler } from '../missions/handler-registry.ts';
 import { materializeUnitQueues } from './unit-queue.ts';
 
@@ -40,28 +41,54 @@ async function closeQueue(ctx: HandlerContext, queueId: number): Promise<boolean
 }
 
 /** `building_finish` — yapı seviyesini bir artırır. */
-export const buildingFinishHandler: MissionHandler = async (ctx) => {
-  const p = payloadOf(ctx);
-  const cityId = ctx.mission.targetCityId;
-  if (cityId == null) throw new Error('building_finish: şehir yok');
-  await ctx.lockCity(cityId);
-  if (!await closeQueue(ctx, p.queueId)) return;   // iptal edilmiş veya zaten uygulanmış
+export function createBuildingFinishHandler(cities: CityService): MissionHandler {
+  return async (ctx) => {
+    const p = payloadOf(ctx);
+    const cityId = ctx.mission.targetCityId;
+    if (cityId == null) throw new Error('building_finish: şehir yok');
+    await ctx.lockCity(cityId);
+    if (!await closeQueue(ctx, p.queueId)) return;   // iptal edilmiş veya zaten uygulanmış
 
-  await ctx.tx.execute(sql`
-    INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, ${p.itemType}, ${p.targetLevel})
-    ON CONFLICT (city_id, type) DO UPDATE SET level = ${p.targetLevel}
-  `);
+    /**
+     * ⭐⭐ SEVİYE ARTMADAN ÖNCE ESKİ HIZLA HESAPLA (2026-08-14 — GERİYE DÖNÜK ÜRETİM HATASI).
+     *
+     * ⚠️ Bu satır yokken Çiftlik/Maden yükseltmeleri **bedava kaynak basıyordu** ve etki
+     * marjinal değildi. Mekanizma: kaynak `resources_at` çıpasından itibaren `buildings`
+     * tablosundaki **O ANKİ** seviyeyle hesaplanıyor. Çıpa ise tam da emrin verildiği anda
+     * ileri çekiliyor (emir `trySpend` → `materialize` üzerinden ödeniyor):
+     *
+     *   emir verildi (çıpa = T0, Çiftlik 10) … N saat inşaat … bitti (Çiftlik 11)
+     *     → sonraki okuma  `output(11) × N saat` kredi veriyordu
+     *     → doğrusu        `output(10) × N saat`
+     *
+     * Fark HER ekonomi yükseltmesinde, tam olarak inşaat süresi kadar hediye ediliyordu;
+     * inşaat penceresiyle bayatlık penceresi aynı şey olduğu için bu bir istisna değil
+     * KURAL'dı. Yükseltme ne kadar uzunsa hediye o kadar büyüktü.
+     *
+     * ⚠️ `closeQueue`den SONRA: emir iptal edilmiş ya da zaten uygulanmışsa handler geri
+     * dönüyor; o durumda şehri ilerletmek anlamsız bir yazma olurdu.
+     * ⚠️ Yapı türüne BAKILMIYOR. Bugün üretime yalnız Çiftlik/Maden giriyor ama `if (farm ||
+     * mine)` yazmak "yarın üretime giren üçüncü yapı" için sessiz bir tuzak kurardı. Bina
+     * bitişi seyrek bir olay; koşulsuz çağırmanın maliyeti önemsiz.
+     */
+    await cities.materialize(cityId, ctx.at, ctx.tx as never);
 
-  await ctx.emit('city:building_finished', {
-    // ⭐ `playerId` gerçek zamanlı yol için ŞART: olay kime gidecek, oradan bulunuyor.
-    cityId, playerId: ctx.mission.ownerPlayerId,
-    type: p.itemType, level: p.targetLevel, at: ctx.at.toISOString(),
-  });
-  await ctx.audit({
-    action: 'building.finished', entity: 'city', entityId: cityId,
-    after: { type: p.itemType, level: p.targetLevel },
-  });
-};
+    await ctx.tx.execute(sql`
+      INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, ${p.itemType}, ${p.targetLevel})
+      ON CONFLICT (city_id, type) DO UPDATE SET level = ${p.targetLevel}
+    `);
+
+    await ctx.emit('city:building_finished', {
+      // ⭐ `playerId` gerçek zamanlı yol için ŞART: olay kime gidecek, oradan bulunuyor.
+      cityId, playerId: ctx.mission.ownerPlayerId,
+      type: p.itemType, level: p.targetLevel, at: ctx.at.toISOString(),
+    });
+    await ctx.audit({
+      action: 'building.finished', entity: 'city', entityId: cityId,
+      after: { type: p.itemType, level: p.targetLevel },
+    });
+  };
+}
 
 /**
  * `unit_finish` — savaşçı siparişinin BİTİŞ noktası.
@@ -188,10 +215,19 @@ export const techFinishHandler: MissionHandler = async (ctx) => {
   });
 };
 
-/** Worker'a kaydedilecek tipler. */
-export const QUEUE_HANDLERS = {
-  building_finish: buildingFinishHandler,
-  unit_finish: unitFinishHandler,
-  defense_finish: defenseFinishHandler,
-  tech_finish: techFinishHandler,
-} as const;
+/**
+ * Worker'a kaydedilecek tipler.
+ *
+ * ⚠️ 2026-08-14'te sabit nesneden FABRİKAYA çevrildi (`missionHandlers` / `battleHandlers`
+ * ile aynı desen): `building_finish` artık seviyeyi artırmadan önce şehri ilerletmek için
+ * `CityService`e ihtiyaç duyuyor. Sabit nesne kalsaydı servis modül düzeyinde bir global
+ * olarak sızdırılmak zorunda kalınırdı.
+ */
+export function queueHandlers(cities: CityService): Record<string, MissionHandler> {
+  return {
+    building_finish: createBuildingFinishHandler(cities),
+    unit_finish: unitFinishHandler,
+    defense_finish: defenseFinishHandler,
+    tech_finish: techFinishHandler,
+  };
+}

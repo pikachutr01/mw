@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
-  buildingCost, buildingTimeSeconds, defenseCapacity, STARTING_RESOURCES, techTimeSeconds,
+  buildingCost, buildingTimeSeconds, defenseCapacity, farmOutput, STARTING_RESOURCES, techTimeSeconds,
   timeFromCost, trainingTimeSeconds, UNITS_BY_ID,
 } from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
@@ -22,7 +22,7 @@ import type { DbHandle } from '../src/db/client.ts';
 import { echoHandler } from '../src/missions/echo.handler.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
-import { QUEUE_HANDLERS } from '../src/queues/queue.handlers.ts';
+import { queueHandlers } from '../src/queues/queue.handlers.ts';
 import { QueueError, QueueService } from '../src/queues/queue.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
 import { createWorld, freshWorldId, setupTestDb, verifyEmail, dueAt } from './helpers/db.ts';
@@ -45,7 +45,7 @@ beforeAll(async () => {
   queues = new QueueService(h.db, cities);
   auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities);
   registry = new HandlerRegistry().register('echo', echoHandler);
-  for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
+  for (const [type, handler] of Object.entries(queueHandlers(cities))) registry.register(type, handler);
 }, 60_000);
 
 afterAll(async () => { await h?.close(); });
@@ -93,6 +93,13 @@ async function buildings(): Promise<Record<string, number>> {
   `);
   return Object.fromEntries(rows.map((r) => [String(r['type']), Number(r['level'])]));
 }
+/** Şehrin HAM kasa satırı — `snapshot()` gibi materialize ETMEZ, ölçümü bozmaz. */
+async function rawResources(): Promise<{ gold: number; food: number }> {
+  const rows = await h.db.execute<Record<string, unknown>>(sql`
+    SELECT gold, food FROM cities WHERE id = ${cityId}
+  `);
+  return { gold: Number(rows[0]!['gold']), food: Number(rows[0]!['food']) };
+}
 async function unitCounts(): Promise<Record<string, number>> {
   const rows = await h.db.execute<Record<string, unknown>>(sql`
     SELECT type, count FROM units WHERE city_id = ${cityId}
@@ -136,6 +143,51 @@ describe('yapı yükseltme', () => {
     expect(r.done).toBe(1);
     expect((await buildings())['farm']).toBe(2);
     expect(await queues.openQueues(cityId)).toHaveLength(0);
+  });
+
+  /**
+   * ⭐⭐ GERİYE DÖNÜK ÜRETİM HEDİYESİ (2026-08-14 — gerçek hata, kullanıcının casusluk
+   * bildirimi üzerine yapılan taramada bulundu).
+   *
+   * Kaynak, `resources_at` çıpasından itibaren `buildings` tablosundaki **o anki** seviyeyle
+   * hesaplanıyor. Çıpa tam emrin verildiği anda ileri çekiliyor (emir `trySpend` üzerinden
+   * ödeniyor), sonra N saat inşaat sürüyor. Bitişte seviye artarken şehir ilerletilmezse o
+   * N saatin TAMAMI yeni (yüksek) hızla kredileniyordu.
+   *
+   * ⚠️ İki yönlü ölçüm şart: yalnız "eski hızla eşit" demek yetmez, çünkü ikisi birbirine
+   * yakın çıkabilir. Bu yüzden ayrıca "yeni hızla ölçülen tutarın ALTINDA" da doğrulanıyor.
+   */
+  it('⭐ yükseltme biterken geçen süre ESKİ seviyeyle kapatılır', async () => {
+    await setLevel('castle', 20);          // ön şart yolu açık olsun
+    await setLevel('farm', 10);
+    await giveResources(500_000, 500_000);
+    const at = await clock.gameNow(worldId);
+
+    /* Emir: Çiftlik 10 → 11. `enqueueBuilding` ödeme yaparken çıpayı `at`e çekiyor. */
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    expect(q.targetLevel).toBe(11);
+    const before = (await rawResources()).food;
+
+    /* İnşaat penceresini taklit et: 4 saat boyunca şehre kimse dokunmadı. */
+    await h.db.execute(sql`
+      UPDATE cities SET resources_at = resources_at - interval '4 hours' WHERE id = ${cityId}
+    `);
+
+    await h.db.execute(sql`
+      UPDATE missions SET execute_at = ${await dueAt(clock, worldId)}::timestamptz WHERE id IN
+        (SELECT mission_id FROM queues WHERE id = ${q.id})
+    `);
+    expect((await scheduler().tick()).done).toBe(1);
+    expect((await buildings())['farm']).toBe(11);
+
+    const gained = (await rawResources()).food - before;
+
+    /* 1) Kazanç ESKİ hızın 4 saatlik karşılığı (test süresi birkaç yüz ms ekliyor). */
+    expect(gained).toBeGreaterThan(farmOutput(10) * 3.9);
+    expect(gained).toBeLessThan(farmOutput(10) * 4.2);
+
+    /* 2) …ve YENİ hızla hesaplanmış OLAMAZ. Hatanın kendisi tam olarak buydu. */
+    expect(gained).toBeLessThan(farmOutput(11) * 3.9);
   });
 
   it('aynı kategoride ikinci iş reddedilir', async () => {

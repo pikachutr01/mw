@@ -21,7 +21,7 @@ import { echoHandler } from '../src/missions/echo.handler.ts';
 import { HandlerRegistry } from '../src/missions/handler-registry.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { SchedulerService } from '../src/missions/scheduler.service.ts';
-import { QUEUE_HANDLERS } from '../src/queues/queue.handlers.ts';
+import { queueHandlers } from '../src/queues/queue.handlers.ts';
 import { QueueError, QueueService } from '../src/queues/queue.service.ts';
 import { AllianceController } from '../src/alliance/alliance.controller.ts';
 import { AllianceService } from '../src/alliance/alliance.service.ts';
@@ -55,13 +55,18 @@ beforeAll(async () => {
   clock = new GameClockService(h.db);
   cities = new CityService(h.db);
   queues = new QueueService(h.db, cities);
-  missions = new MissionService(h.db);
+  /**
+   * ⚠️ `cities` ARTIK ŞART (2026-08-14): `reserveUnits` sefere birlik ayırmadan önce şehri
+   * `materialize` ediyor. Bu satır eskiden servisi eksik kuruyordu ve TypeScript yakalamıyordu
+   * (test dosyaları `tsconfig`in dışında) — hata ancak koşarken çıktı.
+   */
+  missions = new MissionService(h.db, cities);
   vacation = new VacationService(h.db, cities);
   auth = new AuthService(h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities);
   registry = new HandlerRegistry()
     .register('echo', echoHandler)
     .register('vacation_end', createVacationEndHandler());
-  for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
+  for (const [type, handler] of Object.entries(queueHandlers(cities))) registry.register(type, handler);
 }, 60_000);
 
 afterAll(async () => { await h?.close(); });

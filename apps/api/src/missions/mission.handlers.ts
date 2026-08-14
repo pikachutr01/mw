@@ -184,7 +184,7 @@ export function createSupportHandler(cities: CityService): MissionHandler {
  * dönüş yok" kuralının ikizi). Pratikte nadir: `spy.lossMax < 1` olduğu için yeterince büyük
  * bir akından daima bir kısmı döner (`config.ts` → `SpyConfig.lossMax` gerekçesi).
  */
-export function createSpyHandler(): MissionHandler {
+export function createSpyHandler(cities: CityService): MissionHandler {
   return async (ctx) => {
     const targetCityId = ctx.mission.targetCityId;
     const originCityId = ctx.mission.originCityId;
@@ -202,6 +202,32 @@ export function createSpyHandler(): MissionHandler {
       return;
     }
     await ctx.lockCity(targetCityId!);
+
+    /**
+     * ⭐⭐ HEDEF ŞEHİR CASUSLUK ANINA GETİRİLİR (kullanıcı, 2026-08-14 — GERÇEK HATA).
+     *
+     * ⚠️ Bu satır yıllardır **eksikti** ve casusluğu sistematik olarak yalancı yapıyordu.
+     * Kullanıcının gözlemi: *"birkaç saat önce görülen ganimet ile şimdi görülen ganimet aynı
+     * oluyor"*. Sebebi mimarinin kendisi: kaynak DB'de birikmiyor, `resources_at` çıpasından
+     * **okuma anında** hesaplanıyor (`city.service.ts` başlığı, "Tick YOK"). Çevrimdışı bir
+     * oyuncunun satırına kimse dokunmadığı için `cities.gold` giriş anında donuyor — casus
+     * onu ham okuyunca **saatler öncesinin kasasını** raporluyordu.
+     *
+     * ⚠️ Bayatlayan yalnız kasa DEĞİL. `materialize` aynı zamanda asker ve savunma
+     * kuyruklarını da ilerletiyor, yani düzeltme öncesi:
+     *   • `gatherIntel` → kuyruktan düşmüş askerleri saymıyordu (ordu AZ görünüyordu),
+     *   • aşağıdaki kayıp sorgusu → savunanın anti-hava gücünü eksik okuyordu, yani
+     *     savunan hak ettiği kuş kaybını veremiyordu. İkisi de savunanın ALEYHİNEydi.
+     *
+     * ⚠️ **SIRA: önce `lockCity`, sonra `materialize`** — `attack` handler'ıyla birebir aynı
+     * (`battle.handlers.ts`). Ters sırada aynı şehre düşen iki casusluk (ya da bir casusluk
+     * ve bir saldırı) çıpayı yarışarak ilerletirdi.
+     *
+     * ⚠️ Casusluk **hiçbir şey harcamaz**, yalnız okur; buna rağmen bir YAZMA işlemi olan
+     * `materialize` çağrılıyor. Doğrusu bu: birikimi yazmamak "okuma ucu ucuz olsun" diye
+     * bilgiyi yanlış vermek olurdu — zaten aynı transaction'da rapor da yazılıyor.
+     */
+    await cities.materialize(targetCityId!, ctx.at, ctx.tx as never);
 
     const mine = await techLevel(ctx.tx, spyPlayerId, 'espionage');
     const theirs = await techLevel(ctx.tx, target.playerId, 'espionage');
@@ -833,7 +859,7 @@ export function missionHandlers(cities: CityService): Record<string, MissionHand
   return {
     transport: createTransportHandler(cities),
     support: createSupportHandler(cities),
-    spy: createSpyHandler(),
+    spy: createSpyHandler(cities),
     found_city: createFoundCityHandler(cities),
   };
 }

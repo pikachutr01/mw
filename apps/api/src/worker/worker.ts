@@ -24,7 +24,7 @@ import { createCleanupHandler, ensureCleanupSchedule } from '../ops/cleanup.hand
 import { OpsMonitor } from '../ops/ops-monitor.ts';
 import type { OpsThresholds } from '../ops/ops-rules.ts';
 import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
-import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
+import { queueHandlers } from '../queues/queue.handlers.ts';
 import { createAbuseScanHandler, ensureAbuseScanSchedule } from '../abuse/scan.handler.ts';
 import {
   createSupportMaintenanceHandler, ensureSupportSchedule,
@@ -168,7 +168,7 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
      * gerekçe `support.handler.ts` başlığında.
      */
     .register('support_maintenance', createSupportMaintenanceHandler(db));
-  for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
+  for (const [type, handler] of Object.entries(queueHandlers(cities))) registry.register(type, handler);
   for (const [type, handler] of Object.entries(CAVE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
   for (const [type, handler] of Object.entries(missionHandlers(cities))) registry.register(type, handler);
