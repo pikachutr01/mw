@@ -861,14 +861,17 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     key: 'hero.xpWinner',
     label: 'Tecrübe payı — kazanan',
     type: 'number', default: 2 / 3, min: 0, max: 1, tag: 'design',
-    description: 'Savaşı kazanan tarafın kahramanına giden tecrübe payı.',
+    description: 'Savaşın ürettiği tecrübenin kazanan tarafa giden payı. Kaybedenin payı '
+      + 'otomatik olarak KALANI (1 − bu değer) — ayrı bir düğmesi yok.',
   },
-  {
-    key: 'hero.xpLoser',
-    label: 'Tecrübe payı — kaybeden',
-    type: 'number', default: 1 / 3, min: 0, max: 1, tag: 'design',
-    description: 'Kaybeden tarafın payı. İkisinin toplamı savaşın ürettiği tecrübeyi bölüştürür.',
-  },
+  /* ⭐ `hero.xpLoser` KALDIRILDI (2026-08-14). Ayrı bir düğme olarak durması bir denge kaçağıydı:
+   * tecrübe TEK havuzdan bölüşülüyor (`battle.handlers.ts` · «Tecrübe TEK havuzdan iki tarafa»)
+   * ama iki pay bağımsız yazılabildiği için ikisi de 1 yapıldığında savaşın ürettiği tecrübe
+   * sessizce İKİYE KATLANIYOR, ikisi de 0 yapıldığında buharlaşıyordu — ne panelde bir uyarı
+   * ne de kodda bir kapı vardı. Kaybedenin payı artık `1 − xpWinner` olarak türetiliyor ve
+   * toplamın 1 olması `settings/combat.ts`teki tek setter'da garanti altında.
+   * ⚠️ Eski dünyalarda kalmış `hero.xpLoser` satırları zararsız: `applySettings` yalnız bu
+   * şemadaki anahtarlar üzerinde dönüyor, tanımı olmayan satır hiç okunmuyor. */
 
   /* ── Kahraman çıkma ──────────────────────────────────────────────────────── */
   {

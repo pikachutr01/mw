@@ -2341,6 +2341,50 @@ dengeyle çözüldüğü okunabilir kalmalı. `combat.attackScoreBand` ve `comba
 motora `LOOT_MAP` üzerinden aktarılıyor — **ayrı `loot.*` anahtarı YOK**, kapının izin verdiği
 saldırı ile ödülün aynı sayıya bakması şart.
 
+### ⭐⭐ Eşleme doğruydu, TÜKETİCİ varsayılanı okuyordu (2026-08-14)
+
+Yukarıdaki ganimet işinin kenarında bildirilen kusur tek satırlık sanılmıştı: savaş handler'ı
+kahraman tecrübe paylarını dünya ayarından değil `DEFAULT_COMBAT_CONFIG`ten okuyordu. Araştırma
+kusurun **beş yerde** olduğunu ve ortak bir sınıfa ait olduğunu gösterdi.
+
+Ayar hattının kendisi sağlamdı: `settings/combat.ts` her `combat.*`/`hero.*`/`capture.*`
+anahtarını motora eşliyor, `simulate(input, ctx.engine?.combat)` dünya config'ini alıyordu.
+Kaçak **motorda değil, API'nin kendi verdiği kararlardaydı**:
+
+| Yer | Okuduğu | Sonuç |
+| :-- | :-- | :-- |
+| `battle.handlers.ts` · tecrübe | `heroXpShare` | `hero.xpWinner` tamamen etkisiz |
+| `battle.handlers.ts` · yakalama | `capture.maxHeroes` | motor 8'e izin verirken API 5'te kesiyor |
+| `hero.controller.ts` · tapınak | `maxHeroes`, `pointsPerLevel` | ekranda yanlış tavan |
+| `hero.controller.ts` · dağıtım | `hero.pointsPerLevel` | oyuncu kazandığı fazla puanı harcayamıyor |
+| `hero.controller.ts` · gösterim | `hero.pointsPerLevel` | `pointsTotal` yanlış |
+
+⚠️⚠️ **Ders, `combat.ts`teki uyarının kardeşi.** Orada *"yeni ayar eklenince BURAYA da satır
+eklenmezse ayar panelde görünür ama motora hiç ulaşmaz"* yazıyor. Bu vaka bir adım ötesi:
+**eşleme doğru olsa bile, tüketici varsayılanı okuyorsa ayar yine ölü.** Ve bu hâli daha sinsi —
+eşleme tablosuna bakan biri her şeyi yerinde görüyor. Kahraman tavanı vakası en zehirlisiydi:
+kural **iki yerde** uygulanıyor (motor savaşa katılan kahramanları sayıyor, API oyuncunun
+tümünü) ve yalnız biri ayarı okuduğu için ayar yarı yolda sessizce kesiliyordu.
+
+Bekçi: `apps/api/test/hero-settings.test.ts` — beş noktanın her biri için "ayar gerçekten
+ulaşıyor mu" testi, artı dokunulmamış dünyanın varsayılanla **birebir** aynı kaldığı kontrol
+vakaları. Testler önce **kırmızı** koşturularak kusurun kanıtı alındı.
+
+#### `hero.xpLoser` kaldırıldı — kaybedenin payı artık türetiliyor
+
+Tecrübe **TEK havuzdan** bölüşülüyor, ama iki pay iki bağımsız düğmeydi: ikisi de 1 yapıldığında
+savaşın ürettiği tecrübe sessizce **ikiye katlanıyor**, ikisi de 0 yapıldığında buharlaşıyordu —
+ne panelde uyarı, ne kodda kapı. Kaybedenin payı artık `1 − hero.xpWinner`, ve değişmez ayarın
+motora dönüştüğü **tek sınırda** (`COMBAT_MAP`'te tek setter iki alanı birden yazar) garanti
+altında. Emsal: `combat.trapGnomeDisarm` (2026-08-13) aynı şekilde kaldırılmıştı.
+
+⚠️ Eski dünyalarda kalmış `hero.xpLoser` satırları zararsız ve göç gerekmiyor: `applySettings`
+yalnız şemadaki anahtarlar üzerinde dönüyor, tanımı olmayan satır hiç okunmuyor; yazma ucu ise
+bilinmeyen anahtarı zaten reddediyor.
+
+⚠️ `ENGINE_VERSION` **kaymadı**: motorun kendi davranışı değişmedi, değişen API'nin hangi
+config'i okuduğu. Savaşın hangi ayar sürümüyle çözüldüğü zaten `settings_revision_id` ile izli.
+
 ### 🎯 Ön-şart sorusunun cevabı: **HAYIR, seviyeyle değişmiyor**
 İstemci ön-şart eşiğini **tip başına TEK bir değerden** okuyor (`byte[45]` dizisi, `init.do`/tip-35 ile
 sunucudan gelir; `j.java` yalnız `b[tipIndeksi]` yazdırır). **Seviyeye bağlı bir ön-şart dizisi veya

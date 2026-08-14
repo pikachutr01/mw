@@ -21,7 +21,7 @@ import {
   pickHeroName,
 } from '@mobilwar/catalog';
 import {
-  calculateLoot, createRng, DEFAULT_COMBAT_CONFIG, DEFAULT_LOOT_CONFIG, simulate,
+  calculateLoot, createRng, DEFAULT_LOOT_CONFIG, mergeCombatConfig, simulate,
   type LootResult, type SimulateInput, type SimulateResult,
 } from '@mobilwar/engine';
 import { NIGHT_FROM_HOUR, NIGHT_TO_HOUR, zonedHour } from '@mobilwar/contracts';
@@ -135,6 +135,20 @@ export function createAttackHandler(cities: CityService): MissionHandler {
      * değiştirilmemiş dünyada sonuç bit-bit eskisiyle aynı kalır.
      */
     const result = simulate(input, ctx.engine?.combat);
+
+    /**
+     * ⭐⭐ AYNI AYARLARIN **API TARAFI** OKUNUŞU (2026-08-14 düzeltmesi).
+     *
+     * ⚠️ Savaşın her kararını motor vermiyor: tecrübe payı ve kahraman tavanı kapısı BURADA,
+     * handler'da uygulanıyor. Bu iki yer `DEFAULT_COMBAT_CONFIG`i okuduğu sürece `hero.xpWinner`
+     * ve `capture.maxHeroes` panelde görünen ama HİÇBİR ETKİSİ OLMAYAN düğmelerdi — eşleme
+     * doğruydu, `simulate` dünya config'ini alıyordu, kaçak tüketicideydi. Ders `combat.ts`in
+     * uyarısının kardeşi: **eşlemeyi kurmak yetmez, tüketici de dünya config'ini okumalı.**
+     *
+     * Bir kez çözülüp aşağıya taşınıyor: `mergeCombatConfig(undefined)` varsayılan nesnenin
+     * KENDİSİNİ döndürdüğü için dokunulmamış dünyada ek bir kopya bile doğmuyor.
+     */
+    const cfg = mergeCombatConfig(ctx.engine?.combat);
 
     // Savaş öncesi savunmasız mıydı? (`loot.condition = "undefendedBefore"` seçeneği için.)
     const defendedBefore = Object.entries(defender.units)
@@ -324,9 +338,11 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       .reduce((a, b) => a + b, 0);
     const attackerWon = result.winner === 'attacker';
 
-    /* ⭐ Tecrübe TEK havuzdan iki tarafa: kazanan 2/3, kaybeden 1/3. Payını kullanamayan
-     * tarafın (kahramanı yok ya da hepsi öldü) payı ziyan olur, karşıya geçmez. */
-    const { winner: winShare, loser: loseShare } = DEFAULT_COMBAT_CONFIG.heroXpShare;
+    /* ⭐ Tecrübe TEK havuzdan iki tarafa: varsayılanda kazanan 2/3, kaybeden 1/3 — ama pay
+     * dünya ayarından geliyor (`hero.xpWinner`; kaybedeninki türetilir, toplam DAİMA 1).
+     * Payını kullanamayan tarafın (kahramanı yok ya da hepsi öldü) payı ziyan olur, karşıya
+     * geçmez. */
+    const { winner: winShare, loser: loseShare } = cfg.heroXpShare;
     const defenderHeroes = await settleHeroes(ctx, {
       before: defender.heroes,
       after: result.defender.heroes,
@@ -348,6 +364,7 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       worldId: ctx.worldId,
       cityId: attackerWon ? originCityId : targetCityId,
       chance: result.captureChance,
+      maxHeroes: cfg.capture.maxHeroes,
     });
 
     /**
@@ -924,7 +941,7 @@ async function settleHeroes(ctx: HandlerContext, o: {
        * XP savaş anında yazılır ve seviye aynı anda güncellenir; ordu daha dönüş yolundayken
        * oyuncu tapınakta yeni seviyeyi görür. Tek savaşta birkaç eşik birden aşılabilir —
        * `heroLevelForXp` hepsini birden verir, oyuncunun düğmeye basması gerekmez.
-       * Oyuncuya kalan tek iş, seviye başına gelen 3 puanı dağıtmak.
+       * Oyuncuya kalan tek iş, seviye başına gelen puanları dağıtmak (`hero.pointsPerLevel`).
        */
       const newXp = hero.xp + share;
       await ctx.tx.execute(sql`
@@ -940,9 +957,16 @@ async function settleHeroes(ctx: HandlerContext, o: {
 /**
  * ⭐ YENİ KAHRAMAN ÇIKMASI — yalnız KAZANAN tarafta, `captureChance` ile.
  *
- * İhtimal `(ToplamTapınak×10 − Kahraman×155) × min(1, XP×0,000025)`; XP > 499 kapısı ve
- * en fazla 5 kahraman kuralı motorda. Yeni kahraman **seviye 0, 0 XP, puansız** çıkar ve
- * kazanan tarafın o savaştaki şehrine yerleşir (saldıran kazandıysa çıkış şehri).
+ * İhtimal `(ToplamTapınak×10 − Kahraman×155) × min(1, XP×0,000025)`; XP kapısı ve ihtimal
+ * hesabı motorda. Yeni kahraman **seviye 0, 0 XP, puansız** çıkar ve kazanan tarafın o
+ * savaştaki şehrine yerleşir (saldıran kazandıysa çıkış şehri).
+ *
+ * ⚠️ **Kahraman tavanı İKİ yerde uygulanıyor** ve ikisi de gerekli: motor ihtimali hesaplarken
+ * savaşa KATILAN kahramanları sayıyor (`captureChance` · `K >= maxHeroes`), buradaki kapı ise
+ * oyuncunun TÜM kahramanlarını — şehirde oturanı, seferdekini, ölüsünü. İkisi farklı sayılar,
+ * bu yüzden ikisi de yerinde. `maxHeroes` **çağırandan geliyor**: 2026-08-14'e kadar burada
+ * sabit `DEFAULT_COMBAT_CONFIG` okunuyordu ve `capture.maxHeroes` ayarı tam da bu ikinci kapıda
+ * sessizce kesiliyordu — motor 8'e izin verirken API 5'te durduruyordu.
  *
  * @returns çıkan kahramanın adı (çıkmadıysa null) — savaş raporuna yazılır
  */
@@ -951,6 +975,7 @@ async function maybeCaptureHero(ctx: HandlerContext, o: {
   worldId: number;
   cityId: number | null;
   chance: number;
+  maxHeroes: number;
 }): Promise<string | null> {
   if (o.cityId == null || o.chance <= 0) return null;
   /* Determinizm (§5): rulo görevin kimliğinden türer → savaş yeniden oynatılınca aynı sonuç. */
@@ -961,7 +986,7 @@ async function maybeCaptureHero(ctx: HandlerContext, o: {
     SELECT COUNT(*)::int AS n FROM heroes
      WHERE player_id = ${o.playerId} AND status <> 'destroyed'
   `);
-  if (Number(existing?.['n'] ?? 0) >= DEFAULT_COMBAT_CONFIG.capture.maxHeroes) return null;
+  if (Number(existing?.['n'] ?? 0) >= o.maxHeroes) return null;
 
   const takenRows = await ctx.tx.execute<Record<string, unknown>>(sql`
     SELECT name FROM heroes WHERE player_id = ${o.playerId} AND status <> 'destroyed'

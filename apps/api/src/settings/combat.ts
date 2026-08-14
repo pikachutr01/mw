@@ -63,8 +63,17 @@ const COMBAT_MAP: Readonly<Record<string, Setter>> = {
   'hero.areaK': nest('hero', 'areaK'),
   'hero.durumScale': nest('hero', 'durumScale'),
   'hero.pointsPerLevel': nest('hero', 'pointsPerLevel'),
-  'hero.xpWinner': nest('heroXpShare', 'winner'),
-  'hero.xpLoser': nest('heroXpShare', 'loser'),
+  /**
+   * ⭐ TEK ANAHTAR, İKİ ALAN. `hero.xpLoser` 2026-08-14'te kaldırıldı (gerekçe `schema.ts`te):
+   * tecrübe TEK havuzdan bölüşülüyor, dolayısıyla payların toplamı 1 OLMAK ZORUNDA. Kaybedenin
+   * payı burada — ayarın motora dönüştüğü tek sınırda — türetiliyor, böylece değişmez tek yerde
+   * garanti altında; iki ayrı düğme bırakılsaydı toplamı 1'den farklı yapmak serbest kalırdı.
+   */
+  'hero.xpWinner': (out, v) => {
+    const share = (out['heroXpShare'] ??= {});
+    share['winner'] = v;
+    share['loser'] = 1 - (v as number);
+  },
 
   'capture.perTempleLevel': nest('capture', 'perTempleLevel'),
   'capture.perHeroPenalty': nest('capture', 'perHeroPenalty'),
