@@ -35,6 +35,14 @@ export interface LootInput {
   carryCapacity: number;
   /** Savaş öncesi şehirde hiç savaşçı ve savunma birimi var mıydı? (`undefendedBefore` şartı için) */
   defendedBefore?: boolean;
+  /**
+   * ⭐ Fark çarpanı için iki taraf**ın DONMUŞ puanı** (`rankings.score`). Motor `rankings`
+   * tablosunu bilmez; sunucu sefer GÖNDERİLİRKEN okuyup görev yüküne damgalar ve buraya verir.
+   * ⚠️ İkisinden biri verilmezse çarpan **1** olur — eski görevler ve simülatör için güvenli
+   * varsayılan (davranış 1.2.0 ile birebir aynı kalır).
+   */
+  attackerScore?: number;
+  defenderScore?: number;
   /** Determinizm: aynı seed → aynı yağma jitter'ı. Genelde `mission_id`. */
   seed: string | number;
 }
@@ -52,6 +60,8 @@ export interface LootResult {
   plunderNotCarried: Resources;
   /** Kullanılan efektif oranlar (rapor için) — kaynak başına AYRI. */
   effectiveRates: { gold: number; food: number };
+  /** Uygulanan puan farkı çarpanı (rapor ve test için). Çarpan yoksa 1. */
+  gapFactor: number;
 }
 
 const ZERO: Resources = { gold: 0, food: 0 };
@@ -85,11 +95,49 @@ export function plunderRate(poolAmount: number, cfg: LootConfig = DEFAULT_LOOT_C
   return cfg.minRate + t * (cfg.plunderRate - cfg.minRate);
 }
 
+/**
+ * ⭐⭐ PUAN FARKI ÇARPANI (kullanıcı, 2026-08-14) — **yalnız AŞAĞI vururken**.
+ *
+ * ```
+ * çarpan = 1                                          , savunan ≥ saldıran   (yukarı vuruş)
+ * çarpan = 1                                          , |a − d| ≤ gapBand    (küçük hesap bandı)
+ * çarpan = 1 − (oran−1)/(sınır−1) × (1 − gapMinRate)   , aksi hâlde
+ * ```
+ *
+ * ⭐⭐ **TEK YÖNLÜ olması tasarımın özü, ihmal değil.** Kullanıcının iki hedefi ancak böyle
+ * çelişmiyor: (1) *"görece puanı yüksek biri, 10 kat sınırının altındakine saldırınca daha az
+ * ganimet almalı"* ve (2) *"puanını yükseltmeden yağmayla geçinen bir oyuncu mümkün olmalı"*.
+ * O oyuncu parayı **yukarı vurarak** kazanıyor — 50 puanlık akıncı, 10 kat kuralı sayesinde
+ * 500 puanlık zengini vurabiliyor. Çift yönlü bir çarpan tam da açmak istediğimiz stratejiyi
+ * öldürürdü: akıncı hem küçük kalacak hem de vurduğu her zenginden yarım ganimet alacaktı.
+ *
+ * ⚠️ **Band içinde çarpan 1.** İki fakiri birbirine karşı ayrıca cezalandırmanın anlamı yok;
+ * üstelik havuz eğrisi onları zaten %20'ye indiriyor. İki fren üst üste binseydi terk edilmiş
+ * şehri yağmalamak %10'a düşerdi ve band'ın açtığı kapı işe yaramaz hâle gelirdi.
+ *
+ * ⚠️ Puanlar `max(1, …)` ile kelepçeli — saldırı kapısındaki (`mission.service.scoreGap`)
+ * kelepçenin AYNISI. İki yer aynı sayıyı farklı işlerse oyuncu ekranda gördüğü orana güvenemez.
+ */
+export function gapFactor(
+  attackerScore: number | undefined, defenderScore: number | undefined,
+  cfg: LootConfig = DEFAULT_LOOT_CONFIG,
+): number {
+  if (attackerScore == null || defenderScore == null) return 1;
+  const a = Math.max(1, attackerScore);
+  const d = Math.max(1, defenderScore);
+  if (d >= a) return 1;                                  // yukarı vuruş (ya da eşit)
+  if (a - d <= cfg.gapBand) return 1;                    // küçük hesap bandı
+  const limit = cfg.gapRatioLimit;
+  if (limit <= 1) return cfg.gapMinRate;                 // sınır anlamsızsa doğrudan taban
+  const t = Math.min(1, (a / d - 1) / (limit - 1));
+  return 1 - t * (1 - cfg.gapMinRate);
+}
+
 export function calculateLoot(input: LootInput, cfg: LootConfig = DEFAULT_LOOT_CONFIG): LootResult {
   const empty: LootResult = {
     taken: { ...ZERO }, fromDebris: { ...ZERO }, fromPlunder: { ...ZERO },
     leftoverDebrisToDefender: { ...ZERO }, plunderNotCarried: { ...ZERO },
-    effectiveRates: { gold: 0, food: 0 },
+    effectiveRates: { gold: 0, food: 0 }, gapFactor: 1,
   };
 
   // Saldıran kaybederse hiçbir şey almaz; enkazın TAMAMI savunanın şehrine eklenir.
@@ -107,11 +155,14 @@ export function calculateLoot(input: LootInput, cfg: LootConfig = DEFAULT_LOOT_C
   // 1) HAVUZ — kaynak başına: kasa + enkaz.
   const pool: Resources = add(input.cityResources, input.debris);
 
-  // 2) ORAN — kaynak başına bağımsız eğri × ortak jitter (0,85–1,15, seed'e bağlı).
+  // 2) ORAN — kaynak başına bağımsız eğri × puan farkı çarpanı × ortak jitter (0,85–1,15).
   const rng = createRng(`${input.seed}:plunder`);
   const jitterK = rng.range(cfg.jitterMin, cfg.jitterMax);
-  const rateGold = Math.min(1, plunderRate(pool.gold, cfg) * jitterK);
-  const rateFood = Math.min(1, plunderRate(pool.food, cfg) * jitterK);
+  /* ⚠️ Çarpan jitter'dan ÖNCE ve kaynaktan bağımsız: altın ile yemek aynı puan farkını görüyor,
+   * farklı havuzları. Kaynak başına ayrı çarpan, aynı savaşta iki farklı "güç farkı" demekti. */
+  const gapK = gapFactor(input.attackerScore, input.defenderScore, cfg);
+  const rateGold = Math.min(1, plunderRate(pool.gold, cfg) * gapK * jitterK);
+  const rateFood = Math.min(1, plunderRate(pool.food, cfg) * gapK * jitterK);
 
   // 3) ALINAN = havuz × oran, kapasiteyle orantılı kırpılır.
   const desired: Resources = { gold: pool.gold * rateGold, food: pool.food * rateFood };
@@ -137,5 +188,6 @@ export function calculateLoot(input: LootInput, cfg: LootConfig = DEFAULT_LOOT_C
     leftoverDebrisToDefender: rounded(leftoverDebris),
     plunderNotCarried: rounded(notCarried),
     effectiveRates: { gold: rateGold, food: rateFood },
+    gapFactor: gapK,
   };
 }

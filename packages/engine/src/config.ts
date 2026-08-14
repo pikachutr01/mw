@@ -19,8 +19,13 @@
  * **Tur 1 gnom fazı Sur'u yıkıyor** (+ o fazda şaman emmesi de düşülüyor).
  * Ayrıntı: `docs/SAVUNMA_BINARY_KONTROL.md` ve `docs/SUR_TESTLERI.md` §21.
  * ⚠️ Bu damga olmadan 1.1.0 kaydedilmiş savaşlar bugünkü motorla **farklı** çözülür.
+ *
+ * ⚠️ **1.3.0** (2026-08-14) — ganimet oranına **puan farkı çarpanı** eklendi: kendinden zayıfa
+ * saldıran, oran sınırına yaklaştıkça daha az yağmalıyor (tavan yine %40). Çarpan TEK YÖNLÜ
+ * (yukarı vuruşta 1) ve küçük hesap bandında 1. Savaşın kendisi değişmedi, yalnız ganimet.
+ * Ayrıntı: `docs/MOBIWAR_SISTEM_PLANI.md` §13.9b.
  */
-export const ENGINE_VERSION = '1.2.0';
+export const ENGINE_VERSION = '1.3.0';
 
 export interface CombatConfig {
   engineVersion: string;
@@ -253,6 +258,15 @@ export interface LootConfig {
   jitterMin: number;
   jitterMax: number;
   /**
+   * ⭐⭐ FARK ÇARPANININ TABANI (2026-08-14) — puan oranı `gapRatioLimit`teyken çarpan bu.
+   * Oran 1'ken çarpan 1; arası doğrusal. `1` yazmak çarpanı tamamen kapatır (eski davranış).
+   */
+  gapMinRate: number;
+  /** Puan FARKI bunun altındaysa çarpan 1 — küçük hesaplar birbirini tam oranla vurur. */
+  gapBand: number;
+  /** Çarpanın tabana indiği oran; saldırı kapısındaki 10 kat sınırıyla AYNI sayı. */
+  gapRatioLimit: number;
+  /**
    * Yağmanın şartı.
    *  attackerWon      — saldıran kazandıysa (KULLANICI KARARI, varsayılan)
    *  undefendedBefore — yalnız savaş öncesi savunmasız şehirde (eski davranış)
@@ -268,6 +282,9 @@ export const DEFAULT_LOOT_CONFIG: LootConfig = {
   minRate: 0.20,
   jitterMin: 0.85,
   jitterMax: 1.15,
+  gapMinRate: 0.5,
+  gapBand: 50,
+  gapRatioLimit: 10,
   condition: 'attackerWon',
 };
 

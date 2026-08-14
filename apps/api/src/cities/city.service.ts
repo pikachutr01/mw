@@ -284,10 +284,14 @@ export class CityService {
     `);
     const cityId = Number(rows[0]!.id);
 
-    /* Başlangıç yapıları: **Kale 1 · Çiftlik 1 · Maden 1** (§13.11.1).
-     * ⚠️ Baraka bu listede YOK — 2026-08-09'da (`92fd09e`) 0'dan başlamaya çevrildi; bu yorum
-     * "Baraka 1" demeye devam ediyordu ve 2026-08-12'de bir sıfırlama planını yanlış kurdurdu.
-     * Listeyi burada tekrarlamak yerine tek kaynağa bakmak gerekiyordu: `STARTING_BUILDINGS`. */
+    /* Başlangıç yapıları — tek kaynak `STARTING_BUILDINGS` (§13.11.1).
+     *
+     * ⚠️⚠️ **BU YORUM LİSTEYİ ARTIK TEKRARLAMIYOR, BİLEREK.** Önceki iki sürümü de bayattı:
+     * biri "Baraka 1" diyordu (Baraka 2026-08-09'da 0'a inmişti), yerine yazılan "Baraka bu
+     * listede YOK" da bayatladı (2026-08-12'de geri 1'e çekildi). İlk bayat yorum bir sıfırlama
+     * planını yanlış kurdurmuştu. Listeyi burada saymak, aynı bilgiyi ikinci kez ve senkron
+     * kalması hiçbir şeyle zorlanmadan tutmak demek — kaç kez düzeltilirse düzeltilsin yine
+     * kayacaktı. Hangi yapının kaç seviye doğduğu tek yerde: `catalog/buildings.ts`. */
     for (const [type, level] of Object.entries(STARTING_BUILDINGS)) {
       await runner.execute(sql`
         INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, ${type}, ${level})

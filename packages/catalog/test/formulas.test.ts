@@ -10,7 +10,7 @@ import {
   STARTING_RESOURCES, teleportCooldownSeconds, USERNAME_MAX, USERNAME_MIN,
   wallCurrentIntegrity, wallRepairSeconds,
   timeFromCost, trainingTimeSeconds, unitCost, unitTimeValue, UNITS_BY_ID,
-  BUILDINGS, BUILDINGS_BY_ID,
+  BUILDINGS, BUILDINGS_BY_ID, STARTING_BUILDINGS, techCost,
 } from '../src/index.ts';
 
 /**
@@ -374,7 +374,9 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
     expect(buildingCost('mine', 2)).toEqual({ gold: 12, food: 9 });   // altın ağırlıklı
     expect(buildingCost('castle', 2)).toEqual({ gold: 900, food: 700 });
     // Seviye 0'dan başlayan yapılarda taban seviye 1'in fiyatıdır (ölçekleme yok).
-    expect(buildingCost('academy', 1)).toEqual({ gold: 1400, food: 1000 });
+    // ⚠️ Akademi 2026-08-14'te Kale ile eşitlendi (1400/1000 → 900/700); ikisinin AYNI sayı
+    // olması tesadüf değil, "kapı ucuz" ilkesinin sonucu — gerekçe `buildings.ts`te.
+    expect(buildingCost('academy', 1)).toEqual({ gold: 900, food: 700 });
     // ⭐ Baraka seviye 1 başlıyor → ilk ödenen sv2 ve taban oraya oturuyor.
     expect(buildingCost('barracks', 2)).toEqual({ gold: 700, food: 500 });
     // sv1 oyuncunun hiç ödemediği seviye — yine de eğrinin ölçeği kilitleniyor.
@@ -442,29 +444,109 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
    * ⭐⭐ **İLK GÜN ÖLÜ DURAK BEKÇİSİ** (2026-08-10) — başlangıç kesesinin alt sınırını bir
    * TERCİH değil bir YAPI KURALI belirliyor.
    *
-   * Kale 1'in bütçesi 10 seviye ve Çiftlik/Maden zaten 1'den başlıyor → oyuncunun Kale 2'ye
-   * kadar yapabileceği tek şey **Çiftlik 5 + Maden 5**. Ondan sonrası kapalı: Akademi Kale 2
-   * ister, Baraka'ya bütçe kalmaz, savaşçı üretimi Akademi→Demircilik ister. Yani kese Kale 2'yi
+   * Kale 1'in bütçesi 10 seviye ve **Baraka · Çiftlik · Maden zaten 1'den başlıyor (3 seviye
+   * dolu)** → Kale 2'ye kadar satın alınabilecek TOPLAM Çiftlik+Maden seviyesi **7**, yani
+   * ikisi birlikte en fazla **9**'a çıkar (ör. Çiftlik 5 + Maden 4). Ondan sonrası kapalı:
+   * Akademi Kale 2 ister, savaşçı üretimi Akademi→Demircilik ister. Yani kese Kale 2'yi
    * karşılamazsa oyunun **hiçbir şey sunmadığı** bir bekleme doğar.
    *
+   * ⚠️⚠️ **Eski hâli «Çiftlik 5 + Maden 5 = tam 10» diyordu ve BAYATTI**: Baraka 2026-08-12'de
+   * seviye 1'e geri döndü ve bütçe tüketiyor. Test o yüzden artık sayıyı elle yazmıyor,
+   * `castleBudget` ile `STARTING_BUILDINGS`ten **türetiyor** — aynı sapma bir daha doğmasın.
+   *
    * ⚠️ Bu test kese VEYA Kale tabanı tek başına değişirse kırılır — ikisi birbirine bağlı ve
-   * bağın kendisi görünmez. (Ölçüm: kese 500/500 → 10,9 saat · 750/750 → 6,5 · 1000/1000 → 2,0.)
+   * bağın kendisi görünmez. (Ölçüm: kese 500/500 → 10,9 saat · 750/750 → 6,5 · 1000/1000 → 2,0
+   * · 5000/5000 → 0.)
    */
   it('⭐ ilk gün ölü durak 3 saati aşmıyor (kese ↔ Kale 2 bağı)', () => {
     expect(castleBudget(1)).toBe(10);
+
+    // Bütçenin başlangıçta ne kadarı dolu: bütçe TÜKETEN yapıların başlangıç seviyeleri.
+    const doluButce = Object.entries(STARTING_BUILDINGS)
+      .filter(([id]) => BUILDINGS_BY_ID[id]?.consumesCastleBudget)
+      .reduce((t, [, lvl]) => t + lvl, 0);
+    expect(doluButce, 'Baraka 1 + Çiftlik 1 + Maden 1').toBe(3);
+
+    /* Kale 1'de satın alınabilen ek seviye sayısı; Çiftlik ve Maden'e eşit bölünüyor
+     * (tek kalan seviye Çiftlik'e — yemek erken oyunda daha dar). */
+    const ek = castleBudget(1) - doluButce;
+    const ciftlikTavan = 1 + Math.ceil(ek / 2);
+    const madenTavan = 1 + Math.floor(ek / 2);
+    expect(ciftlikTavan + madenTavan, 'Kale 1\'de Çiftlik+Maden tavanı').toBe(9);
+
     let harcanan = 0;
-    for (let l = 2; l <= 5; l++) {
+    for (let l = 2; l <= ciftlikTavan; l++) {
       harcanan += buildingCost('farm', l).gold + buildingCost('farm', l).food;
+    }
+    for (let l = 2; l <= madenTavan; l++) {
       harcanan += buildingCost('mine', l).gold + buildingCost('mine', l).food;
     }
-    // Çiftlik 5 + Maden 5 = tam 10 seviye = Kale 1 bütçesinin tamamı, ve kese onu karşılıyor.
     const kese = STARTING_RESOURCES.gold + STARTING_RESOURCES.food;
     expect(harcanan).toBeLessThan(kese);
 
     const kale2 = buildingCost('castle', 2);
-    const gelir = farmOutput(5) + mineOutput(5);          // 113 kaynak/saat
+    const gelir = farmOutput(ciftlikTavan) + mineOutput(madenTavan);
     const eksik = Math.max(0, kale2.gold + kale2.food - (kese - harcanan));
     expect(eksik / gelir, 'Kale 2 için ölü bekleme (saat)').toBeLessThan(3);
+  });
+});
+
+/**
+ * ⭐⭐⭐ DÜŞÜK PUANLI YAĞMA STRATEJİSİ GERÇEKTEN MÜMKÜN MÜ? (kullanıcı, 2026-08-14)
+ *
+ * Kullanıcının tarif ettiği oyuncu tipi: *"puanını yükseltmeden, olabildiğince az yapı
+ * geliştirerek ganimetini çevre şehirlerden yağma yaparak elde etmek isteyen"* oyuncu. Bu tip
+ * ancak **10 kat kuralının açtığı pencerede kalabilirse** var olabilir; kural puanı
+ * `harcanan kaynak / 1000`den okuyor, yani stratejinin bütçesi doğrudan bir PUAN bütçesi.
+ *
+ * ⚠️⚠️ **Bu testler yazıldığında strateji İMKÂNSIZDI ve sayı bunu söylüyordu:** 1 Cüce +
+ * 1 Yük Arabası'nın kapısı **24 puan**, oysa 0 puanlı (kelepçeyle 1) bir şehre saldırabilmek
+ * için 9 puanda kalmak gerekiyordu. Çözüm fiyatları kırmak değil, `combat.attackScoreBand`
+ * (küçük hesap bandı, 50 puan) oldu — ama band ancak zincirin maliyeti onun altında kalırsa
+ * işe yarar. Bu yüzden bekçi burada: **fiyatlar sessizce yukarı kayarsa strateji yeniden
+ * kapanır ve kimse fark etmez.**
+ */
+describe('⭐⭐ düşük puanlı yağma stratejisinin bütçesi', () => {
+  /** Bir zincirin toplam bedeli → puan (`score_base / 1000`, `score.service.ts`). */
+  const puan = (kaynak: number): number => Math.floor(kaynak / 1000);
+  const yapi = (id: string, lvl: number): number =>
+    buildingCost(id, lvl).gold + buildingCost(id, lvl).food;
+  const teknik = (id: string, lvl: number): number =>
+    techCost(id, lvl).gold + techCost(id, lvl).food;
+  const birim = (id: string, n: number): number =>
+    unitCost(id, n).gold + unitCost(id, n).food;
+
+  it('⭐ Cüce zinciri (Kale 2 → Akademi 1 → Demircilik 1 → 1 Cüce) ≤ 6 puan', () => {
+    const toplam = yapi('castle', 2) + yapi('academy', 1) + teknik('blacksmithing', 1)
+      + birim('dwarf', 1);
+    expect(puan(toplam), `Cüce zinciri ${toplam} kaynak`).toBeLessThanOrEqual(6);
+  });
+
+  /**
+   * ⭐ Asıl bekçi: **taşıma kapasitesi olmadan yağma anlamsız.** Cüce 10, Yük Arabası 5.000
+   * taşıyor — arabaya ulaşamayan oyuncu ganimeti alamıyor, yani strateji yalnız kâğıt üstünde
+   * var oluyor. Zincirin bandın (50 puan) altında kalması ŞART.
+   */
+  it('⭐⭐ Cüce + Yük Arabası zinciri küçük hesap bandına (50 puan) sığıyor', () => {
+    const toplam = yapi('castle', 2)
+      + yapi('academy', 1) + yapi('academy', 2) + yapi('academy', 3)
+      + yapi('barracks', 2) + yapi('barracks', 3)
+      + teknik('blacksmithing', 1) + teknik('cartography', 1)
+      + birim('dwarf', 1) + birim('cargo_wagon', 1);
+    expect(puan(toplam), `araba zinciri ${toplam} kaynak`).toBeLessThanOrEqual(50);
+    // ⚠️ Bandın TAMAMINI yemesin: geriye gerçek bir akın ordusu için yer kalmalı.
+    expect(puan(toplam), 'ordu için band\'da yer kalmalı').toBeLessThanOrEqual(20);
+  });
+
+  /**
+   * ⚠️ Oyuncunun ilk refleksi Çiftlik/Maden yükseltmek ve *"birkaç seviye sonra strateji için
+   * geç kalmış olmamalıyım"* diyor. Ölçüm onu haklı çıkarıyor: ekonomi yapıları puan
+   * bakımından neredeyse bedava — asıl bütçeyi yakan Akademi zinciri.
+   */
+  it('Çiftlik 8 + Maden 8 puanı yakmıyor (strateji için geç kalınmıyor)', () => {
+    let toplam = 0;
+    for (let l = 2; l <= 8; l++) toplam += yapi('farm', l) + yapi('mine', l);
+    expect(puan(toplam), `ekonomi ${toplam} kaynak`).toBeLessThanOrEqual(4);
   });
 });
 

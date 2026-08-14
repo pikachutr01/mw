@@ -66,15 +66,17 @@ describe('taban fiyat ve oran', () => {
     const cfg = mergeCatalogConfig({ buildingTuning: { 'academy:gold': 500, 'academy:food': 400 } });
     // sv 1 = taban (Akademi oyuna sıfırdan başlar, ilk ödenen seviye 1).
     expect(buildingCost('academy', 1, cfg)).toEqual({ gold: 500, food: 400 });
-    expect(buildingCost('academy', 1)).toEqual({ gold: 1400, food: 1000 });
+    expect(buildingCost('academy', 1)).toEqual({ gold: 900, food: 700 });
   });
 
   it('teknik taban fiyatı ve oranı yazılabiliyor', () => {
     const cfg = mergeCatalogConfig({
       techTuning: { 'archery:gold': 200, 'archery:rate': 2 },
     });
-    // base × rate^(sv+1) → 200 × 2² = 800
-    expect(techCost('archery', 1, cfg).gold).toBe(800);
+    // base × rate^(sv+1) × techCostMultiplier → 200 × 2² × 0,75 = 600
+    // ⚠️ Çarpan 2026-08-14'te 1 → 0,75 oldu; varlık başına taban/oran hâlâ globali eziyor,
+    // çarpan ise EN SONDA ve herkese uygulanıyor — bu satır o sıranın bekçisi.
+    expect(techCost('archery', 1, cfg).gold).toBe(600);
     expect(techCost('blacksmithing', 1, cfg)).toEqual(techCost('blacksmithing', 1));
   });
 

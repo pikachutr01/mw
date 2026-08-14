@@ -90,8 +90,28 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * ⭐ Bu, hash'in **denge dışı** bir alandan kaydığı ilk örnek: `maxLevel` savaş matematiğine
  * hiç girmiyor ama `BUILDINGS` tablosunun parçası olduğu için özete dâhil — ve dâhil olması
  * doğru, çünkü aynı savaşın iki farklı tavanla üretilmiş orduları kıyaslanamaz.
+ *
+ * ⚠️⚠️ **2026-08-14, BEŞİNCİ değişiklik: `000c68dc` → `d963193a`.** Sebep **Akademi tabanı
+ * 1400/1000 → 900/700** (Kale ile eşitlendi; *"kapı ucuz, lüks pahalı"* ilkesi, gerekçe
+ * `buildings.ts`te). Dördüncü değişiklik gibi bu da savaş matematiğine girmiyor ama fiyat
+ * tablosunun parçası — ve özetin işi tam olarak *"bu savaş hangi katalogla çözüldü"* sorusunu
+ * cevaplamak; fiyat değişince cevap da değişmeli.
+ *
+ * ⚠️⚠️⚠️ **2026-08-14, ALTINCI değişiklik: `d963193a` → `27c3ff6e`.** Bu bir denge değişikliği
+ * DEĞİL, özetin **kendisindeki kusurun** düzeltilmesi: `d` alanı (bu yapının varsayılan
+ * `CatalogConfig`i) yüke eklendi.
+ *
+ * ⭐ **Kusurun kanıtı aynı gün ortaya çıktı.** `economy.techCostMultiplier` 1 → 0,75 yapıldı;
+ * her tekniğin fiyatı %25 düştü ve **bu test kırılmadı** — çünkü `diffFromDefault(varsayılan)`
+ * hâlâ `undefined` dönüyordu. Yani bu literal, tam da yakalamak için var olduğu şeyi kaçırdı.
+ * Aynı turdaki Akademi değişikliği ise `BUILDINGS` tablosunda olduğu için yakalandı: özet
+ * denge değişikliklerinin bir kısmını görüyor, bir kısmını görmüyordu.
+ *
+ * ⭐ **Bu literal artık asıl bekçi.** `CatalogConfig`teki herhangi bir varsayılan değişince
+ * (çarpanlar, oranlar, süre katsayıları, başlangıç kesesi) burası kırılır ve değiştiren kişi
+ * özetin kaydığını görmek zorunda kalır. Kırılması istenen bir testtir.
  */
-const DEFAULT_HASH = '000c68dc';
+const DEFAULT_HASH = '27c3ff6e';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -109,7 +129,35 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('ce32cb94');
+    expect(catalogHash(cfg)).toBe('b3a78f1a');
+  });
+
+  /**
+   * ⭐⭐⭐ **VARSAYILAN DEĞİŞİKLİĞİ ÖZETE GİRİYOR MU?** (2026-08-14 düzeltmesinin asıl bekçisi)
+   *
+   * ⚠️ Yukarıdaki `DEFAULT_HASH` literali bu soruyu **tek başına cevaplamıyor**: bir varsayılan
+   * değiştiğinde kırılır, ama kırıldığında geliştirici literali güncelleyip geçer — özetin o
+   * değişikliği gerçekten *taşıdığını* değil, yalnız bir şeyin kaydığını görür. 2026-08-14'te
+   * `techCostMultiplier` değiştiğinde literal hiç kırılmadı ve kimse bir şey fark etmedi.
+   *
+   * Bu test farkı doğrudan ölçüyor: yükün `d` alanı varsayılan `CatalogConfig`i taşıdığı için,
+   * varsayılanla **birebir aynı değerleri** açıkça override olarak vermek özeti değiştirmemeli
+   * (fark yok), ama tek bir yaprağı oynatmak değiştirmeli. `d` yükten çıkarılırsa ikinci
+   * beklenti hâlâ geçer (çünkü `c` devrede), ama `d`nin varlığını `DEFAULT_HASH` literali
+   * yakalar; ikisi birlikte kapıyı kapatıyor.
+   */
+  it('⭐⭐ ekonomi yaprağı oynayınca özet MUTLAKA değişir', () => {
+    const aynen = mergeCatalogConfig({
+      economy: {
+        techCostMultiplier: DEFAULT_CATALOG_CONFIG.economy.techCostMultiplier,
+        buildingCostMultiplier: DEFAULT_CATALOG_CONFIG.economy.buildingCostMultiplier,
+      },
+    });
+    expect(catalogHash(aynen), 'aynı değerler = fark yok').toBe(DEFAULT_HASH);
+
+    // Tek yaprak: teknik fiyat çarpanı. 2026-08-14'te tam bu sayı sessizce değişmişti.
+    const oynatilmis = mergeCatalogConfig({ economy: { techCostMultiplier: 0.5 } });
+    expect(catalogHash(oynatilmis)).not.toBe(DEFAULT_HASH);
   });
 
   /**

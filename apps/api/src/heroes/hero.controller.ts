@@ -20,7 +20,6 @@ import {
 } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { heroLevelForXp, heroReviveCost, heroReviveSeconds, heroXpForLevel } from '@mobilwar/catalog';
-import { DEFAULT_COMBAT_CONFIG } from '@mobilwar/engine';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import { payloadHeroIds } from '../cave/cave.service.ts';
@@ -189,20 +188,26 @@ export class HeroController {
     `);
 
     const templeLevel = Number(templeRow?.['level'] ?? 0);
+    const combat = this.settings.combatConfig(player.worldId);
     return {
       templeLevel,
       /** ⭐ Çıkma ihtimalinde kullanılan değer: TÜM şehirlerin tapınak toplamı. */
       templeTotal: Number(sumRow?.['total'] ?? 0),
       heroCount: Number(countRow?.['n'] ?? 0),
-      maxHeroes: DEFAULT_COMBAT_CONFIG.capture.maxHeroes,
-      pointsPerLevel: DEFAULT_COMBAT_CONFIG.hero.pointsPerLevel,
+      /**
+       * ⚠️ İkisi de DÜNYA ayarından (2026-08-14). Ekran bu iki sayıyı olduğu gibi gösteriyor
+       * (`Temple.tsx` → «3/5 kahraman»), yani sabit okunduğunda panel bir değeri, oyun ekranı
+       * başkasını söylüyordu.
+       */
+      maxHeroes: combat.capture.maxHeroes,
+      pointsPerLevel: combat.hero.pointsPerLevel,
       heroes: rows.map((r) => this.present(mapHero(r), templeLevel, now, player.worldId, cave)),
     };
   }
 
   /**
    * **Özellikler** — puan dağıtımı. Puanlar yalnız ARTTIRILABİLİR (geri alma yok, oyunun kendi
-   * davranışı) ve toplam `3 × seviye`yi aşamaz.
+   * davranışı) ve toplam `hero.pointsPerLevel × seviye`yi aşamaz (varsayılan 3).
    */
   @Post('heroes/:id/skills')
   async skills(
@@ -214,7 +219,10 @@ export class HeroController {
     const hero = await this.load(Number(id), req.player!.playerId);
     if (hero.status === 'destroyed') throw new BadRequestException('Bu kahraman yok edildi.');
 
-    const budget = hero.level * DEFAULT_COMBAT_CONFIG.hero.pointsPerLevel;
+    /* ⚠️ Bütçe DÜNYA ayarından (2026-08-14): sabit okunduğu sürece `hero.pointsPerLevel`i
+     * büyüten dünyada oyuncu kazandığı fazla puanı harcayamıyordu — kahraman puan kazanıyor,
+     * ekran gösteriyor, dağıtım ucu reddediyordu. */
+    const budget = hero.level * this.settings.combatConfig(req.player!.worldId).hero.pointsPerLevel;
     const spent = next.fAtk + next.fDef + next.mAtk + next.mDef;
     if (spent > budget) {
       throw new BadRequestException(`En fazla ${budget} puan dağıtılabilir, ${spent} verildi.`);
@@ -311,7 +319,7 @@ export class HeroController {
       /** Bir sonraki seviyenin eşiği — ekranda `mevcut / eşik` yazar (oyunun kendi biçimi). */
       xpForNext: nextXp,
       skills: { fAtk: h.fAtk, fDef: h.fDef, mAtk: h.mAtk, mDef: h.mDef },
-      pointsTotal: h.level * DEFAULT_COMBAT_CONFIG.hero.pointsPerLevel,
+      pointsTotal: h.level * this.settings.combatConfig(worldId).hero.pointsPerLevel,
       pointsSpent: h.fAtk + h.fDef + h.mAtk + h.mDef,
       /**
        * İstemcinin kendi sözlüğü. ⭐ `returning` YENİ (2026-08-01): ölmüş ama henüz eve

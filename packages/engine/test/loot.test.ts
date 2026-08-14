@@ -186,3 +186,101 @@ describe('jitter (kullanıcı kararı: rastgelelik KALIR)', () => {
     expect(r.effectiveRates.gold).toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * ⭐⭐ PUAN FARKI ÇARPANI (kullanıcı, 2026-08-14) — **yalnız AŞAĞI vururken**.
+ *
+ * İstek iki cümleydi: *"görece puanı yüksek bir oyuncu 10 kat limitinin en altındaki birine
+ * saldırınca alacağı ganimet, kendi puanına daha yakın birine saldırınca alacağından az
+ * olmalı"* ve *"puanını yükseltmeden ganimet biriktirmek isteyen bir oyuncu da mümkün olmalı"*.
+ *
+ * ⚠️⚠️ İkisi ancak çarpan **tek yönlü** olursa çelişmiyor ve bu testlerin asıl konusu o:
+ * düşük puanlı akıncı parayı YUKARI vurarak kazanıyor. Çift yönlü bir çarpan onu da yarılar,
+ * yani açmak istediğimiz stratejiyi kapatırdı.
+ */
+describe('⭐⭐ puan farkı çarpanı', () => {
+  const zengin = {
+    winner: 'attacker' as const,
+    debris: { gold: 0, food: 0 },
+    cityResources: { gold: 200_000, food: 200_000 },
+    carryCapacity: BIG_CAP,
+    seed: 'gap',
+  };
+
+  it('puan verilmezse çarpan 1 — eski görevler ve simülatör aynen davranır', () => {
+    const r = calculateLoot(zengin, NO_JITTER);
+    expect(r.gapFactor).toBe(1);
+    expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
+  });
+
+  it('⭐ YUKARI vuruş tam oranı alır (akıncı stratejisinin can damarı)', () => {
+    // 50 puanlık akıncı, 500 puanlık zengini vuruyor — 10 kat kuralı buna izin veriyor.
+    const r = calculateLoot({ ...zengin, attackerScore: 50, defenderScore: 500 }, NO_JITTER);
+    expect(r.gapFactor).toBe(1);
+    expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
+  });
+
+  it('eşit puanda çarpan 1', () => {
+    const r = calculateLoot({ ...zengin, attackerScore: 300, defenderScore: 300 }, NO_JITTER);
+    expect(r.gapFactor).toBe(1);
+  });
+
+  it('⭐ küçük hesap bandı içinde çarpan 1 (iki fakir ayrıca cezalandırılmaz)', () => {
+    // Fark 23 ≤ band 50: arabalı akıncı, terk edilmiş 1 puanlık şehri tam oranla vuruyor.
+    const r = calculateLoot({ ...zengin, attackerScore: 24, defenderScore: 1 }, NO_JITTER);
+    expect(r.gapFactor).toBe(1);
+  });
+
+  it('band sınırı: fark tam 50 → çarpan 1, fark 51 → çarpan < 1', () => {
+    const tam = calculateLoot({ ...zengin, attackerScore: 51, defenderScore: 1 }, NO_JITTER);
+    expect(tam.gapFactor).toBe(1);
+    const asan = calculateLoot({ ...zengin, attackerScore: 52, defenderScore: 1 }, NO_JITTER);
+    expect(asan.gapFactor).toBeLessThan(1);
+  });
+
+  it('⭐⭐ 10 kat sınırının dibinde çarpan tabanda: %40 → %20', () => {
+    // Oran tam 10 (5000 → 500) ve fark banttan çok büyük.
+    const r = calculateLoot({ ...zengin, attackerScore: 5000, defenderScore: 500 }, NO_JITTER);
+    expect(r.gapFactor).toBeCloseTo(0.5, 10);
+    expect(r.effectiveRates.gold).toBeCloseTo(0.2, 10);
+    expect(r.taken.gold).toBe(40_000);                    // 200k × %20
+  });
+
+  it('kendi puanına yakın olana saldırmak DAHA ÇOK ganimet verir', () => {
+    const yakin = calculateLoot({ ...zengin, attackerScore: 5000, defenderScore: 4000 }, NO_JITTER);
+    const dip = calculateLoot({ ...zengin, attackerScore: 5000, defenderScore: 500 }, NO_JITTER);
+    expect(yakin.gapFactor).toBeGreaterThan(dip.gapFactor);
+    expect(yakin.taken.gold).toBeGreaterThan(dip.taken.gold);
+    // Kullanıcının cümlesi: tavan hiçbir zaman %40'ı geçmez.
+    expect(yakin.effectiveRates.gold).toBeLessThanOrEqual(0.4);
+  });
+
+  it('sınırın ötesinde çarpan tabanın ALTINA inmez', () => {
+    const r = calculateLoot({ ...zengin, attackerScore: 1_000_000, defenderScore: 1 }, NO_JITTER);
+    expect(r.gapFactor).toBeCloseTo(DEFAULT_LOOT_CONFIG.gapMinRate, 10);
+  });
+
+  it('gapMinRate = 1 çarpanı tamamen kapatır (eski davranış)', () => {
+    const r = calculateLoot(
+      { ...zengin, attackerScore: 5000, defenderScore: 500 },
+      { ...NO_JITTER, gapMinRate: 1 },
+    );
+    expect(r.gapFactor).toBe(1);
+    expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
+  });
+
+  /**
+   * ⚠️ Fakir şehirde iki fren üst üste binmemeli: havuz eğrisi zaten %20 veriyor. Band bunu
+   * koruyor — band olmasaydı terk edilmiş şehri yağmalamak %10'a düşer ve bandın açtığı kapı
+   * işe yaramaz hâle gelirdi.
+   */
+  it('fakir şehir + band içi: oran %20\'de kalır, %10\'a düşmez', () => {
+    const r = calculateLoot({
+      winner: 'attacker', debris: { gold: 0, food: 0 },
+      cityResources: { gold: 4_000, food: 4_000 }, carryCapacity: BIG_CAP, seed: 'fakir',
+      attackerScore: 24, defenderScore: 1,
+    }, NO_JITTER);
+    expect(r.effectiveRates.gold).toBeCloseTo(0.2, 10);
+    expect(r.taken.gold).toBe(800);
+  });
+});

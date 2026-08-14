@@ -2178,24 +2178,212 @@ savunma biriminde **33,6** — Sur oyundaki en ucuz güç kaynağıydı, farkla.
 sabit (fiyat `1,8^(sv−1)`, güç `1,8^sv`), o yüzden tek kaldıraç taban fiyat. ×2,5 uçurumu kapatıyor
 ama "savunma saldırıdan ucuzdur" tür geleneğini koruyor.
 
-#### Başlangıç kesesi 4000/4000 → **1000/1000**
+#### Başlangıç kesesi 4000/4000 → 1000/1000 → **5000/5000** (2026-08-14)
 
-⚠️ **Alt sınırı bir tercih değil bir YAPI KURALI koyuyor.** Kale 1'in bütçesi 10 seviye ve
-Çiftlik/Maden zaten 1'den başlıyor → oyuncunun Kale 2'ye kadar yapabileceği tek şey Çiftlik 5 +
-Maden 5 (630 kaynak). Gerisi kapalı: Akademi Kale 2 ister, Baraka'ya bütçe kalmaz, savaşçı üretimi
-Akademi→Demircilik ister. Kese Kale 2'yi (1.600) karşılamazsa oyunun **hiçbir şey sunmadığı** bir
-ölü bekleme doğar:
+⚠️ **Alt sınırı bir tercih değil bir YAPI KURALI koyuyor.** Kese Kale 2'yi (1.600) karşılamazsa
+oyunun **hiçbir şey sunmadığı** bir ölü bekleme doğar:
 
 | Kese | Kale 2 için ölü bekleme |
 | :-- | --: |
 | 500/500 | 10,9 saat |
 | 750/750 | 6,5 saat |
-| **1000/1000** | **2,0 saat** ✅ |
-| 1500/1500 | 0 saat |
+| 1000/1000 | 2,0 saat |
+| **5000/5000** | **0 saat** ✅ |
 
-Hedef (*"ilk günde kârlı getiri sayılabilecek kadar çiftlik maden kolayca yükseltilememeli"*) zaten
-Çiftlik/Maden tabanının ×3 olmasıyla sağlanıyor: aynı kese eskiden 13 seviye satın alırken şimdi 5.
-`formulas.test.ts` bu bağı bekçi olarak tutuyor — kese VEYA Kale tabanı tek başına değişirse kırılır.
+⚠️⚠️ **«Çiftlik 5 + Maden 5 = tam 10» satırı BAYATTI ve buradan kaldırıldı.** Baraka 2026-08-12'de
+seviye 1'e döndü ve bütçe tüketiyor: Kale 1'de dolu seviye **3** (Baraka+Çiftlik+Maden), boş **7**,
+yani Çiftlik+Maden birlikte en fazla **9**'a çıkıyor. `formulas.test.ts` sayıyı artık elle yazmıyor,
+`castleBudget` ile `STARTING_BUILDINGS`ten türetiyor — aynı sapma bir daha doğmasın.
+
+##### ⭐⭐ Kesenin 5000'e çıkarılması: gerekçe (oyuncu bildirimi, 2026-08-14)
+
+*"Para erken bitiyor ve oyunda yapacak bir şey kalmayınca çıkmak zorunda kalıyorlar."* Ölçüldü,
+şikâyet birebir doğru: ilk Cüce'nin yolu (Kale 2 → Akademi 1 → Demircilik 1 → 1 Cüce) ≈ 5.200
+altın + 4.800 yemek ve başlangıç geliri saatte 11 kaynak → **ilk askere ≈ 2 gün**. O iki gün
+boyunca oyuncunun yapabileceği tek şey sayaç izlemek.
+
+⭐ **1000'e indiren gerekçe artık kesede değil, iki başka yerde karşılanıyor — kese ÜÇÜNCÜ ve
+gereksiz frendi.** *"İlk günde çiftlik maden kolayca yükseltilememeli"* şartını sağlayan iki fren:
+
+1. Çiftlik/Maden tabanının ×3 olması (aynı kese eskiden 13 seviye satın alıyordu),
+2. ⭐ asıl olan: **Kale bütçesi parayı değil SEVİYEYİ sınırlıyor.** Kale 1'de 7 boş seviye var ve
+   oyuncu cebinde ne olursa olsun fazlasını satın alamaz. Yani büyük kese çiftlik/maden spam'ine
+   dönüşemiyor — yapısal olarak imkânsız.
+
+⚠️ Kesenin puana etkisi **yok**: puan harcamadan doğuyor, kese yalnız aynı harcamanın ne zaman
+yapılabildiğini değiştiriyor.
+
+#### ⭐⭐ Akademi tabanı Kale ile eşitlendi: 1400/1000 → **900/700** (2026-08-14)
+
+Yukarıdaki *"kapı ucuz, lüks pahalı"* ilkesi Kale'yi büyük binaların en ucuzu yapıyor. **Akademi
+tam olarak aynı tanıma giriyor** — her teknik, dolayısıyla her savaşçı ve her savunma birimi
+oradan geçiyor — ama Kale'den pahalı fiyatlanmıştı. Eşitlemek ilkeyi uyguluyor, değiştirmiyor.
+
+Ölçülen etki: Akademi 1→3 zinciri **14.496 → 9.664**. Erken oyunun asıl bütçe yakıcısı buydu;
+Çiftlik/Maden değil — Çiftlik 8 + Maden 8 topu topu 3.690 kaynak, yani **3 puan**.
+
+⭐ Hiçbir çapayı bozmuyor: ÇAPA 1 Mimar Okulu ↔ Teleport, ÇAPA 2 Çiftlik/Maden ↔ Kale; Akademi
+ikisinde de yok. Katalog özeti (`catalogHash`) beşinci kez kaydı: `000c68dc` → `d963193a`.
+
+#### ⭐ Teknik fiyat çarpanı 1 → **0,75** (2026-08-14)
+
+Akademi indirimi kapının **bina** yarısını ucuzlattı; teknikler öbür yarısı. Orada eğrinin
+şekline dokunulmadı — `taban × 1,5^(sv+1)` üssü `k.java`dan geliyor ve Java'ya sadakat birinci
+öncelik. Çarpan tam bunun için var: **eğri aynı, ölçek kayıyor.**
+
+⚠️ Bina tarafındaki karşılığı (`buildingCostMultiplier`) bilerek 1'de bırakıldı: oradaki tempo
+iki çapaya bağlı ve global bir çarpan ikisini birden kaydırırdı.
+
+##### ⚠️⚠️ Bu değişiklik `catalogHash`teki bir kusuru ORTAYA ÇIKARDI — ve düzeltildi
+
+Özet, tablolara (`UNITS`/`TECHS`/`BUILDINGS`) ve *varsayılandan SAPMAYA* bakıyordu;
+**varsayılanın kendisine bakan hiçbir şey yoktu.** `techCostMultiplier` 1 → 0,75 yapıldığında
+her tekniğin fiyatı %25 düştü ama `diffFromDefault(varsayılan)` yine `undefined` döndüğü için
+özet **kıpırdamadı**. Aynı turdaki Akademi değişikliği ise `BUILDINGS` tablosunda olduğu için
+yakalandı — yani özet denge değişikliklerinin bir kısmını görüyor, bir kısmını görmüyordu.
+Yarım çalışan bir bekçi, çalışmayan bir bekçiden daha yanıltıcı.
+
+**Düzeltme:** yüke `d` alanı eklendi — bu yapının varsayılan `CatalogConfig`i. Artık
+`CatalogConfig`teki herhangi bir varsayılan (çarpanlar, oranlar, süre katsayıları, başlangıç
+kesesi) değişince özet kayıyor. Dünya sapması (`c`) aynen duruyor, yani şema büyümesine karşı
+bağışıklık korundu: yeni bir anahtar eklendiğinde **override'lı dünyalar ayrıca** kaymıyor.
+Özet altıncı kez kaydı: `d963193a` → `27c3ff6e`.
+
+⚠️ Eski `battles.catalog_hash` değerleri "geçersiz" olmuyor, sadece farklı — ve olması
+gerekiyor: o savaşlar gerçekten başka bir katalogla çözüldü. Özet hiçbir yerde yeniden
+hesaplanıp karşılaştırılmıyor (yazılıyor ve künyede gösteriliyor), yani kayması bir kırılma
+değil işin kendisi.
+
+#### 📊 Üç değişikliğin birleşik sonucu
+
+| Zincir | Önce | Sonra |
+| :-- | --: | --: |
+| Cüce (Kale 2 → Akademi 1 → Demircilik 1 → 1 Cüce) | 6.338 = 6 puan | **5.116 = 5 puan** |
+| Yük Arabası (+ Akademi 3 · Baraka 3 · Haritacılık 1 · 1 araba) | 24.807 = 24 puan | **19.300 = 19 puan** |
+
+⭐ Yani 50 puanlık bandın içinde arabaya ulaşmak 19 puan tutuyor ve geriye **30.700 kaynak**
+kalıyor — yaklaşık **15 yük arabası** (75.000 taşıma kapasitesi). Strateji artık kâğıt üstünde
+değil, gerçekten oynanabilir.
+
+---
+
+### §13.9b ⭐⭐ KÜÇÜK HESAP BANDI ve GANİMET FARK ÇARPANI (kullanıcı, 2026-08-14)
+
+**İstek iki cümleydi ve ilk bakışta birbiriyle çelişiyorlar:**
+
+1. *"Puanını yükseltmeden, olabildiğince az yapı geliştirerek ganimetini çevre şehirlerden yağma
+   yaparak elde etmek isteyen"* bir oyuncu tipi mümkün olmalı.
+2. *"Görece puanı yüksek bir oyuncu, 10 kat limitinin en altındaki birine saldırınca alacağı
+   ganimet, kendi puanına daha yakın birine saldırınca alacağından az olmalı."*
+
+#### Ölçüm: birinci istek bugün İMKÂNSIZDI
+
+Puan = harcanan kaynak / 1000 ve 10 kat kuralı 0 puanı 1'e kelepçeliyor → 0 puanlı bir şehre
+saldırabilmek için **9 puanda kalmak** gerekiyordu. Oysa:
+
+| Zincir | Kaynak | Puan |
+| :-- | --: | --: |
+| Cüce (Kale 2 → Akademi 1 → Demircilik 1 → 1 Cüce) | 6.338 | 6 |
+| Yük Arabası (Kale 2 → Akademi 3 → Baraka 3 → Haritacılık 1 → 1 araba) | 22.469 | 22 |
+| İkisi birden (Akademi indirimi öncesi) | 24.807 | 24 |
+
+9 puanla yapılabilecek azami şey **6 Cüce** ve toplam taşıma kapasitesi **60 kaynak**. Terk
+edilmiş bir şehir 30 günde ~8.000 kaynak biriktirir; oran %20 olsa bile taşınabilen 60. Yani
+strateji kâğıt üstünde bile yoktu — ve simetrik sonuç: **0 puanlı şehirlere pratikte hiç kimse
+saldıramıyordu.**
+
+#### Çözüm: `combat.attackScoreBand` — tek sabit, iki tüketici
+
+```
+blocked = oran ≥ combat.attackScoreRatio   VE   |a − d| > combat.attackScoreBand
+```
+
+Band **50 puan** (≈50.000 harcanmış kaynak: araba zinciri + gerçek bir akın ordusu). Küçük
+hesaplar birbirine ulaşıyor; 500 puanlık bir oyuncu 0 puanlı şehre yine ulaşamıyor.
+
+⚠️ Band ORANIN yerine geçmiyor, ona **muafiyet** ekliyor. Oranı gevşetmek (ör. sınırı 50 yapmak)
+aynı işi görmezdi: o, güçlünün zayıfı ezmesini de serbest bırakırdı. Band yalnız **iki tarafın da
+küçük olduğu** bölgeyi açıyor.
+
+⚠️⚠️ **BEDELİ AÇIKÇA: kullanıcının 2026-08-06'daki iki örneği artık varsayılan ayarla geçerli
+değil.** *"0 puanlı bir oyuncu 10 puanlıya saldıramasın"* (fark 9) ve *"20 puanlı 2 puanlıya
+saldıramasın"* (fark 18) — ikisi de bandın içinde kaldığı için **serbest**. Bu bandın kaçınılmaz
+sonucu: 0-50 aralığını açmak, o aralıktaki her çifti açmak demek. Kelepçe ve aşağı yön kuralı
+duruyor; `attackScoreBand = 0` yazıldığında eski davranış **birebir** geri geliyor ve
+`battle.test.ts` bunu iki ayrı testle ölçüyor.
+
+#### Ganimet fark çarpanı — **yalnız AŞAĞI vururken**
+
+```
+oran = havuzEğrisi(havuz) × farkÇarpanı × jitter          // tavan yine %40
+
+farkÇarpanı = 1                                    , savunan ≥ saldıran   (yukarı vuruş)
+farkÇarpanı = 1                                    , |a − d| ≤ band       (küçük hesap bandı)
+farkÇarpanı = 1 − (oran−1)/(sınır−1) × (1 − 0,50)  , aksi hâlde
+```
+
+⭐⭐ **Tek yönlü olması tasarımın özü.** İki istek ancak böyle çelişmiyor: düşük puanlı akıncı
+parayı **yukarı vurarak** kazanıyor — 50 puanlık akıncı, 10 kat kuralı sayesinde 500 puanlık
+zengini vurabiliyor ve ondan tam oranı alıyor. Çift yönlü bir çarpan, tam da açmak istediğimiz
+stratejiyi öldürürdü: akıncı hem küçük kalacak hem vurduğu her zenginden yarım ganimet alacaktı.
+
+⚠️ **Band içinde çarpan 1** — iki fakiri birbirine karşı ayrıca cezalandırmanın anlamı yok;
+havuz eğrisi onları zaten %20'ye indiriyor. İki fren üst üste binseydi terk edilmiş şehri
+yağmalamak %10'a düşer ve bandın açtığı kapı işe yaramaz hâle gelirdi.
+
+⚠️ **Puanlar sefer GÖNDERİLİRKEN damgalanıyor** (`missions.payload.attackerScore/defenderScore`),
+savaş anında okunmuyor. Savaş saatler sonra çözülüyor ve arada bir sıralama görüntüsü geçebilir;
+varışta okusaydık oyuncu ne kadar ganimet alacağını yollarken bilemezdi — 10 kat kuralının kendi
+gerekçesinin aynısı. Alan yoksa (eski görev / kural kapalı) çarpan **1**.
+
+⚠️ Motor sürümü **1.2.0 → 1.3.0**: denge sabiti değişti, eski savaş kayıtları künyesinden hangi
+dengeyle çözüldüğü okunabilir kalmalı. `combat.attackScoreBand` ve `combat.attackScoreRatio`
+motora `LOOT_MAP` üzerinden aktarılıyor — **ayrı `loot.*` anahtarı YOK**, kapının izin verdiği
+saldırı ile ödülün aynı sayıya bakması şart.
+
+### ⭐⭐ Eşleme doğruydu, TÜKETİCİ varsayılanı okuyordu (2026-08-14)
+
+Yukarıdaki ganimet işinin kenarında bildirilen kusur tek satırlık sanılmıştı: savaş handler'ı
+kahraman tecrübe paylarını dünya ayarından değil `DEFAULT_COMBAT_CONFIG`ten okuyordu. Araştırma
+kusurun **beş yerde** olduğunu ve ortak bir sınıfa ait olduğunu gösterdi.
+
+Ayar hattının kendisi sağlamdı: `settings/combat.ts` her `combat.*`/`hero.*`/`capture.*`
+anahtarını motora eşliyor, `simulate(input, ctx.engine?.combat)` dünya config'ini alıyordu.
+Kaçak **motorda değil, API'nin kendi verdiği kararlardaydı**:
+
+| Yer | Okuduğu | Sonuç |
+| :-- | :-- | :-- |
+| `battle.handlers.ts` · tecrübe | `heroXpShare` | `hero.xpWinner` tamamen etkisiz |
+| `battle.handlers.ts` · yakalama | `capture.maxHeroes` | motor 8'e izin verirken API 5'te kesiyor |
+| `hero.controller.ts` · tapınak | `maxHeroes`, `pointsPerLevel` | ekranda yanlış tavan |
+| `hero.controller.ts` · dağıtım | `hero.pointsPerLevel` | oyuncu kazandığı fazla puanı harcayamıyor |
+| `hero.controller.ts` · gösterim | `hero.pointsPerLevel` | `pointsTotal` yanlış |
+
+⚠️⚠️ **Ders, `combat.ts`teki uyarının kardeşi.** Orada *"yeni ayar eklenince BURAYA da satır
+eklenmezse ayar panelde görünür ama motora hiç ulaşmaz"* yazıyor. Bu vaka bir adım ötesi:
+**eşleme doğru olsa bile, tüketici varsayılanı okuyorsa ayar yine ölü.** Ve bu hâli daha sinsi —
+eşleme tablosuna bakan biri her şeyi yerinde görüyor. Kahraman tavanı vakası en zehirlisiydi:
+kural **iki yerde** uygulanıyor (motor savaşa katılan kahramanları sayıyor, API oyuncunun
+tümünü) ve yalnız biri ayarı okuduğu için ayar yarı yolda sessizce kesiliyordu.
+
+Bekçi: `apps/api/test/hero-settings.test.ts` — beş noktanın her biri için "ayar gerçekten
+ulaşıyor mu" testi, artı dokunulmamış dünyanın varsayılanla **birebir** aynı kaldığı kontrol
+vakaları. Testler önce **kırmızı** koşturularak kusurun kanıtı alındı.
+
+#### `hero.xpLoser` kaldırıldı — kaybedenin payı artık türetiliyor
+
+Tecrübe **TEK havuzdan** bölüşülüyor, ama iki pay iki bağımsız düğmeydi: ikisi de 1 yapıldığında
+savaşın ürettiği tecrübe sessizce **ikiye katlanıyor**, ikisi de 0 yapıldığında buharlaşıyordu —
+ne panelde uyarı, ne kodda kapı. Kaybedenin payı artık `1 − hero.xpWinner`, ve değişmez ayarın
+motora dönüştüğü **tek sınırda** (`COMBAT_MAP`'te tek setter iki alanı birden yazar) garanti
+altında. Emsal: `combat.trapGnomeDisarm` (2026-08-13) aynı şekilde kaldırılmıştı.
+
+⚠️ Eski dünyalarda kalmış `hero.xpLoser` satırları zararsız ve göç gerekmiyor: `applySettings`
+yalnız şemadaki anahtarlar üzerinde dönüyor, tanımı olmayan satır hiç okunmuyor; yazma ucu ise
+bilinmeyen anahtarı zaten reddediyor.
+
+⚠️ `ENGINE_VERSION` **kaymadı**: motorun kendi davranışı değişmedi, değişen API'nin hangi
+config'i okuduğu. Savaşın hangi ayar sürümüyle çözüldüğü zaten `settings_revision_id` ile izli.
 
 ### 🎯 Ön-şart sorusunun cevabı: **HAYIR, seviyeyle değişmiyor**
 İstemci ön-şart eşiğini **tip başına TEK bir değerden** okuyor (`byte[45]` dizisi, `init.do`/tip-35 ile

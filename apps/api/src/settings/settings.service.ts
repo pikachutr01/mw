@@ -22,7 +22,10 @@ import type postgres from 'postgres';
 import {
   applySettings, validatePatch, type EffectiveSettings, type SettingValue,
 } from '@mobilwar/settings';
-import { mergeMapConfig, type CombatConfig, type DeepPartial, type LootConfig, type MapConfig } from '@mobilwar/engine';
+import {
+  mergeCombatConfig, mergeMapConfig,
+  type CombatConfig, type DeepPartial, type LootConfig, type MapConfig,
+} from '@mobilwar/engine';
 import {
   catalogHash, mergeCatalogConfig, type CatalogConfig, type DeepPartialCatalog, type MeritConfig,
 } from '@mobilwar/catalog';
@@ -93,6 +96,8 @@ export class SettingsService {
   private revisions = new Map<number, number>();
   /** worldId → birleştirilmiş katalog config'i (sıcak yolda kopyalama olmasın diye). */
   private catalogs = new Map<number, CatalogConfig>();
+  /** worldId → birleştirilmiş TAM savaş config'i (`combatConfig`in önbelleği). */
+  private combats = new Map<number, CombatConfig>();
   private unlisten: (() => Promise<void>) | null = null;
   private loaded = false;
 
@@ -117,6 +122,7 @@ export class SettingsService {
     this.rows = next;
     this.snapshots.clear();
     this.catalogs.clear();
+    this.combats.clear();
 
     /**
      * Revizyon kimlikleri de burada yükleniyor: `battles.settings_revision_id` sıcak yolda
@@ -259,6 +265,23 @@ export class SettingsService {
     if (hit) return hit;
     const built = mergeCatalogConfig(this.catalogOverride(worldId));
     this.catalogs.set(worldId, built);
+    return built;
+  }
+
+  /**
+   * ⭐ TAM savaş config'i — motorun değil **API'nin kendi kararları** için (2026-08-14).
+   *
+   * `combat()` yalnız DEĞİŞTİRİLMİŞ alanları döndürüyor: `simulate`ın sözleşmesi bu ve öyle
+   * kalmalı (dokunulmamış dünyada motor kendi varsayılanını kullansın diye). Ama kahraman
+   * tavanı ve puan bütçesi gibi kararları API veriyor ve onların TAM config'e ihtiyacı var —
+   * daha önce bu yüzden `DEFAULT_COMBAT_CONFIG` okunuyor, dünya ayarı da sessizce yok
+   * sayılıyordu. `catalog()` ile aynı önbellek deseni; `load()` ikisini birden temizler.
+   */
+  combatConfig(worldId: number): CombatConfig {
+    const hit = this.combats.get(worldId);
+    if (hit) return hit;
+    const built = mergeCombatConfig(this.combat(worldId));
+    this.combats.set(worldId, built);
     return built;
   }
 

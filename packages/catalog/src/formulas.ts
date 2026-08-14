@@ -256,7 +256,29 @@ export function buildingCost(buildingId: string, level: number, cfg: CatalogConf
   return { gold: Math.round(gold * k * m), food: Math.round(food * k * m) };
 }
 
-/** Teknik maliyeti: base × 1.5^(seviye+1). */
+/**
+ * Teknik maliyeti: `taban × 1,5^(seviye+1) × techCostMultiplier`.
+ *
+ * ⭐⭐ **ÜSTEKİ `+1` JAVA'DAN GELİYOR — bizim eklediğimiz bir kaydırma DEĞİL** (2026-08-14'te
+ * `k.java` üzerinden doğrulandı, soru ikinci kez sorulmasın diye buraya yazılıyor):
+ *
+ * ```java
+ * // k.java:1416-1418, teknik dalı (a[161] = "T")
+ * long var19 = a.e(this.d, a.b(var2.a[1] + 1L));   // d ^ (seviye + 1)
+ * this.j *= var19;                                  // altın
+ * this.k *= var19;                                  // yemek
+ * ```
+ * `this.d = a.a("1.5")` (`k.java:13`). Yani hem **oran** (1,5 — seviye başına %50 artış) hem
+ * **kaydırma** (`+1`) orijinalin kendisi.
+ *
+ * ⚠️ Pratik sonucu: `techs.ts`teki taban, oyuncunun ÖDEDİĞİ bir fiyat değil — seviye 1 zaten
+ * tabanın `1,5² = 2,25` katı. Yapılarda bu böyle değil: orada `firstPaid` normalizasyonu var
+ * ve taban, oyuncunun ödediği ilk yükseltmenin fiyatı (`buildingCost`). **İki tarafın farklı
+ * davranması bilinçli**: bina normalizasyonu bizim rebuild kararımız (kullanıcı 2026-07-28,
+ * *"Çiftlik 3 altın dediğimde ekranda 9 çıkıyor"*), teknik tarafında ise Java'nın kendi
+ * eğrisine dokunulmadı. Ölçek gerektiğinde `economy.techCostMultiplier` ile kaydırılıyor —
+ * eğrinin şekli sabit kalsın diye (2026-08-14: 1 → 0,75).
+ */
 export function techCost(techId: string, level: number, cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): Cost {
   const def = TECHS_BY_ID[techId];
   if (!def) throw new Error(`Bilinmeyen teknik: ${techId}`);

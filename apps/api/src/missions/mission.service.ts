@@ -284,7 +284,7 @@ export class MissionService {
        * gerek yok; kuralı buraya koymak onu kendiliğinden sağlıyor. Ortak yola koysaydık
        * istisnayı elle işlemek gerekir ve bir görev tipi eklendiğinde unutulurdu.
        */
-      await this.assertScoreRatio(t, opts.worldId, opts.playerId, target.playerId);
+      const gapScores = await this.assertScoreRatio(t, opts.worldId, opts.playerId, target.playerId);
       await this.assertMarchLimit(t, opts.originCityId, opts.playerId);
 
       // ⭐ Saldıran kendi acemi korumasını ANINDA kaybeder (§13.5.4). Saldırı yazılmadan önce
@@ -315,6 +315,19 @@ export class MissionService {
         distance: D, speed, travelSeconds: seconds, cartography,
         ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
         departedAt: opts.at.toISOString(),
+        /**
+         * ⭐⭐ GANİMET FARK ÇARPANININ GİRDİSİ — **gönderim anında** damgalanıyor (2026-08-14).
+         *
+         * ⚠️ Savaş saatler sonra çözülüyor ve arada bir sıralama anlık görüntüsü (günde 3 kez)
+         * geçebilir. Puanları varışta okusaydık oyuncu saldırıyı yollarken ne kadar ganimet
+         * alacağını bilemezdi — 10 kat kuralının kendi gerekçesinin (*"anlık puan her harcamada
+         * oynuyor, oyuncu kime saldırabileceğini ancak deneyerek öğrenirdi"*) birebir aynısı.
+         * Kapı ile ödül aynı fotoğrafa bakıyor.
+         *
+         * ⚠️ Kural kapalıyken (`attackScoreRatio ≤ 0`) alan hiç yazılmıyor → motor çarpanı
+         * **1** sayıyor. Eski görevlerde de alan yok, davranışları değişmiyor.
+         */
+        ...(gapScores ?? {}),
       })}::jsonb,
                 ${opts.idempotencyKey ?? null})
         RETURNING id
@@ -1320,17 +1333,35 @@ export class MissionService {
    *
    * ⚠️ Karşılaştırma `>=`: kullanıcı *"tam 10 kat olunca bu kural devreye girer"* dedi.
    * 20 → 200 ENGELLİ, 20 → 199 serbest.
+   *
+   * ⭐⭐ **KÜÇÜK HESAP BANDI** (kullanıcı, 2026-08-14): puan FARKI `combat.attackScoreBand`in
+   * altındaysa oran kuralı engellemez. Gerekçe ölçüldü — kelepçe (0 → 1) yüzünden **10 puanı
+   * geçmiş hiçbir oyuncu terk edilmiş 0 puanlı şehirlere saldıramıyordu**, üstelik 1 Cüce +
+   * 1 Yük Arabası üretmenin kapısı tek başına 24 puan. Sonuç iki taraflı bir çıkmazdı:
+   * *"puanını düşük tutup yağmayla geçinme"* stratejisi matematiksel olarak imkânsız, 0 puanlı
+   * şehirler ise sonsuza kadar dokunulmazdı. Band ikisini birden açıyor: küçük hesaplar
+   * birbirine ulaşıyor, 500 puanlık bir oyuncu yine ulaşamıyor.
+   *
+   * ⚠️ Band ORANIN yerine geçmiyor, ona **muafiyet** ekliyor: `blocked = oran ≥ sınır VE
+   * fark > band`. Oranı gevşetmek (ör. sınırı 50 yapmak) aynı işi görmezdi — o, güçlünün
+   * zayıfı ezmesini de serbest bırakırdı; band yalnız iki tarafın da küçük olduğu bölgeyi açar.
+   *
+   * @returns kapıdan geçen saldırının donmuş puanları — görev yüküne damgalanır (`scoreGap`
+   *   ganimet çarpanında da kullanılıyor ve savaş saatler sonra çözülüyor).
    */
   private async assertScoreRatio(
     tx: Tx, worldId: number, attackerId: number, defenderId: number,
-  ): Promise<void> {
+  ): Promise<{ attackerScore: number; defenderScore: number } | null> {
     const gap = await this.scoreGap(worldId, attackerId, defenderId, tx);
-    if (!gap?.blocked) return;
-    throw new MissionError(
-      'score_gap',
-      scoreGapMessage(gap.limit),
-      { attackerScore: gap.attackerScore, defenderScore: gap.defenderScore, limit: gap.limit },
-    );
+    if (!gap) return null;                       // kural kapalı → damgalanacak puan da yok
+    if (gap.blocked) {
+      throw new MissionError(
+        'score_gap',
+        scoreGapMessage(gap.limit),
+        { attackerScore: gap.attackerScore, defenderScore: gap.defenderScore, limit: gap.limit },
+      );
+    }
+    return { attackerScore: gap.attackerScore, defenderScore: gap.defenderScore };
   }
 
   /**
@@ -1354,7 +1385,7 @@ export class MissionService {
   async scoreGap(
     worldId: number, attackerId: number, defenderId: number, runner: Tx | Db = this.db,
   ): Promise<{
-    blocked: boolean; limit: number; ratio: number;
+    blocked: boolean; limit: number; band: number; ratio: number;
     attackerScore: number; defenderScore: number;
   } | null> {
     const limit = liveNumberFor(worldId, 'combat', 'attackScoreRatio', 10);
@@ -1371,9 +1402,14 @@ export class MissionService {
     const a = Math.max(1, frozen.get(attackerId) ?? 0);
     const d = Math.max(1, frozen.get(defenderId) ?? 0);
     const ratio = Math.max(a, d) / Math.min(a, d);
+    /* ⭐ Band muafiyeti: iki tarafın da küçük olduğu bölgede oran kuralı işlemez.
+     * ⚠️ Fark KELEPÇELİ puanlardan hesaplanıyor (ham `?? 0`dan değil) ki oran ile band aynı
+     * sayıları görsün; 0 ile 1 arasındaki bir birimlik oynama iki kuralı ayrıştırmasın. */
+    const band = Math.max(0, liveNumberFor(worldId, 'combat', 'attackScoreBand', 50));
     return {
-      blocked: ratio >= limit,
+      blocked: ratio >= limit && Math.abs(a - d) > band,
       limit,
+      band,
       ratio,
       attackerScore: frozen.get(attackerId) ?? 0,
       defenderScore: frozen.get(defenderId) ?? 0,
