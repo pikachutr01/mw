@@ -2127,8 +2127,30 @@ describe('10 kat kuralı (saldırı puan farkı)', () => {
     await expect(attack()).resolves.toBeTruthy();
   });
 
-  /** ⭐ Kullanıcının ikinci örneği: kural AŞAĞI doğru da işliyor. */
-  it('güçlü oyuncu zayıfa da saldıramaz (20 → 2)', async () => {
+  /**
+   * ⭐ Kullanıcının ikinci örneği: kural AŞAĞI doğru da işliyor.
+   *
+   * ⚠️⚠️ **BU ÖRNEK 2026-08-14'te KÜÇÜK HESAP BANDINA TAKILDI.** 20 → 2'de fark 18 ve band 50,
+   * yani varsayılan ayarlarla bu saldırı artık SERBEST. Kuralın kendisi değişmedi; band bilinçli
+   * bir muafiyet ve tam da bu bölgeyi (iki tarafın da küçük olduğu bölge) açmak için var —
+   * gerekçesi `mission.service.scoreGap`te. Aşağı yönün hâlâ işlediğini ölçmek için bandın
+   * dışına çıkmak gerekiyor.
+   */
+  it('güçlü oyuncu zayıfa da saldıramaz (aşağı yön) — band DIŞINDA', async () => {
+    await freezeScore(attacker, 700);
+    await freezeScore(defender, 70, 2);          // oran 10, fark 630 > band
+    await expectBlocked();
+  });
+
+  it('⭐ küçük puan bölgesinde aşağı yön SERBEST (20 → 2, fark 18 ≤ band)', async () => {
+    await freezeScore(attacker, 20);
+    await freezeScore(defender, 2, 2);
+    await expect(attack()).resolves.toBeTruthy();
+  });
+
+  /** Band kapatılınca kullanıcının 2026-08-06'daki özgün örneği AYNEN geri geliyor. */
+  it('band 0 iken 20 → 2 yine ENGELLİ (eski davranış geri alınabilir)', async () => {
+    setLiveSettings({ combat: { attackScoreBand: 0 } });
     await freezeScore(attacker, 20);
     await freezeScore(defender, 2, 2);
     await expectBlocked();
@@ -2141,16 +2163,42 @@ describe('10 kat kuralı (saldırı puan farkı)', () => {
   });
 
   /**
-   * ⭐ SIFIR İSTİSNASI — kullanıcının açık örneği: *"0 puanlı bir oyuncu da 10 puanlı bir
-   * oyuncuya saldıramasın, 9 puanlı birine saldırabilsin."* Kod 0'ı 1'e kelepçeliyor.
+   * ⭐ SIFIR İSTİSNASI — kullanıcının açık örneği (2026-08-06): *"0 puanlı bir oyuncu da
+   * 10 puanlı bir oyuncuya saldıramasın, 9 puanlı birine saldırabilsin."* Kod 0'ı 1'e
+   * kelepçeliyor ve kelepçe **duruyor**.
+   *
+   * ⚠️⚠️ **Ama örneğin kendisi 2026-08-14'te bandın içinde kaldı** (fark 9 ≤ 50) ve o saldırı
+   * artık serbest. Bu, bandın kaçınılmaz sonucu: 0-50 puan aralığını açmak, o aralıktaki HER
+   * çifti açmak demek. Kelepçenin hâlâ çalıştığını ölçmek için band kapatılıyor.
    */
-  it('0 puan → 10 puana ENGELLİ, 9 puana serbest', async () => {
+  it('band 0 iken sıfır kelepçesi: 0 → 10 ENGELLİ, 0 → 9 serbest', async () => {
+    setLiveSettings({ combat: { attackScoreBand: 0 } });
     await freezeScore(attacker, 0);
     await freezeScore(defender, 10, 2);
     await expectBlocked();
 
     await freezeScore(defender, 9, 2);
     await expect(attack()).resolves.toBeTruthy();
+  });
+
+  /**
+   * ⭐⭐⭐ **BANDIN VAROLUŞ SEBEBİ** (kullanıcı, 2026-08-14).
+   *
+   * Kelepçe (0 → 1) yüzünden 10 puanı geçmiş HİÇBİR oyuncu terk edilmiş 0 puanlı şehirlere
+   * saldıramıyordu — oysa 1 Cüce + 1 Yük Arabası üretmenin kapısı tek başına ~17 puan. Yani
+   * *"puanını düşük tutup yağmayla geçinme"* stratejisi matematiksel olarak imkânsızdı ve
+   * 0 puanlı şehirler sonsuza kadar dokunulmazdı. Bu iki test o çıkmazın kapandığının kanıtı.
+   */
+  it('⭐⭐ arabalı akıncı (24 puan) 0 puanlı terk edilmiş şehre SALDIRABİLİR', async () => {
+    await freezeScore(attacker, 24);
+    await freezeScore(defender, 0, 2);
+    await expect(attack()).resolves.toBeTruthy();
+  });
+
+  it('⭐⭐ 500 puanlı oyuncu 0 puanlı şehre saldıramaz (band onu kapsamıyor)', async () => {
+    await freezeScore(attacker, 500);
+    await freezeScore(defender, 0, 2);
+    await expectBlocked();
   });
 
   it('iki taraf da 0 puanken serbest', async () => {
@@ -2179,7 +2227,18 @@ describe('10 kat kuralı (saldırı puan farkı)', () => {
    * acemi koruması altında ve koruma bitmeden bir sonraki görüntüde listeye giriyor.
    */
   it('sıralama satırı olmayan oyuncu 0 puan sayılır', async () => {
+    setLiveSettings({ combat: { attackScoreBand: 0 } });   // band olmasa fark 9 ile muaf kalırdı
     await freezeScore(defender, 10, 2);        // saldıranın satırı YOK
+    await expectBlocked();
+  });
+
+  /** Band sınırı keskin: fark tam bandda serbest, bir fazlasında engelli. */
+  it('band sınırı: fark 50 serbest, 51 engelli', async () => {
+    await freezeScore(attacker, 51);
+    await freezeScore(defender, 1, 2);         // fark 50, oran 51
+    await expect(attack()).resolves.toBeTruthy();
+
+    await freezeScore(attacker, 52);           // fark 51
     await expectBlocked();
   });
 

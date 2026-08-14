@@ -66,7 +66,7 @@ describe('taban fiyat ve oran', () => {
     const cfg = mergeCatalogConfig({ buildingTuning: { 'academy:gold': 500, 'academy:food': 400 } });
     // sv 1 = taban (Akademi oyuna sıfırdan başlar, ilk ödenen seviye 1).
     expect(buildingCost('academy', 1, cfg)).toEqual({ gold: 500, food: 400 });
-    expect(buildingCost('academy', 1)).toEqual({ gold: 1400, food: 1000 });
+    expect(buildingCost('academy', 1)).toEqual({ gold: 900, food: 700 });
   });
 
   it('teknik taban fiyatı ve oranı yazılabiliyor', () => {

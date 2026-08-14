@@ -90,8 +90,16 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * ⭐ Bu, hash'in **denge dışı** bir alandan kaydığı ilk örnek: `maxLevel` savaş matematiğine
  * hiç girmiyor ama `BUILDINGS` tablosunun parçası olduğu için özete dâhil — ve dâhil olması
  * doğru, çünkü aynı savaşın iki farklı tavanla üretilmiş orduları kıyaslanamaz.
+ *
+ * ⚠️⚠️ **2026-08-14, BEŞİNCİ değişiklik: `000c68dc` → `d963193a`.** Sebep **Akademi tabanı
+ * 1400/1000 → 900/700** (Kale ile eşitlendi; *"kapı ucuz, lüks pahalı"* ilkesi, gerekçe
+ * `buildings.ts`te). Dördüncü değişiklik gibi bu da savaş matematiğine girmiyor ama fiyat
+ * tablosunun parçası — ve özetin işi tam olarak *"bu savaş hangi katalogla çözüldü"* sorusunu
+ * cevaplamak; fiyat değişince cevap da değişmeli.
+ * ⚠️ Başlangıç kesesi (1000 → 5000) özete **girmiyor**: `STARTING_RESOURCES` katalog
+ * yapılandırmasının değil, dünya kurulumunun parçası.
  */
-const DEFAULT_HASH = '000c68dc';
+const DEFAULT_HASH = 'd963193a';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -109,7 +117,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('ce32cb94');
+    expect(catalogHash(cfg)).toBe('9c6255c6');
   });
 
   /**

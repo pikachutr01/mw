@@ -51,8 +51,12 @@ const BUILDING_GOLDEN: Record<string, readonly Row[]> = {
     [10, 879, 1172, 791], [20, 72255, 96340, 52187]],
   mine: [[1, 4, 3, 4], [2, 12, 9, 10], [5, 91, 69, 70],
     [10, 1172, 879, 791], [20, 96340, 72255, 52187]],
-  academy: [[1, 1400, 1000, 919], [2, 2520, 1800, 1606], [5, 14697, 10498, 8576],
-    [10, 277703, 198359, 139907], [20, 99152948, 70823535, 37233116]],
+  /**
+   * ⚠️ **2026-08-14: taban 1400/1000 → 900/700** (Kale ile eşitlendi, gerekçe `buildings.ts`).
+   * Süreler de düştü çünkü süre maliyetten türüyor — iki sütun birlikte kaydı.
+   */
+  academy: [[1, 900, 700, 625], [2, 1620, 1260, 1093], [5, 9448, 7348, 5835],
+    [10, 178523, 138852, 95182], [20, 63741181, 49576474, 25330438]],
   /**
    * ⚠️ Süreler diğerlerinin **onda biri** — Mimar Okulu `buildingTuning.architect_school:timeFactor
    * = 0,1` taşıyor ve o sayı `k.java:1396-1403`teki `×10`'un karşılığı: orijinalde Mimar Okulu,

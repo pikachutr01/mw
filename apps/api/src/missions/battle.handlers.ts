@@ -147,6 +147,14 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       cityResources,
       carryCapacity: result.attackerCarryCapacity,
       defendedBefore,
+      /**
+       * ⭐ Puan farkı çarpanının girdisi — sefer GÖNDERİLİRKEN damgalanmış donmuş puanlar
+       * (`mission.service.sendAttack`). Burada `rankings`e yeniden bakmıyoruz: arada bir
+       * anlık görüntü geçmiş olabilir ve oyuncunun yollarken gördüğü oranla aldığı ganimet
+       * ayrışırdı. Alan yoksa (eski görev ya da kural kapalı) motor çarpanı 1 sayar.
+       */
+      attackerScore: payloadScore(ctx.mission.payload, 'attackerScore'),
+      defenderScore: payloadScore(ctx.mission.payload, 'defenderScore'),
       seed: `mission:${ctx.mission.id}`,
     }, ctx.engine?.loot
       ? { ...DEFAULT_LOOT_CONFIG, ...ctx.engine.loot }
@@ -1217,6 +1225,19 @@ async function writeMessage(ctx: HandlerContext, o: {
   await ctx.emit('message:written', {
     playerId: o.playerId, kind: o.kind, side: o.side, route: route ?? null,
   });
+}
+
+/**
+ * Görev yüküne damgalanmış donmuş puanı okur (ganimet fark çarpanı için).
+ *
+ * ⚠️ **Yok / sayı değil → `undefined`, `0` DEĞİL.** Fark ediyor: `0` motorda geçerli bir puan
+ * (kelepçeyle 1 olur) ve "damgalanmamış görev"i sıfır puanlı bir savunan gibi işlerdi — eski
+ * seferler ve kural kapalıyken ganimet sessizce yarılanırdı. `undefined` ise çarpanı 1 yapar.
+ */
+function payloadScore(payload: Record<string, unknown>, key: string): number | undefined {
+  const raw = payload[key];
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+  return raw;
 }
 
 function readLootPayload(payload: Record<string, unknown>): { gold: number; food: number } {

@@ -81,6 +81,16 @@ const LOOT_MAP: Readonly<Record<string, keyof LootConfig>> = {
   'loot.minRate': 'minRate',
   'loot.jitterMin': 'jitterMin',
   'loot.jitterMax': 'jitterMax',
+  'loot.gapMinRate': 'gapMinRate',
+  /**
+   * ⭐⭐ İki `combat.*` anahtarı **ganimet** yapılandırmasına akıyor (2026-08-14) — sapma değil,
+   * tek kaynak kuralının gereği. Küçük hesap bandı ve 10 kat sınırı iki yerde birden
+   * tüketiliyor: saldırı kapısı (`mission.service.scoreGap`) ve ganimet fark çarpanı
+   * (`engine/loot.gapFactor`). Ayrı `loot.*` anahtarları açsaydık operatör birini değiştirip
+   * diğerini unutabilir, kapının izin verdiği saldırı bambaşka bir oranla ödüllendirilirdi.
+   */
+  'combat.attackScoreBand': 'gapBand',
+  'combat.attackScoreRatio': 'gapRatioLimit',
 };
 
 /** Panelde görünen ama motora bilerek BAĞLANMAYAN yapılar — belgeye değil koda yazılıyor. */
@@ -110,9 +120,15 @@ export const NOT_TUNABLE = [
  * test yine kırmızı yanar. Muafiyet ancak buraya bilerek bir satır yazılınca doğar.
  */
 export const NOT_ENGINE_BOUND: readonly string[] = [
-  // ⛔ `combat.attackScoreRatio` — 10 kat kuralı (§13.5.4b). `sendAttack` ön koşulu:
-  //    oran aşılırsa saldırı görevi hiç yazılmaz. Motorun bundan haberi olmaması DOĞRU.
-  'combat.attackScoreRatio',
+  /*
+   * ⭐ **LİSTE 2026-08-14'te BOŞALDI.** `combat.attackScoreRatio` buradaydı ve gerekçesi
+   * doğruydu: 10 kat kuralı `sendAttack` ön koşuludur, oran aşılırsa görev hiç yazılmaz.
+   * Ama artık **ikinci bir tüketicisi** var — ganimet fark çarpanı aynı sınırı motorda
+   * kullanıyor (`LOOT_MAP`) — yani anahtar hem ön koşul hem motor ayarı. Muafiyet kalktı.
+   *
+   * ⚠️ Dizi boş kalsın diye silinmedi: mekanizma duruyor ve bir sonraki "panelde var, motorda
+   * yok" ayarı geldiğinde tek satırla ve gerekçesiyle buraya yazılacak.
+   */
 ];
 
 function pick(values: Values, key: string): number | boolean | undefined {

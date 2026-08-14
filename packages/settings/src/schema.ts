@@ -544,21 +544,23 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'economy.startingGold',
     label: 'Başlangıç altını',
-    type: 'int', default: 1000, min: 0, max: 100_000_000, tag: 'design', unit: 'altın',
+    type: 'int', default: 5000, min: 0, max: 100_000_000, tag: 'design', unit: 'altın',
     description: 'Yeni oyuncunun başkentine konan altın. Büyütürsen oyuncu ilk dakikalarda '
       + 'daha rahat başlar; küçültürsen ilk saatler beklemeyle geçer.',
-    note: '⚠️⚠️ 1000\'in ALTINA İNME. Kale 1\'in bütçesi 10 seviye ve Çiftlik/Maden zaten 1\'den '
-      + 'başlıyor → oyuncunun Kale 2\'ye kadar yapabileceği tek şey Çiftlik 5 + Maden 5 (630 '
-      + 'kaynak); gerisi kapalı (Akademi Kale 2 ister, Baraka\'ya bütçe yok, asker Demircilik '
-      + 'ister). Kese Kale 2\'yi (1.600) karşılamazsa oyunun HİÇBİR ŞEY sunmadığı bir ölü bekleme '
-      + 'doğar: 500/500 → 10,9 saat · 750/750 → 6,5 saat · 1000/1000 → 2,0 saat. ⚠️ Yalnız BAŞKENT '
-      + 'alır; kurulan koloni sıfırla doğar ve o sayı ayarlanabilir DEĞİL — koloniye kese vermek '
+    note: '⚠️⚠️ 1000\'in ALTINA İNME. Kese Kale 2\'yi (1.600) karşılamazsa oyunun HİÇBİR ŞEY '
+      + 'sunmadığı bir ölü bekleme doğar: 500/500 → 10,9 saat · 750/750 → 6,5 saat · '
+      + '1000/1000 → 2,0 saat · 5000/5000 → 0 saat. ⭐ Büyütmek çiftlik/maden spam\'i DOĞURMAZ: '
+      + 'Kale 1\'in bütçesi 10 seviye ve Baraka 1 + Çiftlik 1 + Maden 1 zaten 3\'ünü doldurduğu '
+      + 'için oyuncu 7 seviyeden fazlasını cebinde ne olursa olsun satın alamaz — sınır para '
+      + 'değil, KALE BÜTÇESİ. 2026-08-14\'te 1000 → 5000 tam bu yüzden yapıldı: ilk askere kadar '
+      + 'geçen ≈2 günlük ölü bekleme oyuncuyu oyundan koparıyordu. ⚠️ Yalnız BAŞKENT alır; '
+      + 'kurulan koloni sıfırla doğar ve o sayı ayarlanabilir DEĞİL — koloniye kese vermek '
       + '«şehir kur → keseyi al → terk et» döngüsüyle sınırsız kaynak basmayı açardı.',
   },
   {
     key: 'economy.startingFood',
     label: 'Başlangıç yemeği',
-    type: 'int', default: 1000, min: 0, max: 100_000_000, tag: 'design', unit: 'yemek',
+    type: 'int', default: 5000, min: 0, max: 100_000_000, tag: 'design', unit: 'yemek',
     description: 'Yeni oyuncunun başkentine konan yemek. Altınla birlikte düşün: ilk '
       + 'yükseltmelerin çoğu ikisini birden istiyor.',
   },
@@ -684,6 +686,25 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + '`players.score` değil `rankings.score` (dondurulmuş) üzerinden okunuyor: anlık puan '
       + 'her harcamada oynadığı için oyuncu kime saldırabileceğini ancak deneyerek öğrenirdi. '
       + '0 puan 1 gibi işlenir (0 → 9 serbest, 0 → 10 engelli).',
+  },
+  {
+    /**
+     * ⭐⭐ KÜÇÜK HESAP BANDI (kullanıcı, 2026-08-14) — TEK sabit, İKİ tüketici.
+     *
+     * ⚠️ `COMBAT_MAP`'e girer (yukarıdaki oran sınırının aksine): ganimet fark çarpanı bunu
+     * MOTORDA kullanıyor. Saldırı kapısı da aynı anahtarı okuyor → tek kaynak, iki tüketici.
+     */
+    key: 'combat.attackScoreBand',
+    label: 'Küçük hesap bandı',
+    type: 'int', default: 50, min: 0, max: 100_000, tag: 'design', unit: 'puan',
+    description: 'İki oyuncunun puan FARKI bu değerin altındaysa 10 kat kuralı engellemez ve '
+      + 'ganimet fark çarpanı da uygulanmaz. 0 yazmak bandı kapatır (eski davranış).',
+    note: '⭐ Neden gerekli: 10 kat kuralı 0 puanı 1 gibi işlediği için, 10 puanı geçmiş HİÇBİR '
+      + 'oyuncu terk edilmiş 0 puanlı şehirlere saldıramıyordu — üstelik 1 Cüce + 1 Yük Arabası '
+      + 'üretmenin bedeli tek başına 24 puan. Yani «puanını düşük tutup yağmayla geçinme» '
+      + 'stratejisi matematiksel olarak imkânsızdı ve 0 puanlı şehirler dokunulmazdı. Band, '
+      + 'küçük hesapların birbirine ulaşmasını açar; 500 puanlık bir oyuncu yine ulaşamaz. '
+      + '50 puan ≈ 50.000 harcanmış kaynak: araba zinciri + gerçek bir akın ordusu.',
   },
   {
     key: 'combat.repairMin',
@@ -904,13 +925,36 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     key: 'loot.floorThreshold',
     label: 'Yoksulluk eşiği',
     type: 'int', default: 5_000, min: 0, max: 10_000_000, tag: 'design', unit: 'kaynak',
-    description: 'Yağma sonrası savunanda en az bu kadar kaynak kalır.',
+    description: 'Havuzu bu miktarın altında olan kaynakta yağma oranı artık düşmez, «taban '
+      + 'oran»da sabitlenir. Zenginlik eşiğiyle birlikte oranın inişini çizen ikinci uçtur.',
+    note: '⚠️ Bu açıklama 2026-08-14\'te DÜZELTİLDİ. Eskiden «yağma sonrası savunanda en az bu '
+      + 'kadar kaynak kalır» yazıyordu ve YANLIŞTI: kod bunu bir kaynak tabanı olarak değil, '
+      + 'fakirlik rampasının alt eşiği olarak kullanıyor (`engine/src/loot.ts` · `plunderRate`). '
+      + 'Savunanda ne kaldığını belirleyen ayrı bir sayı YOK — kalan, oranın kendisinden çıkar.',
   },
   {
     key: 'loot.minRate',
     label: 'Taban oran',
     type: 'number', default: 0.20, min: 0, max: 1, tag: 'design',
     description: 'Fakirlik indirimi uygulansa bile yağma oranı bunun altına inmez.',
+  },
+  {
+    /**
+     * ⭐⭐ GANİMET FARK ÇARPANI (kullanıcı, 2026-08-14) — **yalnız AŞAĞI vururken**.
+     * Band ve oran sınırı ayrı anahtar değil: `combat.attackScoreBand` ve
+     * `combat.attackScoreRatio` motora aynı eşleme üzerinden gidiyor (tek kaynak kuralı).
+     */
+    key: 'loot.gapMinRate',
+    label: 'Fark çarpanı tabanı',
+    type: 'number', default: 0.5, min: 0, max: 1, tag: 'design',
+    description: 'Kendinden ZAYIF birine saldırırken ganimet oranının çarpıldığı en küçük '
+      + 'değer. Puan oranı 1\'ken çarpan 1, 10 kat sınırındayken bu değer. 1 yazmak çarpanı '
+      + 'tamamen kapatır (eski davranış).',
+    note: '⭐⭐ Çarpan TEK YÖNLÜ: yalnız saldıran savunandan GÜÇLÜYKEN uygulanır. Yukarı vuran '
+      + 'oyuncu tam oranı alır — çift yönlü olsaydı «puanını düşük tutup zenginleri vurma» '
+      + 'stratejisi ölürdü, ki band tam da onu açmak için var. Küçük hesap bandı içindeki '
+      + 'çiftlerde de çarpan 1\'dir: iki fakiri birbirine karşı ayrıca cezalandırmanın anlamı '
+      + 'yok. Tavan yine `loot.plunderRate` (%40), taban eğrisi yine `loot.minRate` (%20).',
   },
   {
     key: 'loot.jitterMin',

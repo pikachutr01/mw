@@ -77,7 +77,23 @@ export const BUILDINGS: readonly BuildingDef[] = [
    */
   b('farm', 'Çiftlik', 9, 12, 40, true, true),
   b('mine', 'Maden', 12, 9, 40, true, true),
-  b('academy', 'Akademi', 1400, 1000, 40, false, true),
+  /**
+   * ⭐⭐ **AKADEMİ KALE İLE EŞİTLENDİ: 1400/1000 → 900/700** (2026-08-14).
+   *
+   * Yukarıdaki *"kapı ucuz, lüks pahalı"* ilkesi Kale'yi büyük binaların en ucuzu yapıyor:
+   * tek başına hiçbir şey üretmez, yalnız tavan açar, ama o tavan olmadan hiçbir yatırım
+   * büyümez. **Akademi tam olarak aynı tanıma giriyor** — her teknik, dolayısıyla her savaşçı
+   * ve her savunma birimi oradan geçiyor — ama Kale'den PAHALI fiyatlanmıştı. Eşitlemek ilkeyi
+   * uyguluyor, değiştirmiyor.
+   *
+   * ⚠️ Ölçülen etki: Akademi 1→3 zinciri **14.496 → 9.664** kaynak. Erken oyunun asıl bütçe
+   * yakıcısı buydu — Çiftlik/Maden değil (Çiftlik 8 + Maden 8 topu topu 3.690 = 3 puan).
+   * Yük Arabası kapısı (Kale 2 → Akademi 3 → Baraka 3 → Haritacılık 1) 22 puandan ~17'ye iner.
+   *
+   * ⚠️ Hiçbir çapayı bozmuyor: ÇAPA 1 Mimar Okulu ↔ Teleport, ÇAPA 2 Çiftlik/Maden ↔ Kale.
+   * Akademi ikisinde de yok, o yüzden serbestçe oynatılabilen tek büyük bina.
+   */
+  b('academy', 'Akademi', 900, 700, 40, false, true),
   // ⭐ ÇAPA 1 (yukarıda) — kullanıcı hatırası, tüm ölçeği bu sayı belirliyor.
   b('architect_school', 'Mimar Okulu', 1000, 1000, 40, false, true),
   b('cave', 'Mağara', 900, 600, 40, false, true),
@@ -136,22 +152,31 @@ export const STARTING_BUILDINGS: Readonly<Record<string, number>> = {
  * Başlangıç kaynağı (§13.11.1a, kullanıcı kararı 2026-07-26).
  * YALNIZ başkent alır; kurulan koloni sıfırla doğar (kur-al-terk et sömürüsünü kapatır).
  *
- * ⚠️ **2026-08-10: 4000/4000 → 1000/1000.** Kullanıcı: *"ilk günde kârlı getiri sayılabilecek
- * kadar çiftlik maden kolayca yükseltilememeli."*
+ * ⚠️⚠️ **2026-08-14: 1000/1000 → 5000/5000** (oyuncu bildirimi: *"para erken bitiyor ve oyunda
+ * yapacak bir şey kalmıyor"*). 2026-08-10'da 4000→1000 indirilmişti; gerekçe *"ilk günde kârlı
+ * getiri sayılabilecek kadar çiftlik maden kolayca yükseltilememeli"* idi.
  *
- * ⚠️⚠️ **ALT SINIRI BİR YAPI KURALI KOYUYOR, TERCİH DEĞİL — 1000'in altına inilmemeli.**
- * Kale 1'in bütçesi 10 seviye ve Çiftlik/Maden zaten 1'den başlıyor → oyuncunun Kale 2'ye kadar
- * yapabileceği TEK şey Çiftlik 5 + Maden 5 (kümülatif **630**). Ondan sonrası kapalı: Akademi
- * Kale 2 ister, Baraka'ya bütçe yok, savaşçı üretimi Akademi→Demircilik ister. Yani kese Kale 2'yi
- * (1.600) karşılamıyorsa oyunun **hiçbir şey sunmadığı** bir ölü bekleme doğuyor. Ölçüldü:
+ * ⭐ **O gerekçe artık kesede DEĞİL, iki başka yerde karşılanıyor — kese ÜÇÜNCÜ ve gereksiz
+ * frendi.** Kalan iki fren:
+ *   1. Çiftlik/Maden tabanının ×3 olması (aynı kese eskiden 13 seviye satın alıyordu),
+ *   2. ⭐ asıl olan: **Kale bütçesi parayı değil SEVİYEYİ sınırlıyor.** Kale 1'in bütçesi
+ *      10 seviye ve başlangıçta Baraka 1 + Çiftlik 1 + Maden 1 = **3** dolu → oyuncu Kale 2'ye
+ *      kadar 7 seviyeden fazlasını **cebinde ne olursa olsun** satın alamaz.
+ * Yani kesenin tek gerçek etkisi ilk askere kadarki ölü beklemeydi ve o bekleme ölçüldü:
+ * **≈2 gün.** İlk Cüce'nin yolu (Kale 2 → Akademi 1 → Demircilik 1 → 1 Cüce) ≈ 5.200 altın +
+ * 4.800 yemek; yeni kese bunun çoğunu karşılıyor, gerisini üretim tamamlıyor.
+ *
+ * ⚠️ **ALT SINIRI BİR YAPI KURALI KOYUYOR, TERCİH DEĞİL — 1000'in altına inilmemeli.** Kese
+ * Kale 2'yi (1.600) karşılamıyorsa oyunun **hiçbir şey sunmadığı** bir ölü bekleme doğuyor:
  *
  *     kese  500/500 → 10,9 saat ölü bekleme
  *     kese  750/750 →  6,5 saat
- *     kese 1000/1000 →  2,0 saat   ← seçilen
- *     kese 1500/1500 →  0 saat
+ *     kese 1000/1000 →  2,0 saat
+ *     kese 5000/5000 →  0 saat   ← seçilen
  *
- * Hedef zaten Çiftlik/Maden tabanının ×3 olmasıyla sağlanıyor: aynı kese eskiden 13 seviye satın
- * alırken şimdi 5 satın alıyor. `catalog-settings.test.ts` bu ölü durağı bekçi olarak tutuyor.
+ * ⚠️ **Eski notta «Çiftlik 5 + Maden 5 = tam 10» yazıyordu; BAYATTI.** Baraka 2026-08-12'de
+ * seviye 1'e döndü ve bütçe tüketiyor → Kale 1'de Çiftlik+Maden birlikte en fazla **9** seviye
+ * (ör. Çiftlik 5 + Maden 4). `catalog-settings.test.ts` bu bağı bekçi olarak tutuyor.
  */
-export const STARTING_RESOURCES = { gold: 1000, food: 1000 } as const;
+export const STARTING_RESOURCES = { gold: 5000, food: 5000 } as const;
 export const COLONY_STARTING_RESOURCES = { gold: 0, food: 0 } as const;
