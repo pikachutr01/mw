@@ -13,9 +13,10 @@ export const CATALOG_VERSION = '0.1.0';
  * değiştirilebildiğinden yalnız derlenmiş veriyi özetlemek yetmiyordu: aynı katalogla ama
  * farklı `economyCostRate` ile çözülmüş iki savaş künyesinde birbirinin aynısı görünürdü.
  *
- * ⚠️ `cfg` verilmediğinde özet **eskisiyle birebir aynı** kalır — varsayılan config
- * `JSON.stringify`da aynı diziyi üretiyor ve testle sabitlendi. Eski savaş kayıtlarının
- * hash'i geçerliliğini korusun diye bu şart.
+ * ⚠️ **Eski savaş kayıtlarının hash'i "geçersiz" olmaz, sadece FARKLI olur** — ve olması
+ * gerekir: o savaşlar gerçekten başka bir katalogla çözüldü. Özet hiçbir yerde yeniden
+ * hesaplanıp karşılaştırılmıyor (`battle.handlers` yazıyor, `battle.controller` okuyup
+ * gösteriyor), yani denge değişince kayması bir kırılma değil, işin kendisi.
  *
  * FNV-1a 32-bit: kriptografik değil, sadece içerik parmak izi. Bağımlılık istemiyoruz (motor saf kalsın).
  */
@@ -50,12 +51,28 @@ function diffFromDefault(cfg: CatalogConfig): Record<string, Record<string, unkn
 }
 
 export function catalogHash(cfg: CatalogConfig = DEFAULT_CATALOG_CONFIG): string {
-  const base = { v: CATALOG_VERSION, u: UNITS, t: TECHS, b: BUILDINGS };
   /**
-   * ⚠️ Varsayılan config'te yük AYNEN eski hâlinde bırakılıyor — `c` alanı eklenseydi
-   * varsayılan hash de değişir ve tüm eski `battles.catalog_hash` değerleri "başka bir
-   * katalog" gibi görünürdü. `hash.test.ts` bunu literal değerle kilitliyor.
+   * ⭐⭐ **`d` — BU YAPININ VARSAYILANLARI** (2026-08-14 düzeltmesi).
+   *
+   * ⚠️⚠️ **Buradaki boşluk gerçek bir kusurdu ve sessizdi.** Özet, tablolara (`u`/`t`/`b`) ve
+   * *varsayılandan SAPMAYA* (`c`) bakıyordu; **varsayılanın kendisine bakan hiçbir şey yoktu.**
+   * Sonuç: `economy.techCostMultiplier` 1 → 0,75 yapıldığında (2026-08-14) her tekniğin fiyatı
+   * %25 düştü ama `diffFromDefault(varsayılan)` yine `undefined` döndüğü için özet KIPIRDAMADI.
+   * Yani o sürümden önce ve sonra çözülmüş iki savaş künyesinde aynı katalogla çözülmüş
+   * görünüyordu — özetin var olma sebebinin tam tersi.
+   *
+   * ⚠️ Kusur neden görünmedi: `BUILDINGS`/`TECHS`/`UNITS` tabloları özette olduğu için taban
+   * fiyat değişiklikleri (ör. aynı turdaki Akademi 1400/1000 → 900/700) hash'i **kaydırıyordu**.
+   * Yani bazı denge değişiklikleri yakalanıyor, `CatalogConfig`te yaşayanlar kaçıyordu. Yarım
+   * çalışan bir bekçi, çalışmayan bir bekçiden daha yanıltıcı.
+   *
+   * ⭐ `c` (dünya sapması) AYNEN duruyor ve şema büyümesine bağışıklık orada korunuyor: yeni bir
+   * anahtar eklendiğinde **override'ı olan dünyalar** ayrıca kaymıyor. `d` ile birlikte artık
+   * yeni anahtar herkesin özetini birlikte kaydırıyor — asimetri yok, ve bu doğru: katalog
+   * yapısı gerçekten değişti. Bedeli sürüm başına bir kez literal güncellemek, ve `hash.test.ts`
+   * o güncellemeyi zorunlu kılıyor.
    */
+  const base = { v: CATALOG_VERSION, u: UNITS, t: TECHS, b: BUILDINGS, d: DEFAULT_CATALOG_CONFIG };
   const diff = diffFromDefault(cfg);
   const payload = diff === undefined
     ? JSON.stringify(base)

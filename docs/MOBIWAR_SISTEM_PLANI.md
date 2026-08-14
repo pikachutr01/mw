@@ -2234,13 +2234,25 @@ Akademi indirimi kapının **bina** yarısını ucuzlattı; teknikler öbür yar
 ⚠️ Bina tarafındaki karşılığı (`buildingCostMultiplier`) bilerek 1'de bırakıldı: oradaki tempo
 iki çapaya bağlı ve global bir çarpan ikisini birden kaydırırdı.
 
-⚠️⚠️ **`catalogHash` bu değişikliği GÖRMÜYOR** ve bu bir kusur: özet `UNITS`/`TECHS`/`BUILDINGS`
-tablolarını ve *varsayılandan sapmayı* hash'liyor (`hash.ts:52-62`), yani **varsayılanın
-kendisi** değişince özet kıpırdamıyor. Akademi tabanı `BUILDINGS`te olduğu için özeti kaydırdı,
-`economy.techCostMultiplier` ise `CatalogConfig`te olduğu için kaydırmadı. Sonuç: bu sürümden
-önce ve sonra çözülmüş iki savaş aynı `catalog_hash`i taşıyor. Ayrı iş — düzeltmek tüm eski
-`battles.catalog_hash` değerlerini "başka bir katalog" hâline getirir, o yüzden bilinçli bir
-karar gerektiriyor.
+##### ⚠️⚠️ Bu değişiklik `catalogHash`teki bir kusuru ORTAYA ÇIKARDI — ve düzeltildi
+
+Özet, tablolara (`UNITS`/`TECHS`/`BUILDINGS`) ve *varsayılandan SAPMAYA* bakıyordu;
+**varsayılanın kendisine bakan hiçbir şey yoktu.** `techCostMultiplier` 1 → 0,75 yapıldığında
+her tekniğin fiyatı %25 düştü ama `diffFromDefault(varsayılan)` yine `undefined` döndüğü için
+özet **kıpırdamadı**. Aynı turdaki Akademi değişikliği ise `BUILDINGS` tablosunda olduğu için
+yakalandı — yani özet denge değişikliklerinin bir kısmını görüyor, bir kısmını görmüyordu.
+Yarım çalışan bir bekçi, çalışmayan bir bekçiden daha yanıltıcı.
+
+**Düzeltme:** yüke `d` alanı eklendi — bu yapının varsayılan `CatalogConfig`i. Artık
+`CatalogConfig`teki herhangi bir varsayılan (çarpanlar, oranlar, süre katsayıları, başlangıç
+kesesi) değişince özet kayıyor. Dünya sapması (`c`) aynen duruyor, yani şema büyümesine karşı
+bağışıklık korundu: yeni bir anahtar eklendiğinde **override'lı dünyalar ayrıca** kaymıyor.
+Özet altıncı kez kaydı: `d963193a` → `27c3ff6e`.
+
+⚠️ Eski `battles.catalog_hash` değerleri "geçersiz" olmuyor, sadece farklı — ve olması
+gerekiyor: o savaşlar gerçekten başka bir katalogla çözüldü. Özet hiçbir yerde yeniden
+hesaplanıp karşılaştırılmıyor (yazılıyor ve künyede gösteriliyor), yani kayması bir kırılma
+değil işin kendisi.
 
 #### 📊 Üç değişikliğin birleşik sonucu
 
