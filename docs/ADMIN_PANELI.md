@@ -1402,6 +1402,45 @@ Birebir aynı. `/healthz` katalog özeti de değişmedi: **`2ec624e6`**.
 çağrı yerleri (`city.service.ts` şehir terk etme, admin aksiyonları) mevcut
 `catalogFor?: (worldId) => CatalogConfig` kalıbını kullanıyor.
 
+> ⚠️⚠️ **2026-08-14 — bu düzeltme YARIM KALMIŞ, tamamlandı.** Yukarıdaki paragraf «kapandı»
+> diyor ama düzeltme **savaş yoluna hiç ulaşmamıştı**: `debitLosses` `cfg` parametresi
+> almıyordu ve `lossValue(lost)` sessizce `DEFAULT_CATALOG_CONFIG`e düşüyordu. Yani tarif edilen
+> arıza (*"iki katı öde, tek katı kaybet"*) savaş kayıplarında **aynen yaşamaya devam
+> ediyordu**; aynısı askerî ünvan eşiği için de geçerliydi (`applyMerit`in `catalog`
+> parametresi vardı ama hiç doldurulmuyordu).
+>
+> Ders tek cümle: **parametreyi eklemek yetmiyor, TAŞIMAK gerekiyor.** Zincir artık uçtan uca:
+> `worker.ts` → `engineFor().catalog` → `HandlerContext.engine.catalog` → `debitLosses` /
+> `applyMerit`. (`worker.ts`teki `CityService` katalogu 2026-08-10'da tam bu sebeple
+> bağlanmıştı — aynı tuzağın ikinci kurbanıydık.)
+
+### ⭐⭐ Fiyat ayarı değişince puanlar YENİDEN FİYATLANIR (2026-08-14)
+
+Kullanıcının sorusu: *"tekniklerin taban fiyatlarını aşağı çektim; önceden pahalıyken alan
+oyuncu fazla puanlı kalıyor mu?"* Evet — ve asıl kusur daha derindi: **alacak ödeme anındaki,
+borç bugünkü fiyattan** işleniyordu (`creditSpend` ↔ `debitLosses`).
+
+Artık `PUT settings/:worldId` ve `POST settings/:worldId/reset` fiyatı etkileyen bir anahtar
+değiştiğinde dünyanın tamamını yeniden fiyatlıyor: oyuncunun **hâlâ sahip olduğu** varlıkların
+değeri eski fiyattan yeni fiyata taşınıyor, tüketilmiş şeylerin (ölen ordu, iptal edilen
+sipariş) geçmişi olduğu gibi kalıyor. Yanıt ve `audit_log` satırı `repriced` (kaç oyuncunun
+tabanı oynadı) taşıyor — sessiz bir toplu puan değişimi, sonradan *"benim puanım neden düştü"*
+biletlerini cevapsız bırakırdı.
+
+- **Tetikleyici** `affectsPrices()` (`scoring/reprice.ts`) ve elle tutulan `PRICE_KEYS` listesi
+  bir **diferansiyel testle** kilitli: şemadaki her anahtar tek tek oynatılıp bütün katalog
+  fiyatları karşılaştırılıyor. Yeni bir maliyet anahtarı listeye eklenmeden CI kırılır.
+- **Kapsam dışı, bilerek:** kuyruk (`queues.spent_gold/spent_food` zaten tarihsel maliyeti
+  taşıyor ve iade aynı sayıyı düşüyor → orada simetri var) ve kahraman diriltme (kahraman
+  `holdingsValue`da yok, hiç `debitLosses` edilmiyor → asimetri de yok).
+- **Bilinen sınır:** `settings.update()`in yayını ile geçişin bitmesi arasında çözülen tek bir
+  savaş karışık fiyat kullanır. Sıfırlamak isteyen operatör değişikliği **bakım modunda**
+  yapmalı — bakımda hiçbir görev koşmuyor, yani hiçbir savaş çözülmüyor.
+- ⚠️ Yan bulgu: `holdingsValue` **iki ordu deposunu hiç okumuyordu** (`cave_units`,
+  `mission_units`). Mağara boşluğu canlıda bir hataydı: «puanı yeniden hesapla» düğmesi
+  mağaradaki ordunun değerini siliyordu. Sefer boşluğu ise sömürüye açıktı — fiyat indirimini
+  duyan oyuncu ordusunu uzun bir sefere yollayıp yeniden fiyatlamayı atlatabilirdi.
+
 ### Adım 2: varlık başına ince ayar tesisatı
 
 `CatalogConfig`e iki grup eklendi: `buildingTuning` ve `techTuning`. Anahtarlar

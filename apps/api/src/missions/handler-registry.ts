@@ -10,7 +10,7 @@
  */
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 import type { CombatConfig, DeepPartial, LootConfig } from '@mobilwar/engine';
-import type { MeritConfig } from '@mobilwar/catalog';
+import type { CatalogConfig, MeritConfig } from '@mobilwar/catalog';
 import type { MissionRow } from './mission.repository.ts';
 
 /** Handler'ın kullanacağı transaction tipi (drizzle'ın tx nesnesi). */
@@ -64,6 +64,20 @@ export interface HandlerContext {
      * (`combat.ts`in aynı uyarısı).
      */
     merit?: MeritConfig;
+    /**
+     * ⭐⭐ KATALOG (fiyat) CONFIG'İ — **puan ve ünvan hesabının girdisi** (2026-08-14).
+     *
+     * ⚠️ **Neden eklendi:** `debitLosses` ve `meritScore` ölen ordunun bedelini `unitCost` ile
+     * hesaplıyor ama bu alanı hiç almadıkları için `DEFAULT_CATALOG_CONFIG`e düşüyorlardı.
+     * Yani panelden `unitTuning.dwarf:gold` ya da `economy.unitCostMultiplier` değiştiren bir
+     * dünyada oyuncu **bir fiyattan ödüyor, başka bir fiyattan puan kaybediyordu** — ve ünvan
+     * eşikleri de o yanlış sayıdan geçiyordu. `lossValue` çarpanı görsün diye 2. nesil Tur 4'te
+     * `cfg` parametresi almıştı; düzeltme ÇAĞIRANA hiç ulaşmamıştı.
+     *
+     * ⚠️ Aynı zamanda yeniden fiyatlamanın (`score.service.ts`) ön şartı: o kanca tabanı
+     * BUGÜNKÜ fiyata taşıyor, borç tarafı da bugünkü fiyattan düşmezse simetri kurulmaz.
+     */
+    catalog?: CatalogConfig;
     /** `battles.settings_revision_id` — hangi ayar sürümüyle çözüldüğünün künyesi. */
     settingsRevisionId?: number | null;
   };

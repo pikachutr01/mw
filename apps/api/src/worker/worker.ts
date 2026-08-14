@@ -192,6 +192,12 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
         combat: opts.settings!.combat(worldId),
         loot: opts.settings!.loot(worldId),
         merit: opts.settings!.merit(worldId),
+        /**
+         * ⚠️ Bu satır olmadan savaş kaybının puan bedeli ve ünvan eşiği varsayılan katalog
+         * fiyatından hesaplanır — panelden fiyat değiştirilen dünyada ikisi de yanlış olur
+         * (2026-08-14; gerekçe `handler-registry.ts` · `engine.catalog`).
+         */
+        catalog: opts.settings!.catalog?.(worldId),
         settingsRevisionId: opts.settings!.revisionId(worldId),
       })
       : undefined,

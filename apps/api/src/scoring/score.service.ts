@@ -19,7 +19,7 @@
  * ⚠️ Taban asla negatife inmez: iade ve kayıp toplamı harcamayı geçemez, ama yuvarlama ya da
  * elle veri düzeltmesi bir gün geçirirse oyuncu eksi puanla görünmesin.
  */
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import {
   BUILDINGS_BY_ID, LEVEL_BASED, STARTING_BUILDINGS, TECHS_BY_ID, UNITS_BY_ID,
   buildingCost, defenseStructureCost, techCost, unitCost, type CatalogConfig,
@@ -121,11 +121,23 @@ export async function debitRefund(
   await addScoreBase(runner, worldId, playerId, -scoreValue(refund));
 }
 
-/** Savaş kaybı → ölen birimlerin bedeli kadar puan düşer. */
+/**
+ * Savaş kaybı → ölen birimlerin bedeli kadar puan düşer.
+ *
+ * ⚠️⚠️ **`cfg` GEÇMEK ZORUNLU** (2026-08-14'te düzeltildi). Bu fonksiyon uzun süre `cfg`
+ * almıyordu ve `lossValue(lost)` sessizce `DEFAULT_CATALOG_CONFIG`e düşüyordu — yani panelden
+ * bir fiyat değiştiren dünyada oyuncu **bir fiyattan ödüyor, başka bir fiyattan puan
+ * kaybediyordu**. `lossValue` çarpanı görsün diye 2. nesil Tur 4'te `cfg` parametresi almıştı
+ * ama düzeltme ÇAĞIRANA hiç ulaşmamıştı: parametreyi eklemek yetmiyor, taşımak gerekiyor.
+ *
+ * ⚠️ Yeniden fiyatlamanın (aşağıdaki başlık) ön şartı da bu: kanca tabanı BUGÜNKÜ fiyata
+ * taşıyor; borç tarafı bugünkü fiyattan düşmezse simetri kurulmaz.
+ */
 export async function debitLosses(
   runner: Runner, worldId: number, playerId: number, lost: Record<string, number>,
+  cfg?: CatalogConfig,
 ): Promise<void> {
-  await addScoreBase(runner, worldId, playerId, -lossValue(lost));
+  await addScoreBase(runner, worldId, playerId, -lossValue(lost, cfg));
 }
 
 /**
@@ -197,9 +209,143 @@ export function unitsValue(counts: Record<string, number>, cfg?: CatalogConfig):
 }
 
 /**
- * Bir oyuncunun sahip olduklarından puan tabanını yeniden kurar ve yazar.
- * @returns yazılan taban (kaynak birimi)
+ * ⭐ SAHİPLİK SATIRI — oyuncunun elindeki tek bir kalem.
+ *
+ * `n` alanının anlamı `kind`e bağlı: yapı/teknikte **SEVİYE**, savaşçıda **ADET**, savunmada
+ * ikisinden biri (Sur ve Büyü Kalkanı `count` sütununda seviye taşır, §13.11.1b).
  */
+type HoldingKind = 'building' | 'tech' | 'unit' | 'defense';
+
+interface HoldingRow { playerId: number; kind: HoldingKind; type: string; n: number }
+
+/**
+ * ⭐⭐ SAHİPLİK OKUMASININ **TEK** ÇEKİRDEĞİ (2026-08-14).
+ *
+ * `holdingsValue`, `applyHoldingsDelta` ve yeniden fiyatlama artık aynı satır kümesini okuyor.
+ * Ayrı ayrı yazılsalardı biri güncellenip diğeri unutulurdu — ⚠️ **nitekim tam bu olmuştu**:
+ * eski `holdingsValue` yalnız dört tabloya bakıyordu ve İKİ ordu deposunu hiç görmüyordu:
+ *
+ *   • `cave_units` — mağaradaki savaşçılar. Sonucu **canlıda bir hata**: yönetici panelindeki
+ *     «puanı yeniden hesapla» (`recomputeScoreBaseFromHoldings`) mağarasında 50.000 askeri olan
+ *     oyuncunun o askerlerin değerini **siliyordu**. Şehir devrinde de aynı yol koşuyor.
+ *   • `mission_units` — seferdeki ordu. Yeniden fiyatlamada bunu dışarıda bırakmak muhasebe
+ *     eksiği değil **sömürü** olurdu: fiyat indirimini duyan oyuncu ordusunu uzun bir sefere
+ *     yollayıp yeniden fiyatlamayı atlatır, dönüşte şişik puanla otururdu. Zamanlamayı oyuncu
+ *     kontrol ediyor.
+ *
+ * ⚠️ `m.status IN ('scheduled','running')` süzgeci **ZORUNLU**: `mission_units` satırları
+ * varışta silinmiyor, dönüş görevine taşınıyor (`mission.service.ts`) ve nihai temizliği
+ * CASCADE yapıyor. Süzgeç olmadan eve dönmüş ordu hem `units`ta hem burada sayılır.
+ *
+ * ⚠️ **KUYRUK BİLEREK YOK.** `queues.spent_gold/spent_food` ödenen tutarı zaten taşıyor ve
+ * iptal iadesi (`debitRefund`) **aynı** sayıyı düşüyor → kredi/borç orada zaten simetrik.
+ * Kuyruğu yeniden fiyatlasaydık ya bu simetriyi bozardık ya da `spent_gold`u yeniden yazmak
+ * gerekirdi; ikincisi oyuncunun **kaynağına** dokunur (fiyat düşerse ödediğinden azını geri
+ * alır = sessiz müsadere).
+ */
+async function holdingRows(
+  runner: Runner, scope: { worldId: number } | { playerId: number },
+): Promise<HoldingRow[]> {
+  const byWorld = 'worldId' in scope;
+  const cityCond: SQL = byWorld
+    ? sql`c.world_id = ${scope.worldId}`
+    : sql`c.player_id = ${scope.playerId}`;
+  const techCond: SQL = byWorld
+    ? sql`p.world_id = ${scope.worldId}`
+    : sql`t.player_id = ${scope.playerId}`;
+  const missionCond: SQL = byWorld
+    ? sql`m.world_id = ${scope.worldId}`
+    : sql`m.owner_player_id = ${scope.playerId}`;
+
+  const [buildings, techRows, unitRows, caveRows, defenseRows, missionRows] = await Promise.all([
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT c.player_id AS pid, b.type, b.level AS n FROM buildings b
+        JOIN cities c ON c.id = b.city_id WHERE ${cityCond}
+    `),
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT t.player_id AS pid, t.type, t.level AS n FROM techs t
+        JOIN players p ON p.id = t.player_id WHERE ${techCond}
+    `),
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT c.player_id AS pid, u.type, u.count AS n FROM units u
+        JOIN cities c ON c.id = u.city_id WHERE ${cityCond}
+    `),
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT c.player_id AS pid, cu.type, cu.count AS n FROM cave_units cu
+        JOIN cities c ON c.id = cu.city_id WHERE ${cityCond}
+    `),
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT c.player_id AS pid, d.type, d.count AS n FROM defenses d
+        JOIN cities c ON c.id = d.city_id WHERE ${cityCond}
+    `),
+    runner.execute<Record<string, unknown>>(sql`
+      SELECT m.owner_player_id AS pid, mu.unit_type AS type, mu.count AS n
+        FROM mission_units mu JOIN missions m ON m.id = mu.mission_id
+       WHERE ${missionCond} AND m.owner_player_id IS NOT NULL
+         AND m.status IN ('scheduled', 'running')
+    `),
+  ]);
+
+  const out: HoldingRow[] = [];
+  const push = (rows: Record<string, unknown>[], kind: HoldingKind): void => {
+    for (const r of rows) {
+      out.push({
+        playerId: Number(r['pid']), kind, type: String(r['type']), n: Number(r['n']),
+      });
+    }
+  };
+  push(buildings, 'building');
+  push(techRows, 'tech');
+  push(unitRows, 'unit');
+  push(caveRows, 'unit');
+  push(missionRows, 'unit');
+  push(defenseRows, 'defense');
+  return out;
+}
+
+/**
+ * Satır kümesini bir katalog config'iyle değerler → `playerId → kaynak birimi`.
+ *
+ * ⚠️ **Memoizasyon opsiyonel değil.** `cumulativeBuildingValue` seviyeye kadar döngü kuruyor;
+ * 5.000 oyunculu bir dünyada iki değerleme milyonlarca `Math.pow` demek. Ayrık `(tip, seviye)`
+ * çifti ise en fazla birkaç yüz tane.
+ *
+ * ⚠️ **Birimler memoize EDİLMEZ**: `unitCost` yuvarlamayı adetle çarptıktan SONRA yapıyor,
+ * yani `unitCost(t, n) ≠ n × unitCost(t, 1)`. `debitLosses` ile bit-bit aynı kalmanın tek yolu
+ * satır başına `unitsValue` çağırmak — zaten O(1).
+ */
+export function valueHoldings(
+  rows: readonly HoldingRow[], cfg?: CatalogConfig,
+): Map<number, number> {
+  const out = new Map<number, number>();
+  const memo = new Map<string, number>();
+  const cached = (key: string, compute: () => number): number => {
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    const v = compute();
+    memo.set(key, v);
+    return v;
+  };
+
+  for (const r of rows) {
+    if (!(r.n > 0)) continue;
+    let v = 0;
+    if (r.kind === 'building') {
+      v = cached(`b:${r.type}:${r.n}`, () => cumulativeBuildingValue(r.type, r.n, cfg));
+    } else if (r.kind === 'tech') {
+      v = cached(`t:${r.type}:${r.n}`, () => cumulativeTechValue(r.type, r.n, cfg));
+    } else if (r.kind === 'unit') {
+      v = unitsValue({ [r.type]: r.n }, cfg);
+    } else {
+      v = LEVEL_BASED.has(r.type)
+        ? cached(`d:${r.type}:${r.n}`, () => cumulativeDefenseStructureValue(r.type, r.n, cfg))
+        : unitsValue({ [r.type]: r.n }, cfg);
+    }
+    if (v !== 0) out.set(r.playerId, (out.get(r.playerId) ?? 0) + v);
+  }
+  return out;
+}
+
 /**
  * ⭐ Oyuncunun ŞU AN sahip olduklarının katalog bedeli — **yazmadan** okur.
  *
@@ -211,39 +357,8 @@ export function unitsValue(counts: Record<string, number>, cfg?: CatalogConfig):
 export async function holdingsValue(
   runner: Runner, playerId: number, cfg?: CatalogConfig,
 ): Promise<number> {
-  const [buildingRows, techRows, unitRows, defenseRows] = await Promise.all([
-    runner.execute<Record<string, unknown>>(sql`
-      SELECT b.type, b.level FROM buildings b
-        JOIN cities c ON c.id = b.city_id WHERE c.player_id = ${playerId}
-    `),
-    runner.execute<Record<string, unknown>>(sql`
-      SELECT type, level FROM techs WHERE player_id = ${playerId}
-    `),
-    runner.execute<Record<string, unknown>>(sql`
-      SELECT u.type, u.count FROM units u
-        JOIN cities c ON c.id = u.city_id WHERE c.player_id = ${playerId}
-    `),
-    runner.execute<Record<string, unknown>>(sql`
-      SELECT d.type, d.count FROM defenses d
-        JOIN cities c ON c.id = d.city_id WHERE c.player_id = ${playerId}
-    `),
-  ]);
-
-  let base = 0;
-  for (const r of buildingRows) {
-    base += cumulativeBuildingValue(String(r['type']), Number(r['level']), cfg);
-  }
-  for (const r of techRows) base += cumulativeTechValue(String(r['type']), Number(r['level']), cfg);
-  for (const r of unitRows) base += unitsValue({ [String(r['type'])]: Number(r['count']) }, cfg);
-  for (const r of defenseRows) {
-    const type = String(r['type']);
-    const n = Number(r['count']);
-    base += LEVEL_BASED.has(type)
-      ? cumulativeDefenseStructureValue(type, n, cfg)   // burada `count` SEVİYEdir (§13.11.1b)
-      : unitsValue({ [type]: n }, cfg);
-  }
-
-  return base;
+  const rows = await holdingRows(runner, { playerId });
+  return valueHoldings(rows, cfg).get(playerId) ?? 0;
 }
 
 /**
@@ -298,4 +413,115 @@ export async function snapshotHoldings(
   const out = new Map<number, number>();
   for (const id of playerIds) out.set(id, await holdingsValue(runner, id, cfg));
   return out;
+}
+
+/* ═══ FİYAT DEĞİŞİMİNDE YENİDEN FİYATLAMA ═══════════════════════════════════
+ * ⭐⭐ KUSUR (kullanıcı sorusu, 2026-08-14): alacak **ödeme anındaki** fiyattan işleniyordu
+ * (`creditSpend`), borç ise **bugünkü** fiyattan (`debitLosses`, `cityScoreBase`). Yönetici
+ * panelden bir maliyeti değiştirdiği an ikisi ayrışıyordu:
+ *
+ *   • fiyat DÜŞERSE → ölen ordu kazandırdığından azını götürür ⇒ puan enflasyonu; "indirimden
+ *     sonra ordunu öldür" puan-POZİTİF bir hamle olurdu.
+ *   • fiyat ARTARSA → ölen ordu kazandırdığından fazlasını götürür; `GREATEST(0,…)` kelepçesi
+ *     yüzünden oyuncu başka yerden kazandığı puanı da kaybedip dibe vurabilirdi.
+ *
+ * Ayrıca aynı tekniği pahalıyken alan eski oyuncu kalıcı bir puan fazlası taşıyordu.
+ *
+ * ⭐ ÇÖZÜMÜN DEĞİŞMEZ KOŞULU: *oyuncunun HÂLÂ SAHİP OLDUĞU* her varlığın `score_base` içindeki
+ * payı, o varlığın BUGÜNKÜ katalog bedeline eşit olmalı. Tüketilmiş şeylerin (ölen ordu, iptal
+ * edilen sipariş, terk edilen şehir) payı tarihsel kalır. Bu koşul sağlanınca `debitLosses` tam
+ * olarak kredilenen tutarı geri alır.
+ *
+ * ⚠️ **Neden satır başına `basis` kolonu DEĞİL** (ilk tasarım oydu): ordu `units` satırında
+ * durmuyor — sefere çıkınca düşüyor, ölüyor, sağ kalanı dönüyor, destek seferiyle başka şehre
+ * yerleşiyor, mağaraya giriyor. `basis` bunların hepsiyle taşınmak zorunda kalırdı ve tek bir
+ * noktayı unutmak sessiz, kalıcı bir puan kayması üretirdi. Üstelik gerçekten gerektiği tek
+ * yerde (kuyruk) zaten var: `queues.spent_gold/spent_food`.
+ */
+
+/**
+ * ⭐⭐ **TEK OKUMA, İKİ DEĞERLEME** — bu fonksiyonun şeklinin tamamı bir yarışı yok etmek için.
+ *
+ * ⚠️ Akla ilk gelen tasarım (`snapshotHoldings` → ayarı uygula → yeniden oku → farkı yaz)
+ * **yapısı gereği yarışlıdır**: iki okuma arasında bir savaş çözülürse ölen birim `önce`de var,
+ * `sonra`da yok → farkı bir kez daha düşülür; savaş da `debitLosses` ile zaten düşmüştür ⇒
+ * **çifte borç**, oyuncunun puanı sebepsiz çöker. Tam olarak "makul görünen ama yanlış sayı".
+ *
+ * Satırları **bir kez** okuyup aynı küme üzerinde iki cfg ile değerleyince eşzamanlı bir savaş
+ * ya işlemin tamamen öncesinde ya tamamen sonrasında kalır; ikisi de doğru sonuç verir.
+ * Sorgu sayısı da yarıya iner.
+ */
+export async function repriceDeltas(
+  runner: Runner, worldId: number,
+  cfgBefore: CatalogConfig | undefined, cfgAfter: CatalogConfig | undefined,
+): Promise<Map<number, number>> {
+  const rows = await holdingRows(runner, { worldId });
+  const before = valueHoldings(rows, cfgBefore);
+  const after = valueHoldings(rows, cfgAfter);
+
+  const out = new Map<number, number>();
+  for (const [pid, a] of after) {
+    const d = a - (before.get(pid) ?? 0);
+    if (d !== 0) out.set(pid, d);
+  }
+  // Yeni değerlemede hiç satırı kalmayan oyuncu (fiyat 0'a indi) — tam tersi yönde.
+  for (const [pid, b] of before) if (!after.has(pid) && b !== 0) out.set(pid, -b);
+  return out;
+}
+
+/**
+ * N oyuncunun tabanını **tek deyimde** oynatır.
+ *
+ * ⚠️ `SET` ifadesi `addScoreBase` ile **BİT BİT AYNI** olmak zorunda. İkisi bilerek yan yana
+ * duruyor ve `score-reprice.test.ts` eşitliklerini kilitliyor — ayrışırlarsa hata sessiz olur
+ * (puanlar yavaşça iki farklı kurala göre hesaplanmaya başlar).
+ */
+export async function addScoreBaseBulk(
+  runner: Runner, worldId: number, deltas: ReadonlyMap<number, number>,
+): Promise<number> {
+  const entries = [...deltas].filter(([, d]) => Number.isFinite(d) && d !== 0);
+  if (entries.length === 0) return 0;
+  const perPoint = resourcePerPoint(worldId);
+
+  // 1.000'lik parçalar: tek deyimde on binlerce VALUES satırı ayrıştırıcıyı zorlar.
+  for (let i = 0; i < entries.length; i += 1000) {
+    const values = sql.join(
+      entries.slice(i, i + 1000).map(([pid, d]) => sql`(${pid}::bigint, ${d}::numeric)`),
+      sql`, `,
+    );
+    await runner.execute(sql`
+      UPDATE players p
+         SET score_base = GREATEST(0::numeric, p.score_base + d.delta),
+             score = FLOOR(GREATEST(0::numeric, p.score_base + d.delta) / ${perPoint}::numeric)
+        FROM (VALUES ${values}) AS d(player_id, delta)
+       WHERE p.id = d.player_id
+    `);
+  }
+  return entries.length;
+}
+
+/**
+ * Bir dünyanın tamamını yeniden fiyatlar. `saveSettings`/`resetSettings` bunu çağırır.
+ *
+ * ⚠️ `pg_advisory_xact_lock`: iki yönetici aynı anda kaydederse aynı fark iki kez uygulanırdı.
+ * Kilit transaction'a bağlı, yani commit/rollback ile kendiliğinden bırakılıyor.
+ *
+ * ⚠️ **Bilinen sınır — kalan yarış penceresi.** `settings.update()`in `NOTIFY` yayını ile bu
+ * geçişin bitmesi arasında worker yeni fiyatlarla bir savaş çözerse o TEK savaşın birimleri
+ * eski fiyattan kredilenip yeni fiyattan düşülür. Etkisi bir savaşın fiyat farkı kadar ve
+ * kendini sınırlıyor. Sıfırlamak isteyen operatör değişikliği **bakım modunda** yapmalı:
+ * bakımda `SchedulerService` hiçbir görev çalıştırmıyor, yani hiçbir savaş çözülmüyor.
+ *
+ * @returns tabanı oynatılan oyuncu sayısı
+ */
+export async function repriceWorld(
+  db: Db, worldId: number,
+  cfgBefore: CatalogConfig | undefined, cfgAfter: CatalogConfig | undefined,
+): Promise<number> {
+  return db.transaction(async (tx) => {
+    const runner = tx as unknown as Runner;
+    await runner.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`reprice:${worldId}`}))`);
+    const deltas = await repriceDeltas(runner, worldId, cfgBefore, cfgAfter);
+    return addScoreBaseBulk(runner, worldId, deltas);
+  });
 }

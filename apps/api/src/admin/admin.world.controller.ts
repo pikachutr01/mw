@@ -27,7 +27,8 @@ import { AuthService } from '../auth/auth.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { scheduleSnapshot } from '../ranking/ranking.service.ts';
-import { rederiveScores } from '../scoring/score.service.ts';
+import { rederiveScores, repriceWorld } from '../scoring/score.service.ts';
+import { affectsPrices } from '../scoring/reprice.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
 import { catalogOverrides } from '../settings/catalog.ts';
 import { combatOverrides } from '../settings/combat.ts';
@@ -555,9 +556,31 @@ export class AdminWorldController {
     if (!parsed.success) throw new BadRequestException('Geçersiz istek.');
     const id = Number(worldId);
     try {
+      /**
+       * ⚠️ ESKİ katalog config'i `update()`ten **ÖNCE** alınmak zorunda: sonrasında geri
+       * getirilemez (`load()` önbelleği temizliyor ve eski satırlar artık DB'de yok). Okuma
+       * O(1) — `SettingsService.catalog()` sonucu zaten önbellekli — bu yüzden fiyat değişip
+       * değişmediğine bakmadan koşulsuz alınıyor; sonucu `res.changed`e bakarak kullanıyoruz.
+       */
+      const cfgBefore = this.settings.catalog(id);
       const res = await this.settings.update({
         worldId: id, patch: parsed.data.values, actorId: req.player!.accountId,
       });
+      /**
+       * ⭐⭐ FİYAT DEĞİŞTİYSE DÜNYAYI YENİDEN FİYATLA (kullanıcı sorusu, 2026-08-14).
+       *
+       * Alacak ödeme anındaki fiyattan işleniyor (`creditSpend`), borç bugünkü fiyattan
+       * (`debitLosses`). Bu kanca olmadan yönetici bir maliyeti her değiştirdiğinde ikisi
+       * ayrışır: fiyat düşerse ölen ordudan puan artakalır, artarsa oyuncu hak etmediği
+       * puanı kaybeder. Gerekçenin tamamı `score.service.ts` · «YENİDEN FİYATLAMA» başlığı.
+       *
+       * ⚠️ Sıra önemli: **önce** yeniden fiyatlama (tabanı oynatır), **sonra** bölen
+       * yeniden türetme (tabandan puanı üretir). Ters sırada bölen değişimi bayat bir
+       * tabandan hesaplardı.
+       */
+      const repriced = affectsPrices(res.changed)
+        ? await repriceWorld(this.db, id, cfgBefore, this.settings.catalog(id))
+        : 0;
       /**
        * ⭐ Puan böleni değiştiyse mevcut puanları HEMEN yeniden türet (2026-08-08).
        *
@@ -575,9 +598,14 @@ export class AdminWorldController {
       await this.db.execute(sql`
         INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
         VALUES (${id}, ${req.player!.playerId}, 'admin.settings.update', 'settings', ${id},
-                ${JSON.stringify(res)}::jsonb, ${currentTraceId()})
+                ${JSON.stringify({ ...res, repriced })}::jsonb, ${currentTraceId()})
       `);
-      return res;
+      /**
+       * `repriced` panele dönüyor: operatör kaç oyuncunun puanının oynadığını GÖRMELİ.
+       * Sessiz bir toplu puan değişimi, sonradan "benim puanım neden düştü" biletlerinin
+       * cevapsız kalmasına yol açardı — `audit_log` satırı da bu yüzden sayıyı taşıyor.
+       */
+      return { ...res, repriced };
     } catch (err) {
       // Alan hataları AYNEN istemciye: panel hangi alanın niye reddedildiğini gösterebilsin.
       if (err instanceof SettingsError) throw new BadRequestException({ issues: err.issues });
@@ -594,13 +622,26 @@ export class AdminWorldController {
     const parsed = resetPatch.safeParse(body);
     if (!parsed.success) throw new BadRequestException('Geçersiz istek.');
     const id = Number(worldId);
+    /**
+     * ⚠️⚠️ **SIFIRLAMA DA BİR FİYAT DEĞİŞİMİDİR** — kancanın en kolay atlanan yarısı.
+     * `saveSettings`e kanca takıp burayı unutmak, "fiyatı elle değiştirince puanlar düzeliyor
+     * ama varsayılana döndürünce bozuluyor" gibi bulunması çok zor bir asimetri bırakırdı.
+     * Burada `changed` listesi yok; sıfırlanan anahtarların kendisi zaten değişen kümedir.
+     */
+    const cfgBefore = this.settings.catalog(id);
     await this.settings.reset(id, parsed.data.keys);
+    const repriced = affectsPrices(parsed.data.keys)
+      ? await repriceWorld(this.db, id, cfgBefore, this.settings.catalog(id))
+      : 0;
+    if (parsed.data.keys.includes('scoring.resourcePerPoint')) {
+      await rederiveScores(this.db as never, id);
+    }
     await this.db.execute(sql`
       INSERT INTO audit_log (world_id, player_id, action, entity, entity_id, after, trace_id)
       VALUES (${id}, ${req.player!.playerId}, 'admin.settings.reset', 'settings', ${id},
-              ${JSON.stringify({ keys: parsed.data.keys })}::jsonb, ${currentTraceId()})
+              ${JSON.stringify({ keys: parsed.data.keys, repriced })}::jsonb, ${currentTraceId()})
     `);
-    return { ok: true, hash: this.settings.hash(id) };
+    return { ok: true, hash: this.settings.hash(id), repriced };
   }
 
   /**

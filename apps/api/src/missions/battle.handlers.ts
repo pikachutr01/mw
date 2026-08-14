@@ -200,8 +200,15 @@ export function createAttackHandler(cities: CityService): MissionHandler {
      */
     const attackerLosses = perTypeLosses(attacker.units, result.attacker.counts);
     const defenderLosses = perTypeLosses(defender.units, result.defender.counts);
-    await debitLosses(ctx.tx, ctx.worldId, attackerPlayerId, attackerLosses);
-    await debitLosses(ctx.tx, ctx.worldId, defenderCity.playerId, defenderLosses);
+    /**
+     * ⚠️ `ctx.engine?.catalog` GEÇİLMEK ZORUNDA: verilmezse `lossValue` varsayılan katalog
+     * fiyatına düşer ve panelden fiyat değiştirilmiş bir dünyada oyuncu ödediğinden farklı bir
+     * puan kaybeder (2026-08-14 düzeltmesi — gerekçe `handler-registry.ts` · `engine.catalog`).
+     */
+    await debitLosses(ctx.tx, ctx.worldId, attackerPlayerId, attackerLosses, ctx.engine?.catalog);
+    await debitLosses(
+      ctx.tx, ctx.worldId, defenderCity.playerId, defenderLosses, ctx.engine?.catalog,
+    );
 
     /**
      * ⭐ ASKERÎ ÜNVAN — aynı kayıp tablosunun ikinci okuyucusu.
@@ -807,6 +814,12 @@ async function grantMerits(ctx: HandlerContext, o: {
       enemyLosses: t.enemyLosses,
       at: ctx.at,
       merit: ctx.engine?.merit,
+      /**
+       * ⚠️ Ünvan eşiği `lossValue`den geçiyor (`meritScore`), yani o da fiyat config'ine
+       * bağlı. `applyMerit`in `catalog` parametresi vardı ama HİÇ doldurulmuyordu — puan
+       * tarafındaki aynı arızanın ikizi (2026-08-14).
+       */
+      catalog: ctx.engine?.catalog,
     });
     if (!grant) continue;
 
