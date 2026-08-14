@@ -1145,8 +1145,15 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'economy.techCostMultiplier',
     label: 'Teknik fiyat çarpanı',
-    type: 'number', default: 1, min: 0.01, max: 100, tag: 'design',
-    description: 'TÜM teknik fiyatlarını topluca ölçekler.',
+    type: 'number', default: 0.75, min: 0.01, max: 100, tag: 'design',
+    description: 'TÜM teknik fiyatlarını topluca ölçekler. Eğrinin ŞEKLİNE dokunmaz, yalnız '
+      + 'ölçeğini kaydırır — teknik fiyatı `taban × 1,5^(seviye+1)` ve o üs orijinal oyundan '
+      + 'geliyor.',
+    note: '⭐ 2026-08-14\'te 1 → 0,75 (erken oyun duvarı). Akademi tabanının Kale ile '
+      + 'eşitlenmesi kapının BİNA yarısını ucuzlattı; bu çarpan TEKNİK yarısını ucuzlatıyor. '
+      + '⚠️ Bina tarafında karşılığı olan `buildingCostMultiplier` bilerek 1\'de bırakıldı: '
+      + 'oradaki tempo ÇAPA 1 (Mimar Okulu ↔ Teleport) ve ÇAPA 2 (Çiftlik/Maden ↔ Kale) '
+      + 'çapalarına bağlı ve global bir çarpan ikisini birden kaydırırdı.',
   },
 
   /* ── Puanlama ──────────────────────────────────────────────────────────────── */

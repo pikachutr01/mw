@@ -2225,6 +2225,34 @@ oradan geçiyor — ama Kale'den pahalı fiyatlanmıştı. Eşitlemek ilkeyi uyg
 ⭐ Hiçbir çapayı bozmuyor: ÇAPA 1 Mimar Okulu ↔ Teleport, ÇAPA 2 Çiftlik/Maden ↔ Kale; Akademi
 ikisinde de yok. Katalog özeti (`catalogHash`) beşinci kez kaydı: `000c68dc` → `d963193a`.
 
+#### ⭐ Teknik fiyat çarpanı 1 → **0,75** (2026-08-14)
+
+Akademi indirimi kapının **bina** yarısını ucuzlattı; teknikler öbür yarısı. Orada eğrinin
+şekline dokunulmadı — `taban × 1,5^(sv+1)` üssü `k.java`dan geliyor ve Java'ya sadakat birinci
+öncelik. Çarpan tam bunun için var: **eğri aynı, ölçek kayıyor.**
+
+⚠️ Bina tarafındaki karşılığı (`buildingCostMultiplier`) bilerek 1'de bırakıldı: oradaki tempo
+iki çapaya bağlı ve global bir çarpan ikisini birden kaydırırdı.
+
+⚠️⚠️ **`catalogHash` bu değişikliği GÖRMÜYOR** ve bu bir kusur: özet `UNITS`/`TECHS`/`BUILDINGS`
+tablolarını ve *varsayılandan sapmayı* hash'liyor (`hash.ts:52-62`), yani **varsayılanın
+kendisi** değişince özet kıpırdamıyor. Akademi tabanı `BUILDINGS`te olduğu için özeti kaydırdı,
+`economy.techCostMultiplier` ise `CatalogConfig`te olduğu için kaydırmadı. Sonuç: bu sürümden
+önce ve sonra çözülmüş iki savaş aynı `catalog_hash`i taşıyor. Ayrı iş — düzeltmek tüm eski
+`battles.catalog_hash` değerlerini "başka bir katalog" hâline getirir, o yüzden bilinçli bir
+karar gerektiriyor.
+
+#### 📊 Üç değişikliğin birleşik sonucu
+
+| Zincir | Önce | Sonra |
+| :-- | --: | --: |
+| Cüce (Kale 2 → Akademi 1 → Demircilik 1 → 1 Cüce) | 6.338 = 6 puan | **5.116 = 5 puan** |
+| Yük Arabası (+ Akademi 3 · Baraka 3 · Haritacılık 1 · 1 araba) | 24.807 = 24 puan | **19.300 = 19 puan** |
+
+⭐ Yani 50 puanlık bandın içinde arabaya ulaşmak 19 puan tutuyor ve geriye **30.700 kaynak**
+kalıyor — yaklaşık **15 yük arabası** (75.000 taşıma kapasitesi). Strateji artık kâğıt üstünde
+değil, gerçekten oynanabilir.
+
 ---
 
 ### §13.9b ⭐⭐ KÜÇÜK HESAP BANDI ve GANİMET FARK ÇARPANI (kullanıcı, 2026-08-14)

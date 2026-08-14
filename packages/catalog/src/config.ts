@@ -293,7 +293,20 @@ export const DEFAULT_CATALOG_CONFIG: CatalogConfig = {
     carryTimeWeight: 1,
     buildingCostMultiplier: 1,
     unitCostMultiplier: 1,
-    techCostMultiplier: 1,
+    /**
+     * ⭐⭐ **1 → 0,75** (kullanıcı, 2026-08-14) — erken oyun duvarının ikinci kaldıracı.
+     *
+     * Akademi tabanını indirmek (Kale ile eşitleme) kapının **binasını** ucuzlattı; teknikler
+     * kapının öbür yarısı ve orada eğrinin şekline dokunmak istemiyoruz: `taban × 1,5^(sv+1)`
+     * üssü `k.java`dan geliyor, Java'ya sadakat birinci öncelik (§13.9). Çarpan tam da bunun
+     * için var — **eğri aynı kalır, yalnız ölçek kayar.**
+     *
+     * ⚠️ Etkisi her seviyede eşit (%25 indirim), yani geç oyunu da ucuzlatıyor. Kabul edildi:
+     * tekniklerin asıl frenı üs, çarpan değil — sv20 Demircilik yine 400 × 1,5²¹ × 0,75 ≈
+     * 1,17 milyar. ⚠️ Bina tarafına dokunulmadı (`buildingCostMultiplier` 1): oradaki tempo
+     * ÇAPA 1 ve ÇAPA 2'ye bağlı ve global bir çarpan iki çapayı birden kaydırırdı.
+     */
+    techCostMultiplier: 0.75,
     // ⚠️ `STARTING_RESOURCES` ile AYNI sayılar — o sabit hâlâ tek gerçek kaynak (`buildings.ts`).
     startingGold: STARTING_RESOURCES.gold,
     startingFood: STARTING_RESOURCES.food,
