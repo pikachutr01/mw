@@ -17,20 +17,41 @@ services:
       timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: mw-redis
-    command: ['redis-server', '--save', '', '--appendonly', 'no']
-    ports: ['6379:6379']
-
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: mw-mailpit
-    ports:
-      - '1025:1025'   # SMTP
-      - '8025:8025'   # web arayüzü → http://localhost:8025
-    environment:
-      MP_MAX_MESSAGES: 500
+  # ⛔ redis ve mailpit KAPALI (2026-08-14) — ikisi de aylardır boşuna çalışıyordu.
+  #
+  # Redis: kodda tek bir referansı yok (`ioredis`/`bullmq` bağımlılığı da yok). Yerini tutan
+  #   şeyler: kuyruk → Postgres `queues`+`missions` (tek transaction), gerçek zamanlı yayın →
+  #   Postgres LISTEN/NOTIFY, oturum → `sessions` tablosu, hız sınırı → süreç içi `Map`.
+  #   Paylaşılan duruma ihtiyaç yok çünkü tek süreç çalışıyoruz (`ops/pm2/ecosystem.config.cjs`:
+  #   `instances: 1, exec_mode: 'fork'`, `ROLE=all`).
+  #   ⚠️ TETİKLEYİCİ: `instances` 1'den büyük yapılırsa ya da `exec_mode` `cluster` olursa hız
+  #   sınırı sayaçları süreç başına ayrılır ve gerçek sınır süreç sayısı kadar gevşer. O gün
+  #   paylaşılan bir sayaç deposu gerekir — ilk aday Redis değil, zaten elimizdeki Postgres.
+  #
+  # Mailpit: mail SMTP'den gitmiyor. Gönderim `https://api.resend.com/emails`'e tek `fetch`
+  #   (`mail.service.ts`); `nodemailer` yok, 1025'e bağlanan kimse yok. `RESEND_API_KEY` boşken
+  #   gövde konsola yazılıyor (`mail.limits.ts` · `mailEnabled`), yani dev'de mailleri API
+  #   log'unda görüyoruz — `localhost:8025` boş kalırdı.
+  #
+  # Silinmediler: ölçeklenme günü ya da SMTP'li bir dev akışı istenirse yorumu kaldırmak yeter.
+  # ⚠️ Kapatma sebebi RAM değil (~27 MB): çalışır durumda duran kullanılmayan altyapı
+  # "demek ki kullanılıyor" yanılgısı üretiyor. `.env.example` aynı gerekçeyle `REDIS_URL`i
+  # zaten temizlemişti ("tuzak oldukları için kaldırıldı").
+  #
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: mw-redis
+  #   command: ['redis-server', '--save', '', '--appendonly', 'no']
+  #   ports: ['6379:6379']
+  #
+  # mailpit:
+  #   image: axllent/mailpit:latest
+  #   container_name: mw-mailpit
+  #   ports:
+  #     - '1025:1025'   # SMTP
+  #     - '8025:8025'   # web arayüzü → http://localhost:8025
+  #   environment:
+  #     MP_MAX_MESSAGES: 500
 
 volumes:
   mw-pgdata:

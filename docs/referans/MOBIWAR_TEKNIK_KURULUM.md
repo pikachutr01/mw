@@ -372,10 +372,21 @@ api ve worker **aynı kod tabanı, tek konteyner** olarak çalışır (`ROLE=api
 değişkeni). Büyüdüğünde `ROLE` değiştirip iki konteynere ayırmak **kod değişikliği gerektirmez**.
 Savaş çözümü 1-50 ms sürdüğü için bu ölçekte olay döngüsünü bloke etmez.
 
-### (b) Redis OPSİYONEL
+### (b) Redis OPSİYONEL → pratikte HİÇ KULLANILMIYOR
 Tek düğümde socket.io'nun Redis adaptörüne, dağıtık rate-limit'e ve presence store'a gerek yok.
-Kod `CacheAdapter`/`PubSubAdapter` arayüzü kullanır: `REDIS_URL` yoksa **bellek-içi** uygulama
-devreye girer. → ~100 MB ve bir hareketli parça daha az. Ölçeklenince `REDIS_URL` tanımlamak yeter.
+
+⚠️ **DÜZELTME (2026-08-14).** Bu bölüm *"Kod `CacheAdapter`/`PubSubAdapter` arayüzü kullanır:
+`REDIS_URL` yoksa bellek-içi uygulama devreye girer"* diyordu — **öyle bir arayüz yok.** Redis
+kodda hiç geçmiyor, `ioredis`/`bullmq` bağımlılığı da yok; `REDIS_URL` `.env.example`'dan
+"tuzak" gerekçesiyle kaldırıldı ve `compose.dev.yml`deki kap yorum satırına alındı.
+Bugün yerini tutanlar: kuyruk → Postgres `queues`+`missions` (tek transaction) · gerçek zamanlı
+yayın → **Postgres LISTEN/NOTIFY** · oturum → `sessions` tablosu · hız sınırı → süreç içi `Map`
+(`apps/api/src/auth/rate-limit.ts`).
+
+⚠️ **Tetikleyici:** `ops/pm2/ecosystem.config.cjs` bugün `instances: 1, exec_mode: 'fork'`.
+Bu ikisinden biri değişirse hız sınırı sayaçları süreç başına ayrılır ve gerçek sınır süreç
+sayısı kadar gevşer — o gün paylaşılan bir sayaç deposu gerekir. Gerçek zamanlı yayın
+etkilenmez, LISTEN/NOTIFY'ı Postgres dağıttığı için zaten çok-süreç güvenli.
 
 ### (c) Web = statik dosya
 React derlemesi **mevcut nginx** tarafından servis edilir; **web için Node süreci yok** (0 MB runtime).
