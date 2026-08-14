@@ -15,6 +15,7 @@ import type { AdminRequest } from '../src/admin/admin.guard.ts';
 import { AuthService } from '../src/auth/auth.service.ts';
 import { TokenService } from '../src/auth/token.service.ts';
 import { CityService } from '../src/cities/city.service.ts';
+import { SettingsService } from '../src/settings/settings.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
 import { createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
@@ -48,7 +49,7 @@ beforeAll(async () => {
     h.db, new TokenService({ accessSecret: 'test-secret-en-az-16-karakter' }), clock, cities,
   );
   // ⚠️ `auth` ÖNCE kurulmalı: `purge-player` oturumları düşürmek için onu kullanıyor.
-  actions = new AdminActionsController(h.db, cities, clock, auth);
+  actions = new AdminActionsController(h.db, cities, clock, auth, new SettingsService(h.db));
 }, 60_000);
 
 afterAll(async () => { await h?.close(); });
@@ -442,6 +443,80 @@ describe('tablo kaydı', () => {
  * ⚠️ Testlerin yarısı "ne SİLİNMEDİĞİNİ" ölçüyor: yalnız silmeyi doğrulayan bir demet,
  * her şeyi silen bir uygulamada da yeşil kalırdı.
  */
+/* ═══ Kod fiyat değişimi sonrası yeniden fiyatlama ═════════════════════════ */
+
+/**
+ * ⭐⭐ Panelden yapılan fiyat değişikliğini `admin.world.controller` zaten yakalıyor. Bu
+ * aksiyon KODDA yapılan değişikliğin karşılığı — kancanın kör noktası (2026-08-15, canlıda
+ * 8 oyuncunun puanı bu yüzden elle düzeltilmişti).
+ */
+describe('kod fiyat değişimi sonrası yeniden fiyatla', () => {
+  const scoreBaseOf = async (): Promise<number> => {
+    const [r] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT score_base FROM players WHERE id = ${playerId}
+    `);
+    return Number(r!['score_base']);
+  };
+
+  it('bilinmeyen ayar anahtarını REDDEDER', async () => {
+    await expect(actions.repriceCatalog(
+      { oldValues: '{"economy.uydurmaAnahtar": 1}' }, req(),
+    )).rejects.toThrow(/Bilinmeyen ayar anahtarı/);
+  });
+
+  it('bozuk JSON anlaşılır hata verir', async () => {
+    await expect(actions.repriceCatalog({ oldValues: '{bu json değil' }, req()))
+      .rejects.toThrow(/geçerli JSON değil/);
+  });
+
+  /**
+   * ⚠️ Bu kapı olmasa araç sessizce "0 oyuncu etkilendi" derdi ve yönetici düzeltmenin
+   * çalıştığını sanırdı — sıfır fark ile "yanlış anahtar verdin" ayırt edilemezdi.
+   */
+  it('FİYATA dokunmayan anahtarı reddeder', async () => {
+    await expect(actions.repriceCatalog(
+      { oldValues: '{"combat.attackScoreRatio": 5}' }, req(),
+    )).rejects.toThrow(/FİYATINI etkilemiyor/);
+  });
+
+  it('⭐ önizleme puanı DEĞİŞTİRMEZ, uygulama değiştirir', async () => {
+    await actions.setBuilding({ cityId, type: 'academy', level: 4 }, req());
+    await actions.recomputeScore({ playerId }, req());
+    const taban0 = await scoreBaseOf();
+    expect(taban0).toBeGreaterThan(0);
+
+    /* Akademi eski tabanı 1400/1000 idi (bugün 900/700) → eski fiyatla değeri DAHA YÜKSEK,
+     * yani düzeltme tabanı AŞAĞI çekmeli. */
+    const eski = '{"buildingTuning.academy:gold": 1400, "buildingTuning.academy:food": 1000}';
+
+    const onizleme = await actions.repriceCatalog({ oldValues: eski }, req());
+    expect(onizleme['onizleme']).toBe(true);
+    expect(Number(onizleme['etkilenen'])).toBe(1);
+    expect(Number(onizleme['toplamTabanDegisimi'])).toBeLessThan(0);
+    expect(await scoreBaseOf()).toBe(taban0);            // ⭐ hiçbir şey yazılmadı
+
+    const sonuc = await actions.repriceCatalog({ oldValues: eski, apply: 'evet' }, req());
+    expect(sonuc['onizleme']).toBe(false);
+    expect(Number(sonuc['uygulanan'])).toBe(1);
+    const taban1 = await scoreBaseOf();
+    expect(taban1).toBeLessThan(taban0);
+    expect(taban1 - taban0).toBeCloseTo(Number(sonuc['toplamTabanDegisimi']), 0);
+  });
+
+  /** ⚠️ Kayıt şart: toplu puan değişimi sonradan "puanım neden düştü" sorusunu doğurur. */
+  it('audit_log kaydı yazılır', async () => {
+    await actions.repriceCatalog(
+      { oldValues: '{"economy.techCostMultiplier": 1}' }, req(),
+    );
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT after FROM audit_log WHERE action = 'admin.action.reprice_catalog'
+       ORDER BY id DESC LIMIT 1
+    `);
+    expect(row).toBeTruthy();
+    expect((row!['after'] as Record<string, unknown>)['apply']).toBe(false);
+  });
+});
+
 describe('oyuncuyu dünyadan kaldır', () => {
   /** İkinci bir oyuncu — "başkası etkilenmiyor" ve ittifak vakaları için. */
   async function otherPlayer(name: string): Promise<{ playerId: number; cityId: number }> {

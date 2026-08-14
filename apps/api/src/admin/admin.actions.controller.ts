@@ -31,7 +31,10 @@ import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { getGateway } from '../realtime/gateway-registry.ts';
-import { recomputeScoreBaseFromHoldings } from '../scoring/score.service.ts';
+import { recomputeScoreBaseFromHoldings, repriceWithOldValues } from '../scoring/score.service.ts';
+import { affectsPrices } from '../scoring/reprice.ts';
+import { SETTINGS } from '@mobilwar/settings';
+import { SettingsService } from '../settings/settings.service.ts';
 import { endVacation } from '../vacation/vacation.service.ts';
 import { GameClockService } from '../world/game-clock.service.ts';
 import { AdminGuard, AdminStepUpGuard, type AdminRequest } from './admin.guard.ts';
@@ -103,6 +106,17 @@ const verifyEmailBody = z.object({
 const moveCityBody = z.object({ cityId, toPlayerId: z.number().int().positive() });
 
 /**
+ * ⚠️ `oldValues` düz METİN alıyor, `z.record` değil: panelin form üreticisinde iç içe nesne
+ * alan tipi yok (`ActionForm.tsx`). Ayrıştırma ve doğrulama uçta yapılıyor ki yönetici
+ * bozuk JSON'da anlaşılır bir hata görsün, 400 yerine.
+ * ⚠️ `apply` yine `'evet'|'hayır'`: panelde boolean alan tipi yok (aynı gerekçe yukarıda).
+ */
+const repriceCatalogBody = z.object({
+  oldValues: z.string().trim().min(2).max(4000),
+  apply: z.enum(['hayır', 'evet']).default('hayır'),
+});
+
+/**
  * ⚠️ `confirm` — yöneticinin oyuncu adını ELLE yazması. Step-up parolası "bu gerçekten sen
  * misin" sorusunu cevaplıyor, bu alan "doğru oyuncuyu mu seçtin" sorusunu: geri alınamaz
  * aksiyonda ikisi ayrı sorular ve yanlış satıra tıklamak parolayla yakalanmıyor.
@@ -121,6 +135,8 @@ export class AdminActionsController {
     private readonly clock: GameClockService,
     /** ⭐ Yalnız `purge-player` için: kaldırılan oyuncunun oturumları düşürülüyor. */
     private readonly auth: AuthService,
+    /** ⭐ Yalnız `reprice-catalog` için: dünyanın ETKİN katalog config'i oradan geliyor. */
+    private readonly settings: SettingsService,
   ) {}
 
   /* ── Ordu ─────────────────────────────────────────────────────────────────── */
@@ -647,6 +663,91 @@ export class AdminActionsController {
   }
 
   /**
+   * ⭐⭐ KOD FİYAT DEĞİŞİMİNDEN SONRA YENİDEN FİYATLA (kullanıcı, 2026-08-15).
+   *
+   * Panelden yapılan fiyat değişikliklerini `admin.world.controller` zaten yakalıyor. Bu uç
+   * onun **kod tarafındaki kardeşi**: katalog tabanları kodda değişince hiçbir kanca çalışmıyor
+   * ve oyuncuların puanı ödedikleri eski fiyatta donuyor. Gerekçenin tamamı
+   * `score.service.ts` → `repriceWithOldValues` başlığında.
+   *
+   * ⚠️ Step-up parolası ZATEN var (sınıf düzeyinde `AdminStepUpGuard`) ve burada doğru: bu,
+   * tek satır değil TÜM dünyanın puanını oynatan bir işlem.
+   */
+  @Post('reprice-catalog')
+  @HttpCode(200)
+  async repriceCatalog(@Body() body: unknown, @Req() req: AdminRequest): Promise<Record<string, unknown>> {
+    const d = parse(repriceCatalogBody, body);
+    const worldId = req.player!.worldId;
+
+    let raw: unknown;
+    try {
+      raw = JSON.parse(d.oldValues);
+    } catch {
+      throw new BadRequestException('Eski değerler geçerli JSON değil. Örnek: {"economy.techCostMultiplier": 1}');
+    }
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new BadRequestException('Eski değerler bir nesne olmalı: {"anahtar": değer}.');
+    }
+    const entries = Object.entries(raw as Record<string, unknown>);
+    if (entries.length === 0) throw new BadRequestException('En az bir anahtar gerekli.');
+
+    /* ⚠️ Anahtarlar ŞEMADAN doğrulanıyor: uydurma bir anahtar sessizce yutulup "hiçbir şey
+     * olmadı" sonucuna yol açardı — operatör düzeltmenin çalıştığını sanırdı. */
+    const known = new Set(SETTINGS.map((s) => s.key));
+    const bilinmeyen = entries.map(([k]) => k).filter((k) => !known.has(k));
+    if (bilinmeyen.length > 0) {
+      throw new BadRequestException(`Bilinmeyen ayar anahtarı: ${bilinmeyen.join(', ')}`);
+    }
+    const sayisalOlmayan = entries.filter(([, v]) => typeof v !== 'number' && typeof v !== 'boolean');
+    if (sayisalOlmayan.length > 0) {
+      throw new BadRequestException(`Değer sayı veya doğru/yanlış olmalı: ${sayisalOlmayan.map(([k]) => k).join(', ')}`);
+    }
+    /* ⚠️ Fiyata dokunmayan anahtar REDDEDİLİYOR: `affectsPrices` false ise bu araç zaten
+     * sıfır fark üretir; sessizce "0 oyuncu" dönmek yerine sebebini söylüyoruz. */
+    if (!affectsPrices(entries.map(([k]) => k))) {
+      throw new BadRequestException(
+        'Bu anahtarların hiçbiri katalog FİYATINI etkilemiyor; yeniden fiyatlama sıfır fark üretirdi.',
+      );
+    }
+
+    /* cfgOld = bugünkü etkin config + operatörün verdiği ESKİ değerler.
+     * ⚠️ Anahtar ilk noktadan bölünüyor: `buildingTuning.academy:gold` → grup `buildingTuning`,
+     * yaprak `academy:gold` (yaprağın kendisi de nokta içermez ama iki nokta üst üste içerir). */
+    const cfgNow = this.settings.catalog(worldId);
+    const cfgOld = structuredClone(cfgNow) as unknown as Record<string, Record<string, unknown>>;
+    for (const [key, value] of entries) {
+      const i = key.indexOf('.');
+      const group = key.slice(0, i);
+      const leaf = key.slice(i + 1);
+      (cfgOld[group] ??= {})[leaf] = value;
+    }
+
+    const res = await repriceWithOldValues(
+      this.db as never, worldId, cfgNow, cfgOld as never, { apply: d.apply === 'evet' },
+    );
+
+    await this.audit(worldId, req, 'admin.action.reprice_catalog', 'world', worldId, {
+      oldValues: Object.fromEntries(entries),
+      apply: d.apply === 'evet',
+      affected: res.rows.length,
+      totalDelta: Math.round(res.total),
+    });
+
+    return {
+      ok: true,
+      onizleme: d.apply !== 'evet',
+      etkilenen: res.rows.length,
+      toplamTabanDegisimi: Math.round(res.total),
+      uygulanan: res.applied,
+      oyuncular: res.rows.map((r) => ({
+        oyuncu: r.username,
+        puan: `${r.scoreBefore} → ${r.scoreAfter}`,
+        taban: Math.round(r.delta),
+      })),
+    };
+  }
+
+  /**
    * ⭐ OYUNCUYU DÜNYADAN TAMAMEN KALDIR (kullanıcı, 2026-08-06) — GERİ ALINAMAZ.
    *
    * Hesap silmeden (`AccountDeleteService`) farkı: orası oyuncunun KENDİ hakkı ve bir gizlilik
@@ -930,6 +1031,26 @@ export const ADMIN_ACTIONS = [
     fields: [
       { key: 'cityId', label: 'Şehir', type: 'cityPicker', required: true },
       { key: 'toPlayerId', label: 'Yeni sahip', type: 'playerPicker', required: true },
+    ],
+  },
+  {
+    id: 'reprice-catalog', label: 'Kod fiyat değişimi sonrası yeniden fiyatla',
+    description: '⭐ Fiyat PANELDEN değişince puanlar kendiliğinden düzeltiliyor. Fiyat KODDA '
+      + 'değişince (katalog tabanları) hiçbir kanca çalışmaz ve oyuncuların puanı ödedikleri '
+      + 'ESKİ fiyatta donar — bu aksiyon o farkı bir kez uygular. '
+      + '⚠️ Panelden «değiştir → geri al» BU İŞİ GÖRMEZ: iki ters fark toplanır, sonuç sıfırdır. '
+      + '⚠️ ESKİ değerleri JSON olarak yaz, örn: {"economy.techCostMultiplier": 1, '
+      + '"buildingTuning.academy:gold": 1400, "buildingTuning.academy:food": 1000}. '
+      + 'Yalnız FİYATA dokunan anahtarlar kabul edilir. '
+      + '⚠️ Önce «Uygula = hayır» ile çalıştır ve kimin kaç puan kaybedeceğini gör; '
+      + 'toplu puan değişimi geri alınamaz. '
+      + '⚠️ Tercihen BAKIM MODUNDA çalıştır: bakımda hiçbir savaş çözülmez.',
+    fields: [
+      { key: 'oldValues', label: 'Eski değerler (JSON)', type: 'text', required: true },
+      {
+        key: 'apply', label: 'Uygula', type: 'select', options: ['hayır', 'evet'],
+        optionLabels: ['Hayır — yalnız önizle', 'Evet — puanları değiştir'], default: 'hayır',
+      },
     ],
   },
   {

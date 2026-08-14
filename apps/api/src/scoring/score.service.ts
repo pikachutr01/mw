@@ -549,3 +549,64 @@ export async function repriceWorld(
     return addScoreBaseBulk(runner, worldId, deltas);
   });
 }
+
+/** Yeniden fiyatlama önizlemesi/uygulaması: oyuncu oyuncu ne olacağını da döndürür. */
+export interface RepriceRow {
+  playerId: number;
+  username: string;
+  delta: number;
+  scoreBefore: number;
+  scoreAfter: number;
+}
+
+/**
+ * ⭐⭐ KOD KAYNAKLI FİYAT DEĞİŞİMİNİN ONARIMI (kullanıcı, 2026-08-15).
+ *
+ * `repriceWorld` yalnız PANELDEN yapılan ayar değişikliklerinde çalışıyor: kanca
+ * `saveSettings`/`resetSettings` içinde. Fiyat **kodda** değişince (katalog tabanları,
+ * `DEFAULT_CATALOG_CONFIG`) hiçbir kanca tetiklenmiyor ve oyuncuların puanı ödedikleri ESKİ
+ * fiyatta donuyor. 2026-08-14'te tam bu oldu: Akademi 1400/1000 → 900/700 ve
+ * `techCostMultiplier` 1 → 0,75 indi, 8 oyuncunun puanı elle yazılan bir betikle düzeltildi.
+ *
+ * Bu fonksiyon o betiği kalıcı bir yönetici aracına çeviriyor. Operatör ESKİ değerleri
+ * veriyor, gerisi `repriceWorld` ile aynı: **fark** işlenir, geçmiş silinmez.
+ *
+ * ⚠️ **Neden panelden "değiştir → geri al" İŞE YARAMAZ** (ilk akla gelen ve yanlış olan yol):
+ * kanca `V(sonra) − V(önce)` işliyor. Gidip dönmek iki ters farkı toplar, sonuç **tam sıfır**.
+ * Gereken tek yönlü bir düzeltmedir, çünkü taban bugünkü config ile zaten TUTARSIZ.
+ *
+ * ⚠️ `dryRun` varsayılan: toplu puan değişimi geri alınamaz, operatör önce görmeli.
+ */
+export async function repriceWithOldValues(
+  db: Db, worldId: number, cfgNow: CatalogConfig, cfgOld: CatalogConfig,
+  opts: { apply: boolean },
+): Promise<{ rows: RepriceRow[]; total: number; applied: number }> {
+  return db.transaction(async (tx) => {
+    const runner = tx as unknown as Runner;
+    await runner.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`reprice:${worldId}`}))`);
+
+    const deltas = await repriceDeltas(runner, worldId, cfgOld, cfgNow);
+    const players = await runner.execute<Record<string, unknown>>(sql`
+      SELECT id, username, score_base FROM players WHERE world_id = ${worldId}
+    `);
+    const perPoint = resourcePerPoint(worldId);
+    const rows: RepriceRow[] = [];
+    let total = 0;
+    for (const p of players) {
+      const delta = deltas.get(Number(p['id'])) ?? 0;
+      if (!delta) continue;
+      const before = Number(p['score_base']);
+      const after = Math.max(0, before + delta);
+      rows.push({
+        playerId: Number(p['id']), username: String(p['username']), delta,
+        scoreBefore: Math.floor(Math.max(0, before) / perPoint),
+        scoreAfter: Math.floor(after / perPoint),
+      });
+      total += delta;
+    }
+    rows.sort((a, b) => a.delta - b.delta);
+
+    const applied = opts.apply ? await addScoreBaseBulk(runner, worldId, deltas) : 0;
+    return { rows, total, applied };
+  });
+}
