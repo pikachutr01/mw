@@ -15,7 +15,16 @@ const num = (name: string, fallback: number): number => {
 };
 
 /** Bildirim kategorileri — oyuncu her birini ayrı kapatabilir (`accounts.notify_prefs`). */
-export const NOTIFY_CATEGORIES = ['attack', 'dm', 'report', 'production', 'mention'] as const;
+export const NOTIFY_CATEGORIES = [
+  'attack', 'dm', 'report', 'production', 'mention',
+  /**
+   * ⭐ Destek talebine yönetici yanıtı (2026-08-14).
+   * ⚠️ Adı `support` DEĞİL **`ticket`**: oyunda «destek» zaten bir sefer türü (takviye) ve
+   * `messages.kind` içinde `support_report` o anlamda kullanılıyor. Aynı sözcüğü ikinci bir
+   * anlamda kullanmak `accounts.notify_prefs` JSON'unda kalıcı karışıklık yaratırdı.
+   */
+  'ticket',
+] as const;
 export type NotifyCategory = (typeof NOTIFY_CATEGORIES)[number];
 
 /**
@@ -33,6 +42,8 @@ export const NOTIFY_DEFAULTS: Readonly<Record<NotifyCategory, boolean>> = {
   production: true,
   /** İttifak sohbetinde `@` ile anılma (§13.15c). Oyuncu Seçenekler'den ayrıca kapatabilir. */
   mention: true,
+  /** Destek talebine yönetici yanıtı. ⭐ `mention` gibi GÖÇSÜZ eklendi: anahtar yoksa açık. */
+  ticket: true,
 };
 
 /**

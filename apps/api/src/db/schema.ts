@@ -1386,6 +1386,140 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   index('push_subscriptions_account').on(t.accountId),
 ]);
 
+/**
+ * ⭐ DESTEK TALEBİ (0047, kullanıcı 2026-08-14) — oyuncu ile yönetim arasındaki yazışma.
+ *
+ * ⚠️ **Anonim ve kayıtlı talep AYNI tabloda** (`accountId` nullable). İki ayrı tablo, admin
+ * kuyruğunu · sayaçları · mail akışını · durum makinesini ikişer kez yazdırırdı; tek fark bir
+ * nullable FK.
+ *
+ * ⚠️ **CASCADE bilerek YOK** (`chat_reports` deseni): destek kaydı hesabın ömründen uzun
+ * yaşamalı. Kimlik alanları bu yüzden DENORMALİZE. Hesap silme zaten bir UPDATE
+ * (anonimleştirme), DELETE değil — PII temizliğini `account-delete.service.ts` açıkça yapıyor.
+ *
+ * ⚠️ **Okunmamış sayacı iki tarafta ASİMETRİK, bilerek**: oyuncu *"bana cevap geldi mi"* sorar
+ * (mesaj bazlı → `supportMessages.readAt`), yönetici *"hangi talep BİZDE bekliyor"* sorar
+ * (talep bazlı → `lastSender`). Tek mekanizmaya zorlamak ya admin kuyruğunu mesaj tablosuna
+ * JOIN'e çevirirdi ya da oyuncuya kendi mesajıyla yanan bir rozet verirdi.
+ */
+export const supportTickets = pgTable('support_tickets', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  /** NULL = anonim (hesabı yok, dolayısıyla dünyası da yok). `outbox.world_id` ile aynı karar. */
+  worldId: smallint('world_id').references(() => worlds.id),
+  accountId: bigint('account_id', { mode: 'number' }).references(() => accounts.id),
+  /** FK YOK, denormalize — oyun içi bildirimin hedefi. Oyuncu gitse de talep durur. */
+  playerId: bigint('player_id', { mode: 'number' }),
+  /**
+   * ⭐ Yanıtın gideceği adres, DAİMA dolu. Kayıtlı kullanıcıda hesaptan kopyalanır;
+   * doğrulanmamış hesapta kullanıcı değiştirebilir (kullanıcı şartı).
+   */
+  email: text('email').notNull(),
+  displayName: text('display_name').notNull(),
+  subject: text('subject').notNull(),
+  /** bug | account | suggestion | report | other */
+  category: text('category').notNull(),
+  /** open | closed — ⭐ talebi YALNIZ yönetici açıp kapatır (kullanıcı şartı). */
+  status: text('status').notNull().default('open'),
+  /**
+   * ⭐ user | admin — "yanıt bekliyor" TÜREV DEĞİL, KOLON. Admin rozeti aşağıdaki kısmî
+   * indeksten okunuyor; duruma `answered` eklemek aynı gerçeği iki yere yazmak olurdu.
+   */
+  lastSender: text('last_sender').notNull().default('user'),
+  /**
+   * ⚠️ Yöneticiye mail YALNIZ ilk açılışta. Tek-seferlik garanti `ops-monitor.ts` deseniyle:
+   * koşullu `UPDATE … WHERE admin_notified_at IS NULL RETURNING` — **hakkı önce al, maili
+   * sonra yaz**. Ters sıra çift posta üretir.
+   */
+  adminNotifiedAt: timestamp('admin_notified_at', { withTimezone: true }),
+  /**
+   * ⭐ Anonim kullanıcının kendi talebine dönüş yolu. Jeton `randomBytes(32).base64url`,
+   * DB'ye **yalnız sha256** (`sessions.refresh_hash` · `email_tokens` deseni).
+   */
+  publicTokenHash: text('public_token_hash'),
+  publicTokenExpiresAt: timestamp('public_token_expires_at', { withTimezone: true }),
+  createdIp: text('created_ip'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  closedBy: bigint('closed_by', { mode: 'number' }),
+}, (t) => [
+  /** Yöneticinin TEK sorgusu: "bizde bekleyen kaç talep var" (sekme rozeti). */
+  index('support_tickets_pending').on(t.updatedAt)
+    .where(sql`${t.status} = 'open' AND ${t.lastSender} = 'user'`),
+  index('support_tickets_account').on(t.accountId, t.id),
+  uniqueIndex('support_tickets_token').on(t.publicTokenHash)
+    .where(sql`${t.publicTokenHash} IS NOT NULL`),
+]);
+
+/**
+ * ⭐ YÜKLENEN RESİM (0047). Projedeki **ilk** kullanıcı içeriği deposu.
+ *
+ * ⚠️ `ticketId` NULLABLE ve satır MESAJDAN ÖNCE yazılıyor: yükleme iki adımlı (önce dosya,
+ * sonra onu referanslayan mesaj). Boşta kalanlar yetim süpürücüsünün tanımı.
+ *
+ * ⚠️ Yazma sırası: `<key>.tmp` → `fsync` → `rename()` (atomik) → **sonra** bu satır. Ters sıra
+ * "DB'de satır var, dosya yok" verirdi; bu sıra en kötü ihtimalle süpürücünün toplayacağı bir
+ * yetim dosya bırakır.
+ */
+export const supportAttachments = pgTable('support_attachments', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  ticketId: bigint('ticket_id', { mode: 'number' })
+    .references(() => supportTickets.id, { onDelete: 'cascade' }),
+  /**
+   * ⚠️ Diskteki GÖRELİ yol (`2026/08/a3/<32 hex>.<uzt>`). Mutlak yol yalnız bundan türetiliyor
+   * ve birleştirmeden önce katı bir regex'ten geçiyor — yol kaçışının tek kapısı orası
+   * (`admin.db.controller.ts` tabloyu elle düzenlemeye izin veriyor, kolon bozulabilir).
+   * Ad 128 bit rastgele: nginx bir gün dizini açsa bile numaralandırma imkânsız.
+   */
+  storageKey: text('storage_key').notNull(),
+  /**
+   * ⚠️ **SNIFF EDİLMİŞ** tür (magic byte), istemcinin `content-type`'ı DEĞİL. Servis ederken
+   * `Content-Type` buradan yazılıyor. SVG bilerek yasak: betik çalıştırır.
+   */
+  mime: text('mime').notNull(),
+  bytes: integer('bytes').notNull(),
+  /** Sıkıştırma bombasına karşı tek savunma (yeniden kodlamıyoruz) — başlıktan okunuyor. */
+  width: integer('width').notNull(),
+  height: integer('height').notNull(),
+  uploadedByAccountId: bigint('uploaded_by_account_id', { mode: 'number' }),
+  uploadedIp: text('uploaded_ip'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('support_attachments_storage_key').on(t.storageKey),
+  index('support_attachments_orphan').on(t.createdAt).where(sql`${t.ticketId} IS NULL`),
+]);
+
+/**
+ * Destek yazışmasının tek mesajı.
+ *
+ * ⚠️ CASCADE burada **İSTENİYOR** (`supportTickets`in aksine): mesajın talepten bağımsız bir
+ * anlamı yok, saklama birimi talebin kendisi.
+ */
+export const supportMessages = pgTable('support_messages', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  ticketId: bigint('ticket_id', { mode: 'number' }).notNull()
+    .references(() => supportTickets.id, { onDelete: 'cascade' }),
+  /**
+   * ⭐ user | admin — **ROL, kimlik değil.** Oyuncuya gösterilen ad yönetici tarafında daima
+   * «Yönetim»; personel kimliği sızmamalı. Gerçek yazar yalnız `authorAccountId`de, denetim
+   * için.
+   */
+  sender: text('sender').notNull(),
+  authorAccountId: bigint('author_account_id', { mode: 'number' }),
+  /** DÜZ METİN (contracts kuralı: HTML/markdown yok → XSS yüzeyi sıfır). */
+  body: text('body').notNull(),
+  /** 0..1 ek — "bir mesaja bir resim" kuralını uygulama değil ŞEMA koruyor. */
+  attachmentId: bigint('attachment_id', { mode: 'number' })
+    .references(() => supportAttachments.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Yalnız `sender = 'admin'` satırlarında anlamlı; oyuncunun okunmamış rozeti bundan. */
+  readAt: timestamp('read_at', { withTimezone: true }),
+}, (t) => [
+  index('support_messages_ticket').on(t.ticketId, t.id),
+  index('support_messages_unread').on(t.ticketId)
+    .where(sql`${t.readAt} IS NULL AND ${t.sender} = 'admin'`),
+]);
+
 export const playersRelations = relations(players, ({ one, many }) => ({
   account: one(accounts, { fields: [players.accountId], references: [accounts.id] }),
   world: one(worlds, { fields: [players.worldId], references: [worlds.id] }),

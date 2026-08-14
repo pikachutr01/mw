@@ -56,6 +56,10 @@ import { sql } from 'drizzle-orm';
 
 import { PasswordService } from './password.service.ts';
 import type { Db } from '../db/client.ts';
+import { deleteAttachment } from '../support/storage.ts';
+import { log } from '../common/logger.ts';
+
+const DEL_LOG = log('account-delete');
 
 export class AccountDeleteError extends Error {
   constructor(readonly code: string, message: string) {
@@ -149,6 +153,16 @@ export class AccountDeleteService {
     await o.revokeAll(o.accountId);
     const scrambled = await this.passwords.hash(randomBytes(32).toString('base64url'));
 
+    /**
+     * ⭐ Destek eklerinin disk yolları — **transaction'dan ÖNCE** okunuyor, çünkü satırlar
+     * içeride silinecek ve sonra `storage_key`i soracak yer kalmayacak.
+     */
+    const attachments = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT a.storage_key FROM support_attachments a
+        JOIN support_tickets t ON t.id = a.ticket_id
+       WHERE t.account_id = ${o.accountId}
+    `);
+
     await this.db.transaction(async (tx) => {
       /**
        * ── 1) Oyuncu satırı: YALNIZ iç işaret ──────────────────────────────────
@@ -188,6 +202,35 @@ export class AccountDeleteService {
       await tx.execute(sql`DELETE FROM push_subscriptions WHERE account_id = ${o.accountId}`);
 
       /**
+       * ── 3b) DESTEK TALEPLERİ: metin kalır, KİŞİSEL VERİ gider (kullanıcı, 2026-08-14) ──
+       *
+       * ⚠️ **FK CASCADE burada HİÇ tetiklenmiyor** ve bu tuzağın kendisi: hesap silme bir
+       * DELETE değil bir UPDATE (anonimleştirme). Yani `support_tickets.email` içindeki
+       * GERÇEK adres, hesap "silindikten" sonra da olduğu gibi duracaktı.
+       *
+       * ⚠️ Talep ve mesaj gövdeleri **silinmiyor** — `chat_reports`in gerekçesiyle aynı
+       * (kullanıcı: *"ileride bir anlaşmazlık durumunda hukuki olarak işine yarayabilir"*).
+       * Silinen yalnız kimlik alanları. Açık talepler kapatılıyor: cevaplanacak kimse yok.
+       */
+      // ⚠️ Satırlar önce: yüklenen fotoğraf en tanımlayıcı kişisel veridir, kalmamalı.
+      await tx.execute(sql`
+        DELETE FROM support_attachments a
+         USING support_tickets t
+         WHERE a.ticket_id = t.id AND t.account_id = ${o.accountId}
+      `);
+      await tx.execute(sql`
+        UPDATE support_tickets
+           SET email = ${`silinmis+${o.accountId}@mobilwar.invalid`},
+               display_name = 'Silinmiş hesap',
+               created_ip = NULL,
+               public_token_hash = NULL,
+               public_token_expires_at = NULL,
+               status = 'closed',
+               closed_at = COALESCE(closed_at, now())
+         WHERE account_id = ${o.accountId}
+      `);
+
+      /**
        * ⚠️ Denetim kaydı **tek iz**: dünyada hiçbir şey değişmediği için "bu hesap silindi mi"
        * sorusunun cevabı yalnız burada ve `players.deleted_at`te duruyor. Destek talebinde
        * dayanağımız bu satır.
@@ -199,5 +242,19 @@ export class AccountDeleteService {
                 ${`account-delete:${o.playerId}`})
       `);
     });
+
+    /**
+     * ⚠️ Dosya silme **commit'ten SONRA** ve hata toleranslı: dosya sistemi transaction'a
+     * katılamaz. Ters sıra (önce dosya) bir rollback'te var olan bir satırın dosyasını yok
+     * ederdi; bu sıra en kötü ihtimalle diskte artık kimsenin referans etmediği bir dosya
+     * bırakır — aylık tutarsızlık raporu onu görür.
+     */
+    for (const a of attachments) {
+      try {
+        await deleteAttachment(String(a['storage_key']));
+      } catch (err) {
+        DEL_LOG.warn({ err, accountId: o.accountId }, 'destek eki dosyası silinemedi');
+      }
+    }
   }
 }

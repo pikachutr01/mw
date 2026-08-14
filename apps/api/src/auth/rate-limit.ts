@@ -29,7 +29,7 @@ import { SettingsService } from '../settings/settings.service.ts';
  * ⚠️ `export`: testler listenin kendisini bekçiye bağlıyor (yeni bir uç eklenirken oyun içi
  * trafiğin yanlışlıkla sınırlanmadığı da ölçülüyor).
  */
-export const LIMITED: ReadonlyArray<{ path: string; bucket: 'simulate' | 'auth' }> = [
+export const LIMITED: ReadonlyArray<{ path: string; bucket: 'simulate' | 'auth' | 'support' }> = [
   { path: '/api/v1/simulate', bucket: 'simulate' },
   { path: '/api/v1/auth/login', bucket: 'auth' },
   { path: '/api/v1/auth/register', bucket: 'auth' },
@@ -58,6 +58,21 @@ export const LIMITED: ReadonlyArray<{ path: string; bucket: 'simulate' | 'auth' 
    * hash'i çalıştırıyor. Uydurma jetonla dövülebilen, sınırsız bir argon2id ucu kalmasın.
    */
   { path: '/api/v1/auth/delete-account', bucket: 'auth' },
+  /**
+   * ⭐ DESTEK — kimliksiz talep açma ve resim yükleme (2026-08-14).
+   *
+   * ⚠️ **AYRI kova, `auth` DEĞİL.** `auth` kovası parola denemesine göre sıkı ayarlı; paylaşsalardı
+   * bir destek formu bir giriş hakkı yerdi ve aynı NAT arkasındaki bir aile kendini oyundan
+   * kilitleyebilirdi. Ters yön de kötü: destek için gevşetmek giriş korumasını zayıflatırdı.
+   *
+   * ⚠️ Gerekçe CPU değil, ikisi birden: **POSTA** (her talep iki mail üretiyor, biri bize biri
+   * ziyaretçiye → Resend kotası ve alan adı itibarı) ve **DİSK** (yükleme ucu).
+   *
+   * ⚠️ Yalnız `public` uçlar listede. Girişli destek uçları **ASLA** eklenmemeli — dosyanın
+   * başındaki kural: oyun içi trafiğe IP başına sınır uygulanmaz.
+   */
+  { path: '/api/v1/support/public/tickets', bucket: 'support' },
+  { path: '/api/v1/support/public/uploads', bucket: 'support' },
 ];
 
 interface Counter { count: number; resetAt: number }
@@ -148,7 +163,9 @@ export class PublicRateLimitGuard implements CanActivate {
     if (cfg['enabled'] === false) return true;
 
     const windowMs = Math.max(1, Number(cfg['windowSeconds'] ?? 60)) * 1000;
-    const limit = Math.max(1, Number(cfg[rule.bucket] ?? (rule.bucket === 'simulate' ? 30 : 10)));
+    /** ⚠️ Yedek değerler şema varsayılanlarının aynısı olmalı; ayrışırsa panel yalan söyler. */
+    const FALLBACK: Record<string, number> = { simulate: 30, auth: 10, support: 5 };
+    const limit = Math.max(1, Number(cfg[rule.bucket] ?? FALLBACK[rule.bucket] ?? 10));
 
     const r = hit(`${rule.bucket}:${clientIp(req)}`, limit, windowMs, Date.now());
     if (r.allowed) return true;

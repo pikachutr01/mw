@@ -33,6 +33,15 @@ export const MAIL = {
   replyTo: str('MAIL_REPLY_TO', ''),
   /** Bağlantı üretimi — doğrulama/sıfırlama e-postalarındaki adres bundan kurulur. */
   appOrigin: str('APP_ORIGIN', 'http://localhost:5173'),
+  /**
+   * ⭐ YÖNETİM PANELİ kökeni (2026-08-14) — destek maillerindeki «Panelde Aç» düğmesi.
+   *
+   * ⚠️ Ayrı env, `appOrigin`den TÜRETİLMİYOR: panel ayrı bir alt alanda (`admin.mobilwar.com`)
+   * ve önünde Cloudflare Access var. `https://admin.` öneki uydurmak, alan adı bir gün
+   * değişince sessizce ölü bir bağlantı üretirdi.
+   * ⚠️ Boşsa düğme oyunun kökenine düşer — kırık bir bağlantıdansa yanlış ama açılan bir sayfa.
+   */
+  adminOrigin: str('ADMIN_ORIGIN', str('APP_ORIGIN', 'http://localhost:5173')),
   /** Resend uç noktası (test/proxy için değiştirilebilir). */
   endpoint: str('RESEND_ENDPOINT', 'https://api.resend.com/emails'),
   /**

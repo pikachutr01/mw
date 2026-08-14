@@ -47,6 +47,16 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     description: 'Doğrulama ve şifre sıfırlama bağlantılarının ömrü ile kotalar (§9.2).',
   },
   {
+    id: 'support',
+    label: 'Destek talepleri',
+    description: '⭐ Oyuncuların yönetime açtığı destek/iletişim talepleri. Sınırların çoğu '
+      + '**kimliksiz** bir uca bakıyor: destek formu oyundaki tek anonim POST ucu ve iki şey '
+      + 'birden üretebiliyor — veritabanı satırı ve POSTA. İkincisi daha pahalı, çünkü bir spam '
+      + 'dalgası Resend kotasını yakar ve alan adının itibarını düşürür. '
+      + '⚠️ «Ek boyutu» büyütülürse nginx\'teki `client_max_body_size` de büyütülmeli, yoksa '
+      + 'istek sunucuya hiç ulaşmaz ve kullanıcı anlamsız bir 413 görür.',
+  },
+  {
     id: 'verify',
     label: 'Doğrulanmamış hesap',
     description: '⭐ E-postasını DOĞRULAMAMIŞ oyuncunun neye kadar gidebileceği. Amaç oyunu '
@@ -486,6 +496,68 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'cihazları çabuk temizler ama geçici bir arızada gerçek cihazı da atar.',
     note: 'Tarayıcı «bu abonelik yok» (404/410) derse kayıt zaten anında silinir; bu eşik yalnız '
       + 'geçici hatalar için.',
+  },
+
+  /* ── Destek talepleri ────────────────────────────────────────────────────── */
+  {
+    key: 'support.maxOpenPerAccount',
+    label: 'Hesap başına açık talep',
+    type: 'int', default: 5, min: 1, max: 50, tag: 'design', unit: 'adet',
+    description: 'Bir oyuncunun aynı anda kaç açık talebi olabilir. Küçültmek kuyruğu temiz '
+      + 'tutar; büyütmek gerçekten çok sorunu olan oyuncuyu rahatlatır. Kapanan talep sayılmaz.',
+  },
+  {
+    key: 'support.anonPerIpPerHour',
+    label: 'IP başına saatlik anonim talep',
+    type: 'int', default: 3, min: 1, max: 60, tag: 'design', unit: 'adet',
+    description: 'Giriş yapmamış bir ziyaretçi aynı bağlantıdan saatte kaç talep açabilir. '
+      + 'Spam freni: her talep bir de e-posta üretiyor.',
+  },
+  {
+    key: 'support.maxMessagesPerTicket',
+    label: 'Talep başına mesaj',
+    type: 'int', default: 100, min: 5, max: 1000, tag: 'design', unit: 'adet',
+    description: 'Bir yazışma en fazla kaç mesaj sürebilir. Sonsuz büyüyen bir iş parçacığı '
+      + 'depolama sorununa dönüşür; tavana gelince oyuncu yeni talep açar.',
+  },
+  {
+    key: 'support.maxAttachmentBytes',
+    label: 'Ek boyutu',
+    type: 'int', default: 5 * 1024 * 1024, min: 64 * 1024, max: 20 * 1024 * 1024,
+    tag: 'design', unit: 'bayt',
+    description: 'Mesaja eklenen resmin en büyük boyutu. Telefon ekran görüntüsü 5 MB\'a rahat '
+      + 'sığar. ⚠️ Büyütürsen sunucudaki nginx ayarı (`client_max_body_size`) da büyütülmeli — '
+      + 'yoksa dosya sunucuya hiç ulaşmaz.',
+  },
+  {
+    key: 'support.maxAttachmentPixels',
+    label: 'Ek piksel tavanı',
+    type: 'int', default: 40_000_000, min: 1_000_000, max: 200_000_000,
+    tag: 'design', unit: 'piksel',
+    description: 'Resmin genişlik × yükseklik tavanı. Küçük bir dosya çok büyük bir resme '
+      + 'açılabilir (sıkıştırma bombası); bu sayı ona karşı tek savunma.',
+    note: 'Resimler yeniden kodlanmıyor (native `sharp` bağımlılığı bilerek eklenmedi), o yüzden '
+      + 'boyut yalnız dosya başlığından okunuyor. 40 MP, 8K ekran görüntüsünün (33 MP) üstünde.',
+  },
+  {
+    key: 'support.uploadsPerHour',
+    label: 'Hesap başına saatlik yükleme',
+    type: 'int', default: 10, min: 1, max: 200, tag: 'design', unit: 'adet',
+    description: 'Bir oyuncu saatte kaç resim yükleyebilir. Diski doldurmaya karşı fren.',
+  },
+  {
+    key: 'support.publicTokenDays',
+    label: 'Anonim takip bağlantısı ömrü',
+    type: 'int', default: 90, min: 1, max: 365, tag: 'design', unit: 'gün',
+    description: 'Giriş yapmamış kullanıcıya e-postayla giden «talebimi gör» bağlantısı kaç gün '
+      + 'geçerli. Bağlantıya sahip olan talebi okur ve yanıtlar, o yüzden sonsuz olmamalı.',
+  },
+  {
+    key: 'support.orphanHours',
+    label: 'Yetim ek toplama süresi',
+    type: 'int', default: 24, min: 1, max: 720, tag: 'design', unit: 'sa',
+    description: 'Yüklenip hiçbir mesaja iliştirilmeyen resim kaç saat sonra silinir. '
+      + '(Kullanıcı formu yarıda bıraktığında oluşur.)',
   },
 
   /* ── E-posta ─────────────────────────────────────────────────────────────── */
@@ -1763,6 +1835,17 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     note: 'Parola deneme saldırısına karşı ikinci savunma. Birincisi hesap bazlı kilit '
       + '(`accounts.failed_logins` / `locked_until`) ve o hesabı korur; bu ise farklı '
       + 'kullanıcı adlarını sırayla deneyen saldırganı yavaşlatır.',
+  },
+  {
+    key: 'ratelimit.support',
+    label: 'Destek formu (pencere başına)',
+    type: 'int', default: 5, min: 1, max: 200, tag: 'design',
+    description: 'Giriş yapmamış bir ziyaretçinin pencere içinde kaç kez destek talebi '
+      + 'gönderebileceği ya da resim yükleyebileceği.',
+    note: '⚠️ Giriş kovasından AYRI tutuldu: paylaşsalardı bir destek formu bir giriş hakkı '
+      + 'yerdi ve aynı bağlantıyı paylaşan bir aile kendini oyundan kilitleyebilirdi. Asıl '
+      + 'fren saatlik sayı («IP başına saatlik anonim talep», Destek grubu); buradaki pencere '
+      + 'sınırı ani sel için kaba bir dış çit.',
   },
 
   /* ── Tatil modu ──────────────────────────────────────────────────────────── */

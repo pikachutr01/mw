@@ -30,6 +30,9 @@ const CATEGORIES: readonly (readonly [string, string, string])[] = [
   /* ⭐ §13.15c — YALNIZ bahsedilince gelir; sıradan ittifak sohbeti mesajı bildirim üretmez. */
   ['mention', 'İttifak sohbetinde bahsedilme',
     'Bir ittifak arkadaşın sohbette @ ile senden bahsettiğinde.'],
+  /* ⭐ Destek (2026-08-14) — YALNIZ yönetici yanıtladığında; kendi yazdığın mesaj bildirim
+     üretmez. Kapatsan bile e-posta gider: destek yanıtının ulaşması bir tercih değil. */
+  ['ticket', 'Destek yanıtı', 'Yönetim destek talebini yanıtladığında.'],
 ];
 
 const STATE_TEXT: Record<PushState, string> = {

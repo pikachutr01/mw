@@ -46,17 +46,39 @@ describe('sınırlanan yollar', () => {
     expect(LIMITED.map((r) => r.path)).not.toContain('/api/v1/auth/delete-account/preview');
   });
 
+  /**
+   * ⚠️ Asıl değişmez: listedeki HER yol **kimliksiz** olmalı. Oyun içi (oturumlu) bir uca IP
+   * başına sınır koymak, aynı bağlantıyı paylaşan iki oyuncunun birbirini kilitlemesi demek.
+   * ⭐ 2026-08-14'te kimliksiz destek uçları eklendi; kural genişledi, GEVŞEMEDİ.
+   */
+  const PUBLIC_PREFIXES = ['/api/v1/auth/', '/api/v1/support/public/'];
+
   it('⚠️ oyun içi trafik sınırlı DEĞİL', () => {
     for (const r of LIMITED) {
-      expect(r.path.startsWith('/api/v1/auth/') || r.path === '/api/v1/simulate', r.path)
-        .toBe(true);
+      const ok = PUBLIC_PREFIXES.some((p) => r.path.startsWith(p)) || r.path === '/api/v1/simulate';
+      expect(ok, r.path).toBe(true);
     }
   });
 
-  it('kimlik uçlarının hepsi `auth` kovasında (simülatör tükenince giriş kilitlenmesin)', () => {
+  /**
+   * Kova ayrımı: simülatör · kimlik · destek. ⚠️ Destek kimlik kovasını PAYLAŞMIYOR — bir
+   * destek formu bir giriş hakkı yeseydi, aynı NAT arkasındaki bir aile kendini oyundan
+   * kilitleyebilirdi (ve tersi: destek için gevşetmek giriş korumasını zayıflatırdı).
+   */
+  it('her uç doğru kovada (biri tükenince diğeri kilitlenmesin)', () => {
     for (const r of LIMITED) {
-      expect(r.bucket, r.path).toBe(r.path === '/api/v1/simulate' ? 'simulate' : 'auth');
+      const expected = r.path === '/api/v1/simulate' ? 'simulate'
+        : r.path.startsWith('/api/v1/support/') ? 'support'
+          : 'auth';
+      expect(r.bucket, r.path).toBe(expected);
     }
+  });
+
+  it('⚠️ OTURUMLU destek uçları listede DEĞİL', () => {
+    const paths = LIMITED.map((r) => r.path);
+    expect(paths).not.toContain('/api/v1/support');
+    expect(paths).not.toContain('/api/v1/support/uploads');
+    expect(paths).not.toContain('/api/v1/admin/support/uploads');
   });
 });
 

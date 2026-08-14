@@ -209,9 +209,14 @@ describe('bakımda outbox', () => {
   });
 
   /** Muafiyet listesi "hesap erişimi + operasyon" ile sınırlı kalmalı; büyürse burada görünür. */
+  /**
+   * ⚠️ Liste bilinçli olarak KISA ve her üyesi "oyun olayı DEĞİL" ailesinden.
+   * ⭐ `support:changed` 2026-08-14'te eklendi: destek, oyuncunun oyuna **giremediği** anda
+   * yazdığı kanal ve talebin yöneticinin panelinde görünmesi bakımın bitmesini bekleyemez.
+   */
   it('muafiyet listesi bilinçli olarak KISA', () => {
     expect([...MAINTENANCE_PASSTHROUGH_TOPICS].sort())
-      .toEqual(['admin:abuse_report', 'mail:send']);
+      .toEqual(['admin:abuse_report', 'mail:send', 'support:changed']);
   });
 });
 

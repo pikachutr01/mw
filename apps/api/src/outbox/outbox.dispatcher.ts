@@ -42,8 +42,13 @@ export const OUTBOX_MAX_ATTEMPTS = 10;
  *     Operasyon alarmları da bu konudan gidiyor: bakım sırasında çıkan bir arıza tam olarak
  *     duyulması gereken andır.
  *   • `admin:abuse_report` — yöneticiye giden operasyon raporu, oyuncuya giden bildirim değil.
+ *   • `support:changed` — destek yazışması (2026-08-14). Aynı gerekçenin en güçlü hâli: oyuncu
+ *     tam da **oyun kapalıyken** destek yazar ("neden giremiyorum"), ve yöneticinin panelinde o
+ *     talebin görünmesi bakımın bitmesini bekleyemez. Oyun olayı değil, hesap/iletişim yolu.
  */
-export const MAINTENANCE_PASSTHROUGH_TOPICS: readonly string[] = ['mail:send', 'admin:abuse_report'];
+export const MAINTENANCE_PASSTHROUGH_TOPICS: readonly string[] = [
+  'mail:send', 'admin:abuse_report', 'support:changed',
+];
 
 /**
  * Yukarıdaki listenin parametreli `IN (...)` hâli.

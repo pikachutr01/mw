@@ -199,6 +199,170 @@ export function emailChanged(o: { username: string; newEmail: string }): Templat
   };
 }
 
+/* ═══ DESTEK / İLETİŞİM (2026-08-14) ════════════════════════════════════════ */
+
+/** Çok satırlı kullanıcı metnini güvenli HTML'e çevirir. ⚠️ `esc` ÖNCE, `<br>` SONRA. */
+const paragraph = (s: string): string =>
+  `<p style="margin:0 0 10px;font-size:14px;line-height:1.5;white-space:pre-wrap">${
+    esc(s)}</p>`;
+
+/**
+ * ⭐ YÖNETİCİYE: yeni destek talebi. **Yalnız ilk açılışta** gider (kullanıcı kararı).
+ *
+ * ⚠️ Gövdenin yalnız ilk 400 karakteri: `alertTo` bir operasyon kutusu ve kopyanın en
+ * korumasız durduğu yer. Ama önizlemesiz bir bildirim de yöneticiyi her talep için panele
+ * sokardı — bu, ikisi arasındaki denge.
+ * ⚠️ Ek **asla** maile konmaz; panelde yetkiyle iniyor.
+ */
+export function supportTicketOpened(o: {
+  ticketId: number; subject: string; category: string; body: string;
+  who: string; anonymous: boolean; adminUrl: string;
+}): Template {
+  const preview = o.body.length > 400 ? `${o.body.slice(0, 400)}…` : o.body;
+  const kim = o.anonymous ? `${o.who} (ANONİM — giriş yapmamış)` : o.who;
+  const text = [
+    `Yeni destek talebi #${o.ticketId}`,
+    '',
+    `Kimden : ${kim}`,
+    `Kategori: ${o.category}`,
+    `Konu   : ${o.subject}`,
+    '',
+    preview,
+    '',
+    'Panelden yanıtla:',
+    o.adminUrl,
+  ].join('\n');
+
+  return {
+    subject: `MobilWar destek — #${o.ticketId} ${o.subject}`,
+    text,
+    html: shell(
+      `Yeni destek talebi #${o.ticketId}`,
+      `<p style="margin:0 0 10px;font-size:13px;color:#6b6153">
+         <strong>Kimden:</strong> ${esc(kim)}<br>
+         <strong>Kategori:</strong> ${esc(o.category)}<br>
+         <strong>Konu:</strong> ${esc(o.subject)}</p>
+       <div style="border-left:3px solid #cbbfa6;padding-left:12px;margin:12px 0">
+         ${paragraph(preview)}
+       </div>`,
+      o.adminUrl, 'Panelde Aç',
+    ),
+  };
+}
+
+/**
+ * ⭐ KULLANICIYA: "talebin alındı".
+ *
+ * ⚠️ Kullanıcı bu maili istememişti; **yine de gerekli** ve gerekçesi üç katmanlı:
+ *  (a) Anonim kullanıcının takip bağlantısını taşıyan TEK araç — onsuz anonim tarafta
+ *      "karşılıklı yazışma" şartı yarım kalırdı (yönetici yazar, kullanıcı yanıtlayamaz).
+ *  (b) En ucuz spam önlemi: "ulaştı mı" belirsizliği aynı talebi üç kez açtıran şeydir.
+ *  (c) Adresin gerçek olduğunu, yönetici cevabı YAZMADAN ÖNCE doğrular.
+ */
+export function supportTicketReceived(o: {
+  ticketId: number; subject: string; url: string;
+}): Template {
+  const text = [
+    `Destek talebin alındı (#${o.ticketId}).`,
+    '',
+    `Konu: ${o.subject}`,
+    '',
+    'Yönetim en kısa sürede yanıtlayacak; yanıt geldiğinde bu adrese bilgi maili göndereceğiz.',
+    '',
+    'Talebini görüntülemek ve yanıtlamak için:',
+    o.url,
+  ].join('\n');
+
+  return {
+    subject: `MobilWar destek — talebin alındı (#${o.ticketId})`,
+    text,
+    html: shell(
+      'Destek talebin alındı',
+      `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">Talebini aldık
+         (<strong>#${o.ticketId}</strong>) ve yönetim en kısa sürede yanıtlayacak.</p>
+       <p style="margin:0 0 10px;font-size:13px;color:#6b6153"><strong>Konu:</strong>
+         ${esc(o.subject)}</p>
+       <p style="margin:0;font-size:13px;color:#6b6153">Yanıt geldiğinde bu adrese bilgi maili
+         göndereceğiz.</p>`,
+      o.url, 'Talebimi Gör',
+    ),
+  };
+}
+
+/**
+ * ⭐ KULLANICIYA: yönetici yanıtladı. **Her** yanıtta gider (kullanıcı şartı).
+ *
+ * ⚠️ **Yanıt gövdesi TAM gidiyor**, "girip bak" değil. Anonimde zaten mecburi (başka kanal
+ * yok); kayıtlıda da aynısı, çünkü (1) ikinci bir varyant aynı davranışın iki uygulaması
+ * demek, (2) "girmek için tıkla" kalıbı kullanıcıyı maildeki bağlantıya tıklamaya eğitir —
+ * `passwordChanged`ın açıkça reddettiği oltalama kalıbı.
+ * ⚠️ Telafisi yönetici tarafında: yazma kutusunda *"bu metin oyuncuya AYNEN e-posta ile
+ * gidecek"* uyarısı var, yani kararı bilgiyle veriyor.
+ */
+export function supportTicketReplied(o: {
+  ticketId: number; subject: string; body: string; url: string;
+}): Template {
+  const text = [
+    `Destek talebine (#${o.ticketId}) yanıt verildi.`,
+    '',
+    `Konu: ${o.subject}`,
+    '',
+    '— Yönetim —',
+    o.body,
+    '',
+    'Yanıtlamak için:',
+    o.url,
+  ].join('\n');
+
+  return {
+    subject: `MobilWar destek — talebine yanıt verildi (#${o.ticketId})`,
+    text,
+    html: shell(
+      'Talebine yanıt verildi',
+      `<p style="margin:0 0 10px;font-size:13px;color:#6b6153"><strong>Konu:</strong>
+         ${esc(o.subject)}</p>
+       <div style="border-left:3px solid #8a5a2b;padding-left:12px;margin:12px 0">
+         <p style="margin:0 0 6px;font-size:12px;color:#8a5a2b;font-weight:600">Yönetim</p>
+         ${paragraph(o.body)}
+       </div>`,
+      o.url, 'Talebi Aç ve Yanıtla',
+    ),
+  };
+}
+
+/**
+ * ⭐ YÖNETİCİYE: günlük özet — **telafi edici kontrol**.
+ *
+ * ⚠️ Yönetici oyuncunun SONRAKİ yanıtları için mail almıyor (kullanıcı kararı: *"sadece ilk
+ * açıldığında"*). Panel rozeti bunu telafi ediyor ama rozet yalnız panel açıkken çalışır;
+ * tek kişilik bir operasyonda bir emniyet ağı gerekiyor. Günde en fazla bir kez.
+ */
+export function supportPendingDigest(o: {
+  count: number; oldestHours: number; adminUrl: string;
+}): Template {
+  const text = [
+    `${o.count} destek talebinde yanıtın bekleniyor.`,
+    '',
+    `En eskisi ${o.oldestHours} saattir bekliyor.`,
+    '',
+    'Panel:',
+    o.adminUrl,
+  ].join('\n');
+
+  return {
+    subject: `MobilWar destek — ${o.count} talep yanıt bekliyor`,
+    text,
+    html: shell(
+      'Yanıt bekleyen destek talepleri',
+      `<p style="margin:0 0 10px;font-size:14px;line-height:1.5">
+         <strong>${o.count}</strong> talepte yanıtın bekleniyor.</p>
+       <p style="margin:0;font-size:13px;color:#6b6153">En eskisi
+         <strong>${o.oldestHours} saattir</strong> bekliyor.</p>`,
+      o.adminUrl, 'Destek Kuyruğunu Aç',
+    ),
+  };
+}
+
 export function resetPassword(o: { username: string; url: string }): Template {
   const text = [
     `Merhaba ${o.username},`,

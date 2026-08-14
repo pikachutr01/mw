@@ -272,6 +272,28 @@ export function notificationForOutbox(
     }
 
     /**
+     * ⭐ DESTEK TALEBİNE YANIT (2026-08-14) — oyuncu oyundayken e-postayı beklemesin.
+     *
+     * ⚠️ **Yalnız `by === 'admin'`**: aynı konu talep açıldığında ve kapandığında da yazılıyor
+     * (arayüz tazelemesi için); oyuncuya kendi yazdığı mesaj için bildirim göndermek en klasik
+     * sahte-bildirim hatası olurdu.
+     * ⚠️ `playerId` NULL ise (anonim talep) bildirim üretilmez — `NotifyService.deliver`
+     * playerId istiyor ve anonim kullanıcının zaten oyun hesabı yok; o haberi e-postayla alır.
+     */
+    case 'support:changed': {
+      const to = n(payload['playerId']);
+      if (to == null || payload['by'] !== 'admin') return [];
+      const ticketId = n(payload['ticketId']);
+      return [note({
+        playerId: to, worldId, category: 'ticket',
+        title: 'Destek talebine yanıt',
+        body: 'Yönetim destek talebini yanıtladı.',
+        url: ticketId == null ? '/destek' : `/destek?t=${ticketId}`,
+        tag: `ticket:${ticketId ?? to}`,
+      })];
+    }
+
+    /**
      * ⭐ İKİ ALICI, İKİ FARKLI METİN — dönüş tipinin dizi olmasının sebebi bu dal.
      * `winner` motorun `'attacker' | 'defender' | 'draw'` değeri (`engine/combat.ts`).
      *

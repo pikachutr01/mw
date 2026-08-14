@@ -409,6 +409,7 @@ ssh deploy@31.210.36.185 "curl -s 'localhost:3002/healthz?deep=1' | jq ."
 | 4 | **Push testi** | Yeni VAPID çiftiyle ilk abonelik |
 | 5 | **Yedek tatbikatı** | `pg_restore` ile boş bir veritabanına geri yükleme denenmeli — *tatbikat yapılmamış yedek, yedek değildir* |
 | 6 | **Uzak yedek kopyası** | Yedekler hâlâ **aynı sunucuda**; sunucu tamamen giderse yedek de gider (rclone/restic → B2) |
+| 6b | ⚠️⚠️ **`/var/lib/mobilwar/uploads` yedeğe eklenecek** | **Veritabanı yedeği artık TEK BAŞINA tam yedek DEĞİL** (2026-08-14). Destek eklerinin gelişine kadar tüm durum Postgres'teydi ve `pg_dump` her şeyi kapsıyordu; artık kapsamıyor. `pg_restore` sonrası DB'de duran her ek satırının dosyası eksik olur ve indirme 500 döner. `UPLOAD_ROOT` ayrıca `deploy:www-data` / `0750` olmalı — nginx dosyayı `X-Accel-Redirect` ile **kendisi** okuyor (`ops/sunucu-kurulum.sh`) |
 | 7 | `og:url` / `og:image` | `apps/web/index.html`'deki mutlak adresler alan adına bağlı |
 | 8 | Sohbete düşen sırlar | **Resend API anahtarı ve root/deploy parolaları bu oturumda düz metin geçti** — yayına çıkmadan döndürülmeli |
 

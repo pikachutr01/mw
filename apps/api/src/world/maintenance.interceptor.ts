@@ -35,8 +35,13 @@ const MUTATIONS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE'
  *   `/api/v1/auth/`  → giriş · token yenileme · çıkış. Kapatsaydık oturumu düşen oyuncu
  *                      **perdeyi bile göremezdi**: perde oturum gerektiren bir ekranda.
  *   `/api/v1/admin/` → bakımı bitirecek olan uçlar. Kendi kilidimizde kalmak absürt olurdu.
+ *   `/api/v1/support` → ⭐ 2026-08-14. Destek, oyuncunun oyuna **giremediği** anda yazacağı tek
+ *                      yer; bakım penceresinde kapatmak, tam da yardım istemesi gereken anda
+ *                      kanalı kesmek olurdu. Oyun durumunu değiştirmiyor — yalnız yazışma.
+ *                      (`outbox.dispatcher.ts` de aynı gerekçeyle `support:changed`i bakımda
+ *                      geçiriyor; iki taraf birlikte anlamlı, biri olmadan öteki yarım kalır.)
  */
-const OPEN_PREFIXES = ['/api/v1/auth/', '/api/v1/admin/'] as const;
+const OPEN_PREFIXES = ['/api/v1/auth/', '/api/v1/admin/', '/api/v1/support'] as const;
 
 @Injectable()
 export class MaintenanceInterceptor implements NestInterceptor {

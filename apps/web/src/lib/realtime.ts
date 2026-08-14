@@ -65,6 +65,12 @@ const INVALIDATES: Record<string, string[]> = {
   'cities:changed': ['cities', 'city', 'world', 'missions'],
   // Posta kutusuna düşen her satır — okunmamış rozeti anında güncellensin.
   'messages:changed': ['messages'],
+  /**
+   * ⭐ Destek talebi (2026-08-14): açıldı · yanıtlandı · kapatıldı.
+   * `support-thread` de listede çünkü modal AÇIKKEN gelen yanıt anında görünmeli — yalnız
+   * listeyi tazelemek, açık yazışmayı bayat bırakırdı.
+   */
+  'support:changed': ['support', 'support-thread'],
   // Savaş hem raporu hem orduyu hem şehri değiştirir.
   'battle:resolved': ['messages', 'missions', 'city'],
   // Sıralama günde 3 kez donuyor; donduğu an ekrandaki sıra bayatlamasın.

@@ -25,6 +25,8 @@ import { Landing } from './screens/Landing.tsx';
 import { OptionsScreen } from './screens/Placeholders.tsx';
 import { HelpScreen, TravelHelpScreen } from './screens/Help.tsx';
 import { SimulateScreen } from './screens/Simulate.tsx';
+import { SupportScreen } from './screens/Support.tsx';
+import { SupportPublicThreadScreen } from './screens/SupportPublicThread.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
 import { World } from './screens/World.tsx';
 
@@ -54,6 +56,11 @@ const emailRoutes = [
   <Route key="verify" path="/verify-email" element={<VerifyEmailScreen />} />,
   <Route key="reset" path="/reset-password" element={<ResetPasswordScreen />} />,
   <Route key="delete" path="/hesap-sil" element={<DeleteAccountScreen />} />,
+  /**
+   * ⭐ Anonim destek takibi (2026-08-14) — aynı aileden ve aynı gerekçeyle kabuğun DIŞINDA:
+   * bağlantı posta uygulamasından, oturumsuz bir tarayıcıda açılıyor.
+   */
+  <Route key="destek-token" path="/destek/t/:token" element={<SupportPublicThreadScreen />} />,
 ];
 
 export function App() {
@@ -148,6 +155,8 @@ function AuthedApp() {
         <Route path="/help" element={<HelpScreen />} />
         <Route path="/help/sefer" element={<TravelHelpScreen />} />
         <Route path="/simulate" element={<SimulateScreen />} />
+        {/* ⭐ Destek (2026-08-14). Aynı ekran misafir dalında da mount ediliyor. */}
+        <Route path="/destek" element={<SupportScreen />} />
         {/* Mobil "Şehir" ve "Daha" sekmeleri */}
         <Route path="/city" element={<CityHub />} />
         <Route path="/more" element={<OptionsScreen />} />
@@ -209,6 +218,9 @@ function GuestApp() {
             açılıyor ama içeride "giriş yapınca burada çıkar" diyor — çıkış noktası aktif şehir. */}
         <Route path="/help" element={<HelpScreen />} />
         <Route path="/help/sefer" element={<TravelHelpScreen />} />
+        {/* ⭐ Destek MİSAFİRE DE AÇIK (kullanıcı şartı): en çok ihtiyaç duyan kişi zaten
+            giriş YAPAMAYAN kişidir. Anonimde e-posta zorunlu — yanıtın tek yolu o. */}
+        <Route path="/destek" element={<SupportScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

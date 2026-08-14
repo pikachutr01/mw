@@ -27,6 +27,9 @@ import { OutboxDispatcher } from '../outbox/outbox.dispatcher.ts';
 import { QUEUE_HANDLERS } from '../queues/queue.handlers.ts';
 import { createAbuseScanHandler, ensureAbuseScanSchedule } from '../abuse/scan.handler.ts';
 import {
+  createSupportMaintenanceHandler, ensureSupportSchedule,
+} from '../support/support.handler.ts';
+import {
   createRankingSnapshotHandler, createRankingWatchdog, ensureRankingSchedule,
 } from '../ranking/ranking.handler.ts';
 import { createVacationEndHandler } from '../vacation/vacation.handler.ts';
@@ -158,7 +161,13 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
     .register('abuse_scan', createAbuseScanHandler())
     .register('vacation_end', createVacationEndHandler())
     /** ⭐ Faz 3: gecelik saklama süresi uygulaması. Zincir kendi kendini yazıyor. */
-    .register('ops_cleanup', createCleanupHandler(retentionFor));
+    .register('ops_cleanup', createCleanupHandler(retentionFor))
+    /**
+     * ⭐ Destek bakımı (2026-08-14): yetim ek süpürme + yanıt bekleyen özeti.
+     * ⚠️ `db` (görev transaction'ı DEĞİL) geçiliyor — dosya silme transaction'a katılamaz,
+     * gerekçe `support.handler.ts` başlığında.
+     */
+    .register('support_maintenance', createSupportMaintenanceHandler(db));
   for (const [type, handler] of Object.entries(QUEUE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(CAVE_HANDLERS)) registry.register(type, handler);
   for (const [type, handler] of Object.entries(battleHandlers(cities))) registry.register(type, handler);
@@ -351,6 +360,10 @@ export function createWorker(db: Db, opts: WorkerOptions): Worker {
         .catch((err: unknown) => {
           SCHED_LOG.error({ err }, 'gecelik temizlik zinciri kurulamadi');
         });
+      /** ⭐ Destek bakımı zinciri (2026-08-14) — yetim ek süpürme + yanıt bekleyen özeti. */
+      void ensureSupportSchedule(db, opts.worldId).catch((err: unknown) => {
+        SCHED_LOG.error({ err }, 'destek bakim zinciri kurulamadi');
+      });
     },
     async stop() {
       await Promise.all([scheduler.stop(), dispatcher.stop()]);

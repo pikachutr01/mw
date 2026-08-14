@@ -24,6 +24,7 @@ import { DatabaseScreen } from './screens/Database.tsx';
 import { HealthScreen } from './screens/Health.tsx';
 import { BulkScreen } from './screens/Bulk.tsx';
 import { ModerationScreen } from './screens/Moderation.tsx';
+import { SupportScreen } from './screens/Support.tsx';
 import { PlayersScreen } from './screens/Players.tsx';
 import { SettingsScreen } from './screens/Settings.tsx';
 import { TrainingScreen } from './screens/Training.tsx';
@@ -52,6 +53,12 @@ const NAV: [string, string][] = [
   ['/uretim', 'Üretim'],
   ['/toplu', 'Toplu işlem'],
   ['/moderasyon', 'Moderasyon'],
+  /**
+   * ⭐ «Destek» Moderasyon'dan AYRI (2026-08-14): orası bir oyuncuya KARŞI yapılan işi
+   * topluyor (yasak, şikâyet), bu ise oyuncunun BİZE yazdığı yardım talebi. Birleştirmek,
+   * yardım isteyeni ceza kuyruğunun içine koymak olurdu.
+   */
+  ['/destek', 'Destek'],
   // ⭐ «Duyuru» Moderasyon'dan AYRI: orası bir oyuncuya KARŞI yapılan işi topluyor (yasak,
   // şikâyet), bu ise oyunculara YÖNELİK bilgilendirme. Birleştirmek "herkese duyur"
   // düğmesini ceza düğmelerinin arasına koymak olurdu.
@@ -136,6 +143,7 @@ export function App() {
               />
               <Route path="/toplu" element={<BulkScreen onNeedStepUp={openStepUp} />} />
               <Route path="/moderasyon" element={<ModerationScreen onNeedStepUp={openStepUp} />} />
+              <Route path="/destek" element={<SupportScreen onNeedStepUp={openStepUp} />} />
               <Route
                 path="/duyuru"
                 element={<AnnounceScreen worldId={session.worldId} onNeedStepUp={openStepUp} />}

@@ -330,6 +330,13 @@
       "when": 1786492800000,
       "tag": "0046_global_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786752000000,
+      "tag": "0047_support",
+      "breakpoints": true
     }
   ]
 }

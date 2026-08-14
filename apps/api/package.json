@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
+    "@fastify/multipart": "^8.3.1",
     "@mobilwar/catalog": "workspace:*",
     "@mobilwar/contracts": "workspace:*",
     "@mobilwar/engine": "workspace:*",

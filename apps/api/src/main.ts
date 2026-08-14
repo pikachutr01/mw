@@ -56,6 +56,30 @@ async function bootstrap(): Promise<void> {
   app?.enableShutdownHooks();
 
   /**
+   * ⭐ DOSYA YÜKLEME (2026-08-14) — destek eklerinin taşıma katmanı.
+   *
+   * ⚠️ **`FileInterceptor` KULLANILAMAZ**: o `@nestjs/platform-express`ten geliyor, biz
+   * Fastify üzerindeyiz. Handler `@Req()` alıp `await req.file()` çağırıyor; `@Body()`
+   * multipart isteklerde **boş** gelir.
+   *
+   * ⚠️ **Neden base64-in-JSON değil**: base64, gövdeyi tamamen almadan reddedilemez ve
+   * kimliksiz bir uçta erken abort güvenlik farkıdır. Daha belirleyicisi, 6 MB'lık bir JSON
+   * gövdesini kabul etmek Fastify'ın `bodyLimit`ini **örnek genelinde** yükseltmeyi
+   * gerektirirdi — yani oyunun TÜM JSON uçlarının yazma yüzeyi genişlerdi. Multipart limiti
+   * yalnız bu yola bakıyor.
+   *
+   * ⚠️ `fileSize` burada SERT bir tavan; asıl (panelden ayarlanabilen) sınır
+   * `support.limits.ts`te ve ondan küçük olmalı. Buradaki değer yapılandırma kaymasına karşı
+   * son çit, kütüphane akış sırasında kesiyor.
+   */
+  if (app) {
+    const { default: multipart } = await import('@fastify/multipart');
+    await app.register(multipart as never, {
+      limits: { fileSize: 8 * 1024 * 1024, files: 1, fields: 8 },
+    });
+  }
+
+  /**
    * ⭐⭐ İSTEK BAĞLAMI (Faz 3) — her isteğe bir `traceId`, en erken noktada.
    *
    * ⚠️ `onRequest` **en erken kanca**: guard'lardan, interceptor'lardan ve hata filtresinden

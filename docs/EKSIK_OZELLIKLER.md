@@ -91,6 +91,27 @@ ve toplu seçim.
 > doğrulama düşer, eski adrese bilgi maili), **şifre değiştirme** artık aktif oturumu
 > düşürmüyor + bilgilendirme maili gönderiyor. Ad sınırı 10 → **15**.
 >
+> ✅ **2026-08-14: DESTEK / İLETİŞİM SİSTEMİ EKLENDİ.** Oyunun bugüne kadarki tek destek
+> kanalı `destek@mobilwar.com` idi — yani yardım isteme yolu oyunun DIŞINDAYDI, geçmişi yoktu,
+> yönetici kuyruğu yoktu. Artık: oyun içinden talep açma (**giriş yapmamış ziyaretçiler
+> dâhil**), karşılıklı yazışma, mesaj başına bir resim, kategori, yönetici paneli, oyun içi
+> bildirim (`ticket` kategorisi) ve e-posta akışı. Göç `0047_support.sql`,
+> `apps/api/src/support/`, `apps/web/src/screens/Support.tsx`, `apps/admin/src/screens/Support.tsx`.
+>
+> ⭐ Kullanıcı kararları: talebi **yalnız yönetici** açıp kapatır · yöneticiye mail **yalnız ilk
+> açılışta** (sonrası panel rozeti + günlük özet) · anonimde e-posta **zorunlu** · hesap
+> silinince metin kalır, **PII ve resimler silinir**.
+>
+> ⚠️ **Bilinen sınırlar (bilerek):**
+> - **Resimler yeniden boyutlandırılmıyor** — `sharp` native bir bağımlılık ve geliştirme
+>   Windows / üretim Linux ikilisinde yanlış platform ikilisi sessiz bir dağıtım arızası
+>   üretirdi. Tavan 5 MB + 40 MP; magic byte, piksel bombası ve SVG savunmaları bağımlılıksız.
+> - **EXIF yalnız JPEG'de temizleniyor** (`APPn` segmentleri atılıyor). PNG/WebP ekran
+>   görüntüleri pratikte konum taşımıyor; taşıyan bir kaynak çıkarsa burası genişletilmeli.
+> - **Yükleme `UPLOAD_ROOT` boşken kapalı** (uç 503) — talep açma ve yazışma yine çalışır.
+> - ⚠️⚠️ **Veritabanı yedeği artık tek başına tam yedek değil**: `/var/lib/mobilwar/uploads`
+>   de yedeklenmeli (`YAYINA_ALMA.md §4/6b`).
+>
 > ✅ **2026-08-02: posta altyapısı KAPANDI.** Alan adı `mailer.mobilwar.com`, Resend'de
 > **verified** (DKIM `resend._domainkey.mailer`, SPF+MX `send.mailer` altında — Return-Path
 > Resend'in kendi alt alanı). DNS **Cloudflare**'de. `RESEND_API_KEY` üretimde

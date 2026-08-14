@@ -341,6 +341,16 @@ export interface RequestOptions {
 }
 
 export async function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+  /**
+   * ⭐ DOSYA YÜKLEME DALI (2026-08-14) — `body` bir `FormData` ise istek multipart gider.
+   *
+   * ⚠️ `content-type` **BİLEREK YAZILMIYOR**: tarayıcı onu `multipart/form-data; boundary=…`
+   * olarak kendisi üretmek zorunda. Elle yazarsak boundary eksik kalır ve sunucu gövdeyi hiç
+   * ayrıştıramaz — sessiz, teşhisi zor bir 400.
+   * ⚠️ `JSON.stringify` de atlanıyor; `FormData` olduğu gibi gönderiliyor.
+   */
+  const isForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
+
   const send = async (): Promise<Response> =>
     fetch(path.startsWith('/') ? path : `/api/v1/${path}`, {
       method: opts.method ?? 'GET',
@@ -349,14 +359,16 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
         //    bırakmak Fastify'ı *"Body cannot be empty when content-type is set to
         //    'application/json'"* hatasına düşürüyordu (yapı yükseltme iptali böyle patlıyordu):
         //    başlık "gövde geliyor" diye söz verir, gövde gelmez, ayrıştırıcı 400 döner.
-        ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(opts.body === undefined || isForm ? {} : { 'content-type': 'application/json' }),
         'x-device-id': deviceId(),
         'x-client-instance': instanceId(),
         'x-platform': 'web',
         ...clientHints,
         ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}),
       },
-      ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
+      ...(opts.body === undefined
+        ? {}
+        : { body: isForm ? (opts.body as FormData) : JSON.stringify(opts.body) }),
     });
 
   /**

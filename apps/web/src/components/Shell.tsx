@@ -61,6 +61,11 @@ const MENU = [
   { to: '/simulate', label: 'Simülatör', icon: 'simulator' },
   { to: '/options', label: 'Seçenekler', icon: 'secenekler' },
   { to: '/help', label: 'Yardım', icon: 'yardim' },
+  /**
+   * ⭐ Destek (kullanıcı, 2026-08-14). Yeri Yardım'ın hemen ardı: ikisi de "takıldım" ailesi —
+   * Yardım kendi kendine çözmek, Destek insana sormak için.
+   */
+  { to: '/destek', label: 'Destek', icon: 'destek' },
 ] as const;
 
 /**
@@ -95,6 +100,11 @@ const MORE_ITEMS = [
   { to: '/simulate', label: 'Simülatör', icon: 'simulator' },
   { to: '/options', label: 'Seçenekler', icon: 'secenekler' },
   { to: '/help', label: 'Yardım', icon: 'yardim' },
+  /**
+   * ⚠️ Destek burada olmak ZORUNDA: alt barın beş sekmesine sığmıyor ve bu listeye
+   * konmasaydı **mobilde ekrana giden hiçbir yol kalmazdı** (Simülatör'ün aynı gerekçesi).
+   */
+  { to: '/destek', label: 'Destek', icon: 'destek' },
 ] as const;
 
 /**
@@ -114,6 +124,7 @@ const PAGE_TITLE: [string, string][] = [
   ['/defense', 'Savunma'], ['/academy', 'Akademi'], ['/temple', 'Tapınak'],
   ['/world', 'Dünya'], ['/messages', 'Mesajlar'], ['/options', 'Seçenekler'],
   ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'], ['/simulate', 'Simülatör'],
+  ['/destek', 'Destek'],
 ];
 
 /* ⚠️ `cityActivity` ve `ActivityDot` 2026-08-09'da `lib/city-activity.tsx`e taşındı —

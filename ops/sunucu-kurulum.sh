@@ -94,6 +94,17 @@ say "dizinler"
 mkdir -p "$BASE/releases" "$BASE/shared/logs"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$BASE"
 mkdir -p /var/www/html/.well-known/acme-challenge   # certbot --webroot için
+
+# ⭐ Destek eklerinin deposu (2026-08-14) — projedeki İLK kullanıcı içeriği dizini.
+# ⚠️⚠️ Sahiplik `deploy:www-data` ve mod 0750 olmak ZORUNDA. Dosyayı **nginx** servis ediyor
+#    (`X-Accel-Redirect`), yani grubun okuma izni şart. Bu adım atlanırsa özellik "çalışıyor"
+#    görünür — yükleme başarılı olur, DB satırı yazılır — ama her indirme 403 döner ve hata
+#    uygulama hatası gibi görünür. En pahalı yanlış teşhis sınıfı.
+# ⚠️ Sürüm dizininin (`$BASE`) DIŞINDA: yüklenen içerik dağıtımla gelip gitmemeli.
+mkdir -p /var/lib/mobilwar/uploads
+chown -R "$DEPLOY_USER:www-data" /var/lib/mobilwar
+chmod 750 /var/lib/mobilwar /var/lib/mobilwar/uploads
+
 echo "$BASE hazır"
 
 # ── 6. Sırlar ────────────────────────────────────────────────────────────────

@@ -562,11 +562,13 @@ describe('NotifyService.prefs', () => {
      */
     expect(await service.prefs(accountId)).toEqual({
       attack: true, dm: true, report: true, production: true, mention: true,
+      /** ⭐ Destek talebine yönetici yanıtı (2026-08-14) — `mention` gibi GÖÇSÜZ eklendi. */
+      ticket: true,
     });
 
     await service.setPrefs(accountId, { production: false });
     expect(await service.prefs(accountId)).toEqual({
-      attack: true, dm: true, report: true, production: false, mention: true,
+      attack: true, dm: true, report: true, production: false, mention: true, ticket: true,
     });
 
     await service.setPrefs(accountId, { dm: false });

@@ -14,3 +14,10 @@ coverage/
 # java-dize.py cikti dosyalari (gecici, docs/JAVA_ROENTGEN.md ureticisi)
 kall.txt
 kbul.txt
+
+# Destek eklerinin yerel deposu (UPLOAD_ROOT) — asla depoya girmez.
+.uploads/
+
+# API'yi elle başlatırken üretilen yerel günlükler.
+api-out.log
+api-err.log

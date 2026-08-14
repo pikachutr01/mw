@@ -13,6 +13,10 @@ import {
   type UseInfiniteQueryResult, type UseQueryResult,
 } from '@tanstack/react-query';
 import type { MapConfig } from '@mobilwar/engine';
+import type {
+  CreateSupportTicketRequest, ReplySupportTicketRequest, SupportThread, SupportTicketSummary,
+  SupportUploadResult,
+} from '@mobilwar/contracts';
 import { api } from './api.ts';
 import { noteServerTime, useSession } from './hooks.ts';
 import { useConnection } from './realtime.ts';
@@ -1719,3 +1723,70 @@ export const useBlockedPlayers = (): UseQueryResult<{ items: BlockedPlayer[] }> 
   queryFn: () => get<{ items: BlockedPlayer[] }>('/api/v1/chat/blocks'),
   enabled: useAuthed(),
 });
+
+/* ── Destek talepleri (2026-08-14) ─────────────────────────────────────────── */
+
+export const useSupportTickets = (): UseQueryResult<{
+  tickets: SupportTicketSummary[]; unread: number;
+}> => useQuery({
+  queryKey: ['support'],
+  queryFn: () => get<{ tickets: SupportTicketSummary[]; unread: number }>('/api/v1/support'),
+  refetchInterval: useSafetyNet(),
+  enabled: useAuthed(),
+});
+
+/**
+ * Form açılış paketi — e-posta alanının gösterilip gösterilmeyeceğini **sunucu** söyler.
+ * ⚠️ İstemcide `me` yanıtından türetseydik kural iki yere yazılmış olurdu.
+ */
+export const useSupportForm = (): UseQueryResult<{
+  email: string; emailVerified: boolean; showEmailField: boolean;
+}> => useQuery({
+  queryKey: ['support-form'],
+  queryFn: () => get<{ email: string; emailVerified: boolean; showEmailField: boolean }>(
+    '/api/v1/support/form',
+  ),
+  enabled: useAuthed(),
+});
+
+/** ⚠️ Liste ve yazışma AYRI uç: liste 60 sn'de bir dönüyor, gövdeleri boşuna taşımasın. */
+export const useSupportThread = (id: number | null): UseQueryResult<SupportThread> => useQuery({
+  queryKey: ['support-thread', id],
+  queryFn: () => get<SupportThread>(`/api/v1/support/${id}`),
+  enabled: useAuthed() && id != null,
+});
+
+export function useCreateSupportTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateSupportTicketRequest) =>
+      api<{ ticketId: number }>('/api/v1/support', { method: 'POST', body }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['support'] }); },
+  });
+}
+
+export function useReplySupportTicket(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ReplySupportTicketRequest) =>
+      api(`/api/v1/support/${id}/messages`, { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['support'] });
+      void qc.invalidateQueries({ queryKey: ['support-thread', id] });
+    },
+  });
+}
+
+/**
+ * Resim yükleme — `api()`nin multipart dalını kullanıyor.
+ * ⚠️ `content-type` ELLE YAZILMAZ; tarayıcı boundary'yi kendisi üretmeli (`api.ts`).
+ */
+export function useSupportUpload(path = '/api/v1/support/uploads') {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return api<SupportUploadResult>(path, { method: 'POST', body: fd });
+    },
+  });
+}

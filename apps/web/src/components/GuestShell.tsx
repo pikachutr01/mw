@@ -19,15 +19,24 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { AuthModal, type AuthMode } from './AuthModal.tsx';
 import { Button, MenuIcon } from './ui.tsx';
 
-/** Misafirin gezebildiği tek iki ekran. Geri kalan her şey oturum istiyor. */
+/**
+ * Misafirin gezebildiği ekranlar. Geri kalan her şey oturum istiyor.
+ *
+ * ⭐ **Destek misafire de açık** (kullanıcı şartı, 2026-08-14): *"hem giriş yapmış hem de
+ * yapmamış kullanıcılar için kullanılabilir olmalı."* Zaten en çok ihtiyaç duyan kişi giriş
+ * YAPAMAYAN kişidir — kapıyı oturumun arkasına koymak, tam da yardım gerektiren durumu
+ * kapsam dışı bırakırdı.
+ */
 const GUEST_MENU = [
   { to: '/simulate', label: 'Simülatör', icon: 'simulator' },
   { to: '/help', label: 'Yardım', icon: 'yardim' },
+  { to: '/destek', label: 'Destek', icon: 'destek' },
 ] as const;
 
 const GUEST_TITLE: [string, string][] = [
   ['/simulate', 'Simülatör'],
   ['/help', 'Yardım'],
+  ['/destek', 'Destek'],
 ];
 
 /**

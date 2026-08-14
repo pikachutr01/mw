@@ -45,6 +45,9 @@ import { HttpExceptionFilter } from './common/http-exception.filter.ts';
 import { WorldStateService } from './world/world-state.service.ts';
 import { WorldController } from './world/world.controller.ts';
 import { WorldsPublicController } from './world/worlds-public.controller.ts';
+import { AdminSupportController } from './admin/admin.support.controller.ts';
+import { SupportController } from './support/support.controller.ts';
+import { SupportPublicController } from './support/support.public.controller.ts';
 
 export { DB } from './db/tokens.ts';
 
@@ -70,7 +73,14 @@ export { DB } from './db/tokens.ts';
     // ⭐ Admin uçları aynı süreçte, ayrı guard'ın arkasında (§admin Faz 0).
     AdminController, AdminWorldController, AdminModerationController,
     AdminActionsController, AdminDbController, AdminOpsController, AdminPlayersController,
-    AdminBulkController, AdminAbuseController, AdminMessagesController,
+    AdminBulkController, AdminAbuseController, AdminMessagesController, AdminSupportController,
+    /**
+     * ⭐ DESTEK (2026-08-14) — İKİ controller, biri guard'lı biri kimliksiz.
+     * ⚠️ Ayrı olmaları şart: `SupportController` sınıf düzeyinde `AuthGuard` taşıyor,
+     * `SupportPublicController` ise taşımıyor. Tek sınıfta metot başına guard yazmak da
+     * mümkündü ama o zaman "hangi uç kimliksiz" sorusunun cevabı dosyanın içine dağılırdı.
+     */
+    SupportController, SupportPublicController,
   ],
   providers: [
     {

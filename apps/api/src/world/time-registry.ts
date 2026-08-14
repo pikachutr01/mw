@@ -261,6 +261,25 @@ export const NON_TIMELINE_COLUMNS: readonly string[] = [
   'email_tokens.expires_at', 'email_tokens.used_at', 'email_tokens.created_at',
   'push_subscriptions.created_at', 'push_subscriptions.last_used_at', 'push_subscriptions.failed_at',
 
+  /**
+   * 2 — DESTEK / İLETİŞİM (0047). ⚠️ Hepsi **gerçek zamanda** ve bu bilinçli bir karar,
+   * unutulmuş bir sınıflandırma değil: destek bir oyun mekaniği değil, oyunun **dışına açılan
+   * kanal**. Bakımda oyun saati donuyor ama destek yazışması donmamalı — nitekim aynı gerekçe
+   * `MaintenanceInterceptor` muafiyetinde ve `MAINTENANCE_PASSTHROUGH_TOPICS`te de yazılı:
+   * oyuncu tam da oyuna GİREMEDİĞİ anda buraya yazar.
+   *
+   * ⚠️ `public_token_expires_at` şimdiki zamanla KARŞILAŞTIRILIYOR (`ticketIdForToken`) ama
+   * yine de burada: emsali `email_tokens.expires_at` — jeton ömrü bir güvenlik penceresidir,
+   * oyun vadesi değil. Bakım yüzünden uzasaydı, kaybedilmiş bir posta kutusunun elindeki
+   * bağlantı da o kadar uzun yaşardı.
+   * ⚠️ `support_attachments.created_at` de öyle: yetim süpürme bir SAKLAMA kuralı
+   * (`ops-jobs.ts` ayrımının aynısı), oyun kuralı değil.
+   */
+  'support_tickets.created_at', 'support_tickets.updated_at', 'support_tickets.closed_at',
+  'support_tickets.admin_notified_at', 'support_tickets.public_token_expires_at',
+  'support_messages.created_at', 'support_messages.read_at',
+  'support_attachments.created_at',
+
   // 2 — Moderasyon (ceza bakım yapıldı diye uzamaz)
   'chat_bans.until', 'chat_bans.created_at',
   'alliance_chat_mutes.until', 'alliance_chat_mutes.created_at', 'alliance_chat_mutes.revoked_at',

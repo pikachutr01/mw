@@ -124,6 +124,24 @@ export function eventForOutbox(
       };
 
     /**
+     * ⭐ DESTEK TALEBİ DEĞİŞTİ (2026-08-14) — açıldı · yanıtlandı · kapatıldı.
+     *
+     * ⚠️ `playerId` **NULL olabilir** (anonim talep). O durumda `players()` boş dizi döner ve
+     * yönlendirme kuralı gereği olay **dünya odasına** giderdi — yani destek yazışmasının
+     * varlığı dünyadaki herkese duyurulurdu. Bu yüzden hedefi olmayan olay hiç üretilmiyor:
+     * anonim kullanıcının zaten soketi yok, haberi e-postayla alıyor.
+     */
+    case 'support:changed': {
+      const to = num(payload['playerId']);
+      if (to == null || to <= 0) return null;
+      return {
+        topic: 'support:changed', worldId,
+        playerIds: players(to),
+        ref: { ticketId: num(payload['ticketId']) },
+      };
+    }
+
+    /**
      * ⭐ GÖREV GÖNDERİLDİ → GÖNDERENE (kullanıcı, 2026-08-02). Ordular rozeti görev verilir
      * verilmez belirsin.
      *
