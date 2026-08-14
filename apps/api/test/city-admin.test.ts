@@ -25,6 +25,7 @@ import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/
 let h: DbHandle;
 let ctl: CityController;
 let svc: CityService;
+let clock: GameClockService;
 let worldId: number;
 let me: number;
 let myCity: number;
@@ -51,6 +52,7 @@ const nameOfCity = async (id: number): Promise<string> => {
 beforeAll(async () => {
   h = await setupTestDb();
   svc = new CityService(h.db);
+  clock = new GameClockService(h.db);
   /**
    * ⚠️ `SettingsService` de geçiliyor (§admin Faz 5): controller ekrandaki fiyat/süreleri
    * dünyanın etkin katalog sabitlerinden hesaplıyor. Hiç ayar kaydedilmemişse servis
@@ -58,7 +60,7 @@ beforeAll(async () => {
    */
   ctl = new CityController(
     svc, new QueueService(h.db, svc), new CaveService(h.db),
-    new GameClockService(h.db), new SettingsService(h.db), h.db,
+    clock, new SettingsService(h.db), h.db,
   );
 }, 60_000);
 
@@ -152,14 +154,14 @@ describe('şehir terk etme — engeller', () => {
     colony = Number(row!['id']);
   });
 
-  const blockers = (): Promise<string[]> => svc.abandonBlockers(colony);
+  const blockers = async (): Promise<string[]> => svc.abandonBlockers(colony, await clock.gameNow(worldId));
 
   it('temiz koloni terk edilebilir', async () => {
     expect(await blockers()).toEqual([]);
   });
 
   it('başkent terk edilemez', async () => {
-    expect(await svc.abandonBlockers(myCity)).toContain('Başkent terk edilemez.');
+    expect(await svc.abandonBlockers(myCity, await clock.gameNow(worldId))).toContain('Başkent terk edilemez.');
   });
 
   it('barakada savaşçı varsa engellenir', async () => {

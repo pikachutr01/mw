@@ -77,6 +77,13 @@ export async function isVerified(
  *
  * ⚠️ Savunma birimleri sayıya GİRMEZ: onlar `defenses` tablosunda ve doğrulanmamış hesapta
  * zaten hiç üretilemiyor.
+ *
+ * ⚠️ **KUYRUKTAN `done` DÜŞÜLÜR** (2026-08-14 düzeltmesi). Üretim tembel ilerliyor: biten
+ * birimler `units` tablosuna yazılıyor ve `q.done` o sayıyı tutuyor. Ham `q.count` toplanınca
+ * üretilmiş kısım İKİ KEZ sayılıyordu (bir `units`te, bir kuyrukta) — 100'lük siparişin 40'ı
+ * bitmişse toplam 140 çıkıyordu. Üstelik sonuç şehrin materialize edilip edilmediğine göre
+ * değişiyordu: aynı oyuncu, aynı ordu, farklı limit. Limit bu yüzden olduğundan SIKI çalışıyor
+ * ve doğrulanmamış oyuncuyu hak etmediği yerde durduruyordu.
  */
 export async function warriorTotal(
   runner: { execute: <T>(q: unknown) => Promise<T[]> }, playerId: number,
@@ -91,7 +98,7 @@ export async function warriorTotal(
                   JOIN missions m ON m.id = mu.mission_id
                  WHERE m.owner_player_id = ${playerId}
                    AND m.status IN ('scheduled', 'running')), 0)
-    + COALESCE((SELECT SUM(q.count) FROM queues q
+    + COALESCE((SELECT SUM(q.count - q.done) FROM queues q
                   JOIN cities c ON c.id = q.city_id
                  WHERE c.player_id = ${playerId} AND q.category = 'unit'
                    AND q.completed_at IS NULL AND q.canceled_at IS NULL), 0)

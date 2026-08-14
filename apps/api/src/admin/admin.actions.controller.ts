@@ -456,7 +456,10 @@ export class AdminActionsController {
     `);
     if (!p) throw new NotFoundException('Oyuncu bulunamadı.');
 
-    await recomputeScoreBaseFromHoldings(this.db as never, Number(p['world_id']), d.playerId);
+    await recomputeScoreBaseFromHoldings(
+      this.db as never, Number(p['world_id']), d.playerId,
+      undefined, await this.clock.gameNow(Number(p['world_id'])),
+    );
     const [after] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT score FROM players WHERE id = ${d.playerId}
     `);
@@ -612,6 +615,16 @@ export class AdminActionsController {
     `);
     if (hero) throw new BadRequestException('Şehirde kahraman var — önce taşı veya sil.');
 
+    /**
+     * ⭐ ÇIPAYI DEVİRDEN ÖNCE KAPAT (2026-08-14).
+     *
+     * ⚠️ `cities.resources_at` devirle birlikte taşınıyor. İlerletilmezse eski sahibin
+     * elindeyken biriken üretim, şehir el değiştirdikten SONRA yeni sahibin kasasına
+     * yazılıyordu. Aynı dosyanın başlığı ve `end-vacation` aksiyonu bu tuzağı zaten
+     * anlatıyor ("önce `materialize()`, sonra ekle/çıkar") — burada uygulanmamıştı.
+     */
+    await this.cities.materialize(d.cityId, await this.clock.gameNow(city.worldId));
+
     await this.db.transaction(async (tx) => {
       await tx.execute(sql`
         UPDATE cities SET player_id = ${d.toPlayerId}, is_capital = false WHERE id = ${d.cityId}
@@ -623,8 +636,9 @@ export class AdminActionsController {
       `);
     });
     /** ⚠️ İki tarafın da puanı türev — ikisi de yeniden hesaplanmalı. */
-    await recomputeScoreBaseFromHoldings(this.db as never, city.worldId, city.playerId);
-    await recomputeScoreBaseFromHoldings(this.db as never, city.worldId, d.toPlayerId);
+    const scoreAt = await this.clock.gameNow(city.worldId);
+    await recomputeScoreBaseFromHoldings(this.db as never, city.worldId, city.playerId, undefined, scoreAt);
+    await recomputeScoreBaseFromHoldings(this.db as never, city.worldId, d.toPlayerId, undefined, scoreAt);
 
     await this.audit(city.worldId, req, 'admin.action.move_city', 'city', d.cityId, {
       from: city.playerId, to: d.toPlayerId,

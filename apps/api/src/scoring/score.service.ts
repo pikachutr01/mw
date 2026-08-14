@@ -27,6 +27,7 @@ import {
 import type { Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
 import { liveNumberFor } from '../settings/live.ts';
+import { materializeUnitQueues } from '../queues/unit-queue.ts';
 
 type Runner = Db | Tx;
 
@@ -366,8 +367,31 @@ export async function holdingsValue(
  * @returns yazılan taban (kaynak birimi)
  */
 export async function recomputeScoreBaseFromHoldings(
-  runner: Runner, worldId: number, playerId: number, cfg?: CatalogConfig,
+  runner: Runner, worldId: number, playerId: number, cfg?: CatalogConfig, at?: Date,
 ): Promise<number> {
+  /**
+   * ⭐ ÖNCE ÜRETİM BANTLARINI YAZ (2026-08-14) — `cave_units` boşluğuyla aynı sınıf.
+   *
+   * ⚠️ Bu fonksiyon `score_base`i **ÜZERİNE YAZIYOR**, fark işlemiyor. Yani eksik okunan her
+   * şey kalıcı olarak siliniyor. Üretim tembel ilerlediği için, kuyruktan düşmüş ama `units`/
+   * `defenses` tablosuna henüz yazılmamış ordu ham okumada YOK görünüyordu: operatör "puanı
+   * yeniden hesapla" düğmesine bastığında oyuncu o ordunun değerini kaybediyordu.
+   *
+   * ⚠️ `at` verilmezse ilerletme YAPILMAZ (davranış eskisiyle bit-bit aynı). Oyun saatini
+   * burada `now()`tan uyduramayız — bakımda saat donuyor ve uydurulmuş bir zaman kuyruğu
+   * gerçekte üretilmemiş birimlerle doldururdu. Zamanı bilen çağıran versin.
+   */
+  if (at) {
+    const cityRows = await runner.execute<Record<string, unknown>>(sql`
+      SELECT id FROM cities WHERE player_id = ${playerId}
+    `);
+    for (const c of cityRows) {
+      const cityId = Number(c['id']);
+      await materializeUnitQueues(runner as never, cityId, at, 'unit');
+      await materializeUnitQueues(runner as never, cityId, at, 'defense');
+    }
+  }
+
   const base = await holdingsValue(runner, playerId, cfg);
   await runner.execute(sql`
     UPDATE players

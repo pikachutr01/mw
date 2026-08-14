@@ -44,6 +44,7 @@ import { UNITS_BY_ID, caveArea, caveCapacity, caveTransferSeconds } from '@mobil
 import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobilwar/catalog';
 import { toDate, type Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
+import { materializeUnitQueues } from '../queues/unit-queue.ts';
 
 type Runner = Db | Tx;
 
@@ -215,6 +216,20 @@ export class CaveService {
        * Emir anında **yalnız DOĞRULAMA** yapılır, düşüm değil: olmayan askeri işaretlemenin
        * anlamı yok. Süre içinde ölürlerse varışta zaten clamp'lenecek.
        */
+      /**
+       * ⭐⭐ ÖNCE BARAKAYI ŞİMDİYE GETİR (2026-08-14 — `reserveUnits` ile aynı hata).
+       *
+       * ⚠️ Baraka üretimi TEMBEL: biten askerler `units` tablosuna ancak şehir okunduğunda
+       * yazılıyor. Bu satır yokken doğrulama **ekranın gösterdiğinden az** asker görüyor ve
+       * oyuncu gözünün önündeki orduyu mağaraya gönderemiyordu ("yeterli asker yok").
+       *
+       * ⚠️ Tam `CityService.materialize` DEĞİL, yalnız birim bandı çağrılıyor: mağaraya
+       * gönderme kaynak harcamıyor, kasayı ilerletmek için bir sebep yok. Kaynak çıpasına
+       * dokunmadığımız için tutarsız ara durum da doğmuyor — `materialize`in yaptığı birim
+       * işinin aynısı bu.
+       */
+      await materializeUnitQueues(tx as never, opts.cityId, opts.at, 'unit');
+
       const have = await readCounts(tx as never, 'units', opts.cityId);
       for (const [type, n] of Object.entries(wanted)) {
         if ((have[type] ?? 0) < n) {

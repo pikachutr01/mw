@@ -321,7 +321,21 @@ export class CityService {
    * ise `SET NULL` → kahraman sahipsiz kalır. İkisi de geri alınamaz ve oyuncu ne olduğunu
    * hiç görmez.
    */
-  async abandonBlockers(cityId: number, runner: Runner = this.db): Promise<string[]> {
+  async abandonBlockers(cityId: number, at: Date, runner: Runner = this.db): Promise<string[]> {
+    /**
+     * ⭐⭐ ÖNCE BARAKAYI ŞİMDİYE GETİR (2026-08-14).
+     *
+     * ⚠️ Bu, kozmetik bir sayı düzeltmesi DEĞİL — kapının kendisi bozuluyordu. Fonksiyonun
+     * varlık sebebi yukarıda yazıyor: terk edilen şehirle birlikte ordu **sessizce siliniyor**
+     * ve oyuncu ne olduğunu görmüyor. Kuyruktan düşmüş ama `units` tablosuna henüz yazılmamış
+     * askerler ham okumada 0 görünüyordu → engel HİÇ oluşmuyor, şehir terk ediliyor ve o
+     * ordu tam da önlenmek istenen şekilde yok oluyordu.
+     *
+     * ⚠️ `materializeUnitQueues` yeterli: burada kaynak değil ASKER sayılıyor.
+     */
+    await materializeUnitQueues(runner as never, cityId, at, 'unit');
+    await materializeUnitQueues(runner as never, cityId, at, 'defense');
+
     const [r] = await runner.execute<Record<string, unknown>>(sql`
       SELECT
         c.is_capital,
@@ -364,7 +378,7 @@ export class CityService {
    *
    * @returns silinen şehrin künyesi + düşen puan tabanı
    */
-  async abandon(o: { cityId: number; playerId: number; worldId: number }): Promise<{
+  async abandon(o: { cityId: number; playerId: number; worldId: number; at: Date }): Promise<{
     name: string; coordinates: { k: number; d: number; s: number }; scoreBaseLost: number;
   }> {
     return this.db.transaction(async (tx) => {
@@ -376,7 +390,7 @@ export class CityService {
       `);
       if (!city) throw new AbandonError(['Şehir bulunamadı.']);
 
-      const blockers = await this.abandonBlockers(o.cityId, runner);
+      const blockers = await this.abandonBlockers(o.cityId, o.at, runner);
       if (blockers.length > 0) throw new AbandonError(blockers);
 
       // ⚠️ `cfg` geçiliyor: dünya bazlı fiyat override'ında terk edilen şehrin puan bedeli

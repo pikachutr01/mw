@@ -289,7 +289,7 @@ export class CityController {
        WHERE id = ${cityId} AND player_id = ${player.playerId} AND world_id = ${player.worldId}
     `);
     if (!row) throw new NotFoundException('Şehir bulunamadı.');
-    const blockers = await this.cities.abandonBlockers(cityId);
+    const blockers = await this.cities.abandonBlockers(cityId, await this.clock.gameNow(player.worldId));
     return { canAbandon: blockers.length === 0, blockers };
   }
 
@@ -310,6 +310,7 @@ export class CityController {
     try {
       const res = await this.cities.abandon({
         cityId: Number(id), playerId: player.playerId, worldId: player.worldId,
+        at: await this.clock.gameNow(player.worldId),
       });
       return { ok: true, ...res };
     } catch (err) {

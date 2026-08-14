@@ -119,7 +119,7 @@ export class QueueService {
     cityId: number; playerId: number; type: string; at: Date;
   }): Promise<QueueItem> {
     return this.db.transaction(async (tx) => {
-      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId);
+      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId, opts.at);
       const current = st.buildings[opts.type] ?? 0;
       const target = current + 1;
 
@@ -200,7 +200,7 @@ export class QueueService {
     if (!def || def.kind !== 'warrior') throw new QueueError('unknown_item', 'Bilinmeyen savaşçı.');
 
     return this.db.transaction(async (tx) => {
-      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId);
+      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId, opts.at);
       this.assertRequirements(UNIT_REQUIREMENTS[opts.type], st, opts.type);
 
       /**
@@ -285,7 +285,7 @@ export class QueueService {
     }
 
     return this.db.transaction(async (tx) => {
-      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId);
+      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId, opts.at);
       this.assertRequirements(UNIT_REQUIREMENTS[opts.type], st, opts.type);
 
       /**
@@ -425,7 +425,7 @@ export class QueueService {
     cityId: number; playerId: number; type: string; at: Date;
   }): Promise<QueueItem> {
     return this.db.transaction(async (tx) => {
-      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId);
+      const st = await this.loadCity(tx as never, opts.cityId, opts.playerId, opts.at);
       const current = st.techs[opts.type] ?? 0;
       const target = current + 1;
 
@@ -548,7 +548,7 @@ export class QueueService {
    * `worldId` taşımak yalnız gürültü olurdu. **Değişmez burada yazılı** ki bir sonraki okuyan
    * aynı soruyu sıfırdan sormasın.
    */
-  private async loadCity(tx: Db, cityId: number, playerId: number): Promise<CityState> {
+  private async loadCity(tx: Db, cityId: number, playerId: number, at: Date): Promise<CityState> {
     const rows = await tx.execute<Record<string, unknown>>(sql`
       SELECT c.world_id, c.player_id, (a.email_verified_at IS NOT NULL) AS email_verified,
              (p.vacation_until IS NOT NULL) AS on_vacation
@@ -576,6 +576,20 @@ export class QueueService {
         'Tatil modundayken üretim ve ilerletme yapılamaz. Önce tatil modundan çık.',
       );
     }
+
+    /**
+     * ⭐ ÖNCE BANDI ŞİMDİYE GETİR (2026-08-14).
+     *
+     * ⚠️ `defenses` bir KAPI değeri: Sur kapasitesi kontrolü (`defenseCapacity`) buradan
+     * okunuyor. Savunma bandının ürettiği ama henüz tabloya yazılmamış birimler ham okumada
+     * görünmüyordu → kullanılan alan olduğundan AZ hesaplanıyor ve oyuncu Sur kapasitesinin
+     * ÜSTÜNDE sipariş verebiliyordu. `spend()` birkaç satır sonra zaten materialize ediyor,
+     * yani sıra yanlıştı: kapıdan geçtikten sonra ilerletiliyordu.
+     *
+     * ⚠️ Tam `materialize` çağrılıyor (yalnız birim bandı değil): bu yol kaynak da harcıyor,
+     * tek kapıdan geçmek iki ayrı "ne kadar ilerlettik" durumunun doğmasını engelliyor.
+     */
+    await this.cities.materialize(cityId, at, tx as never);
 
     const [bRows, dRows, tRows] = await Promise.all([
       tx.execute<Record<string, unknown>>(sql`SELECT type, level FROM buildings WHERE city_id = ${cityId}`),
