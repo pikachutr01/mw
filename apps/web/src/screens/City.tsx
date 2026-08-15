@@ -28,6 +28,7 @@ import {
   type CatalogBuilding, type CatalogTech, type CatalogUnit, type CityDetail, type QueueRow,
   type TechQueueRow,
 } from '../lib/queries.ts';
+import { unitProgress, type UnitProgress } from '../lib/city-progress.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import {
   AmountInput, Badge, Button, CatalogIcon, Empty, ErrorBox, Panel, Requirements, Res,
@@ -577,56 +578,6 @@ function useCollapsed(): [boolean, (v: boolean) => void] {
     localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
     setV(next);
   }];
-}
-
-/**
- * ⭐ ÜRETİM BANDININ İSTEMCİDE TÜRETİLMESİ (2026-07-28, kullanıcının bildirdiği hata)
- *
- * **Hata neydi:** bir askerin üretimi bitince çubuk %100'de donuyor, geri sayım "birazdan"da
- * kalıyor ve **bir sonraki sunucu okumasına kadar** yenilenmiyordu. Yoklama 5 sn'den 60 sn'ye
- * indirildiği için bu kusur bir anlık takılmadan **bir dakikalık donmaya** dönüştü.
- *
- * **Neden WS ile çözülmedi:** üretim **tembeldir** (§3, tick YOK). Sunucu bir askerin üretildiğini
- * ancak şehir okunduğunda "fark eder"; bu yüzden asker başına olay yayınlayabilmesi için her aktif
- * kuyruğa bir zamanlayıcı koymak, yani mimarinin temel kararını geri almak gerekirdi.
- *
- * **Neden asker başına fetch de değil:** 9 sn'lik Cüce siparişinde dakikada ~7 istek, yüksek
- * Baraka'da 1 sn'lik birimde **dakikada 60 istek** ederdi.
- *
- * **Çözüm — sıfır maliyet:** bant **tamamen deterministik**. `startedAt` ve `perUnitSeconds`
- * biliniyorsa k'ıncı asker `startedAt + k × perUnit` anında biter. İstemci sunucunun kullandığı
- * FORMÜLÜN AYNISINI çalıştırıyor; hiçbir istek atmadan, saniyesi saniyesine.
- * (Kaynak sayacındaki ekstrapolasyon kararının aynısı.)
- *
- * ⚠️ `q.done`/`q.remaining` **kullanılmıyor**: onlar sunucunun son okuma anındaki hâli, yani
- * tanımı gereği bayat. Çıpa `startedAt` — o hiç bayatlamaz.
- */
-interface UnitProgress {
-  /** Şimdiye kadar üretilmiş adet. */
-  produced: number;
-  /** Kalan sipariş. */
-  remaining: number;
-  /** Sıradaki tek askerin penceresi (ms). */
-  unitStart: number;
-  unitEnd: number;
-  /** Siparişin tamamı bitti (sunucudaki bitiş görevi birazdan satırı kapatacak). */
-  finished: boolean;
-}
-
-function unitProgress(q: QueueRow, now: number): UnitProgress | null {
-  const perMs = (q.perUnitSeconds ?? 0) * 1000;
-  const count = q.count ?? 0;
-  if (perMs <= 0 || count <= 0) return null;
-  const start = Date.parse(q.startedAt);
-  const produced = Math.min(count, Math.max(0, Math.floor((now - start) / perMs)));
-  const unitStart = start + produced * perMs;
-  return {
-    produced,
-    remaining: count - produced,
-    unitStart,
-    unitEnd: unitStart + perMs,
-    finished: produced >= count,
-  };
 }
 
 /**

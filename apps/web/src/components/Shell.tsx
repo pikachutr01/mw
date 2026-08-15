@@ -26,6 +26,7 @@ import { NotifyBanner } from './NotifyBanner.tsx';
 import {
   armiesBadge, useAlliance, useChatConversations, useCity, useMessages, useMovements,
 } from '../lib/queries.ts';
+import { extrapolateResources } from '../lib/city-progress.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useGlobalChatConnection } from '../lib/global-chat-context.tsx';
 import { GlobalChat } from './GlobalChat.tsx';
@@ -216,9 +217,10 @@ function InfoBar() {
   // çıpa WS olaylarında ve emniyet ağı yoklamasında (dakikada bir) tazeleniyor.
   const now = useTick();
   const d = city.data;
-  const elapsedH = d ? Math.max(0, (now - Date.parse(d.serverNow)) / 3_600_000) : 0;
-  const gold = d ? d.resources.gold + d.production.goldPerHour * elapsedH : 0;
-  const food = d ? d.resources.food + d.production.foodPerHour * elapsedH : 0;
+  // ⚠️ Hesap `lib/city-progress.ts`te: mobil aynısını çalıştırıyor ve ortak vektörle kilitli.
+  const { gold, food } = d
+    ? extrapolateResources({ ...d.resources, ...d.production, serverNow: d.serverNow }, now)
+    : { gold: 0, food: 0 };
 
   const page = PAGE_TITLE.find(([p]) => pathname.startsWith(p))?.[1] ?? '';
 

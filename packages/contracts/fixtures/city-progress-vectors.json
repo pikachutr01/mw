@@ -1,0 +1,160 @@
+{
+  "_aciklama": [
+    "⭐⭐ DİLLER ARASI EŞİTLİK KAPISI — şehir ekranının istemcide türetilen iki sayacı.",
+    "",
+    "`clock-vectors.json` ile aynı sözleşme: elle yazılmış bağımsız şartname, iki uygulama da",
+    "GÖRELİ YOLDAN okur, kopyalamaz. Gerekçenin tamamı orada.",
+    "",
+    "Tüketiciler:",
+    "  · apps/web/test/city-progress.test.ts        (TypeScript · src/lib/city-progress.ts)",
+    "  · apps/mobile/test/core/city_progress_test.dart (Dart · lib/core/city_progress.dart)",
+    "",
+    "⚠️ İki sayacın ÇIPASI farklı ve bu bilinçli:",
+    "  · unitProgress        → gameNow  (`startedAt` oyun saatinde; bakımda DONMALI)",
+    "  · extrapolateResources → serverNow (yanıtın gerçek okunma anı)",
+    "Çıpa seçimi çağıranın işi, bu vektörler `now`u açıkça veriyor."
+  ],
+
+  "_unitProgress_aciklama": [
+    "ÜRETİM BANDI. Bant tamamen deterministik: `startedAt` ve `perUnitSeconds` biliniyorsa",
+    "k'ıncı asker `startedAt + k × perUnit` anında biter. Sunucunun `done`/`remaining` alanları",
+    "KULLANILMIYOR — onlar son okuma anındaki hâl, tanımı gereği bayat.",
+    "",
+    "⚠️ 2026-07-28'de kullanıcının bildirdiği hata: bir asker bitince çubuk %100'de donuyor ve",
+    "bir sonraki sunucu okumasına kadar (60 sn) kıpırdamıyordu. Bu vektörler o düzeltmenin",
+    "sözleşmesi."
+  ],
+  "unitProgress": [
+    {
+      "ad": "yeni başladı",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:00:00.000Z",
+      "count": 10, "perUnitSeconds": 60,
+      "beklenen": { "produced": 0, "remaining": 10, "finished": false,
+        "unitStart": "2026-08-15T12:00:00.000Z", "unitEnd": "2026-08-15T12:01:00.000Z" }
+    },
+    {
+      "ad": "⭐ TAM SINIR — 60 sn'de birinci asker BİTMİŞ sayılır",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:01:00.000Z",
+      "count": 10, "perUnitSeconds": 60,
+      "beklenen": { "produced": 1, "remaining": 9, "finished": false,
+        "unitStart": "2026-08-15T12:01:00.000Z", "unitEnd": "2026-08-15T12:02:00.000Z" }
+    },
+    {
+      "ad": "birinci bitti, ikinci sürüyor",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:01:30.000Z",
+      "count": 10, "perUnitSeconds": 60,
+      "beklenen": { "produced": 1, "remaining": 9, "finished": false,
+        "unitStart": "2026-08-15T12:01:00.000Z", "unitEnd": "2026-08-15T12:02:00.000Z" }
+    },
+    {
+      "ad": "sipariş tam bitti",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:10:00.000Z",
+      "count": 10, "perUnitSeconds": 60,
+      "beklenen": { "produced": 10, "remaining": 0, "finished": true,
+        "unitStart": "2026-08-15T12:10:00.000Z", "unitEnd": "2026-08-15T12:11:00.000Z" }
+    },
+    {
+      "ad": "⚠️ süre AŞILDI — üretilen adet sipariş sayısına KELEPÇELENİR",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:16:40.000Z",
+      "count": 10, "perUnitSeconds": 60,
+      "beklenen": { "produced": 10, "remaining": 0, "finished": true,
+        "unitStart": "2026-08-15T12:10:00.000Z", "unitEnd": "2026-08-15T12:11:00.000Z" }
+    },
+    {
+      "ad": "⚠️ `now` başlangıçtan ÖNCE (saat sapması) — negatife düşmez",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T11:59:55.000Z",
+      "count": 10, "perUnitSeconds": 60,
+      "beklenen": { "produced": 0, "remaining": 10, "finished": false,
+        "unitStart": "2026-08-15T12:00:00.000Z", "unitEnd": "2026-08-15T12:01:00.000Z" }
+    },
+    {
+      "ad": "⭐ yüksek Baraka: 1 sn'lik birim, 100'lük sipariş",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:00:45.000Z",
+      "count": 100, "perUnitSeconds": 1,
+      "beklenen": { "produced": 45, "remaining": 55, "finished": false,
+        "unitStart": "2026-08-15T12:00:45.000Z", "unitEnd": "2026-08-15T12:00:46.000Z" }
+    },
+    {
+      "ad": "perUnitSeconds yok → bant çizilmez",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:05:00.000Z",
+      "count": 10, "perUnitSeconds": null, "beklenen": null
+    },
+    {
+      "ad": "perUnitSeconds 0 → bant çizilmez (sıfıra bölme)",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:05:00.000Z",
+      "count": 10, "perUnitSeconds": 0, "beklenen": null
+    },
+    {
+      "ad": "count 0 → bant çizilmez",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:05:00.000Z",
+      "count": 0, "perUnitSeconds": 60, "beklenen": null
+    },
+    {
+      "ad": "count yok → bant çizilmez",
+      "startedAt": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:05:00.000Z",
+      "count": null, "perUnitSeconds": 60, "beklenen": null
+    },
+    {
+      "ad": "⚠️ bozuk `startedAt` → çökmez, bant çizilmez",
+      "startedAt": "bu bir tarih değil", "now": "2026-08-15T12:05:00.000Z",
+      "count": 10, "perUnitSeconds": 60, "beklenen": null
+    }
+  ],
+
+  "_resources_aciklama": [
+    "KAYNAK SAYACI. Sunucu kaynağı tembel biriktiriyor (tick YOK); istemci aradaki saniyeleri",
+    "üretim hızıyla ekstrapole ediyor. Otorite yine sunucu — çıpa her okumada tazeleniyor.",
+    "",
+    "⚠️ Beklenen değerler ÖLÇÜLDÜ, tahmin edilmedi (2026-08-15). İkisi de IEEE754 double",
+    "kullandığı ve işlem sırası aynı olduğu için sonuçlar bit düzeyinde eşit olmak zorunda;",
+    "`45.6666…` gibi kesirli bir vektör tam olarak bunu sınıyor.",
+    "",
+    "⚠️ Tatil kontrolü YOK ve olmamalı: sunucu tatilde hızları 0 döndürüyor, sayaç kendiliğinden",
+    "duruyor. Ayrıca kontrol koymak «0/sa ⇒ tatilde» yanlış çıkarımını koda sokardı — madeni",
+    "olmayan yeni bir şehrin de üretimi 0'dır."
+  ],
+  "resources": [
+    {
+      "ad": "çıpa anı — hiç eklenmez",
+      "gold": 500, "food": 2000, "goldPerHour": 120, "foodPerHour": 73,
+      "serverNow": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:00:00.000Z",
+      "beklenen": { "gold": 500, "food": 2000 }
+    },
+    {
+      "ad": "tam bir saat",
+      "gold": 500, "food": 2000, "goldPerHour": 120, "foodPerHour": 0,
+      "serverNow": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T13:00:00.000Z",
+      "beklenen": { "gold": 620, "food": 2000 }
+    },
+    {
+      "ad": "yarım saat",
+      "gold": 500, "food": 2000, "goldPerHour": 120, "foodPerHour": 0,
+      "serverNow": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:30:00.000Z",
+      "beklenen": { "gold": 560, "food": 2000 }
+    },
+    {
+      "ad": "⭐ KESİRLİ — 20 dk, ikisi de IEEE754 double olmak zorunda",
+      "gold": 1000, "food": 2000, "goldPerHour": 137, "foodPerHour": 73,
+      "serverNow": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T12:20:00.000Z",
+      "beklenen": { "gold": 1045.6666666666667, "food": 2024.3333333333333 }
+    },
+    {
+      "ad": "⚠️ `now` çıpadan ÖNCE (cihaz saati geride) — sayaç GERİYE akmaz",
+      "gold": 500, "food": 2000, "goldPerHour": 120, "foodPerHour": 73,
+      "serverNow": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T11:55:00.000Z",
+      "beklenen": { "gold": 500, "food": 2000 }
+    },
+    {
+      "ad": "⭐ tatil: sunucu hızları 0 döndürüyor → sayaç kendiliğinden donuyor",
+      "gold": 12345, "food": 6789, "goldPerHour": 0, "foodPerHour": 0,
+      "serverNow": "2026-08-15T12:00:00.000Z", "now": "2026-08-15T18:00:00.000Z",
+      "beklenen": { "gold": 12345, "food": 6789 }
+    },
+    {
+      "ad": "⚠️ bozuk çıpa → çökmez, ekleme yapmaz",
+      "gold": 500, "food": 2000, "goldPerHour": 120, "foodPerHour": 73,
+      "serverNow": "çöp", "now": "2026-08-15T13:00:00.000Z",
+      "beklenen": { "gold": 500, "food": 2000 }
+    }
+  ]
+}

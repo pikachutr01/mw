@@ -9,6 +9,8 @@
 /// async yapardı — oysa künye uygulama ömrü boyunca değişmiyor.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api_client.dart';
@@ -18,6 +20,8 @@ import '../core/device_identity.dart';
 import '../core/http_transport.dart';
 import '../core/session.dart';
 import '../core/storage.dart';
+import '../features/city/city_model.dart';
+import '../gen/contracts.g.dart';
 
 /// Önyüklemede override edilir. Override edilmeden okunursa bilerek patlar: sessizce
 /// varsayılan bir künye üretmek, cihaz sinyalini aylarca yanlış toplamak demekti.
@@ -147,6 +151,110 @@ class Auth {
 }
 
 final authProvider = Provider<Auth>(Auth.new);
+
+/// ⭐ SANİYELİK SAYAÇ — geri sayım ve kaynak sayacı gösteren HER ekran bunu dinler.
+///
+/// ⚠️ Tek yerde: her bileşen kendi `Timer`ını kursaydı ekranda onlarca zamanlayıcı çalışırdı
+/// (web'de aynı karar: `useTick`). Riverpod dinleyici kalmayınca akışı kendiliğinden kapatıyor,
+/// yani arka planda boşa dönen sayaç kalmıyor.
+final tickProvider = StreamProvider<int>(
+  (ref) => Stream<int>.periodic(const Duration(seconds: 1), (i) => i),
+);
+
+/// Oyuncunun şehirleri. ⭐ `CitySummary` **üretilmiş sözleşme** (`contracts.g.dart`) — bu uç
+/// borç defterinin ödenmiş tarafında.
+final citiesProvider = FutureProvider<List<CitySummary>>((ref) async {
+  // ⚠️ Oturuma bağlı: çıkışta liste boşalsın ve yeni girişte yeniden çekilsin. `watch`
+  // olmasaydı önceki oyuncunun şehirleri ekranda kalırdı.
+  if (ref.watch(sessionProvider) == null) return const [];
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/cities');
+  final list = body is Map ? body['cities'] as List<dynamic>? : null;
+  return (list ?? const [])
+      .whereType<Map<String, dynamic>>()
+      .map(CitySummary.fromJson)
+      .toList();
+});
+
+/// ⚠️ Web'le **aynı anahtar** (`localStorage['mw-active-city']`). Aynı adı kullanmak iki
+/// istemcinin aynı kavramı aynı isimle tuttuğunu belgeliyor; değerler zaten paylaşılmıyor.
+const String kActiveCityKey = 'mw-active-city';
+
+/// Seçili şehir. Diskte tutuluyor: uygulama her açıldığında oyuncuyu ilk şehrine geri
+/// döndürmek, çok şehirli oyuncu için sürekli bir sürtünme olurdu.
+class ActiveCity extends AsyncNotifier<int?> {
+  @override
+  Future<int?> build() async {
+    final raw = await ref.read(storeProvider).read(kActiveCityKey);
+    final saved = raw == null ? null : int.tryParse(raw);
+    final cities = await ref.watch(citiesProvider.future);
+    if (cities.isEmpty) return null;
+    // ⚠️ Kayıtlı şehir ARTIK YOKSA (terk edildi, ele geçirildi) ilkine düş: yoksa ekran
+    // kalıcı olarak 404 gösterirdi ve oyuncunun bunu düzeltmesinin bir yolu olmazdı.
+    final gecerli = saved != null && cities.any((c) => c.id == saved);
+    return gecerli ? saved : cities.first.id;
+  }
+
+  Future<void> select(int id) async {
+    await ref.read(storeProvider).write(kActiveCityKey, '$id');
+    state = AsyncData(id);
+  }
+}
+
+final activeCityProvider = AsyncNotifierProvider<ActiveCity, int?>(
+  ActiveCity.new,
+);
+
+/// ⚠️ Emniyet ağı — web'deki `SAFETY_NET_MS` ile aynı 60 sn.
+///
+/// Web bunu WS bağlıyken 5 dakikaya çıkarıyor (`WS_IDLE_MS`); mobilde **henüz WS yok**, yani
+/// kısa aralık doğru olan. WS geldiğinde bu sabit de o karara bağlanacak.
+const Duration kCitySafetyNet = Duration(seconds: 60);
+
+/// Şehrin tam durumu.
+final cityProvider = FutureProvider.family<CityDetail, int>((ref, id) async {
+  // ⭐ Emniyet ağı: sunucu otoritedir, istemcinin ekstrapolasyonu yalnız aradaki saniyeleri
+  // dolduruyor. Çıpa tazelenmezse sayaçlar yavaşça gerçeklikten ayrılır.
+  final timer = Timer(kCitySafetyNet, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/cities/$id');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Şehir verisi okunamadı.');
+  }
+  return CityDetail.fromJson(body);
+});
+
+/// ⭐ KATALOG ADLARI — `id` → oyuncuya görünen TÜRKÇE ad.
+///
+/// ⚠️ Kod, DB, URL ve katalog `id`'leri İngilizce; **ekranda İngilizce görünmez** (§13.14).
+/// Web bunu `@mobilwar/catalog`tan okuyor (`lib/names.ts`), mobil ise **API'den**.
+///
+/// ⛔⛔ `packages/catalog` Dart'a ÜRETİLMEZ ve bu kararın sebebi adlar değil DEĞERLER: katalog
+/// değerleri dünya başına çalışma anında override edilebiliyor (bu depoda Akademi maliyeti tam
+/// olarak böyle değiştirildi). Derlenmiş bir Dart kataloğu override'lı dünyada **sessizce
+/// yanlış** olurdu. Adlar da aynı uçtan geldiği için ayrı bir yol açmaya gerek yok.
+///
+/// ⚠️ Ad bulunamazsa `id`'nin kendisi gösteriliyor — web'deki `nameOf` ile aynı davranış.
+/// Sunucuya yeni bir birim eklendiğinde ekran boş kalmaz, ham adıyla görünür.
+final catalogNamesProvider = FutureProvider.family<Map<String, String>, int>((
+  ref,
+  cityId,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/cities/$cityId/catalog');
+  final adlar = <String, String>{};
+  if (body is Map) {
+    for (final anahtar in ['buildings', 'units', 'defenses', 'techs']) {
+      for (final e in (body[anahtar] as List<dynamic>? ?? const [])) {
+        if (e is Map && e['id'] is String && e['name'] is String) {
+          adlar[e['id'] as String] = e['name'] as String;
+        }
+      }
+    }
+  }
+  return adlar;
+});
 
 /// Açık dünya listesi + en düşük istemci yapı numarası.
 ///

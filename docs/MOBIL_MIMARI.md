@@ -199,6 +199,26 @@ intersection`. Bu da bir kapıdır: şema yazarı taşınabilir kalmak zorunda.
 ⚠️ Üretilen Dart, eksik alanı `int?` bırakır ve **asla `?? 0`'a düşmez** — §3.4'teki 4 numaralı
 mekanizmanın (`undefined` ≠ `0`) codegen şartı.
 
+### 4.0 ⚠️⚠️ `CityDetail` borcu — neden ÖDENMEDİ (2026-08-15)
+
+Şehir ekranı taşındı ama `CityDetail` şeması **yazılmadı** ve bu bilinçli bir karar:
+
+Sunucudaki `city.controller.ts` · `get()` kuyruk satırlarını **`...q` yayılımıyla** döndürüyor.
+Dönüş tipini `z.infer<typeof cityDetail>`e daraltmak **derlenirdi ama hiçbir şey ölçmezdi**:
+TypeScript'in fazla-alan (excess property) denetimi nesne literaline uygulanıyor, **yayılıma
+uygulanmıyor**. Şema "kapsandı" görünür, gerçekte kapsamazdı — yani sahte bir kapı, borçtan
+daha kötü.
+
+⭐ **Ödeme sırası:** önce `QueueService.openQueues` açık bir dönüş şekli almalı, sonra
+controller literal döndürmeli, ancak ondan sonra şema gerçek bir kapı olur.
+
+Bu arada mobil taraf `apps/mobile/lib/features/city/city_model.dart`ta elle yazılı ve borç
+orada adıyla duruyor. ⚠️ Model **yalnız ekranın okuduğu alanları** taşıyor: okunmayan alanı
+modele koymak, kullanılmadığı için hiç doğrulanmayan bir sözleşme yazmak olurdu.
+
+⭐ Şehir LİSTESİ (`GET /api/v1/cities`) borçlu değil: `citySummary` şeması vardı, `CitySummary`
+zaten Dart'a üretiliyor ve ekran onu kullanıyor.
+
 ### 4.1 Dört kapı, dördü farklı arıza
 
 | # | Kapı | Yakaladığı | Flutter SDK gerekir mi |
@@ -302,9 +322,17 @@ iddia ediliyor.
 ⭐ Kapının ısırdığı **ölçüldü**: `formatDuration` bilerek bozulduğunda 6 test kırmızıya döndü
 (2026-08-15). Geçen bir test, yanlışı yakalayacağının kanıtı değil.
 
-Aynı yöntem `unitProgress` için de uygulanacak. ⚠️ Ön koşulu: `unitProgress` bugün
-`City.tsx` içine gömülü, **önce `apps/web/src/lib/`'e çıkarılmalı** ki iki taraf da test
-edilebilsin ve vektör paylaşsın.
+✅ **İkinci vektör kümesi kuruldu (2026-08-15):** `city-progress-vectors.json` — üretim bandı
+(`unitProgress`) ve kaynak sayacı (`extrapolateResources`), 21 vektör.
+
+⭐ Ön koşul da yapıldı: ikisi de ekranlardan çıkarılıp `apps/web/src/lib/city-progress.ts`e
+taşındı (`City.tsx` ve `Shell.tsx`ten). Çıkarma ikisini de **ilk kez test edilebilir** yaptı —
+oysa `unitProgress` kullanıcının 2026-07-28'de bildirdiği bir hatanın düzeltmesiydi ve o
+düzeltmeyi koruyan hiçbir şey yoktu.
+
+⚠️ Kaynak sayacının vektörlerinde **kesirli** bir durum var (`1045.6666666666667`). İki dil de
+IEEE754 double kullanıp aynı işlem sırasını izlediği için sonuç bit düzeyinde eşit olmak
+zorunda; karşılaştırma bu yüzden `closeTo` değil **tam eşitlik**.
 
 ### 5.3 `INVALIDATES` tablosu ortaklaşır
 
@@ -422,7 +450,7 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 | :-- | :-- | :-- |
 | **0 — Zemin** | `flutter create` ✅ · socket.io spike ✅ · bu belge ✅ · `tokens.dart` bağlantısı + kapı ✅ · test iskeleti ✅ · `mobile.yml` ✅ · **kalan:** `contracts` Dart üreteci + 4 kapı | `flutter test` yeşil, CI koşuyor |
 | **1 — Kabuk ve oturum** ✅ | Güvenli depo ✅ · 9 başlık ✅ · **kalıcı instanceId** ✅ · yenileme (tek söz) ✅ · 409 çakışma perdesi ✅ · go_router kabuğu (alt bar + drawer) ✅ · giriş/kayıt ✅ · minimum sürüm kontrolü ✅ · misafir akışı ✅ · saat çekirdeği + eşitlik kapısı ✅ | Cihazda giriş yapılıyor, oturum hayatta kalıyor |
-| **2 — Çekirdek oyun** | Şehir (4 ekran + kuyruk) · Dünya · Ordular/sefer · Savaş raporu · Sohbet (3 kanal) · WS invalidation · i18n | v1 kapsamı oynanabilir |
+| **2 — Çekirdek oyun** | ⏳ Şehir: kaynak sayacı ✅ · üretim bandı ✅ · yapı listesi ✅ · katalog adları ✅ · **kalan:** 4 alt ekran (Baraka/Yapılar/Savunma/Akademi) + emir verme · Dünya · Ordular/sefer · Savaş raporu · Sohbet (3 kanal) · WS invalidation · i18n | v1 kapsamı oynanabilir |
 | **3 — Bildirim** | ⚠️ Sunucu: `push_subscriptions` göçü + `FcmSender` + kayıt ucu · İstemci: FCM + local notifications + derin bağlantı | Bildirime tıklayınca doğru ekran açılıyor |
 | **4 — Google giriş** | Sunucu: `google.verifier.ts` + kimlik tablosu + iki adımlı kullanıcı adı akışı · İstemci: `google_sign_in` 7.x · **web'e de eklenir** | İki istemcide de çalışıyor |
 | **5 — Attestation** | Play Integrity sinyalini **topla, kapı koyma** (`MOBIL_UYGULAMA.md` §9-2) | Sinyal DB'ye düşüyor |

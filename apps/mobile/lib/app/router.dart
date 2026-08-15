@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_screen.dart';
+import '../features/city/city_screen.dart';
 import '../features/guest/landing_screen.dart';
 import '../features/shell/shell.dart';
 import 'providers.dart';
@@ -51,7 +52,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             GameShell(path: state.matchedLocation, child: child),
         routes: [
           GoRoute(path: kLandingPath, builder: (_, _) => const LandingScreen()),
-          for (final t in tabs)
+          // ⭐ Faz 2'nin ilk gerçek ekranı. Diğer sekmeler hâlâ yer tutucu; listeden AYRI
+          // yazılıyor ki hangisinin gerçek olduğu tek bakışta görünsün.
+          GoRoute(path: '/city', builder: (_, _) => const CityScreen()),
+          for (final t in tabs.where((t) => t.path != '/city'))
             GoRoute(
               path: t.path,
               builder: (_, _) => PlaceholderScreen(t.label),
