@@ -5,8 +5,10 @@
 /// "yükleniyor" gösterirdi — oysa ikisi de uygulama ömrü boyunca bir kez okunuyor.
 library;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/client_hints.dart';
 import '../core/storage.dart';
@@ -17,6 +19,20 @@ import 'router.dart';
 
 Future<void> baslat() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ⭐ SADECE GELİŞTİRMEDE ekranı açık tut. Cihazda elle deneme yaparken ekranın kendiliğinden
+  // kapanması hem akışı kesiyor hem de kilit ekranı yüzünden `adb exec-out screencap` ile
+  // görsel doğrulamayı imkânsız kılıyordu.
+  // ⛔ `kDebugMode` şartı KALKMAMALI: üretimde ekranı zorla açık tutmak pili tüketir ve
+  // oyuncunun beklemediği bir davranıştır. Bir oyunun ekranı açık tutması ancak oyuncu
+  // isterse (ileride bir tercih olarak) meşru olur.
+  if (kDebugMode) {
+    try {
+      await WakelockPlus.enable();
+    } catch (_) {
+      // Desteklenmeyen platform/cihaz uygulamayı açılmaktan alıkoymamalı.
+    }
+  }
 
   // ⚠️ Künye toplanamazsa uygulama AÇILMALI: cihaz sinyali olmadan da oyun oynanır, ama
   // açılmayan uygulama hiçbir işe yaramaz. Boş künye sunucuda `COALESCE` ile öncekini silmiyor.

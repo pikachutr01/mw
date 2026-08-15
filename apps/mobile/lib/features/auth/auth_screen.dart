@@ -11,6 +11,19 @@ import '../../app/providers.dart';
 import '../../core/api_client.dart';
 import '../../ui/primitives.dart';
 
+/// ⚠️⚠️ Gönderilen dünya, EKRANDA GÖRÜNENLE **aynı ifadeden** gelmek zorunda.
+///
+/// İlk yazımda dropdown listenin ilkini GÖSTERİYOR ama seçim durumu yalnız kullanıcı ona
+/// dokununca yazılıyordu. Sonuç: form "Dunya 1" gösteriyor, «Giriş yap»a basınca
+/// *"Önce bir dünya seç"* diyordu — **gösterdiği değeri göndermeyen bir form**. Gerçek cihazda
+/// yakalandı (2026-08-15).
+///
+/// ⭐ Saf fonksiyon olması bilinçli: deponun deseni, kararı bileşenden çıkarıp test edilebilir
+/// kılmak (`apps/web/src/lib/*` ile aynı gerekçe). Hem gösterim hem gönderim BUNU çağırıyor,
+/// yani ikisinin ayrışması yapısal olarak imkânsız.
+int? seciliDunya(int? secilen, List<({int id, String ad})> liste) =>
+    secilen ?? liste.firstOrNull?.id;
+
 enum _Kip { giris, kayit }
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -37,10 +50,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.dispose();
   }
 
-  Future<void> _gonder() async {
-    final w = _worldId;
+  Future<void> _gonder(List<({int id, String ad})> liste) async {
+    final w = seciliDunya(_worldId, liste);
     if (w == null) {
-      setState(() => _hata = 'Önce bir dünya seç.');
+      setState(() => _hata = 'Dünya listesi yüklenemedi, tekrar dene.');
       return;
     }
     setState(() {
@@ -127,7 +140,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       error: (e, _) =>
                           const MwHataKutusu('Dünya listesi alınamadı.'),
                       data: (liste) => DropdownButtonFormField<int>(
-                        initialValue: _worldId ?? liste.firstOrNull?.id,
+                        initialValue: seciliDunya(_worldId, liste),
                         decoration: const InputDecoration(
                           labelText: 'Dünya',
                           border: OutlineInputBorder(),
@@ -147,7 +160,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     MwButon(
                       etiket: girisMi ? 'Giriş yap' : 'Hesap oluştur',
                       mesgul: _mesgul,
-                      onTap: _gonder,
+                      // ⚠️ Dünya listesi henüz gelmediyse düğme kapalı: gönderilecek değer
+                      // yokken basılabilir bir düğme, kullanıcıyı boş bir hataya sokardı.
+                      onTap: dunyalar.hasValue
+                          ? () => _gonder(dunyalar.requireValue)
+                          : null,
                     ),
                     const SizedBox(height: 8),
                     TextButton(
