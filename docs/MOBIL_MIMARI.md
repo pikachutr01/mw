@@ -75,7 +75,7 @@ diyor ama **ESLint hiç kurulu değil**. Fiilî kalite kapısı üçlü: `tsc --
 
 | Katman | Seçim | Gerekçe |
 | :-- | :-- | :-- |
-| Durum | **Riverpod 3.x** | Async provider + önbellek modeli, web'deki react-query'nin birebir karşılığı → `queries.ts`'in 34 okuma hook'u mekanik olarak çevrilir |
+| Durum | **Riverpod 3.x, codegen'SİZ** | Async provider + önbellek modeli, web'deki react-query'nin birebir karşılığı → `queries.ts`'in 34 okuma hook'u mekanik olarak çevrilir. ⚠️ `@riverpod` codegen'i KULLANILMIYOR — aşağıdaki `build_runner` yasağıyla çelişirdi; elle yazılan provider biraz daha uzun ama tek codegen zinciri kalıyor. ⚠️ `flutter pub add` kendiliğinden **2.6.1** seçiyor, 3.x açıkça istenmeli |
 | Rota | **go_router** | Bildirim derin bağlantısı (`notify` yükündeki `url`) rota eşlemesi istiyor |
 | HTTP | **dio** | Interceptor zinciri şart: 9 başlık · proaktif yenileme · 503≠401 · 409 `session_conflict` |
 | WS | **socket_io_client** | ⚠️ Sunucu ham WebSocket DEĞİL **socket.io 4.8.3** (`realtime.gateway.ts`, path `/ws`) |
@@ -338,6 +338,9 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 | **Hiç golden test yokken `flutter test --tags golden`** | **exit 79** — *"No tests ran"*. İlk koşuda CI'yı kırardı | Workflow **yalnız 79'u** tolere ediyor; gerçek başarısızlık (1) yine kırıyor |
 | **GitHub Actions YAML anchor desteklemiyor** | `&ad`/`*ad` sessizce çalışmaz | `paths` listesi bilerek **iki kez** yazılı |
 | **`dart format` ↔ `tokens:check` çatışması** | Formatçı üretilmiş `tokens.dart`'taki uzun ternary'yi üçe bölmek istiyor; bölünmüş hâli üretecin çıktısı olmadığı için `tokens:check` reddediyor. **İki kapı birbirini kilitliyor** | `lib/gen/` biçim denetiminin **dışında** (üretilmiş kodu biçimlendirmek insan işi değil), ama `flutter analyze` onu **yine de** denetliyor — "üretilen Dart derleniyor mu" kapısı açık kalıyor |
+| **`flutter analyze` monorepo KÖKÜNDEN koşarsa** | 426 sahte hata: `packages/design-tokens/dist/tokens.dart` Flutter paketi dışında ama Dart dosyası, analizör onu da tarıyor ve `ThemeData` çözümlenemiyor | Her zaman `apps/mobile` içinden koş. Workflow zaten `working-directory: apps/mobile` kullanıyor |
+| **`flutter pub add flutter_riverpod`** | Sessizce **2.6.1** kuruyor, 3.x'e çıkmıyor | Sürüm açıkça istenmeli: `flutter pub add "flutter_riverpod:^3.4.2"` |
+| **`flutter_secure_storage` v11** | `AndroidOptions(encryptedSharedPreferences: true)` **derlenmiyor** — bayrak kaldırılmış (varsayılan zaten AES-GCM + RSA-OAEP). İnternetteki örneklerin çoğu eski API'yi gösteriyor | Seçeneksiz `const FlutterSecureStorage()` |
 
 ---
 
