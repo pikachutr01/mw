@@ -121,6 +121,7 @@ test olarak duruyor.
 | Renk/tema | `tokens.dart` hazır. ⚠️ `tokens:check` mobil kopyayı da kapsamalı. ⚠️ Üreteç bugün yalnız RENK veriyor; `radius`/`space`/`font` eklenecek |
 | Sözleşmeler | `packages/contracts` → `apps/mobile/lib/gen/contracts.g.dart` (§4) |
 | Metin | `packages/i18n` — ortak anahtar seti, iki istemci de oradan |
+| **Görseller** | ⭐ Web'in `public/assets/`i **tek kaynak**; `pnpm assets:build` mobile kopyalıyor, `pnpm assets:check` sürüklenmeyi kırıyor (`ops/assets-sync.mjs`). ⚠️ Kopya zorunlu: Flutter `pubspec.yaml`ta paket dizini DIŞINDAKİ varlığı göremiyor. Kapı üç arızayı da yakalıyor — değişmiş · eksik · **fazla** (web'den silinen ikon mobilde kalırsa da ayrışma olur) |
 | Hesap | ⭐ v1 için çok az: ETA önizlemesi (`route`/`travelSeconds`/`armySpeed`) + `wallCurrentIntegrity` + üretim çubuğu. Gerisini sunucu hesaplayıp veriyor |
 
 ⛔⛔ **`packages/catalog` Dart'a ÜRETİLMEZ.** Katalog değerleri **dünya başına çalışma anında
@@ -179,6 +180,7 @@ mekanizmanın (`undefined` ≠ `0`) codegen şartı.
 
 | # | Kapı | Yakaladığı | Flutter SDK gerekir mi |
 | :-- | :-- | :-- | :-: |
+| 0 | `pnpm tokens:check` · `pnpm assets:check` | palet ya da görsel web'den ayrıştı | ✖ |
 | 1 | `pnpm contracts:check` | zod değişti, `.g.dart` yeniden üretilmedi (`tokens:check` deseninin aynısı) | ✖ |
 | 2 | `apps/api/test/contract-fixtures.test.ts` | controller'ın **gerçek** JSON'u şemayı sağlamıyor | ✖ |
 | 3 | `pnpm contracts:compat` + `contracts/baseline/mobil-<sürüm>.json` | **yayındaki** mobil sürümün okuduğu alan silindi/yeniden adlandırıldı → `DAGITIM.md` §6'nın makineleşmiş hâli | ✖ |

@@ -198,6 +198,43 @@ class MwKaynak extends StatelessWidget {
   }
 }
 
+/// ⭐ MENÜ İKONU — web ile **birebir aynı görsel** (`apps/web/public/assets/menu/`).
+///
+/// Material ikonları yerine oyunun kendi ikonları kullanılıyor: iki istemcinin aynı oyunu
+/// göstermesi kullanıcının «tam eşitlik» kararının görünen yüzü. Dosyalar `pnpm assets:build`
+/// ile eşitleniyor, `pnpm assets:check` sürüklenmeyi kırıyor.
+///
+/// ⚠️ `errorBuilder` ŞART: dosya adı katalog `id`'sinden üretiliyor ve eşleşmeyen bir id
+/// (ör. sunucuya yeni birim eklendi, görseli henüz yok) ekranı kırmızı hata kutusuna
+/// çevirirdi. Yerine aynı ölçüde boşluk bırakılıyor — web'deki `CatalogIcon` ile aynı karar.
+class MwIkon extends StatelessWidget {
+  const MwIkon({
+    super.key,
+    required this.klasor,
+    required this.id,
+    this.boyut = 24,
+    this.renk,
+  });
+
+  /// `menu` · `units` · `buildings` · `techs` · `defenses` · `missions` · `hero` · `ranks` · `ui`
+  final String klasor;
+  final String id;
+  final double boyut;
+
+  /// Verilirse ikon tek renge boyanır (alt sekmede seçili/seçili değil ayrımı için).
+  final Color? renk;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+    'assets/$klasor/$id.png',
+    width: boyut,
+    height: boyut,
+    color: renk,
+    filterQuality: FilterQuality.medium,
+    errorBuilder: (_, _, _) => SizedBox(width: boyut, height: boyut),
+  );
+}
+
 /// `tr-TR` binlik ayracı — web'deki `fmt()` ile aynı görünüm.
 /// ⚠️ `intl` paketi EKLENMEDİ: tek ihtiyacımız binlik ayracı ve `intl` yalnız bunun için
 /// ~1 MB ve bir yerelleştirme kurulum adımı getiriyor.

@@ -18,21 +18,25 @@ import 'package:go_router/go_router.dart';
 import '../../app/providers.dart';
 import '../../ui/primitives.dart';
 
-/// Alt sekmeler — web `Shell.tsx:81-87` ile aynı beşli.
-const sekmeler = <({String yol, String etiket, IconData ikon})>[
-  (yol: '/armies', etiket: 'Ordular', ikon: Icons.groups),
-  (yol: '/city', etiket: 'Şehir', ikon: Icons.castle),
-  (yol: '/world', etiket: 'Dünya', ikon: Icons.public),
-  (yol: '/messages', etiket: 'Mesaj', ikon: Icons.mail),
-  (yol: '/command', etiket: 'Komuta', ikon: Icons.flag),
+/// Alt sekmeler — web `Shell.tsx:81-87` ile aynı beşli, **aynı ikon dosyalarıyla**.
+///
+/// ⭐ `ikon` alanı bir `IconData` değil, `assets/menu/<ikon>.png` dosyasının adı. Material
+/// ikonları yerine oyunun kendi görselleri kullanılıyor: iki istemcinin aynı oyunu göstermesi
+/// «tam eşitlik» kararının görünen yüzü. Adlar web'deki `MENU`/`TABS` dizileriyle birebir.
+const sekmeler = <({String yol, String etiket, String ikon})>[
+  (yol: '/armies', etiket: 'Ordular', ikon: 'ordular'),
+  (yol: '/city', etiket: 'Şehir', ikon: 'sehir'),
+  (yol: '/world', etiket: 'Dünya', ikon: 'dunya'),
+  (yol: '/messages', etiket: 'Mesaj', ikon: 'mesaj'),
+  (yol: '/command', etiket: 'Komuta', ikon: 'komutamerkezi'),
 ];
 
 /// Drawer maddeleri — web `MORE_ITEMS` (`Shell.tsx:99-108`) ile aynı dörtlü.
-const drawerMaddeleri = <({String yol, String etiket, IconData ikon})>[
-  (yol: '/simulate', etiket: 'Simülatör', ikon: Icons.calculate),
-  (yol: '/options', etiket: 'Seçenekler', ikon: Icons.settings),
-  (yol: '/help', etiket: 'Yardım', ikon: Icons.help_outline),
-  (yol: '/destek', etiket: 'Destek', ikon: Icons.support_agent),
+const drawerMaddeleri = <({String yol, String etiket, String ikon})>[
+  (yol: '/simulate', etiket: 'Simülatör', ikon: 'simulator'),
+  (yol: '/options', etiket: 'Seçenekler', ikon: 'secenekler'),
+  (yol: '/help', etiket: 'Yardım', ikon: 'yardim'),
+  (yol: '/destek', etiket: 'Destek', ikon: 'destek'),
 ];
 
 class OyunKabugu extends ConsumerWidget {
@@ -60,7 +64,10 @@ class OyunKabugu extends ConsumerWidget {
         onDestinationSelected: (i) => context.go(sekmeler[i].yol),
         destinations: [
           for (final s in sekmeler)
-            NavigationDestination(icon: Icon(s.ikon), label: s.etiket),
+            NavigationDestination(
+              icon: MwIkon(klasor: 'menu', id: s.ikon, boyut: 26),
+              label: s.etiket,
+            ),
         ],
       ),
     );
@@ -117,7 +124,9 @@ class _Drawer extends ConsumerWidget {
             ),
             for (final m in drawerMaddeleri)
               ListTile(
-                leading: Icon(m.ikon),
+                // ⚠️ 20 px — web'in «Daha» listesiyle aynı (`Shell.tsx:788`). Alt sekme
+                // çubuğunda 26 kullanılıyor (`:708`); ikisi bilerek farklı.
+                leading: MwIkon(klasor: 'menu', id: m.ikon, boyut: 20),
                 title: Text(m.etiket),
                 onTap: () {
                   Navigator.of(context).pop();
@@ -127,7 +136,8 @@ class _Drawer extends ConsumerWidget {
             const Spacer(),
             const Divider(height: 1),
             ListTile(
-              leading: Icon(Icons.logout, color: r.danger),
+              // Web'de de aynı dosya: `menu/cikis.png` (`Shell.tsx:798`, 20 px).
+              leading: const MwIkon(klasor: 'menu', id: 'cikis', boyut: 20),
               title: Text('Oyunu kapat', style: TextStyle(color: r.danger)),
               onTap: () async {
                 Navigator.of(context).pop();

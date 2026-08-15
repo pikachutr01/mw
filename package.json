@@ -18,6 +18,8 @@
     "tokens:check": "pnpm --filter @mobilwar/design-tokens run check",
     "contracts:build": "pnpm --filter @mobilwar/contracts run dart:build",
     "contracts:check": "pnpm --filter @mobilwar/contracts run dart:check",
+    "assets:build": "node ops/assets-sync.mjs",
+    "assets:check": "node ops/assets-sync.mjs --check",
     "db:generate": "pnpm --filter @mobilwar/api run db:generate",
     "db:migrate": "pnpm --filter @mobilwar/api run db:migrate",
     "dev:infra": "docker compose -f compose.dev.yml up -d",

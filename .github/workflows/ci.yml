@@ -59,3 +59,8 @@ jobs:
       # metin. Mobilin sürüklenme kapısı bu yüzden ana CI'da durabiliyor.
       - name: Dart sözleşmeleri senkron mu
         run: pnpm contracts:check
+
+      # Mobil, web'in görsellerinin KOPYASINI taşıyor (Flutter paket dışı varlık göremiyor).
+      # Kopya sürüklenirse iki istemci farklı ikon gösterir ve kimse fark etmez.
+      - name: Görsel varlıklar senkron mu
+        run: pnpm assets:check
