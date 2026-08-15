@@ -53,3 +53,9 @@ jobs:
       # Üretilen tasarım token'ları kaynakla senkron mu? (§13.13.1 — sürüklenme yasak)
       - name: Tasarım token'ları senkron mu
         run: pnpm tokens:check
+
+      # Üretilen Dart sözleşmeleri zod kaynağıyla senkron mu? (MOBIL_MIMARI.md §4.1 · kapı 1)
+      # ⭐ Bu adım Flutter SDK'sı İSTEMEZ — üreteç Node tarafında koşuyor ve karşılaştırma düz
+      # metin. Mobilin sürüklenme kapısı bu yüzden ana CI'da durabiliyor.
+      - name: Dart sözleşmeleri senkron mu
+        run: pnpm contracts:check

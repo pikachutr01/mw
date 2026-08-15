@@ -329,13 +329,23 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 
 ⚠️ `integration_test` PR'da koşmaz — gece ya da `workflow_dispatch`, emülatör + gerçek API ister.
 
+### 7.1 ⚠️ Faz 0'da ölçülerek öğrenilen üç tuzak
+
+Üçü de *"yazınca çalışır sanılan ama çalışmayan"* sınıfından; hepsi ölçüldü (2026-08-15).
+
+| Tuzak | Belirti | Çözüm |
+| :-- | :-- | :-- |
+| **Hiç golden test yokken `flutter test --tags golden`** | **exit 79** — *"No tests ran"*. İlk koşuda CI'yı kırardı | Workflow **yalnız 79'u** tolere ediyor; gerçek başarısızlık (1) yine kırıyor |
+| **GitHub Actions YAML anchor desteklemiyor** | `&ad`/`*ad` sessizce çalışmaz | `paths` listesi bilerek **iki kez** yazılı |
+| **`dart format` ↔ `tokens:check` çatışması** | Formatçı üretilmiş `tokens.dart`'taki uzun ternary'yi üçe bölmek istiyor; bölünmüş hâli üretecin çıktısı olmadığı için `tokens:check` reddediyor. **İki kapı birbirini kilitliyor** | `lib/gen/` biçim denetiminin **dışında** (üretilmiş kodu biçimlendirmek insan işi değil), ama `flutter analyze` onu **yine de** denetliyor — "üretilen Dart derleniyor mu" kapısı açık kalıyor |
+
 ---
 
 ## 8. Yol haritası
 
 | Faz | İş | Biter sayılma ölçütü |
 | :-- | :-- | :-- |
-| **0 — Zemin** | `flutter create` ✅ · socket.io spike ✅ · bu belge ✅ · `tokens.dart` bağlantısı + kapı · `contracts` Dart üreteci + 4 kapı · test iskeleti · `mobile.yml` | `flutter test` yeşil, CI koşuyor |
+| **0 — Zemin** | `flutter create` ✅ · socket.io spike ✅ · bu belge ✅ · `tokens.dart` bağlantısı + kapı ✅ · test iskeleti ✅ · `mobile.yml` ✅ · **kalan:** `contracts` Dart üreteci + 4 kapı | `flutter test` yeşil, CI koşuyor |
 | **1 — Kabuk ve oturum** | Güvenli depo · 9 başlık · **kalıcı instanceId** · yenileme (tek söz) · 409/`session:takeover` kapısı · go_router kabuğu (alt bar + drawer) · giriş/kayıt/misafir · **minimum sürüm kontrolü** | Cihazda giriş yapılıyor, oturum hayatta kalıyor |
 | **2 — Çekirdek oyun** | Şehir (4 ekran + kuyruk) · Dünya · Ordular/sefer · Savaş raporu · Sohbet (3 kanal) · WS invalidation · i18n | v1 kapsamı oynanabilir |
 | **3 — Bildirim** | ⚠️ Sunucu: `push_subscriptions` göçü + `FcmSender` + kayıt ucu · İstemci: FCM + local notifications + derin bağlantı | Bildirime tıklayınca doğru ekran açılıyor |
