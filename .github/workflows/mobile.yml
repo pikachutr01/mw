@@ -1,0 +1,78 @@
+# ⭐ MOBİL CI — oyun dağıtımından BAĞIMSIZ (DAGITIM.md §6).
+#
+# Neden ayrı iş akışı: mobil sürüm mağaza onayına tabi, web ise anında çıkıyor. İkisini aynı
+# workflow'a bağlamak web dağıtımını mağazanın hızına indirger.
+#
+# ⚠️ `ci.yml` bu işi ÜSTLENMEZ: orada Flutter SDK'sı yok ve olması da gerekmiyor. Sözleşme
+# sürüklenmesini yakalayan kapıların üçü (`contracts:check`, fixture testi, `contracts:compat`)
+# Node tarafında koşuyor — yalnız "üretilen Dart derleniyor mu" sorusu Flutter istiyor, o da burada.
+#
+# ⚠️ `apps/mobile`in `package.json`ı YOK ve olmayacak: pnpm yalnız `package.json` olan dizinleri
+# paket sayar, dosya olmayınca `pnpm -r` ona hiç uğramaz → Flutter'sız runner asla kırılmaz.
+#
+# ⚠️ `paths` listesi iki kez yazılı: GitHub Actions **YAML anchor'ı desteklemiyor** (`&ad`/`*ad`
+# sessizce çalışmaz). Tekrar bilinçli.
+name: Mobil
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/design-tokens/**'
+      - 'packages/contracts/**'
+      - '.github/workflows/mobile.yml'
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/design-tokens/**'
+      - 'packages/contracts/**'
+      - '.github/workflows/mobile.yml'
+
+jobs:
+  analiz-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # ⚠️ `lib/gen/` BİLEREK dışarıda: orası ÜRETİLMİŞ kod. `dart format` ile token üretecinin
+      # çıktısı satır sarmada anlaşamıyor (üreteç tek satır yazıyor, formatçı üçe bölmek istiyor)
+      # ve ikisini uzlaştırmak `tokens:check` ile bu kapıyı KALICI olarak çatıştırırdı.
+      # Üretilmiş kodu biçimlendirmek zaten insan işi değil — ama `flutter analyze` onu YİNE de
+      # denetliyor (aşağıdaki adım), yani "üretilen Dart derleniyor mu" kapısı açık kalıyor.
+      - name: Biçim (üretilmiş kod hariç)
+        run: dart format --output=none --set-exit-if-changed lib/main.dart test tool
+
+      # ⭐ Üretilmiş kod DÂHİL — token/sözleşme üreteci bozuk Dart üretirse burada yakalanır.
+      - name: Analiz
+        run: flutter analyze --fatal-infos
+
+      # Golden'lar ayrı adımda ve yalnız Linux'ta: font oluşturma platforma bağlı, Windows
+      # geliştirici makinesi kalıcı sahte kırmızı üretir (MOBIL_MIMARI.md §5.4).
+      - name: Test (golden hariç)
+        run: flutter test --exclude-tags golden
+
+      # ⚠️ Hiç golden test yokken `flutter test --tags golden` **79** ile çıkıyor ("No tests ran").
+      # Ölçüldü (2026-08-15). Yalnız BU kod tolere edilir; gerçek başarısızlık (1) yine kırar.
+      - name: Golden testler
+        run: |
+          set +e
+          flutter test --tags golden
+          kod=$?
+          set -e
+          if [ "$kod" -eq 79 ]; then
+            echo "ℹ️ Henüz golden test yok — adım atlandı."
+            exit 0
+          fi
+          exit "$kod"

@@ -144,19 +144,31 @@ class MwTheme {
 `;
 }
 
-const OUTPUTS: Record<string, () => string> = {
-  'tokens.css': buildCss,
-  'tokens.tw.css': buildTailwind,
-  'tokens.ts': buildTs,
-  'tokens.dart': buildDart,
-};
+/**
+ * ⭐ Hedefler — dosya adı DEĞİL tam yol, çünkü `tokens.dart` İKİ yere yazılıyor.
+ *
+ * ⚠️ **Mobil kopya neden var:** Flutter, `packages/design-tokens/dist/`i pub bağımlılığı
+ * olarak göremiyor (Dart `pubspec.yaml` ister, orada yok). En ucuz çözüm üretecin ikinci bir
+ * yola da yazması. ⚠️ Kopya `tokens:check` KAPSAMINDA — kapsam dışı kalsaydı mobil palet
+ * sessizce sürüklenirdi ve bunu kimse görmezdi (§13.13.1'in tüm gerekçesi buydu).
+ */
+const MOBILE_GEN = join(here, '..', '..', '..', 'apps', 'mobile', 'lib', 'gen');
+
+const TARGETS: { path: string; make: () => string }[] = [
+  { path: join(distDir, 'tokens.css'), make: buildCss },
+  { path: join(distDir, 'tokens.tw.css'), make: buildTailwind },
+  { path: join(distDir, 'tokens.ts'), make: buildTs },
+  { path: join(distDir, 'tokens.dart'), make: buildDart },
+  { path: join(MOBILE_GEN, 'tokens.dart'), make: buildDart },
+];
 
 const check = process.argv.includes('--check');
 mkdirSync(distDir, { recursive: true });
+if (!check) mkdirSync(MOBILE_GEN, { recursive: true });
 
 let drift = false;
-for (const [file, make] of Object.entries(OUTPUTS)) {
-  const path = join(distDir, file);
+for (const { path, make } of TARGETS) {
+  const file = path.split(/[\\/]/).slice(-3).join('/');   // günlükte okunabilir kısa yol
   const next = make();
   if (check) {
     let current: string | null = null;

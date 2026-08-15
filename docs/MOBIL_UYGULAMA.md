@@ -4,6 +4,11 @@
 > akışlarına her dokunulduğunda. Bu belge **niyet ve gerekçe** taşıyor; derleme, imzalama,
 > CI/CD ve tek cihaz başlık sözleşmesi `DAGITIM.md` §6'da, sinyal toplama katmanı
 > `MOBIWAR_SISTEM_PLANI.md` §9.1'de, doğrulanmamış hesap kısıtları §9.2b'de.
+>
+> ⭐ Uygulamanın **mimarisi ve yol haritası** ayrı bir belgede: **`MOBIL_MIMARI.md`**
+> (2026-08-15). Bu belge *"hesap kimliği nasıl kurulur"* sorusuna, o *"uygulama nasıl yazılır
+> ve hangi sırayla"* sorusuna cevap veriyor. §9'daki sıranın 2. maddesi (attestation'ı topla)
+> orada **Faz 5** olarak duruyor.
 
 Kaynak: kullanıcının 2026-08-13 tarihli kararı — *"insanların çoklu hesap açmasını
 engelleyecek yöntemler üzerinde durmaya devam etmek istiyorum… kayıt olma sürecini de sadece
