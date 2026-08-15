@@ -18,16 +18,27 @@
  * Döngü riski yok; `turbo.json` sıralamayı `^build` ile zaten çözüyor.
  */
 import {
-  BUILDINGS, BUILDING_ORDER, DEFENSE_ORDER, DEFENSE_STRUCTURES, LEVEL_BASED, TECHS, TECH_ORDER,
+  BUILDINGS, BUILDING_ORDER, DEFENSE_ORDER, DEFENSE_STRUCTURES, LEVEL_BASED,
+  STARTING_BUILDINGS, TECHS, TECH_ORDER, buildingCost, defenseStructureCost, techCost, unitCost,
   UNITS, WARRIOR_ORDER, orderBy,
 } from '@mobilwar/catalog';
 import type { SettingDef } from './types.ts';
 
 /** ⚠️ Türetilmiş açıklamalar KISA: 84 uzun metin `GET /admin/settings` yükünü şişirirdi. */
+/**
+ * ⚠️⚠️ **`gold`/`food` METNİ DÜZELTİLDİ (kullanıcı, 2026-08-15).** Eskiden *"bu kalemin
+ * 1. seviyedeki altın fiyatı"* diyordu ve **tekniklerde YANLIŞTI**. Kullanıcının bildirdiği
+ * somut çelişki: Zırh alanında 700 yazıyor ama denge sayfası 0→1 için 1181 diyor. İkisi de
+ * doğruydu, farklı büyüklüklerdi — `techCost` tabanı `taban × oran^(sv+1) × çarpan` ile
+ * ölçekliyor (üsteki `+1` Java'nın kendi kuralı), yani taban hiçbir seviyenin fiyatı değil.
+ * Yapılarda ise taban gerçekten ilk ÖDENEN seviyenin fiyatı (`buildingCost` orada 1'e
+ * normalize ediyor). Metin artık bu ayrımı söylüyor; ayrıca her alanın açıklamasına
+ * **hesaplanmış ilk seviye fiyatı** ekleniyor (aşağıda `firstPriceNote`).
+ */
 const AXIS_HELP: Record<string, string> = {
-  gold: 'Bu kalemin 1. seviyedeki altın fiyatı. Büyütürsen her seviye pahalanır — eğri aynı '
-    + 'kalır, sadece yukarı kayar.',
-  food: 'Bu kalemin 1. seviyedeki yemek fiyatı. Altın gibi çalışır.',
+  gold: 'Bu kalemin TABAN altın değeri. ⚠️ Ödenecek fiyatın kendisi değil: fiyat bundan '
+    + 'türetiliyor. Büyütürsen her seviye pahalanır — eğri aynı kalır, sadece yukarı kayar.',
+  food: 'Bu kalemin TABAN yemek değeri. Altın gibi çalışır.',
   rate: 'Her seviyenin bir öncekine göre kaç kat pahalı olduğu. Büyütürsen üst seviyeler '
     + 'hızla erişilemez olur, küçültürsen oyun çabuk biter. Boş bırakırsan genel oran geçerli.',
   timeFactor: 'Hesaplanan süreyi çarpar (1 = dokunma). ⚠️ Oyunda ayrı bir "taban süre" YOK; '
@@ -37,6 +48,19 @@ const AXIS_HELP: Record<string, string> = {
 const AXIS_LABEL: Record<string, string> = {
   gold: 'Altın', food: 'Yemek', rate: 'Büyüme oranı', timeFactor: 'Süre çarpanı',
 };
+
+/**
+ * ⭐ İlk seviyenin GERÇEK fiyatı — panelde tabanın yanında gösteriliyor.
+ *
+ * ⚠️ Tabanın fiyat olmadığı tek yer teknikler değil aslında: Sur/Kalkan da ayrı bir
+ * fonksiyondan geçiyor. Bu yüzden hesap ÇAĞIRANA bırakılıyor, burada `kind`e bakıp
+ * tahmin edilmiyor — yanlış fonksiyonu seçmek sessizce yanlış sayı gösterirdi.
+ */
+function firstPriceNote(price: { gold: number; food: number } | null, axis: string): string {
+  if (!price || (axis !== 'gold' && axis !== 'food')) return '';
+  const n = axis === 'gold' ? price.gold : price.food;
+  return ` Bu tabanla ilk seviyenin fiyatı: ${n.toLocaleString('tr-TR')}.`;
+}
 
 function defsFor(
   kind: 'building' | 'tech' | 'unit',
@@ -50,6 +74,8 @@ function defsFor(
    * parametre — eksik bırakılmış değil, bilerek daraltılmış.
    */
   axes: readonly ('gold' | 'food' | 'rate' | 'timeFactor')[] = ['gold', 'food', 'rate', 'timeFactor'],
+  /** Varsayılan tabanla ilk seviyenin fiyatı; `null` ise not yazılmaz. */
+  firstPrice: (id: string) => { gold: number; food: number } | null = () => null,
 ): SettingDef[] {
   const out: SettingDef[] = [];
   for (const it of items) {
@@ -71,7 +97,7 @@ function defsFor(
         min: axis === 'rate' ? 1 : axis === 'timeFactor' ? 0.01 : 0,
         max: axis === 'rate' ? 3 : axis === 'timeFactor' ? 100 : Math.max(1000, base * 100),
         tag: 'design',
-        description: AXIS_HELP[axis]!,
+        description: AXIS_HELP[axis]! + firstPriceNote(firstPrice(it.id), axis),
         entity: { kind, id: it.id, name: it.name.tr, axis },
       });
     }
@@ -144,9 +170,14 @@ const LEVEL_BASED_STRUCTS = DEFENSE_STRUCTURES
 
 export function derivedCatalogSettings(): SettingDef[] {
   return [
+    /* ⚠️ Yapıda ilk ÖDENEN seviye `STARTING_BUILDINGS`ten türüyor (Kale/Baraka/Çiftlik/Maden
+     * 1 başlar → onlarda ilk ödenen 2). `buildingCost` orayı 1'e normalize ettiği için sayı
+     * tabanın kendisi çıkıyor; yine de formülden okunuyor ki kural değişirse not da kaysın. */
     ...defsFor(
       'building', 'buildingTuning', orderBy(BUILDINGS, BUILDING_ORDER),
       BUILDING_RATE_DEFAULT, BUILDING_TIME_FACTOR_DEFAULT,
+      ['gold', 'food', 'rate', 'timeFactor'],
+      (id) => buildingCost(id, (STARTING_BUILDINGS[id] ?? 0) + 1),
     ),
     /* ⚠️ Aynı gruba (`buildingTuning`) yazılıyor: `defenseStructureCost` tabanı oradan
      * okuyor. Ayrı bir grup açmak `catalogOverrides`in `CATALOG_GROUPS` listesini de
@@ -154,11 +185,21 @@ export function derivedCatalogSettings(): SettingDef[] {
     ...defsFor(
       'building', 'buildingTuning', LEVEL_BASED_STRUCTS,
       () => 1.8, () => 1, ['gold', 'food'],
+      (id) => defenseStructureCost(id, 1),
     ),
-    ...defsFor('tech', 'techTuning', orderBy(TECHS, TECH_ORDER), () => 1.5),
+    /* ⚠️ TEKNİKTE TABAN ≠ FİYAT: `techCost` üsse `+1` ekliyor (Java kuralı) ve çarpanı
+     * uyguluyor. Kullanıcının bildirdiği "panelde 700, sayfada 1181" çelişkisinin kaynağı
+     * buydu; not artık ikisini yan yana gösteriyor. */
+    ...defsFor(
+      'tech', 'techTuning', orderBy(TECHS, TECH_ORDER), () => 1.5, () => 1,
+      ['gold', 'food', 'rate', 'timeFactor'],
+      (id) => techCost(id, 1),
+    ),
+    /* Askerin seviyesi yok — "ilk seviye" bir birimin fiyatı demek. */
     ...defsFor(
       'unit', 'unitTuning', TUNABLE_UNITS, () => 1, () => 1,
       ['gold', 'food', 'timeFactor'],
+      (id) => unitCost(id, 1),
     ),
   ];
 }

@@ -12,8 +12,8 @@ import {
   scaledSeconds,
 } from '@mobilwar/catalog';
 import {
-  EMPTY_STATE, buildingRows, castleUsage, combine, defenseRows, effectiveHeld, heroInfo,
-  report, techRows, unitRows, unmetText, type BalanceBundle, type BalanceState,
+  EMPTY_STATE, acceleratorInfo, buildingRows, castleUsage, combine, defenseRows, effectiveHeld,
+  heroInfo, report, techRows, unitRows, unmetText, type BalanceBundle, type BalanceState,
 } from '../src/lib/balance-model.ts';
 
 const bundle = (over: Partial<BalanceBundle> = {}): BalanceBundle => ({
@@ -292,5 +292,33 @@ describe('toplam', () => {
   /** `scaledSeconds` katalogdan geliyor — tezgâh kendi kopyasını tutmuyor. */
   it('süre tabanı 1 saniyenin altına inmiyor', () => {
     expect(scaledSeconds(0.2, 100)).toBe(1);
+  });
+
+  /**
+   * ⭐⭐ HIZLANDIRMA YÜZDESİNİN TABANI (kullanıcı, 2026-08-15).
+   *
+   * Kullanıcı denge tezgâhında Baraka 1'de *"%17 kısaldı"* yazdığını gördü ve haklı olarak
+   * sordu: baraka zaten 1 başlıyorsa, bedava gelen seviye nasıl kazanç sayılıyor?
+   * Formül doğruydu, KIYAS NOKTASI yanlıştı. Bu test tabanı kilitliyor.
+   */
+  it('⭐ Baraka hızlandırması BAŞLANGIÇ seviyesine göre ölçülür (bedava seviye kazanç değil)', () => {
+    const cfg = bundle();
+    // Oyunun başladığı hâl: Baraka 1 → hiçbir kazanç YOK.
+    expect(acceleratorInfo(open({ buildings: { barracks: 1 } }), cfg).barracks.cut).toBe(0);
+    // İlk ÖDENEN seviye 2 → tek adımlık kazanç (1,2 bölen ⇒ %16,7).
+    const sv2 = acceleratorInfo(open({ buildings: { barracks: 2 } }), cfg).barracks;
+    expect(sv2.divisor).toBeCloseTo(1.2, 6);
+    expect(sv2.cut).toBeCloseTo(1 - 1 / 1.2, 6);
+  });
+
+  /**
+   * ⚠️ Akademi ve Mimar Okulu `STARTING_BUILDINGS`te YOK: tabanları 0 ve davranışları
+   * değişmemeli. Kaydırma yanlışlıkla genele uygulanırsa burası kırılır.
+   */
+  it('Akademi/Mimar Okulu tabanı 0 kalır — kaydırma yalnız başlangıç yapılarına', () => {
+    const cfg = bundle();
+    const a = acceleratorInfo(open({ buildings: { academy: 1, architect_school: 1 } }), cfg);
+    expect(a.academy.cut).toBeGreaterThan(0);
+    expect(a.architect.cut).toBeGreaterThan(0);
   });
 });

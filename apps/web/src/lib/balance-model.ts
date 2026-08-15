@@ -405,6 +405,19 @@ export function caveInfo(state: BalanceState, cfg: BalanceBundle): {
  * ⭐ Mimar Okulu'nun **yüzde kaç kısalttığı**. Bölen `structureTimeDecayRate^seviye`; oran o
  * bölenin tersi. Ekranda hem bölen hem yüzde gösteriliyor çünkü "×32 hızlandı" ile "%97 kısaldı"
  * aynı sayının iki okunuşu ve denge ayarlarken ikisi de soruluyor.
+ *
+ * ⚠️⚠️ **TABAN, OYUNUN BAŞLANGIÇ SEVİYESİ — 0 DEĞİL** (kullanıcı, 2026-08-15).
+ *
+ * Kullanıcının sorusu şuydu: *"Baraka zaten 1 başlıyor, ama sayfa 1. seviyede %17 kısalma
+ * diyor — burada bir yanlışlık yok mu?"* Formül doğruydu (`1,2¹` → %16,7) ama KIYAS NOKTASI
+ * yanlıştı: `STARTING_BUILDINGS.barracks = 1`, yani seviye 0 oyunda **hiç var olmuyor**.
+ * Sayfa, ulaşılamayan bir duruma göre kazanç raporluyordu ve denge kararı o sayıdan verilecek.
+ *
+ * ⚠️ Taban `STARTING_BUILDINGS`ten TÜRETİLİYOR, `barracks` diye elle yazılmıyor: o liste bu
+ * depoda iki kez değişti (2026-08-09 baraka çıktı, 08-12 geri kondu). Sabit yazsaydık üçüncü
+ * değişiklikte sayfa sessizce yanlış yüzde göstermeye başlardı.
+ *
+ * ⚠️ Akademi ve Mimar Okulu listede DEĞİL, yani onların tabanı zaten 0 ve hiçbir şey değişmiyor.
  */
 export function acceleratorInfo(state: BalanceState, cfg: BalanceBundle): {
   architect: { level: number; divisor: number; cut: number };
@@ -413,14 +426,17 @@ export function acceleratorInfo(state: BalanceState, cfg: BalanceBundle): {
 } {
   const structRate = cfg.catalog.economy.structureTimeDecayRate;
   const unitRate = cfg.catalog.economy.timeDecayRate;
-  const mk = (level: number, rate: number): { level: number; divisor: number; cut: number } => {
-    const divisor = Math.max(1, rate) ** Math.max(0, level);
+  const mk = (id: string, level: number, rate: number): {
+    level: number; divisor: number; cut: number;
+  } => {
+    const base = STARTING_BUILDINGS[id] ?? 0;
+    const divisor = Math.max(1, rate) ** Math.max(0, level - base);
     return { level, divisor, cut: 1 - 1 / divisor };
   };
   return {
-    architect: mk(lvl(state.buildings, 'architect_school'), structRate),
-    academy: mk(lvl(state.buildings, 'academy'), structRate),
-    barracks: mk(lvl(state.buildings, 'barracks'), unitRate),
+    architect: mk('architect_school', lvl(state.buildings, 'architect_school'), structRate),
+    academy: mk('academy', lvl(state.buildings, 'academy'), structRate),
+    barracks: mk('barracks', lvl(state.buildings, 'barracks'), unitRate),
   };
 }
 

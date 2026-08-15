@@ -218,7 +218,9 @@ function Buildings({ cfg, state, rows, total, set }: {
     ),
     barracks: (
       <Note>
-        Savaşçı sürelerini <b>{pct(acc.barracks.cut)}</b> kısaltıyor · eşzamanlı sipariş:{' '}
+        {/* ⚠️ Yüzde, oyunun BAŞLANGIÇ seviyesine göre — Baraka 1 başlıyor, seviye 0 hiç
+            var olmuyor. Gerekçe `balance-model.ts` → `acceleratorInfo`. */}
+        Savaşçı sürelerini <b>{pct(acc.barracks.cut)}</b> kısaltıyor (sv 1'e göre) · eşzamanlı sipariş:{' '}
         {Math.max(1, state.buildings['barracks'] ?? 0)} · açılan birim:{' '}
         {unlocked.units.length ? unlocked.units.join(', ') : '—'}
       </Note>
