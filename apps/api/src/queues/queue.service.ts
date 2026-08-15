@@ -13,7 +13,7 @@ import { sql } from 'drizzle-orm';
 import {
   defenseStructureCost, UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID, BUILDING_REQUIREMENTS, TECH_REQUIREMENTS, UNIT_REQUIREMENTS,
   buildingCost, buildingTimeSeconds, cancelRefund, checkRequirement, techCost, techTimeSeconds,
-  timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
+  scaledSeconds, timeFromCost, trainingTimeSeconds, type RefundRule, type UnmetRequirement,
 } from '@mobilwar/catalog';
 import { DEFAULT_CATALOG_CONFIG, type CatalogConfig } from '@mobilwar/catalog';
 import {
@@ -85,12 +85,11 @@ interface CityState {
 
 /**
  * Süreyi dünya çarpanına böler; en az 1 sn (çarpan ne olursa olsun anlık bitiş yok).
- * ⚠️ Yuvarlama YOK: birim-başına süreler kesirli saklanır (tembel materyalizasyon
- * `done = elapsed / per_unit_seconds` hesabı yuvarlamayla kayardı) — çarpan 1'ken
- * davranış bit-bit aynı kalır.
+ * ⚠️ Formül **katalogda tek yerde** (`scaledSeconds`): burada ve `city.controller.ts`te iki ayrı
+ * kopyaydı, eşitliklerini bir test kilitliyordu. Kilit doğruydu ama kopyayı çoğalmaktan
+ * korumuyordu — üçüncü tüketici gelince ortak kaynağa alındı.
  */
-const scaled = (seconds: number, multiplier: number): number =>
-  Math.max(1, seconds / Math.max(1, multiplier));
+const scaled = scaledSeconds;
 
 export class QueueService {
   private readonly capacity = new CapacityService();

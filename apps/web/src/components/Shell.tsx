@@ -125,6 +125,9 @@ const PAGE_TITLE: [string, string][] = [
   ['/world', 'Dünya'], ['/messages', 'Mesajlar'], ['/options', 'Seçenekler'],
   ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'], ['/simulate', 'Simülatör'],
   ['/destek', 'Destek'],
+  /* ⚠️ Menüde YOK ama başlığı olmak zorunda: liste yalnız navigasyon değil, bilgi çubuğunun ve
+     `document.title`ın kaynağı — eksik olsaydı sayfa adsız açılırdı. */
+  ['/denge', 'Denge Tezgâhı'],
 ];
 
 /* ⚠️ `cityActivity` ve `ActivityDot` 2026-08-09'da `lib/city-activity.tsx`e taşındı —

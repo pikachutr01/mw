@@ -401,6 +401,25 @@ export function timeFromCost(cost: Cost, divisorLevel: number, cfg: CatalogConfi
 }
 
 /**
+ * ⭐ DÜNYA HIZ ÇARPANININ SÜREYE UYGULANMASI — kuyruk, ekran ve denge tezgâhı için **tek kaynak**.
+ *
+ * `max(1, sn / max(1, çarpan))`. İki kelepçe de yükü taşıyor: alttaki 1 sn, çarpan ne olursa olsun
+ * anlık bitişi engeller; bölendeki `max(1, …)` ise 0/negatif çarpanın süreyi sonsuza ya da eksiye
+ * götürmesini engeller.
+ *
+ * ⚠️ **Yuvarlama YOK ve bu şart**: kuyruk birim-başına süreleri kesirli saklıyor (tembel
+ * materyalizasyon `done = elapsed / per_unit_seconds` hesabı yuvarlamayla kayardı). Yuvarlamaya
+ * ihtiyacı olan yalnız EKRAN — o, sonucu kendisi yuvarlar.
+ *
+ * ⚠️ Bu formül 2026-08-14'e kadar `queue.service.ts` ve `city.controller.ts`te **iki ayrı kopya**
+ * olarak duruyordu; ikisinin eşitliğini bir test kilitliyordu ama kopya olmaları, üçüncü bir
+ * tüketici (denge tezgâhı) geldiğinde üçüncü kopyayı davet ediyordu.
+ */
+export function scaledSeconds(seconds: number, multiplier: number): number {
+  return Math.max(1, seconds / Math.max(1, Number(multiplier ?? 1)));
+}
+
+/**
  * Yapı inşa süresi (saniye). Hızlandıran: **Mimar Okulu**.
  *
  * ⭐ **MİMAR OKULU KENDİNİ HIZLANDIRMAZ** (kullanıcı, 2026-08-03): kendi yükseltmesinde bölen

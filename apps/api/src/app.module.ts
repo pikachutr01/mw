@@ -24,6 +24,7 @@ import { BattleController } from './battles/battle.controller.ts';
 import { AllianceChatController } from './chat/alliance-chat.controller.ts';
 import { ChatController } from './chat/chat.controller.ts';
 import { GlobalChatController } from './chat/global-chat.controller.ts';
+import { BalanceController } from './balance/balance.controller.ts';
 import { CityController } from './cities/city.controller.ts';
 import { HeroController } from './heroes/hero.controller.ts';
 import { CityService } from './cities/city.service.ts';
@@ -64,7 +65,7 @@ export { DB } from './db/tokens.ts';
  */
 @Module({
   controllers: [
-    HealthController, SimulateController, AuthController, CityController,
+    HealthController, SimulateController, AuthController, CityController, BalanceController,
     AllianceController, ChatController, AllianceChatController, GlobalChatController,
     HeroController,
     MissionController, BattleController, WorldController, WorldsPublicController, CommandController,
