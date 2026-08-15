@@ -6,7 +6,13 @@ plugins {
 
 android {
     namespace = "com.mobilwar.mobilwar"
-    compileSdk = flutter.compileSdkVersion
+    // ⚠️ `flutter.compileSdkVersion` (36) YETMİYOR: flutter_secure_storage 11.0.0 kendisine
+    // bağımlı olan uygulamanın **37 veya üstüne** derlenmesini şart koşuyor ve derleme
+    // `checkDebugAarMetadata` adımında kırılıyor. Sabit yazılmasının sebebi bu; Flutter
+    // varsayılanı 37'ye çıkınca bu satır kaldırılabilir.
+    // ⚠️ AGP 9.0.1 "önerilen en yüksek 36" diye UYARIYOR — uyarı, engel değil. Alternatif
+    // (flutter_secure_storage'ı 10.x'e düşürmek) jetonların saklandığı katmanı eskitirdi.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

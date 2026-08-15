@@ -46,13 +46,14 @@ jobs:
 
       - run: flutter pub get
 
-      # ⚠️ `lib/gen/` BİLEREK dışarıda: orası ÜRETİLMİŞ kod. `dart format` ile token üretecinin
-      # çıktısı satır sarmada anlaşamıyor (üreteç tek satır yazıyor, formatçı üçe bölmek istiyor)
-      # ve ikisini uzlaştırmak `tokens:check` ile bu kapıyı KALICI olarak çatıştırırdı.
-      # Üretilmiş kodu biçimlendirmek zaten insan işi değil — ama `flutter analyze` onu YİNE de
-      # denetliyor (aşağıdaki adım), yani "üretilen Dart derleniyor mu" kapısı açık kalıyor.
-      - name: Biçim (üretilmiş kod hariç)
-        run: dart format --output=none --set-exit-if-changed lib/main.dart test tool
+      # ⭐ `lib` BÜTÜN olarak veriliyor ve bu güvenli: üretilmiş dosyalar çıktılarının başında
+      # `// dart format off` taşıyor (üreteçlerde gerekçesiyle yazılı), yani formatçı onlara
+      # nasıl çağrılırsa çağrılsın dokunmuyor.
+      # ⚠️ Bir ara dar bir liste (`lib/main.dart test tool`) yazılmıştı — `lib/app`, `lib/ui`,
+      # `lib/features` eklendiğinde onları SESSİZCE kapsam dışı bıraktı. Dar liste, yeni klasör
+      # açıldığında kendini unutturur; direktif ise unutulamaz.
+      - name: Biçim
+        run: dart format --output=none --set-exit-if-changed lib test tool
 
       # ⭐ Üretilmiş kod DÂHİL — token/sözleşme üreteci bozuk Dart üretirse burada yakalanır.
       - name: Analiz

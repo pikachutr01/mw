@@ -4,4 +4,22 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!--
+      ⚠️⚠️ SADECE DEBUG · düz HTTP izni.
+
+      Android 9 (API 28) ve üstü cleartext trafiği VARSAYILAN OLARAK engelliyor. Belgelediğimiz
+      yerel geliştirme döngüsü (adb reverse ile 127.0.0.1:3002) bu izin olmadan hiç çalışmıyor:
+      istek sessizce ölüyor, ekranda kalıcı "yükleniyor" kalıyor ve Dart tarafında görünür bir
+      hata BASILMIYOR. Teşhisi zor bir arıza; 2026-08-15'te cihazda tam olarak bu yaşandı.
+
+      ⛔ Bu dosya src/debug/ altında ve öyle KALMALI. src/main/ içine taşınırsa üretim yapısı da
+      düz HTTP kabul eder ve oyuncunun jetonları ortadaki adam saldırısına açılır. Üretim yapısı
+      yalnız HTTPS konuşuyor (MW_API derleme sabiti https ile veriliyor).
+
+      ⚠️ Bu yorumda çift tire KULLANILAMAZ: XML yorumları çift tire içeremiyor ve manifest
+      birleştirme "Error parsing AndroidManifest.xml" ile kırılıyor. İlk yazımda dart-define
+      bayrağı tam hâliyle yazılmıştı ve derleme tam bu yüzden patladı.
+    -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>
