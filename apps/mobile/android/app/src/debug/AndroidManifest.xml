@@ -6,20 +6,24 @@
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <!--
-      ⚠️⚠️ SADECE DEBUG · düz HTTP izni.
+      SADECE DEBUG · düz HTTP izni.
 
-      Android 9 (API 28) ve üstü cleartext trafiği VARSAYILAN OLARAK engelliyor. Belgelediğimiz
-      yerel geliştirme döngüsü (adb reverse ile 127.0.0.1:3002) bu izin olmadan hiç çalışmıyor:
-      istek sessizce ölüyor, ekranda kalıcı "yükleniyor" kalıyor ve Dart tarafında görünür bir
-      hata BASILMIYOR. Teşhisi zor bir arıza; 2026-08-15'te cihazda tam olarak bu yaşandı.
+      ⚠️ NE İÇİN DEĞİL: `adb reverse` ile 127.0.0.1 kullanan yerel döngü bu izni GEREKTİRMİYOR.
+      2026-08-15'te ölçüldü: izin tamamen kaldırılıp Android 16 cihazda denendi ve
+      http://127.0.0.1:3002 sorunsuz çalıştı — loopback cleartext engelinin dışında.
+      (O gün ekranın "yükleniyor"da takılmasının gerçek sebebi çok daha sıradandı: yerel API
+      hiç çalışmıyordu. Üç şey aynı anda değiştirildiği için hata yanlışlıkla bu izne
+      yazılmıştı; izolasyon deneyi bunu çürüttü.)
+
+      NE İÇİN: cihaz USB'de değilken LAN adresiyle geliştirme (örn. http://192.168.1.x:3002).
+      Loopback olmayan düz HTTP adresleri Android 9+ tarafından engelleniyor.
 
       ⛔ Bu dosya src/debug/ altında ve öyle KALMALI. src/main/ içine taşınırsa üretim yapısı da
       düz HTTP kabul eder ve oyuncunun jetonları ortadaki adam saldırısına açılır. Üretim yapısı
       yalnız HTTPS konuşuyor (MW_API derleme sabiti https ile veriliyor).
 
       ⚠️ Bu yorumda çift tire KULLANILAMAZ: XML yorumları çift tire içeremiyor ve manifest
-      birleştirme "Error parsing AndroidManifest.xml" ile kırılıyor. İlk yazımda dart-define
-      bayrağı tam hâliyle yazılmıştı ve derleme tam bu yüzden patladı.
+      birleştirme "Error parsing AndroidManifest.xml" ile kırılıyor (bu da yaşandı).
     -->
     <application android:usesCleartextTraffic="true" />
 </manifest>

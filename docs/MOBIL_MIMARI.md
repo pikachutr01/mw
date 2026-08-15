@@ -304,8 +304,11 @@ adb exec-out screencap -p > shot.png   # ekran görüntüsü
 ⭐ **Canlıya bağlanan yapı** (yerel API kurmadan denemek için):
 `flutter build apk --debug --dart-define=MW_API=https://mobilwar.com`
 
-⚠️ `adb reverse` **her USB bağlantısında yeniden kurulur** — kalıcı değil. Ekranda kalıcı
-"yükleniyor" görüyorsan ilk bakılacak yer burası (ikincisi cleartext izni, §7.1).
+⚠️ **Yerel API'yi başlatmayı unutma** — `pnpm --filter @mobilwar/api dev` (Postgres için önce
+`pnpm dev:infra`). Ekranda kalıcı "yükleniyor" görüyorsan **ilk bakılacak yer burası**;
+`curl 127.0.0.1:3002/healthz` iki saniyede cevap veriyor.
+
+⚠️ `adb reverse` **her USB bağlantısında sıfırlanır** — kalıcı değil. İkinci bakılacak yer.
 
 ⭐ Son satır önemli: ekran görüntüsü okunabildiği için arayüz **kendi kendine doğrulanabiliyor**;
 her adımda kullanıcıya *"bir bak da doğru mu görünüyor"* diye dönmek gerekmiyor.
@@ -347,7 +350,8 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 | **`flutter analyze` monorepo KÖKÜNDEN koşarsa** | 426 sahte hata: `packages/design-tokens/dist/tokens.dart` Flutter paketi dışında ama Dart dosyası, analizör onu da tarıyor ve `ThemeData` çözümlenemiyor | Her zaman `apps/mobile` içinden koş. Workflow zaten `working-directory: apps/mobile` kullanıyor |
 | **`flutter pub add flutter_riverpod`** | Sessizce **2.6.1** kuruyor, 3.x'e çıkmıyor | Sürüm açıkça istenmeli: `flutter pub add "flutter_riverpod:^3.4.2"` |
 | **`flutter_secure_storage` v11** | `AndroidOptions(encryptedSharedPreferences: true)` **derlenmiyor** — bayrak kaldırılmış (varsayılan zaten AES-GCM + RSA-OAEP). İnternetteki örneklerin çoğu eski API'yi gösteriyor | Seçeneksiz `const FlutterSecureStorage()` |
-| ⚠️⚠️ **Android cleartext engeli** | Android 9+ düz HTTP'yi varsayılan olarak engelliyor. `adb reverse` + `http://127.0.0.1:3002` yolu **hiç çalışmıyor**: istek sessizce ölüyor, ekran kalıcı "yükleniyor"da kalıyor ve Dart tarafında görünür hata BASILMIYOR. Teşhisi zor | `android:usesCleartextTraffic="true"` **yalnız `src/debug/AndroidManifest.xml`**. ⛔ `src/main/`e taşınırsa üretim de düz HTTP kabul eder |
+| ⚠️⚠️ **Kalıcı "yükleniyor" ekranı** | Ekran boş kalıyor, Dart tarafında **görünür hata basılmıyor**. Teşhisi zor çünkü arıza sessiz | ⭐ **İlk bakılacak yer: yerel API gerçekten ayakta mı** (`curl 127.0.0.1:3002/healthz`). İkincisi `adb reverse` kurulu mu — her USB bağlantısında sıfırlanıyor |
+| ⚠️ **Cleartext engeli — SANILDIĞI GİBİ DEĞİL** | `adb reverse` + `127.0.0.1` yolu `usesCleartextTraffic` **GEREKTİRMİYOR**: izin tamamen kaldırılıp Android 16 cihazda ölçüldü, düz HTTP loopback sorunsuz çalıştı. İzin yalnız **LAN adresiyle** (`192.168.1.x`) geliştirirken gerekiyor | İzin debug manifestinde duruyor ama gerekçesi LAN senaryosu. ⛔ `src/main/`e taşınmaz |
 | **XML yorumunda çift tire** | `AndroidManifest.xml` yorumuna `dart-define` bayrağı tam hâliyle yazılınca manifest birleştirme *"Error parsing AndroidManifest.xml"* ile kırılıyor — XML yorumları çift tire içeremiyor | Yorumda çift tire kullanma |
 | **`flutter_secure_storage` 11 ↔ compileSdk** | Paket, kendisine bağımlı uygulamanın **37+**'ye derlenmesini şart koşuyor; Flutter varsayılanı 36 → `checkDebugAarMetadata` kırılıyor | `android/app/build.gradle.kts` içinde `compileSdk = 37` sabit. AGP "önerilen en yüksek 36" diye uyarıyor — uyarı, engel değil |
 
