@@ -38,6 +38,25 @@ class MwColors {
       dark ? MwDarkColors.onPanelHeader : MwLightColors.onPanelHeader;
 }
 
+/// ⭐ BAŞLIK YAZI TİPİ — web'deki `.display` sınıfının karşılığı (Cinzel).
+///
+/// ⚠️⚠️ **Oyuncunun yazdığı metinde KULLANILMAZ.** Cinzel tasarımı gereği küçük harf
+/// taşımıyor: küçük harfleri büyük harf gibi çiziyor. Web'de bir ara şehir adına uygulandı ve
+/// oyuncu «Mithlond» yazdığı hâlde ekranda «MİTHLOND» görünüyordu. Yalnız SABİT başlıklarda —
+/// şehir adı, kullanıcı adı ve sohbet metni gövde fontunda kalır.
+///
+/// ⚠️ `fontVariations` ŞART: Cinzel değişken bir font (Google Fonts'ta statik sürümü yok) ve
+/// yalnız `fontWeight` yazmak varyasyon eksenini oynatmıyor — başlık ince çizilirdi.
+TextStyle mwDisplayStyle({Color? color, double fontSize = 13}) => TextStyle(
+  fontFamily: MwFonts.display,
+  fontFamilyFallback: MwFonts.displayFallback,
+  fontVariations: const [FontVariation('wght', 600)],
+  fontWeight: FontWeight.w600,
+  fontSize: fontSize,
+  letterSpacing: 0.8,
+  color: color,
+);
+
 /// Web'deki `Panel` — başlık bandı + çerçeve. Ana görsel birim.
 class MwPanel extends StatelessWidget {
   const MwPanel({super.key, this.title, required this.child, this.trailing});
@@ -72,10 +91,13 @@ class MwPanel extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      title!,
-                      style: TextStyle(
+                      // ⚠️ Web'de de büyük harf (`uppercase` sınıfı). Cinzel zaten küçük harf
+                      // taşımıyor; metni açıkça büyütmek harf aralığının tutarlı olmasını
+                      // sağlıyor ve fontun yüklenmediği durumda da aynı görünüyor.
+                      title!.toUpperCase(),
+                      style: mwDisplayStyle(
                         color: c.onPanelHeader,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
                       ),
                     ),
                   ),

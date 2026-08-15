@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/client_hints.dart';
+import '../core/device_identity.dart';
 import '../core/storage.dart';
 import '../features/shell/session_conflict.dart';
 import '../features/shell/update_gate.dart';
@@ -51,13 +52,37 @@ Future<void> bootstrap() async {
     );
   }
 
+  // ⭐ Cihaz kimliği BURADA okunuyor: soket el sıkışmasında senkron olarak gerekiyor
+  // (`realtimeProvider`) ve async bir sağlayıcıya bağlamak bağlantıyı bir kare geciktirirdi.
+  // ⚠️ Okunamazsa `null` kalır ve soket hiç bağlanmaz — kimliksiz el sıkışma sunucuda oturum
+  // kimliğine düşer ve tek cihaz kuralı şaşar. Sessizce yanlış bağlanmaktansa bağlanmamak.
+  final store = SecureStore();
+  String? deviceId;
+  try {
+    deviceId = await DeviceIdentity(store).deviceId();
+  } catch (_) {
+    deviceId = null;
+  }
+
   final container = ProviderContainer(
-    overrides: [clientHintsProvider.overrideWithValue(hints)],
+    overrides: [
+      clientHintsProvider.overrideWithValue(hints),
+      // ⚠️ AYNI depo örneği paylaşılıyor: ikinci bir `SecureStore` kurmak yanlış olmazdı ama
+      // aynı anahtarı iki yerden okumak, ileride önbelleğe alınan bir değerin ayrışmasına
+      // açık kapı bırakırdı.
+      storeProvider.overrideWithValue(store),
+      deviceIdProvider.overrideWithValue(deviceId),
+    ],
   );
 
   // Diskteki oturumu belleğe al — açılışta giriş ekranı "parlamasın".
   final session = await container.read(apiProvider).loadSession();
   container.read(sessionProvider.notifier).update(session);
+
+  // ⭐ Soketi ayağa kaldır. ⚠️ `read` yeterli: sağlayıcı oturumu kendisi izliyor ve oturum
+  // değişince yeniden kuruluyor. Burada yapılan tek şey onu ilk kez hayata geçirmek —
+  // hiçbir ekran onu izlemeseydi (misafirde olduğu gibi) hiç kurulmazdı.
+  container.read(realtimeProvider);
 
   runApp(
     UncontrolledProviderScope(container: container, child: const MobilWarApp()),

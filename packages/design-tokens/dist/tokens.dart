@@ -59,6 +59,23 @@ class MwDarkColors {
   static const Color bolt = Color(0xFFB8862F);
 }
 
+/// Yazı tipleri — web ile AYNI aileler (`tokens.json` · `font`).
+///
+/// ⚠️ Dosyalar uygulamaya GÖMÜLÜ (`apps/mobile/assets/fonts/`, `pubspec.yaml`); çalışma
+/// anında indirilmiyor. Gerekçe MOBIL_MIMARI.md §3.6'da.
+///
+/// ⚠️ `display` (Cinzel) KÜÇÜK HARF TAŞIMIYOR — küçük harfleri büyük harf gibi çiziyor.
+/// Oyuncunun yazdığı metinde (şehir adı, kullanıcı adı) KULLANILMAZ; web'de tam olarak bu
+/// hata yaşandı ve «Mithlond» ekranda «MİTHLOND» görünüyordu. Yalnız sabit başlıklarda.
+class MwFonts {
+  static const String display = 'Cinzel';
+  static const List<String> displayFallback = ['EB Garamond', 'Georgia'];
+  static const String body = 'Spectral';
+  static const List<String> bodyFallback = ['EB Garamond', 'Georgia'];
+  static const String mono = 'JetBrains Mono';
+  static const List<String> monoFallback = ['Cascadia Mono', 'Segoe UI Mono', 'Menlo', 'Consolas'];
+}
+
 class MwTheme {
   static ThemeData light() => _build(Brightness.light);
   static ThemeData dark() => _build(Brightness.dark);
@@ -75,6 +92,11 @@ class MwTheme {
     return ThemeData(
       brightness: brightness,
       scaffoldBackgroundColor: bg,
+      // ⭐ Gövde fontu uygulamanın TAMAMINA uygulanıyor — web'de `body` ile aynı.
+      // ⚠️ Sayılar da bu fontta: web'de sayılar bir ara monospace'teydi ve o fontun ÇİZGİLİ
+      // sıfırı 8 ile karışıyordu; gövde fontuna alınınca sorun çözüldü (kullanıcı kararı).
+      fontFamily: MwFonts.body,
+      fontFamilyFallback: MwFonts.bodyFallback,
       colorScheme: ColorScheme(
         brightness: brightness,
         primary: accent,

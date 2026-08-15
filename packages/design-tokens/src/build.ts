@@ -93,11 +93,38 @@ export const themes = { light: lightColors, dark: darkColors } as const;
 /** "#AABBCC" → "0xFFAABBCC" (Dart Color literali) */
 const dartColor = (hex: string): string => `0xFF${hex.replace('#', '').toUpperCase()}`;
 
+/**
+ * ⭐ CSS font yığınını Dart'a çevirir: `'Spectral', 'EB Garamond', Georgia, serif`
+ * → ailesi `Spectral`, yedekleri `['EB Garamond', 'Georgia']`.
+ *
+ * ⚠️ Flutter tek bir `fontFamily` + ayrı bir yedek LİSTESİ istiyor; CSS'teki tek dizeyi
+ * olduğu gibi vermek sessizce varsayılan fonta düşerdi.
+ *
+ * ⚠️ `serif`/`sans-serif`/`monospace` gibi CSS jenerik adları atılıyor: onlar tarayıcı
+ * kavramı, Flutter'da karşılıkları yok ve yedek listesinde bulunmaları bir işe yaramaz.
+ */
+const CSS_GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'system-ui', 'ui-monospace']);
+
+function dartFontStack(stack: string): { family: string; fallback: string[] } {
+  const parts = stack.split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, ''));
+  const real = parts.filter((p) => !CSS_GENERIC.has(p));
+  return { family: real[0] ?? 'Roboto', fallback: real.slice(1) };
+}
+
 function buildDart(): string {
   const emit = (theme: ThemeName): string =>
     Object.entries(resolveTheme(theme))
       .map(([name, hex]) => `  static const Color ${name} = Color(${dartColor(hex)});`)
       .join('\n');
+
+  const fontLines = Object.entries(source.font)
+    .map(([k, v]) => {
+      const { family, fallback } = dartFontStack(v as string);
+      const fb = fallback.map((f) => `'${f}'`).join(', ');
+      return `  static const String ${k} = '${family}';\n`
+        + `  static const List<String> ${k}Fallback = [${fb}];`;
+    })
+    .join('\n');
 
   return `// dart format off
 // ÜRETİLMİŞ DOSYA — elle düzenlemeyin. Kaynak: packages/design-tokens/tokens.json
@@ -118,6 +145,18 @@ class MwDarkColors {
 ${emit('dark')}
 }
 
+/// Yazı tipleri — web ile AYNI aileler (\`tokens.json\` · \`font\`).
+///
+/// ⚠️ Dosyalar uygulamaya GÖMÜLÜ (\`apps/mobile/assets/fonts/\`, \`pubspec.yaml\`); çalışma
+/// anında indirilmiyor. Gerekçe MOBIL_MIMARI.md §3.6'da.
+///
+/// ⚠️ \`display\` (Cinzel) KÜÇÜK HARF TAŞIMIYOR — küçük harfleri büyük harf gibi çiziyor.
+/// Oyuncunun yazdığı metinde (şehir adı, kullanıcı adı) KULLANILMAZ; web'de tam olarak bu
+/// hata yaşandı ve «Mithlond» ekranda «MİTHLOND» görünüyordu. Yalnız sabit başlıklarda.
+class MwFonts {
+${fontLines}
+}
+
 class MwTheme {
   static ThemeData light() => _build(Brightness.light);
   static ThemeData dark() => _build(Brightness.dark);
@@ -134,6 +173,11 @@ class MwTheme {
     return ThemeData(
       brightness: brightness,
       scaffoldBackgroundColor: bg,
+      // ⭐ Gövde fontu uygulamanın TAMAMINA uygulanıyor — web'de \`body\` ile aynı.
+      // ⚠️ Sayılar da bu fontta: web'de sayılar bir ara monospace'teydi ve o fontun ÇİZGİLİ
+      // sıfırı 8 ile karışıyordu; gövde fontuna alınınca sorun çözüldü (kullanıcı kararı).
+      fontFamily: MwFonts.body,
+      fontFamilyFallback: MwFonts.bodyFallback,
       colorScheme: ColorScheme(
         brightness: brightness,
         primary: accent,

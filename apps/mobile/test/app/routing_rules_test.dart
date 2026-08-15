@@ -30,6 +30,9 @@ const _allPaths = <String>[
   '/command',
   '/command/rankings',
   '/options',
+  '/barracks',
+  '/buildings',
+  '/temple',
   '/helpdesk', // ⚠️ tuzak: `/help` ile aynı ön eke sahip AMA ayrı bir rota
   '/bilinmeyen',
 ];

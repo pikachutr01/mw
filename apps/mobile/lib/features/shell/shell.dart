@@ -1,14 +1,25 @@
-/// OYUN KABUĞU — alt sekme çubuğu + drawer.
+/// OYUN KABUĞU — bilgi çubuğu · şehir şeridi · şehir sekmeleri · içerik · alt gezinti.
 ///
-/// Web'deki `Shell.tsx`in mobil karşılığı. Sekmeler web'in `TABS` dizisiyle, drawer ise
-/// `MORE_ITEMS` ile aynı içerikte — iki istemcide farklı gezinme, aynı oyunu iki ayrı oyun
-/// gibi gösterirdi.
+/// Web'deki `Shell.tsx`in **mobil** düzeniyle aynı dizilim (orada: bilgi çubuğu → şehir şeridi
+/// → içerik + alt bar). Kullanıcı kararı: *"mobil web ile mobil uygulama görünümü birbirine
+/// yakın kalmalı"*.
+///
+/// ⛔⛔ **ÜST BAR (AppBar) YOK ve geri gelmemeli.** Bir ara sayfa adı + hamburger taşıyan bir
+/// AppBar vardı; kaldırıldı çünkü telefonda dikey alan en kıt kaynak ve o satırın taşıdığı iki
+/// bilgi de zaten başka yerde duruyor:
+///   • sayfa adı  → alt bardaki sekme yanıyor, şehir ekranlarında ayrıca sekme şeridi var
+///   • hamburger  → alt barın altıncı maddesi «Daha» (`more_sheet.dart`)
+/// Yerine geçen bilgi çubuğu **her ekranda** altın/yemek/koordinat/bağlantı gösteriyor; yani
+/// aynı yükseklik boş bir başlık yerine gerçekten kullanılan veriye gidiyor.
+///
+/// ⚠️⚠️ **SafeArea yalnız ÜSTTE ve YANLARDA, altta DEĞİL.** Alt gezinti çubuğunun kendisi
+/// `SafeArea` sarmalıyor: `bottom: true` en dışta verilseydi çubuğun ALTINDA boş bir şerit
+/// kalır ve çubuk ekranın dibine oturmazdı. Üstte ise şart — bilgi çubuğu durum çubuğunun
+/// altına kayarsa saat ve pil ikonları rakamların üstüne biner.
 ///
 /// ⭐⭐ **Rota yolları web ile AYNI** (`/armies`, `/city`, …) ve bu bilinçli: bildirim yükündeki
-/// `url` alanı web rotaları taşıyor (`notify.catalog.ts` → `/armies`, `/messages?dm=`,
-/// `/destek?t=`). Aynı yolları kullanmak, derin bağlantı için bir çeviri tablosuna olan
-/// ihtiyacı tamamen ortadan kaldırıyor — o tablo yazılsaydı sunucu yeni bir rota eklediğinde
-/// sessizce eksik kalırdı.
+/// `url` alanı web rotaları taşıyor (`notify.catalog.ts`). Aynı yolları kullanmak, derin
+/// bağlantı için bir çeviri tablosuna olan ihtiyacı tamamen ortadan kaldırıyor.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,13 +28,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../app/routing_rules.dart';
+import '../../core/city_screens.dart';
 import '../../ui/primitives.dart';
+import 'city_strip.dart';
+import 'city_tabs.dart';
+import 'info_bar.dart';
+import 'more_sheet.dart';
 
-/// Alt sekmeler — web `Shell.tsx:81-87` ile aynı beşli, **aynı ikon dosyalarıyla**.
+/// Alt sekmeler — web `Shell.tsx` · `TABS` ile aynı beşli, **aynı ikon dosyalarıyla**.
 ///
 /// ⭐ `icon` alanı bir `IconData` değil, `assets/menu/<icon>.png` dosyasının adı. Material
 /// ikonları yerine oyunun kendi görselleri kullanılıyor: iki istemcinin aynı oyunu göstermesi
-/// «tam eşitlik» kararının görünen yüzü. Adlar web'deki `MENU`/`TABS` dizileriyle birebir.
+/// «tam eşitlik» kararının görünen yüzü.
 const tabs = <({String path, String label, String icon})>[
   (path: '/armies', label: 'Ordular', icon: 'ordular'),
   (path: '/city', label: 'Şehir', icon: 'sehir'),
@@ -32,7 +48,7 @@ const tabs = <({String path, String label, String icon})>[
   (path: '/command', label: 'Komuta', icon: 'komutamerkezi'),
 ];
 
-/// Drawer maddeleri — web `MORE_ITEMS` (`Shell.tsx:99-108`) ile aynı dörtlü.
+/// «Daha» listesinin maddeleri — web `MORE_ITEMS` ile aynı dörtlü.
 const drawerItems = <({String path, String label, String icon})>[
   (path: '/simulate', label: 'Simülatör', icon: 'simulator'),
   (path: '/options', label: 'Seçenekler', icon: 'secenekler'),
@@ -40,15 +56,19 @@ const drawerItems = <({String path, String label, String icon})>[
   (path: '/destek', label: 'Destek', icon: 'destek'),
 ];
 
-/// Kabuk — **oturumluyken ve misafirken aynı widget**, içeriği duruma göre değişir.
-///
-/// ⚠️⚠️ İki AYRI kabuk yazılmadı, bilerek. Web'de iki ayrı rota ağacı var (`AuthedApp` /
-/// `GuestApp`) ve orada bedelsiz; go_router'da ise aynı yolun (`/simulate`, `/help`, `/destek`)
-/// iki ShellRoute altında **iki kez** tanımlanması gerekirdi. Aynı rotayı iki yerde tutmak,
-/// birinin güncellenip diğerinin unutulduğu klasik sessiz sürüklenme kaynağı.
-///
-/// ⚠️ Misafirde alt sekme çubuğu ve drawer YOK: beşinin de hedefi oturum isteyen ekranlar,
-/// yani her dokunuş oyuncuyu ana sayfaya geri fırlatırdı (`authRedirect`).
+/// ⚠️ «Şehir» sekmesi şehir ALT ekranlarında da yanmalı. Düz ön ek karşılaştırması
+/// `/barracks`ı `/city` ile eşleştiremiyor ve o beş sayfada alt barda **hiçbir sekme aktif
+/// olmuyordu** — üst bar da kalktığına göre "neredeyim" ipucu tamamen kaybolurdu.
+/// Web'de aynı düzeltme var (`Shell.tsx`, 2026-08-09).
+int activeTabIndex(String path) {
+  final i = tabs.indexWhere((t) => path.startsWith(t.path));
+  if (i >= 0) return i;
+  if (matchCityScreen(path) != null) {
+    return tabs.indexWhere((t) => t.path == '/city');
+  }
+  return -1;
+}
+
 class GameShell extends ConsumerWidget {
   const GameShell({super.key, required this.child, required this.path});
 
@@ -57,118 +77,164 @@ class GameShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
-    final signedIn = session != null;
-    final index = tabs.indexWhere((t) => path.startsWith(t.path));
+    final signedIn = ref.watch(sessionProvider) != null;
+    final index = activeTabIndex(path);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_title(path)),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        actions: [
-          if (!signedIn)
-            TextButton(
-              onPressed: () => context.go(kAuthPath),
-              child: Text(
-                'Giriş yap',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+      body: Column(
+        children: [
+          // ⚠️ Üst güvenli alan bilgi çubuğunun DIŞINDA değil, çubuğun kendi zemini onu
+          // kapsasın diye içinde: aksi hâlde durum çubuğunun arkası tema zemini kalır ve
+          // çubuğun rengi ekranın tepesine kadar uzanmaz.
+          if (signedIn) ...[
+            const _TopSafeArea(child: InfoBar()),
+            CityStrip(path: path),
+            CityTabs(path: path),
+          ] else
+            const _TopSafeArea(child: _GuestBar()),
+          Expanded(child: SafeArea(top: false, bottom: false, child: child)),
         ],
       ),
-      drawer: signedIn ? _Drawer(username: session.username) : null,
-      body: child,
-      bottomNavigationBar: signedIn
-          ? NavigationBar(
-              // ⚠️ `-1` (eşleşme yok) NavigationBar'ı patlatıyor → 0'a kelepçeleniyor.
-              selectedIndex: index < 0 ? 0 : index,
-              onDestinationSelected: (i) => context.go(tabs[i].path),
-              destinations: [
-                for (final t in tabs)
-                  NavigationDestination(
-                    icon: MwIcon(folder: 'menu', id: t.icon, size: 26),
-                    label: t.label,
-                  ),
-              ],
-            )
-          : null,
+      bottomNavigationBar: signedIn ? _BottomBar(index: index) : null,
     );
   }
 }
 
-/// Web'deki `PAGE_TITLE` (`Shell.tsx:116-131`) ile aynı eşleme.
-/// ⚠️ SIRA ÖNEMLİ: uzun yollar önce, yoksa `/command` alt sayfalarını yutar.
-String _title(String path) {
-  const table = <(String, String)>[
-    ('/command/rankings', 'Sıralamalar'),
-    ('/command/alliance', 'İttifak'),
-    ('/command/search', 'Arama'),
-    ('/command', 'Genel Durum'),
-    ('/armies', 'Ordular'),
-    ('/city', 'Şehir'),
-    ('/world', 'Dünya'),
-    ('/messages', 'Mesajlar'),
-    ('/simulate', 'Simülatör'),
-    ('/options', 'Seçenekler'),
-    ('/help', 'Yardım'),
-    ('/destek', 'Destek'),
-  ];
-  for (final (prefix, name) in table) {
-    if (path.startsWith(prefix)) return name;
-  }
-  return 'MobilWar';
-}
+/// Durum çubuğunun altına kaymayı önler ve zemini onun arkasına kadar uzatır.
+class _TopSafeArea extends StatelessWidget {
+  const _TopSafeArea({required this.child});
 
-class _Drawer extends ConsumerWidget {
-  const _Drawer({required this.username});
-
-  final String username;
+  final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    return Container(
+      color: MwColors.of(context).panelHeader,
+      child: SafeArea(bottom: false, child: child),
+    );
+  }
+}
+
+/// Misafirde bilgi çubuğunun yerini alan ince şerit: oyun verisi yok, giriş bağlantısı var.
+class _GuestBar extends StatelessWidget {
+  const _GuestBar();
+
+  @override
+  Widget build(BuildContext context) {
     final c = MwColors.of(context);
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              color: c.panelHeader,
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                username.isEmpty ? 'MobilWar' : username,
-                style: TextStyle(
-                  color: c.onPanelHeader,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          const MwIcon(folder: 'ui', id: 'logo', size: 22),
+          const SizedBox(width: 8),
+          Text(
+            'MobilWar',
+            style: TextStyle(
+              color: c.onPanelHeader,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => context.go(kAuthPath),
+            child: Text(
+              'Giriş yap',
+              style: TextStyle(
+                color: c.onPanelHeader,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            for (final d in drawerItems)
-              ListTile(
-                // ⚠️ 20 px — web'in «Daha» listesiyle aynı (`Shell.tsx:788`). Alt sekme
-                // çubuğunda 26 kullanılıyor (`:708`); ikisi bilerek farklı.
-                leading: MwIcon(folder: 'menu', id: d.icon, size: 20),
-                title: Text(d.label),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.go(d.path);
-                },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Alt gezinti — beş sekme + «Daha».
+///
+/// ⚠️ `NavigationBar` yerine elle çizildi: altıncı madde bir rota DEĞİL, yukarı açılan bir
+/// liste. `NavigationBar` her hedefi bir seçim sayıyor ve «Daha»ya dokununca onu seçili
+/// göstermeye çalışıyordu — oysa liste kapanınca hiçbir şey değişmemiş oluyor.
+class _BottomBar extends StatelessWidget {
+  const _BottomBar({required this.index});
+
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.panelHeader,
+        border: Border(top: BorderSide(color: c.borderStrong, width: 2)),
+      ),
+      // ⚠️ Güvenli alan BURADA (en dışta değil): çubuk ekranın dibine otursun, altında boş
+      // şerit kalmasın; gezinme çubuğu olan cihazlarda içerik onun altına girmesin.
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 56,
+          child: Row(
+            children: [
+              for (var i = 0; i < tabs.length; i++)
+                _BarItem(
+                  icon: tabs[i].icon,
+                  label: tabs[i].label,
+                  active: i == index,
+                  onTap: () => context.go(tabs[i].path),
+                ),
+              _BarItem(
+                // Web'de de aynı simge (`menu/secenekler.png`).
+                icon: 'secenekler',
+                label: 'Daha',
+                active: false,
+                onTap: () => showMoreSheet(context),
               ),
-            const Spacer(),
-            const Divider(height: 1),
-            ListTile(
-              // Web'de de aynı dosya: `menu/cikis.png` (`Shell.tsx:798`, 20 px).
-              leading: const MwIcon(folder: 'menu', id: 'cikis', size: 20),
-              title: Text('Oyunu kapat', style: TextStyle(color: c.danger)),
-              onTap: () async {
-                Navigator.of(context).pop();
-                await ref.read(authProvider).logout();
-              },
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BarItem extends StatelessWidget {
+  const _BarItem({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            MwIcon(folder: 'menu', id: icon, size: 24),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: active ? FontWeight.w700 : FontWeight.normal,
+                // ⚠️ Seçili olmayan sekme SİLİK, gizli değil: dokunulabilir olduğu görünmeli.
+                color: active
+                    ? c.onPanelHeader
+                    : c.onPanelHeader.withValues(alpha: 0.7),
+              ),
             ),
           ],
         ),
@@ -184,5 +250,5 @@ class PlaceholderScreen extends StatelessWidget {
   final String name;
 
   @override
-  Widget build(BuildContext context) => MwEmpty('$name — Faz 2\'de gelecek.');
+  Widget build(BuildContext context) => MwEmpty('$name — yakında.');
 }

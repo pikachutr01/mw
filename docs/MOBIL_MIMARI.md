@@ -144,6 +144,39 @@ Hepsi gerçek hatalardan doğdu. Yeniden keşfedilmesinler diye adıyla yazılı
 | 5 | **WS `INVALIDATES` tablosu** + `presence:update` debounce'u | `realtime.ts:60-120,330` | Ekran tazelenmez ya da kalabalık ittifakta olay yağmuru |
 | 6 | **`useSafetyNet()`** — WS bağlıyken 5 dk, kopukken 60 sn | `queries.ts:428` | Pil ve sunucu yükü |
 
+### 3.4.1 ⭐⭐ Arka plandan dönüş — mobilin web'de KARŞILIĞI OLMAYAN tuzağı (2026-08-16)
+
+Yukarıdaki altı mekanizma web'den taşınıyor. Bu yedincinin web'de karşılığı **yok**: tarayıcı
+sekmesi arka plandayken soket yaşamaya devam eder, Android'de etmez.
+
+İşletim sistemi uygulamayı dondurunca iki şey oluyor, ikisi de sessiz:
+
+| # | Ne oluyor | Sonucu |
+| :-- | :-- | :-- |
+| 1 | **Zamanlayıcılar durur.** socket.io'nun üstel backoff'u bir `Timer`a dayanıyor | Geri dönünce istemci "birazdan denerim" diye bekliyor; o «birazdan» dakikalar sonra |
+| 2 | ⚠️⚠️ **HAYALET SOKET.** İşletim sistemi TCP'yi öldürür, istemci hâlâ `connected` sanır | Ekranda yeşil nokta yanar, **hiçbir olay gelmez** — gösterge YALAN söyler |
+
+Bu yüzden geri dönüşte socket.io'nun kendi durumuna **güvenilmiyor**. Karar saf bir fonksiyonda
+(`shouldForceReconnect`, `core/realtime.dart`) ve testle kilitli:
+
+* bağlı DEĞİLSEK → hemen bağlan (donmuş backoff beklenmez)
+* **15 sn'den uzun uzaktaysak → bağlı GÖRÜNSEK bile yeniden kur**
+* eşik Engine.IO'nun 20 sn'lik `pingTimeout`unun ALTINDA ve sınırda «yeniden bağlan» tarafına
+  düşüyor: gereksiz el sıkışmanın bedeli bir istek, kaçırılan hayalet soketinki oyuncunun hiç
+  olay almaması
+
+⚠️ Arka plana geçerken soket **bilerek kapatılmıyor**: oyuncu üç saniyeliğine başka uygulamaya
+baksa sahipliği bırakırdı ve web'de açık sekmesi varsa oyun oraya kaçardı.
+
+⭐ **Cihazda ölçüldü (2026-08-16), yalıtımlı deneyle:** uygulama arka plana alındı → **API
+öldürüldü** (soket öldü, arka planda hiçbir olay gelemez) → 45 sn beklendi → API geri açıldı →
+uygulama öne alındı. **3 saniye içinde** bağlantı kuruldu (`account_presence.seen_at` tazelendi,
+gösterge yeşile döndü).
+
+⭐ Göstergenin kendisi de **yalanlandı**: piksel rengi ölçülerek doğrulandı — bağlıyken
+`RGB(143,176,94)` yeşil, API öldürülünce `RGB(212,103,79)` kırmızı, geri gelince yine yeşil.
+Sürekli yeşil kalan bir nokta ekranda birebir aynı görünürdü.
+
 ### 3.5 ⚠️ Adlandırma — makine okuyan her ad İngilizce, yorumlar Türkçe
 
 Depo kuralı (`README` §13.14) burada da geçerli ve **Dart'ta ihlali derleme hatasıyla ortaya
@@ -166,6 +199,31 @@ bozar. Dosyalar tek tek yeniden yazıldı.
 `Notifier.set(...)` yazılamıyor (`set` setter anahtar sözcüğü) → `update(...)`; giriş rotası
 `/auth` (web'de karşılığı yok, çünkü orada giriş bir modal — bu yüzden «yollar web ile aynı»
 kuralının dışında).
+
+### 3.6 ⭐ Yazı tipleri — GÖMÜLÜ, indirilmiyor (2026-08-16)
+
+Web ile aynı iki aile: **Cinzel** (başlık) · **Spectral** (gövde), ikisi de `tokens.json`ın
+`font` bölümünden geliyor ve Dart'a `MwFonts` olarak üretiliyor — yani tek kaynak korunuyor.
+
+⚠️⚠️ **`google_fonts` paketi KULLANILMADI.** O paket varsayılan olarak fontu **çalışma anında
+indiriyor**; sonucu:
+* ilk açılışta ağ yoksa oyuncu yanlış fontla karşılaşır, sonra metin zıplar
+* oyunun kabuğu çevrimdışı açılabiliyor, fontu ağa bağlamak onu geriletirdi
+* paket dosyayı nasılsa diske indiriyor — bedeli ödeyip karşılığını almamak
+
+Bedel **~1,3 MB APK**; karşılığında ilk kareden itibaren doğru tipografi.
+
+| Konu | Karar |
+| :-- | :-- |
+| Lisans | İkisi de **SIL OFL** — gömmeye açıkça izin veriyor. `OFL-*.txt` dosyaları yanlarında duruyor |
+| Cinzel | Google Fonts'ta **yalnız değişken** sürüm var. Ağırlık `fontVariations` ile veriliyor; tek başına `fontWeight` varyasyon eksenini oynatmıyor ve başlık ince çizilirdi |
+| Spectral | Statik 400/600/700 gömülü — gövde metni ağırlık sentezine bırakılmayacak kadar çok yerde |
+| ⚠️⚠️ Cinzel nerede KULLANILMAZ | **Oyuncunun yazdığı metin.** Font küçük harf taşımıyor; web'de şehir adına uygulanmış ve «Mithlond» ekranda «MİTHLOND» görünmüştü. Yalnız sabit başlıklarda |
+
+⚠️⚠️ **Ayna tuzağı — ölçülerek yakalandı:** `ops/assets-sync.mjs` web'de karşılığı olmayan
+dosyayı «fazla» sayıp **siliyor**. Fontların web'de dosya karşılığı yok (tarayıcı onları
+CDN'den alıyor), yani ilk `pnpm assets:build` çağrısı `assets/fonts/` klasörünü sessizce
+silecekti. `MOBILE_ONLY` listesi bu yüzden var ve düzeltme **komutu koşturarak** doğrulandı.
 
 ---
 

@@ -16,8 +16,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_screen.dart';
-import '../features/city/city_screen.dart';
+import '../features/city/barracks_screen.dart';
+import '../features/city/buildings_screen.dart';
+import '../features/city/city_hub_screen.dart';
 import '../features/guest/landing_screen.dart';
+import '../core/city_screens.dart';
 import '../features/shell/shell.dart';
 import 'providers.dart';
 import 'routing_rules.dart';
@@ -52,9 +55,23 @@ final routerProvider = Provider<GoRouter>((ref) {
             GameShell(path: state.matchedLocation, child: child),
         routes: [
           GoRoute(path: kLandingPath, builder: (_, _) => const LandingScreen()),
-          // ⭐ Faz 2'nin ilk gerçek ekranı. Diğer sekmeler hâlâ yer tutucu; listeden AYRI
-          // yazılıyor ki hangisinin gerçek olduğu tek bakışta görünsün.
-          GoRoute(path: '/city', builder: (_, _) => const CityScreen()),
+          // ⭐ Gerçek ekranlar listeden AYRI yazılıyor ki hangisinin yer tutucu olmadığı
+          // tek bakışta görünsün.
+          GoRoute(path: '/city', builder: (_, _) => const CityHubScreen()),
+          GoRoute(path: '/barracks', builder: (_, _) => const BarracksScreen()),
+          GoRoute(
+            path: '/buildings',
+            builder: (_, _) => const BuildingsScreen(),
+          ),
+          // ⚠️ Kalan üç şehir ekranı yer tutucu ama ROTASI VAR: olmasaydı sekme şeridine
+          // dokunmak «Bilinmeyen sayfa» hatasına düşerdi.
+          for (final s in kCityScreens.where(
+            (s) => s.path != '/barracks' && s.path != '/buildings',
+          ))
+            GoRoute(
+              path: s.path,
+              builder: (_, _) => PlaceholderScreen(s.label),
+            ),
           for (final t in tabs.where((t) => t.path != '/city'))
             GoRoute(
               path: t.path,

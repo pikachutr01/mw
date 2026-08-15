@@ -11,6 +11,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api_client.dart';
@@ -18,6 +19,7 @@ import '../core/client_hints.dart';
 import '../core/clock.dart';
 import '../core/device_identity.dart';
 import '../core/http_transport.dart';
+import '../core/realtime.dart';
 import '../core/session.dart';
 import '../core/storage.dart';
 import '../features/city/city_model.dart';
@@ -151,6 +153,100 @@ class Auth {
 }
 
 final authProvider = Provider<Auth>(Auth.new);
+
+/// ⭐⭐ GERÇEK ZAMANLI BAĞLANTI — oturum varken açık durur, oturum düşünce kapanır.
+///
+/// ⚠️ `ref.watch(sessionProvider)`: jeton yenilenince (12 saatte bir) sağlayıcı yeniden kurulur
+/// ve soket **yeni jetonla** bağlanır. Eski jetonla bağlanmak el sıkışmada reddedilir, istemci
+/// bunu ağ arızası sanıp durmadan denerdi.
+///
+/// ⚠️⚠️ **Yaşam döngüsü BURADA dinleniyor** — arka plandan dönüşte yeniden bağlanma mobilin en
+/// kolay atlanan noktası. Gerekçe `core/realtime.dart` başlığında; karar (`shouldForceReconnect`)
+/// saf bir fonksiyonda ve testle kilitli.
+final realtimeProvider = Provider<Realtime>((ref) {
+  final session = ref.watch(sessionProvider);
+
+  final rt = Realtime(
+    // ⚠️ Kimlik her bağlanışta YENİDEN okunuyor, burada yakalanmıyor.
+    credentials: () {
+      final s = ref.read(sessionProvider);
+      if (s == null) return null;
+      // ⚠️ `instanceId` senkron gerekiyor; cihaz kimliği açılışta zaten önbelleğe alınmış
+      // oluyor (`DeviceIdentity` bellek içi önbellek). Yine de boşsa bağlanmıyoruz —
+      // kimliksiz el sıkışma sunucuda oturum kimliğine düşer ve tek cihaz kuralı şaşar.
+      final id = ref.read(deviceIdProvider);
+      if (id == null) return null;
+      return (token: s.accessToken, instanceId: id);
+    },
+    onTopic: (topic) => _tazele(ref, topic),
+    // ⚠️ Devralınma oturumu DÜŞÜRMEZ — perde açılır, oyuncu geri alabilir.
+    onTakeover: () =>
+        ref.read(conflictProvider.notifier).update(const SessionConflict()),
+    onRevoked: () async {
+      await ref.read(apiProvider).setSession(null);
+      ref.read(sessionProvider.notifier).update(null);
+    },
+  );
+
+  // ⭐ Uygulama arka plana gidip geri geldiğinde toparlanma.
+  final lifecycle = AppLifecycleListener(
+    onResume: rt.resume,
+    onPause: rt.pause,
+    // ⚠️ `onHide`/`onInactive` DEĞİL: Android'de bildirim panelini açmak bile `inactive`
+    // üretiyor ve her seferinde yeniden bağlanmak gereksiz el sıkışma yağmuru olurdu.
+  );
+
+  ref.onDispose(() {
+    lifecycle.dispose();
+    rt.dispose();
+  });
+
+  if (session != null) rt.connect();
+  return rt;
+});
+
+/// Bağlantı durumu — üst çubuktaki gösterge bunu okuyor.
+///
+/// ⚠️ Başlangıç değeri sağlayıcının O ANKİ durumu; akış yalnız DEĞİŞİMLERİ yayıyor ve ilk
+/// değeri kaçıran bir gösterge sonsuza kadar «bağlanıyor» gösterirdi.
+final connectionProvider = StreamProvider<MwConnectionState>((ref) {
+  final rt = ref.watch(realtimeProvider);
+  return rt.onStateChange.transform(
+    StreamTransformer.fromBind((s) async* {
+      yield rt.state;
+      yield* s;
+    }),
+  );
+});
+
+/// Cihaz kimliği — soketin el sıkışmada senkron olarak ihtiyaç duyduğu değer.
+///
+/// ⚠️ `DeviceIdentity.deviceId()` async; açılışta bir kez okunup buraya yazılıyor
+/// (`bootstrap.dart`). Override edilmeden okunursa `null` döner ve soket bağlanmaz —
+/// sessizce yanlış bir kimlikle bağlanmaktansa hiç bağlanmamak doğrusu.
+final deviceIdProvider = Provider<String?>((ref) => null);
+
+/// WS haberi → tazelenecek sağlayıcılar.
+///
+/// ⚠️ Eşleme `kInvalidates`te (tek yer); burada yalnız o adların Riverpod karşılığı var.
+void _tazele(Ref ref, String topic) {
+  final hedefler = topic == kTopicAll
+      ? kInvalidates.values.expand((v) => v).toSet()
+      : (kInvalidates[topic] ?? const []).toSet();
+
+  for (final h in hedefler) {
+    switch (h) {
+      case 'cities':
+        ref.invalidate(citiesProvider);
+      case 'city':
+        ref.invalidate(cityProvider);
+      case 'catalog':
+        ref.invalidate(catalogNamesProvider);
+      // ⚠️ `missions` ve `messages` ekranları henüz yok; konu tabloda duruyor ki sunucu
+      // yaydığında sessizce düşmesin — ekran geldiğinde tek satır eklenecek.
+    }
+  }
+}
 
 /// ⭐ SANİYELİK SAYAÇ — geri sayım ve kaynak sayacı gösteren HER ekran bunu dinler.
 ///

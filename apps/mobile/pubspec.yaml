@@ -85,6 +85,32 @@ flutter:
     - assets/ui/
     - assets/units/
 
+  # ⭐ YAZI TİPLERİ — web ile aynı aileler (Cinzel + Spectral), uygulamaya GÖMÜLÜ.
+  #
+  # ⚠️ Çalışma anında indirilmiyor (`google_fonts` paketi kullanılmadı) ve bu bilinçli:
+  #   • ilk açılışta ağ yoksa oyuncu YANLIŞ fontla karşılaşırdı, sonra metin zıplardı
+  #   • oyunun kabuğu zaten çevrimdışı açılabiliyor; fontu ağa bağlamak onu geriletirdi
+  #   • paket dosyaları nasılsa diske indiriyor — bedeli ödüyor, karşılığını almıyoruz
+  # Bedeli ~1,3 MB APK; gerekçesi MOBIL_MIMARI.md §3.6.
+  #
+  # ⚠️ Bu dosyalar `assets:build` aynasının DIŞINDA (`ops/assets-sync.mjs` · MOBILE_ONLY):
+  # web'de karşılıkları yok, olmasaydı ayna onları «fazla» sayıp SİLERDİ.
+  #
+  # ⚠️ Cinzel DEĞİŞKEN font (Google Fonts'ta statik sürümü yok). Ağırlık `fontVariations` ile
+  # veriliyor — yalnız `fontWeight` yazmak varyasyon eksenini oynatmıyor.
+  fonts:
+    - family: Spectral
+      fonts:
+        - asset: assets/fonts/Spectral-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Spectral-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Spectral-Bold.ttf
+          weight: 700
+    - family: Cinzel
+      fonts:
+        - asset: assets/fonts/Cinzel-VF.ttf
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

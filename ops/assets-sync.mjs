@@ -39,6 +39,21 @@ function tara(kok) {
   return out;
 }
 
+/**
+ * ⚠️⚠️ **MOBİLE ÖZEL, AYNANIN DIŞINDA** — burayı boş bırakmak veri kaybı demek.
+ *
+ * Ayna iki yönlü davranıyor: web'de olmayan bir dosyayı «fazla» sayıp **siliyor**. Yazı tipleri
+ * web'de dosya olarak YOK (tarayıcı onları Google Fonts'tan indiriyor), mobilde ise uygulamanın
+ * içine gömülmek ZORUNDA. Bu liste olmasaydı ilk `pnpm assets:build` çağrısı
+ * `apps/mobile/assets/fonts/` klasörünü sessizce silerdi ve uygulama fontsuz kalırdı.
+ *
+ * ⚠️ Buraya bir şey eklemek onu «tam eşitlik» kapısının DIŞINA çıkarır; yalnız karşılığı
+ * web'de bulunmayan, platforma özgü varlıklar için.
+ */
+const MOBILE_ONLY = ['fonts/'];
+
+const mobileOnly = (yol) => MOBILE_ONLY.some((p) => yol.startsWith(p));
+
 const check = process.argv.includes('--check');
 const kaynakDosyalar = tara(kaynak);
 
@@ -47,6 +62,10 @@ try {
   hedefDosyalar = tara(hedef);
 } catch {
   hedefDosyalar = new Map();
+}
+// Mobile özel varlıklar karşılaştırmaya hiç girmiyor — ne eksik ne fazla sayılırlar.
+for (const y of [...hedefDosyalar.keys()]) {
+  if (mobileOnly(y)) hedefDosyalar.delete(y);
 }
 
 const eksik = [...kaynakDosyalar.keys()].filter((y) => !hedefDosyalar.has(y));
