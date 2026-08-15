@@ -136,14 +136,30 @@ class KimlikDogrulama {
 
 final kimlikDogrulamaProvider = Provider<KimlikDogrulama>(KimlikDogrulama.new);
 
-/// Kayıt/giriş formundaki dünya seçici. ⚠️ Oturum GEREKTİRMEZ (`/worlds` herkese açık).
-final dunyalarProvider = FutureProvider<List<({int id, String ad})>>((
-  ref,
-) async {
+/// Açık dünya listesi + en düşük istemci yapı numarası.
+///
+/// ⚠️ Oturum GEREKTİRMEZ (`/worlds` herkese açık) ve bu **şart**: sürümü çok eski olan
+/// uygulama giriş DENEMEDEN önce durdurulmalı. Kimlikli bir uca bağlasaydık, eski uygulama
+/// önce giriş yapar, jeton alır, sonra bozuk çalışırdı.
+///
+/// ⭐ İki tüketici tek istek paylaşıyor: giriş formundaki dünya seçici ve sürüm kapısı.
+/// Ayrı sağlayıcılar açsaydık her açılışta aynı uca iki istek giderdi.
+typedef AcilisBilgisi = ({
+  List<({int id, String ad})> dunyalar,
+  int enDusukYapi,
+});
+
+final acilisProvider = FutureProvider<AcilisBilgisi>((ref) async {
   final g = await ref.read(apiProvider).istek('GET', '/api/v1/worlds');
-  final liste = (g is Map ? g['worlds'] : null) as List<dynamic>? ?? const [];
-  return liste
-      .whereType<Map<String, dynamic>>()
-      .map((w) => (id: (w['id'] as num).toInt(), ad: w['name'] as String))
-      .toList();
+  final m = g is Map ? g : const {};
+  final liste = m['worlds'] as List<dynamic>? ?? const [];
+  return (
+    dunyalar: liste
+        .whereType<Map<String, dynamic>>()
+        .map((w) => (id: (w['id'] as num).toInt(), ad: w['name'] as String))
+        .toList(),
+    // ⚠️ Alan yoksa 0 → kapı KAPALI. Eski bir sunucuya bağlanan yeni uygulama, sunucu bu
+    // alanı hiç göndermediği için kendini kilitlememeli.
+    enDusukYapi: (m['minAndroidBuild'] as num?)?.toInt() ?? 0,
+  );
 });

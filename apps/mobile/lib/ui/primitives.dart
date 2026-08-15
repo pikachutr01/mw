@@ -58,6 +58,11 @@ class MwPanel extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
+        // ⚠️ `min` ŞART: varsayılan `max` paneli dikeyde EKRANIN TAMAMINA yayıyor. Giriş
+        // ekranında fark edilmemişti çünkü orası `SingleChildScrollView` içinde (sonsuz
+        // yükseklik → kendiliğinden daralıyor); sürüm kapısı ekranında panel bomboş bir
+        // şekilde alta kadar uzadı. Paylaşılan primitifteki bu kusur her yeni ekranı ısırırdı.
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (baslik != null)

@@ -90,7 +90,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dunyalar = ref.watch(dunyalarProvider);
+    final acilis = ref.watch(acilisProvider);
     final girisMi = _kip == _Kip.giris;
 
     return Scaffold(
@@ -135,18 +135,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    dunyalar.when(
+                    acilis.when(
                       loading: () => const LinearProgressIndicator(),
                       error: (e, _) =>
                           const MwHataKutusu('Dünya listesi alınamadı.'),
-                      data: (liste) => DropdownButtonFormField<int>(
-                        initialValue: seciliDunya(_worldId, liste),
+                      data: (a) => DropdownButtonFormField<int>(
+                        initialValue: seciliDunya(_worldId, a.dunyalar),
                         decoration: const InputDecoration(
                           labelText: 'Dünya',
                           border: OutlineInputBorder(),
                         ),
                         items: [
-                          for (final d in liste)
+                          for (final d in a.dunyalar)
                             DropdownMenuItem(value: d.id, child: Text(d.ad)),
                         ],
                         onChanged: (v) => setState(() => _worldId = v),
@@ -162,8 +162,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       mesgul: _mesgul,
                       // ⚠️ Dünya listesi henüz gelmediyse düğme kapalı: gönderilecek değer
                       // yokken basılabilir bir düğme, kullanıcıyı boş bir hataya sokardı.
-                      onTap: dunyalar.hasValue
-                          ? () => _gonder(dunyalar.requireValue)
+                      onTap: acilis.hasValue
+                          ? () => _gonder(acilis.requireValue.dunyalar)
                           : null,
                     ),
                     const SizedBox(height: 8),

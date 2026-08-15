@@ -312,6 +312,21 @@ adb exec-out screencap -p > shot.png   # ekran görüntüsü
 
 ⚠️ `adb reverse` **her USB bağlantısında sıfırlanır** — kalıcı değil. İkinci bakılacak yer.
 
+### 6.1 ⛔ Hot reload komut satırından TETİKLENEMİYOR (Windows) — iki yol denendi, ikisi de kapalı
+
+Değişiklik başına ~60 sn'lik `flutter build apk` yerine ~2 sn'lik hot reload cazip görünüyor ama
+Windows'ta otomasyona kapalı. **Denenip ölçüldü (2026-08-15), tekrar denemeye değmez:**
+
+| Yol | Neden olmadı |
+| :-- | :-- |
+| `--pid-file` + `SIGUSR1` | Flutter'ın belgelediği yol, ama **`SIGUSR1`/`SIGUSR2` Windows'ta yok** |
+| Dart VM Service'e doğrudan `reloadSources` | `Error while starting Kernel isolate task`. Yapısal: Flutter'ın hot reload'u önce `flutter_tools`un **frontend derleyicisinin** Dart'ı artımlı kernel'a çevirmesini gerektiriyor; VM tek başına o derleyiciyi ayağa kaldıramıyor |
+| `flutter run --machine` + stdin'e JSON-RPC | İstek yazılıyor, **yanıt hiç gelmiyor**. Windows'ta süreç `cmd.exe` sarmalayıcısından geçtiği için stdin aktarımı güvenilir değil |
+
+⭐ **Bu bir engel değil, yalnız bir yavaşlık.** Doğrulama döngüsü (derle → kur → `screencap`)
+çalışıyor ve güvenilir. Geliştirici kendi terminalinde `flutter run` açıp `r`ye basabilir —
+kaybedilen tek şey otomasyonun aynısını yapabilmesi.
+
 ⭐ Son satır önemli: ekran görüntüsü okunabildiği için arayüz **kendi kendine doğrulanabiliyor**;
 her adımda kullanıcıya *"bir bak da doğru mu görünüyor"* diye dönmek gerekmiyor.
 

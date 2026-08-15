@@ -13,6 +13,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/client_hints.dart';
 import '../core/storage.dart';
 import '../features/shell/session_conflict.dart';
+import '../features/shell/update_gate.dart';
 import '../gen/tokens.dart';
 import 'providers.dart';
 import 'router.dart';
@@ -75,8 +76,11 @@ class MobilWarApp extends ConsumerWidget {
       routerConfig: ref.watch(routerProvider),
       // ⚠️ Çakışma perdesi ROTA DEĞİL bindirme: kapanamaz olmalı ve altındaki ekran
       // yerinde durmalı (oyuncu devralınca kaldığı yerden devam etsin).
-      builder: (context, child) =>
-          OturumCakismaPerdesi(child: child ?? const SizedBox.shrink()),
+      // ⚠️ SIRA ÖNEMLİ: sürüm kapısı EN DIŞTA. Sürümü geçersiz bir uygulamanın oturum
+      // çakışması perdesini göstermesinin anlamı yok — ilk soru "bu uygulama çalışabilir mi".
+      builder: (context, child) => SurumKapisi(
+        child: OturumCakismaPerdesi(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

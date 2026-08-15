@@ -15,14 +15,37 @@
  * önemli (`rate-limit.ts` yalnız POST'ları sınırlıyor).
  */
 import { Controller, Get } from '@nestjs/common';
+import { SettingsService } from '../settings/settings.service.ts';
+import { primaryWorldId } from '../settings/settings.service.ts';
 import { WorldStateService } from './world-state.service.ts';
 
 @Controller('api/v1/worlds')
 export class WorldsPublicController {
-  constructor(private readonly worlds: WorldStateService) {}
+  constructor(
+    private readonly worlds: WorldStateService,
+    private readonly settings: SettingsService,
+  ) {}
 
+  /**
+   * ⭐ `minAndroidBuild` BURADA, bilerek — yukarıdaki "bilgi fakir kalsın" kuralının bilinçli
+   * bir istisnası ve gerekçesi net: **eski uygulama giriş DENEMEDEN önce durdurulmalı.**
+   * Kimlikli bir uca koysaydık, sürümü çok eski olan uygulama önce giriş yapar, jeton alır,
+   * sonra bozuk çalışırdı. Üstelik bu alan dünyanın içi hakkında hiçbir şey söylemiyor —
+   * istemciye ait bir gereklilik.
+   *
+   * ⚠️ Uygulamanın kendi yapı numarasıyla karşılaştırmayı İSTEMCİ yapıyor. Sunucunun
+   * `X-App-Version`a bakıp 426 döndürmesi de mümkündü ama o, her isteğe bir dal ekler ve
+   * başlığı hiç göndermeyen istemcilerde (web) ne yapacağı belirsizdir.
+   */
   @Get()
-  list(): { worlds: Array<{ id: number; name: string }> } {
-    return { worlds: this.worlds.listOpen() };
+  list(): {
+    worlds: Array<{ id: number; name: string }>;
+    minAndroidBuild: number;
+  } {
+    const client = this.settings.group(primaryWorldId(), 'client');
+    return {
+      worlds: this.worlds.listOpen(),
+      minAndroidBuild: Number(client['minAndroidBuild'] ?? 0),
+    };
   }
 }

@@ -78,6 +78,17 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + 'geçerli olur.',
   },
   {
+    id: 'client',
+    label: 'İstemci sürümü',
+    description: '⭐ Mobil uygulamanın **en düşük kabul edilen sürümü**. Web\'de böyle bir şeye '
+      + 'gerek yok: sayfa yenilenir ve herkes yeni sürümdedir. Mobilde öyle değil — mağaza '
+      + 'onayı günler sürer ve güncellemeyi almayan oyuncu haftalarca eski sürümde kalır. '
+      + '⚠️ Bu ayar bir **acil vana**: sunucuda geriye uyumu bozan bir değişiklik yapmak '
+      + 'zorunda kalırsanız, eski uygulamaların sessizce bozuk çalışması yerine açık bir '
+      + '«güncelle» ekranı görmesini sağlar. ⚠️ Normal şartlarda 0 (kapalı) kalmalı: '
+      + 'oyuncuyu güncellemeye zorlamak son çaredir, ilk çare API\'yi geriye uyumlu tutmaktır.',
+  },
+  {
     id: 'ratelimit',
     label: 'Hız sınırı (kimliksiz uçlar)',
     description: '⭐ Yalnız GİRİŞ YAPMAMIŞ ziyaretçinin ulaşabildiği uçlara IP başına sınır. '
@@ -1805,6 +1816,23 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'büyütürsen kısa ağ kesintisinde sahiplik elden gitmez.',
     note: 'Soket kopması saniyeler içinde fark edilir; bu süre asıl olarak soketsiz '
       + '(yalnız yoklama yapan) istemciler ve ani kapanmalar için var.',
+  },
+
+  /* ── İstemci sürümü (mobil acil vanası) ──────────────────────────────────── */
+  {
+    key: 'client.minAndroidBuild',
+    label: 'En düşük Android yapı numarası',
+    type: 'int', default: 0, min: 0, max: 1_000_000, tag: 'design', unit: 'yapı',
+    description: 'Bu numaranın altındaki Android uygulaması oyuna girmez, «güncelle» ekranı '
+      + 'görür. **0 = kapalı** ve normalde öyle kalmalı. Büyütürsen eski sürümdeki oyuncular '
+      + 'mağazadan güncelleyene kadar oynayamaz; küçültmek zaten engellenmiş kimseyi geri '
+      + 'getirmez (uygulamayı silmiş olabilirler).',
+    note: '⚠️ **Sürüm dizesi değil YAPI NUMARASI** (`versionCode`, `1.0.0+7`deki 7) '
+      + 'karşılaştırılıyor — bilerek. Semver dizelerini karşılaştırmak klasik bir hata '
+      + 'kaynağı: sıradan bir metin karşılaştırmasında «1.10.0» < «1.9.0» çıkar. Yapı '
+      + 'numarası tam sayıdır ve Play Store\'un kendi sıralama ölçütüdür. '
+      + '⚠️ Mağaza bağlantısı bu panelde YOK: uygulama kimliğinden türetiliyor ve bir denge '
+      + 'düğmesi değil.',
   },
 
   /* ── Hız sınırı — yalnız kimliksiz uçlar (§9.3.7) ────────────────────────── */
