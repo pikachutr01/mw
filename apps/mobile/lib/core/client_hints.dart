@@ -26,8 +26,8 @@ const int kAppVersionMax = 40;
 const int kTimezoneMax = 60;
 const int kLocaleMax = 20;
 
-class IstemciKunyesi {
-  const IstemciKunyesi({
+class ClientHints {
+  const ClientHints({
     required this.platform,
     required this.osVersion,
     required this.deviceModel,
@@ -45,15 +45,15 @@ class IstemciKunyesi {
   final String locale;
 
   /// Cihazdan gerçek künyeyi toplar. ⚠️ Platform kanalı gerektirir → `flutter test` içinde
-  /// ÇAĞRILMAZ; testler `IstemciKunyesi(...)` ile doğrudan kurulur (dikiş burada).
-  static Future<IstemciKunyesi> topla({
-    DeviceInfoPlugin? cihaz,
-    PackageInfo? paket,
-    String? saatDilimi,
-    String? yerel,
+  /// ÇAĞRILMAZ; testler `ClientHints(...)` ile doğrudan kurulur (dikiş burada).
+  static Future<ClientHints> collect({
+    DeviceInfoPlugin? device,
+    PackageInfo? package,
+    String? timezone,
+    String? locale,
   }) async {
-    final d = cihaz ?? DeviceInfoPlugin();
-    final p = paket ?? await PackageInfo.fromPlatform();
+    final d = device ?? DeviceInfoPlugin();
+    final p = package ?? await PackageInfo.fromPlatform();
 
     var platform = 'android';
     var osVersion = '';
@@ -70,21 +70,21 @@ class IstemciKunyesi {
       model = i.utsname.machine;
     }
 
-    return IstemciKunyesi(
+    return ClientHints(
       platform: platform,
-      osVersion: _kirp(osVersion, kOsVersionMax),
-      deviceModel: _kirp(model, kDeviceModelMax),
+      osVersion: _trim(osVersion, kOsVersionMax),
+      deviceModel: _trim(model, kDeviceModelMax),
       // ⚠️ `version+buildNumber`: mağaza sürümü ile derleme numarası birlikte olmadan
       // "hangi yapı" sorusu cevaplanamıyor (aynı sürümden birden çok yapı çıkabiliyor).
-      appVersion: _kirp('${p.version}+${p.buildNumber}', kAppVersionMax),
-      timezone: _kirp(saatDilimi ?? DateTime.now().timeZoneName, kTimezoneMax),
-      locale: _kirp(yerel ?? Platform.localeName, kLocaleMax),
+      appVersion: _trim('${p.version}+${p.buildNumber}', kAppVersionMax),
+      timezone: _trim(timezone ?? DateTime.now().timeZoneName, kTimezoneMax),
+      locale: _trim(locale ?? Platform.localeName, kLocaleMax),
     );
   }
 
   /// Her isteğe binen başlıklar. ⚠️ `Authorization` ve cihaz kimliği BURADA DEĞİL — onlar
-  /// oturuma/kuruluma ait, künyeye değil (`http_client.dart` birleştiriyor).
-  Map<String, String> basliklar() => {
+  /// oturuma/kuruluma ait, künyeye değil (`api_client.dart` birleştiriyor).
+  Map<String, String> headers() => {
     'x-platform': platform,
     if (osVersion.isNotEmpty) 'x-os-version': osVersion,
     if (deviceModel.isNotEmpty) 'x-device-model': deviceModel,
@@ -94,4 +94,4 @@ class IstemciKunyesi {
   };
 }
 
-String _kirp(String s, int max) => s.length <= max ? s : s.substring(0, max);
+String _trim(String s, int max) => s.length <= max ? s : s.substring(0, max);

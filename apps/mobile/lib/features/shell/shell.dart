@@ -20,53 +20,53 @@ import '../../ui/primitives.dart';
 
 /// Alt sekmeler — web `Shell.tsx:81-87` ile aynı beşli, **aynı ikon dosyalarıyla**.
 ///
-/// ⭐ `ikon` alanı bir `IconData` değil, `assets/menu/<ikon>.png` dosyasının adı. Material
+/// ⭐ `icon` alanı bir `IconData` değil, `assets/menu/<icon>.png` dosyasının adı. Material
 /// ikonları yerine oyunun kendi görselleri kullanılıyor: iki istemcinin aynı oyunu göstermesi
 /// «tam eşitlik» kararının görünen yüzü. Adlar web'deki `MENU`/`TABS` dizileriyle birebir.
-const sekmeler = <({String yol, String etiket, String ikon})>[
-  (yol: '/armies', etiket: 'Ordular', ikon: 'ordular'),
-  (yol: '/city', etiket: 'Şehir', ikon: 'sehir'),
-  (yol: '/world', etiket: 'Dünya', ikon: 'dunya'),
-  (yol: '/messages', etiket: 'Mesaj', ikon: 'mesaj'),
-  (yol: '/command', etiket: 'Komuta', ikon: 'komutamerkezi'),
+const tabs = <({String path, String label, String icon})>[
+  (path: '/armies', label: 'Ordular', icon: 'ordular'),
+  (path: '/city', label: 'Şehir', icon: 'sehir'),
+  (path: '/world', label: 'Dünya', icon: 'dunya'),
+  (path: '/messages', label: 'Mesaj', icon: 'mesaj'),
+  (path: '/command', label: 'Komuta', icon: 'komutamerkezi'),
 ];
 
 /// Drawer maddeleri — web `MORE_ITEMS` (`Shell.tsx:99-108`) ile aynı dörtlü.
-const drawerMaddeleri = <({String yol, String etiket, String ikon})>[
-  (yol: '/simulate', etiket: 'Simülatör', ikon: 'simulator'),
-  (yol: '/options', etiket: 'Seçenekler', ikon: 'secenekler'),
-  (yol: '/help', etiket: 'Yardım', ikon: 'yardim'),
-  (yol: '/destek', etiket: 'Destek', ikon: 'destek'),
+const drawerItems = <({String path, String label, String icon})>[
+  (path: '/simulate', label: 'Simülatör', icon: 'simulator'),
+  (path: '/options', label: 'Seçenekler', icon: 'secenekler'),
+  (path: '/help', label: 'Yardım', icon: 'yardim'),
+  (path: '/destek', label: 'Destek', icon: 'destek'),
 ];
 
-class OyunKabugu extends ConsumerWidget {
-  const OyunKabugu({super.key, required this.child, required this.yol});
+class GameShell extends ConsumerWidget {
+  const GameShell({super.key, required this.child, required this.path});
 
   final Widget child;
-  final String yol;
+  final String path;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final oturum = ref.watch(oturumProvider);
-    final secili = sekmeler.indexWhere((s) => yol.startsWith(s.yol));
+    final session = ref.watch(sessionProvider);
+    final index = tabs.indexWhere((t) => path.startsWith(t.path));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_baslik(yol)),
+        title: Text(_title(path)),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
-      drawer: _Drawer(kullanici: oturum?.username ?? ''),
+      drawer: _Drawer(username: session?.username ?? ''),
       body: child,
       bottomNavigationBar: NavigationBar(
         // ⚠️ `-1` (eşleşme yok) NavigationBar'ı patlatıyor → 0'a kelepçeleniyor.
-        selectedIndex: secili < 0 ? 0 : secili,
-        onDestinationSelected: (i) => context.go(sekmeler[i].yol),
+        selectedIndex: index < 0 ? 0 : index,
+        onDestinationSelected: (i) => context.go(tabs[i].path),
         destinations: [
-          for (final s in sekmeler)
+          for (final t in tabs)
             NavigationDestination(
-              icon: MwIkon(klasor: 'menu', id: s.ikon, boyut: 26),
-              label: s.etiket,
+              icon: MwIcon(folder: 'menu', id: t.icon, size: 26),
+              label: t.label,
             ),
         ],
       ),
@@ -76,8 +76,8 @@ class OyunKabugu extends ConsumerWidget {
 
 /// Web'deki `PAGE_TITLE` (`Shell.tsx:116-131`) ile aynı eşleme.
 /// ⚠️ SIRA ÖNEMLİ: uzun yollar önce, yoksa `/command` alt sayfalarını yutar.
-String _baslik(String yol) {
-  const tablo = <(String, String)>[
+String _title(String path) {
+  const table = <(String, String)>[
     ('/command/rankings', 'Sıralamalar'),
     ('/command/alliance', 'İttifak'),
     ('/command/search', 'Arama'),
@@ -91,57 +91,57 @@ String _baslik(String yol) {
     ('/help', 'Yardım'),
     ('/destek', 'Destek'),
   ];
-  for (final (onek, ad) in tablo) {
-    if (yol.startsWith(onek)) return ad;
+  for (final (prefix, name) in table) {
+    if (path.startsWith(prefix)) return name;
   }
   return 'MobilWar';
 }
 
 class _Drawer extends ConsumerWidget {
-  const _Drawer({required this.kullanici});
+  const _Drawer({required this.username});
 
-  final String kullanici;
+  final String username;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final r = MwRenk.of(context);
+    final c = MwColors.of(context);
     return Drawer(
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              color: r.panelHeader,
+              color: c.panelHeader,
               padding: const EdgeInsets.all(16),
               child: Text(
-                kullanici.isEmpty ? 'MobilWar' : kullanici,
+                username.isEmpty ? 'MobilWar' : username,
                 style: TextStyle(
-                  color: r.onPanelHeader,
+                  color: c.onPanelHeader,
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            for (final m in drawerMaddeleri)
+            for (final d in drawerItems)
               ListTile(
                 // ⚠️ 20 px — web'in «Daha» listesiyle aynı (`Shell.tsx:788`). Alt sekme
                 // çubuğunda 26 kullanılıyor (`:708`); ikisi bilerek farklı.
-                leading: MwIkon(klasor: 'menu', id: m.ikon, boyut: 20),
-                title: Text(m.etiket),
+                leading: MwIcon(folder: 'menu', id: d.icon, size: 20),
+                title: Text(d.label),
                 onTap: () {
                   Navigator.of(context).pop();
-                  context.go(m.yol);
+                  context.go(d.path);
                 },
               ),
             const Spacer(),
             const Divider(height: 1),
             ListTile(
               // Web'de de aynı dosya: `menu/cikis.png` (`Shell.tsx:798`, 20 px).
-              leading: const MwIkon(klasor: 'menu', id: 'cikis', boyut: 20),
-              title: Text('Oyunu kapat', style: TextStyle(color: r.danger)),
+              leading: const MwIcon(folder: 'menu', id: 'cikis', size: 20),
+              title: Text('Oyunu kapat', style: TextStyle(color: c.danger)),
               onTap: () async {
                 Navigator.of(context).pop();
-                await ref.read(kimlikDogrulamaProvider).cikisYap();
+                await ref.read(authProvider).logout();
               },
             ),
           ],
@@ -152,11 +152,11 @@ class _Drawer extends ConsumerWidget {
 }
 
 /// Faz 2'de gerçek ekranlarla değişecek yer tutucu.
-class YerTutucuEkran extends StatelessWidget {
-  const YerTutucuEkran(this.ad, {super.key});
+class PlaceholderScreen extends StatelessWidget {
+  const PlaceholderScreen(this.name, {super.key});
 
-  final String ad;
+  final String name;
 
   @override
-  Widget build(BuildContext context) => MwBos('$ad — Faz 2\'de gelecek.');
+  Widget build(BuildContext context) => MwEmpty('$name — Faz 2\'de gelecek.');
 }

@@ -14,10 +14,10 @@ library;
 ///
 /// ⚠️ `null` dönmesi **kapıyı AÇIK bırakır** (aşağıya bak) — bilinçli. Yapı numarasını
 /// okuyamamak, oyuncuyu oyundan atmak için yeterli bir sebep değil.
-int? yapiNumarasi(String surum) {
-  final i = surum.lastIndexOf('+');
-  if (i < 0 || i == surum.length - 1) return null;
-  return int.tryParse(surum.substring(i + 1));
+int? buildNumber(String version) {
+  final i = version.lastIndexOf('+');
+  if (i < 0 || i == version.length - 1) return null;
+  return int.tryParse(version.substring(i + 1));
 }
 
 /// Güncelleme zorunlu mu?
@@ -26,10 +26,10 @@ int? yapiNumarasi(String surum) {
 /// minimum 0 (kapalı). Bir sürüm kapısının yanlış tarafa düşmesinin bedeli asimetrik —
 /// gereksiz yere açık kalırsa eski bir uygulama biraz daha çalışır, gereksiz yere kapanırsa
 /// oynayabilecek herkesi oyundan atarız.
-bool guncellemeGerekli({required String? surum, required int? enDusukYapi}) {
-  if (enDusukYapi == null || enDusukYapi <= 0) return false;
-  if (surum == null) return false;
-  final yapi = yapiNumarasi(surum);
-  if (yapi == null) return false;
-  return yapi < enDusukYapi;
+bool updateRequired({required String? version, required int? minBuild}) {
+  if (minBuild == null || minBuild <= 0) return false;
+  if (version == null) return false;
+  final build = buildNumber(version);
+  if (build == null) return false;
+  return build < minBuild;
 }

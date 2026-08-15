@@ -21,10 +21,10 @@ import '../../ui/primitives.dart';
 /// ⭐ Saf fonksiyon olması bilinçli: deponun deseni, kararı bileşenden çıkarıp test edilebilir
 /// kılmak (`apps/web/src/lib/*` ile aynı gerekçe). Hem gösterim hem gönderim BUNU çağırıyor,
 /// yani ikisinin ayrışması yapısal olarak imkânsız.
-int? seciliDunya(int? secilen, List<({int id, String ad})> liste) =>
-    secilen ?? liste.firstOrNull?.id;
+int? selectedWorld(int? chosen, List<({int id, String name})> list) =>
+    chosen ?? list.firstOrNull?.id;
 
-enum _Kip { giris, kayit }
+enum _Mode { login, register }
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -34,64 +34,64 @@ class AuthScreen extends ConsumerStatefulWidget {
 }
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
-  _Kip _kip = _Kip.giris;
-  final _kullanici = TextEditingController();
-  final _parola = TextEditingController();
-  final _eposta = TextEditingController();
+  _Mode _mode = _Mode.login;
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  final _email = TextEditingController();
   int? _worldId;
-  bool _mesgul = false;
-  String? _hata;
+  bool _busy = false;
+  String? _error;
 
   @override
   void dispose() {
-    _kullanici.dispose();
-    _parola.dispose();
-    _eposta.dispose();
+    _username.dispose();
+    _password.dispose();
+    _email.dispose();
     super.dispose();
   }
 
-  Future<void> _gonder(List<({int id, String ad})> liste) async {
-    final w = seciliDunya(_worldId, liste);
+  Future<void> _submit(List<({int id, String name})> list) async {
+    final w = selectedWorld(_worldId, list);
     if (w == null) {
-      setState(() => _hata = 'Dünya listesi yüklenemedi, tekrar dene.');
+      setState(() => _error = 'Dünya listesi yüklenemedi, tekrar dene.');
       return;
     }
     setState(() {
-      _mesgul = true;
-      _hata = null;
+      _busy = true;
+      _error = null;
     });
 
     try {
-      final auth = ref.read(kimlikDogrulamaProvider);
-      if (_kip == _Kip.giris) {
-        await auth.girisYap(
-          kullaniciAdi: _kullanici.text.trim(),
-          parola: _parola.text,
+      final auth = ref.read(authProvider);
+      if (_mode == _Mode.login) {
+        await auth.login(
+          username: _username.text.trim(),
+          password: _password.text,
           worldId: w,
         );
       } else {
-        await auth.kayitOl(
-          eposta: _eposta.text.trim(),
-          parola: _parola.text,
-          kullaniciAdi: _kullanici.text.trim(),
+        await auth.register(
+          email: _email.text.trim(),
+          password: _password.text,
+          username: _username.text.trim(),
           worldId: w,
         );
       }
       // Yönlendirme `router.dart`taki `redirect` tarafından yapılıyor — burada
       // `context.go` çağırmak iki yerde yönlendirme mantığı demekti.
-    } on MwApiHatasi catch (e) {
-      setState(() => _hata = e.mesaj);
+    } on MwApiError catch (e) {
+      setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _hata = 'Sunucuya ulaşılamadı. Bağlantını kontrol et.');
+      setState(() => _error = 'Sunucuya ulaşılamadı. Bağlantını kontrol et.');
     } finally {
-      if (mounted) setState(() => _mesgul = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final acilis = ref.watch(acilisProvider);
-    final girisMi = _kip == _Kip.giris;
+    final boot = ref.watch(bootProvider);
+    final isLogin = _mode == _Mode.login;
 
     return Scaffold(
       body: SafeArea(
@@ -101,13 +101,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: MwPanel(
-                baslik: girisMi ? 'Oyuna Gir' : 'Yeni Hesap',
+                title: isLogin ? 'Oyuna Gir' : 'Yeni Hesap',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!girisMi) ...[
+                    if (!isLogin) ...[
                       TextField(
-                        controller: _eposta,
+                        controller: _email,
                         keyboardType: TextInputType.emailAddress,
                         autocorrect: false,
                         decoration: const InputDecoration(
@@ -118,7 +118,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       const SizedBox(height: 12),
                     ],
                     TextField(
-                      controller: _kullanici,
+                      controller: _username,
                       autocorrect: false,
                       decoration: const InputDecoration(
                         labelText: 'Kullanıcı adı',
@@ -127,7 +127,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      controller: _parola,
+                      controller: _password,
                       obscureText: true,
                       decoration: const InputDecoration(
                         labelText: 'Parola',
@@ -135,47 +135,47 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    acilis.when(
+                    boot.when(
                       loading: () => const LinearProgressIndicator(),
                       error: (e, _) =>
-                          const MwHataKutusu('Dünya listesi alınamadı.'),
-                      data: (a) => DropdownButtonFormField<int>(
-                        initialValue: seciliDunya(_worldId, a.dunyalar),
+                          const MwErrorBox('Dünya listesi alınamadı.'),
+                      data: (b) => DropdownButtonFormField<int>(
+                        initialValue: selectedWorld(_worldId, b.worlds),
                         decoration: const InputDecoration(
                           labelText: 'Dünya',
                           border: OutlineInputBorder(),
                         ),
                         items: [
-                          for (final d in a.dunyalar)
-                            DropdownMenuItem(value: d.id, child: Text(d.ad)),
+                          for (final w in b.worlds)
+                            DropdownMenuItem(value: w.id, child: Text(w.name)),
                         ],
                         onChanged: (v) => setState(() => _worldId = v),
                       ),
                     ),
-                    if (_hata != null) ...[
+                    if (_error != null) ...[
                       const SizedBox(height: 12),
-                      MwHataKutusu(_hata!),
+                      MwErrorBox(_error!),
                     ],
                     const SizedBox(height: 16),
-                    MwButon(
-                      etiket: girisMi ? 'Giriş yap' : 'Hesap oluştur',
-                      mesgul: _mesgul,
+                    MwButton(
+                      label: isLogin ? 'Giriş yap' : 'Hesap oluştur',
+                      busy: _busy,
                       // ⚠️ Dünya listesi henüz gelmediyse düğme kapalı: gönderilecek değer
                       // yokken basılabilir bir düğme, kullanıcıyı boş bir hataya sokardı.
-                      onTap: acilis.hasValue
-                          ? () => _gonder(acilis.requireValue.dunyalar)
+                      onTap: boot.hasValue
+                          ? () => _submit(boot.requireValue.worlds)
                           : null,
                     ),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: _mesgul
+                      onPressed: _busy
                           ? null
                           : () => setState(() {
-                              _kip = girisMi ? _Kip.kayit : _Kip.giris;
-                              _hata = null;
+                              _mode = isLogin ? _Mode.register : _Mode.login;
+                              _error = null;
                             }),
                       child: Text(
-                        girisMi
+                        isLogin
                             ? 'Hesabın yok mu? Kayıt ol'
                             : 'Zaten hesabın var mı? Giriş yap',
                       ),

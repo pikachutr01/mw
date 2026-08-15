@@ -16,43 +16,47 @@ import 'package:mobilwar/core/storage.dart';
 
 /// Yazmayı kabul eden ama **hiçbir şey hatırlamayan** depo — "kimlik bellekte üretildi"
 /// hatasının gözlemlenebilir eşdeğeri. Yalnız bu dosyadaki karşı-örnek testi için var.
-class _UnutkanDepo implements KaliciDepo {
-  int yazmaSayisi = 0;
+class _ForgetfulStore implements Store {
+  int writeCount = 0;
 
   @override
-  Future<String?> oku(String anahtar) async => null;
+  Future<String?> read(String key) async => null;
 
   @override
-  Future<void> yaz(String anahtar, String deger) async => yazmaSayisi++;
+  Future<void> write(String key, String value) async => writeCount++;
 
   @override
-  Future<void> sil(String anahtar) async {}
+  Future<void> delete(String key) async {}
 }
 
 void main() {
-  group('CihazKimligi', () {
+  group('DeviceIdentity', () {
     test('ilk çağrıda üretir ve kalıcı olarak yazar', () async {
-      final depo = BellekDepo();
-      final id = await CihazKimligi(depo).deviceId();
+      final store = MemoryStore();
+      final id = await DeviceIdentity(store).deviceId();
 
       expect(id, isNotEmpty);
-      expect(depo.icerik[kDeviceIdKey], id, reason: 'değer depoya yazılmalı');
+      expect(
+        store.contents[kDeviceIdKey],
+        id,
+        reason: 'değer depoya yazılmalı',
+      );
     });
 
     test('aynı nesne ikinci çağrıda AYNI değeri döndürür', () async {
-      final k = CihazKimligi(BellekDepo());
-      expect(await k.deviceId(), await k.deviceId());
+      final identity = DeviceIdentity(MemoryStore());
+      expect(await identity.deviceId(), await identity.deviceId());
     });
 
     test('⚠️⚠️ UYGULAMA YENİDEN AÇILINCA kimlik DEĞİŞMEZ '
         '(değişirse oyuncu 90 sn kendi hesabına giremez)', () async {
-      final depo = BellekDepo(); // disk: iki açılış arasında yaşıyor
-      final ilkAcilis = await CihazKimligi(depo).deviceId();
-      final ikinciAcilis = await CihazKimligi(
-        depo,
+      final store = MemoryStore(); // disk: iki açılış arasında yaşıyor
+      final firstLaunch = await DeviceIdentity(store).deviceId();
+      final secondLaunch = await DeviceIdentity(
+        store,
       ).deviceId(); // yeni nesne = yeni açılış
 
-      expect(ikinciAcilis, ilkAcilis);
+      expect(secondLaunch, firstLaunch);
     });
 
     test(
@@ -62,14 +66,18 @@ void main() {
         // taklit edilen hata, kimliğin bellekte üretilmesi (ya da eşdeğeri: yazılanın geri
         // okunamaması). Sonucu: iki açılış, iki farklı kimlik → sunucu ikinciyi başka bir kopya
         // sanar → 90 saniyelik kilit.
-        final unutkan = _UnutkanDepo();
-        final ilk = await CihazKimligi(unutkan).deviceId();
-        final ikinci = await CihazKimligi(unutkan).deviceId();
+        final forgetful = _ForgetfulStore();
+        final first = await DeviceIdentity(forgetful).deviceId();
+        final second = await DeviceIdentity(forgetful).deviceId();
 
-        expect(unutkan.yazmaSayisi, 2, reason: 'her açılışta yeniden üretildi');
         expect(
-          ikinci,
-          isNot(ilk),
+          forgetful.writeCount,
+          2,
+          reason: 'her açılışta yeniden üretildi',
+        );
+        expect(
+          second,
+          isNot(first),
           reason: 'kalıcılık olmadan kimlik korunamaz — kaçınılan durum',
         );
       },
@@ -80,23 +88,23 @@ void main() {
       () async {
         // Web'de ikisi ayrıdır çünkü orada "kopya" bir SEKME. Mobilde sekme yok, kopya =
         // kurulum → ayırmanın anlamı yok (DAGITIM.md §6).
-        final k = CihazKimligi(BellekDepo());
-        expect(await k.instanceId(), await k.deviceId());
+        final identity = DeviceIdentity(MemoryStore());
+        expect(await identity.instanceId(), await identity.deviceId());
       },
     );
   });
 
   group('biçim — sunucu reddetmemeli', () {
     /// Sunucudaki `UUID_RE` (`abuse/device-context.ts:25`) ile BİREBİR aynı kalıp.
-    final sunucuRe = RegExp(
+    final serverRe = RegExp(
       r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
       caseSensitive: false,
     );
 
     test('⭐ üretilen kimlik sunucunun UUID kalıbına uyar', () async {
-      final id = await CihazKimligi(BellekDepo()).deviceId();
+      final id = await DeviceIdentity(MemoryStore()).deviceId();
       expect(
-        sunucuRe.hasMatch(id),
+        serverRe.hasMatch(id),
         isTrue,
         reason: 'uymayan değer sunucuda SESSİZCE null sayılır',
       );
@@ -105,13 +113,13 @@ void main() {
     test('⚠️ bozuk kayıtlı değer tazelenir (sessizce kullanılmaz)', () async {
       // Sunucu geçersiz kimliği yok sayıyor ve cihaz künyesini HİÇ yazmıyor. Sessiz kayıp
       // yerine yeni kimlik üretmek doğrusu.
-      final depo = BellekDepo({kDeviceIdKey: 'bu-bir-uuid-degil'});
-      final id = await CihazKimligi(depo).deviceId();
+      final store = MemoryStore({kDeviceIdKey: 'bu-bir-uuid-degil'});
+      final id = await DeviceIdentity(store).deviceId();
 
       expect(id, isNot('bu-bir-uuid-degil'));
-      expect(sunucuRe.hasMatch(id), isTrue);
+      expect(serverRe.hasMatch(id), isTrue);
       expect(
-        depo.icerik[kDeviceIdKey],
+        store.contents[kDeviceIdKey],
         id,
         reason: 'tazelenen değer diske de yazılmalı',
       );
@@ -123,10 +131,10 @@ void main() {
         // v4 olmayan ama sunucunun kabul ettiği bir UUID. Burada daha katı davranmak, sunucunun
         // sorun görmediği bir kimliği "bozuk" sayıp DEĞİŞTİRMEK demekti — yani tam olarak
         // kaçındığımız şey.
-        const sunucununKabulEttigi = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
-        final depo = BellekDepo({kDeviceIdKey: sunucununKabulEttigi});
+        const serverAccepts = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+        final store = MemoryStore({kDeviceIdKey: serverAccepts});
 
-        expect(await CihazKimligi(depo).deviceId(), sunucununKabulEttigi);
+        expect(await DeviceIdentity(store).deviceId(), serverAccepts);
       },
     );
   });

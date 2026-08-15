@@ -9,14 +9,14 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobilwar/core/client_hints.dart';
 
-IstemciKunyesi ornek({
+ClientHints sample({
   String platform = 'android',
   String osVersion = 'Android 16 (SDK 36)',
   String deviceModel = 'samsung SM-A346E',
   String appVersion = '1.0.0+1',
   String timezone = '+03',
   String locale = 'tr_TR',
-}) => IstemciKunyesi(
+}) => ClientHints(
   platform: platform,
   osVersion: osVersion,
   deviceModel: deviceModel,
@@ -29,7 +29,7 @@ void main() {
   group('başlıklar', () {
     test('⭐ sunucunun okuduğu ALTI başlık adı birebir üretilir', () {
       // Sunucu tarafı: `apps/api/src/abuse/device-context.ts` · `extractDeviceContext`.
-      expect(ornek().basliklar().keys.toSet(), {
+      expect(sample().headers().keys.toSet(), {
         'x-platform',
         'x-os-version',
         'x-device-model',
@@ -42,27 +42,27 @@ void main() {
     test('⚠️ cihaz kimliği ve Authorization künyede DEĞİL', () {
       // İkisi de oturuma/kuruluma ait; künye yalnız "bu cihaz nedir" sorusunu cevaplıyor.
       // Karıştırmak, künyeyi oturumsuz isteklerde de göndermemek gibi bir hataya yol açardı.
-      final b = ornek().basliklar();
-      expect(b.containsKey('x-device-id'), isFalse);
-      expect(b.containsKey('x-client-instance'), isFalse);
-      expect(b.containsKey('authorization'), isFalse);
+      final h = sample().headers();
+      expect(h.containsKey('x-device-id'), isFalse);
+      expect(h.containsKey('x-client-instance'), isFalse);
+      expect(h.containsKey('authorization'), isFalse);
     });
 
     test('boş alan hiç gönderilmez (null yerine yokluk)', () {
-      final b = ornek(deviceModel: '', locale: '').basliklar();
-      expect(b.containsKey('x-device-model'), isFalse);
-      expect(b.containsKey('x-locale'), isFalse);
-      expect(b['x-platform'], 'android');
+      final h = sample(deviceModel: '', locale: '').headers();
+      expect(h.containsKey('x-device-model'), isFalse);
+      expect(h.containsKey('x-locale'), isFalse);
+      expect(h['x-platform'], 'android');
     });
 
     test('değerler olduğu gibi taşınır', () {
-      final b = ornek().basliklar();
-      expect(b['x-platform'], 'android');
-      expect(b['x-os-version'], 'Android 16 (SDK 36)');
-      expect(b['x-device-model'], 'samsung SM-A346E');
-      expect(b['x-app-version'], '1.0.0+1');
-      expect(b['x-timezone'], '+03');
-      expect(b['x-locale'], 'tr_TR');
+      final h = sample().headers();
+      expect(h['x-platform'], 'android');
+      expect(h['x-os-version'], 'Android 16 (SDK 36)');
+      expect(h['x-device-model'], 'samsung SM-A346E');
+      expect(h['x-app-version'], '1.0.0+1');
+      expect(h['x-timezone'], '+03');
+      expect(h['x-locale'], 'tr_TR');
     });
   });
 

@@ -5,4 +5,4 @@
 // `main`i ince tutmak, açılış sırasının tek bir yerde okunabilmesini sağlıyor.
 import 'app/bootstrap.dart';
 
-Future<void> main() => baslat();
+Future<void> main() => bootstrap();

@@ -11,50 +11,50 @@ library;
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-abstract class KaliciDepo {
-  Future<String?> oku(String anahtar);
-  Future<void> yaz(String anahtar, String deger);
-  Future<void> sil(String anahtar);
+abstract class Store {
+  Future<String?> read(String key);
+  Future<void> write(String key, String value);
+  Future<void> delete(String key);
 }
 
 /// Üretimdeki depo. Android'de EncryptedSharedPreferences, iOS'ta Keychain.
-class GuvenliDepo implements KaliciDepo {
+class SecureStore implements Store {
   /// ⚠️ **`encryptedSharedPreferences: true` ARAMA — v11'de o bayrak YOK.** Eski sürümlerde
   /// gerekliydi (varsayılan düz SharedPreferences'a düşüyordu); 11.0.0'da varsayılan
   /// yapılandırma zaten AES-GCM + RSA-OAEP anahtar sarma, yani bayrak gereksizleştiği için
   /// kaldırıldı. İnternetteki çoğu örnek hâlâ eski API'yi gösteriyor ve derlenmiyor.
-  GuvenliDepo([FlutterSecureStorage? depo])
-    : _depo = depo ?? const FlutterSecureStorage();
+  SecureStore([FlutterSecureStorage? storage])
+    : _storage = storage ?? const FlutterSecureStorage();
 
-  final FlutterSecureStorage _depo;
-
-  @override
-  Future<String?> oku(String anahtar) => _depo.read(key: anahtar);
+  final FlutterSecureStorage _storage;
 
   @override
-  Future<void> yaz(String anahtar, String deger) =>
-      _depo.write(key: anahtar, value: deger);
+  Future<String?> read(String key) => _storage.read(key: key);
 
   @override
-  Future<void> sil(String anahtar) => _depo.delete(key: anahtar);
+  Future<void> write(String key, String value) =>
+      _storage.write(key: key, value: value);
+
+  @override
+  Future<void> delete(String key) => _storage.delete(key: key);
 }
 
-/// Testler için bellek deposu. ⭐ Aynı örnek iki `CihazKimligi` arasında paylaşılarak
+/// Testler için bellek deposu. ⭐ Aynı örnek iki `DeviceIdentity` arasında paylaşılarak
 /// "uygulama yeniden açıldı" durumu birebir taklit edilir.
-class BellekDepo implements KaliciDepo {
-  BellekDepo([Map<String, String>? baslangic]) : _m = {...?baslangic};
+class MemoryStore implements Store {
+  MemoryStore([Map<String, String>? initial]) : _m = {...?initial};
 
   final Map<String, String> _m;
 
   /// Testin depoya doğrudan bakabilmesi için (iddia kurmak amacıyla).
-  Map<String, String> get icerik => Map.unmodifiable(_m);
+  Map<String, String> get contents => Map.unmodifiable(_m);
 
   @override
-  Future<String?> oku(String anahtar) async => _m[anahtar];
+  Future<String?> read(String key) async => _m[key];
 
   @override
-  Future<void> yaz(String anahtar, String deger) async => _m[anahtar] = deger;
+  Future<void> write(String key, String value) async => _m[key] = value;
 
   @override
-  Future<void> sil(String anahtar) async => _m.remove(anahtar);
+  Future<void> delete(String key) async => _m.remove(key);
 }

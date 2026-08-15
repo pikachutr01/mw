@@ -30,34 +30,34 @@ import 'storage.dart';
 /// serbest değil.
 const String kDeviceIdKey = 'mw-device-id';
 
-class CihazKimligi {
-  CihazKimligi(this._depo, {String Function()? uuidUret})
-    : _uret = uuidUret ?? (() => const Uuid().v4());
+class DeviceIdentity {
+  DeviceIdentity(this._store, {String Function()? newUuid})
+    : _generate = newUuid ?? (() => const Uuid().v4());
 
-  final KaliciDepo _depo;
-  final String Function() _uret;
+  final Store _store;
+  final String Function() _generate;
 
   /// Bellek içi önbellek — aynı açılışta depoya tekrar tekrar gitmemek için.
   String? _cache;
 
   /// Kurulum kimliği. İlk çağrıda üretilip **kalıcı olarak** yazılır, sonrakiler aynı değeri
-  /// döndürür. Uygulama yeniden başlasa da (yeni `CihazKimligi` nesnesi) değer korunur.
+  /// döndürür. Uygulama yeniden başlasa da (yeni `DeviceIdentity` nesnesi) değer korunur.
   Future<String> deviceId() async {
-    final onbellek = _cache;
-    if (onbellek != null) return onbellek;
+    final cached = _cache;
+    if (cached != null) return cached;
 
-    final mevcut = await _depo.oku(kDeviceIdKey);
-    if (mevcut != null && _gecerliUuid(mevcut)) {
-      _cache = mevcut;
-      return mevcut;
+    final stored = await _store.read(kDeviceIdKey);
+    if (stored != null && _isValidUuid(stored)) {
+      _cache = stored;
+      return stored;
     }
 
     // ⚠️ Bozuk/eski değer varsa ÜZERİNE yazılır: geçersiz UUID sunucuda sessizce yok
     // sayılıyordu, yani cihaz künyesi hiç toplanmıyordu. Sessiz kayıp yerine tazele.
-    final yeni = _uret();
-    await _depo.yaz(kDeviceIdKey, yeni);
-    _cache = yeni;
-    return yeni;
+    final fresh = _generate();
+    await _store.write(kDeviceIdKey, fresh);
+    _cache = fresh;
+    return fresh;
   }
 
   /// ⭐ `X-Client-Instance` — mobilde **bilerek `deviceId` ile aynı**. Gerekçe dosya başlığında.
@@ -76,4 +76,4 @@ final RegExp _uuidRe = RegExp(
   caseSensitive: false,
 );
 
-bool _gecerliUuid(String s) => _uuidRe.hasMatch(s);
+bool _isValidUuid(String s) => _uuidRe.hasMatch(s);

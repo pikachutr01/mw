@@ -16,42 +16,50 @@ import '../features/auth/auth_screen.dart';
 import '../features/shell/shell.dart';
 import 'providers.dart';
 
-const String kGirisYolu = '/giris';
+/// ⚠️ Web'de karşılığı YOK: orada giriş bir modal (`AuthModal`), ayrı bir rota değil. Bu yüzden
+/// «yollar web ile aynı» kuralının dışında kalıyor ve hiçbir bildirim yükü buraya işaret etmiyor.
+const String kAuthPath = '/auth';
 
 /// Oturum değişince yönlendiriciyi uyandıran köprü.
 /// ⚠️ `Listenable` gerekiyor çünkü go_router Riverpod bilmiyor; sağlayıcıyı dinleyip
 /// `notifyListeners` çağıran ince bir katman.
-class _OturumDinleyici extends ChangeNotifier {
-  _OturumDinleyici(Ref ref) {
-    ref.listen(oturumProvider, (_, _) => notifyListeners());
+class _SessionListener extends ChangeNotifier {
+  _SessionListener(Ref ref) {
+    ref.listen(sessionProvider, (_, _) => notifyListeners());
   }
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final dinleyici = _OturumDinleyici(ref);
-  ref.onDispose(dinleyici.dispose);
+  final listener = _SessionListener(ref);
+  ref.onDispose(listener.dispose);
 
   return GoRouter(
     initialLocation: '/armies',
-    refreshListenable: dinleyici,
+    refreshListenable: listener,
     redirect: (context, state) {
-      final girisli = ref.read(oturumProvider) != null;
-      final girisEkraninda = state.matchedLocation == kGirisYolu;
+      final signedIn = ref.read(sessionProvider) != null;
+      final onAuthScreen = state.matchedLocation == kAuthPath;
 
-      if (!girisli) return girisEkraninda ? null : kGirisYolu;
+      if (!signedIn) return onAuthScreen ? null : kAuthPath;
       // Girişliyken giriş ekranında durmanın anlamı yok → oyuna al.
-      return girisEkraninda ? '/armies' : null;
+      return onAuthScreen ? '/armies' : null;
     },
     routes: [
-      GoRoute(path: kGirisYolu, builder: (_, _) => const AuthScreen()),
+      GoRoute(path: kAuthPath, builder: (_, _) => const AuthScreen()),
       ShellRoute(
         builder: (context, state, child) =>
-            OyunKabugu(yol: state.matchedLocation, child: child),
+            GameShell(path: state.matchedLocation, child: child),
         routes: [
-          for (final s in sekmeler)
-            GoRoute(path: s.yol, builder: (_, _) => YerTutucuEkran(s.etiket)),
-          for (final m in drawerMaddeleri)
-            GoRoute(path: m.yol, builder: (_, _) => YerTutucuEkran(m.etiket)),
+          for (final t in tabs)
+            GoRoute(
+              path: t.path,
+              builder: (_, _) => PlaceholderScreen(t.label),
+            ),
+          for (final d in drawerItems)
+            GoRoute(
+              path: d.path,
+              builder: (_, _) => PlaceholderScreen(d.label),
+            ),
         ],
       ),
     ],

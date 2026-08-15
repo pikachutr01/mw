@@ -9,10 +9,10 @@ import 'dart:convert';
 
 import 'storage.dart';
 
-const String kOturumKey = 'mw-session';
+const String kSessionKey = 'mw-session';
 
-class Oturum {
-  const Oturum({
+class Session {
+  const Session({
     required this.accessToken,
     required this.refreshToken,
     required this.playerId,
@@ -48,7 +48,7 @@ class Oturum {
     'refreshAt': refreshAt?.millisecondsSinceEpoch,
   };
 
-  static Oturum fromJson(Map<String, dynamic> j) => Oturum(
+  static Session fromJson(Map<String, dynamic> j) => Session(
     accessToken: j['accessToken'] as String,
     refreshToken: j['refreshToken'] as String,
     playerId: (j['playerId'] as num).toInt(),
@@ -69,22 +69,22 @@ class Oturum {
   /// Sunucunun `/auth/*` yanıt gövdesinden oturum kurar.
   /// Gövde şekli: `auth.controller.ts` → `accessToken · refreshToken · accessExpiresAt ·
   /// refreshExpiresAt · player{id,username,worldId} · serverNow`.
-  static Oturum? sunucuYanitindan(Map<String, dynamic> g, {DateTime? simdi}) {
-    final at = g['accessToken'];
-    final rt = g['refreshToken'];
-    final p = g['player'];
+  static Session? fromAuthResponse(Map<String, dynamic> body, {DateTime? now}) {
+    final at = body['accessToken'];
+    final rt = body['refreshToken'];
+    final p = body['player'];
     if (at is! String || rt is! String || p is! Map) return null;
 
-    return Oturum(
+    return Session(
       accessToken: at,
       refreshToken: rt,
       playerId: (p['id'] as num).toInt(),
       worldId: (p['worldId'] as num).toInt(),
       username: p['username'] as String,
-      refreshAt: yenilemeAni(
-        accessExpiresAt: g['accessExpiresAt'] as String?,
-        serverNow: g['serverNow'] as String?,
-        simdi: simdi ?? DateTime.now(),
+      refreshAt: refreshDeadline(
+        accessExpiresAt: body['accessExpiresAt'] as String?,
+        serverNow: body['serverNow'] as String?,
+        now: now ?? DateTime.now(),
       ),
     );
   }
@@ -95,49 +95,49 @@ class Oturum {
 /// Saf fonksiyon — `apps/web/src/lib/api.ts` · `refreshDeadline` ile birebir. Test edilebilir
 /// olması şart: bu hesabın yanlışı, ya her istekte yenileme (sunucu yükü) ya da hiç yenileme
 /// (oyuncu 12 saat sonra sessizce düşer) demek.
-DateTime? yenilemeAni({
+DateTime? refreshDeadline({
   required String? accessExpiresAt,
   required String? serverNow,
-  required DateTime simdi,
+  required DateTime now,
 }) {
   if (accessExpiresAt == null || serverNow == null) return null;
-  final son = DateTime.tryParse(accessExpiresAt);
-  final now = DateTime.tryParse(serverNow);
-  if (son == null || now == null) return null;
+  final expires = DateTime.tryParse(accessExpiresAt);
+  final issued = DateTime.tryParse(serverNow);
+  if (expires == null || issued == null) return null;
 
-  final omurMs = son.difference(now).inMilliseconds;
-  if (omurMs <= 0) return null;
+  final lifetimeMs = expires.difference(issued).inMilliseconds;
+  if (lifetimeMs <= 0) return null;
 
-  final lead = (omurMs * 0.1).clamp(30000, 600000).toInt();
+  final lead = (lifetimeMs * 0.1).clamp(30000, 600000).toInt();
   // ⚠️ `.toUtc()` — tüm damgalar UTC'de tutuluyor (diske yazılıp okunduğunda da UTC dönüyor).
   // Karışık tutulsaydı eşitlik karşılaştırmaları sessizce yanlış sonuç verirdi.
-  return simdi.add(Duration(milliseconds: omurMs - lead)).toUtc();
+  return now.add(Duration(milliseconds: lifetimeMs - lead)).toUtc();
 }
 
-/// Oturumun kalıcı deposu. ⚠️ Jetonlar **güvenli depoda** (`GuvenliDepo`) — düz
+/// Oturumun kalıcı deposu. ⚠️ Jetonlar **güvenli depoda** (`SecureStore`) — düz
 /// `shared_preferences` yedeklenip başka cihaza taşınabiliyor.
-class OturumDeposu {
-  OturumDeposu(this._depo);
+class SessionStore {
+  SessionStore(this._store);
 
-  final KaliciDepo _depo;
+  final Store _store;
 
-  Future<Oturum?> oku() async {
-    final ham = await _depo.oku(kOturumKey);
-    if (ham == null) return null;
+  Future<Session?> read() async {
+    final raw = await _store.read(kSessionKey);
+    if (raw == null) return null;
     try {
-      return Oturum.fromJson(jsonDecode(ham) as Map<String, dynamic>);
+      return Session.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
       // Bozuk kayıt oturumu kilitlememeli: sil, misafir olarak devam et.
-      await _depo.sil(kOturumKey);
+      await _store.delete(kSessionKey);
       return null;
     }
   }
 
-  Future<void> yaz(Oturum? o) async {
-    if (o == null) {
-      await _depo.sil(kOturumKey);
+  Future<void> write(Session? s) async {
+    if (s == null) {
+      await _store.delete(kSessionKey);
     } else {
-      await _depo.yaz(kOturumKey, jsonEncode(o.toJson()));
+      await _store.write(kSessionKey, jsonEncode(s.toJson()));
     }
   }
 }

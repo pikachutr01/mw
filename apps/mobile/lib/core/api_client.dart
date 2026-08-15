@@ -20,264 +20,265 @@ import 'session.dart';
 
 /// Ham taşıma — **dikiş**. Üretimde dio, testte fixture döndüren bir fonksiyon.
 /// ⚠️ Mock değil: beklenti/`verify` yok, gerçek bayt/JSON akıyor.
-typedef Gonderici = Future<HamYanit> Function(HamIstek istek);
+typedef Sender = Future<RawResponse> Function(RawRequest request);
 
-class HamIstek {
-  const HamIstek({
-    required this.yontem,
-    required this.yol,
-    required this.basliklar,
-    this.govde,
+class RawRequest {
+  const RawRequest({
+    required this.method,
+    required this.path,
+    required this.headers,
+    this.body,
   });
 
-  final String yontem;
-  final String yol;
-  final Map<String, String> basliklar;
-  final Object? govde;
+  final String method;
+  final String path;
+  final Map<String, String> headers;
+  final Object? body;
 }
 
-class HamYanit {
-  const HamYanit(this.durum, [this.govde]);
+class RawResponse {
+  const RawResponse(this.status, [this.body]);
 
-  final int durum;
-  final Object? govde;
+  final int status;
+  final Object? body;
 
-  bool get basarili => durum >= 200 && durum < 300;
+  bool get ok => status >= 200 && status < 300;
 }
 
 /// API hatası. `code` sunucunun makine-okur kodu (`maintenance`, `session_conflict`,
 /// `email_unverified`, `rate_limited` …).
-class MwApiHatasi implements Exception {
-  const MwApiHatasi(this.durum, this.mesaj, {this.code, this.govde});
+class MwApiError implements Exception {
+  const MwApiError(this.status, this.message, {this.code, this.body});
 
-  final int durum;
-  final String mesaj;
+  final int status;
+  final String message;
   final String? code;
-  final Object? govde;
+  final Object? body;
 
   @override
   String toString() =>
-      'MwApiHatasi($durum${code == null ? '' : ' $code'}): $mesaj';
+      'MwApiError($status${code == null ? '' : ' $code'}): $message';
 }
 
 /// Tek cihaz çakışması — oturum DÜŞMEZ, oyuncuya devralma seçeneği sunulur.
-class OturumCakismasi {
-  const OturumCakismasi({this.platform, this.gorulme});
+class SessionConflict {
+  const SessionConflict({this.platform, this.seenAt});
 
   final String? platform;
-  final String? gorulme;
+  final String? seenAt;
 }
 
 class MwApi {
   MwApi({
-    required Gonderici gonderici,
-    required OturumDeposu oturumDeposu,
-    required CihazKimligi kimlik,
-    required IstemciKunyesi kunye,
-    this.onCakisma,
-    this.onOturumDustu,
-    DateTime Function()? saat,
-    Future<void> Function(Duration)? bekle,
+    required Sender sender,
+    required SessionStore sessionStore,
+    required DeviceIdentity identity,
+    required ClientHints hints,
+    this.onConflict,
+    this.onSessionLost,
+    DateTime Function()? clock,
+    Future<void> Function(Duration)? sleep,
     // ⚠️ Aşağıdaki iki `ignore` gerçek bir yanlış öneriyi susturuyor: `prefer_initializing_formals`
-    // `required this._kimlik` diyor, ama o adlandırılmış parametreyi `_kimlik:` yapar ve Dart
+    // `required this._identity` diyor, ama o adlandırılmış parametreyi `_identity:` yapar ve Dart
     // **alt çizgiyle başlayan adlandırılmış argümanı kabul etmiyor** — çağrı DERLENMİYOR
     // (ölçüldü, 2026-08-15). Alan private olmalı, parametre public; ikisi aynı ad olamaz.
-  }) : _gonder = gonderici,
-       _depo = oturumDeposu,
+  }) : _send = sender,
+       _store = sessionStore,
        // ignore: prefer_initializing_formals
-       _kimlik = kimlik,
+       _identity = identity,
        // ignore: prefer_initializing_formals
-       _kunye = kunye,
-       _saat = saat ?? DateTime.now,
-       _bekle = bekle ?? Future<void>.delayed;
+       _hints = hints,
+       _clock = clock ?? DateTime.now,
+       _sleep = sleep ?? Future<void>.delayed;
 
-  final Gonderici _gonder;
-  final OturumDeposu _depo;
-  final CihazKimligi _kimlik;
-  final IstemciKunyesi _kunye;
-  final DateTime Function() _saat;
-  final Future<void> Function(Duration) _bekle;
+  final Sender _send;
+  final SessionStore _store;
+  final DeviceIdentity _identity;
+  final ClientHints _hints;
+  final DateTime Function() _clock;
+  final Future<void> Function(Duration) _sleep;
 
   /// Tek cihaz çakışması görülünce çağrılır (kapanamaz modal açılacak).
-  final void Function(OturumCakismasi)? onCakisma;
+  final void Function(SessionConflict)? onConflict;
 
   /// Oturum gerçekten düştüğünde çağrılır (giriş ekranına dönülecek).
-  final void Function()? onOturumDustu;
+  final void Function()? onSessionLost;
 
-  Oturum? _oturum;
-  bool _yuklendi = false;
+  Session? _session;
+  bool _loaded = false;
 
   /// ⭐ Uçuştaki yenileme. İkinci bir yenileme BAŞLATILMAZ, bunun sonucu beklenir.
-  Future<bool>? _yenilemeUcusta;
+  Future<bool>? _refreshInFlight;
 
   /// Yenileme geçici arızayla başarısız olduysa bu ana kadar tekrar denenmez.
   /// ⚠️ Olmasaydı API kapalıyken saniyede onlarca yenileme isteği giderdi.
-  DateTime _yenilemeKapali = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _refreshBlockedUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
-  Oturum? get oturum => _oturum;
+  Session? get session => _session;
 
-  Future<Oturum?> oturumuYukle() async {
-    if (_yuklendi) return _oturum;
-    _oturum = await _depo.oku();
-    _yuklendi = true;
-    return _oturum;
+  Future<Session?> loadSession() async {
+    if (_loaded) return _session;
+    _session = await _store.read();
+    _loaded = true;
+    return _session;
   }
 
-  Future<void> oturumuAyarla(Oturum? o) async {
-    _oturum = o;
-    _yuklendi = true;
-    await _depo.yaz(o);
-    if (o == null) onOturumDustu?.call();
+  Future<void> setSession(Session? s) async {
+    _session = s;
+    _loaded = true;
+    await _store.write(s);
+    if (s == null) onSessionLost?.call();
   }
 
-  /// Yetkili istek. `yenilemeYok` yalnız yenileme çağrısının kendisi için (sonsuz döngü).
-  Future<Object?> istek(
-    String yontem,
-    String yol, {
-    Object? govde,
-    bool yenilemeYok = false,
+  /// Yetkili istek. `noRefresh` yalnız yenileme çağrısının kendisi için (sonsuz döngü).
+  Future<Object?> request(
+    String method,
+    String path, {
+    Object? body,
+    bool noRefresh = false,
   }) async {
-    await oturumuYukle();
+    await loadSession();
 
     // ⭐ PROAKTİF YENİLEME — 401 beklenmez. Jetonun son %10'una girildiyse önce tazele.
-    final o = _oturum;
-    if (!yenilemeYok &&
-        o?.refreshAt != null &&
-        !_saat().isBefore(o!.refreshAt!)) {
-      await _yenile();
+    final s = _session;
+    if (!noRefresh &&
+        s?.refreshAt != null &&
+        !_clock().isBefore(s!.refreshAt!)) {
+      await _refresh();
     }
 
-    var yanit = await _gonderHazirla(yontem, yol, govde);
+    var response = await _dispatch(method, path, body);
 
     // 401 emniyet ağı: proaktif yenileme kaçırmışsa (ör. sunucu ömrü kısalttı) bir kez dene.
-    if (yanit.durum == 401 && !yenilemeYok && _oturum != null) {
-      if (await _yenile()) {
-        yanit = await _gonderHazirla(yontem, yol, govde);
+    if (response.status == 401 && !noRefresh && _session != null) {
+      if (await _refresh()) {
+        response = await _dispatch(method, path, body);
       }
     }
 
     // ⚠️ Geçici yukarı-akış arızası — BİR kez sessizce tekrarlanır. Oturuma dokunulmaz.
-    if (const {502, 503, 504}.contains(yanit.durum) && !yenilemeYok) {
-      await _bekle(const Duration(milliseconds: 800));
-      yanit = await _gonderHazirla(yontem, yol, govde);
+    if (const {502, 503, 504}.contains(response.status) && !noRefresh) {
+      await _sleep(const Duration(milliseconds: 800));
+      response = await _dispatch(method, path, body);
     }
 
-    if (yanit.basarili) return yanit.govde;
+    if (response.ok) return response.body;
 
-    final hata = _hataCoz(yanit);
+    final error = _parseError(response);
 
     // ⚠️ 409 `session_conflict`: oturum GEÇERLİ, yalnız sahiplik başka kopyada. Düşürme.
-    if (yanit.durum == 409 && hata.code == 'session_conflict') {
-      onCakisma?.call(_cakismaCoz(yanit.govde));
+    if (response.status == 409 && error.code == 'session_conflict') {
+      onConflict?.call(_parseConflict(response.body));
     }
-    throw hata;
+    throw error;
   }
 
-  Future<HamYanit> _gonderHazirla(
-    String yontem,
-    String yol,
-    Object? govde,
+  Future<RawResponse> _dispatch(
+    String method,
+    String path,
+    Object? body,
   ) async {
-    return _gonder(
-      HamIstek(
-        yontem: yontem,
-        yol: yol,
-        basliklar: await _basliklar(govdeVar: govde != null),
-        govde: govde,
+    return _send(
+      RawRequest(
+        method: method,
+        path: path,
+        headers: await _headers(hasBody: body != null),
+        body: body,
       ),
     );
   }
 
-  Future<Map<String, String>> _basliklar({required bool govdeVar}) async {
-    final id = await _kimlik.deviceId();
+  Future<Map<String, String>> _headers({required bool hasBody}) async {
+    final id = await _identity.deviceId();
     return {
       // ⚠️ Gövdesiz istekte `content-type` YAZILMAZ: Fastify boş gövdeye
       // "Body cannot be empty..." 400'ü veriyor (web'de yaşandı).
-      if (govdeVar) 'content-type': 'application/json',
+      if (hasBody) 'content-type': 'application/json',
       'x-device-id': id,
-      'x-client-instance': await _kimlik.instanceId(),
-      ..._kunye.basliklar(),
-      if (_oturum != null) 'authorization': 'Bearer ${_oturum!.accessToken}',
+      'x-client-instance': await _identity.instanceId(),
+      ..._hints.headers(),
+      if (_session != null) 'authorization': 'Bearer ${_session!.accessToken}',
     };
   }
 
   /// ⭐ Yenileme — uçuşta tek söz.
-  Future<bool> _yenile() {
-    final o = _oturum;
-    if (o == null) return Future.value(false);
-    if (_saat().isBefore(_yenilemeKapali)) return Future.value(false);
+  Future<bool> _refresh() {
+    final s = _session;
+    if (s == null) return Future.value(false);
+    if (_clock().isBefore(_refreshBlockedUntil)) return Future.value(false);
 
-    return _yenilemeUcusta ??= _yenileGercek(
-      o.refreshToken,
-    ).whenComplete(() => _yenilemeUcusta = null);
+    return _refreshInFlight ??= _doRefresh(
+      s.refreshToken,
+    ).whenComplete(() => _refreshInFlight = null);
   }
 
-  Future<bool> _yenileGercek(String refreshToken) async {
+  Future<bool> _doRefresh(String refreshToken) async {
     try {
       // ⚠️ Künye BURADA da gönderiliyor: yenileme, giriş sonrası cihaz sinyalinin yazıldığı
       // EN SIK yol. Yalnız girişe koysaydık aylarca açık kalan oturumun künyesi ilk günden
       // kalma olurdu (`auth.service.ts` → `issueSession` → `devices.record`).
-      final yanit = await _gonder(
-        HamIstek(
-          yontem: 'POST',
-          yol: '/api/v1/auth/refresh',
-          basliklar: await _basliklar(govdeVar: true),
-          govde: {'refreshToken': refreshToken},
+      final response = await _send(
+        RawRequest(
+          method: 'POST',
+          path: '/api/v1/auth/refresh',
+          headers: await _headers(hasBody: true),
+          body: {'refreshToken': refreshToken},
         ),
       );
 
       // ⚠️⚠️ OTURUM YALNIZ GERÇEK REDDE DÜŞER.
-      if (yanit.durum == 401 || yanit.durum == 403) {
-        await oturumuAyarla(null);
+      if (response.status == 401 || response.status == 403) {
+        await setSession(null);
         return false;
       }
-      if (!yanit.basarili) {
-        _yenilemeKapali = _saat().add(const Duration(seconds: 10));
+      if (!response.ok) {
+        _refreshBlockedUntil = _clock().add(const Duration(seconds: 10));
         return false;
       }
 
-      final g = yanit.govde;
-      final yeni = g is Map<String, dynamic>
-          ? Oturum.sunucuYanitindan(g, simdi: _saat())
+      final body = response.body;
+      final fresh = body is Map<String, dynamic>
+          ? Session.fromAuthResponse(body, now: _clock())
           : null;
-      if (yeni == null) {
-        await oturumuAyarla(null);
+      if (fresh == null) {
+        await setSession(null);
         return false;
       }
-      await oturumuAyarla(yeni);
+      await setSession(fresh);
       return true;
     } catch (_) {
       // Ağ hatası jeton hakkında hiçbir şey söylemez → oturum korunur.
-      _yenilemeKapali = _saat().add(const Duration(seconds: 10));
+      _refreshBlockedUntil = _clock().add(const Duration(seconds: 10));
       return false;
     }
   }
 
-  MwApiHatasi _hataCoz(HamYanit y) {
-    final g = y.govde;
-    if (g is Map) {
+  MwApiError _parseError(RawResponse r) {
+    final body = r.body;
+    if (body is Map) {
       final code =
-          g['code'] ?? (g['error'] is Map ? (g['error'] as Map)['code'] : null);
-      final mesaj = g['message'] ?? g['error'];
-      return MwApiHatasi(
-        y.durum,
-        mesaj is String ? mesaj : 'İstek başarısız (${y.durum})',
+          body['code'] ??
+          (body['error'] is Map ? (body['error'] as Map)['code'] : null);
+      final message = body['message'] ?? body['error'];
+      return MwApiError(
+        r.status,
+        message is String ? message : 'İstek başarısız (${r.status})',
         code: code is String ? code : null,
-        govde: g,
+        body: body,
       );
     }
-    return MwApiHatasi(y.durum, 'İstek başarısız (${y.durum})', govde: g);
+    return MwApiError(r.status, 'İstek başarısız (${r.status})', body: body);
   }
 
-  OturumCakismasi _cakismaCoz(Object? govde) {
+  SessionConflict _parseConflict(Object? body) {
     // Sunucu gövdesi: {code, message, holder:{platform, seenAt}}
-    final tutan = govde is Map ? govde['holder'] : null;
-    if (tutan is Map) {
-      return OturumCakismasi(
-        platform: tutan['platform'] as String?,
-        gorulme: tutan['seenAt'] as String?,
+    final holder = body is Map ? body['holder'] : null;
+    if (holder is Map) {
+      return SessionConflict(
+        platform: holder['platform'] as String?,
+        seenAt: holder['seenAt'] as String?,
       );
     }
-    return const OturumCakismasi();
+    return const SessionConflict();
   }
 }

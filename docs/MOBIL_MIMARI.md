@@ -144,6 +144,29 @@ Hepsi gerçek hatalardan doğdu. Yeniden keşfedilmesinler diye adıyla yazılı
 | 5 | **WS `INVALIDATES` tablosu** + `presence:update` debounce'u | `realtime.ts:60-120,330` | Ekran tazelenmez ya da kalabalık ittifakta olay yağmuru |
 | 6 | **`useSafetyNet()`** — WS bağlıyken 5 dk, kopukken 60 sn | `queries.ts:428` | Pil ve sunucu yükü |
 
+### 3.5 ⚠️ Adlandırma — makine okuyan her ad İngilizce, yorumlar Türkçe
+
+Depo kuralı (`README` §13.14) burada da geçerli ve **Dart'ta ihlali derleme hatasıyla ortaya
+çıktı**: Türkçe `ı` harfi Dart tanımlayıcılarında yasak, yani `karanlık` gibi bir alan adı
+dosyayı derlenemez yapıyor. Tanımlayıcılar 2026-08-15'te toptan İngilizceye çevrildi
+(`CihazKimligi` → `DeviceIdentity`, `MwButon` → `MwButton`, `yenilemeAni` → `refreshDeadline`, …).
+
+| Katman | Dil | Örnek |
+| :-- | :-- | :-- |
+| Sınıf · alan · metot · sağlayıcı · parametre | **İngilizce** | `SessionStore.write()`, `bootProvider`, `updateRequired(minBuild:)` |
+| Yorum · doc comment · `reason:` metni | **Türkçe** | `/// ⚠️ Oturum yalnız GERÇEK reddde düşer` |
+| `test`/`group` başlıkları | **Türkçe** (⭐/⚠️ işaretleriyle) | `'⭐⭐ yenileme uçuşta TEK söz'` |
+| Kullanıcıya görünen metin | **Türkçe** | `'Güncelleme gerekli'` |
+
+⛔ **Bu dönüşüm `sed` ile yapılmaz.** `yol`, `durum`, `mesaj`, `istek`, `oku` gibi adlar aynı
+zamanda yorumların içinde geçen Türkçe kelimeler; toplu değiştirme kodu düzeltirken gerekçeleri
+bozar. Dosyalar tek tek yeniden yazıldı.
+
+⚠️ İki ad Dart'ın grameriyle çakıştığı için doğrudan çevrilemedi ve bunlar kural değil **istisna**:
+`Notifier.set(...)` yazılamıyor (`set` setter anahtar sözcüğü) → `update(...)`; giriş rotası
+`/auth` (web'de karşılığı yok, çünkü orada giriş bir modal — bu yüzden «yollar web ile aynı»
+kuralının dışında).
+
 ---
 
 ## 4. Tip güvenliği — "sözleşme borcu defteri"

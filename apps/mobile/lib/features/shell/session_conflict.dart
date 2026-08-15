@@ -16,15 +16,15 @@ import '../../app/providers.dart';
 import '../../core/api_client.dart';
 import '../../ui/primitives.dart';
 
-class OturumCakismaPerdesi extends ConsumerWidget {
-  const OturumCakismaPerdesi({super.key, required this.child});
+class SessionConflictGate extends ConsumerWidget {
+  const SessionConflictGate({super.key, required this.child});
 
   final Widget child;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cakisma = ref.watch(cakismaProvider);
-    if (cakisma == null) return child;
+    final conflict = ref.watch(conflictProvider);
+    if (conflict == null) return child;
 
     return Stack(
       children: [
@@ -34,49 +34,49 @@ class OturumCakismaPerdesi extends ConsumerWidget {
         const Positioned.fill(
           child: AbsorbPointer(child: ColoredBox(color: Color(0xAA000000))),
         ),
-        Positioned.fill(child: _Perde(cakisma: cakisma)),
+        Positioned.fill(child: _Overlay(conflict: conflict)),
       ],
     );
   }
 }
 
-class _Perde extends ConsumerStatefulWidget {
-  const _Perde({required this.cakisma});
+class _Overlay extends ConsumerStatefulWidget {
+  const _Overlay({required this.conflict});
 
-  final OturumCakismasi cakisma;
+  final SessionConflict conflict;
 
   @override
-  ConsumerState<_Perde> createState() => _PerdeState();
+  ConsumerState<_Overlay> createState() => _OverlayState();
 }
 
-class _PerdeState extends ConsumerState<_Perde> {
-  bool _mesgul = false;
-  String? _hata;
+class _OverlayState extends ConsumerState<_Overlay> {
+  bool _busy = false;
+  String? _error;
 
-  Future<void> _devral() async {
+  Future<void> _claim() async {
     setState(() {
-      _mesgul = true;
-      _hata = null;
+      _busy = true;
+      _error = null;
     });
     try {
       // ⚠️ `/auth/**` tek cihaz kuralından MUAF (`auth.guard.ts` PRESENCE_EXEMPT), yani bu
       // çağrının kendisi 409 almıyor — devralma düğmesi başka türlü çalışamazdı.
       await ref
           .read(apiProvider)
-          .istek('POST', '/api/v1/auth/session/claim', govde: {'force': true});
-      ref.read(cakismaProvider.notifier).ayarla(null);
-    } on MwApiHatasi catch (e) {
-      setState(() => _hata = e.mesaj);
+          .request('POST', '/api/v1/auth/session/claim', body: {'force': true});
+      ref.read(conflictProvider.notifier).update(null);
+    } on MwApiError catch (e) {
+      setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _hata = 'Sunucuya ulaşılamadı.');
+      setState(() => _error = 'Sunucuya ulaşılamadı.');
     } finally {
-      if (mounted) setState(() => _mesgul = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final nerede = widget.cakisma.platform;
+    final where = widget.conflict.platform;
     return Material(
       color: Colors.transparent,
       child: Center(
@@ -85,37 +85,35 @@ class _PerdeState extends ConsumerState<_Perde> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: MwPanel(
-              baslik: 'Hesabın başka bir yerde açık',
+              title: 'Hesabın başka bir yerde açık',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    nerede == null
+                    where == null
                         ? 'Bu hesap şu anda başka bir kopyada açık görünüyor.'
-                        : 'Bu hesap şu anda ${_platformAdi(nerede)} üzerinde açık görünüyor.',
+                        : 'Bu hesap şu anda ${_platformName(where)} üzerinde açık görünüyor.',
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Oyunu bu cihazda sürdürürsen diğer kopya kapanır.',
-                    style: TextStyle(color: MwRenk.of(context).muted),
+                    style: TextStyle(color: MwColors.of(context).muted),
                   ),
-                  if (_hata != null) ...[
+                  if (_error != null) ...[
                     const SizedBox(height: 12),
-                    MwHataKutusu(_hata!),
+                    MwErrorBox(_error!),
                   ],
                   const SizedBox(height: 16),
-                  MwButon(
-                    etiket: 'Bu cihazda devam et',
-                    mesgul: _mesgul,
-                    onTap: _devral,
+                  MwButton(
+                    label: 'Bu cihazda devam et',
+                    busy: _busy,
+                    onTap: _claim,
                   ),
                   const SizedBox(height: 8),
-                  MwButon(
-                    etiket: 'Çıkış yap',
-                    tur: MwButonTuru.hayalet,
-                    onTap: _mesgul
-                        ? null
-                        : () => ref.read(kimlikDogrulamaProvider).cikisYap(),
+                  MwButton(
+                    label: 'Çıkış yap',
+                    kind: MwButtonKind.ghost,
+                    onTap: _busy ? null : () => ref.read(authProvider).logout(),
                   ),
                 ],
               ),
@@ -127,7 +125,7 @@ class _PerdeState extends ConsumerState<_Perde> {
   }
 }
 
-String _platformAdi(String p) => switch (p) {
+String _platformName(String p) => switch (p) {
   'web' => 'tarayıcı',
   'android' => 'başka bir Android cihaz',
   'ios' => 'bir iPhone/iPad',

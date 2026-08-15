@@ -11,49 +11,48 @@ import 'package:flutter/material.dart';
 import '../gen/tokens.dart';
 
 /// Semantik renklere tema üzerinden erişim — `MwLightColors`/`MwDarkColors` seçimini
-/// tek yerde yapar. Bileşenler `MwRenk.of(context).gold` yazar, `isDark ? ... : ...` değil.
-class MwRenk {
-  const MwRenk._(this.karanlik);
+/// tek yerde yapar. Bileşenler `MwColors.of(context).gold` yazar, `isDark ? ... : ...` değil.
+class MwColors {
+  const MwColors._(this.dark);
 
-  factory MwRenk.of(BuildContext c) =>
-      MwRenk._(Theme.of(c).brightness == Brightness.dark);
+  factory MwColors.of(BuildContext c) =>
+      MwColors._(Theme.of(c).brightness == Brightness.dark);
 
-  final bool karanlik;
+  final bool dark;
 
-  Color get gold => karanlik ? MwDarkColors.gold : MwLightColors.gold;
-  Color get food => karanlik ? MwDarkColors.food : MwLightColors.food;
-  Color get danger => karanlik ? MwDarkColors.danger : MwLightColors.danger;
-  Color get warning => karanlik ? MwDarkColors.warning : MwLightColors.warning;
-  Color get success => karanlik ? MwDarkColors.success : MwLightColors.success;
-  Color get info => karanlik ? MwDarkColors.info : MwLightColors.info;
-  Color get muted =>
-      karanlik ? MwDarkColors.textMuted : MwLightColors.textMuted;
-  Color get border => karanlik ? MwDarkColors.border : MwLightColors.border;
+  Color get gold => dark ? MwDarkColors.gold : MwLightColors.gold;
+  Color get food => dark ? MwDarkColors.food : MwLightColors.food;
+  Color get danger => dark ? MwDarkColors.danger : MwLightColors.danger;
+  Color get warning => dark ? MwDarkColors.warning : MwLightColors.warning;
+  Color get success => dark ? MwDarkColors.success : MwLightColors.success;
+  Color get info => dark ? MwDarkColors.info : MwLightColors.info;
+  Color get muted => dark ? MwDarkColors.textMuted : MwLightColors.textMuted;
+  Color get border => dark ? MwDarkColors.border : MwLightColors.border;
   Color get borderStrong =>
-      karanlik ? MwDarkColors.borderStrong : MwLightColors.borderStrong;
+      dark ? MwDarkColors.borderStrong : MwLightColors.borderStrong;
   Color get raised =>
-      karanlik ? MwDarkColors.surfaceRaised : MwLightColors.surfaceRaised;
+      dark ? MwDarkColors.surfaceRaised : MwLightColors.surfaceRaised;
   Color get panelHeader =>
-      karanlik ? MwDarkColors.panelHeader : MwLightColors.panelHeader;
+      dark ? MwDarkColors.panelHeader : MwLightColors.panelHeader;
   Color get onPanelHeader =>
-      karanlik ? MwDarkColors.onPanelHeader : MwLightColors.onPanelHeader;
+      dark ? MwDarkColors.onPanelHeader : MwLightColors.onPanelHeader;
 }
 
 /// Web'deki `Panel` — başlık bandı + çerçeve. Ana görsel birim.
 class MwPanel extends StatelessWidget {
-  const MwPanel({super.key, this.baslik, required this.child, this.sag});
+  const MwPanel({super.key, this.title, required this.child, this.trailing});
 
-  final String? baslik;
+  final String? title;
   final Widget child;
-  final Widget? sag;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final r = MwRenk.of(context);
+    final c = MwColors.of(context);
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border.all(color: r.border),
+        border: Border.all(color: c.border),
         borderRadius: BorderRadius.circular(10),
       ),
       clipBehavior: Clip.antiAlias,
@@ -65,22 +64,22 @@ class MwPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (baslik != null)
+          if (title != null)
             Container(
-              color: r.panelHeader,
+              color: c.panelHeader,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
-                      baslik!,
+                      title!,
                       style: TextStyle(
-                        color: r.onPanelHeader,
+                        color: c.onPanelHeader,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                  ?sag,
+                  ?trailing,
                 ],
               ),
             ),
@@ -91,113 +90,113 @@ class MwPanel extends StatelessWidget {
   }
 }
 
-enum MwButonTuru { birincil, hayalet, tehlike }
+enum MwButtonKind { primary, ghost, danger }
 
-class MwButon extends StatelessWidget {
-  const MwButon({
+class MwButton extends StatelessWidget {
+  const MwButton({
     super.key,
-    required this.etiket,
+    required this.label,
     this.onTap,
-    this.tur = MwButonTuru.birincil,
-    this.mesgul = false,
+    this.kind = MwButtonKind.primary,
+    this.busy = false,
   });
 
-  final String etiket;
+  final String label;
   final VoidCallback? onTap;
-  final MwButonTuru tur;
-  final bool mesgul;
+  final MwButtonKind kind;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final r = MwRenk.of(context);
-    final (zemin, yazi) = switch (tur) {
-      MwButonTuru.birincil => (scheme.primary, scheme.onPrimary),
-      MwButonTuru.tehlike => (r.danger, scheme.onPrimary),
-      MwButonTuru.hayalet => (Colors.transparent, scheme.onSurface),
+    final c = MwColors.of(context);
+    final (bg, fg) = switch (kind) {
+      MwButtonKind.primary => (scheme.primary, scheme.onPrimary),
+      MwButtonKind.danger => (c.danger, scheme.onPrimary),
+      MwButtonKind.ghost => (Colors.transparent, scheme.onSurface),
     };
 
     return FilledButton(
-      // ⚠️ `mesgul` iken `onTap` null verilir → düğme hem görsel hem işlevsel olarak kapanır.
+      // ⚠️ `busy` iken `onTap` null verilir → düğme hem görsel hem işlevsel olarak kapanır.
       // Yalnız görsel kapatmak çift gönderime açık kapı bırakırdı.
-      onPressed: mesgul ? null : onTap,
+      onPressed: busy ? null : onTap,
       style: FilledButton.styleFrom(
-        backgroundColor: zemin,
-        foregroundColor: yazi,
-        side: tur == MwButonTuru.hayalet
-            ? BorderSide(color: r.borderStrong)
+        backgroundColor: bg,
+        foregroundColor: fg,
+        side: kind == MwButtonKind.ghost
+            ? BorderSide(color: c.borderStrong)
             : null,
         minimumSize: const Size.fromHeight(46),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
-      child: mesgul
+      child: busy
           ? SizedBox(
               height: 18,
               width: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: yazi),
+              child: CircularProgressIndicator(strokeWidth: 2, color: fg),
             )
-          : Text(etiket),
+          : Text(label),
     );
   }
 }
 
 /// Web'deki `ErrorBox`.
-class MwHataKutusu extends StatelessWidget {
-  const MwHataKutusu(this.mesaj, {super.key});
+class MwErrorBox extends StatelessWidget {
+  const MwErrorBox(this.message, {super.key});
 
-  final String mesaj;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
-    final r = MwRenk.of(context);
+    final c = MwColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: r.danger.withValues(alpha: 0.12),
-        border: Border.all(color: r.danger),
+        color: c.danger.withValues(alpha: 0.12),
+        border: Border.all(color: c.danger),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(mesaj, style: TextStyle(color: r.danger)),
+      child: Text(message, style: TextStyle(color: c.danger)),
     );
   }
 }
 
 /// Web'deki `Empty`.
-class MwBos extends StatelessWidget {
-  const MwBos(this.mesaj, {super.key});
+class MwEmpty extends StatelessWidget {
+  const MwEmpty(this.message, {super.key});
 
-  final String mesaj;
+  final String message;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 32),
     child: Center(
-      child: Text(mesaj, style: TextStyle(color: MwRenk.of(context).muted)),
+      child: Text(message, style: TextStyle(color: MwColors.of(context).muted)),
     ),
   );
 }
 
 /// Kaynak göstergesi (altın/yemek). Sayı biçimi Türkçe binlik ayracıyla.
-class MwKaynak extends StatelessWidget {
-  const MwKaynak({super.key, required this.tur, required this.miktar});
+class MwResource extends StatelessWidget {
+  const MwResource({super.key, required this.kind, required this.amount});
 
-  final String tur; // 'gold' | 'food'
-  final int miktar;
+  final String kind; // 'gold' | 'food'
+  final int amount;
 
   @override
   Widget build(BuildContext context) {
-    final r = MwRenk.of(context);
+    final c = MwColors.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          tur == 'gold' ? Icons.circle : Icons.eco,
+          kind == 'gold' ? Icons.circle : Icons.eco,
           size: 14,
-          color: tur == 'gold' ? r.gold : r.food,
+          color: kind == 'gold' ? c.gold : c.food,
         ),
         const SizedBox(width: 4),
-        Text(mwSayi(miktar)),
+        Text(mwNumber(amount)),
       ],
     );
   }
@@ -212,38 +211,38 @@ class MwKaynak extends StatelessWidget {
 /// ⚠️ `errorBuilder` ŞART: dosya adı katalog `id`'sinden üretiliyor ve eşleşmeyen bir id
 /// (ör. sunucuya yeni birim eklendi, görseli henüz yok) ekranı kırmızı hata kutusuna
 /// çevirirdi. Yerine aynı ölçüde boşluk bırakılıyor — web'deki `CatalogIcon` ile aynı karar.
-class MwIkon extends StatelessWidget {
-  const MwIkon({
+class MwIcon extends StatelessWidget {
+  const MwIcon({
     super.key,
-    required this.klasor,
+    required this.folder,
     required this.id,
-    this.boyut = 24,
-    this.renk,
+    this.size = 24,
+    this.color,
   });
 
   /// `menu` · `units` · `buildings` · `techs` · `defenses` · `missions` · `hero` · `ranks` · `ui`
-  final String klasor;
+  final String folder;
   final String id;
-  final double boyut;
+  final double size;
 
   /// Verilirse ikon tek renge boyanır (alt sekmede seçili/seçili değil ayrımı için).
-  final Color? renk;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) => Image.asset(
-    'assets/$klasor/$id.png',
-    width: boyut,
-    height: boyut,
-    color: renk,
+    'assets/$folder/$id.png',
+    width: size,
+    height: size,
+    color: color,
     filterQuality: FilterQuality.medium,
-    errorBuilder: (_, _, _) => SizedBox(width: boyut, height: boyut),
+    errorBuilder: (_, _, _) => SizedBox(width: size, height: size),
   );
 }
 
 /// `tr-TR` binlik ayracı — web'deki `fmt()` ile aynı görünüm.
 /// ⚠️ `intl` paketi EKLENMEDİ: tek ihtiyacımız binlik ayracı ve `intl` yalnız bunun için
 /// ~1 MB ve bir yerelleştirme kurulum adımı getiriyor.
-String mwSayi(int n) {
+String mwNumber(int n) {
   final s = n.abs().toString();
   final b = StringBuffer();
   for (var i = 0; i < s.length; i++) {

@@ -20,121 +20,122 @@ import '../core/storage.dart';
 
 /// Önyüklemede override edilir. Override edilmeden okunursa bilerek patlar: sessizce
 /// varsayılan bir künye üretmek, cihaz sinyalini aylarca yanlış toplamak demekti.
-final kunyeProvider = Provider<IstemciKunyesi>(
-  (ref) => throw StateError('kunyeProvider önyüklemede override edilmeli'),
+final clientHintsProvider = Provider<ClientHints>(
+  (ref) =>
+      throw StateError('clientHintsProvider önyüklemede override edilmeli'),
 );
 
-final depoProvider = Provider<KaliciDepo>((ref) => GuvenliDepo());
+final storeProvider = Provider<Store>((ref) => SecureStore());
 
-final kimlikProvider = Provider<CihazKimligi>(
-  (ref) => CihazKimligi(ref.watch(depoProvider)),
+final identityProvider = Provider<DeviceIdentity>(
+  (ref) => DeviceIdentity(ref.watch(storeProvider)),
 );
 
 /// Tek cihaz çakışması. Doluysa kapanamaz bir perde gösterilir.
-class CakismaNotifier extends Notifier<OturumCakismasi?> {
+class ConflictNotifier extends Notifier<SessionConflict?> {
   @override
-  OturumCakismasi? build() => null;
+  SessionConflict? build() => null;
 
-  void ayarla(OturumCakismasi? c) => state = c;
+  void update(SessionConflict? c) => state = c;
 }
 
-final cakismaProvider = NotifierProvider<CakismaNotifier, OturumCakismasi?>(
-  CakismaNotifier.new,
+final conflictProvider = NotifierProvider<ConflictNotifier, SessionConflict?>(
+  ConflictNotifier.new,
 );
 
 /// Oturum durumu. **Tek doğruluk kaynağı `MwApi`** — burası onun UI'ya yansıması.
 /// İki yerde ayrı ayrı tutulsaydı, yenilemenin oturumu değiştirdiği anlar kaçardı.
-class OturumNotifier extends Notifier<Oturum?> {
+class SessionNotifier extends Notifier<Session?> {
   @override
-  Oturum? build() => null;
+  Session? build() => null;
 
-  void ayarla(Oturum? o) => state = o;
+  void update(Session? s) => state = s;
 }
 
-final oturumProvider = NotifierProvider<OturumNotifier, Oturum?>(
-  OturumNotifier.new,
+final sessionProvider = NotifierProvider<SessionNotifier, Session?>(
+  SessionNotifier.new,
 );
 
 final apiProvider = Provider<MwApi>((ref) {
   return MwApi(
-    gonderici: dioGonderici(),
-    oturumDeposu: OturumDeposu(ref.watch(depoProvider)),
-    kimlik: ref.watch(kimlikProvider),
-    kunye: ref.watch(kunyeProvider),
+    sender: dioSender(),
+    sessionStore: SessionStore(ref.watch(storeProvider)),
+    identity: ref.watch(identityProvider),
+    hints: ref.watch(clientHintsProvider),
     // ⚠️ `ref.read` (watch değil): geri çağrılar gelecekte çalışıyor, sağlayıcıyı yeniden
     // kurmamalı. `watch` burada döngü kurardı.
-    onCakisma: (c) => ref.read(cakismaProvider.notifier).ayarla(c),
-    onOturumDustu: () => ref.read(oturumProvider.notifier).ayarla(null),
+    onConflict: (c) => ref.read(conflictProvider.notifier).update(c),
+    onSessionLost: () => ref.read(sessionProvider.notifier).update(null),
   );
 });
 
 /// Giriş/kayıt/çıkış — oturum yazan tek yer.
-class KimlikDogrulama {
-  const KimlikDogrulama(this._ref);
+class Auth {
+  const Auth(this._ref);
 
   final Ref _ref;
 
   MwApi get _api => _ref.read(apiProvider);
 
-  Future<void> girisYap({
-    required String kullaniciAdi,
-    required String parola,
+  Future<void> login({
+    required String username,
+    required String password,
     required int worldId,
   }) async {
-    final g = await _api.istek(
+    final body = await _api.request(
       'POST',
       '/api/v1/auth/login',
-      govde: {'username': kullaniciAdi, 'password': parola, 'worldId': worldId},
+      body: {'username': username, 'password': password, 'worldId': worldId},
     );
-    await _oturumaGec(g);
+    await _applySession(body);
   }
 
-  Future<void> kayitOl({
-    required String eposta,
-    required String parola,
-    required String kullaniciAdi,
+  Future<void> register({
+    required String email,
+    required String password,
+    required String username,
     required int worldId,
   }) async {
-    final g = await _api.istek(
+    final body = await _api.request(
       'POST',
       '/api/v1/auth/register',
-      govde: {
-        'email': eposta,
-        'password': parola,
-        'username': kullaniciAdi,
+      body: {
+        'email': email,
+        'password': password,
+        'username': username,
         'worldId': worldId,
       },
     );
-    await _oturumaGec(g);
+    await _applySession(body);
   }
 
-  Future<void> cikisYap() async {
+  Future<void> logout() async {
     // ⚠️ Sunucuya ulaşılamasa bile YEREL oturum düşer: aksi hâlde ağı olmayan oyuncu
     // uygulamadan çıkamazdı (web'de aynı karar).
     try {
-      await _api.istek('POST', '/api/v1/auth/logout');
+      await _api.request('POST', '/api/v1/auth/logout');
     } catch (_) {
       // yut
     }
-    await _api.oturumuAyarla(null);
-    _ref.read(oturumProvider.notifier).ayarla(null);
-    _ref.read(cakismaProvider.notifier).ayarla(null);
+    await _api.setSession(null);
+    _ref.read(sessionProvider.notifier).update(null);
+    _ref.read(conflictProvider.notifier).update(null);
   }
 
-  Future<void> _oturumaGec(Object? govde) async {
-    final o = govde is Map<String, dynamic>
-        ? Oturum.sunucuYanitindan(govde)
+  Future<void> _applySession(Object? body) async {
+    final s = body is Map<String, dynamic>
+        ? Session.fromAuthResponse(body)
         : null;
-    if (o == null) {
-      throw const MwApiHatasi(0, 'Sunucu beklenmeyen bir yanıt döndürdü.');
+    if (s == null) {
+      throw const MwApiError(0, 'Sunucu beklenmeyen bir yanıt döndürdü.');
     }
-    await _api.oturumuAyarla(o);
-    _ref.read(oturumProvider.notifier).ayarla(o);
-    _ref.read(cakismaProvider.notifier).ayarla(null);
+    await _api.setSession(s);
+    _ref.read(sessionProvider.notifier).update(s);
+    _ref.read(conflictProvider.notifier).update(null);
   }
 }
 
-final kimlikDogrulamaProvider = Provider<KimlikDogrulama>(KimlikDogrulama.new);
+final authProvider = Provider<Auth>(Auth.new);
 
 /// Açık dünya listesi + en düşük istemci yapı numarası.
 ///
@@ -144,22 +145,19 @@ final kimlikDogrulamaProvider = Provider<KimlikDogrulama>(KimlikDogrulama.new);
 ///
 /// ⭐ İki tüketici tek istek paylaşıyor: giriş formundaki dünya seçici ve sürüm kapısı.
 /// Ayrı sağlayıcılar açsaydık her açılışta aynı uca iki istek giderdi.
-typedef AcilisBilgisi = ({
-  List<({int id, String ad})> dunyalar,
-  int enDusukYapi,
-});
+typedef BootInfo = ({List<({int id, String name})> worlds, int minBuild});
 
-final acilisProvider = FutureProvider<AcilisBilgisi>((ref) async {
-  final g = await ref.read(apiProvider).istek('GET', '/api/v1/worlds');
-  final m = g is Map ? g : const {};
-  final liste = m['worlds'] as List<dynamic>? ?? const [];
+final bootProvider = FutureProvider<BootInfo>((ref) async {
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/worlds');
+  final m = body is Map ? body : const {};
+  final list = m['worlds'] as List<dynamic>? ?? const [];
   return (
-    dunyalar: liste
+    worlds: list
         .whereType<Map<String, dynamic>>()
-        .map((w) => (id: (w['id'] as num).toInt(), ad: w['name'] as String))
+        .map((w) => (id: (w['id'] as num).toInt(), name: w['name'] as String))
         .toList(),
     // ⚠️ Alan yoksa 0 → kapı KAPALI. Eski bir sunucuya bağlanan yeni uygulama, sunucu bu
     // alanı hiç göndermediği için kendini kilitlememeli.
-    enDusukYapi: (m['minAndroidBuild'] as num?)?.toInt() ?? 0,
+    minBuild: (m['minAndroidBuild'] as num?)?.toInt() ?? 0,
   );
 });

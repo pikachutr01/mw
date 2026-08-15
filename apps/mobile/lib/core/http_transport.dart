@@ -1,4 +1,4 @@
-/// GERÇEK TAŞIMA — `Gonderici` dikişinin dio ile uygulanışı.
+/// GERÇEK TAŞIMA — `Sender` dikişinin dio ile uygulanışı.
 ///
 /// ⚠️ Buraya **iş mantığı yazılmaz**: yenileme, oturum düşürme, 409 ve tekrar kararlarının
 /// hepsi `api_client.dart`'ta ve testleri cihazsız koşuyor. Bu dosya yalnız "baytları taşı"
@@ -19,18 +19,18 @@ import 'api_client.dart';
 /// ⚠️ `--dart-define` derleme zamanı sabitidir; çalışma anında değiştirilemez. Bilerek: API
 /// kökünü çalışma anında oynatılabilir yapmak, kötü niyetli bir yapılandırmayla oyuncunun
 /// jetonlarını başka bir sunucuya yollatmanın en kolay yolu olurdu.
-const String kApiKok = String.fromEnvironment(
+const String kApiRoot = String.fromEnvironment(
   'MW_API',
   defaultValue: 'http://127.0.0.1:3002',
 );
 
 /// dio tabanlı gönderici üretir.
-Gonderici dioGonderici({String kok = kApiKok, Dio? dio}) {
+Sender dioSender({String root = kApiRoot, Dio? dio}) {
   final d =
       dio ??
       Dio(
         BaseOptions(
-          baseUrl: kok,
+          baseUrl: root,
           // ⚠️ `validateStatus: hepsi geçerli` — dio varsayılanı 4xx/5xx'te FIRLATIYOR.
           // Durum kodlarının kararı `MwApi`de veriliyor (401 yenile, 503 tekrarla, 409 çakışma);
           // burada istisnaya çevirmek o mantığı try/catch'e gömerdi.
@@ -41,12 +41,12 @@ Gonderici dioGonderici({String kok = kApiKok, Dio? dio}) {
         ),
       );
 
-  return (HamIstek istek) async {
-    final yanit = await d.request<dynamic>(
-      istek.yol,
-      data: istek.govde,
-      options: Options(method: istek.yontem, headers: istek.basliklar),
+  return (RawRequest request) async {
+    final response = await d.request<dynamic>(
+      request.path,
+      data: request.body,
+      options: Options(method: request.method, headers: request.headers),
     );
-    return HamYanit(yanit.statusCode ?? 0, yanit.data);
+    return RawResponse(response.statusCode ?? 0, response.data);
   };
 }

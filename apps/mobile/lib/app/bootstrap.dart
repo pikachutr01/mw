@@ -18,7 +18,7 @@ import '../gen/tokens.dart';
 import 'providers.dart';
 import 'router.dart';
 
-Future<void> baslat() async {
+Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ⭐ SADECE GELİŞTİRMEDE ekranı açık tut. Cihazda elle deneme yaparken ekranın kendiliğinden
@@ -37,11 +37,11 @@ Future<void> baslat() async {
 
   // ⚠️ Künye toplanamazsa uygulama AÇILMALI: cihaz sinyali olmadan da oyun oynanır, ama
   // açılmayan uygulama hiçbir işe yaramaz. Boş künye sunucuda `COALESCE` ile öncekini silmiyor.
-  IstemciKunyesi kunye;
+  ClientHints hints;
   try {
-    kunye = await IstemciKunyesi.topla();
+    hints = await ClientHints.collect();
   } catch (_) {
-    kunye = const IstemciKunyesi(
+    hints = const ClientHints(
       platform: 'android',
       osVersion: '',
       deviceModel: '',
@@ -51,15 +51,17 @@ Future<void> baslat() async {
     );
   }
 
-  final kap = ProviderContainer(
-    overrides: [kunyeProvider.overrideWithValue(kunye)],
+  final container = ProviderContainer(
+    overrides: [clientHintsProvider.overrideWithValue(hints)],
   );
 
   // Diskteki oturumu belleğe al — açılışta giriş ekranı "parlamasın".
-  final oturum = await kap.read(apiProvider).oturumuYukle();
-  kap.read(oturumProvider.notifier).ayarla(oturum);
+  final session = await container.read(apiProvider).loadSession();
+  container.read(sessionProvider.notifier).update(session);
 
-  runApp(UncontrolledProviderScope(container: kap, child: const MobilWarApp()));
+  runApp(
+    UncontrolledProviderScope(container: container, child: const MobilWarApp()),
+  );
 }
 
 class MobilWarApp extends ConsumerWidget {
@@ -78,19 +80,19 @@ class MobilWarApp extends ConsumerWidget {
       // yerinde durmalı (oyuncu devralınca kaldığı yerden devam etsin).
       // ⚠️ SIRA ÖNEMLİ: sürüm kapısı EN DIŞTA. Sürümü geçersiz bir uygulamanın oturum
       // çakışması perdesini göstermesinin anlamı yok — ilk soru "bu uygulama çalışabilir mi".
-      builder: (context, child) => SurumKapisi(
-        child: OturumCakismaPerdesi(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => UpdateGate(
+        child: SessionConflictGate(child: child ?? const SizedBox.shrink()),
       ),
     );
   }
 }
 
 /// Testlerin ve araçların kullanabilmesi için: bellek deposuyla kap kurar.
-ProviderContainer testKabi({IstemciKunyesi? kunye}) => ProviderContainer(
+ProviderContainer testContainer({ClientHints? hints}) => ProviderContainer(
   overrides: [
-    kunyeProvider.overrideWithValue(
-      kunye ??
-          const IstemciKunyesi(
+    clientHintsProvider.overrideWithValue(
+      hints ??
+          const ClientHints(
             platform: 'android',
             osVersion: 'test',
             deviceModel: 'test',
@@ -99,6 +101,6 @@ ProviderContainer testKabi({IstemciKunyesi? kunye}) => ProviderContainer(
             locale: 'tr_TR',
           ),
     ),
-    depoProvider.overrideWithValue(BellekDepo()),
+    storeProvider.overrideWithValue(MemoryStore()),
   ],
 );

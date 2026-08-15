@@ -11,34 +11,34 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobilwar/features/auth/auth_screen.dart';
 
-const _liste = <({int id, String ad})>[
-  (id: 1, ad: 'Dunya 1'),
-  (id: 2, ad: 'Dunya 2'),
+const _list = <({int id, String name})>[
+  (id: 1, name: 'Dunya 1'),
+  (id: 2, name: 'Dunya 2'),
 ];
 
 void main() {
-  group('seciliDunya', () {
+  group('selectedWorld', () {
     test(
       '⚠️⚠️ kullanıcı DOKUNMADIYSA listenin ilki seçilidir (gösterilenle aynı)',
       () {
-        expect(seciliDunya(null, _liste), 1);
+        expect(selectedWorld(null, _list), 1);
       },
     );
 
     test('kullanıcı seçtiyse onun seçimi kazanır', () {
-      expect(seciliDunya(2, _liste), 2);
+      expect(selectedWorld(2, _list), 2);
     });
 
     test(
       'liste henüz boşsa null döner — düğme kapalı kalır, sahte hata gösterilmez',
       () {
-        expect(seciliDunya(null, const []), isNull);
+        expect(selectedWorld(null, const []), isNull);
       },
     );
 
     test('⭐ liste boş olsa bile kullanıcının önceki seçimi korunur', () {
       // Liste yeniden yüklenirken (ör. ağ kesintisi sonrası) seçim sıfırlanmamalı.
-      expect(seciliDunya(2, const []), 2);
+      expect(selectedWorld(2, const []), 2);
     });
   });
 }
