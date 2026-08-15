@@ -13,6 +13,7 @@ import {
   type UseInfiniteQueryResult, type UseQueryResult,
 } from '@tanstack/react-query';
 import type { MapConfig } from '@mobilwar/engine';
+import type { BalanceBundle } from './balance-model.ts';
 import type {
   CreateSupportTicketRequest, ReplySupportTicketRequest, SupportThread, SupportTicketSummary,
   SupportUploadResult,
@@ -458,6 +459,31 @@ export const useCity = (cityId: number | null): UseQueryResult<CityDetail> => {
  * geçersiz kılıyor (`lib/realtime.ts`) ve kuyruk/iptal mutasyonları da öyle. Yani süre uzunluğu
  * yalnız "hiçbir şey olmadıysa" geçerli.
  */
+/**
+ * ⭐ DENGE TEZGÂHI SABİTLERİ (`/denge`) — dünyanın etkin `CatalogConfig`i, savaş config'i, hız
+ * çarpanları ve puan böleni tek pakette.
+ *
+ * ⚠️ **`staleTime: 0` + 20 sn yoklama, bilerek ters yönde.** `useCatalog` uzun `staleTime`
+ * kullanıyor çünkü tazelemesi olayla İTİLİYOR (`city:changed`). Burada öyle bir olay **yok**:
+ * ayar değişikliği bugün tarayıcıya hiç ulaşmıyor — `SettingsService` yalnız `mw_settings`
+ * kanalına bildiriyor ve o kanal soketlere fanlanmıyor (ayrım bilinçli: her ayar kaydında
+ * dünyadaki her oyuncuya olay göndermek istenmiyor).
+ *
+ * ⭐ Asıl tazeleme yolu **odak**: yönetici panelinde sayıyı değiştirip oyun sekmesine dönünce
+ * `staleTime: 0` sayesinde anında yeniden çekiliyor. 20 sn'lik yoklama onun emniyet ağı.
+ * Uç sorgusuz denecek kadar ucuz (config'ler `SettingsService`te memoize'li).
+ */
+export const useBalance = (): UseQueryResult<BalanceBundle> => {
+  const authed = useAuthed();
+  return useQuery({
+    queryKey: ['balance'],
+    queryFn: () => get<BalanceBundle>('/api/v1/balance'),
+    enabled: authed,
+    staleTime: 0,
+    refetchInterval: 20_000,
+  });
+};
+
 export const useCatalog = (cityId: number | null): UseQueryResult<CityCatalog> => {
   const authed = useAuthed();
   return useQuery({

@@ -21,8 +21,10 @@
  */
 import { sql, type SQL } from 'drizzle-orm';
 import {
-  BUILDINGS_BY_ID, LEVEL_BASED, STARTING_BUILDINGS, TECHS_BY_ID, UNITS_BY_ID,
-  buildingCost, defenseStructureCost, techCost, unitCost, type CatalogConfig,
+  BUILDINGS_BY_ID, LEVEL_BASED, TECHS_BY_ID, UNITS_BY_ID,
+  RESOURCE_PER_POINT, cumulativeBuildingValue, cumulativeDefenseStructureValue,
+  cumulativeTechValue, pointsFromBase, scoreValue, unitsValue,
+  type CatalogConfig, type ResourceAmount,
 } from '@mobilwar/catalog';
 import type { Db } from '../db/client.ts';
 import type { Tx } from '../missions/handler-registry.ts';
@@ -31,8 +33,21 @@ import { materializeUnitQueues } from '../queues/unit-queue.ts';
 
 type Runner = Db | Tx;
 
-/** Kaç birim kaynak 1 puan eder (doküman: 1000) — panel dokunmamışsa bu kullanılır. */
-export const RESOURCE_PER_POINT = 1000;
+/**
+ * ⭐ **PUANIN SAF MATEMATİĞİ ARTIK KATALOGDA** (2026-08-14): `packages/catalog/src/scoring.ts`.
+ *
+ * Buradan yeniden dışa aktarılıyorlar ki mevcut çağıranlar (`queue.service`, `battle.handlers`,
+ * admin uçları, testler) tek satır bile değişmesin. Taşımanın sebebi üçüncü bir tüketici: denge
+ * tezgâhı ekranı `apps/web`ten `apps/api`yi import edemiyor, kopyalasaydık bu dosyanın kendi
+ * uyardığı sınıfta — «aynı fiyatın iki ayrı hesabı» — bir kaçak daha doğardı.
+ *
+ * ⚠️ `resourcePerPoint` **taşınmadı**: canlı ayar okuyor (`liveNumberFor`) ve dünya kavramı saf
+ * katalog paketinde yasak. Bölen, katalog fonksiyonlarına parametre olarak geçer.
+ */
+export {
+  RESOURCE_PER_POINT, cumulativeBuildingValue, cumulativeDefenseStructureValue,
+  cumulativeTechValue, pointsFromBase, scoreValue, unitsValue, type ResourceAmount,
+};
 
 /**
  * ⭐ Bölen artık **panelden ayarlanabilir** (kullanıcı, 2026-08-08: *"Bu 1000 değerini admin
@@ -48,45 +63,15 @@ export function resourcePerPoint(worldId: number): number {
   return Math.max(1, liveNumberFor(worldId, 'scoring', 'resourcePerPoint', RESOURCE_PER_POINT));
 }
 
-export interface ResourceAmount {
-  gold: number;
-  food: number;
-}
-
-/** Kaynağın puan tabanındaki karşılığı: altın ve yemek EŞİT ağırlıkta (doküman "kaynak" der). */
-export function scoreValue(amount: ResourceAmount): number {
-  return Math.max(0, amount.gold) + Math.max(0, amount.food);
-}
-
 /**
- * Taban → gösterilen puan. Tek yerde durur ki sunucu ve testler aynı yuvarlamayı kullansın.
- * `perPoint` verilmezse doküman varsayılanı (1000) kullanılır.
- */
-export function pointsFromBase(base: number, perPoint = RESOURCE_PER_POINT): number {
-  return Math.floor(Math.max(0, base) / Math.max(1, perPoint));
-}
-
-/**
- * ⭐ Ölen birimlerin puan bedeli.
+ * ⭐ Ölen birimlerin puan bedeli — adetli birimlerin katalog bedeliyle **aynı** hesap.
  *
- * Sur ve Büyü Kalkanı `LEVEL_BASED`: savaşta adet kaybetmezler (seviyeleri düşmez), o yüzden
- * puan da götürmezler. Kahramanlar da hariç — onlar kaynakla üretilmiyor, savaştan çıkıyor.
+ * İki isim tek fonksiyon: kayıp tarafında `lossValue`, sahiplik tarafında `unitsValue` okunuyor
+ * ve ikisinin ayrışmaması bir değişmez (ölen birim, sahip olunurken kazandırdığı puanı tam olarak
+ * geri götürmeli). Gövde katalogda (`unitsValue`), Sur/Büyü Kalkanı ve kahraman istisnaları
+ * oradaki başlıkta anlatılıyor.
  */
-export function lossValue(lost: Record<string, number>, cfg?: CatalogConfig): number {
-  let total = 0;
-  for (const [id, n] of Object.entries(lost)) {
-    if (!(n > 0) || LEVEL_BASED.has(id)) continue;
-    if (!UNITS_BY_ID[id]) continue;
-    /**
-     * ⚠️ **DÜZELTİLDİ (2. nesil Tur 4):** eskiden `def.gold + def.food` ham okunuyordu ve
-     * `economy.unitCostMultiplier` **hiç görülmüyordu**. Çarpanı 2 yapan bir dünyada oyuncu
-     * iki katı ödüyor, birimi ölünce tek katı puan kaybediyordu — yani ordu kaybetmek
-     * kârlıydı. `unitCost` aynı çarpanı zaten uyguluyor.
-     */
-    total += scoreValue(unitCost(id, Math.trunc(n), cfg));
-  }
-  return total;
-}
+export const lossValue = unitsValue;
 
 /**
  * Puan tabanını değiştirir ve gösterilen puanı aynı ifadeyle yeniden türetir.
@@ -170,44 +155,9 @@ export async function rederiveScores(runner: Runner, worldId: number): Promise<n
  * hiç oynamamış oyuncu 0, çok yapı dikmiş oyuncu yüksek puan alır.
  */
 
-/** Bir yapının 1. seviyeden `level`'a kadar ödenen TOPLAM bedeli. */
-export function cumulativeBuildingValue(
-  type: string, level: number, cfg?: CatalogConfig,
-): number {
-  if (!BUILDINGS_BY_ID[type]) return 0;
-  // Kale/Baraka/Çiftlik/Maden seviye 1 hediyedir → ilk ÖDENEN seviyeden başla (§13.9).
-  let total = 0;
-  for (let l = (STARTING_BUILDINGS[type] ?? 0) + 1; l <= level; l++) {
-    total += scoreValue(buildingCost(type, l, cfg));
-  }
-  return total;
-}
-
-export function cumulativeTechValue(type: string, level: number, cfg?: CatalogConfig): number {
-  if (!TECHS_BY_ID[type]) return 0;
-  let total = 0;
-  for (let l = 1; l <= level; l++) total += scoreValue(techCost(type, l, cfg));
-  return total;
-}
-
-/**
- * Sur / Büyü Kalkanı seviye taşır; maliyeti **katalogdan** gelir.
- * ⚠️ Burada da çıplak `1.8` kopyası vardı: dünya bazlı bir fiyat override'ında oyuncu farklı
- * ödüyor, puanı farklı hesaplanıyordu.
- */
-export function cumulativeDefenseStructureValue(
-  type: string, level: number, cfg?: CatalogConfig,
-): number {
-  if (!UNITS_BY_ID[type]) return 0;
-  let total = 0;
-  for (let l = 1; l <= level; l++) total += scoreValue(defenseStructureCost(type, l, cfg));
-  return total;
-}
-
-/** Adetli birimlerin (savaşçı + savunma birimi) bedeli. */
-export function unitsValue(counts: Record<string, number>, cfg?: CatalogConfig): number {
-  return lossValue(counts, cfg);
-}
+/* Kümülatif bedel fonksiyonları (`cumulativeBuildingValue` · `cumulativeTechValue` ·
+ * `cumulativeDefenseStructureValue` · `unitsValue`) dosyanın başında katalogdan yeniden dışa
+ * aktarılıyor — gövdeleri `packages/catalog/src/scoring.ts`te. */
 
 /**
  * ⭐ SAHİPLİK SATIRI — oyuncunun elindeki tek bir kalem.

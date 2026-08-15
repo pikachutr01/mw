@@ -10,6 +10,7 @@ export * from './techs.ts';
 export * from './buildings.ts';
 export * from './config.ts';
 export * from './formulas.ts';
+export * from './scoring.ts';
 export * from './prerequisites.ts';
 export * from './display-order.ts';
 export * from './merit.ts';

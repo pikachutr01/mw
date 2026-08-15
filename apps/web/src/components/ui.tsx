@@ -457,6 +457,43 @@ export function BoundedAmountInput({ value, min, max, onCommit, ...rest }: {
   );
 }
 
+/**
+ * ⭐ KAYDIRICI — kod tabanındaki ilk `range` (denge tezgâhı için eklendi).
+ *
+ * ⚠️ Native `<input type="range">` bilinçli tercih: klavye (ok tuşları · Home/End), dokunma ve
+ * ekran okuyucu desteği tarayıcıdan bedava geliyor. Elle çizilmiş bir kaydırıcı bunların hepsini
+ * yeniden yazmayı gerektirirdi ve mobilde sürükleme davranışını tutturmak zor.
+ *
+ * ⚠️ Renk `accent-accent` ile: `accent-color` hem ray hem topuz için tema token'ını kullanır,
+ * yani açık/koyu temada ayrıca iş yapmaya gerek kalmaz.
+ */
+export function Slider({
+  value, min, max, onChange, disabled = false, label,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (n: number) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={1}
+      value={value}
+      disabled={disabled}
+      aria-label={label}
+      onChange={(e) => onChange(Number(e.target.value))}
+      // `touch-manipulation`: mobilde çift dokunuşla yakınlaşma sürüklemeyi kesmesin.
+      className="h-7 w-full min-w-0 cursor-pointer touch-manipulation accent-accent
+        disabled:cursor-not-allowed disabled:opacity-40"
+    />
+  );
+}
+
 /** Hata kutusu — sunucunun alan hatası mesajını AYNEN gösterir (kodlar i18n'e hazır). */
 export function ErrorBox({ error }: { error: unknown }) {
   if (!error) return null;

@@ -2385,6 +2385,66 @@ bilinmeyen anahtarı zaten reddediyor.
 ⚠️ `ENGINE_VERSION` **kaymadı**: motorun kendi davranışı değişmedi, değişen API'nin hangi
 config'i okuduğu. Savaşın hangi ayar sürümüyle çözüldüğü zaten `settings_revision_id` ile izli.
 
+### ⭐ DENGE TEZGÂHI (`/denge`, 2026-08-15)
+
+Yapı/teknik/asker/savunma ekranları hep **bir sonraki seviyeyi** gösterir ve birbirinden
+habersizdir. Denge ayarlarken sorulan sorular ise kümülatif ve çapraz: *"sıfırdan Ejderha'ya kaç
+gün, kaça, kaç puan?"*, *"Mimar Okulu 10 olunca bütün inşaat süreleri ne kadar kısalıyor?"*,
+*"Baraka 8'e düşünce hangi birimler kapanıyor?"* Tek ekran, kaydırıcılarla anlık cevap veriyor.
+Menüye bağlı **değil** (kullanıcı kararı) ve hiçbir şeyi **değiştirmiyor** — yalnız okur.
+
+#### Hesap tarayıcıda, sabitler sunucudan — ve bu kuralı çiğnemiyor
+
+`city.controller.ts` şunu söylüyor: *"İstemci maliyeti KENDİ hesaplamaz; formül tek yerde
+(sunucuda) kalsın diye buradan okur."* Tezgâh bu kuralın **gerekçesine** uyuyor. Kuralın düşmanı
+formülün yeniden yazılması ve sabitin koda gömülmesi — o zaman panelden yapılan override'ı ekran
+görmez. Burada ikisi de yok: hesap `@mobilwar/catalog`un **aynı fonksiyonlarıyla**, sabitler
+`GET /api/v1/balance`ten inen dünyanın etkin `CatalogConfig`iyle yapılıyor.
+
+⭐ Emsal zaten vardı: yönetici panelinin *eğitim süresi × Baraka* tablosu (`catalog-config` ucu)
+tam olarak böyle çalışıyor, gerekçesi de birebir aynı — **kaydırıcı sürüklenirken her tuş
+vuruşunda HTTP gidiş-dönüşü olamaz.** 9 yapı + 12 teknik + 20 birim kaydırıcısı için sunucuya
+gitmek kullanılamaz bir sayfa üretirdi.
+
+⚠️ Hız çarpanları `CatalogConfig`te **değil**, `worlds` satırında ve ayrı bir uçtan düzenleniyor
+(`mw_settings` bildirimini tetiklemiyor). İki kaynağı birleştiren tek yer bu uç.
+
+#### Puanın saf matematiği katalog paketine taşındı
+
+`scoreValue` · `pointsFromBase` · `cumulative*Value` · `unitsValue` artık
+`packages/catalog/src/scoring.ts`te; `score.service.ts` onları yeniden dışa aktarıyor.
+Sebep üçüncü tüketici: `apps/web`, `apps/api`den import edemiyor. Kopyalasaydık bu paketin kendi
+uyardığı sınıfta bir kaçak daha doğardı (`defenseStructureCost` tam da üç dosyaya kopyalanmış
+çıplak `1.8` yüzünden ortak pakete alınmıştı). ⚠️ `resourcePerPoint(worldId)` taşınmadı: canlı
+ayar okuyor, dünya kavramı saf katalog paketinde yasak — bölen parametre olarak geçiyor.
+
+Aynı gerekçeyle `scaledSeconds` de katalogda: `queue.service.ts` ve `city.controller.ts`teki iki
+kopya (eşitlikleri bir testle kilitliydi) tek kaynağa bağlandı.
+
+#### İki karar, sayfayı doğru kılan
+
+⭐⭐ **Kilitli kalem ZİNCİRLEME sıfır sayılır.** Kaydırıcılar bağımsız olduğu için imkânsız bir
+kurulum kurulabiliyor: Büyücülük 12'ye çekilir, sonra Akademi 0'a indirilir. Ham görüntüde
+Büyücülük hâlâ 12 ve Ejderha açık kalırdı — yani sayfa oyunda **mümkün olmayan** bir kurulumu
+geçerli gösterirdi. `effectiveHeld` sabit noktaya kadar dönerek geçersizleşen her kalemi sıfır
+sayıyor. Durumun kendisi bozulmuyor: Akademi geri çıkınca girilen sayılar aynen dönüyor.
+
+⭐ **Boş tezgâh, oyunun gerçek sıfır noktası** (`STARTING_BUILDINGS`: Kale/Baraka/Çiftlik/Maden 1).
+Hepsini 0'dan başlatmak yanlış bir tablo üretiyordu: Kale 0 → bütçe `0 × 10 = 0` → sayfa açılır
+açılmaz her yapının altında *"Kale seviye bütçesi dolu"* yazıyordu. Oyunda Kale 0 diye bir durum
+yok; sıfırdan başlayanın gerçek tablosu **Kale 1 · bütçe 10 · 3'ü dolu · 7 boş.**
+
+⚠️ Kümülatif süre "**şu anki** hızlandırıcı seviyelerinle sıfırdan buraya" demektir ve ekranda da
+böyle yazıyor — Mimar Okulu yolda büyüseydi gerçek süre kısalırdı, tek iyi tanımlı okuma bu.
+⚠️ Kahraman diriltme genel toplama girmez: bir **tamir**, edinim değil; puan da vermiyor.
+
+#### Tazeleme: itme değil çekme
+
+Ayar değişikliği bugün tarayıcıya **hiç** ulaşmıyor (`mw_settings` soketlere fanlanmıyor; ayrım
+bilinçli). Tezgâh için push eklemek her ayar kaydında dünyadaki her oyuncuya olay göndermek
+demekti. Onun yerine: `staleTime: 0` + 20 sn yoklama + **odak tazelemesi** — panelde sayıyı
+değiştirip oyun sekmesine dönünce sayfa kendini yeniliyor. Uç sorgusuz denecek kadar ucuz.
+
 ### 🎯 Ön-şart sorusunun cevabı: **HAYIR, seviyeyle değişmiyor**
 İstemci ön-şart eşiğini **tip başına TEK bir değerden** okuyor (`byte[45]` dizisi, `init.do`/tip-35 ile
 sunucudan gelir; `j.java` yalnız `b[tipIndeksi]` yazdırır). **Seviyeye bağlı bir ön-şart dizisi veya

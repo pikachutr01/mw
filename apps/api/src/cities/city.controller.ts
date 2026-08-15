@@ -16,7 +16,7 @@ import {
   DEFENSE_ORDER, TECHS, TECHS_BY_ID, TECH_ORDER, TECH_REQUIREMENTS,
   UNITS, UNITS_BY_ID, UNIT_REQUIREMENTS, WARRIOR_ORDER,
   buildingCost, buildingTimeSeconds, farmOutput, mineOutput, orderBy, techCost, techTimeSeconds,
-  timeFromCost, trainingTimeSeconds, unitCost,
+  scaledSeconds, timeFromCost, trainingTimeSeconds, unitCost,
 } from '@mobilwar/catalog';
 import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
@@ -476,9 +476,10 @@ export class CityController {
      * süre 1x hâliyle duruyor."* Yani oyuncu **başlatmadan önce gördüğü süreyle** başlattıktan
      * sonraki geri sayımın tutmadığını görüyordu.
      *
-     * ⚠️ Bölme burada KOPYALANMIYOR, `queue.service`teki `scaled` ile **birebir aynı formül**
-     * yazılıyor (`max(1, sn / max(1, çarpan))`) ve bir test ikisinin eşitliğini kilitliyor.
-     * Yuvarlama yalnız EKRAN için: kuyruk kesirli saklıyor (tembel materyalizasyon ona bağlı).
+     * ⚠️ Bölme `scaledSeconds` ile — kuyruğun kullandığı **aynı fonksiyon** (2026-08-14'e kadar
+     * ikisi ayrı kopyaydı, eşitliklerini bir test kilitliyordu; artık kilide gerek bırakmayan
+     * tek kaynak var). Yuvarlama yalnız EKRAN için: kuyruk kesirli saklıyor (tembel
+     * materyalizasyon ona bağlı).
      *
      * ⚠️ Hangi kaleme hangi çarpan — `queue.service`teki dağılımın aynısı:
      *   bina · teknik · Sur/Büyü Kalkanı → `construction` · savaşçı · savunma birimi → `training`
@@ -491,9 +492,7 @@ export class CityController {
     const dur = (base: number, multiplier: number): {
       seconds: number; baseSeconds: number | null;
     } => {
-      const m = Math.max(1, Number(multiplier ?? 1));
-      const effective = Math.max(1, base / m);
-      const rounded = Math.round(effective);
+      const rounded = Math.round(scaledSeconds(base, Number(multiplier ?? 1)));
       const roundedBase = Math.round(base);
       return { seconds: rounded, baseSeconds: rounded === roundedBase ? null : roundedBase };
     };

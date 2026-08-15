@@ -15,6 +15,7 @@ import { NotifyProvider } from './components/Toaster.tsx';
 import { Shell } from './components/Shell.tsx';
 import { GuestLayout } from './components/GuestShell.tsx';
 import { Armies } from './screens/Armies.tsx';
+import { BalanceScreen } from './screens/Balance.tsx';
 import { AcademyScreen, BarracksScreen, BuildingsScreen, DefenseScreen } from './screens/City.tsx';
 import { CityHub } from './screens/CityHub.tsx';
 import { DeleteAccountScreen } from './screens/DeleteAccount.tsx';
@@ -155,6 +156,10 @@ function AuthedApp() {
         <Route path="/help" element={<HelpScreen />} />
         <Route path="/help/sefer" element={<TravelHelpScreen />} />
         <Route path="/simulate" element={<SimulateScreen />} />
+        {/* ⭐ DENGE TEZGÂHI (2026-08-15) — bilerek MENÜSÜZ: bir denge/test aracı, oyuncunun
+            günlük akışında yeri yok (kullanıcı kararı). Yalnız adresi bilen açar; sayfa
+            hiçbir şeyi DEĞİŞTİRMEZ, yalnız okur ve hesaplar. */}
+        <Route path="/denge" element={<BalanceScreen />} />
         {/* ⭐ Destek (2026-08-14). Aynı ekran misafir dalında da mount ediliyor. */}
         <Route path="/destek" element={<SupportScreen />} />
         {/* Mobil "Şehir" ve "Daha" sekmeleri */}
