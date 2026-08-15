@@ -252,7 +252,7 @@ describe('hata kodunun HTTP karşılığı', () => {
   it('cezalı hedef 403 döner (koruma/tatil ile aynı sınıf)', async () => {
     const { missionErrorToHttp } = await import('../src/missions/mission.controller.ts');
     const status = (code: string): number =>
-      (missionErrorToHttp(new MissionError(code as never, 'x')) as { getStatus(): number }).getStatus();
+      (missionErrorToHttp(new MissionError(code as never, 'x')) as unknown as { getStatus(): number }).getStatus();
     expect(status('target_banned')).toBe(403);
     expect(status('target_protected')).toBe(403);
     expect(status('target_vacation')).toBe(403);

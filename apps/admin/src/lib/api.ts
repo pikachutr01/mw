@@ -108,6 +108,22 @@ async function refresh(): Promise<boolean> {
   return refreshing;
 }
 
+/**
+ * ⭐ YETKİLİ İKİLİ İNDİRME — destek eki (kullanıcı, 2026-08-15).
+ *
+ * ⚠️ Ek bağlantısı düz `<a href>` idi ve 401 dönüyordu: tarayıcı adres çubuğundan giden
+ * isteğe `Authorization` başlığı KOYMAZ, ekranda ham JSON beliriyordu. Baytlar yetkiyle
+ * çekilip `blob:` URL'i olarak gösteriliyor. Çağıran işi bitince `URL.revokeObjectURL`
+ * çağırmalı.
+ */
+export async function apiObjectUrl(path: string): Promise<string> {
+  const res = await fetch(path, {
+    headers: { ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}) },
+  });
+  if (!res.ok) throw new Error(`Ek açılamadı (${res.status}).`);
+  return URL.createObjectURL(await res.blob());
+}
+
 export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
   const send = (): Promise<Response> => fetch(path, {
     method: opts.method ?? 'GET',

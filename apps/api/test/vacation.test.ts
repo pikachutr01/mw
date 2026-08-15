@@ -501,7 +501,8 @@ describe('ittifak listesi', () => {
       INSERT INTO buildings (city_id, type, level) VALUES (${cityId}, 'castle', 20)
       ON CONFLICT (city_id, type) DO UPDATE SET level = 20
     `);
-    await alliances.found({ worldId, playerId, name: 'Tatilci', text: 'test' });
+    /* ⚠️ `text` alanı `found()` sözleşmesinde YOK — sessizce yok sayılıyordu. */
+    await alliances.found({ worldId, playerId, name: 'Tatilci' });
     const a = await alliances.myMembership(playerId);
     await h.db.execute(sql`
       UPDATE players SET alliance_id = ${a!.allianceId}, alliance_role = 1 WHERE id = ${otherId}

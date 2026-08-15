@@ -1,0 +1,26 @@
+{
+  /**
+   * ⭐⭐ TESTLER DE TİP DENETİMİNDEN GEÇSİN (kullanıcı, 2026-08-15).
+   *
+   * ⚠️ 2026-08-15'e kadar `tsconfig.json` yalnız `src/**` içeriyordu, yani **hiçbir test
+   * dosyası derlenmiyordu**. Bunun bedeli aynı gün ÜÇ kez ödendi: `vacation.test.ts`,
+   * `city-admin.test.ts` ve `admin-actions.test.ts` servisleri EKSİK parametreyle kuruyordu
+   * ve TypeScript görmüyordu. Testler yeşil kalıyordu çünkü hiçbiri o yolu çağırmıyordu;
+   * hata ancak yeni bir test o yolu çağırınca, çalışma anında patladı.
+   *
+   * ⚠️ **Ayrı dosya, `include` genişletmesi DEĞİL.** `tsconfig.json` derleme yapıyor
+   * (`outDir: dist`); testleri oraya eklemek `dist/test/**` üretir ve dağıtım paketine
+   * test dosyaları girerdi. Bu dosya yalnız `--noEmit` ile koşuyor.
+   *
+   * ⚠️ `rootDir` YOK: iki köke (src + test) yayıldığı için ayarlanamaz ve emit olmadığı
+   * için gerekmiyor.
+   */
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -118,7 +118,7 @@ describe('varsayılan davranış', () => {
        */
       if (group === 'buildingTuning' || group === 'techTuning' || group === 'unitTuning') continue;
       const fromSchema = eff[group] ?? {};
-      const fromCatalog = DEFAULT_CATALOG_CONFIG[group] as Record<string, number>;
+      const fromCatalog = DEFAULT_CATALOG_CONFIG[group] as unknown as Record<string, number>;
       for (const [key, value] of Object.entries(fromSchema)) {
         expect(fromCatalog[key], `${group}.${key}`).toBe(value);
       }

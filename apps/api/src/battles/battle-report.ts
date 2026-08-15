@@ -55,7 +55,12 @@ export interface ReportHeroLine {
 }
 
 /** Rapordaki bir şehir: koordinat + O ANKİ ad. `name` bu alandan önceki savaşlarda yok. */
-export interface ReportCoord { k: number; d: number; s: number; name?: string }
+/**
+ * ⚠️ `owner` 2026-08-15'te EKLENDİ: `report-route.ts` onu baştan beri yazıyordu ama tip
+ * taşımıyordu. Testler tip denetimine alınınca ortaya çıktı — `battle.test.ts` alanı
+ * okuyor ve geçiyordu, yani tip sunucunun gerçeğinden geride kalmıştı.
+ */
+export interface ReportCoord { k: number; d: number; s: number; name?: string; owner?: string }
 
 export interface BattleReport {
   battleId: number;

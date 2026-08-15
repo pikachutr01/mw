@@ -299,7 +299,7 @@ describe('kuyruk sağlığı', () => {
     const out = await ops.health(req()) as { pool: Record<string, number> };
     expect(out.pool['maxConnections']).toBeGreaterThan(0);
     expect(out.pool['total']).toBeGreaterThan(0);
-    expect(out.pool['total']).toBeLessThanOrEqual(out.pool['maxConnections']);
+    expect(out.pool['total']).toBeLessThanOrEqual(out.pool['maxConnections']!);
   });
 });
 

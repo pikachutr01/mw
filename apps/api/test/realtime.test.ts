@@ -137,7 +137,7 @@ describe('outbox → istemci olayı eşlemesi', () => {
     }, 2)!;
     expect(e.topic).toBe('missions:changed');
     expect(e.playerIds.sort()).toEqual([3, 4]);
-    expect(e.ref['missionId']).toBe(11);
+    expect(e.ref!['missionId']).toBe(11);
   });
 
   /** ⭐ İTTİFAK (2026-07-30): olay ittifak ODASINA + etkilenen oyunculara gider. */

@@ -36,9 +36,19 @@ export const supportTicketId = z.number().int().positive();
 /**
  * ⚠️ Sınırlar hem sunucuda hem formda geçerli. `min(20)` gövde için en ucuz spam freni:
  * gerçek kullanıcıya hiçbir maliyeti yok, "asdf" gönderen bota var.
+ *
+ * ⭐⭐ **20 KARAKTER YALNIZ İLK MESAJDA** (kullanıcı, 2026-08-15). Spam freni talebin
+ * AÇILIŞINDA anlamlı: kimliksiz bir formdan gelen ilk gövdeyi süzüyor. Yazışmanın devamında
+ * ise düpedüz zarar veriyordu — yönetici *"Sorun çözüldü mü?"* diye soruyor, oyuncunun
+ * yazacağı cevap *"Evet, teşekkürler"* ve bu 17 karakter. Kullanıcı bunu bildirdi.
+ *
+ * ⚠️ Yanıtın kendi tabanı 1 DEĞİL 2: tek karakterlik gövde bir yanıt değil kazadır ve
+ * yöneticiye bildirim üretirdi. `trim()` zaten boşluğu eliyor.
  */
 export const supportSubject = z.string().trim().min(5).max(120);
 export const supportBody = z.string().trim().min(20).max(4000);
+/** Yanıt gövdesi — açılıştaki 20 karakter kuralı BURADA geçerli değil. */
+export const supportReplyBody = z.string().trim().min(2).max(4000);
 
 /** Liste satırı — **gövdesiz** (liste/gövde ayrımı, `queries.ts` deseni). */
 export const supportTicketSummary = z.object({
@@ -95,7 +105,8 @@ export const createSupportTicketRequest = z.object({
 export type CreateSupportTicketRequest = z.infer<typeof createSupportTicketRequest>;
 
 export const replySupportTicketRequest = z.object({
-  body: supportBody,
+  /** ⚠️ `supportBody` DEĞİL — 20 karakter kuralı yalnız açılışta (gerekçe yukarıda). */
+  body: supportReplyBody,
   attachmentId: z.number().int().positive().optional(),
 });
 export type ReplySupportTicketRequest = z.infer<typeof replySupportTicketRequest>;

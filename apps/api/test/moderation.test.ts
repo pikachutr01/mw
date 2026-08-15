@@ -199,9 +199,9 @@ describe('hata kodunun HTTP karşılığı', () => {
    */
   it('yasak 403, engel 400 döner', async () => {
     const { toHttp } = await import('../src/chat/chat.controller.ts');
-    expect((toHttp(new ChatError('chat_banned', 'x')) as { getStatus(): number }).getStatus())
+    expect((toHttp(new ChatError('chat_banned', 'x')) as unknown as { getStatus(): number }).getStatus())
       .toBe(403);
-    expect((toHttp(new ChatError('blocked', 'x')) as { getStatus(): number }).getStatus())
+    expect((toHttp(new ChatError('blocked', 'x')) as unknown as { getStatus(): number }).getStatus())
       .toBe(400);
   });
 });

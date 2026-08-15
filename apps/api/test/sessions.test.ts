@@ -20,7 +20,8 @@ let h: DbHandle;
 let auth: AuthService;
 let worldId: number;
 
-const ctx = (o: Partial<{ deviceId: string; platform: string; deviceModel: string; ip: string }> = {}) => ({
+/** ⚠️ `platform` düz `string` DEĞİL: `DeviceContext` daraltılmış birlik istiyor. */
+const ctx = (o: Partial<{ deviceId: string; platform: 'web' | 'android' | 'ios'; deviceModel: string; ip: string }> = {}) => ({
   deviceId: o.deviceId ?? randomUUID(),
   ip: o.ip ?? '85.104.12.7',
   userAgent: 'Mozilla/5.0 test',

@@ -22,7 +22,13 @@ let worldId: number;
 
 /** Sabit kurgulu, sabit seed'li savaş — tek değişken motor ayarları. */
 const BATTLE = {
-  attacker: { counts: { dwarf: 4000, elf: 1200, ogre: 300 }, tech: { blacksmith: 5 } },
+  /**
+   * ⚠️ **`blacksmith` DEĞİL `blacksmithing`** (2026-08-15). Yıllardır yanlış yazılıydı ve
+   * hiçbir şey uyarmıyordu: motor tanımadığı anahtarı sessizce yok sayıyor, yani bu savaş
+   * kurulumu **teknik bonusu HİÇ uygulamadan** çözülüyordu. Testler tip denetimine alınınca
+   * ortaya çıktı — kurulumun ölçtüğünü sandığı şeyi ölçmediği bir vakaydı.
+   */
+  attacker: { counts: { dwarf: 4000, elf: 1200, ogre: 300 }, tech: { blacksmithing: 5 } },
   defender: {
     counts: { dwarf: 3000, archer_tower: 40, wall: 6, magic_shield: 4 },
     tech: { masonry: 4 },

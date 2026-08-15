@@ -16,7 +16,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { DbHandle } from '../src/db/client.ts';
 import { notificationForOutbox } from '../src/notify/notify.catalog.ts';
-import { notifyLimits } from '../src/notify/notify.limits.ts';
+import { notifyLimits, type NotifyCategory } from '../src/notify/notify.limits.ts';
 import {
   NotifyService, PushGoneError, type PushSender, type PushSubscriptionInput,
 } from '../src/notify/notify.service.ts';
@@ -381,7 +381,9 @@ describe('notify.catalog', () => {
 /* ── Teslim: tek dallanma noktası ─────────────────────────────────────────────── */
 
 describe('NotifyService.deliver', () => {
-  const note = (playerId: number, category = 'dm' as const) => ([{
+  /** ⚠️ `= 'dm' as const` varsayılanı tipi TEK değere kilitliyordu; çağıranlar 'attack' da
+   *     geçiyor. Doğrusu varsayılanı korumak ama tipi kategori birliğine açmak. */
+  const note = (playerId: number, category: NotifyCategory = 'dm') => ([{
     playerId, worldId, category, title: 'Ayla', body: 'selam',
     url: '/messages', tag: `dm:${playerId}`,
   }]);

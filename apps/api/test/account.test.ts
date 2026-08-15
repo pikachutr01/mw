@@ -747,7 +747,7 @@ describe('e-posta adresi değiştirme', () => {
 
 describe('şifre değiştirme', () => {
   it('⭐ AKTİF oturum ayakta kalır, diğerleri düşer', async () => {
-    const ctx = { deviceId: randomUUID(), ip: '3.3.3.3', userAgent: 't', platform: 'web' };
+    const ctx = { deviceId: randomUUID(), ip: '3.3.3.3', userAgent: 't', platform: 'web' as const };
     const a = await auth.login({ username: (await username()), password: PW, worldId }, ctx);
     const b = await auth.login(
       { username: (await username()), password: PW, worldId },

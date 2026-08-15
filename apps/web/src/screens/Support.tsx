@@ -22,7 +22,7 @@ import { Modal } from '../components/Modal.tsx';
 import {
   Badge, Button, Card, Empty, ErrorBox, Field, Input, SectionTitle, Select, Skeleton,
 } from '../components/ui.tsx';
-import { api, ApiError } from '../lib/api.ts';
+import { api, apiObjectUrl, ApiError } from '../lib/api.ts';
 import { useSession } from '../lib/hooks.ts';
 import {
   useCreateSupportTicket, useReplySupportTicket, useSupportForm, useSupportThread,
@@ -52,60 +52,115 @@ const fmt = (iso: string): string =>
 
 /* ── Resim seçici (form ve yanıt kutusu ortak kullanıyor) ─────────────────────── */
 
-function ImagePicker({ uploadPath, onPicked, disabled }: {
-  uploadPath: string;
-  onPicked: (id: number | undefined) => void;
+/**
+ * ⭐⭐ SEÇİM ANINDA YÜKLEME YOK — önce ÖNİZLEME, gönderimde yükleme (kullanıcı, 2026-08-15).
+ *
+ * ⚠️ İlk sürüm dosyayı `onChange` içinde hemen sunucuya atıyordu ve kullanıcının gördüğü şey
+ * şuydu: resmi seçer seçmez veri trafiği başlıyor, sonra "Sunucu hatası" — daha talebi
+ * göndermeden. İki ayrı sorun doğuruyordu:
+ *   1. Oyuncu seçtiğini GÖREMİYORDU: doğru dosyayı mı seçtim sorusunun cevabı yoktu.
+ *   2. Gönderilmeyen her talep sunucuda **yetim ek** bırakıyordu (`sweepOrphanAttachments`
+ *      tam bunu süpürmek için yazılmıştı — artık kaynağı büyük ölçüde kurumuş oluyor).
+ *
+ * Şimdi: dosya bileşende duruyor, `URL.createObjectURL` ile yerel önizleme gösteriliyor,
+ * yükleme **gönder** tuşuna basılınca yapılıyor. Sunucu sözleşmesi DEĞİŞMEDİ (yine önce
+ * `/uploads` ile ek oluşturulup dönen kimlik talebe bağlanıyor) — değişen yalnız ZAMANLAMA.
+ *
+ * ⚠️ `URL.revokeObjectURL` şart: her seçimde yeni bir nesne URL'i doğuyor, bırakılmazsa
+ * sekme kapanana kadar bellekte kalıyorlar.
+ */
+function ImagePicker({ file, onPick, disabled }: {
+  file: File | undefined;
+  onPick: (f: File | undefined) => void;
   disabled?: boolean;
 }) {
-  const upload = useSupportUpload(uploadPath);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) { setPreview(null); return undefined; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => { URL.revokeObjectURL(url); };
+  }, [file]);
 
   const clear = (): void => {
-    setName(null);
-    onPicked(undefined);
-    upload.reset();
+    onPick(undefined);
     if (inputRef.current) inputRef.current.value = '';
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {/* ⚠️ `accept` yalnız DOSYA SEÇİCİYİ daraltır, bir güvenlik önlemi değil: gerçek
-          doğrulama sunucuda magic byte ile yapılıyor. */}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        disabled={disabled || upload.isPending}
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (!f) return;
-          setName(f.name);
-          upload.mutate(f, {
-            onSuccess: (r) => { onPicked(r.attachmentId); },
-            onError: () => { onPicked(undefined); },
-          });
-        }}
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={disabled || upload.isPending}
-        onClick={() => inputRef.current?.click()}
-      >
-        {upload.isPending ? 'Yükleniyor…' : 'Resim ekle'}
-      </Button>
-      {name != null && upload.isSuccess ? (
-        <span className="flex items-center gap-2 text-xs text-muted">
-          <span className="max-w-[12rem] truncate">{name}</span>
-          <button type="button" className="underline" onClick={clear}>kaldır</button>
-        </span>
-      ) : null}
-      {upload.isError ? (
-        <span className="text-xs text-danger">{errorText(upload.error)}</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {/* ⚠️ `accept` yalnız DOSYA SEÇİCİYİ daraltır, bir güvenlik önlemi değil: gerçek
+            doğrulama sunucuda magic byte ile yapılıyor. */}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={disabled}
+          className="hidden"
+          onChange={(e) => { onPick(e.target.files?.[0] ?? undefined); }}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => inputRef.current?.click()}
+        >
+          {file ? 'Resmi değiştir' : 'Resim ekle'}
+        </Button>
+        {file ? (
+          <span className="flex items-center gap-2 text-xs text-muted">
+            <span className="max-w-[12rem] truncate">{file.name}</span>
+            <button type="button" className="underline" onClick={clear}>kaldır</button>
+          </span>
+        ) : null}
+      </div>
+      {preview != null ? (
+        <img
+          src={preview}
+          alt="Seçilen resmin önizlemesi"
+          className="max-h-40 w-fit rounded-[var(--radius-sm)] border border-border object-contain"
+        />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * ⭐ EKİ MODAL İÇİNDE GÖSTER (kullanıcı, 2026-08-15).
+ *
+ * ⚠️ Öncesinde düz bir `<a href>` vardı ve tarayıcı adres çubuğundan giden isteğe
+ * `Authorization` başlığı koymadığı için ekranda ham `401` JSON'u beliriyordu. Baytlar
+ * artık yetkiyle çekilip `blob:` URL'i olarak gösteriliyor (gerekçe `lib/api.ts`te).
+ */
+function AttachmentModal({ messageId, onClose }: { messageId: number; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    let made: string | null = null;
+    apiObjectUrl(`/api/v1/support/attachments/${messageId}`)
+      .then((u) => {
+        if (!alive) { URL.revokeObjectURL(u); return; }
+        made = u; setUrl(u);
+      })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; if (made) URL.revokeObjectURL(made); };
+  }, [messageId]);
+
+  return (
+    <Modal onClose={onClose} title="Ek" width="lg">
+      <div className="flex min-h-[8rem] items-center justify-center p-4">
+        {err ? <ErrorBox error="Resim açılamadı." /> : null}
+        {!err && url == null ? <Skeleton w="100%" /> : null}
+        {url != null ? (
+          <img src={url} alt="Mesaja eklenen resim" className="max-h-[70vh] max-w-full object-contain" />
+        ) : null}
+      </div>
+    </Modal>
   );
 }
 
@@ -117,11 +172,13 @@ function TicketForm({ authed, onOpened }: {
 }) {
   const form = useSupportForm();
   const create = useCreateSupportTicket();
+  /** ⚠️ Kimliksiz kullanıcı ayrı uca yüklüyor — oturum yoksa `/public/uploads`. */
+  const upload = useSupportUpload(authed ? '/api/v1/support/uploads' : '/api/v1/support/public/uploads');
   const [subject, setSubject] = useState('');
   const [category, setCategory] = useState<SupportCategory>('bug');
   const [body, setBody] = useState('');
   const [email, setEmail] = useState('');
-  const [attachmentId, setAttachmentId] = useState<number | undefined>();
+  const [file, setFile] = useState<File | undefined>();
   /** ⚠️ BAL KÜPÜ — gerçek kullanıcı görmez, dolayısıyla dolduramaz. */
   const [website, setWebsite] = useState('');
   const [error, setError] = useState<unknown>(null);
@@ -141,6 +198,14 @@ function TicketForm({ authed, onOpened }: {
     setError(null);
     setBusy(true);
     try {
+      /**
+       * ⭐ Yükleme TAM BURADA — seçim anında değil (gerekçe `ImagePicker` başlığında).
+       * ⚠️ Sıra load-bearing: ek başarısız olursa talep HİÇ açılmaz. Ters sırada oyuncu
+       * "talep açıldı ama resmim yok" durumuna düşer ve resmi ekleyecek yeri kalmaz.
+       */
+      const attachmentId = file
+        ? (await upload.mutateAsync(file)).attachmentId
+        : undefined;
       const payload = {
         subject, category, body, attachmentId,
         ...(showEmail ? { email } : {}),
@@ -155,7 +220,7 @@ function TicketForm({ authed, onOpened }: {
         );
         onOpened({ ticketId: r.ticketId, token: r.token });
       }
-      setSubject(''); setBody(''); setAttachmentId(undefined);
+      setSubject(''); setBody(''); setFile(undefined);
     } catch (err) {
       setError(err);
     } finally {
@@ -219,11 +284,7 @@ function TicketForm({ authed, onOpened }: {
           />
         </Field>
 
-        <ImagePicker
-          uploadPath={authed ? '/api/v1/support/uploads' : '/api/v1/support/public/uploads'}
-          onPicked={setAttachmentId}
-          disabled={busy}
-        />
+        <ImagePicker file={file} onPick={setFile} disabled={busy} />
 
         {/* ⚠️ Bal küpü: `display:none` DEĞİL — bazı botlar onu atlıyor; ekran dışına taşınıyor. */}
         <input
@@ -253,16 +314,21 @@ function TicketForm({ authed, onOpened }: {
 function ThreadModal({ id, onClose }: { id: number; onClose: () => void }) {
   const thread = useSupportThread(id);
   const reply = useReplySupportTicket(id);
+  const upload = useSupportUpload('/api/v1/support/uploads');
   const [body, setBody] = useState('');
-  const [attachmentId, setAttachmentId] = useState<number | undefined>();
+  const [file, setFile] = useState<File | undefined>();
   const [error, setError] = useState<unknown>(null);
+  /** Açık ek modalı — mesaj kimliği, `null` ise kapalı. */
+  const [openAttachment, setOpenAttachment] = useState<number | null>(null);
 
   const send = async (): Promise<void> => {
     setError(null);
     try {
+      /* ⚠️ Ek önce yükleniyor: başarısız olursa yanıt HİÇ gitmez (form ile aynı sıra). */
+      const attachmentId = file ? (await upload.mutateAsync(file)).attachmentId : undefined;
       await reply.mutateAsync({ body, attachmentId });
       setBody('');
-      setAttachmentId(undefined);
+      setFile(undefined);
     } catch (err) { setError(err); }
   };
 
@@ -308,14 +374,13 @@ function ThreadModal({ id, onClose }: { id: number; onClose: () => void }) {
                 </div>
                 <p className="whitespace-pre-wrap text-sm text-ink">{m.body}</p>
                 {m.attachmentId != null ? (
-                  <a
-                    href={`/api/v1/support/attachments/${m.attachmentId}`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setOpenAttachment(m.attachmentId!)}
                     className="mt-2 inline-block text-xs underline"
                   >
                     Eklenen resmi aç
-                  </a>
+                  </button>
                 ) : null}
               </div>
             ))}
@@ -327,18 +392,17 @@ function ThreadModal({ id, onClose }: { id: number; onClose: () => void }) {
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 rows={4}
-                minLength={20}
                 maxLength={4000}
                 placeholder="Yanıtını yaz…"
                 className="w-full rounded-[var(--radius-sm)] border border-border bg-raised px-3 py-2 text-sm text-ink placeholder:text-muted"
               />
-              <ImagePicker uploadPath="/api/v1/support/uploads" onPicked={setAttachmentId} />
+              <ImagePicker file={file} onPick={setFile} disabled={reply.isPending} />
               {error != null ? (
                 <div role="alert" className="text-sm text-danger">{errorText(error)}</div>
               ) : null}
               <Button
                 onClick={() => void send()}
-                disabled={reply.isPending || body.trim().length < 20}
+                disabled={reply.isPending || body.trim().length < 2}
               >
                 {reply.isPending ? 'Gönderiliyor…' : 'Yanıtla'}
               </Button>
@@ -349,6 +413,11 @@ function ThreadModal({ id, onClose }: { id: number; onClose: () => void }) {
             </p>
           )}
         </div>
+      ) : null}
+      {/* ⚠️ Ek modalı yazışma modalının İÇİNDE: kapatınca yazışmaya dönülüyor, tarayıcı
+          sekmesi değişmiyor. Kimlik `null` iken hiç kurulmuyor ki istek de gitmesin. */}
+      {openAttachment != null ? (
+        <AttachmentModal messageId={openAttachment} onClose={() => setOpenAttachment(null)} />
       ) : null}
     </Modal>
   );

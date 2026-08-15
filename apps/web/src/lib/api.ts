@@ -432,6 +432,32 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   return body as T;
 }
 
+/**
+ * ⭐⭐ YETKİLİ İKİLİ İNDİRME — destek eki görüntüleme (kullanıcı, 2026-08-15).
+ *
+ * ⚠️ Ek bağlantısı `<a href="/api/v1/support/attachments/1">` idi ve **401 dönüyordu**:
+ * tarayıcı adres çubuğundan gidilen bir isteğe `Authorization` başlığı KOYMAZ. Ekranda
+ * oyuncuya ham JSON görünüyordu (*"Yetki başlığı yok."*). Ek, özel yazışmanın parçası
+ * olduğu için ucu kimliksiz açmak da çözüm değil — doğrusu baytları yetkiyle çekip
+ * `blob:` URL'i olarak göstermek.
+ *
+ * ⚠️ Çağıran döndürülen URL'i işi bitince `URL.revokeObjectURL` ile bırakmalı; yoksa
+ * modal her açılışta bellekte bir kopya birikir.
+ */
+export async function apiObjectUrl(path: string): Promise<string> {
+  const res = await fetch(path.startsWith('/') ? path : `/api/v1/${path}`, {
+    headers: {
+      'x-device-id': deviceId(),
+      'x-client-instance': instanceId(),
+      'x-platform': 'web',
+      ...clientHints,
+      ...(session ? { authorization: `Bearer ${session.accessToken}` } : {}),
+    },
+  });
+  if (!res.ok) throw errorOf(res.status, await parse(res));
+  return URL.createObjectURL(await res.blob());
+}
+
 interface ConflictHolder { platform?: string | null; seenAt?: string | null }
 
 /**

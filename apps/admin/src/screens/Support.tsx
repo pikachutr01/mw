@@ -10,13 +10,13 @@
  * gösteren tek yer burası. Rozet olmasaydı cevap bekleyen bir mesaj fark edilmeden kalırdı.
  * (İkinci emniyet ağı: günlük özet maili — `support.handler.ts`.)
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
   SUPPORT_CATEGORY_LABEL, type SupportCategory, type SupportStatus, type SupportThread,
 } from '@mobilwar/contracts';
-import { api } from '../lib/api.ts';
+import { api, apiObjectUrl } from '../lib/api.ts';
 import { needsStepUp } from '../lib/admin.ts';
 import {
   Badge, Button, DataTable, ErrorBox, Info, Pagination, Panel, SearchInput, Select,
@@ -165,6 +165,8 @@ function TicketPanel({ id, onClose, onNeedStepUp, onChanged }: {
   const qc = useQueryClient();
   const [body, setBody] = useState('');
   const [attachmentId, setAttachmentId] = useState<number | undefined>();
+  /** Açık ek — mesaj kimliği; `null` ise kapalı. */
+  const [openAttachment, setOpenAttachment] = useState<number | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -244,13 +246,13 @@ function TicketPanel({ id, onClose, onNeedStepUp, onChanged }: {
                 </div>
                 <p className="whitespace-pre-wrap text-xs text-ink">{m.body}</p>
                 {m.attachmentId != null ? (
-                  <a
-                    href={`/api/v1/admin/support/attachments/${m.attachmentId}`}
-                    target="_blank" rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setOpenAttachment(m.attachmentId!)}
                     className="mt-1 inline-block text-[11px] underline"
                   >
                     Eklenen resmi aç
-                  </a>
+                  </button>
                 ) : null}
               </div>
             ))}
@@ -286,13 +288,65 @@ function TicketPanel({ id, onClose, onNeedStepUp, onChanged }: {
               {attachmentId != null ? <Badge>resim hazır</Badge> : null}
             </div>
             {error != null ? <ErrorBox error={error} /> : null}
-            <Button onClick={() => reply.mutate()} disabled={reply.isPending || body.trim().length < 20}>
+            {/* ⚠️ 20 karakter kuralı YOK: o yalnız talebin AÇILIŞINDA geçerli — yöneticinin
+                "Çözüldü mü?" gibi kısa yanıtları engellenmemeli (contracts/support.ts). */}
+            <Button onClick={() => reply.mutate()} disabled={reply.isPending || body.trim().length < 2}>
               {reply.isPending ? 'Gönderiliyor…' : 'Yanıtla ve e-posta gönder'}
             </Button>
           </div>
         </>
       ) : null}
+      {openAttachment != null ? (
+        <AttachmentView messageId={openAttachment} onClose={() => setOpenAttachment(null)} />
+      ) : null}
     </Panel>
+  );
+}
+
+/**
+ * ⭐ Ek görüntüleyici — yetkiyle çekilip üstte gösteriliyor (kullanıcı, 2026-08-15).
+ *
+ * ⚠️ Panelde ortak bir `Modal` bileşeni YOK (web'de var). Yeni bir bileşen ailesi açmak
+ * yerine tek kullanımlık bir örtü yazıldı: paneldeki tek modal ihtiyacı bu.
+ */
+function AttachmentView({ messageId, onClose }: { messageId: number; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    let made: string | null = null;
+    apiObjectUrl(`/api/v1/admin/support/attachments/${messageId}`)
+      .then((u) => {
+        if (!alive) { URL.revokeObjectURL(u); return; }
+        made = u; setUrl(u);
+      })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; if (made) URL.revokeObjectURL(made); };
+  }, [messageId]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Mesaj eki"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-full overflow-auto rounded-[var(--radius-md)] border border-border bg-surface p-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {err ? <p className="text-xs text-danger">Resim açılamadı.</p> : null}
+        {!err && url == null ? <p className="text-xs text-muted">Yükleniyor…</p> : null}
+        {url != null ? (
+          <img src={url} alt="Mesaja eklenen resim" className="max-h-[80vh] max-w-full object-contain" />
+        ) : null}
+        <div className="mt-2 text-right">
+          <Button variant="ghost" onClick={onClose}>Kapat</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
