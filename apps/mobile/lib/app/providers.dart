@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api_client.dart';
 import '../core/client_hints.dart';
+import '../core/clock.dart';
 import '../core/device_identity.dart';
 import '../core/http_transport.dart';
 import '../core/session.dart';
@@ -56,6 +57,14 @@ final sessionProvider = NotifierProvider<SessionNotifier, Session?>(
   SessionNotifier.new,
 );
 
+/// ⭐⭐ Zaman çıpası. Uygulama boyunca **tek örnek** olmak zorunda: sapma ve bakım durumu
+/// ondan okunuyor ve ikinci bir örnek hiç beslenmemiş (sapması 0) bir saat demek olurdu.
+///
+/// ⚠️ Tekil (global) bir değişken yerine sağlayıcı: testte sahte cihaz saatiyle kurulabilmesi
+/// şart. Web'de modül düzeyinde durum tutuluyor ve orada da aynı gerekçeyle test edilebilmesi
+/// için `noteServerTime` dışarıdan çağrılabilir bırakılmış.
+final clockProvider = Provider<MwClock>((ref) => MwClock());
+
 final apiProvider = Provider<MwApi>((ref) {
   return MwApi(
     sender: dioSender(),
@@ -66,6 +75,8 @@ final apiProvider = Provider<MwApi>((ref) {
     // kurmamalı. `watch` burada döngü kurardı.
     onConflict: (c) => ref.read(conflictProvider.notifier).update(c),
     onSessionLost: () => ref.read(sessionProvider.notifier).update(null),
+    // ⭐ Saat HER başarılı yanıttan besleniyor — web'deki `queries.ts` · `get<T>` ile aynı yer.
+    onServerTime: (s, g) => ref.read(clockProvider).noteServerTime(s, g),
   );
 });
 

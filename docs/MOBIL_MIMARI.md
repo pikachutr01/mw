@@ -138,7 +138,7 @@ Hepsi gerçek hatalardan doğdu. Yeniden keşfedilmesinler diye adıyla yazılı
 | # | Mekanizma | Kaynak | Atlanırsa |
 | :-- | :-- | :-- | :-- |
 | 1 | **Yenileme uçuşta tek söz** (`refreshing ??=`) | `api.ts:263` | İki eşzamanlı 401 iki yenileme başlatır, ikincisi oturumu düşürür |
-| 2 | **`gameNow()` ≠ `serverNow()`** | `hooks.ts:113-118` | İki kez canlı hata üretti: casuslukta sürekli «varıyor», üretimde kalıcı «tamamlandı» |
+| 2 | **`gameNow()` ≠ `serverNow()`** ✅ `lib/core/clock.dart` | `hooks.ts:113-118` | İki kez canlı hata üretti: casuslukta sürekli «varıyor», üretimde kalıcı «tamamlandı» |
 | 3 | **`unitProgress` `startedAt` çıpası** | `City.tsx:616-630` | Sunucunun `done`/`remaining` alanları tanımı gereği bayat — **kullanılmaz** |
 | 4 | **Simülatörde donmuş `ran` fotoğrafı** | `Simulate.tsx:227-255` | `undefined` («savaşa girmedi») ile `0` («girdi, yok oldu») ayrımı silinir |
 | 5 | **WS `INVALIDATES` tablosu** + `presence:update` debounce'u | `realtime.ts:60-120,330` | Ekran tazelenmez ya da kalabalık ittifakta olay yağmuru |
@@ -275,15 +275,34 @@ baytlar var. `api.ts`'in *"çerçeveden bağımsız düz modül"* olması zaten 
 koşmak mobil paketi deponun en yavaş ve en kırılgan parçası yapardı. Gerçek API yalnız
 `integration_test/`'te — bedelini hak ettiği yerde.
 
-### 5.2 ⭐⭐ Diller arası eşitlik kapısı
+### 5.2 ⭐⭐ Diller arası eşitlik kapısı ✅ (2026-08-15, zaman ailesi kuruldu)
 
-"Tam eşitlik" kararını umut olmaktan çıkarıp kapıya çeviren mekanizma:
+"Tam eşitlik" kararını umut olmaktan çıkarıp kapıya çeviren mekanizma. **Kurulu ve çalışıyor:**
 
-TS testi `apps/web/test/fixtures/clock-vectors.json` üretir (sapma/duraklama/iso → beklenen
-metin); Dart testi **aynı dosyayı** tüketir →
-`⭐⭐ web ile AYNI vektörler AYNI metni üretir (tam eşitlik kapısı)`.
+| Parça | Yer |
+| :-- | :-- |
+| Şartname | `packages/contracts/fixtures/clock-vectors.json` — 34 vektör |
+| TS tüketici | `apps/web/test/clock-vectors.test.ts` → `src/lib/hooks.ts` |
+| Dart tüketici | `apps/mobile/test/core/clock_test.dart` → `lib/core/clock.dart` |
 
-Aynı yöntem `unitProgress` için de uygulanır. ⚠️ Bunun ön koşulu: `unitProgress` bugün
+⭐⭐ **Vektörler ÜRETİLMİYOR, elle yazıldı** — ilk tasarımdan bilinçli sapma. Üretilseydi
+(«TS koşar, JSON yazar») dosya TS'in aynadaki görüntüsü olurdu ve TS'teki bir hata sessizce
+*beklenen* hâline gelirdi; Dart kırılınca da suç yanlış tarafa yazılırdı. Elle yazılınca dosya
+**bağımsız bir otorite**: bir dil değişince önce o dilin testi kırılır, dosyayı güncellemek
+bilinçli bir karar olur, sonra ÖTEKİ dilin testi kırılır. Zincirin her halkası birinin durup
+bakmasını zorunlu kılıyor.
+
+⚠️ Kopyalama YOK: iki test de dosyayı göreli yoldan okuyor (`../../packages/...`). Kopya,
+öldürmeye çalıştığımız bayatlamanın ta kendisi olurdu.
+
+⚠️ **Boş küme tuzağı:** `it.each([])` / boş `for` döngüsü hiçbir şey koşmadan YEŞİL yanar.
+Yanlış anahtar okumak testi sessizce iptal ederdi; iki tarafta da vektör sayısı ayrıca
+iddia ediliyor.
+
+⭐ Kapının ısırdığı **ölçüldü**: `formatDuration` bilerek bozulduğunda 6 test kırmızıya döndü
+(2026-08-15). Geçen bir test, yanlışı yakalayacağının kanıtı değil.
+
+Aynı yöntem `unitProgress` için de uygulanacak. ⚠️ Ön koşulu: `unitProgress` bugün
 `City.tsx` içine gömülü, **önce `apps/web/src/lib/`'e çıkarılmalı** ki iki taraf da test
 edilebilsin ve vektör paylaşsın.
 
@@ -402,7 +421,7 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 | Faz | İş | Biter sayılma ölçütü |
 | :-- | :-- | :-- |
 | **0 — Zemin** | `flutter create` ✅ · socket.io spike ✅ · bu belge ✅ · `tokens.dart` bağlantısı + kapı ✅ · test iskeleti ✅ · `mobile.yml` ✅ · **kalan:** `contracts` Dart üreteci + 4 kapı | `flutter test` yeşil, CI koşuyor |
-| **1 — Kabuk ve oturum** | Güvenli depo ✅ · 9 başlık ✅ · **kalıcı instanceId** ✅ · yenileme (tek söz) ✅ · 409 çakışma perdesi ✅ · go_router kabuğu (alt bar + drawer) ✅ · giriş/kayıt ✅ · **kalan:** misafir akışı · minimum sürüm kontrolü | Cihazda giriş yapılıyor, oturum hayatta kalıyor |
+| **1 — Kabuk ve oturum** ✅ | Güvenli depo ✅ · 9 başlık ✅ · **kalıcı instanceId** ✅ · yenileme (tek söz) ✅ · 409 çakışma perdesi ✅ · go_router kabuğu (alt bar + drawer) ✅ · giriş/kayıt ✅ · minimum sürüm kontrolü ✅ · misafir akışı ✅ · saat çekirdeği + eşitlik kapısı ✅ | Cihazda giriş yapılıyor, oturum hayatta kalıyor |
 | **2 — Çekirdek oyun** | Şehir (4 ekran + kuyruk) · Dünya · Ordular/sefer · Savaş raporu · Sohbet (3 kanal) · WS invalidation · i18n | v1 kapsamı oynanabilir |
 | **3 — Bildirim** | ⚠️ Sunucu: `push_subscriptions` göçü + `FcmSender` + kayıt ucu · İstemci: FCM + local notifications + derin bağlantı | Bildirime tıklayınca doğru ekran açılıyor |
 | **4 — Google giriş** | Sunucu: `google.verifier.ts` + kimlik tablosu + iki adımlı kullanıcı adı akışı · İstemci: `google_sign_in` 7.x · **web'e de eklenir** | İki istemcide de çalışıyor |

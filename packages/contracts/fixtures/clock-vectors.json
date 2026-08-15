@@ -1,0 +1,88 @@
+{
+  "_aciklama": [
+    "⭐⭐ DİLLER ARASI EŞİTLİK KAPISI — zaman biçimlendirmesinin TEK şartnamesi.",
+    "",
+    "Bu dosya üretilmiş DEĞİL, elle yazılmış: iki uygulamanın da ölçüldüğü bağımsız otorite.",
+    "Üretilseydi (TS koşar, JSON yazar) dosya TS'in aynadaki görüntüsü olurdu ve TS'teki bir",
+    "hata sessizce 'beklenen' hâline gelirdi. Elle yazılınca değiştirmek bilinçli bir karar:",
+    "önce o dilin testi kırılır, sonra bu dosya güncellenir, sonra ÖTEKİ dilin testi kırılır.",
+    "Zincirin her halkası birinin durup bakmasını zorunlu kılıyor.",
+    "",
+    "Tüketiciler:",
+    "  · apps/web/test/clock-vectors.test.ts   (TypeScript · src/lib/hooks.ts)",
+    "  · apps/mobile/test/core/clock_test.dart (Dart · lib/core/clock.dart)",
+    "",
+    "⚠️ İkisi de dosyayı GÖRELİ YOLDAN okur, kopyalamaz. Kopya, öldürmeye çalıştığımız",
+    "bayatlamanın ta kendisi olurdu (MOBIL_MIMARI.md §5.1)."
+  ],
+
+  "_durations_aciklama": [
+    "saniye → üç biçim. `duration` saniye hassasiyetli (kullanıcı kararı: ordu hareketlerinde",
+    "oyuncu varışın tam anını görmek istiyor), `long` bir günden uzun süreler için kaba biçim,",
+    "`clock` dar yerler için orijinal oyunun kendi gösterimi."
+  ],
+  "durations": [
+    { "seconds": 0,       "duration": "0 sn",                "long": "0 sn",           "clock": "00:00" },
+    { "seconds": -5,      "duration": "0 sn",                "long": "0 sn",           "clock": "00:00",
+      "not": "negatif girdi sıfıra kelepçelenir — geri sayım eksiye düşmez" },
+    { "seconds": 9,       "duration": "9 sn",                "long": "9 sn",           "clock": "00:09" },
+    { "seconds": 59,      "duration": "59 sn",               "long": "59 sn",          "clock": "00:59" },
+    { "seconds": 60,      "duration": "1 dk 00 sn",          "long": "1 dk 00 sn",     "clock": "01:00",
+      "not": "dakika sınırı: saniye iki hane sıfır dolgulu" },
+    { "seconds": 192,     "duration": "3 dk 12 sn",          "long": "3 dk 12 sn",     "clock": "03:12" },
+    { "seconds": 271,     "duration": "4 dk 31 sn",          "long": "4 dk 31 sn",     "clock": "04:31" },
+    { "seconds": 3599,    "duration": "59 dk 59 sn",         "long": "59 dk 59 sn",    "clock": "59:59" },
+    { "seconds": 3600,    "duration": "1 sa 00 dk 00 sn",    "long": "1 sa 00 dk 00 sn", "clock": "1:00:00",
+      "not": "saat sınırı: `clock` saat hanesini dolgulamaz, dakika/saniye dolgular" },
+    { "seconds": 7457,    "duration": "2 sa 04 dk 17 sn",    "long": "2 sa 04 dk 17 sn", "clock": "2:04:17" },
+    { "seconds": 7467,    "duration": "2 sa 04 dk 27 sn",    "long": "2 sa 04 dk 27 sn", "clock": "2:04:27" },
+    { "seconds": 86399,   "duration": "23 sa 59 dk 59 sn",   "long": "23 sa 59 dk 59 sn", "clock": "23:59:59",
+      "not": "gün sınırının bir saniye altı — `long` hâlâ `duration`a devrediyor" },
+    { "seconds": 86400,   "duration": "24 sa 00 dk 00 sn",   "long": "1 gün",          "clock": "24:00:00",
+      "not": "⭐ AYRIM NOKTASI: tam burada `long` kendi biçimine geçiyor" },
+    { "seconds": 2591940, "duration": "719 sa 59 dk 00 sn",  "long": "29 gün 23 sa",   "clock": "719:59:00",
+      "not": "⭐ tatilin 30 günlük üst sınırı — `long` biçiminin var oluş sebebi okunabilirlik" }
+  ],
+
+  "_timeAgo_aciklama": [
+    "⚠️ `duration` ailesinin TERSİ: geçmişe bakar. Geleceğe kalan bir damga «1 saniye önce»",
+    "sayılır, negatif yazılmaz — sunucu ile cihaz saati arasındaki küçük kayma yüzünden yeni",
+    "gönderilmiş bir mesaj birkaç saniye ileride görünebiliyor ve «-2 saniye önce» kabul edilemez.",
+    "Ay = 30 gün, yıl = 365 gün (yaklaşık); takvim doğruluğu gerekmiyor."
+  ],
+  "timeAgo": [
+    { "agoSeconds": -4,       "text": "1 saniye önce",
+      "not": "⚠️ GELECEK damga — saat kayması yüzünden gerçekte oluyor" },
+    { "agoSeconds": 0,        "text": "1 saniye önce", "not": "sıfır da 1'e yuvarlanır" },
+    { "agoSeconds": 3,        "text": "3 saniye önce" },
+    { "agoSeconds": 59,       "text": "59 saniye önce" },
+    { "agoSeconds": 60,       "text": "1 dakika önce" },
+    { "agoSeconds": 2700,     "text": "45 dakika önce" },
+    { "agoSeconds": 3600,     "text": "1 saat önce" },
+    { "agoSeconds": 82800,    "text": "23 saat önce" },
+    { "agoSeconds": 86400,    "text": "1 gün önce" },
+    { "agoSeconds": 2505600,  "text": "29 gün önce" },
+    { "agoSeconds": 2592000,  "text": "1 ay önce" },
+    { "agoSeconds": 17280000, "text": "6 ay önce" },
+    { "agoSeconds": 34560000, "text": "1 yıl önce" }
+  ],
+
+  "_pause_aciklama": [
+    "⭐⭐ BAKIM SEZGİSİ — `gameNow` ile `serverNow` arasındaki fark duraklama mı, gürültü mü?",
+    "",
+    "Tek zaman çizgisinde ikisi arasında duraklama dışında meşru bir fark yok. Eşik, ağ",
+    "gecikmesi ve sorgu süresi için pay: altındaki fark gürültüdür, üstündeki bakımdır.",
+    "",
+    "⚠️ Karşılaştırma `>` — `>=` DEĞİL. Tam eşikte duraklama SAYILMAZ. İki dilde bu sınırın",
+    "farklı yazılması, tam 2 saniye gecikmeli bir ağda birinin bakım perdesi açıp diğerinin",
+    "açmaması demekti."
+  ],
+  "pauseThresholdMs": 2000,
+  "pause": [
+    { "skewMs": 0,      "paused": false, "not": "dünya çalışıyor: gameNow == serverNow" },
+    { "skewMs": 300,    "paused": false, "not": "ağ gecikmesi bakım sanılmamalı" },
+    { "skewMs": 2000,   "paused": false, "not": "⭐ TAM EŞİK duraklama sayılmaz (`>` kuralı)" },
+    { "skewMs": 2001,   "paused": true,  "not": "eşiğin bir ms üstü" },
+    { "skewMs": 600000, "paused": true,  "not": "10 dakikalık gerçek bakım" }
+  ]
+}

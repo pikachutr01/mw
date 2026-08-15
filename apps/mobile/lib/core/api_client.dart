@@ -76,6 +76,7 @@ class MwApi {
     required ClientHints hints,
     this.onConflict,
     this.onSessionLost,
+    this.onServerTime,
     DateTime Function()? clock,
     Future<void> Function(Duration)? sleep,
     // ⚠️ Aşağıdaki iki `ignore` gerçek bir yanlış öneriyi susturuyor: `prefer_initializing_formals`
@@ -103,6 +104,16 @@ class MwApi {
 
   /// Oturum gerçekten düştüğünde çağrılır (giriş ekranına dönülecek).
   final void Function()? onSessionLost;
+
+  /// ⭐⭐ Her BAŞARILI yanıttaki sunucu damgaları — saat çıpası buradan besleniyor.
+  ///
+  /// ⚠️ Web'de aynı kanca `queries.ts` · `get<T>` içinde (`noteServerTime(t?.serverNow,
+  /// t?.gameNow)`). Ekranlara bırakılsaydı her yeni ekran onu çağırmayı hatırlamak zorunda
+  /// kalırdı ve unutulan ekranda geri sayımlar cihaz saatiyle çizilirdi — sapması olan
+  /// cihazda sessizce yanlış.
+  ///
+  /// ⚠️ İKİ alan da geçiliyor: `gameNow` olmadan bakım donması hiç görülmez.
+  final void Function(String? serverNow, String? gameNow)? onServerTime;
 
   Session? _session;
   bool _loaded = false;
@@ -162,7 +173,10 @@ class MwApi {
       response = await _dispatch(method, path, body);
     }
 
-    if (response.ok) return response.body;
+    if (response.ok) {
+      _noteTime(response.body);
+      return response.body;
+    }
 
     final error = _parseError(response);
 
@@ -237,6 +251,9 @@ class MwApi {
       }
 
       final body = response.body;
+      // ⭐ Yenileme yanıtı da `serverNow` taşıyor ve saatlerce açık kalan bir oturumda
+      // çıpanın tazelendiği en güvenilir an burası olabiliyor.
+      _noteTime(body);
       final fresh = body is Map<String, dynamic>
           ? Session.fromAuthResponse(body, now: _clock())
           : null;
@@ -251,6 +268,15 @@ class MwApi {
       _refreshBlockedUntil = _clock().add(const Duration(seconds: 10));
       return false;
     }
+  }
+
+  /// ⚠️ Damgası olmayan yanıt saati BOZMAMALI. Uçların bir kısmı `serverNow` göndermiyor
+  /// (ör. `204`, düz liste dönenler); onlara `null` geçilince `MwClock` çıpayı korur.
+  void _noteTime(Object? body) {
+    if (onServerTime == null || body is! Map) return;
+    final s = body['serverNow'];
+    final g = body['gameNow'];
+    onServerTime!(s is String ? s : null, g is String ? g : null);
   }
 
   MwApiError _parseError(RawResponse r) {

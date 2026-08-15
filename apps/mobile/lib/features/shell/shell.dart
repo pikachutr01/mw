@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
+import '../../app/routing_rules.dart';
 import '../../ui/primitives.dart';
 
 /// Alt sekmeler — web `Shell.tsx:81-87` ile aynı beşli, **aynı ikon dosyalarıyla**.
@@ -39,6 +40,15 @@ const drawerItems = <({String path, String label, String icon})>[
   (path: '/destek', label: 'Destek', icon: 'destek'),
 ];
 
+/// Kabuk — **oturumluyken ve misafirken aynı widget**, içeriği duruma göre değişir.
+///
+/// ⚠️⚠️ İki AYRI kabuk yazılmadı, bilerek. Web'de iki ayrı rota ağacı var (`AuthedApp` /
+/// `GuestApp`) ve orada bedelsiz; go_router'da ise aynı yolun (`/simulate`, `/help`, `/destek`)
+/// iki ShellRoute altında **iki kez** tanımlanması gerekirdi. Aynı rotayı iki yerde tutmak,
+/// birinin güncellenip diğerinin unutulduğu klasik sessiz sürüklenme kaynağı.
+///
+/// ⚠️ Misafirde alt sekme çubuğu ve drawer YOK: beşinin de hedefi oturum isteyen ekranlar,
+/// yani her dokunuş oyuncuyu ana sayfaya geri fırlatırdı (`authRedirect`).
 class GameShell extends ConsumerWidget {
   const GameShell({super.key, required this.child, required this.path});
 
@@ -48,6 +58,7 @@ class GameShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
+    final signedIn = session != null;
     final index = tabs.indexWhere((t) => path.startsWith(t.path));
 
     return Scaffold(
@@ -55,21 +66,36 @@ class GameShell extends ConsumerWidget {
         title: Text(_title(path)),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
-      ),
-      drawer: _Drawer(username: session?.username ?? ''),
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        // ⚠️ `-1` (eşleşme yok) NavigationBar'ı patlatıyor → 0'a kelepçeleniyor.
-        selectedIndex: index < 0 ? 0 : index,
-        onDestinationSelected: (i) => context.go(tabs[i].path),
-        destinations: [
-          for (final t in tabs)
-            NavigationDestination(
-              icon: MwIcon(folder: 'menu', id: t.icon, size: 26),
-              label: t.label,
+        actions: [
+          if (!signedIn)
+            TextButton(
+              onPressed: () => context.go(kAuthPath),
+              child: Text(
+                'Giriş yap',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
         ],
       ),
+      drawer: signedIn ? _Drawer(username: session.username) : null,
+      body: child,
+      bottomNavigationBar: signedIn
+          ? NavigationBar(
+              // ⚠️ `-1` (eşleşme yok) NavigationBar'ı patlatıyor → 0'a kelepçeleniyor.
+              selectedIndex: index < 0 ? 0 : index,
+              onDestinationSelected: (i) => context.go(tabs[i].path),
+              destinations: [
+                for (final t in tabs)
+                  NavigationDestination(
+                    icon: MwIcon(folder: 'menu', id: t.icon, size: 26),
+                    label: t.label,
+                  ),
+              ],
+            )
+          : null,
     );
   }
 }

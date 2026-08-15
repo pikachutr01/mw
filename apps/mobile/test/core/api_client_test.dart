@@ -67,6 +67,7 @@ Future<MwApi> _api(
   Session? session,
   void Function(SessionConflict)? onConflict,
   void Function()? onLost,
+  void Function(String?, String?)? onServerTime,
   DateTime Function()? clock,
 }) async {
   final store = SessionStore(MemoryStore());
@@ -78,6 +79,7 @@ Future<MwApi> _api(
     hints: _hints,
     onConflict: onConflict,
     onSessionLost: onLost,
+    onServerTime: onServerTime,
     clock: clock,
     sleep: (_) async {}, // testte 800 ms beklenmez
   );
@@ -305,6 +307,86 @@ void main() {
       expect(h['x-client-instance'], isNotNull);
       expect(h['x-app-version'], '1.0.0+1');
       expect(h['x-os-version'], 'Android 16');
+    });
+  });
+
+  group('⭐⭐ saat çıpası her yanıttan besleniyor', () {
+    /// ⚠️ Bu kancanın kopması **sessiz** bir arıza: ekranlar çizilmeye devam eder, yalnız
+    /// geri sayımlar cihaz saatiyle hesaplanır. Saati doğru olan geliştirici cihazında hiçbir
+    /// şey görünmez; sapması olan oyuncuda süreler yanlış çıkar. Testle kilitleniyor.
+    test('başarılı yanıttaki serverNow ve gameNow geçilir', () async {
+      final gorulen = <(String?, String?)>[];
+      final t = _Transport(
+        (r, _) async => const RawResponse(200, {
+          'serverNow': '2026-08-15T12:00:00.000Z',
+          'gameNow': '2026-08-15T11:50:00.000Z',
+        }),
+      );
+      final api = await _api(
+        t,
+        session: _session(),
+        onServerTime: (s, g) => gorulen.add((s, g)),
+      );
+
+      await api.request('GET', '/a');
+
+      expect(gorulen.single, (
+        '2026-08-15T12:00:00.000Z',
+        '2026-08-15T11:50:00.000Z',
+      ));
+    });
+
+    test('⚠️ damgasız yanıt null geçer — çıpayı bozmaz', () async {
+      // `MwClock` null gördüğünde çıpayı KORUYOR; buradaki iş yalnız "uydurma değer üretme".
+      final gorulen = <(String?, String?)>[];
+      final t = _Transport(
+        (r, _) async => const RawResponse(200, {'ok': true}),
+      );
+      final api = await _api(
+        t,
+        session: _session(),
+        onServerTime: (s, g) => gorulen.add((s, g)),
+      );
+
+      await api.request('GET', '/a');
+      expect(gorulen.single, (null, null));
+    });
+
+    test('⚠️ BAŞARISIZ yanıt saati beslemez', () async {
+      // 500'ün gövdesindeki bir damga (varsa) güvenilmez; hata yolunda çıpa oynatılmamalı.
+      var cagrildi = false;
+      final t = _Transport(
+        (r, _) async =>
+            const RawResponse(500, {'serverNow': '2026-08-15T12:00:00.000Z'}),
+      );
+      final api = await _api(
+        t,
+        session: _session(),
+        onServerTime: (_, _) => cagrildi = true,
+      );
+
+      await api.request('GET', '/a').catchError((_) => null);
+      expect(cagrildi, isFalse);
+    });
+
+    test('⭐ YENİLEME yanıtı da saati besler', () async {
+      // Aylarca açık kalan bir oturumda çıpanın tazelendiği en güvenilir an bu olabiliyor.
+      final gorulen = <(String?, String?)>[];
+      final t = _Transport((r, _) async {
+        if (r.path == '/api/v1/auth/refresh') {
+          return RawResponse(200, _authBody());
+        }
+        return const RawResponse(401, {'message': 'yok'});
+      });
+      final api = await _api(
+        t,
+        session: _session(),
+        onServerTime: (s, g) => gorulen.add((s, g)),
+      );
+
+      await api.request('GET', '/a').catchError((_) => null);
+
+      expect(gorulen.first.$1, '2026-08-15T00:00:00.000Z');
     });
   });
 
