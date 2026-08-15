@@ -1,5 +1,12 @@
+// dart format off
 // ÜRETİLMİŞ DOSYA — elle düzenlemeyin. Kaynak: packages/design-tokens/tokens.json
 // Flutter tarafı web ile AYNI paleti kullanır (§13.13.1).
+//
+// ⚠️⚠️ Yukarıdaki `dart format off` DİREKTİFİ ŞART, süs değil. Olmadan `dart format` bu
+// dosyayı yeniden sarıyor, sarılmış hâli üretecin çıktısıyla eşleşmiyor ve `tokens:check`
+// kırılıyor — yani biçim kapısı ile sürüklenme kapısı birbirini kilitliyor. 2026-08-15'te
+// tam olarak bu yaşandı: `dart format lib` çağrısı üretilmiş dosyaları da yeniden yazdı ve
+// CI kırıldı. Direktif, çağrı biçiminden bağımsız olarak sorunu kökten kapatıyor.
 import 'package:flutter/material.dart';
 
 class MwLightColors {
@@ -62,9 +69,7 @@ class MwTheme {
     final surface = isDark ? MwDarkColors.surface : MwLightColors.surface;
     final accent = isDark ? MwDarkColors.accent : MwLightColors.accent;
     final onAccent = isDark ? MwDarkColors.onAccent : MwLightColors.onAccent;
-    final textPrimary = isDark
-        ? MwDarkColors.textPrimary
-        : MwLightColors.textPrimary;
+    final textPrimary = isDark ? MwDarkColors.textPrimary : MwLightColors.textPrimary;
     final danger = isDark ? MwDarkColors.danger : MwLightColors.danger;
 
     return ThemeData(

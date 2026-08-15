@@ -167,6 +167,11 @@ export function buildDart(registry: Registry): string {
   }
 
   return [
+    // ⚠️⚠️ `dart format off` ŞART. Olmadan `dart format` bu dosyayı yeniden sarıyor, sarılmış
+    // hâli üretecin çıktısıyla eşleşmiyor ve `contracts:check` kırılıyor — biçim kapısı ile
+    // sürüklenme kapısı birbirini kilitliyor. 2026-08-15'te yaşandı: `dart format lib` çağrısı
+    // üretilmiş dosyaları da yeniden yazdı ve CI kırıldı. Direktif sorunu kökten kapatıyor.
+    '// dart format off',
     '// ÜRETİLMİŞ DOSYA — elle düzenlemeyin. Kaynak: packages/contracts/src/dart/registry.ts',
     '// Üreteç: packages/contracts/src/dart/emit.ts  ·  Kapı: pnpm contracts:check',
     '//',

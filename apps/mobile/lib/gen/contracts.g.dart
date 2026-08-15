@@ -1,3 +1,4 @@
+// dart format off
 // ÜRETİLMİŞ DOSYA — elle düzenlemeyin. Kaynak: packages/contracts/src/dart/registry.ts
 // Üreteç: packages/contracts/src/dart/emit.ts  ·  Kapı: pnpm contracts:check
 //
@@ -18,13 +19,11 @@ class CitySummary {
   final bool isCapital;
 
   factory CitySummary.fromJson(Map<String, dynamic> json) => CitySummary(
-    id: (json['id'] as num).toInt(),
-    name: json['name'] as String,
-    coordinates: CitySummaryCoordinates.fromJson(
-      json['coordinates'] as Map<String, dynamic>,
-    ),
-    isCapital: json['isCapital'] as bool,
-  );
+        id: (json['id'] as num).toInt(),
+        name: json['name'] as String,
+        coordinates: CitySummaryCoordinates.fromJson(json['coordinates'] as Map<String, dynamic>),
+        isCapital: json['isCapital'] as bool,
+      );
 }
 
 class CitySummaryCoordinates {
@@ -38,8 +37,7 @@ class CitySummaryCoordinates {
   final int d;
   final int s;
 
-  factory CitySummaryCoordinates.fromJson(Map<String, dynamic> json) =>
-      CitySummaryCoordinates(
+  factory CitySummaryCoordinates.fromJson(Map<String, dynamic> json) => CitySummaryCoordinates(
         k: (json['k'] as num).toInt(),
         d: (json['d'] as num).toInt(),
         s: (json['s'] as num).toInt(),
@@ -66,28 +64,29 @@ class QueueItem {
   final String finishAt;
 
   factory QueueItem.fromJson(Map<String, dynamic> json) => QueueItem(
-    id: (json['id'] as num).toInt(),
-    category: json['category'] as String,
-    itemType: json['itemType'] as String,
-    targetLevel: (json['targetLevel'] as num?)?.toInt(),
-    count: (json['count'] as num?)?.toInt(),
-    startedAt: json['startedAt'] as String,
-    finishAt: json['finishAt'] as String,
-  );
+        id: (json['id'] as num).toInt(),
+        category: json['category'] as String,
+        itemType: json['itemType'] as String,
+        targetLevel: (json['targetLevel'] as num?)?.toInt(),
+        count: (json['count'] as num?)?.toInt(),
+        startedAt: json['startedAt'] as String,
+        finishAt: json['finishAt'] as String,
+      );
 }
 
 class WorldSlot {
-  const WorldSlot({required this.s, this.city});
+  const WorldSlot({
+    required this.s,
+    this.city,
+  });
 
   final int s;
   final WorldSlotCity? city;
 
   factory WorldSlot.fromJson(Map<String, dynamic> json) => WorldSlot(
-    s: (json['s'] as num).toInt(),
-    city: json['city'] == null
-        ? null
-        : WorldSlotCity.fromJson(json['city'] as Map<String, dynamic>),
-  );
+        s: (json['s'] as num).toInt(),
+        city: json['city'] == null ? null : WorldSlotCity.fromJson(json['city'] as Map<String, dynamic>),
+      );
 }
 
 class WorldSlotCity {
@@ -112,13 +111,13 @@ class WorldSlotCity {
   final String? protection;
 
   factory WorldSlotCity.fromJson(Map<String, dynamic> json) => WorldSlotCity(
-    id: (json['id'] as num).toInt(),
-    name: json['name'] as String,
-    playerId: (json['playerId'] as num).toInt(),
-    username: json['username'] as String,
-    score: (json['score'] as num).toInt(),
-    isCapital: json['isCapital'] as bool,
-    isOwn: json['isOwn'] as bool,
-    protection: json['protection'] as String?,
-  );
+        id: (json['id'] as num).toInt(),
+        name: json['name'] as String,
+        playerId: (json['playerId'] as num).toInt(),
+        username: json['username'] as String,
+        score: (json['score'] as num).toInt(),
+        isCapital: json['isCapital'] as bool,
+        isOwn: json['isOwn'] as bool,
+        protection: json['protection'] as String?,
+      );
 }
