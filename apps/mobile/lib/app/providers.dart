@@ -22,6 +22,7 @@ import '../core/http_transport.dart';
 import '../core/realtime.dart';
 import '../core/session.dart';
 import '../core/storage.dart';
+import '../features/city/catalog_model.dart';
 import '../features/city/city_model.dart';
 import '../gen/contracts.g.dart';
 
@@ -320,18 +321,33 @@ final cityProvider = FutureProvider.family<CityDetail, int>((ref, id) async {
   return CityDetail.fromJson(body);
 });
 
-/// ⭐ KATALOG ADLARI — `id` → oyuncuya görünen TÜRKÇE ad.
+/// ⭐ ŞEHİR KATALOĞU — maliyet, süre, ön koşul ve adlar.
+///
+/// ⚠️ Şehre bağlı: süreler Baraka/Mimar Okulu seviyesine, maliyetler dünya ayarlarına göre
+/// değişiyor. Tek bir "global katalog" tutmak, farklı Baraka seviyesindeki iki şehirde aynı
+/// süreyi göstermek olurdu.
+///
+/// ⛔ Katalog Dart'a ÜRETİLMEZ — gerekçe `features/city/catalog_model.dart` başlığında.
+final catalogProvider = FutureProvider.family<CityCatalog, int>((
+  ref,
+  cityId,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/cities/$cityId/catalog');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Katalog okunamadı.');
+  }
+  return CityCatalog.fromJson(body);
+});
+
+/// `id` → oyuncuya görünen TÜRKÇE ad.
 ///
 /// ⚠️ Kod, DB, URL ve katalog `id`'leri İngilizce; **ekranda İngilizce görünmez** (§13.14).
-/// Web bunu `@mobilwar/catalog`tan okuyor (`lib/names.ts`), mobil ise **API'den**.
-///
-/// ⛔⛔ `packages/catalog` Dart'a ÜRETİLMEZ ve bu kararın sebebi adlar değil DEĞERLER: katalog
-/// değerleri dünya başına çalışma anında override edilebiliyor (bu depoda Akademi maliyeti tam
-/// olarak böyle değiştirildi). Derlenmiş bir Dart kataloğu override'lı dünyada **sessizce
-/// yanlış** olurdu. Adlar da aynı uçtan geldiği için ayrı bir yol açmaya gerek yok.
-///
-/// ⚠️ Ad bulunamazsa `id`'nin kendisi gösteriliyor — web'deki `nameOf` ile aynı davranış.
-/// Sunucuya yeni bir birim eklendiğinde ekran boş kalmaz, ham adıyla görünür.
+/// ⭐ Katalogla AYNI istekten türetiliyor: ayrı bir sağlayıcı açsaydık her ekranda aynı uca
+/// iki istek giderdi.
+/// ⚠️ Ad bulunamazsa `id`'nin kendisi gösteriliyor — web'deki `nameOf` ile aynı davranış:
+/// sunucuya yeni bir birim eklendiğinde ekran boş kalmaz, ham adıyla görünür.
 final catalogNamesProvider = FutureProvider.family<Map<String, String>, int>((
   ref,
   cityId,
@@ -339,18 +355,56 @@ final catalogNamesProvider = FutureProvider.family<Map<String, String>, int>((
   final body = await ref
       .read(apiProvider)
       .request('GET', '/api/v1/cities/$cityId/catalog');
-  final adlar = <String, String>{};
-  if (body is Map) {
-    for (final anahtar in ['buildings', 'units', 'defenses', 'techs']) {
-      for (final e in (body[anahtar] as List<dynamic>? ?? const [])) {
-        if (e is Map && e['id'] is String && e['name'] is String) {
-          adlar[e['id'] as String] = e['name'] as String;
-        }
-      }
-    }
-  }
-  return adlar;
+  return body is Map<String, dynamic>
+      ? CityCatalog.namesFrom(body)
+      : const <String, String>{};
 });
+
+/// ⭐ KUYRUK İŞLEMLERİ — emir ver · iptal et · sırala.
+///
+/// ⚠️ Başarıdan sonra tazelenecek anahtarlar web'deki `useEnqueue`/`useCancelQueue`/
+/// `useMoveQueue` ile **aynı**: kaynak ve kuyruk şehirden, maliyet katalogdan geliyor ve
+/// ikisi de emirden sonra değişiyor. `cities` yalnız iptalde: bir emir iptal edilince
+/// şehir puanı değişebiliyor ve şerit onu gösteriyor.
+class CityQueues {
+  const CityQueues(this._ref, this.cityId);
+
+  final Ref _ref;
+  final int cityId;
+
+  MwApi get _api => _ref.read(apiProvider);
+
+  Future<void> enqueue({
+    required String category,
+    required String type,
+    int? count,
+  }) async {
+    await _api.request(
+      'POST',
+      '/api/v1/cities/$cityId/queues',
+      body: {'category': category, 'type': type, 'count': ?count},
+    );
+    _tazele(_ref, 'city:changed');
+  }
+
+  Future<void> cancel(int queueId) async {
+    await _api.request('DELETE', '/api/v1/cities/queues/$queueId');
+    _tazele(_ref, 'cities:changed');
+    _tazele(_ref, 'city:changed');
+  }
+
+  /// ⚠️ Yalnız BEKLEYEN emir taşınabilir; süren emri taşımayı sunucu reddediyor.
+  Future<void> move(int queueId, String direction) async {
+    await _api.request(
+      'POST',
+      '/api/v1/cities/queues/$queueId/move',
+      body: {'direction': direction},
+    );
+    _tazele(_ref, 'city:changed');
+  }
+}
+
+final cityQueuesProvider = Provider.family<CityQueues, int>(CityQueues.new);
 
 /// Açık dünya listesi + en düşük istemci yapı numarası.
 ///

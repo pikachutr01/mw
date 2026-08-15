@@ -31,6 +31,9 @@ class CityDetail {
     required this.onVacation,
     required this.buildings,
     required this.units,
+    required this.defenses,
+    required this.techs,
+    required this.caveUnits,
     required this.queues,
     required this.serverNow,
     required this.gameNow,
@@ -52,6 +55,18 @@ class CityDetail {
 
   final Map<String, int> buildings;
   final Map<String, int> units;
+
+  /// ⚠️ Sur ve Büyü Kalkanı BURADA yaşıyor, `buildings`te değil — ama ön koşullarda bir
+  /// **yapı** olarak yazılı. Yalnız `buildings`e bakmak Sur'u daima 0 gösteriyor ve Sur ön
+  /// koşullu her savunma birimi kilitli kalıyordu (web'de ve sunucuda aynı hata yaşandı).
+  final Map<String, int> defenses;
+
+  /// Teknik seviyeleri — oyuncu geneli, şehre değil.
+  final Map<String, int> techs;
+
+  /// ⭐ Mağaradaki birimler. Orijinal Baraka kartında da yazıyor («Mağarada : 0»).
+  final Map<String, int> caveUnits;
+
   final List<CityQueue> queues;
 
   /// Kaynak sayacının çıpası (gerçek saat).
@@ -59,6 +74,14 @@ class CityDetail {
 
   /// Üretim bandının çıpası (oyun saati).
   final String gameNow;
+
+  /// ⭐ Ön koşullarda geçen "yapı" seviyeleri: `buildings` + **seviye taşıyan savunma
+  /// yapıları**. Gerekçe `defenses` alanının başında; sunucudaki `structureLevels` ile aynı.
+  Map<String, int> get structureLevels => {
+    ...buildings,
+    'wall': defenses['wall'] ?? 0,
+    'magic_shield': defenses['magic_shield'] ?? 0,
+  };
 
   static CityDetail fromJson(Map<String, dynamic> j) {
     final c = j['coordinates'] as Map<String, dynamic>;
@@ -80,6 +103,9 @@ class CityDetail {
       onVacation: j['onVacation'] as bool? ?? false,
       buildings: _counts(j['buildings']),
       units: _counts(j['units']),
+      defenses: _counts(j['defenses']),
+      techs: _counts(j['techs']),
+      caveUnits: _counts((j['cave'] as Map<String, dynamic>?)?['units']),
       queues: (j['queues'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(CityQueue.fromJson)

@@ -15,14 +15,26 @@ class BuildingsScreen extends ConsumerWidget {
       builder: (context, city) => ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          ProductionBand(
-            city: city,
-            // ⚠️ Yalnız `building`: teknik araştırmaları Akademi'de, savunma Savunma'da.
-            only: const {'building'},
-            title: 'İnşaat',
-            emptyText: 'Şu an inşaat yok.',
-          ),
-          const SizedBox(height: 12),
+          // ⚠️ Yalnız `building`: teknik araştırmaları Akademi'de, savunma Savunma'da.
+          // ⚠️ Bant yalnız emir varken — boş panel çizilmiyor.
+          if (city.queues.any((q) => q.category == 'building')) ...[
+            ProductionBand(
+              city: city,
+              queues: city.queues
+                  .where((q) => q.category == 'building')
+                  .toList(),
+              // ⚠️ İnşaat aynı anda TEK: sunucu ikinci bir yapı emrini reddediyor.
+              limit: 1,
+              noun: 'yapı',
+              folder: 'buildings',
+              title: 'İnşaat',
+              busy: false,
+              // ⚠️ Yapı kuyruğunda sıralama YOK (tek emir); iptal Faz 2'nin Yapılar turunda.
+              onMove: (_, _) {},
+              onCancel: (_) {},
+            ),
+            const SizedBox(height: 12),
+          ],
           CountsPanel(
             title: 'Yapılar',
             counts: city.buildings,

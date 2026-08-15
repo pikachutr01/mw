@@ -273,3 +273,180 @@ String mwNumber(int n) {
   }
   return '${n < 0 ? '-' : ''}$b';
 }
+
+/// ⭐ ONAY DİYALOĞU — geri alınamaz işlemlerin tek kapısı.
+///
+/// ⚠️ Web'de de global (`ConfirmProvider`): her çağıran kendi diyaloğunu kursa metinler ve
+/// davranış ayrışırdı.
+///
+/// ⚠️ Gövdede **RAKAM YOK** (kullanıcı kararı, 2026-08-03): *"Ekranda görünen değerle iptal
+/// onayını verildiği anda farklılık olur. Sadece bilgilendirme olması yeterli."* Web'de bir ara
+/// iade tutarı istemcide hesaplanıp gösteriliyordu; gerçek iade sunucuda ONAY ANINDA yeniden
+/// hesaplandığı için arada geçen saniyeler iki sayıyı kaçınılmaz olarak ayrıştırıyordu.
+Future<bool> mwConfirm(
+  BuildContext context, {
+  required String title,
+  required String body,
+  String confirmLabel = 'Onayla',
+  bool danger = false,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final c = MwColors.of(ctx);
+      return AlertDialog(
+        title: Text(title, style: mwDisplayStyle(fontSize: 15)),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: danger ? c.danger : null,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      );
+    },
+  );
+  return ok ?? false;
+}
+
+/// Adet kutusu — web'deki `AmountInput`.
+///
+/// ⚠️ Değer **dize** olarak tutuluyor, sayı olarak değil. Sayı tutup her tuşta kelepçelemek
+/// (`max(1, …)`) alanın hiç boşalamamasına yol açıyor: oyuncu `1`i silmek isteyince alan
+/// anında 1'e geri sıçrıyor ve `23` yazmak için önce metni seçmek gerekiyordu. Web'de tam
+/// olarak bu hata yaşandı (kullanıcı: *"1 yazısı minimum değer olduğu için silinemiyor"*).
+class MwAmountInput extends StatelessWidget {
+  const MwAmountInput({
+    super.key,
+    required this.controller,
+    this.hint = 'adet',
+    this.width = 78,
+    this.enabled = true,
+    this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final double width;
+  final bool enabled;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: 38,
+      child: TextField(
+        controller: controller,
+        enabled: enabled,
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.center,
+        onChanged: onChanged,
+        style: const TextStyle(
+          fontSize: 14,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(fontSize: 12, color: MwColors.of(context).muted),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 8,
+          ),
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+}
+
+/// İnce ilerleme çubuğu — geri sayımların altında.
+///
+/// ⚠️ `LinearProgressIndicator` yerine elle çizildi: yeni bir birime geçerken çubuğun
+/// **animasyonsuz** sıfırlanması gerekiyor. Yumuşak geçiş, dolmuş çubuğun geri sarması gibi
+/// görünüyor (web'de aynı karar).
+class MwBar extends StatelessWidget {
+  const MwBar({super.key, required this.value, this.animate = true});
+
+  final double value;
+  final bool animate;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        height: 6,
+        decoration: BoxDecoration(
+          color: c.raised,
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: value.clamp(0.0, 1.0),
+          child: AnimatedContainer(
+            duration: animate
+                ? const Duration(milliseconds: 950)
+                : Duration.zero,
+            curve: Curves.linear,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Küçük düğme — satır içi eylemler (Üret · İptal et · ↑ ↓).
+class MwSmallButton extends StatelessWidget {
+  const MwSmallButton({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.kind = MwButtonKind.primary,
+    this.minWidth = 0,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final MwButtonKind kind;
+  final double minWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final c = MwColors.of(context);
+    final (bg, fg) = switch (kind) {
+      MwButtonKind.primary => (scheme.primary, scheme.onPrimary),
+      MwButtonKind.danger => (c.danger, scheme.onPrimary),
+      MwButtonKind.ghost => (Colors.transparent, scheme.onSurface),
+    };
+
+    return FilledButton(
+      onPressed: onTap,
+      style: FilledButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: fg,
+        side: kind == MwButtonKind.ghost
+            ? BorderSide(color: c.borderStrong)
+            : null,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        minimumSize: Size(minWidth, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      child: Text(label),
+    );
+  }
+}

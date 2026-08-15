@@ -508,7 +508,7 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 | :-- | :-- | :-- |
 | **0 — Zemin** | `flutter create` ✅ · socket.io spike ✅ · bu belge ✅ · `tokens.dart` bağlantısı + kapı ✅ · test iskeleti ✅ · `mobile.yml` ✅ · **kalan:** `contracts` Dart üreteci + 4 kapı | `flutter test` yeşil, CI koşuyor |
 | **1 — Kabuk ve oturum** ✅ | Güvenli depo ✅ · 9 başlık ✅ · **kalıcı instanceId** ✅ · yenileme (tek söz) ✅ · 409 çakışma perdesi ✅ · go_router kabuğu (alt bar + drawer) ✅ · giriş/kayıt ✅ · minimum sürüm kontrolü ✅ · misafir akışı ✅ · saat çekirdeği + eşitlik kapısı ✅ | Cihazda giriş yapılıyor, oturum hayatta kalıyor |
-| **2 — Çekirdek oyun** | ⏳ Şehir: kaynak sayacı ✅ · üretim bandı ✅ · yapı listesi ✅ · katalog adları ✅ · **kalan:** 4 alt ekran (Baraka/Yapılar/Savunma/Akademi) + emir verme · Dünya · Ordular/sefer · Savaş raporu · Sohbet (3 kanal) · WS invalidation · i18n | v1 kapsamı oynanabilir |
+| **2 — Çekirdek oyun** | ⏳ Kabuk (bilgi çubuğu · şehir şeridi · şehir sekmeleri · alt bar) ✅ · WS bağlantısı + arka plandan dönüş ✅ · **Baraka TAM** (emir ver · iptal + onay · sıralama · tek-birim sayacı) ✅ · Yapılar (okuma) ✅ · **kalan:** Savunma · Akademi · Tapınak · Dünya · Ordular/sefer · Savaş raporu · Sohbet · i18n | v1 kapsamı oynanabilir |
 | **3 — Bildirim** | ⚠️ Sunucu: `push_subscriptions` göçü + `FcmSender` + kayıt ucu · İstemci: FCM + local notifications + derin bağlantı | Bildirime tıklayınca doğru ekran açılıyor |
 | **4 — Google giriş** | Sunucu: `google.verifier.ts` + kimlik tablosu + iki adımlı kullanıcı adı akışı · İstemci: `google_sign_in` 7.x · **web'e de eklenir** | İki istemcide de çalışıyor |
 | **5 — Attestation** | Play Integrity sinyalini **topla, kapı koyma** (`MOBIL_UYGULAMA.md` §9-2) | Sinyal DB'ye düşüyor |
