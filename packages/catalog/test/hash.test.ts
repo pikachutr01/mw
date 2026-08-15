@@ -110,8 +110,14 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * ⭐ **Bu literal artık asıl bekçi.** `CatalogConfig`teki herhangi bir varsayılan değişince
  * (çarpanlar, oranlar, süre katsayıları, başlangıç kesesi) burası kırılır ve değiştiren kişi
  * özetin kaydığını görmek zorunda kalır. Kırılması istenen bir testtir.
+
+ * ⚠️ **2026-08-15, YEDİNCİ değişiklik: `27c3ff6e` → `2aea7b08`.** Denge indirimi (kullanıcı):
+ * Akademi 900/700 → 500/400, Baraka 700/500 → 500/350, Sur 2500 → 1500, Büyü Kalkanı
+ * 12000/3000 → 7000/1750. Büyüme oranlarına DOKUNULMADI — `1,8` Java'nın kendi sabiti.
+ * ⭐ Altıncı değişiklikte eklenen `d` alanı bu turda işini gördü: Sur/Kalkan `BUILDINGS`
+ * tablosunda değil `UNITS`te, yani eski yük onları da kaçırabilirdi.
  */
-const DEFAULT_HASH = '27c3ff6e';
+const DEFAULT_HASH = '2aea7b08';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -129,7 +135,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('b3a78f1a');
+    expect(catalogHash(cfg)).toBe('65367cf0');
   });
 
   /**

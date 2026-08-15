@@ -57,7 +57,7 @@ import type { BuildingDef } from './types.ts';
  */
 export const BUILDINGS: readonly BuildingDef[] = [
   b('castle', 'Kale', 900, 700, 40, false, false),
-  b('barracks', 'Baraka', 700, 500, 40, false, true),
+  b('barracks', 'Baraka', 500, 350, 40, false, true),
   /**
    * ⭐ EKONOMİ YAPILARI — kullanıcı kararı (2026-07-27): ürettiği kaynaktan AĞIR yer.
    * Maden altın üretir → altın ağırlıklı (12/9); Çiftlik yemek üretir → yemek ağırlıklı (9/12).
@@ -93,7 +93,7 @@ export const BUILDINGS: readonly BuildingDef[] = [
    * ⚠️ Hiçbir çapayı bozmuyor: ÇAPA 1 Mimar Okulu ↔ Teleport, ÇAPA 2 Çiftlik/Maden ↔ Kale.
    * Akademi ikisinde de yok, o yüzden serbestçe oynatılabilen tek büyük bina.
    */
-  b('academy', 'Akademi', 900, 700, 40, false, true),
+  b('academy', 'Akademi', 500, 400, 40, false, true),
   // ⭐ ÇAPA 1 (yukarıda) — kullanıcı hatırası, tüm ölçeği bu sayı belirliyor.
   b('architect_school', 'Mimar Okulu', 1000, 1000, 40, false, true),
   b('cave', 'Mağara', 900, 600, 40, false, true),

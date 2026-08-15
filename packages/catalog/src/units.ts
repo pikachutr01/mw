@@ -55,8 +55,8 @@ export const UNITS: readonly UnitDef[] = [
    *
    * ⚠️ Kalkanın 4:1 altın ağırlığı korundu (orijinal asimetri); Sur'unki zaten simetrikti.
    */
-  d('wall',         'Sur',          2,       0,      0,     0,   50,   50,     0,    600,  2500,    2500,    300),
-  d('magic_shield', 'Büyü Kalkanı', 3,       0,      0,     0,    0,    0,   320,   2000, 12000,    3000,    400),
+  d('wall',         'Sur',          2,       0,      0,     0,   50,   50,     0,    600,  1500,    1500,    300),
+  d('magic_shield', 'Büyü Kalkanı', 3,       0,      0,     0,    0,    0,   320,   2000,  7000,    1750,    400),
   // Tapınak SAVAŞMAZ (bina). Binary stat tablosu idx20'de biter → savaş satırı yok.
   // Vestigial giriş: nötr (mDef=1 sıfıra bölme koruması). Savaşta hiç görünmez.
   d('temple',       'Tapınak',      3,       0,      0,     0,    0,    0,     0,      1,  8000,    2000,    400),

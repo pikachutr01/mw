@@ -316,7 +316,28 @@ export function defenseStructureCost(
   if (!def) throw new Error(`Bilinmeyen savunma yapısı: ${id}`);
   if (level <= 0) return { gold: 0, food: 0 };
   const k = cfg.economy.buildingCostRate ** (level - 1) * cfg.economy.buildingCostMultiplier;
-  return { gold: Math.round(def.gold * k), food: Math.round(def.food * k) };
+  /**
+   * ⭐⭐ TABAN ARTIK PANELDEN EZİLEBİLİR (kullanıcı, 2026-08-15 — GERÇEK BOŞLUKTU).
+   *
+   * ⚠️ Bu iki yapı, oyunda fiyatı olan **tek** varlıklardı ki 355 ayarın hiçbiri onlara
+   * ulaşmıyordu. Üstelik sessizce değil: `unitTuning`in panel açıklaması operatörü
+   * *"Sur ve Büyü Kalkanı burada değil, «Yapı fiyatları»na bak"* diye yönlendiriyordu ve
+   * orada da yoklardı. Yani panel, var olmayan bir kontrole işaret ediyordu.
+   *
+   * ⚠️ Kaynağı `buildingTuning` (birim değil): `unitTuning`den dışlanmaları DOĞRUYDU —
+   * fiyatları `unitCost`tan değil buradan geliyor, oraya konsalar etkisiz kutu olurlardı
+   * (`derived.ts`in kendi gerekçesi). Eksik olan, `defenseStructureCost`a ULAŞAN bir gruba
+   * konmamış olmalarıydı.
+   *
+   * ⚠️ `rate` ekseni BİLEREK verilmedi. `1,8` Java'nın kendi sabiti (`k.java:10-15`,
+   * *«SUR ve BÜYÜ KALKANI istisna: taban × 1.8^seviye»*) ve Sur'un savaş gücü de `1,8^sv`
+   * ile büyüyor — yani kaynak/güç oranı seviyeden bağımsız SABİT. Oranı tek başına oynatmak
+   * o dengeyi seviyeye bağımlı hâle getirir; tek güvenli kaldıraç taban fiyattır (bu ayrımın
+   * ölçümü `units.ts`teki fiyat notunda).
+   */
+  const gold = cfg.buildingTuning[`${id}:gold`] ?? def.gold;
+  const food = cfg.buildingTuning[`${id}:food`] ?? def.food;
+  return { gold: Math.round(gold * k), food: Math.round(food * k) };
 }
 
 /** Sur/Kalkan yükseltme süresi. Hızlandıran yapıların hepsinde olduğu gibi **Mimar Okulu**. */

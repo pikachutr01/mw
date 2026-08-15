@@ -15,7 +15,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SETTINGS, applySettings } from '@mobilwar/settings';
 import {
   BUILDINGS_BY_ID, DEFAULT_CATALOG_CONFIG, TECHS_BY_ID, buildingCost, buildingTimeSeconds,
-  catalogHash, farmOutput, mergeCatalogConfig, mineOutput, techCost, trainingTimeSeconds,
+  catalogHash, defenseStructureCost, farmOutput, mergeCatalogConfig, mineOutput, techCost,
+  trainingTimeSeconds,
   unitCost, UNITS_BY_ID,
 } from '@mobilwar/catalog';
 import { AuthService } from '../src/auth/auth.service.ts';
@@ -147,12 +148,45 @@ describe('varsayılan davranış', () => {
     expect(byKey.get('buildingTuning.castle:timeFactor')?.default).toBe(1);
   });
 
+  /**
+   * ⚠️ **`building` künyesi artık İKİ tabloya bakıyor (2026-08-15).** Sur ve Büyü Kalkanı
+   * `buildingTuning` grubunda ama `UNITS`te yaşıyorlar — fiyatları `defenseStructureCost`tan
+   * geliyor ve o fonksiyon tabanı `cfg.buildingTuning`ten okuyor. Yani grup adı "hangi
+   * formül okuyor" sorusunun cevabı, "hangi tabloda duruyor" sorusunun değil.
+   *
+   * ⚠️ Bu testin asıl işi DEĞİŞMEDİ: her türetilmiş ayarın katalogda gerçek bir karşılığı
+   * olmalı. Gevşetilen tek şey hangi tabloda arandığı; uydurma bir kimlik yine yakalanır.
+   */
   it('⭐ türetilmiş her ayarın karşılığı katalogda GERÇEKTEN var', () => {
     const table = { building: BUILDINGS_BY_ID, tech: TECHS_BY_ID, unit: UNITS_BY_ID } as const;
     for (const d of SETTINGS) {
       if (!d.entity) continue;
-      expect(table[d.entity.kind][d.entity.id], `katalogda yok: ${d.key}`).toBeTruthy();
+      const hit = table[d.entity.kind][d.entity.id]
+        ?? (d.entity.kind === 'building' ? UNITS_BY_ID[d.entity.id] : undefined);
+      expect(hit, `katalogda yok: ${d.key}`).toBeTruthy();
     }
+  });
+
+  /**
+   * ⭐⭐ SUR ve BÜYÜ KALKANI PANELDEN AYARLANABİLİR (kullanıcı, 2026-08-15).
+   *
+   * ⚠️ 2026-08-15'e kadar oyunda fiyatı olan **tek** varlıklardı ki 355 ayarın hiçbiri onlara
+   * ulaşmıyordu — üstelik `unitTuning`in açıklaması operatörü var olmayan bir kontrole
+   * yönlendiriyordu. Bu test o boşluğun geri açılmasını engelliyor.
+   */
+  it('⭐⭐ Sur ve Büyü Kalkanı taban fiyatı panelden ezilebiliyor', () => {
+    const byKey = new Map(SETTINGS.map((d) => [d.key, d]));
+    for (const id of ['wall', 'magic_shield']) {
+      for (const axis of ['gold', 'food']) {
+        expect(byKey.get(`buildingTuning.${id}:${axis}`), `${id}:${axis} yok`).toBeTruthy();
+      }
+      // ⚠️ `rate` BİLEREK yok: 1,8 Java'nın sabiti ve savaş gücü de aynı oranla büyüyor.
+      expect(byKey.get(`buildingTuning.${id}:rate`), `${id}:rate OLMAMALI`).toBeUndefined();
+    }
+    // Ezme gerçekten fiyata ULAŞIYOR mu — panelin etkisiz düğme göstermediğinin kanıtı.
+    const cfg = mergeCatalogConfig({ buildingTuning: { 'wall:gold': 100, 'wall:food': 100 } });
+    expect(defenseStructureCost('wall', 1, cfg)).toEqual({ gold: 100, food: 100 });
+    expect(defenseStructureCost('wall', 1)).toEqual({ gold: 1500, food: 1500 });
   });
 
   /**

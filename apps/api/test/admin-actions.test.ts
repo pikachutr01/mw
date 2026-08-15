@@ -500,7 +500,14 @@ describe('kod fiyat değişimi sonrası yeniden fiyatla', () => {
     expect(Number(sonuc['uygulanan'])).toBe(1);
     const taban1 = await scoreBaseOf();
     expect(taban1).toBeLessThan(taban0);
-    expect(taban1 - taban0).toBeCloseTo(Number(sonuc['toplamTabanDegisimi']), 0);
+    /**
+     * ⚠️ Ham fark yerine KELEPÇELİ beklenti (2026-08-15). Önceki hâli
+     * `taban1 - taban0 ≈ toplamTabanDegisimi` diyordu ve Akademi tabanı 900 → 500'e inince
+     * kırıldı: oyuncunun tabanı küçüldüğü için delta onu sıfırın altına itiyor ve
+     * `addScoreBaseBulk`in `GREATEST(0, …)` kelepçesi devreye giriyor. Kelepçe DOĞRU
+     * davranış — puan eksiye düşmemeli — testin beklentisi eksikti.
+     */
+    expect(taban1).toBeCloseTo(Math.max(0, taban0 + Number(sonuc['toplamTabanDegisimi'])), 0);
   });
 
   /** ⚠️ Kayıt şart: toplu puan değişimi sonradan "puanım neden düştü" sorusunu doğurur. */

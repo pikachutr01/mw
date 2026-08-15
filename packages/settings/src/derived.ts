@@ -18,7 +18,7 @@
  * Döngü riski yok; `turbo.json` sıralamayı `^build` ile zaten çözüyor.
  */
 import {
-  BUILDINGS, BUILDING_ORDER, DEFENSE_ORDER, LEVEL_BASED, TECHS, TECH_ORDER,
+  BUILDINGS, BUILDING_ORDER, DEFENSE_ORDER, DEFENSE_STRUCTURES, LEVEL_BASED, TECHS, TECH_ORDER,
   UNITS, WARRIOR_ORDER, orderBy,
 } from '@mobilwar/catalog';
 import type { SettingDef } from './types.ts';
@@ -121,11 +121,39 @@ const TUNABLE_UNITS = [
   ...orderBy(UNITS.filter((u) => u.kind === 'defense' && !LEVEL_BASED.has(u.id)), DEFENSE_ORDER),
 ].map((u) => ({ id: u.id, name: u.name, baseGold: u.gold, baseFood: u.food }));
 
+/**
+ * ⭐⭐ SEVİYE TAŞIYAN SAVUNMA YAPILARI — Sur ve Büyü Kalkanı (2026-08-15).
+ *
+ * ⚠️ Bunlar 2026-08-15'e kadar **hiçbir gruba dâhil değildi**: oyunda fiyatı olan tek
+ * varlıklardı ki 355 ayarın hiçbiri onlara ulaşmıyordu. `unitTuning`den dışlanmaları
+ * doğruydu (fiyatları `unitCost`tan gelmiyor) ama yerine bir şey konmamıştı.
+ *
+ * ⚠️ Yalnız `gold`/`food`: `rate` ekseni BİLEREK yok. `1,8` Java'nın kendi sabiti ve Sur'un
+ * savaş gücü de `1,8^sv` ile büyüdüğü için kaynak/güç oranı seviyeden bağımsız sabit —
+ * yalnız oranı oynatmak o dengeyi bozardı. `timeFactor` da yok: süre maliyetten türüyor
+ * (`defenseStructureTimeSeconds` → `timeFromCost`), fiyatı değiştirmek süreyi zaten
+ * değiştiriyor. Gerekçenin tamamı `formulas.ts` → `defenseStructureCost`ta.
+ */
+/* ⚠️ Ölçüt `DEFENSE_STRUCTURES`, `LEVEL_BASED` DEĞİL. İkincisi Tapınak'ı da içeriyor ve
+ * Tapınak `BUILDINGS`te de var → anahtar İKİ KEZ üretiliyordu. Şema bekçisi
+ * (`apply.test.ts`, "tekrar eden anahtar") bunu ilk koşuda yakaladı. Doğru ayrım:
+ * fiyatı `defenseStructureCost`tan gelen yapılar = tam olarak Sur ve Büyü Kalkanı. */
+const LEVEL_BASED_STRUCTS = DEFENSE_STRUCTURES
+  .map((id) => UNITS.find((u) => u.id === id)!)
+  .map((u) => ({ id: u.id, name: u.name, baseGold: u.gold, baseFood: u.food }));
+
 export function derivedCatalogSettings(): SettingDef[] {
   return [
     ...defsFor(
       'building', 'buildingTuning', orderBy(BUILDINGS, BUILDING_ORDER),
       BUILDING_RATE_DEFAULT, BUILDING_TIME_FACTOR_DEFAULT,
+    ),
+    /* ⚠️ Aynı gruba (`buildingTuning`) yazılıyor: `defenseStructureCost` tabanı oradan
+     * okuyor. Ayrı bir grup açmak `catalogOverrides`in `CATALOG_GROUPS` listesini de
+     * genişletmeyi gerektirir ve kazanç sıfır olurdu. */
+    ...defsFor(
+      'building', 'buildingTuning', LEVEL_BASED_STRUCTS,
+      () => 1.8, () => 1, ['gold', 'food'],
     ),
     ...defsFor('tech', 'techTuning', orderBy(TECHS, TECH_ORDER), () => 1.5),
     ...defsFor(

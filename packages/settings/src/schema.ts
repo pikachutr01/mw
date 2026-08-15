@@ -227,8 +227,11 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
       + '⚠️ Oyunda ayrı bir «taban süre» YOK — süre fiyattan türüyor (altın + yemek + taşıma). '
       + 'Yani fiyatı değiştirmek süreyi de değiştirir; FİYATA DOKUNMADAN yalnız süreyi '
       + 'oynatmak için «Süre çarpanı» sütununu kullan. ⚠️ Büyüme oranı sütunu yok, çünkü '
-      + 'askerlerin seviyesi yok — bir Cüce her zaman aynı fiyat. Sur ve Büyü Kalkanı burada '
-      + 'değil (onlar adet değil seviye taşıyor, «Yapı fiyatları»na bak).',
+      + 'askerlerin seviyesi yok — bir Cüce her zaman aynı fiyat. ⭐ Sur ve Büyü Kalkanı '
+      + 'burada değil, «Yapı fiyatları»nın SONUNDA (onlar adet değil seviye taşıyor ve '
+      + 'fiyatları yapı formülünden geliyor). ⚠️ Onlarda yalnız altın/yemek var: büyüme '
+      + 'oranı 1,8 orijinalin kendi sabiti ve savaş güçleri de aynı oranla büyüyor, yalnız '
+      + 'oranı oynatmak dengeyi seviyeye bağımlı hâle getirirdi.',
   },
   {
     id: 'abuse',

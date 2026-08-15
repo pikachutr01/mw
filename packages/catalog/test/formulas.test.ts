@@ -374,13 +374,14 @@ describe('maliyetler (§13.11.1a başlangıç kesesinin dayanağı)', () => {
     expect(buildingCost('mine', 2)).toEqual({ gold: 12, food: 9 });   // altın ağırlıklı
     expect(buildingCost('castle', 2)).toEqual({ gold: 900, food: 700 });
     // Seviye 0'dan başlayan yapılarda taban seviye 1'in fiyatıdır (ölçekleme yok).
-    // ⚠️ Akademi 2026-08-14'te Kale ile eşitlendi (1400/1000 → 900/700); ikisinin AYNI sayı
-    // olması tesadüf değil, "kapı ucuz" ilkesinin sonucu — gerekçe `buildings.ts`te.
-    expect(buildingCost('academy', 1)).toEqual({ gold: 900, food: 700 });
+    // ⚠️ Akademi 2026-08-15'te İKİNCİ kez indirildi (900/700 → 500/400, kullanıcı isteği:
+    // "20 seviye için bu kadar yüksek ganimet istemesin"). Kale ile eşitliği BİTTİ —
+    // Akademi artık kapıların en ucuzu; gerekçe `buildings.ts`te.
+    expect(buildingCost('academy', 1)).toEqual({ gold: 500, food: 400 });
     // ⭐ Baraka seviye 1 başlıyor → ilk ödenen sv2 ve taban oraya oturuyor.
-    expect(buildingCost('barracks', 2)).toEqual({ gold: 700, food: 500 });
+    expect(buildingCost('barracks', 2)).toEqual({ gold: 500, food: 350 });
     // sv1 oyuncunun hiç ödemediği seviye — yine de eğrinin ölçeği kilitleniyor.
-    expect(buildingCost('barracks', 1)).toEqual({ gold: 389, food: 278 });
+    expect(buildingCost('barracks', 1)).toEqual({ gold: 278, food: 194 });
     // Eğri: seviye × 1,45^(seviye−1), sv2'ye göre ölçekli.
     expect(buildingCost('farm', 4)).toEqual({ gold: 38, food: 50 });
     expect(buildingCost('mine', 4)).toEqual({ gold: 50, food: 38 });

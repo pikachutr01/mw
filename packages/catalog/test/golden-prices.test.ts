@@ -40,8 +40,8 @@ const BUILDING_GOLDEN: Record<string, readonly Row[]> = {
    * ⚠️ sv1 artık oyuncunun HİÇ ödemediği seviye (Kale/Çiftlik/Maden gibi); yine de kilitli ki
    * ölçekleme sessizce kaymasın.
    */
-  barracks: [[1, 389, 278, 272], [2, 700, 500, 476], [5, 4082, 2916, 2540],
-    [10, 77140, 55100, 41434], [20, 27542486, 19673204, 11026610]],
+  barracks: [[1, 278, 194, 196], [2, 500, 350, 343], [5, 2916, 2041, 1830],
+    [10, 55100, 38570, 29859], [20, 19673204, 13771243, 7946352]],
   /**
    * ⚠️ Çiftlik/Maden sv1 satırı oyunda GÖRÜNMEZ (ikisi de seviye 1 başlıyor); taban `sv1→2`nin
    * fiyatı, yani gerçek ilk satır sv2. sv1 yine de kilitleniyor ki `firstPaid` ölçeklemesi
@@ -55,8 +55,8 @@ const BUILDING_GOLDEN: Record<string, readonly Row[]> = {
    * ⚠️ **2026-08-14: taban 1400/1000 → 900/700** (Kale ile eşitlendi, gerekçe `buildings.ts`).
    * Süreler de düştü çünkü süre maliyetten türüyor — iki sütun birlikte kaydı.
    */
-  academy: [[1, 900, 700, 625], [2, 1620, 1260, 1093], [5, 9448, 7348, 5835],
-    [10, 178523, 138852, 95182], [20, 63741181, 49576474, 25330438]],
+  academy: [[1, 500, 400, 362], [2, 900, 720, 633], [5, 5249, 4199, 3378],
+    [10, 99180, 79344, 55103], [20, 35411767, 28329414, 14664224]],
   /**
    * ⚠️ Süreler diğerlerinin **onda biri** — Mimar Okulu `buildingTuning.architect_school:timeFactor
    * = 0,1` taşıyor ve o sayı `k.java:1396-1403`teki `×10`'un karşılığı: orijinalde Mimar Okulu,
@@ -120,10 +120,10 @@ const TECH_GOLDEN: Record<string, readonly Row[]> = {
  * hesap katalogda tek bir yere taşındığında değişmemesi gereken sayılar bunlar.
  */
 const STRUCTURE_GOLDEN: Record<string, readonly (readonly [number, number, number])[]> = {
-  wall: [[1, 2500, 2500], [2, 4500, 4500], [5, 26244, 26244],
-    [10, 495898, 495898], [20, 177058836, 177058836]],
-  magic_shield: [[1, 12000, 3000], [2, 21600, 5400], [5, 125971, 31493],
-    [10, 2380311, 595078], [20, 849882414, 212470604]],
+  wall: [[1, 1500, 1500], [2, 2700, 2700], [5, 15746, 15746],
+    [10, 297539, 297539], [20, 106235302, 106235302]],
+  magic_shield: [[1, 7000, 1750], [2, 12600, 3150], [5, 73483, 18371],
+    [10, 1388515, 347129], [20, 495764742, 123941185]],
 };
 
 describe('altın tablo — yapılar', () => {

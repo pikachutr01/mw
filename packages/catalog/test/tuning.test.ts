@@ -63,10 +63,13 @@ describe('seyreklik sözleşmesi', () => {
 
 describe('taban fiyat ve oran', () => {
   it('yapı taban fiyatı yazılabiliyor', () => {
-    const cfg = mergeCatalogConfig({ buildingTuning: { 'academy:gold': 500, 'academy:food': 400 } });
+    /* ⚠️ Ezme değerleri 2026-08-15'te 500/400'den 250/200'e çekildi: Akademi'nin YENİ
+     * varsayılanı 500/400 oldu ve test "ezdim, değişti" iddiasını kanıtlayamaz hâle geldi —
+     * ezilen değer varsayılanın aynısı olunca iki taraf da aynı sayıyı döndürürdü. */
+    const cfg = mergeCatalogConfig({ buildingTuning: { 'academy:gold': 250, 'academy:food': 200 } });
     // sv 1 = taban (Akademi oyuna sıfırdan başlar, ilk ödenen seviye 1).
-    expect(buildingCost('academy', 1, cfg)).toEqual({ gold: 500, food: 400 });
-    expect(buildingCost('academy', 1)).toEqual({ gold: 900, food: 700 });
+    expect(buildingCost('academy', 1, cfg)).toEqual({ gold: 250, food: 200 });
+    expect(buildingCost('academy', 1)).toEqual({ gold: 500, food: 400 });
   });
 
   it('teknik taban fiyatı ve oranı yazılabiliyor', () => {
