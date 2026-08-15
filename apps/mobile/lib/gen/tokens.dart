@@ -62,7 +62,9 @@ class MwTheme {
     final surface = isDark ? MwDarkColors.surface : MwLightColors.surface;
     final accent = isDark ? MwDarkColors.accent : MwLightColors.accent;
     final onAccent = isDark ? MwDarkColors.onAccent : MwLightColors.onAccent;
-    final textPrimary = isDark ? MwDarkColors.textPrimary : MwLightColors.textPrimary;
+    final textPrimary = isDark
+        ? MwDarkColors.textPrimary
+        : MwLightColors.textPrimary;
     final danger = isDark ? MwDarkColors.danger : MwLightColors.danger;
 
     return ThemeData(
