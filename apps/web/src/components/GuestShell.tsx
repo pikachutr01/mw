@@ -74,6 +74,19 @@ export function GuestShell({ children }: { children: ReactNode }) {
             `z-20`: merdivenin en altı (alt bar 20 < sohbet 30 < modal 40 < toast 50 <
             ipucu 60 — `Toaster.tsx:124`). Giriş modalı bunun üstünde açılmalı. */}
         <header className="tex tex-header sticky top-0 z-20 border-b-2 border-strong bg-panel-header">
+          {/**
+            * ⚠️⚠️ **TELEFONDA AÇILIR MENÜ, MASAÜSTÜNDE SATIR İÇİ** (kullanıcı, 2026-08-16).
+            *
+            * Bar tek sıraydı ve dar ekranda taşıyordu: logo (~110px) + menü + iki düğme
+            * 375px'e sığmıyor, «Kayıt ol» ekrandan taşıyordu. Menüye dördüncü madde
+            * (Değişiklikler) eklenince görünür hâle geldi ama sorun ondan ÖNCE de vardı.
+            *
+            * Önce sarmalama denendi (menü kendi satırına iniyordu); taşma bitti ama bar iki
+            * kat yükseldi ve üst bölge hantallaştı — kullanıcı beğenmedi. Şimdiki çözüm
+            * **oturumlu kabuğun `MoreSheet` deseninin aynısı**: telefonda maddeler tek bir
+            * «Menü» düğmesinin altında toplanıyor, `sm:`den itibaren satır içi menü geri
+            * geliyor ve masaüstünde hiçbir şey değişmiyor.
+            */}
           <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-3 py-2 sm:gap-4">
             {/*
               ⚠️ Mobil ölçüler 2026-08-02'de büyütüldü (kullanıcı: «çok küçük kalıyor»).
@@ -85,20 +98,24 @@ export function GuestShell({ children }: { children: ReactNode }) {
                 className="icon-shadow h-11 w-auto object-contain sm:h-12" />
             </NavLink>
 
-            {GUEST_MENU.map((m) => (
-              <NavLink key={m.to} to={m.to}
-                className={({ isActive }) => `flex items-center gap-1.5 rounded-[var(--radius-sm)]
-                  border px-2.5 py-1.5 text-[13px] transition-colors sm:px-2 sm:py-1 ${
-                  isActive
-                    ? 'border-strong bg-accent font-semibold text-on-accent shadow-[var(--bevel)]'
-                    : 'border-transparent text-on-panel-header hover:border-border hover:bg-raised/40'
-                }`}>
-                <MenuIcon id={m.icon} size={26} className="h-[26px] w-[26px] sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">{m.label}</span>
-              </NavLink>
-            ))}
+            {/* Masaüstü: satır içi menü. Telefonda gizli — yerini «Menü» düğmesi alıyor. */}
+            <nav className="hidden items-center gap-4 sm:flex">
+              {GUEST_MENU.map((m) => (
+                <NavLink key={m.to} to={m.to}
+                  className={({ isActive }) => `flex shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)]
+                    border px-2 py-1 text-[13px] transition-colors ${
+                    isActive
+                      ? 'border-strong bg-accent font-semibold text-on-accent shadow-[var(--bevel)]'
+                      : 'border-transparent text-on-panel-header hover:border-border hover:bg-raised/40'
+                  }`}>
+                  <MenuIcon id={m.icon} size={20} className="h-5 w-5" />
+                  <span>{m.label}</span>
+                </NavLink>
+              ))}
+            </nav>
 
             <div className="ml-auto flex shrink-0 items-center gap-2">
+              <GuestMenuSheet />
               <Button size="sm" variant="ghost" onClick={() => setAuthMode('login')}>Giriş yap</Button>
               <Button size="sm" onClick={() => setAuthMode('register')}>Kayıt ol</Button>
             </div>
@@ -123,4 +140,61 @@ export function GuestShell({ children }: { children: ReactNode }) {
 /** Rota ağacında kullanılan sarmalayıcı (pathless layout route). */
 export function GuestLayout(): React.ReactElement {
   return <GuestShell><Outlet /></GuestShell>;
+}
+
+/**
+ * ⭐ MİSAFİR «MENÜ» — telefonda aşağı açılan liste (kullanıcı, 2026-08-16).
+ *
+ * ⚠️ Deseni `Shell.tsx`teki `MoreSheet`ten alıyor ve üç kuralını aynen taşıyor:
+ *   1. **Dışarı dokunuşla kapanır** — açıkken ekranın kalanı tıklama kalkanı olur.
+ *   2. **Rota değişince kapanır** — aksi hâlde yeni sayfanın üstünde asılı kalır.
+ *   3. `z` merdiveni bozulmaz: kalkan üst barın (`z-20`) içinde, liste onun üstünde (`z-30`),
+ *      giriş modalı (`z-40`) ikisinin de üstünde kalır (merdiven `Toaster.tsx:124`).
+ *
+ * ⚠️ `sm:hidden` — masaüstünde satır içi menü zaten görünüyor; ikisi aynı anda çizilirse
+ * aynı bağlantılar iki kez sunulur.
+ */
+function GuestMenuSheet(): ReactNode {
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  return (
+    <div className="relative sm:hidden">
+      {open ? (
+        <button type="button" aria-label="Kapat" onClick={() => setOpen(false)}
+          className="fixed inset-0 z-20 cursor-default bg-black/30" />
+      ) : null}
+
+      {open ? (
+        <div className="absolute top-full right-0 z-30 mt-1 w-44 overflow-hidden
+          rounded-[var(--radius-md)] border-2 border-strong bg-panel-header shadow-[var(--mw-shadow-md)]">
+          {GUEST_MENU.map((m) => (
+            <NavLink key={m.to} to={m.to}
+              className={({ isActive }) => `flex items-center gap-2 border-b
+                border-on-panel-header/15 px-3 py-2.5 text-[13px] last:border-b-0 ${
+                isActive
+                  ? 'bg-accent font-semibold text-on-accent'
+                  : 'text-on-panel-header hover:bg-raised/40'
+              }`}>
+              <MenuIcon id={m.icon} size={20} />
+              {m.label}
+            </NavLink>
+          ))}
+        </div>
+      ) : null}
+
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        aria-label="Menü"
+        className={`relative z-30 flex items-center gap-1.5 rounded-[var(--radius-sm)] border
+          px-2.5 py-1.5 text-[13px] transition-colors ${
+          open
+            ? 'border-strong bg-accent font-semibold text-on-accent shadow-[var(--bevel)]'
+            : 'border-transparent text-on-panel-header hover:border-border hover:bg-raised/40'
+        }`}>
+        <MenuIcon id="secenekler" size={26} className="h-[26px] w-[26px]" />
+      </button>
+    </div>
+  );
 }
