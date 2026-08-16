@@ -245,12 +245,12 @@ void _tazele(Ref ref, String topic) {
       case 'city':
         ref.invalidate(cityProvider);
       case 'catalog':
-        /// ⚠️⚠️ **`catalogProvider` 2026-08-16'ya kadar EKSİKTİ** — yalnız ad sözlüğü
-        /// tazeleniyordu. Oysa Baraka ekranının kendisi `catalogProvider`ı okuyor
-        /// (`barracks_screen.dart:37`) ve savaşta değişen Sur/Büyü Kalkanı **seviyesi** de
-        /// oradan geliyor. Yani WS olayı geliyor, doğru anahtara çevriliyor ve son adımda
-        /// sessizce yanlış sağlayıcıya düşüyordu: ekran hiç tazelenmiyordu.
-        /// İkisi birlikte, çünkü ikisi de aynı ucun (`/catalog`) farklı okumaları.
+        // ⚠️⚠️ **`catalogProvider` 2026-08-16'ya kadar EKSİKTİ** — yalnız ad sözlüğü
+        // tazeleniyordu. Oysa Baraka ekranının kendisi `catalogProvider`ı okuyor
+        // (`barracks_screen.dart:37`) ve savaşta değişen Sur/Büyü Kalkanı **seviyesi** de
+        // oradan geliyor. Yani WS olayı geliyor, doğru anahtara çevriliyor ve son adımda
+        // sessizce yanlış sağlayıcıya düşüyordu: ekran hiç tazelenmiyordu.
+        // İkisi birlikte, çünkü ikisi de aynı ucun (`/catalog`) farklı okumaları.
         ref.invalidate(catalogProvider);
         ref.invalidate(catalogNamesProvider);
       // ⚠️ `missions` ve `messages` ekranları henüz yok; konu tabloda duruyor ki sunucu

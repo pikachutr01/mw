@@ -61,9 +61,9 @@ const Map<String, List<String>> kInvalidates = {
   'cities:changed': ['cities', 'city'],
   'missions:changed': ['missions'],
   'messages:changed': ['messages'],
-  /// ⚠️ Web'in listesi daha geniş (`temple`, `overview` de var); burada yalnız ÇİZİLMİŞ
-  /// ekranların karşılığı duruyor. Mobilde henüz Tapınak ve Komuta Merkezi yok, olmayan
-  /// sağlayıcı adını yazmak ölü satır olurdu. Ekran geldiğinde bu satır da büyüyecek.
+  // ⚠️ Web'in listesi daha geniş (`temple`, `overview` de var); burada yalnız ÇİZİLMİŞ
+  // ekranların karşılığı duruyor. Mobilde henüz Tapınak ve Komuta Merkezi yok, olmayan
+  // sağlayıcı adını yazmak ölü satır olurdu. Ekran geldiğinde bu satır da büyüyecek.
   'battle:resolved': ['city', 'catalog', 'missions', 'messages'],
 };
 
@@ -175,7 +175,11 @@ class Realtime {
       'path': '/ws',
       // ⚠️ `instanceId` el sıkışmada: sahipliği asıl olarak SOKET alıyor.
       // ⚠️ `platform` da burada — gerekçe alanın kendi yorumunda.
-      'auth': {'token': c.token, 'instanceId': c.instanceId, 'platform': platform},
+      'auth': {
+        'token': c.token,
+        'instanceId': c.instanceId,
+        'platform': platform,
+      },
       'transports': ['websocket', 'polling'],
       'autoConnect': false,
       // Üstel backoff + jitter: sunucu yeniden başlarken tüm istemciler aynı anda vurmasın.
