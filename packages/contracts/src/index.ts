@@ -10,3 +10,4 @@ export * from './city.ts';
 export * from './mission.ts';
 export * from './simulate.ts';
 export * from './support.ts';
+export * from './changelog.ts';

@@ -280,6 +280,20 @@ export const NON_TIMELINE_COLUMNS: readonly string[] = [
   'support_messages.created_at', 'support_messages.read_at',
   'support_attachments.created_at',
 
+  /**
+   * 2 — DEĞİŞİKLİK GÜNLÜĞÜ (0048). ⚠️ **Gerçek zamanda** — destekle aynı aile ve aynı gerekçe:
+   * günlük bir oyun mekaniği değil, oyunun **hakkında** konuşan bir kanal. Madde "16 Ağustos'ta
+   * yayınlandı" der; bakım o tarihi kaydırsaydı takvim yalan söylerdi.
+   *
+   * ⚠️ `published_at` şimdiki zamanla KARŞILAŞTIRILIYOR (`published_at <= now()`, ileri tarihli
+   * madde henüz görünmez) ama yine de burada: emsali `support_tickets.public_token_expires_at`.
+   * Kıyaslanıyor olması tek başına yetmiyor — soru "canlı bir OYUN kuralı mı okuyor" ve cevap
+   * hayır. Bakım yüzünden yayın tarihinin ötelenmesi, duyuruyu gerçekte olmadığı bir güne
+   * taşımak olurdu.
+   */
+  'changelog_entries.published_at', 'changelog_entries.created_at',
+  'changelog_entries.updated_at',
+
   // 2 — Moderasyon (ceza bakım yapıldı diye uzamaz)
   'chat_bans.until', 'chat_bans.created_at',
   'alliance_chat_mutes.until', 'alliance_chat_mutes.created_at', 'alliance_chat_mutes.revoked_at',

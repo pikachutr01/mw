@@ -27,6 +27,7 @@ import { OptionsScreen } from './screens/Placeholders.tsx';
 import { HelpScreen, TravelHelpScreen } from './screens/Help.tsx';
 import { SimulateScreen } from './screens/Simulate.tsx';
 import { SupportScreen } from './screens/Support.tsx';
+import { ChangelogScreen } from './screens/Changelog.tsx';
 import { SupportPublicThreadScreen } from './screens/SupportPublicThread.tsx';
 import { TempleScreen } from './screens/Temple.tsx';
 import { World } from './screens/World.tsx';
@@ -162,6 +163,8 @@ function AuthedApp() {
         <Route path="/denge" element={<BalanceScreen />} />
         {/* ⭐ Destek (2026-08-14). Aynı ekran misafir dalında da mount ediliyor. */}
         <Route path="/destek" element={<SupportScreen />} />
+        {/* ⭐ Değişiklik günlüğü (2026-08-16) — misafir dalında da mount ediliyor. */}
+        <Route path="/degisiklikler" element={<ChangelogScreen />} />
         {/* Mobil "Şehir" ve "Daha" sekmeleri */}
         <Route path="/city" element={<CityHub />} />
         <Route path="/more" element={<OptionsScreen />} />
@@ -226,6 +229,8 @@ function GuestApp() {
         {/* ⭐ Destek MİSAFİRE DE AÇIK (kullanıcı şartı): en çok ihtiyaç duyan kişi zaten
             giriş YAPAMAYAN kişidir. Anonimde e-posta zorunlu — yanıtın tek yolu o. */}
         <Route path="/destek" element={<SupportScreen />} />
+        {/* ⭐ Değişiklik günlüğü (2026-08-16) — misafir dalında da mount ediliyor. */}
+        <Route path="/degisiklikler" element={<ChangelogScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

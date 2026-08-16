@@ -1520,6 +1520,33 @@ export const supportMessages = pgTable('support_messages', {
     .where(sql`${t.readAt} IS NULL AND ${t.sender} = 'admin'`),
 ]);
 
+/**
+ * ⭐⭐ DEĞİŞİKLİK GÜNLÜĞÜ (kullanıcı, 2026-08-16) — oyuncuya görünen "ne değişti" listesi.
+ *
+ * Gerekçenin tamamı `drizzle/0048_changelog.sql` başlığında. Özet: denge değişikliklerinin
+ * bir kısmı **yönetim panelinden** yapılıyor ve depoya hiç dokunmuyor; bu yüzden günlük
+ * kaynak dosyası değil, veritabanı satırı.
+ *
+ * ⚠️ Gövde **DÜZ METİN** — `support_messages.body` ile aynı kural: HTML/markdown yok, XSS
+ * yüzeyi sıfır. Satır sonu istemcide `whitespace-pre-line` ile korunuyor.
+ */
+export const changelogEntries = pgTable('changelog_entries', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  /** NULL = tüm dünyalar. Motor sabitleri dünya başına ayarlanabildiği için var. */
+  worldId: smallint('world_id').references(() => worlds.id),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  /** balance | feature | fix */
+  category: text('category').notNull().default('balance'),
+  /** ⚠️ NULL = TASLAK. Ayrı bir `isPublished` boolean'ı YOK — tek gerçek, tek kolon. */
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  createdBy: bigint('created_by', { mode: 'number' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('changelog_published').on(t.publishedAt, t.id).where(sql`${t.publishedAt} IS NOT NULL`),
+]);
+
 export const playersRelations = relations(players, ({ one, many }) => ({
   account: one(accounts, { fields: [players.accountId], references: [accounts.id] }),
   world: one(worlds, { fields: [players.worldId], references: [worlds.id] }),

@@ -67,6 +67,12 @@ const MENU = [
    * Yardım kendi kendine çözmek, Destek insana sormak için.
    */
   { to: '/destek', label: 'Destek', icon: 'destek' },
+  /**
+   * ⭐ Değişiklik günlüğü (kullanıcı, 2026-08-16). Yeri Destek'in ardı: üçü de "oyunun
+   * kendisi" değil "oyun hakkında" ailesi — Yardım nasıl oynanır, Destek insana sor,
+   * Değişiklikler ne değişti.
+   */
+  { to: '/degisiklikler', label: 'Değişiklikler', icon: 'yardim' },
 ] as const;
 
 /**
@@ -106,6 +112,9 @@ const MORE_ITEMS = [
    * konmasaydı **mobilde ekrana giden hiçbir yol kalmazdı** (Simülatör'ün aynı gerekçesi).
    */
   { to: '/destek', label: 'Destek', icon: 'destek' },
+  /* ⚠️ Burada olmak ZORUNDA: alt barın beş sekmesine sığmıyor, listeye konmazsa
+     mobilde ekrana giden hiçbir yol kalmaz (Destek'in aynı gerekçesi). */
+  { to: '/degisiklikler', label: 'Değişiklikler', icon: 'yardim' },
 ] as const;
 
 /**
@@ -125,7 +134,7 @@ const PAGE_TITLE: [string, string][] = [
   ['/defense', 'Savunma'], ['/academy', 'Akademi'], ['/temple', 'Tapınak'],
   ['/world', 'Dünya'], ['/messages', 'Mesajlar'], ['/options', 'Seçenekler'],
   ['/help', 'Yardım'], ['/city', 'Şehir'], ['/more', 'Seçenekler'], ['/simulate', 'Simülatör'],
-  ['/destek', 'Destek'],
+  ['/destek', 'Destek'], ['/degisiklikler', 'Değişiklikler'],
   /* ⚠️ Menüde YOK ama başlığı olmak zorunda: liste yalnız navigasyon değil, bilgi çubuğunun ve
      `document.title`ın kaynağı — eksik olsaydı sayfa adsız açılırdı. */
   ['/denge', 'Denge Tezgâhı'],

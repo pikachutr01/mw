@@ -31,12 +31,20 @@ const GUEST_MENU = [
   { to: '/simulate', label: 'Simülatör', icon: 'simulator' },
   { to: '/help', label: 'Yardım', icon: 'yardim' },
   { to: '/destek', label: 'Destek', icon: 'destek' },
+  /**
+   * ⭐ Değişiklik günlüğü **misafire de açık** (2026-08-16) — Destek'le aynı gerekçe:
+   * uç zaten kimlik istemiyor ve oyuna dışarıdan bakan biri için *"denge son zamanlarda ne
+   * yönde değişti"* tam da karar verdiren bilgi. Rota misafir dalında mount edilmişti;
+   * menüye konmasaydı **adresi bilmeyen hiç kimse ulaşamazdı**.
+   */
+  { to: '/degisiklikler', label: 'Değişiklikler', icon: 'yardim' },
 ] as const;
 
 const GUEST_TITLE: [string, string][] = [
   ['/simulate', 'Simülatör'],
   ['/help', 'Yardım'],
   ['/destek', 'Destek'],
+  ['/degisiklikler', 'Değişiklikler'],
 ];
 
 /**

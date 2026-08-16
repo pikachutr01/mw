@@ -15,6 +15,7 @@ import {
 import type { MapConfig } from '@mobilwar/engine';
 import type { BalanceBundle } from './balance-model.ts';
 import type {
+  ChangelogEntry,
   CreateSupportTicketRequest, ReplySupportTicketRequest, SupportThread, SupportTicketSummary,
   SupportUploadResult,
 } from '@mobilwar/contracts';
@@ -1816,3 +1817,19 @@ export function useSupportUpload(path = '/api/v1/support/uploads') {
     },
   });
 }
+
+/**
+ * ⭐⭐ DEĞİŞİKLİK GÜNLÜĞÜ (kullanıcı, 2026-08-16) — "oyunda ne değişti" listesi.
+ *
+ * ⚠️ `enabled` kapısı YOK, bilerek: uç herkese açık ve ekran misafir dalında da mount
+ * ediliyor (`GuestShell`). `useAuthed()` koysaydık misafir boş liste görürdü — oysa oyuna
+ * bakan biri için "denge son zamanlarda ne yönde değişti" tam da merak edilen şey.
+ *
+ * ⚠️ `refetchInterval` YOK: günlük saatte bir değil, ayda birkaç kez değişiyor. Güvenlik ağı
+ * burada boşuna istek demek olurdu.
+ */
+export const useChangelog = (): UseQueryResult<{ entries: ChangelogEntry[] }> => useQuery({
+  queryKey: ['changelog'],
+  queryFn: () => get<{ entries: ChangelogEntry[] }>('/api/v1/changelog'),
+  staleTime: 5 * 60_000,
+});

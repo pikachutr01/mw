@@ -49,6 +49,9 @@ import { WorldsPublicController } from './world/worlds-public.controller.ts';
 import { AdminSupportController } from './admin/admin.support.controller.ts';
 import { SupportController } from './support/support.controller.ts';
 import { SupportPublicController } from './support/support.public.controller.ts';
+import { ChangelogController } from './changelog/changelog.controller.ts';
+import { ChangelogService } from './changelog/changelog.service.ts';
+import { AdminChangelogController } from './admin/admin.changelog.controller.ts';
 
 export { DB } from './db/tokens.ts';
 
@@ -66,6 +69,7 @@ export { DB } from './db/tokens.ts';
 @Module({
   controllers: [
     HealthController, SimulateController, AuthController, CityController, BalanceController,
+    ChangelogController, AdminChangelogController,
     AllianceController, ChatController, AllianceChatController, GlobalChatController,
     HeroController,
     MissionController, BattleController, WorldController, WorldsPublicController, CommandController,
@@ -177,6 +181,7 @@ export { DB } from './db/tokens.ts';
      * örneği ayrı olabilir. İkisi de aynı satırdan türetiliyor, paylaşılan durum yok.
      */
     { provide: WorldStateService, useFactory: (db: Db) => new WorldStateService(db), inject: [DB] },
+    { provide: ChangelogService, useFactory: (db: Db) => new ChangelogService(db), inject: [DB] },
     /**
      * ⭐ BAKIM KİLİDİ — GLOBAL. Interceptor seçilmesinin gerekçesi dosyanın başında; özeti:
      * global guard'lar `AuthGuard`tan ÖNCE koşuyor, interceptor'lar SONRA → kimlik hazır.
