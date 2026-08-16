@@ -14,7 +14,8 @@
  * hiç göndermemek: `api()` istekten önce ömrün son %10'una girilmişse yenilemeyi bekliyor.
  * 401 yolu yine duruyor ama artık yalnız bir emniyet ağı (saat kayması, sunucuda iptal).
  */
-import { setConflict } from './session-conflict.ts';
+import { fallbackInstanceId, resolveInstanceId } from './instance-id.ts';
+import { conflictEpoch, setConflict } from './session-conflict.ts';
 
 export interface Session {
   accessToken: string;
@@ -93,25 +94,31 @@ function deviceId(): string {
 }
 
 /**
- * ⭐ ÖRNEK (INSTANCE) KİMLİĞİ — tek cihaz kuralının SEKME düzeyindeki ayracı.
+ * ⭐ ÖRNEK (INSTANCE) KİMLİĞİ — tek cihaz kuralının ayracı.
  *
- * ⚠️ `sessionStorage`, `localStorage` DEĞİL — fark kuralın tamamı:
- *   • `localStorage` sekmeler arasında PAYLAŞILIR → iki sekme aynı kimliği taşır, ayırt
- *     edilemezler ve "aynı cihazda ikinci sekme" kuralı hiç çalışmaz.
- *   • `sessionStorage` sekme başına ayrı → yeni sekme yeni kimlik, sayfa yenileme aynı kimlik
- *     (istenen davranış: F5 seni kendi hesabından atmamalı).
+ * ⚠️ Kuralın TAMAMI `lib/instance-id.ts`te: kimliğin neden yalnız `sessionStorage`ta
+ * tutulamadığı (PWA'yı kapatıp açan oyuncu kendi hesabına giremiyordu) ve "başka canlı kopya
+ * var mı" sorusunun neden kalp atışıyla değil **Web Locks** ile sorulduğu orada yazılı.
  *
- * ⚠️ Bu kimlik `deviceId` ile karıştırılmamalı: o KALICI ve çoklu hesap analizi için, bu ise
- * geçici ve yalnız "hangi kopya" sorusunu yanıtlıyor. Sunucu ikisini de kimlik doğrulamada
- * kullanmaz.
+ * ⚠️ Burada yalnız **çözülmüş değer** duruyor. Çözüm asenkron (kilit sorusu), bu yüzden
+ * `initInstanceId()` açılışta bir kez ve **ilk istek çıkmadan önce** çağrılıyor (`main.tsx`).
  */
+let resolvedInstance: string | null = null;
+
+/** Açılışta bir kez — kimliği çözer. `main.tsx` bunu `render`den ÖNCE bekler. */
+export async function initInstanceId(): Promise<string> {
+  resolvedInstance = await resolveInstanceId();
+  return resolvedInstance;
+}
+
 function instanceId(): string {
-  let id = sessionStorage.getItem('mw-instance-id');
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem('mw-instance-id', id);
-  }
-  return id;
+  /**
+   * ⚠️ Yedek yol normal akışta HİÇ koşmaz. Açılış sırası bir gün bozulup `initInstanceId`
+   * beklenmeden istek çıkarsa, kimliğin her istekte değişmesindense sekme içinde kararlı
+   * kalması yeğdir — sunucu tarafında her istek yeni bir kopya gibi görünürdü.
+   */
+  resolvedInstance ??= fallbackInstanceId();
+  return resolvedInstance;
 }
 
 export { instanceId };
@@ -383,6 +390,12 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   const wait = apiDownUntil - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 
+  /**
+   * ⚠️ Çakışma sayacı istek YOLA ÇIKMADAN önce okunuyor — gerekçe `session-conflict.ts`te:
+   * 200 dönen bir cevap, guard'ın koştuğu ANDA sahip olduğumuzu kanıtlar, cevabı okuduğumuz
+   * anda değil. Arada devralınmışsak kapıyı kapatmamalıyız.
+   */
+  const epochAtSend = conflictEpoch();
   let res = await send();
 
   if (res.status === 401 && !opts.noRetry && session) {
@@ -426,10 +439,43 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
         kind: 'blocked',
       });
     }
+  } else if (res.ok && isPresenceGuarded(path) && conflictEpoch() === epochAtSend) {
+    /**
+     * ⭐⭐ KAPI KENDİLİĞİNDEN KAPANIR (2026-08-16).
+     *
+     * ⚠️ `setConflict` bu dosyada **yalnız DOLU değerle** çağrılıyordu; `null` hiç yazılmıyordu.
+     * Yani kapı bir kez açıldıktan sonra ekranda kalıyor ve tek çıkış yolu düğmeye basmaktı —
+     * öteki kopya çoktan kapanmış, sahiplik serbest kalmış ve istekler yeniden 200 dönüyor
+     * olsa bile. Oyuncu bunu "modal takıldı" diye görüyordu ve haklıydı.
+     *
+     * Sahiplik kuralına TABİ bir uç 200 döndüyse sahiplik ispatlı bizdedir; kapının açık
+     * kalması için bir sebep kalmaz. `SessionConflictGate` ayrıca 10 saniyede bir yokluyor
+     * ama o yalnız kapı AÇIKKEN koşuyor ve sahipliği zaten kendisi almaya çalışıyor;
+     * buradaki satır sıradan trafiğin de kapıyı kapatmasını sağlıyor.
+     *
+     * ⚠️ **`isPresenceGuarded` şart.** `/auth/*` ve `/admin/*` sunucuda kuraldan MUAF
+     * (`PRESENCE_EXEMPT`): oradan gelen bir 200, sahipliğin bizde olduğunu KANITLAMAZ.
+     * Jeton yenileme (`/auth/refresh`) kapı açıkken de çalışmaya devam ediyor — koşulsuz
+     * temizleseydik kapı her yenilemede yanıp sönerdi.
+     */
+    setConflict(null);
   }
 
   if (!res.ok) throw errorOf(res.status, body);
   return body as T;
+}
+
+/**
+ * Bu uç sunucuda tek cihaz kuralına tabi mi? Sunucudaki `PRESENCE_EXEMPT` düzenli ifadesinin
+ * ikizi (`auth.guard.ts`).
+ *
+ * ⚠️ İki yerde duran bir kural — ama tersi daha kötüydü: istemcinin muafiyeti bilmesi
+ * gerekiyor ve sunucunun bunu her yanıtta bildirmesi (başlık) sıcak yola gereksiz bir
+ * sözleşme eklerdi. Ayrışırlarsa bedeli küçük ve tek yönlü: muaf bir ucu tabi sanmak kapıyı
+ * erken kapatır, tersi kapıyı geç kapatır. İkisi de veri bozmaz.
+ */
+export function isPresenceGuarded(path: string): boolean {
+  return !/^\/?(api\/v1\/)?(auth|admin)\b/.test(path.replace(/^\//, ''));
 }
 
 /**

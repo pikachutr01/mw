@@ -20,15 +20,22 @@
  *
  * | istemci | kopya nedir | nerede saklanır | yaşam süresi |
  * | :-- | :-- | :-- | :-- |
- * | Web | **sekme** | `sessionStorage` | sekme kapanana kadar (F5 korur) |
+ * | Web / PWA | **canlı sekme** | `sessionStorage` + kalıcı yedek, ayrımı **Web Locks** yapar | sekme kapanana kadar (F5 ve yeniden açılış korur) |
  * | Flutter (Android/iOS) | **kurulum** | kalıcı depo (`shared_preferences` vb.) | uygulama silinene kadar |
  *
- * ⚠️⚠️ **Mobilde kimlik OTURUM BOYU (bellekte) ÜRETİLMEZ.** Mobil uygulamalar sürekli
- * öldürülüp yeniden açılır (arka plan, bellek baskısı, kullanıcı kaydırması). Her açılışta
- * yeni kimlik üretilseydi, önceki kimliğin sahipliği `claimGraceSeconds` (90 sn) boyunca taze
- * kaldığı için oyuncu **kendi hesabına ~90 saniye giremezdi** — üstelik hatanın sebebi ekranda
- * "hesabın başka bir cihazda açık" diye görünürdü. Kalıcı kimlikle yeniden açılış aynı
- * `instanceId`i sahiplenir ve `claim`in 2. kuralı ("sahip zaten biziz") anında geçirir.
+ * ⚠️⚠️ **KİMLİK HER AÇILIŞTA YENİDEN ÜRETİLMEZ.** Uygulamalar sürekli öldürülüp yeniden
+ * açılır (arka plan, bellek baskısı, kullanıcı kaydırması). Her açılışta yeni kimlik
+ * üretilseydi, önceki kimliğin sahipliği `claimGraceSeconds` (90 sn) boyunca taze kaldığı
+ * için oyuncu **kendi hesabına ~90 saniye giremezdi** — üstelik hatanın sebebi ekranda
+ * "hesabın başka bir cihazda açık" diye görünürdü. Aynı kimlikle dönen kopya `claim`in
+ * 2. kuralına ("sahip zaten biziz") takılır ve anında geçer.
+ *
+ * ⚠️⚠️ **BU UYARI ÖNCE YALNIZ MOBİL İÇİN YAZILDI VE WEB TAM ONA DÜŞTÜ** (2026-08-16).
+ * Web kimliği yalnız `sessionStorage`taydı; orası sekme/PWA kapanınca silinir, yani her
+ * açılış yeni bir kopya sayılıyordu. Canlıda bir günde **773 adet 409, 12 farklı oyuncu**.
+ * Web artık kalıcı bir yedek tutuyor ve "başka canlı kopya var mı" sorusunu **Web Locks**'a
+ * soruyor: kilit alınabiliyorsa eski kimliği geri kuşanıyor, alınamıyorsa gerçekten ikinci
+ * sekmedir ve yeni kimlik üretiyor. Tamamı `apps/web/src/lib/instance-id.ts`te.
  *
  * ⚠️ Mobilde sekme kavramı olmadığı için `instanceId`in `deviceId` ile aynı değer olması
  * tamamen doğrudur; ikisini ayrı tutmak yalnız web'de anlamlı.
@@ -160,6 +167,19 @@ export class PresenceService {
    * ⚠️ `RETURNING`in ÖNCEKİ satırı vermesi için `account_presence AS ap` kendi eski hâliyle
    * okunuyor: Postgres'te `ON CONFLICT DO UPDATE` içinde eski satır `account_presence.<sütun>`
    * ile erişilebilir, `excluded.<sütun>` ise yeni değerdir.
+   *
+   * ⚠️⚠️ **`platform` `COALESCE` ile yazılıyor** (2026-08-16). `NULL` burada "platform yok"
+   * değil **"bilmiyorum"** demek ve bilmeyen bir çağıranın bileni ezmesi için sebep yok.
+   * Ezdiği de ölçüldü: soket el sıkışması bu metodu platformsuz çağırıyordu ve girişten
+   * saniyeler sonra `AuthGuard`ın yazdığı `web` değerini siliyordu. Canlıda 25 sahiplik
+   * satırının 10'u platformsuzdu; çakışma modalı bu yüzden **nerede açık olduğunu hiç
+   * söyleyemiyor**, yalnız «başka bir yerde açık» diyordu.
+   *
+   * ⚠️ Asıl düzeltme soket tarafında (platform artık el sıkışmada gidiyor); buradaki
+   * `COALESCE` ikinci hat, yarın platformu bilmeyen üçüncü bir çağıran eklenirse aynı hata
+   * sessizce geri gelmesin diye.
+   * ⚠️ Örnek DEĞİŞTİĞİNDE de korunuyor ve bu doğru: yeni sahip platformunu bildiriyorsa
+   * zaten yazılır, bildirmiyorsa elimizdeki tek bilgi eskisidir.
    */
   async claim(input: ClaimInput, attempt = 0): Promise<ClaimResult> {
     const grace = claimGraceSeconds();
@@ -179,7 +199,11 @@ export class PresenceService {
          SET instance_id = excluded.instance_id,
              session_id  = excluded.session_id,
              world_id    = excluded.world_id,
-             platform    = excluded.platform,
+             -- ⚠️⚠️ COALESCE, düz excluded.platform DEĞİL (2026-08-16). Gerekçe aşağıda,
+             --    metodun yorumunda: NULL burada "bilmiyorum" demek, "yok" değil.
+             -- ⚠️⚠️ COALESCE, düz excluded.platform DEĞİL (2026-08-16). Gerekçe metodun
+             --    yorumunda: NULL burada "bilmiyorum" demek, "yok" değil.
+             platform    = COALESCE(excluded.platform, account_presence.platform),
              claimed_at  = CASE WHEN account_presence.instance_id = excluded.instance_id
                                 THEN account_presence.claimed_at ELSE now() END,
              seen_at     = now()
@@ -219,8 +243,14 @@ export class PresenceService {
   /**
    * "Hâlâ buradayım." Yalnız sahibin satırına dokunur.
    *
-   * ⚠️ Çağrı sıklığı `AuthGuard` tarafından kısılıyor (örnek başına 30 sn'de bir): her istekte
-   * bir UPDATE, oyunun en sıcak yoluna gereksiz bir yazma koyardı.
+   * ⚠️⚠️ **Çağıranı `RealtimeGateway`in sahiplik nabzı** (2026-08-16). Buradaki yorum uzun
+   * süre *"çağrı sıklığı `AuthGuard` tarafından kısılıyor"* diyordu ve bu **doğru değildi**:
+   * guard `claim` çağırıyor, `touch`u değil. Fonksiyonun HİÇBİR çağıranı yoktu ve yokluğu
+   * gerçek bir açık bırakıyordu — soketi bağlı ama HTTP'de sessiz bir oyuncu 90 saniye sonra
+   * sahipsiz görünüyordu. Gerekçenin tamamı `realtime.gateway.ts` → `startPresenceHeartbeat`.
+   *
+   * ⚠️ Sahip DEĞİLSEK hiçbir satır etkilenmez (`WHERE instance_id = …`) — devralınmış bir
+   * örneğin nabzı yeni sahibin damgasını diriltemez.
    */
   async touch(accountId: number, instanceId: string): Promise<void> {
     await this.db.execute(sql`

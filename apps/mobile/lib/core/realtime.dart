@@ -109,6 +109,7 @@ class Realtime {
     required this.onTopic,
     required this.onTakeover,
     required this.onRevoked,
+    this.platform = 'android',
     String? root,
     io.Socket Function(String root, Map<String, dynamic> opts)? factory,
     DateTime Function()? clock,
@@ -120,6 +121,14 @@ class Realtime {
   /// yenilendiğinde (12 saatte bir) eski jetonla bağlanmak el sıkışmada reddedilirdi ve
   /// istemci bunu ağ arızası sanıp durmadan denerdi.
   final ({String token, String instanceId})? Function() credentials;
+
+  /// ⭐ El sıkışmaya binen platform (`android` · `ios`) — 2026-08-16.
+  ///
+  /// ⚠️ Soketin HTTP başlığı yok, yani `client_hints.headers()` buraya ulaşmıyor. Sahipliği
+  /// asıl olarak soket aldığı için platform da el sıkışmada gitmek zorunda; gitmezse sunucu
+  /// sahiplik satırına NULL yazıyor ve karşı taraftaki çakışma modalı «Android uygulamasında
+  /// açık» diyemiyor, yalnız «başka bir yerde» diyor.
+  final String platform;
 
   /// Sunucudan bir konu geldi → çağıran ilgili sorguları tazeler. `'*'` = her şey.
   final void Function(String topic) onTopic;
@@ -165,7 +174,8 @@ class Realtime {
     final s = _factory(_root, <String, dynamic>{
       'path': '/ws',
       // ⚠️ `instanceId` el sıkışmada: sahipliği asıl olarak SOKET alıyor.
-      'auth': {'token': c.token, 'instanceId': c.instanceId},
+      // ⚠️ `platform` da burada — gerekçe alanın kendi yorumunda.
+      'auth': {'token': c.token, 'instanceId': c.instanceId, 'platform': platform},
       'transports': ['websocket', 'polling'],
       'autoConnect': false,
       // Üstel backoff + jitter: sunucu yeniden başlarken tüm istemciler aynı anda vurmasın.

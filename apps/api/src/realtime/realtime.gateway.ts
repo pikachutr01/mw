@@ -25,7 +25,7 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import type { TokenService } from '../auth/token.service.ts';
 import type { PresenceService } from '../auth/presence.service.ts';
-import { singleDeviceEnforced } from '../auth/presence.service.ts';
+import { claimGraceSeconds, singleDeviceEnforced } from '../auth/presence.service.ts';
 import { globalChatLimits } from '../chat/global-chat.limits.ts';
 import type { RealtimeBus, RealtimeEvent } from './realtime.bus.ts';
 
@@ -144,12 +144,26 @@ export class RealtimeGateway {
          * genel `unauthorized` hatasıyla karışsaydı istemci "jetonum bozuk" sanıp sonsuz
          * yeniden bağlanma döngüsüne girerdi — oysa yapması gereken modalı açmak.
          */
+        /**
+         * ⚠️⚠️ **`platform` GEÇİLMEK ZORUNDA** (2026-08-16). Bu satır yokken soket, girişten
+         * hemen sonra sahipliği alıyor ve `claim` platformu `excluded.platform` ile, yani
+         * **NULL** ile eziyordu — `AuthGuard`ın az önce yazdığı `'web'` siliniyordu. Sonuç
+         * çakışma modalının metninde görülüyordu: *"Bu hesap zaten açık"*, nerede olduğu
+         * asla yazmıyordu. Canlı ölçüm: 25 sahiplik satırının 10'unda platform boş.
+         * ⚠️ El sıkışma yükünden okunuyor, HTTP başlığından değil: soketin başlığı yok.
+         */
+        const rawPlatform = String(socket.handshake.auth?.['platform'] ?? '').trim();
+        const platform = rawPlatform === 'web' || rawPlatform === 'android' || rawPlatform === 'ios'
+          ? rawPlatform
+          : null;
+
         if (singleDeviceEnforced()) {
           const res = await this.presence.claim({
             accountId: player.accountId,
             sessionId: player.sessionId,
             instanceId: player.instanceId,
             worldId: player.worldId,
+            platform,
           });
           if (!res.ok) { next(new Error('session_conflict')); return; }
           if (res.previous) this.kickInstance(player.accountId, res.previous.instanceId);
@@ -163,6 +177,9 @@ export class RealtimeGateway {
     });
 
     io.on('connection', (socket) => this.onConnect(socket));
+
+    /* ⭐ Sahiplik nabzı — bağlı soketin damgasını taze tutar. Gerekçe metodun yorumunda. */
+    this.startPresenceHeartbeat();
 
     // Veri yolundan gelen her olay ilgili odalara dağıtılır.
     await this.bus.subscribe((event) => this.dispatch(event));
@@ -581,7 +598,55 @@ export class RealtimeGateway {
     }
   }
 
+  /**
+   * ⭐⭐ SAHİPLİK NABZI — bağlı her soketin sahiplik damgasını taze tutar (2026-08-16).
+   *
+   * ⚠️⚠️ **Bu olmadan bağlı bir istemci sahipliğini SESSİZCE kaybediyordu.** Sahiplik
+   * `account_presence.seen_at` üzerinden yaşıyor ve o damgayı yenileyen tek yer `AuthGuard`dı:
+   * yani **yalnız HTTP isteği atınca**. Soket sahipliği bir kez alıyor ve bir daha ona hiç
+   * dokunmuyordu.
+   *
+   * Rakamlar çelişiyordu: sahiplik `claimGraceSeconds` = **90 sn**'de düşüyor, ama soketi
+   * SAĞLAM olan bir web istemcisinin emniyet ağı yoklaması **5 dakikada bir** dönüyor
+   * (`queries.ts` → `WS_IDLE_MS`). Yani ekranda oturan, soketi bağlı, gayet canlı bir oyuncu
+   * 90 saniye sonra "sahipsiz" görünüyordu. Kimse gelmezse fark edilmiyor (bir sonraki isteği
+   * sahipliği geri alıyor); ama araya bir kopya girerse **oynayan oyuncu kapıyı yiyordu.**
+   *
+   * ⚠️ Cihazda ölçüldü (kullanıcı fark etti: *"devralmaya rağmen sağ üstteki nokta kırmızı"*):
+   * telefon devraldı, soketi ölü kaldı, 90 saniye sonra sahiplik düştü ve karşıdaki tarayıcı
+   * sekmesi oyunu geri aldı. İki uçlu bir ping pong.
+   *
+   * ⚠️ Aralık `claimGraceSeconds`in YARISINDAN küçük olmalı: tek bir turun kaçması (yeniden
+   * dağıtım, kısa donma) sahipliği düşürmemeli. 90 sn'ye karşı 30 sn üç kat pay bırakıyor.
+   * ⚠️ `PresenceService.touch` bu güne kadar **hiçbir yerden çağrılmıyordu**; yorumu
+   * *"çağrı sıklığı AuthGuard tarafından kısılıyor"* diyordu ve bu doğru değildi (guard
+   * `claim` çağırıyor). Fonksiyon nihayet sahibini buldu.
+   * ⚠️ Aynı hesap+örneğe ait birden çok soket olabilir (kısa kesintide üst üste binerler);
+   * anahtar kümesiyle tekilleştiriliyor, yoksa aynı satıra tur başına birkaç UPDATE giderdi.
+   */
+  private startPresenceHeartbeat(): void {
+    const everyMs = Math.max(5_000, Math.floor(claimGraceSeconds() * 1000 / 3));
+    this.heartbeat = setInterval(() => {
+      if (!this.io || !singleDeviceEnforced()) return;
+      const seen = new Set<string>();
+      for (const [, socket] of this.io.of('/').sockets) {
+        const p = (socket.data as { player?: SocketPlayer }).player;
+        if (!p) continue;
+        const key = `${p.accountId}:${p.instanceId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        void this.presence.touch(p.accountId, p.instanceId).catch(() => { /* önemsiz */ });
+      }
+    }, everyMs);
+    // ⚠️ `unref`: nabız süreç kapanışını geciktirmemeli (test koşuları asılı kalırdı).
+    this.heartbeat.unref?.();
+  }
+
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
+
   async close(): Promise<void> {
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.heartbeat = null;
     await this.bus.stop();
     await new Promise<void>((resolve) => {
       if (!this.io) return resolve();

@@ -407,3 +407,146 @@ describe('⭐⭐ zorlama kapısı', () => {
     }
   });
 });
+
+/**
+ * ⭐⭐ WEB / PWA: KİMLİK AÇILIŞTAN AÇILIŞA YAŞAMALI — 2026-08-16 canlı hatası.
+ *
+ * ⚠️⚠️ Yukarıdaki *"mobil: instanceId kalıcı olmalı"* bloğu bu tuzağı **2026-08-15'te tarif
+ * etmişti** ve web tam olarak ona düştü. Web kimliği `sessionStorage`taydı; `sessionStorage`
+ * sekme ve PWA kapanınca silinir, yani her açılış «acilis-2» oluyordu. Kullanıcı bildirdi:
+ * *"PWA uygulamayı kapatıp yeniden açtığımda aynı hata devam ediyor."* Canlı ölçüm: bir günde
+ * 773 adet 409, 12 farklı oyuncu.
+ *
+ * ⚠️ Sunucu tarafı **kusursuzdu ve değişmedi**: kural 2 ("sahip zaten biziz") zaten anında
+ * geçiriyor. Eksik olan, istemcinin aynı kimlikle geri gelmesiydi (`web/src/lib/instance-id.ts`).
+ * Buradaki testler sunucunun o sözleşmeyi tuttuğunu kilitliyor.
+ */
+describe('⭐⭐ web/PWA: yeniden açılış', () => {
+  it('⭐ AYNI kimlikle dönen kopya, kendi grace penceresini beklemez', async () => {
+    const a = await newAccount();
+    const kimlik = 'pwa-kalici-kimlik';
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: kimlik, worldId, platform: 'web',
+    });
+    // PWA kapandı: soket koptu, yumuşak bırakma çalıştı (sahiplik ~20 sn daha geçerli).
+    await presence.release(a.accountId, kimlik);
+
+    // Oyuncu uygulamayı HEMEN yeniden açıyor — kimlik aynı olduğu için kapı açılmamalı.
+    const tekrar = await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: kimlik, worldId, platform: 'web',
+    });
+    expect(tekrar.ok, 'kalıcı kimlik yeniden açılışta kilitlenmemeli').toBe(true);
+  });
+
+  /** ⚠️ Kuralın kendisi bozulmamalı: gerçekten İKİNCİ bir kopya hâlâ engellenmeli. */
+  it('⚠️ ikinci sekme (farklı kimlik) hâlâ engellenir', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'sekme-1', worldId, platform: 'web',
+    });
+    const ikinci = await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'sekme-2', worldId, platform: 'web',
+    });
+    expect(ikinci.ok).toBe(false);
+  });
+});
+
+/**
+ * ⭐ PLATFORM BİLGİSİ SİLİNMEZ — çakışma modalı «nerede açık» diyebilsin.
+ *
+ * ⚠️ Soket el sıkışması `claim`i platformsuz çağırıyordu ve girişten saniyeler sonra
+ * `AuthGuard`ın yazdığı değeri NULL'la eziyordu. Canlıda 25 satırın 10'u platformsuzdu;
+ * oyuncunun gördüğü metin yalnız «başka bir yerde açık» oluyordu, hangi cihaz olduğu değil.
+ */
+describe('⭐ sahiplik satırındaki platform', () => {
+  const platformOf = async (accountId: number): Promise<string | null> =>
+    (await presence.holder(accountId))?.platform ?? null;
+
+  it('⭐⭐ platformsuz çağrı BİLİNENİ EZMEZ', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'kopya-1', worldId, platform: 'android',
+    });
+    expect(await platformOf(a.accountId)).toBe('android');
+
+    // İkinci çağrı platformu bilmiyor (eski soket yolu tam olarak böyleydi).
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'kopya-1', worldId,
+    });
+    expect(await platformOf(a.accountId), 'NULL «bilmiyorum» demek, «yok» değil').toBe('android');
+  });
+
+  it('bilen çağrı platformu GÜNCELLER', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'kopya-1', worldId, platform: 'web',
+    });
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'kopya-2', worldId, platform: 'android', force: true,
+    });
+    expect(await platformOf(a.accountId)).toBe('android');
+  });
+});
+
+/**
+ * ⭐⭐ SAHİPLİK NABZI — bağlı istemci sahipliğini kaybetmemeli (2026-08-16).
+ *
+ * ⚠️⚠️ Sahiplik `seen_at` üzerinden yaşıyor ve o damgayı yenileyen tek yer `AuthGuard`dı,
+ * yani YALNIZ HTTP isteği atınca. Soket sahipliği bir kez alıp bir daha ona hiç dokunmuyordu.
+ * Rakamlar çelişiyordu: sahiplik 90 saniyede düşüyor, soketi SAĞLAM bir web istemcisinin
+ * emniyet ağı yoklaması ise 5 dakikada bir dönüyor (`queries.ts` → `WS_IDLE_MS`). Ekranda
+ * oturan, bağlı, canlı bir oyuncu 90 saniye sonra "sahipsiz" görünüyordu.
+ *
+ * ⚠️ Burada ölçülen `PresenceService.touch`un sözleşmesi; nabzın kendisi (zamanlayıcı)
+ * `realtime.gateway.ts`te ve gerçek soket gerektirdiği için orada sınanmıyor.
+ */
+describe('⭐⭐ sahiplik nabzı', () => {
+  it('⭐ nabız sahipliği zaman aşımından KURTARIR', async () => {
+    setLiveSettings({ session: { claimGraceSeconds: 2 } });
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'bagli-kopya', worldId, platform: 'web',
+    });
+
+    // Grace'in ötesine geç, ama arada nabız at — tam olarak bağlı soketin yaptığı iş.
+    await new Promise((r) => { setTimeout(r, 1500); });
+    await presence.touch(a.accountId, 'bagli-kopya');
+    await new Promise((r) => { setTimeout(r, 1500); });
+
+    const sahip = await presence.holder(a.accountId);
+    expect(sahip?.instanceId, 'nabız atan kopya sahipliğini korumalı').toBe('bagli-kopya');
+  }, 15_000);
+
+  it('⚠️ nabız ATILMAZSA sahiplik düşer (hatanın kendisi)', async () => {
+    setLiveSettings({ session: { claimGraceSeconds: 2 } });
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'sessiz-kopya', worldId, platform: 'web',
+    });
+    await new Promise((r) => { setTimeout(r, 2600); });
+    expect(await presence.holder(a.accountId)).toBeNull();
+  }, 15_000);
+
+  /** ⚠️ Devralınmış bir örneğin nabzı YENİ sahibin damgasını diriltmemeli. */
+  it('sahip olmayanın nabzı hiçbir satırı etkilemez', async () => {
+    const a = await newAccount();
+    await presence.claim({
+      accountId: a.accountId, sessionId: a.sessionId,
+      instanceId: 'yeni-sahip', worldId, platform: 'android',
+    });
+    await presence.touch(a.accountId, 'devralinmis-eski');
+    const sahip = await presence.holder(a.accountId);
+    expect(sahip?.instanceId).toBe('yeni-sahip');
+    expect(sahip?.platform).toBe('android');
+  });
+});

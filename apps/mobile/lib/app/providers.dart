@@ -180,6 +180,9 @@ final realtimeProvider = Provider<Realtime>((ref) {
       return (token: s.accessToken, instanceId: id);
     },
     onTopic: (topic) => _tazele(ref, topic),
+    /* ⚠️ Künyeyle AYNI kaynak: HTTP başlığı ile el sıkışma yükü ayrışırsa sahiplik satırındaki
+     * platform, isteği kimin attığına göre değişir ve modal yanlış cihazı gösterir. */
+    platform: ref.read(clientHintsProvider).platform,
     // ⚠️ Devralınma oturumu DÜŞÜRMEZ — perde açılır, oyuncu geri alabilir.
     onTakeover: () =>
         ref.read(conflictProvider.notifier).update(const SessionConflict()),

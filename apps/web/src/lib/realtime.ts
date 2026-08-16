@@ -178,7 +178,9 @@ export function connectRealtime(queryClient: QueryClient): () => void {
        * yani tarayıcı kapanınca sahiplik saniyeler içinde serbest kalıyor, zaman aşımını
        * beklemek gerekmiyor.
        */
-      auth: { token: session.accessToken, instanceId: instanceId() },
+      /* ⚠️ `platform` de gönderiliyor: soket sahipliği aldığında `claim` platformu da yazıyor
+       * ve o alan olmadan çakışma modalı «nerede açık» diyemiyor (`realtime.gateway.ts`). */
+      auth: { token: session.accessToken, instanceId: instanceId(), platform: 'web' },
       transports: ['websocket', 'polling'],
       // Üstel backoff + jitter: sunucu yeniden başlarken tüm istemciler aynı anda vurmasın.
       reconnection: true,
