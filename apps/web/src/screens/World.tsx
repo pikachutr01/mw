@@ -16,10 +16,11 @@
  * ⚠️ **Gizlilik (§13.16.5):** liste asker ve kaynak GÖSTERMEZ — bunu öğrenmenin yolu casusluktur.
  */
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { fmt } from '../lib/hooks.ts';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
+import { homeAction, visibleCoords } from '../lib/world-coords.ts';
 import { AllyBadge } from '../components/AllyBadge.tsx';
 import { BoundedAmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
 import { TargetModal } from './world-modal.tsx';
@@ -74,6 +75,7 @@ export function World() {
    * çünkü rota değişmedi).
    */
   const params = useParams();
+  const navigate = useNavigate();
   const urlK = Number(params['k']);
   const urlD = Number(params['d']);
   const fromUrl = Number.isInteger(urlK) && Number.isInteger(urlD) && urlK > 0 && urlD > 0
@@ -81,8 +83,9 @@ export function World() {
     : null;
 
   const home = city.data?.coordinates;
-  const k = sel?.k ?? fromUrl?.k ?? home?.k ?? 1;
-  const d = sel?.d ?? fromUrl?.d ?? home?.d ?? 1;
+  /* ⚠️ Öncelik zinciri ve «eve dön» kararı `lib/world-coords.ts`te — orada test edilebiliyor,
+     burada edilemiyordu ve 2026-08-16 hatası tam bu yüzden gözden kaçtı. */
+  const { k, d } = visibleCoords(sel, fromUrl, home ?? null);
   const world = useWorld(k, d, sel != null || fromUrl != null || home != null);
   const setK = (n: number): void => setSel({ k: n, d });
   const setD = (n: number): void => setSel({ k, d: n });
@@ -107,9 +110,29 @@ export function World() {
           <BoundedAmountInput min={1} max={500} value={d} onCommit={setD} aria-label="Diyar" />
           <Button size="sm" variant="ghost" onClick={() => setD(Math.min(500, d + 1))}>+</Button>
           {home ? (
+            /**
+             * ⭐⭐ **KENDİ DİYARIMA DÖN — adresi de temizlemek ZORUNDA** (kullanıcı, 2026-08-16).
+             *
+             * ⚠️ Eskiden yalnız `setSel(null)` yapıyordu ve derin bağlantıyla açılmış sayfada
+             * YANLIŞ yere gidiyordu: koordinat çözümü `sel ?? fromUrl ?? home` sırasıyla
+             * ilerliyor, yani `sel` boşalınca sıra `home`a değil **adresteki koordinata**
+             * düşüyordu. Casusluk raporundan Dünya'ya geçen oyuncu düğmeye basınca kendi
+             * diyarına değil raporun diyarına dönüyordu.
+             *
+             * `/world`e gitmek `fromUrl`ü null yapıyor → zincir `home`a iniyor. `setSel(null)`
+             * korunuyor çünkü asıl anlamı "sabitlemeyi bırak, aktif şehri izle": oyuncu sonra
+             * şehir değiştirirse görünüm onu takip etmeli (dosya başındaki açılış kuralı).
+             *
+             * ⚠️ `replace` KULLANILMIYOR: geri tuşu raporun diyarına dönebilmeli — oyuncu
+             * "bir bakıp geri döneyim" akışında tam olarak bunu bekliyor.
+             */
             <Button size="sm" variant="ghost" className="ml-auto px-1.5 py-0.5"
               title="Kendi diyarıma dön"
-              onClick={() => setSel(null)}>
+              onClick={() => {
+                const a = homeAction(fromUrl);
+                setSel(a.sel);
+                if (a.clearUrl) navigate('/world');
+              }}>
               <img src="/assets/buildings/city.png" alt="" width={22} height={22}
                 className="icon-shadow h-[22px] w-auto object-contain" />
             </Button>
