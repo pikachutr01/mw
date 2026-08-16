@@ -48,6 +48,17 @@
 > Resend'de verified, DNS **Cloudflare**'de) · ✅ ~~4 GB RAM~~ (yapıldı) ·
 > 🔵 **GitHub secret'ları** (`YAYINA_ALMA.md §2.5`) · 🔵 Cloudflare panel ayarları (§2.4).
 >
+> ### ⏰ 2026-08-16 — SAAT SIÇRAMASI: KONAK SAATİ KONUĞA SIZIYORDU (`docs/SAAT_SICRAMASI.md`)
+> Oyuncular *"saldırım anında gerçekleşti"* dedi. Sebep kodda değildi: **ESXi konağının saati
+> 9 sa 25 dk ileri** ve VMware Tools onu günde ~3 kez konuk saatine bastırıyor. O pencerede
+> PostgreSQL `now()` geleceği okudu, `claimDue` **12 görevi** birden aldı, 6 savaş 2,5 saate
+> kadar erken çözüldü.
+> ⚠️ 2026-08-03'ün `GAME_NOW_SQL` önlemi bu sınıfa **kör**: DB'nin kendi saati sıçrayınca
+> kıyaslamanın iki ucu da aynı yanlış saati okuyor. Kapatan şey iki yeni kat oldu —
+> **monotonik kapı** (tur atlanır) + **alım sonrası taze doğrulama** (`releaseFuture`).
+> Sunucuda vmtoolsd'den `CAP_SYS_TIME` düşürüldü (çekirdek kuralı, ayar değil).
+> 🔵 **Sağlayıcıya destek talebi kullanıcıda** — metin `SAAT_SICRAMASI.md §7`.
+
 > ### ⏱️ 2026-08-07 — ZAMAN MİMARİSİ 3 FAZDA YENİDEN YAZILDI
 > Tetikleyen olay: bir oyuncu *"ordu dönüş süresi olmadan şehre döndü"* dedi. Rapor gerçekti ama
 > **sebep dönüş mantığı değildi**: terk edilmiş bir transaction satırları tutuyor, `SKIP LOCKED`

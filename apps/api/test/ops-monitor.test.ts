@@ -22,7 +22,7 @@ let worldId: number;
 
 const EMPTY: TickResult = {
   claimed: 0, done: 0, retried: 0, dead: 0, reaped: 0, skippedPaused: false,
-  lagMs: 0, due: 0, skippedLocked: 0, stuck: 0,
+  released: 0, clockJumpMs: 0, lagMs: 0, due: 0, skippedLocked: 0, stuck: 0,
 };
 const tick = (over: Partial<TickResult> = {}): TickResult => ({ ...EMPTY, ...over });
 

@@ -46,6 +46,39 @@ export interface SchedulerOptions {
   tickTimeoutMs?: number;
   maxAttempts?: number;
   retryBackoffMs?: number;
+  /**
+   * ⭐⭐ **SAAT SIÇRAMASI KAPISI — 1. KAT (2026-08-16 olayı).**
+   *
+   * İki tur arasında DB saati (`gameNow`), sürecin **monotonik** saatinden bu kadar fazla
+   * ayrışırsa tur ATLANIR: saat sıçramıştır, hiçbir vade kıyaslaması güvenilir değildir.
+   *
+   * ⚠️ Neden monotonik: `CLOCK_MONOTONIC` geri gitmez ve NTP/host senkronu onu adımlayamaz —
+   * duvar saatinin doğruluğunu ölçebilecek TEK yerel referans odur. `Date.now()` ile
+   * kıyaslamak anlamsız olurdu (ikisi de aynı sıçramada birlikte kayar).
+   *
+   * Varsayılan 30 sn: normal tur farkı `pollIntervalMs` (1 sn) + sorgu gecikmesi, yani
+   * milisaniyeler mertebesinde. 30 sn'yi ancak gerçek bir sıçrama ya da uzun bir duraklama aşar.
+   */
+  clockJumpToleranceMs?: number;
+  /**
+   * ⭐⭐ **SAAT SIÇRAMASI KAPISI — 2. KAT (2026-08-16 olayı).**
+   *
+   * Alınmış bir görevin vadesi, alımdan HEMEN SONRA yeniden okunan oyun saatinden bu kadar
+   * ileriyse görev çalıştırılmaz, kuyruğa geri bırakılır (`releaseFuture`).
+   *
+   * ⚠️ 1. kat yetmediği için var: `clock.read()` ile `claimDue` **iki ayrı sorgu**. Sıçrama
+   * tam aralarına düşerse kapı temiz bir saat görür, `claimDue` sıçramış saatle alır.
+   * 2026-08-16'da sıçrama saniyenin altında sürdü — handler'lar zaten DÜZELMİŞ saatle koştu,
+   * yani bu ikinci okuma o gün sıçramayı KESİNLİKLE yakalardı.
+   *
+   * ⚠️ Tolerans geriye değil İLERİYE bakıyor — `ranking.handler.ts`'teki kapıyla aynı gerekçe:
+   * geç kalmak normaldir ve zararsızdır, erken çalışmak HER ZAMAN hatadır.
+   *
+   * ⚠️ Varsayılan 60 sn, `ranking.handler.ts`'in 1 saatinden çok daha dar — bilerek. O kapı
+   * 8 saatlik yuvaları koruyor; buradan geçen görevler saniyeler içinde alınır. 2026-08-16'da
+   * 12 görevin 6'sı 1 saatten az erkendi: 1 saatlik tolerans onları KAÇIRIRDI.
+   */
+  maxFutureDueMs?: number;
   onError?: (err: unknown, mission: MissionRow | null) => void;
   /**
    * ⭐ DÜNYA BAZLI MOTOR AYARLARI (§admin Faz 4). Verilmezse handler `ctx.engine` göremez ve
@@ -88,6 +121,16 @@ export interface TickResult {
   dead: number;
   reaped: number;
   skippedPaused: boolean;
+  /**
+   * ⭐ Saat sıçraması yüzünden kuyruğa geri bırakılan görev sayısı (2. kat). Sıfırdan büyükse
+   * bir sıçrama `claimDue`'ya sızmış ve **oradan da yakalanmış** demektir.
+   */
+  released: number;
+  /**
+   * ⭐ 1. katın ölçtüğü sapma (ms) — tur atlandıysa dolu, normalde 0. Sıçramanın YÖNÜNÜ de
+   * taşır (ileri sıçrama pozitif), çünkü tanı için "ne kadar" kadar "ne tarafa" da gerekiyor.
+   */
+  clockJumpMs: number;
   lagMs: number;
   /** Vadesi gelmiş ve alınabilir durumdaki görev sayısı (kilitliler dâhil). */
   due: number;
@@ -123,6 +166,11 @@ export class SchedulerService {
   private runGeneration = 0;
   /** Bir sonraki "tur asıldı" uyarısının eşiği (katlanarak büyür, log fırtınası olmasın). */
   private nextStallWarnMs = 0;
+  /**
+   * ⭐ Saat sıçraması kapısının çıpası: bir önceki turun oyun saati ve O ANIN monotonik okuması.
+   * `null` = çıpa yok (ilk tur, ya da bakımdan yeni çıkıldı) → o tur YARGILANMAZ, yalnız çıpa kurar.
+   */
+  private clockAnchor: { gameNowMs: number; monoMs: number } | null = null;
 
   constructor(
     private readonly db: Db,
@@ -141,6 +189,8 @@ export class SchedulerService {
       tickTimeoutMs: options.tickTimeoutMs ?? 30_000,
       maxAttempts: options.maxAttempts ?? 5,
       retryBackoffMs: options.retryBackoffMs ?? 5_000,
+      clockJumpToleranceMs: options.clockJumpToleranceMs ?? 30_000,
+      maxFutureDueMs: options.maxFutureDueMs ?? 60_000,
       onError: options.onError,
       engineFor: options.engineFor,
       heartbeat: options.heartbeat,
@@ -152,7 +202,8 @@ export class SchedulerService {
   /** Tek tur. Testler bunu elle çağırır (zamanla yarışmadan davranışı ölçmek için). */
   async tick(): Promise<TickResult> {
     const result: TickResult = {
-      claimed: 0, done: 0, retried: 0, dead: 0, reaped: 0, skippedPaused: false, lagMs: 0,
+      claimed: 0, done: 0, retried: 0, dead: 0, reaped: 0, skippedPaused: false,
+      released: 0, clockJumpMs: 0, lagMs: 0,
       due: 0, skippedLocked: 0, stuck: 0,
     };
 
@@ -167,10 +218,43 @@ export class SchedulerService {
       // Bakım: yeni görev ALINMAZ. Oyun saati de donduğu için vade zaten ilerlemiyor.
       result.skippedPaused = true;
       /**
+       * ⚠️ Çıpa DÜŞÜRÜLÜYOR: bakımda `gameNow` donuk (`pausedAt`), monotonik saat ise akmaya
+       * devam ediyor. Çıpa korunsaydı bakım süresi kadar sahte bir "sıçrama" birikir ve
+       * devam edildiği anda ilk tur boşuna atlanırdı.
+       */
+      this.clockAnchor = null;
+      /**
        * ⚠️ Nabız bakımda da atıyor — bilerek. Bakımdaki bir dünya ile ÖLMÜŞ bir worker
        * bakım panelinde aynı görünseydi (kuyruk ilerlemiyor) yanlış alarm ya da daha
        * kötüsü kaçırılmış alarm üretirdi.
        */
+      await this.sample(result);
+      await this.beat(result);
+      return result;
+    }
+
+    /**
+     * ⭐⭐ **1. KAT — SAAT SIÇRADIYSA HİÇBİR ŞEY ALMA.**
+     *
+     * ⚠️ 2026-08-03'te alınan önlem (`GAME_NOW_SQL`: kıyaslamanın iki ucu da DB saatinden)
+     * **süreç ile DB arasındaki** kaymayı kapatıyor. Ama DB'nin KENDİ saati sıçrarsa iki uç da
+     * aynı yanlış saati okur ve önlem hiçbir şey yapmaz. 2026-08-16'da canlıda tam bu oldu:
+     * konak (ESXi) saati konuk saatine sızdı, `now()` bir anlığına **9 sa 25 dk ileri** döndü,
+     * `claimDue` o ana kadar vadesi olan **12 görevi** birden aldı — 6 savaş 2,5 saate kadar
+     * erken çözüldü. Saat saniyenin altında geri düştüğü için hiçbir log satırına yansımadı.
+     *
+     * Monotonik saat bu yanılsamayı kıran tek referans: o sıçramaz.
+     */
+    const jump = this.noteClockJump(world.gameNow);
+    if (jump !== null) {
+      result.clockJumpMs = jump;
+      this.opts.onError?.(
+        new Error(
+          `[scheduler] saat sıçraması: oyun saati monotonik saatten ${Math.round(jump / 1000)} sn ` +
+          'ayrıştı — tur ATLANDI, hiçbir görev alınmadı',
+        ),
+        null,
+      );
       await this.sample(result);
       await this.beat(result);
       return result;
@@ -203,7 +287,49 @@ export class SchedulerService {
      */
     result.skippedLocked = Math.max(0, Math.min(result.due, this.opts.batchSize) - result.claimed);
 
-    for (const mission of claimed) {
+    /**
+     * ⭐⭐ **2. KAT — ALINDIKTAN SONRA VADEYİ BİR KEZ DAHA DOĞRULA.**
+     *
+     * 1. kat `clock.read()` ile, alım ise `claimDue` ile yapılıyor — **iki ayrı sorgu**. Sıçrama
+     * tam aralarına düşerse kapı temiz saat görür, alım sıçramış saatle yapılır. Bu kat o dar
+     * yarışı kapatıyor: alımın hemen ardından oyun saati TAZE okunuyor ve vadesi hâlâ gelecekte
+     * olan görev çalıştırılmadan kuyruğa geri bırakılıyor.
+     *
+     * ⚠️ Bu okumanın işe yarayacağı kanıtlı: 2026-08-16'da sıçrama saniyenin altında sürdü,
+     * handler'lar zaten DÜZELMİŞ saatle koştu (`finished_at` doğruydu, `claimed_at` bozuktu).
+     * Yani o gün bu ikinci okuma 12 görevin 12'sini de yakalardı.
+     *
+     * ⚠️ Ek sorgu YALNIZ görev alındığında yapılıyor — boş turlar (kuyruğun normal hâli) hiçbir
+     * maliyet görmüyor.
+     */
+    let runnable = claimed;
+    if (claimed.length > 0) {
+      const verify = await this.clock.read(this.opts.worldId);
+      const future = claimed.filter(
+        (m) => m.executeAt.getTime() - verify.gameNow.getTime() > this.opts.maxFutureDueMs,
+      );
+      if (future.length > 0) {
+        runnable = claimed.filter((m) => !future.includes(m));
+        for (const m of future) {
+          await this.repo.releaseFuture(m.id);
+          result.released++;
+          this.opts.onError?.(
+            new Error(
+              `[scheduler] görev ${m.id} (${m.type}) vadesi ${m.executeAt.toISOString()}, ` +
+              `oyun saati ${verify.gameNow.toISOString()} — GELECEKTE, kuyruğa geri bırakıldı`,
+            ),
+            m,
+          );
+        }
+        /**
+         * ⚠️ Çıpa da düşürülüyor: buraya gelindiyse saat oynamış demektir, bir sonraki tur
+         * eski çıpayla kıyaslanıp boşuna atlanmasın.
+         */
+        this.clockAnchor = null;
+      }
+    }
+
+    for (const mission of runnable) {
       try {
         await this.runOne(mission);
         result.done++;
@@ -236,6 +362,37 @@ export class SchedulerService {
     await this.sample(result);
     await this.beat(result);
     return result;
+  }
+
+  /**
+   * ⭐⭐ **SAAT SIÇRAMASI ÖLÇÜMÜ — çıpayı günceller, sapmayı döndürür.**
+   *
+   * Dönen değer `null` ise saat sağlıklı (ya da çıpa henüz yok). Sayı ise sapma miktarı;
+   * pozitif = oyun saati İLERİ sıçradı, negatif = geri.
+   *
+   * Ölçü şu: iki tur arasında oyun saati ne kadar ilerlediyse, monotonik saat de o kadar
+   * ilerlemeli. Fark toleransı aşıyorsa duvar saati adımlanmıştır.
+   *
+   * ⚠️ **Sapma görülünce çıpa YENİLENİYOR ve tur atlanıyor** — ikisi birlikte. Yenilenmeseydi
+   * meşru bir saat düzeltmesinden (NTP'nin büyük ama DOĞRU bir adımı) sonra her tur atlanır ve
+   * kuyruk kalıcı olarak dururdu. Böylece bedel her sıçramada **tek tur** (1 sn) oluyor.
+   *
+   * ⚠️ `performance.now()` kullanılıyor — `Date.now()` DEĞİL. İkincisi duvar saatidir ve
+   * sıçramada oyun saatiyle birlikte kayar; kıyaslama kendini doğrular, hiçbir şey yakalanmaz.
+   *
+   * ⚠️ VM askıya alınıp devam ettirilirse (`CLOCK_MONOTONIC` askıda durur, duvar saati akar)
+   * bu ölçüm sahte pozitif verir. Bilerek katlanılıyor: bedeli tek atlanmış tur, kazancı
+   * gerçek sıçramaların yakalanması.
+   */
+  private noteClockJump(gameNow: Date): number | null {
+    const monoMs = performance.now();
+    const gameNowMs = gameNow.getTime();
+    const anchor = this.clockAnchor;
+    this.clockAnchor = { gameNowMs, monoMs };
+
+    if (anchor === null) return null;               // ilk tur: yalnız çıpa kuruldu
+    const drift = (gameNowMs - anchor.gameNowMs) - (monoMs - anchor.monoMs);
+    return Math.abs(drift) > this.opts.clockJumpToleranceMs ? drift : null;
   }
 
   /**

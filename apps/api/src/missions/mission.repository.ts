@@ -174,6 +174,34 @@ export class MissionRepository {
   }
 
   /**
+   * ⭐⭐ **SAAT SIÇRAMASIYLA ALINMIŞ GÖREVİ KUYRUĞA GERİ BIRAK (2026-08-16 olayı).**
+   *
+   * `markFailed` DEĞİL, çünkü bu bir hata değil: görev kusursuz, alınma ANI kusurlu. `markFailed`
+   * `execute_at`i backoff kadar İLERİ iter ve `attempts`i harcar — ikisi de yanlış olurdu:
+   * vade oyuncuya söz verilmiş saattir, kaydırılamaz; sıçrama da görevin denemesi değildir.
+   *
+   * ⚠️ **`claimed_at` ve `lag_ms` TEMİZLENİYOR.** `claimDue` `claimed_at`i `COALESCE` ile
+   * korur ("kuyrukta ne kadar bekledi" sorusunun çıpası) — ama sıçramada yazılan damga
+   * GELECEKTE. Silinmezse görev asıl vaktinde işlendiğinde bile çıpa o bozuk değerde kalır ve
+   * `lag_ms` kalıcı olarak saatler gösterir. 2026-08-16'da canlıda tam bu oldu:
+   * `claimed_at = 16:34:48`, `finished_at = 07:09:44` — bitişi alınışından ÖNCE olan 12 satır.
+   *
+   * ⚠️ `attempts` de geri alınıyor: sıçrama günde birkaç kez tekrarlıyor ve her biri bir deneme
+   * yakarsa görev `maxAttempts`e ulaşıp **dead letter**'a düşerdi — hiç çalışmadan.
+   */
+  async releaseFuture(missionId: number): Promise<void> {
+    await this.db.execute(sql`
+      UPDATE missions
+         SET status = 'scheduled',
+             locked_by = NULL, locked_at = NULL,
+             claimed_at = NULL, lag_ms = NULL,
+             attempts = GREATEST(0, attempts - 1),
+             last_error = 'saat sicramasi: vadesi gelecekte oldugu icin kuyruga geri birakildi'
+       WHERE id = ${missionId} AND status = 'running'
+    `);
+  }
+
+  /**
    * ⭐ `duration_ms` / `completed_by` (0044) — HANDLER süresi, kuyrukta beklemeden ayrı.
    *
    * ⚠️ `locked_by` bitişte NULL'lanmak ZORUNDA (kilit alanı), ama o zaman "bu görevi hangi
