@@ -18,9 +18,10 @@ import { CityService } from '../src/cities/city.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
 import { QueueService } from '../src/queues/queue.service.ts';
 import {
-  cumulativeBuildingValue, lossValue, pointsFromBase, recomputeScoreBaseFromHoldings,
-  rederiveScores, resourcePerPoint, scoreValue,
+  creditQueueProgress, cumulativeBuildingValue, lossValue, pointsFromBase,
+  recomputeScoreBaseFromHoldings, rederiveScores, resourcePerPoint, scoreValue,
 } from '../src/scoring/score.service.ts';
+import { materializeUnitQueues } from '../src/queues/unit-queue.ts';
 import { setLiveSettings } from '../src/settings/live.ts';
 import {
   nextSnapshotAt, previousSnapshotAt, scheduleSnapshot, takeSnapshot,
@@ -83,6 +84,23 @@ async function giveBarracks(): Promise<void> {
   `);
 }
 
+/**
+ * ⭐ Bir kuyruk satırını TAMAMLANMIŞ say ve puanını yazdır (2026-08-16).
+ * Puan artık sipariş anında değil tamamlanınca yazıldığı için testlerin bitişi taklit
+ * etmesi gerekiyor; `closeQueue`in yaptığı işin aynısı, gerçek yolun kullandığı fonksiyonla.
+ */
+async function completeQueue(queueId: number): Promise<void> {
+  const [r] = await h.db.execute<Record<string, unknown>>(sql`
+    UPDATE queues SET completed_at = now()
+     WHERE id = ${queueId} AND completed_at IS NULL AND canceled_at IS NULL
+    RETURNING world_id, player_id, (spent_gold + spent_food)::numeric AS spent
+  `);
+  if (!r) return;
+  await creditQueueProgress(
+    h.db as never, Number(r['world_id']), Number(r['player_id']), queueId, Number(r['spent']),
+  );
+}
+
 async function scoreOf(id = playerId): Promise<{ score: number; base: number }> {
   const rows = await h.db.execute<Record<string, unknown>>(sql`
     SELECT score, score_base FROM players WHERE id = ${id}
@@ -112,16 +130,26 @@ describe('puan tabanı', () => {
     expect(scoreValue({ gold: 900, food: 900 })).toBe(1800);
   });
 
-  it('yapı yükseltmesi harcandığı kaynak kadar puan yazar', async () => {
+  /**
+   * ⭐⭐ **PUAN SİPARİŞTE DEĞİL, TAMAMLANINCA** (kullanıcı bildirimi, 2026-08-16).
+   * Bir oyuncu *"yükseltmelerle alınması gereken puan tamamlanmadan önce veriliyor"* dedi ve
+   * haklıydı; bu test o davranışı yasaklıyor.
+   */
+  it('⭐⭐ yapı yükseltmesi SİPARİŞTE puan yazmaz, TAMAMLANINCA yazar', async () => {
     await giveResources(1_000_000, 1_000_000);
     const at = new Date();
     const cost = buildingCost('farm', 2);
+    const before = await scoreOf();
 
-    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    const q = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
 
-    const s = await scoreOf();
-    expect(s.base).toBeCloseTo(cost.gold + cost.food, 3);
-    expect(s.score).toBe(Math.floor((cost.gold + cost.food) / 1000));
+    const afterOrder = await scoreOf();
+    expect(afterOrder.base).toBe(before.base);      // ← hatanın bekçisi
+
+    await completeQueue(q.id);
+    const afterDone = await scoreOf();
+    expect(afterDone.base - before.base).toBeCloseTo(cost.gold + cost.food, 3);
+    expect(afterDone.score).toBe(Math.floor((cost.gold + cost.food) / 1000));
   });
 
   it('iptal iadesi puanı geri alır — sipariş/iptal döngüsü bedava puan basamaz', async () => {
@@ -138,18 +166,48 @@ describe('puan tabanı', () => {
 
     const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
     const afterOrder = await scoreOf();
-    expect(afterOrder.base).toBeGreaterThan(before.base);
+    expect(afterOrder.base).toBe(before.base);      // sipariş puan yazmaz
 
-    // Hemen iptal: dokümandaki kural gereği BİR birim eksik iade edilir.
-    const res = await queues.cancel({ queueId: q.id, playerId, at });
+    // Hiç asker üretilmeden iptal.
+    await queues.cancel({ queueId: q.id, playerId, at });
     const afterCancel = await scoreOf();
 
+    /**
+     * ⭐⭐ Kullanıcı kararı (2026-08-16): *"tam son anda iptal edip neredeyse tüm ganimeti
+     * iptal cezası yüzünden kaybetse bile iptal durumunda puan verilmez."* Yani iade oranına
+     * bakılmıyor; hiçbir şey üretilmediyse puan da yok.
+     */
+    expect(afterCancel.base).toBe(before.base);
+  });
+
+  /** ⭐ Üretilmiş askerler şehirde KALIYOR → onların puanı da kalmalı. */
+  it('⭐ iptalde ÜRETİLMİŞ askerlerin puanı korunur', async () => {
+    await giveBarracks();
+    await giveResources(1_000_000, 1_000_000);
+    await h.db.execute(sql`
+      INSERT INTO techs (player_id, type, level) VALUES (${playerId}, 'blacksmithing', 1)
+      ON CONFLICT (player_id, type) DO UPDATE SET level = 1
+    `);
+    const at = new Date();
+    const before = await scoreOf();
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+
+    // Üç birimlik süre geçir → 3 asker üretilmiş olsun.
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT per_unit_seconds FROM queues WHERE id = ${q.id}
+    `);
+    const perUnit = Number(row!['per_unit_seconds']);
+    const sonra = new Date(at.getTime() + perUnit * 3 * 1000 + 500);
+    await materializeUnitQueues(h.db as never, cityId, sonra, 'unit');
+
+    const uretilmis = await scoreOf();
     const unit = UNITS_BY_ID['dwarf']!;
-    const ordered = (unit.gold + unit.food) * 10;
-    const refunded = res.refunded.gold + res.refunded.food;
-    // Elde kalan puan tabanı = harcanan − iade edilen (yani yakılan tek birimin bedeli kadar).
-    expect(afterCancel.base).toBeCloseTo(before.base + ordered - refunded, 0);
-    expect(afterCancel.base).toBeLessThan(afterOrder.base);
+    expect(uretilmis.base - before.base).toBeCloseTo((unit.gold + unit.food) * 3, 0);
+
+    await queues.cancel({ queueId: q.id, playerId, at: sonra });
+    const afterCancel = await scoreOf();
+    // Üretilen 3 askerin puanı DURUYOR, üretilmeyen 7'ninki hiç yazılmamıştı.
+    expect(afterCancel.base).toBeCloseTo(before.base + (unit.gold + unit.food) * 3, 0);
   });
 });
 
@@ -437,10 +495,12 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
     const before = (await scoreOf()).base;
 
     // Çiftlik 1→2 ve 2→3: iki ayrı harcama, ikisi de toplanmalı.
-    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    const q1 = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    await completeQueue(q1.id);
     await h.db.execute(sql`UPDATE buildings SET level = 2 WHERE city_id = ${cityId} AND type = 'farm'`);
     await h.db.execute(sql`DELETE FROM queues WHERE city_id = ${cityId}`);
-    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    const q2 = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    await completeQueue(q2.id);
 
     const beklenen = spend(buildingCost('farm', 2)) + spend(buildingCost('farm', 3));
     expect((await scoreOf()).base - before).toBe(beklenen);
@@ -454,11 +514,13 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
       ON CONFLICT (city_id, type) DO UPDATE SET level = 2`);
     const at = await clock.gameNow(worldId);
     const before = (await scoreOf()).base;
-    await queues.enqueueTech({ cityId, playerId, type: 'archery', at });
+    const q = await queues.enqueueTech({ cityId, playerId, type: 'archery', at });
+    expect((await scoreOf()).base - before).toBe(0);        // sipariş yazmaz
+    await completeQueue(q.id);
     expect((await scoreOf()).base - before).toBeGreaterThan(0);
   });
 
-  it('K3 · asker üretimi puan yazar (adet kadar)', async () => {
+  it('K3 · asker üretimi puan yazar (ÜRETİLEN adet kadar)', async () => {
     await giveBarracks();
     await giveResources(1e9, 1e9);
     await h.db.execute(sql`
@@ -466,9 +528,16 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
       ON CONFLICT (player_id, type) DO UPDATE SET level = 1`);
     const at = await clock.gameNow(worldId);
     const before = (await scoreOf()).base;
-    await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 7, at });
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 7, at });
     const d = UNITS_BY_ID['dwarf']!;
-    expect((await scoreOf()).base - before).toBe((d.gold + d.food) * 7);
+    expect((await scoreOf()).base - before).toBe(0);        // sipariş yazmaz
+
+    // Tüm sipariş üretilene kadar süre geçir.
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT per_unit_seconds FROM queues WHERE id = ${q.id}`);
+    const sonra = new Date(at.getTime() + Number(row!['per_unit_seconds']) * 7 * 1000 + 500);
+    await materializeUnitQueues(h.db as never, cityId, sonra, 'unit');
+    expect((await scoreOf()).base - before).toBeCloseTo((d.gold + d.food) * 7, 0);
   });
 
   it('K4 · savunma birimi ve Sur da puan yazar', async () => {
@@ -483,11 +552,18 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
     const at = await clock.gameNow(worldId);
 
     const a = (await scoreOf()).base;
-    await queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 3, at });
+    const qa = await queues.enqueueDefense({ cityId, playerId, type: 'archer_tower', count: 3, at });
+    expect((await scoreOf()).base).toBe(a);                 // sipariş yazmaz
+    const [ra] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT per_unit_seconds FROM queues WHERE id = ${qa.id}`);
+    await materializeUnitQueues(
+      h.db as never, cityId,
+      new Date(at.getTime() + Number(ra!['per_unit_seconds']) * 3 * 1000 + 500), 'defense');
     expect((await scoreOf()).base).toBeGreaterThan(a);
 
     const b = (await scoreOf()).base;
-    await queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at });
+    const qb = await queues.enqueueDefense({ cityId, playerId, type: 'wall', count: 1, at });
+    await completeQueue(qb.id);                             // Sur seviyeli → bitiş görevinden
     expect((await scoreOf()).base).toBeGreaterThan(b);
   });
 
@@ -518,11 +594,15 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
     const at = await clock.gameNow(worldId);
 
     const before = (await scoreOf()).base;
-    await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+    const q = await queues.enqueueUnits({ cityId, playerId, type: 'dwarf', count: 10, at });
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT per_unit_seconds FROM queues WHERE id = ${q.id}`);
+    const sonra = new Date(at.getTime() + Number(row!['per_unit_seconds']) * 10 * 1000 + 500);
+    await materializeUnitQueues(h.db as never, cityId, sonra, 'unit');
     const yazilan = (await scoreOf()).base - before;
 
     // Onunun da öldüğü senaryo: tam olarak yazılan kadar düşmeli.
-    expect(lossValue({ dwarf: 10 })).toBe(yazilan);
+    expect(lossValue({ dwarf: 10 })).toBeCloseTo(yazilan, 0);
   });
 
   it('K8 · puan oyuncunun TÜM şehirlerinin toplamı', async () => {
@@ -540,8 +620,10 @@ describe('⭐ puanlama kuralları — kullanıcının tarifi', () => {
        WHERE id = ${ikinciId}`);
 
     const before = (await scoreOf()).base;
-    await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
-    await queues.enqueueBuilding({ cityId: ikinciId, playerId, type: 'farm', at });
+    const qa = await queues.enqueueBuilding({ cityId, playerId, type: 'farm', at });
+    const qb = await queues.enqueueBuilding({ cityId: ikinciId, playerId, type: 'farm', at });
+    await completeQueue(qa.id);
+    await completeQueue(qb.id);
 
     // İki AYRI şehirdeki harcama tek oyuncu tabanında toplanmalı.
     expect((await scoreOf()).base - before).toBe(2 * spend(buildingCost('farm', 2)));

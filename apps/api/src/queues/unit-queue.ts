@@ -20,6 +20,7 @@
  * eder — böylece bir hafta çevrimdışı kalan oyuncunun tüm kuyruğu tek okumada yakalanır.
  */
 import { sql } from 'drizzle-orm';
+import { creditQueueProgress } from '../scoring/score.service.ts';
 
 /** `db` veya transaction — ikisi de `execute` sunuyor. */
 export interface Runner {
@@ -34,6 +35,11 @@ interface OpenRow {
   perUnit: number;
   startedAt: Date | null;
   position: number;
+  worldId: number;
+  /** NULL olabilir (eski satırlar) → o zaman puan yazılmaz. */
+  playerId: number | null;
+  /** Sipariş anında ödenen toplam (altın + yemek). Puan oranı bundan türer. */
+  spent: number;
 }
 
 /** Sonsuz döngü sigortası: normalde en fazla `Baraka seviyesi` kadar dönülür. */
@@ -66,7 +72,8 @@ export async function materializeUnitQueues(
 
   for (let guard = 0; guard < MAX_CHAIN; guard++) {
     const rows = await runner.execute<Record<string, unknown>>(sql`
-      SELECT id, item_type, count, done, per_unit_seconds, started_at, position
+      SELECT id, item_type, count, done, per_unit_seconds, started_at, position,
+             world_id, player_id, (spent_gold + spent_food)::numeric AS spent
         FROM queues
        WHERE city_id = ${cityId} AND category = ${category} AND target_level IS NULL
          AND completed_at IS NULL AND canceled_at IS NULL
@@ -84,6 +91,9 @@ export async function materializeUnitQueues(
       perUnit: Math.max(0.001, Number(r['per_unit_seconds'] ?? 0)),
       startedAt: r['started_at'] == null ? null : new Date(String(r['started_at'])),
       position: Number(r['position'] ?? 1),
+      worldId: Number(r['world_id']),
+      playerId: r['player_id'] == null ? null : Number(r['player_id']),
+      spent: Number(r['spent'] ?? 0),
     };
     if (!q.startedAt || q.count <= 0) break;
 
@@ -108,6 +118,26 @@ export async function materializeUnitQueues(
         ON CONFLICT (city_id, type) DO UPDATE SET count = ${sql.raw(table)}.count + ${delta}
       `);
       await runner.execute(sql`UPDATE queues SET done = ${producible} WHERE id = ${q.id}`);
+
+      /**
+       * ⭐⭐ **PUAN ÜRETİLEN BİRİM BAŞINA** (kullanıcı, 2026-08-16): *"toplu üretimde üretimi
+       * bittiği kadar askerin sıralama hesaplanırken hesaba katılması gerekir. Komple
+       * kuyruğun veya o anki toplu üretimin hepsinin bitmesi beklenmemeli."*
+       *
+       * ⚠️ Oran `spent × done / count` — birim maliyetini katalogdan yeniden okumuyoruz.
+       * Sipariş ANINDAKİ fiyat `spent`te donmuş durumda; katalog sonradan yeniden
+       * fiyatlanırsa (canlıda 5 kez oldu) yeniden okuma, oyuncunun ödemediği bir tutarı
+       * puana yazardı.
+       *
+       * ⚠️ Tembel ilerleme yüzünden bu satır aynı kuyruk için defalarca koşuyor;
+       * `creditQueueProgress` FARK işlediği için tekrar puan yazmıyor.
+       */
+      if (q.playerId != null && q.count > 0) {
+        await creditQueueProgress(
+          runner as never, q.worldId, q.playerId, q.id, (q.spent * producible) / q.count,
+        );
+      }
+
       produced[q.itemType] = (produced[q.itemType] ?? 0) + delta;
       q.done = producible;
     }

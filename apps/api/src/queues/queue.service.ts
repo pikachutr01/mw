@@ -23,7 +23,7 @@ import { CapacityService } from '../cities/capacity.service.ts';
 import { openUnitQueueCount, promoteNext, rescheduleUnitChain } from './unit-queue.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
-import { creditSpend, debitRefund } from '../scoring/score.service.ts';
+import { debitQueueCancel } from '../scoring/score.service.ts';
 
 export type QueueCategory = 'building' | 'unit' | 'defense' | 'tech';
 
@@ -722,9 +722,19 @@ export class QueueService {
   }
 
   /**
-   * Kaynağı düşer ve **puanı aynı transaction'da işler** (doküman: harcanan her 1000 birim
-   * kaynak 1 puan). Puanı burada yazmak şart: harcamanın tek geçtiği yer burası, başka bir
-   * noktaya koysak yeni bir kalem türü eklendiğinde puan sessizce yazılmadan kalırdı.
+   * Kaynağı düşer. **Puan BURADA YAZILMAZ** (2026-08-16).
+   *
+   * ⚠️⚠️ Eskiden hemen ardından `creditSpend` çağrılıyordu ve bir oyuncu bunu bildirdi:
+   * *"yükseltmelerle alınması gereken puan tamamlanmadan önce veriliyor."* Doğruydu; canlıda
+   * ölçüldü, `score_base` ile gerçek sahiplik arasındaki fark açık kuyruğun bedeline kuruşu
+   * kuruşuna eşitti (barbossa 54 görünüyordu, tamamlanmışın karşılığı 48'di).
+   *
+   * Etkisi sıralamayla sınırlı değildi: puan **10 kat saldırı kuralında** ve **ganimet fark
+   * çarpanında** da kullanılıyor, yani sipariş vererek puanını şişiren oyuncu aynı anda
+   * kendini saldırıdan koruyup ganimet hesabını değiştiriyordu.
+   *
+   * Puan artık tamamlanma noktalarında yazılıyor: yapı/teknik `queue.handlers.ts`te,
+   * toplu üretim ise birim başına `unit-queue.ts`te (`creditQueueProgress`).
    */
   private async spend(
     tx: Db, worldId: number, cityId: number, playerId: number,
@@ -738,7 +748,6 @@ export class QueueService {
         cost,
       );
     }
-    await creditSpend(tx as never, worldId, playerId, cost);
   }
 
   /** Kuyruk satırı + bitiş görevi — AYNI transaction (yarım iş olamaz). */
@@ -911,13 +920,30 @@ export class QueueService {
       }
       if (refunded.gold > 0 || refunded.food > 0) {
         await this.cities.add(cityId, refunded, opts.at, tx as never);
-        /**
-         * ⭐ İADE EDİLEN KAYNAK HARCANMIŞ SAYILMAZ → puan tabanından geri alınır.
-         * Bu satır olmadan "sipariş ver, hemen iptal et" döngüsü kaynak harcamadan puan basardı:
-         * sipariş harcamayı puana yazar, iptal kaynağı geri verir, kasa hiç azalmaz.
-         */
-        await debitRefund(tx as never, Number(q['world_id']), opts.playerId, refunded);
       }
+
+      /**
+       * ⭐⭐ **İPTALDE PUAN VERİLMEZ** (kullanıcı, 2026-08-16): *"tam son anda iptal edip
+       * neredeyse tüm ganimeti iptal cezası yüzünden kaybetse bile iptal durumunda puan
+       * verilmez."* Yani ölçü iade ORANI değil, o satırın yazdırdığı puanın karşılığında
+       * gerçekten üretilmiş bir şey olup olmadığı.
+       *
+       * ⚠️ `debitRefund` YERİNE geçti. Eski kural "iade edilen kaynak harcanmamış sayılır"dı
+       * ve iade edilmeyen kısmın puanı oyuncuda kalıyordu; canlıda ölçüldü, altı oyuncunun
+       * puan sapmasının tamamı bundan geliyordu (Kaos'ta 600, iki iptalin "bir birim eksik"
+       * cezası kadar).
+       *
+       * ⚠️ Toplu üretimde biten askerler şehirde KALIYOR → onların puanı da kalmalı.
+       * `keptValue` tam olarak o: üretilmiş kısmın kaynak karşılığı.
+       *
+       * ⚠️ Yeni satırlarda bu çağrı hiçbir şey yapmaz (yazılan puan zaten üretilenin
+       * karşılığı). İş yaptığı tek yer göç öncesi satırlar; onlar tüm puanı sipariş anında
+       * almışlardı.
+       */
+      const keptValue = isUnit && count! > 0 ? (spent.gold + spent.food) * (done / count!) : 0;
+      await debitQueueCancel(
+        tx as never, Number(q['world_id']), opts.playerId, opts.queueId, keptValue,
+      );
       return { refunded, rule, progress };
     });
   }

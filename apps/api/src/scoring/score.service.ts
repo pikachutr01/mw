@@ -100,6 +100,77 @@ export async function creditSpend(
   await addScoreBase(runner, worldId, playerId, scoreValue(cost));
 }
 
+/**
+ * ⭐⭐ **KUYRUK SATIRININ TAMAMLANAN KISMININ PUANINI YAZAR** (2026-08-16).
+ *
+ * `queues.score_credited` o satırın şimdiye kadar yazdırdığı toplamı taşıyor; buraya
+ * "artık ne kadar yazmış olmalı" (`shouldBe`) veriliyor ve fark işleniyor. İki tamamlanma
+ * yolu da (yapı/teknik bitişi · toplu üretimde birim başına ilerleme) bunu çağırıyor.
+ *
+ * ⚠️ **Fark işlemek ŞART, mutlak yazmak değil.** Toplu üretim tembel ilerliyor: aynı satır
+ * için bu fonksiyon defalarca, farklı `shouldBe` değerleriyle çağrılıyor. Mutlak yazsaydık
+ * her çağrı puanı baştan eklerdi.
+ *
+ * ⚠️ **`score_credited` ile `score_base` AYNI transaction'da güncelleniyor.** Ayrılsalardı
+ * araya düşen bir hata satırı "puan yazdım" derken oyuncuya hiç yazmamış olurdu; tersi de
+ * mümkün ve o daha kötü (sessiz enflasyon).
+ *
+ * ⚠️ Geriye gitmez: `shouldBe` mevcut değerden küçükse hiçbir şey yapılmaz. Üretim sayacı
+ * yalnız ileri gidiyor, ama bir gün gitmezse puanın kendiliğinden erimesini istemeyiz.
+ */
+export async function creditQueueProgress(
+  runner: Runner, worldId: number, playerId: number, queueId: number, shouldBe: number,
+): Promise<void> {
+  /**
+   * ⚠️ Fark `RETURNING`den OKUNAMAZ: orası satırın GÜNCELLENMİŞ hâlini görür ve "eskisi neydi"
+   * sorusu cevapsız kalır (PG 17'de `OLD` yok) — `city.service.spendUpTo` ile aynı tuzak.
+   * Eski değer aynı ifadede bir CTE ile fotoğraflanıyor; `FOR UPDATE` iki eşzamanlı
+   * ilerletmenin aynı farkı iki kez yazmasını engelliyor.
+   */
+  const rows = await runner.execute<Record<string, unknown>>(sql`
+    WITH cur AS (
+      SELECT score_credited AS c FROM queues WHERE id = ${queueId} FOR UPDATE
+    ), upd AS (
+      UPDATE queues SET score_credited = GREATEST(score_credited, ${shouldBe}::numeric)
+       WHERE id = ${queueId}
+      RETURNING 1
+    )
+    SELECT GREATEST(0::numeric, ${shouldBe}::numeric - cur.c) AS delta FROM cur
+  `);
+  const delta = Number(rows[0]?.['delta'] ?? 0);
+  if (delta > 0) await addScoreBase(runner, worldId, playerId, delta);
+}
+
+/**
+ * ⭐ İPTAL — yazılmış ama karşılığı üretilmemiş puanı geri alır (2026-08-16).
+ *
+ * ⚠️ Kullanıcı kararı: *"tam son anda iptal edip neredeyse tüm ganimeti iptal cezası yüzünden
+ * kaybetse bile iptal durumunda puan verilmez."* Yani iade oranına BAKILMIYOR; ölçü, o satırın
+ * yazdırdığı puanın karşılığında gerçekten üretilmiş bir şey olup olmadığı.
+ *
+ * `keptValue` = iptal anında elde kalan (üretilmiş) kısmın kaynak karşılığı. Toplu üretimde
+ * biten askerler şehirde kalıyor, onların puanı da kalmalı; yapıda hiçbir şey üretilmediği
+ * için 0 geçiliyor.
+ *
+ * ⚠️ Yeni satırlarda `score_credited` zaten üretilmişin karşılığına eşit → düşülecek puan 0.
+ * Geriye alınacak puan yalnız **göç öncesi** satırlarda çıkıyor; onlar tüm puanı sipariş
+ * anında almışlardı.
+ */
+export async function debitQueueCancel(
+  runner: Runner, worldId: number, playerId: number, queueId: number, keptValue: number,
+): Promise<void> {
+  const rows = await runner.execute<Record<string, unknown>>(sql`
+    SELECT score_credited::numeric AS credited FROM queues WHERE id = ${queueId}
+  `);
+  const credited = Number(rows[0]?.['credited'] ?? 0);
+  const geriAl = credited - Math.max(0, keptValue);
+  if (geriAl <= 0) return;
+  await runner.execute(sql`
+    UPDATE queues SET score_credited = ${Math.max(0, keptValue)}::numeric WHERE id = ${queueId}
+  `);
+  await addScoreBase(runner, worldId, playerId, -geriAl);
+}
+
 /** İade → puan geri alınır (harcanmamış sayılır). */
 export async function debitRefund(
   runner: Runner, worldId: number, playerId: number, refund: ResourceAmount,

@@ -6,6 +6,7 @@
  * = `queue:<id>` olduğu için aynı kuyruk iki kez uygulanamaz.
  */
 import { sql } from 'drizzle-orm';
+import { creditQueueProgress } from '../scoring/score.service.ts';
 import type { CityService } from '../cities/city.service.ts';
 import type { HandlerContext, MissionHandler } from '../missions/handler-registry.ts';
 import { materializeUnitQueues } from './unit-queue.ts';
@@ -35,9 +36,31 @@ async function closeQueue(ctx: HandlerContext, queueId: number): Promise<boolean
   const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
     UPDATE queues SET completed_at = ${ctx.at.toISOString()}::timestamptz
      WHERE id = ${queueId} AND completed_at IS NULL AND canceled_at IS NULL
-    RETURNING id
+    RETURNING id, world_id, player_id, (spent_gold + spent_food)::numeric AS spent
   `);
-  return rows.length > 0;
+  const r = rows[0];
+  if (!r) return false;
+
+  /**
+   * ⭐⭐ **PUAN BURADA YAZILIYOR** (2026-08-16) — sipariş anında değil, TAMAMLANINCA.
+   *
+   * Bir oyuncu *"yükseltmelerle alınması gereken puan tamamlanmadan önce veriliyor"* diye
+   * bildirdi ve haklıydı: `queue.service.spend()` kaynağı düşerken puanı da yazıyordu.
+   * Gerekçenin tamamı `drizzle/0050_score_on_completion.sql` başlığında.
+   *
+   * ⚠️ `closeQueue` içinde olmak ZORUNDA, çağıranların içinde değil: bu fonksiyon yapı,
+   * teknik ve savunma bitişlerinin ORTAK kapısı ve `completed_at IS NULL` koşuluyla
+   * **tam olarak bir kez** geçiliyor. Çağıranlara dağıtsaydık dördüncü bir kalem türü
+   * eklendiğinde puan sessizce yazılmadan kalırdı; bu, kaldırdığımız `spend()` çağrısının
+   * kendi yorumunda yazan gerekçenin aynısı.
+   */
+  const playerId = r['player_id'] == null ? null : Number(r['player_id']);
+  if (playerId != null) {
+    await creditQueueProgress(
+      ctx.tx as never, Number(r['world_id']), playerId, queueId, Number(r['spent'] ?? 0),
+    );
+  }
+  return true;
 }
 
 /** `building_finish` — yapı seviyesini bir artırır. */

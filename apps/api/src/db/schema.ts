@@ -439,6 +439,18 @@ export const queues = pgTable('queues', {
   spentFood: numeric('spent_food', { precision: 20, scale: 6 }).notNull().default('0'),
   /** Bitişi uygulayacak görev (aynı transaction'da yazılır). */
   missionId: bigint('mission_id', { mode: 'number' }),
+  /**
+   * ⭐⭐ Bu satırın `score_base`e şimdiye kadar YAZDIRDIĞI toplam (2026-08-16).
+   *
+   * Puan artık sipariş anında değil **tamamlanınca** yazılıyor; toplu üretimde ise üretilen
+   * birim başına ilerliyor. Tamamlanma "ödenen − bu sütun", iptal ise "bu sütun − üretilmiş
+   * olanın karşılığı" kadar işlem yapıyor.
+   *
+   * ⚠️ Göç mevcut satırları ödenen tutarın tamamıyla doldurdu: onlar puanı sipariş anında
+   * almışlardı, yeni kod bir kez daha yazsaydı çifte puan olurdu
+   * (`drizzle/0050_score_on_completion.sql`).
+   */
+  scoreCredited: numeric('score_credited', { precision: 24, scale: 6 }).notNull().default('0'),
   canceledAt: timestamp('canceled_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 }, (t) => [
