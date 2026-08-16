@@ -61,14 +61,23 @@ class _Buildings extends ConsumerStatefulWidget {
 }
 
 class _BuildingsState extends ConsumerState<_Buildings> {
-  bool _busy = false;
+  /// ⭐ Uçuştaki isteğin **hangi satıra** ait olduğu; boşta `null`.
+  ///
+  /// ⚠️ Eskiden düz bir `bool`du ve kullanıcı sonucunu bildirdi: *"bir butona basınca
+  /// ekrandaki tüm butonlar anlık olarak bir patlama efekti veriyorlar."* Tek bayrak, listedeki
+  /// her düğmeyi aynı anda pasife düşürüyordu. Gerekçenin tamamı `UpgradeRow.pending`de.
+  String? _pending;
   String? _error;
 
   /// ⚠️ Hata/başarı geri bildirimi TEK yerden: her çağıran kendi `try`ını yazsaydı titreşim
   /// bir yerde unutulur ve davranış ekran içinde ayrışırdı (`barracks_screen` ile aynı kalıp).
-  Future<void> _run(Future<void> Function() action) async {
+  ///
+  /// ⚠️ **Çift gönderim koruması burada, düğmede DEĞİL**: uçuşta bir istek varken ikinci
+  /// dokunuş sessizce yutuluyor. Görsel bir kilide (tüm düğmeleri pasife almaya) gerek yok.
+  Future<void> _run(String id, Future<void> Function() action) async {
+    if (_pending != null) return;
     setState(() {
-      _busy = true;
+      _pending = id;
       _error = null;
     });
     try {
@@ -81,7 +90,7 @@ class _BuildingsState extends ConsumerState<_Buildings> {
       await mwTapError();
       if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _pending = null);
     }
   }
 
@@ -102,21 +111,12 @@ class _BuildingsState extends ConsumerState<_Buildings> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        if (buildingQueues.isNotEmpty) ...[
-          ProductionBand(
-            city: city,
-            queues: buildingQueues,
-            limit: 1,
-            noun: 'yapı',
-            folder: 'buildings',
-            title: 'İnşaat',
-            busy: _busy,
-            // ⚠️ Yapı kuyruğunda sıralama YOK (tek emir) — oklar hiç çizilmiyor.
-            onMove: (_, _) {},
-            onCancel: _askCancel,
-          ),
-          const SizedBox(height: 12),
-        ],
+        /// ⚠️⚠️ **ÜSTTE «İNŞAAT» BANDI YOK** (kullanıcı, 2026-08-17): *"Yapılar sayfasında
+        /// yükseltilen bina yalnızca kendi satırında görünür, üstte ek olarak çıkmaz."*
+        ///
+        /// Bir ara hem bant hem satır içi geri sayım vardı ve **aynı emri iki kez** gösteriyordu.
+        /// Baraka'da bant doğru araç, çünkü orada sıralanabilir BİRDEN ÇOK emir var; inşaat ise
+        /// aynı anda tek ve yeri kendi satırı. Web de böyle davranıyor.
         MwPanel(
           title: 'Yapılar',
           child: Column(
@@ -191,10 +191,15 @@ class _BuildingsState extends ConsumerState<_Buildings> {
         afford: afford,
         hasUnmet: unmet.isNotEmpty,
         busy: flags['buildBusy']!,
-        pending: _busy,
+        // ⚠️⚠️ **SATIR BAZINDA** — `_pending != null` YAZILMAZ. Öyle yazılırsa uçuştaki
+        //    tek bir istek listedeki HER düğmeyi pasife düşürür ve kullanıcının bildirdiği
+        //    "tüm butonlar patlama efekti veriyor" davranışı geri gelir. Çift gönderim
+        //    koruması `_run`da; buradaki kapı yalnız bu satırı ilgilendiriyor.
+        pending: _pending == b.id,
         mutex: mutex != null,
         caveLocked: caveLocked,
       ),
+      pending: _pending == b.id,
       onUpgrade: () => _upgrade(b),
       progress: q == null
           ? null
@@ -202,7 +207,7 @@ class _BuildingsState extends ConsumerState<_Buildings> {
               startedAt: q.startedAt,
               finishAt: q.finishAt,
               label: 'seviye ${q.targetLevel}',
-              busy: _busy,
+              busy: _pending != null,
               onCancel: () => _askCancel(q),
             ),
     );
@@ -210,7 +215,7 @@ class _BuildingsState extends ConsumerState<_Buildings> {
 
   Future<void> _upgrade(CatalogUpgradable b) async {
     final queues = ref.read(cityQueuesProvider(widget.city.id));
-    await _run(() => queues.enqueue(category: 'building', type: b.id));
+    await _run(b.id, () => queues.enqueue(category: 'building', type: b.id));
   }
 
   Future<void> _askCancel(CityQueue q) async {
@@ -227,6 +232,9 @@ class _BuildingsState extends ConsumerState<_Buildings> {
       confirmLabel: 'İptal et',
     );
     if (!ok) return;
-    await _run(() => ref.read(cityQueuesProvider(widget.city.id)).cancel(q.id));
+    await _run(
+      q.itemType,
+      () => ref.read(cityQueuesProvider(widget.city.id)).cancel(q.id),
+    );
   }
 }

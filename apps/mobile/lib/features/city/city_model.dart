@@ -190,6 +190,7 @@ class CityQueue {
     required this.startedAt,
     required this.finishAt,
     required this.perUnitSeconds,
+    required this.done,
     required this.position,
   });
 
@@ -203,6 +204,20 @@ class CityQueue {
   final String startedAt;
   final String finishAt;
   final num? perUnitSeconds;
+
+  /// ⭐⭐ SUNUCUNUN **ZATEN SAYDIĞI** ÜRETİM ADEDİ (2026-08-17).
+  ///
+  /// ⚠️ `city_progress.dart` `done`u ilerleme hesabından bilerek dışlıyor ve gerekçesi doğru:
+  /// orada `done` **bayat** bir sayıdır, ilerleme `startedAt` çıpasından türetilmeli.
+  /// Buradaki kullanımı ise tamamen farklı bir soru: *"bu yanıt hazırlanırken kaç birim
+  /// `units` tablosuna İŞLENMİŞTİ?"* Ve o sorunun cevabı tam olarak `done`dur.
+  ///
+  /// ⭐ Baraka'daki eldeki adet bununla düzeltiliyor: sunucu tembel üretiyor (`units.count`
+  /// yalnız şehir okunduğunda ilerliyor), yani toplu bir emirde sayı okuma anında donuyor ve
+  /// oyuncu *"üretimi biten askerler anlık olarak eklenmiyor"* diyordu. Ekranda gösterilen
+  /// adet artık `units + (istemcide türetilen üretim − done)`; fark okuma anında sıfır,
+  /// zaman geçtikçe büyüyor ve bir sonraki okumada kendiliğinden sıfırlanıyor.
+  final int done;
 
   /// Banttaki sıra; **1 = üretimi süren**. Bekleyen emirde tek-birim penceresi yok.
   final int? position;
@@ -224,6 +239,7 @@ class CityQueue {
     startedAt: j['startedAt'] as String,
     finishAt: j['finishAt'] as String,
     perUnitSeconds: j['perUnitSeconds'] as num?,
+    done: (j['done'] as num?)?.toInt() ?? 0,
     position: (j['position'] as num?)?.toInt(),
   );
 }

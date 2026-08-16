@@ -21,21 +21,25 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../app/providers.dart';
+import '../../core/city_activity.dart';
 
 import '../../core/city_screens.dart';
 import '../../ui/primitives.dart';
 
-class CityTabs extends StatefulWidget {
+class CityTabs extends ConsumerStatefulWidget {
   const CityTabs({super.key, required this.path});
 
   final String path;
 
   @override
-  State<CityTabs> createState() => _CityTabsState();
+  ConsumerState<CityTabs> createState() => _CityTabsState();
 }
 
-class _CityTabsState extends State<CityTabs> {
+class _CityTabsState extends ConsumerState<CityTabs> {
   final _controller = ScrollController();
 
   @override
@@ -79,6 +83,16 @@ class _CityTabsState extends State<CityTabs> {
     final c = MwColors.of(context);
     final scheme = Theme.of(context).colorScheme;
 
+    /// ⭐ AKTİVİTE NOKTALARI (kullanıcı, 2026-08-17) — hangi ekranda süren iş varsa sekmesinde
+    /// küçük yeşil nokta. Kural `core/city_activity.dart`ta ve web ile aynı.
+    ///
+    /// ⚠️ `cityProvider` zaten bu ekranlarda okunuyor → ek istek YOK, aynı önbellekten geliyor.
+    /// ⚠️ Şehir henüz yüklenmediyse `null` → nokta çizilmiyor; boş bir nokta yakıp sonra
+    /// söndürmek "bir şey mi oldu" sorusu doğururdu.
+    final cityId = ref.watch(activeCityProvider).value;
+    final city = cityId == null ? null : ref.watch(cityProvider(cityId)).value;
+    final activity = cityActivity(city, cityId);
+
     return SizedBox(
       height: 38,
       child: ListView.separated(
@@ -103,13 +117,22 @@ class _CityTabsState extends State<CityTabs> {
                 ),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(
-                s.label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-                  color: active ? scheme.onPrimary : c.muted,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    s.label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+                      color: active ? scheme.onPrimary : c.muted,
+                    ),
+                  ),
+                  if (activity[s.path] == true) ...[
+                    const SizedBox(width: 5),
+                    const MwActivityDot(),
+                  ],
+                ],
               ),
             ),
           );

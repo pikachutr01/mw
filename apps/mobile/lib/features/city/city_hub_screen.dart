@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/providers.dart';
+import '../../core/city_activity.dart';
 import '../../core/city_screens.dart';
 import '../../ui/primitives.dart';
 
@@ -20,6 +22,12 @@ class CityHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = MwColors.of(context);
+
+    /// ⭐ Aktivite noktaları — sekme şeridiyle AYNI kaynaktan (`core/city_activity.dart`).
+    /// ⚠️ Ek istek yok: `cityProvider` zaten önbellekte.
+    final cityId = ref.watch(activeCityProvider).value;
+    final city = cityId == null ? null : ref.watch(cityProvider(cityId)).value;
+    final activity = cityActivity(city, cityId);
 
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -54,6 +62,12 @@ class CityHubScreen extends ConsumerWidget {
                             ],
                           ),
                         ),
+                        // ⚠️ Nokta okun SOLUNDA: ok her satırda var ve göz onu sınır sayıyor;
+                        //    dışına konan bir nokta satırdan kopuk görünürdü.
+                        if (activity[s.path] == true) ...[
+                          const MwActivityDot(),
+                          const SizedBox(width: 8),
+                        ],
                         Icon(Icons.chevron_right, color: c.muted),
                       ],
                     ),

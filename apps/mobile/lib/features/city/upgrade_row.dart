@@ -29,6 +29,7 @@ class UpgradeRow extends StatelessWidget {
     required this.unmet,
     required this.enabled,
     required this.onUpgrade,
+    this.pending = false,
     this.lockNote,
     this.capNote,
     this.alt = false,
@@ -48,6 +49,19 @@ class UpgradeRow extends StatelessWidget {
 
   final bool enabled;
   final VoidCallback onUpgrade;
+
+  /// ⭐⭐ **YALNIZ BU SATIRIN** isteği uçuşta mı (kullanıcı bildirimi, 2026-08-17).
+  ///
+  /// ⚠️ Kullanıcı şöyle tarif etti: *"bir butona basınca ekrandaki tüm butonlar anlık olarak
+  /// bir patlama efekti veriyorlar."* Sebep, uçuştaki isteğin **tek bir ekran bayrağıyla**
+  /// (`_busy`) tutulmasıydı: bayrak kalkınca listedeki HER düğme aynı anda pasife düşüyor,
+  /// Material her birinde zemin geçişini animasyonla oynatıyordu — on düğme birden yanıp
+  /// sönüyordu.
+  ///
+  /// ⭐ Artık uçuştaki istek satır bazında: yalnız basılan düğme dönen bir göstergeye
+  /// çeviriliyor, diğerleri **hiç değişmiyor**. Çift gönderim koruması görsel değil mantıksal
+  /// (ekran ikinci dokunuşu yutuyor), böylece koruma için ekranı titretmek gerekmiyor.
+  final bool pending;
 
   /// Karşılıklı kilit gibi, satırın TAMAMINI kapatan sebep. Yazılıysa gösterilir.
   final String? lockNote;
@@ -160,10 +174,22 @@ class UpgradeRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 // ⭐ Tavandaki yapıda düğme yerine «—»: pasif bir «sv 31» düğmesi, oyuncuya
                 // hâlâ ilerleyebilecekmiş gibi görünür.
-                MwSmallButton(
-                  label: maxed ? '—' : 'sv ${item.level + 1}',
-                  onTap: enabled ? onUpgrade : null,
-                  minWidth: 64,
+                // ⭐ Uçuştaki istek YALNIZ bu düğmede dönen bir gösterge — gerekçe `pending`de.
+                SizedBox(
+                  width: 64,
+                  child: pending
+                      ? const Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : MwSmallButton(
+                          label: maxed ? '—' : 'sv ${item.level + 1}',
+                          onTap: enabled ? onUpgrade : null,
+                          minWidth: 64,
+                        ),
                 ),
               ],
             ),

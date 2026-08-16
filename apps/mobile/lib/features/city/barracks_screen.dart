@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/api_client.dart';
+import '../../core/city_progress.dart';
 import '../../ui/primitives.dart';
 import 'catalog_bits.dart';
 import 'catalog_model.dart';
@@ -241,8 +242,41 @@ class _UnitRowState extends ConsumerState<_UnitRow> {
     final city = widget.city;
     final controller = widget.controller;
     final c = MwColors.of(context);
-    final have = city.units[unit.id] ?? 0;
     final inCave = city.caveUnits[unit.id] ?? 0;
+
+    /// ⭐⭐ ELDEKİ ADET **CANLI** (kullanıcı, 2026-08-17): *"toplu üretim emri verilince üretimi
+    /// biten askerler anlık olarak barakadaki asker sayısına eklenmiyor, üretimin hepsi bitince
+    /// tek seferde güncelleniyor."*
+    ///
+    /// Sebep sunucunun tembel üretimi: `units.count` yalnız şehir OKUNDUĞUNDA ilerliyor. Soket
+    /// bağlıyken emniyet ağı 5 dakikada bir döndüğü için sayı toplu bir emirde dakikalarca
+    /// donuyordu.
+    ///
+    /// ⭐ Çözüm **görsel ve bedava**: sunucunun saydığı adet (`done`) ile istemcinin `startedAt`
+    /// çıpasından türettiği adet (`produced`) arasındaki fark ekleniyor. Okuma anında ikisi
+    /// eşit → fark 0; zaman geçtikçe fark büyüyor; bir sonraki okumada sunucu yakalıyor ve fark
+    /// yeniden 0 oluyor. **Ek istek yok, çift sayma yok.**
+    ///
+    /// ⚠️ `done` BURADA meşru, ilerleme hesabında değil — ayrım `CityQueue.done`da yazılı.
+    /// ⚠️ Yalnız BU birimin açık emirleri toplanıyor: bant birden çok birim taşıyabiliyor.
+    final clock = ref.watch(clockProvider);
+    ref.watch(tickProvider);
+    var pending = 0;
+    for (final q in city.queues) {
+      if (q.category != 'unit' || q.itemType != unit.id || !q.isBatch) continue;
+      final p = unitProgress(
+        ProgressInput(
+          startedAt: q.startedAt,
+          count: q.count,
+          perUnitSeconds: q.perUnitSeconds,
+        ),
+        clock.gameNow(),
+      );
+      // ⚠️ `unitProgress` bant satırı olmayan girdide `null` dönüyor — sessizce atla.
+      if (p == null) continue;
+      pending += (p.produced - q.done).clamp(0, q.count ?? 0);
+    }
+    final have = (city.units[unit.id] ?? 0) + pending;
 
     // ⚠️ Dize olarak okunuyor: boş kutu 0, geçersiz metin de 0 → düğme kapalı kalır.
     final n = int.tryParse(controller.text.trim()) ?? 0;

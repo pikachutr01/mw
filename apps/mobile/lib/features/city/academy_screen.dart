@@ -60,12 +60,18 @@ class _Academy extends ConsumerStatefulWidget {
 }
 
 class _AcademyState extends ConsumerState<_Academy> {
-  bool _busy = false;
+  /// ⭐ Uçuştaki isteğin **hangi satıra** ait olduğu; boşta `null`. Gerekçe
+  /// `UpgradeRow.pending`de: tek bayrak, listedeki her düğmeyi aynı anda pasife düşürüyor
+  /// ve kullanıcının bildirdiği "patlama efekti" oradan geliyordu.
+  String? _pending;
   String? _error;
 
-  Future<void> _run(Future<void> Function() action) async {
+  /// ⚠️ Çift gönderim koruması BURADA, düğmede değil: uçuşta istek varken ikinci dokunuş
+  /// sessizce yutuluyor. Görsel bir kilide gerek yok.
+  Future<void> _run(String id, Future<void> Function() action) async {
+    if (_pending != null) return;
     setState(() {
-      _busy = true;
+      _pending = id;
       _error = null;
     });
     try {
@@ -78,7 +84,7 @@ class _AcademyState extends ConsumerState<_Academy> {
       await mwTapError();
       if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _pending = null);
     }
   }
 
@@ -173,8 +179,11 @@ class _AcademyState extends ConsumerState<_Academy> {
         busyHere: busyHere,
         alreadyRunning: q != null,
         academyUpgrading: academyUpgrading,
-        pending: _busy,
+        // ⚠️⚠️ SATIR BAZINDA — `_pending != null` yazılırsa uçuştaki tek istek tüm düğmeleri
+        //    pasife düşürür (kullanıcının bildirdiği "patlama efekti").
+        pending: _pending == t.id,
       ),
+      pending: _pending == t.id,
       onUpgrade: () => _research(t),
       progress: q == null
           ? null
@@ -185,7 +194,7 @@ class _AcademyState extends ConsumerState<_Academy> {
               label: mineHere
                   ? 'seviye ${q.targetLevel}'
                   : 'seviye ${q.targetLevel} · ${q.cityName}',
-              busy: _busy,
+              busy: _pending != null,
               onCancel: mineHere ? () => _askCancel(q, t.name) : null,
             ),
     );
@@ -193,7 +202,7 @@ class _AcademyState extends ConsumerState<_Academy> {
 
   Future<void> _research(CatalogUpgradable t) async {
     final queues = ref.read(cityQueuesProvider(widget.city.id));
-    await _run(() => queues.enqueue(category: 'tech', type: t.id));
+    await _run(t.id, () => queues.enqueue(category: 'tech', type: t.id));
   }
 
   Future<void> _askCancel(TechQueue q, String name) async {
@@ -206,6 +215,9 @@ class _AcademyState extends ConsumerState<_Academy> {
       confirmLabel: 'İptal et',
     );
     if (!ok) return;
-    await _run(() => ref.read(cityQueuesProvider(widget.city.id)).cancel(q.id));
+    await _run(
+      q.itemType,
+      () => ref.read(cityQueuesProvider(widget.city.id)).cancel(q.id),
+    );
   }
 }

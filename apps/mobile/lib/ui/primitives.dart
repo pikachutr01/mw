@@ -94,7 +94,7 @@ class MwPanel extends StatelessWidget {
                       // ⚠️ Web'de de büyük harf (`uppercase` sınıfı). Cinzel zaten küçük harf
                       // taşımıyor; metni açıkça büyütmek harf aralığının tutarlı olmasını
                       // sağlıyor ve fontun yüklenmediği durumda da aynı görünüyor.
-                      title!.toUpperCase(),
+                      mwUpper(title!),
                       style: mwDisplayStyle(
                         color: c.onPanelHeader,
                         fontSize: 13,
@@ -274,6 +274,45 @@ String mwNumber(int n) {
   return '${n < 0 ? '-' : ''}$b';
 }
 
+/// ⭐ AKTİVİTE NOKTASI — «bu şehirde burada süren bir iş var».
+///
+/// Web'deki `ActivityDot` karşılığı, aynı ölçü ve aynı parıltı. ⚠️ Sayı DEĞİL nokta: kaç iş
+/// olduğu değil, olup olmadığı soruluyor; sayı koymak sekme şeridini şişirirdi.
+class MwActivityDot extends StatelessWidget {
+  const MwActivityDot({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return Container(
+      width: 7,
+      height: 7,
+      decoration: BoxDecoration(
+        color: c.success,
+        shape: BoxShape.circle,
+        // Web'de de gölge var (`shadow-[0_0_4px_…]`): koyu zeminde nokta yoksa kayboluyor.
+        boxShadow: [BoxShadow(color: c.success, blurRadius: 4)],
+      ),
+    );
+  }
+}
+
+/// ⭐⭐ TÜRKÇE BÜYÜK HARF — `i` → `İ` (kullanıcı bildirimi, 2026-08-17).
+///
+/// ⚠️ Dart'ın `toUpperCase()`i **yerelden bağımsızdır** ve Unicode'un varsayılan eşlemesini
+/// uygular: `i` → `I`. Türkçede doğrusu `İ` (U+0130). Ekranda «AKADEMI», «İNŞAAT» yerine
+/// «INSAAT» görünmesinin sebebi buydu.
+///
+/// ⚠️ Yalnız `i` düzeltiliyor, `ı` DEĞİL: `ı` (U+0131) zaten doğru şekilde `I`ya dönüyor.
+/// İkisini birden ele almaya çalışmak (ör. `I` → `ı` ters yönü) burada gereksiz — bu
+/// fonksiyon yalnız büyütüyor, küçültmüyor.
+///
+/// ⚠️ `İ` girdide zaten varsa dokunulmuyor: `'İ'.toUpperCase()` `İ` döndürüyor (ölçüldü).
+///
+/// ⚠️ **Dart `intl` paketine gerek yok.** `toUpperCase` yerel almıyor; yerel duyarlı büyütme
+/// için ayrı bir paket taşımak, tek bir harf için koca bir bağımlılık olurdu.
+String mwUpper(String s) => s.replaceAll('i', 'İ').toUpperCase();
+
 /// ⭐ ONAY DİYALOĞU — geri alınamaz işlemlerin tek kapısı.
 ///
 /// ⚠️ Web'de de global (`ConfirmProvider`): her çağıran kendi diyaloğunu kursa metinler ve
@@ -295,7 +334,8 @@ Future<bool> mwConfirm(
     builder: (ctx) {
       final c = MwColors.of(ctx);
       return AlertDialog(
-        title: Text(title, style: mwDisplayStyle(fontSize: 15)),
+        // ⚠️ Cinzel küçük harfi büyük harf gibi çiziyor → `i` noktasız kalıyordu (`mwUpper`).
+        title: Text(mwUpper(title), style: mwDisplayStyle(fontSize: 15)),
         content: Text(body),
         actions: [
           TextButton(

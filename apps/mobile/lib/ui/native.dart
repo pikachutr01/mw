@@ -90,7 +90,10 @@ Future<T?> mwSheet<T>(
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Text(title, style: mwDisplayStyle(fontSize: 16)),
+              // ⚠️ `mwUpper` ŞART: Cinzel küçük harfi büyük harf gibi çiziyor ve `i`nin
+              // noktası kayboluyordu («ÇIFTLIK»). Metni önceden Türkçe kurallarıyla
+              // büyütünce doğru glif (`İ`) çiziliyor. Gerekçenin tamamı `mwUpper`da.
+              child: Text(mwUpper(title), style: mwDisplayStyle(fontSize: 16)),
             ),
             // ⚠️ Uzun içerik sığmazsa kaydırılabilir olmalı: telefon yatayken ya da yazı
             // boyutu büyütülmüşken sheet ekranı aşabiliyor.
