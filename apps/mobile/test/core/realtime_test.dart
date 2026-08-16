@@ -108,7 +108,15 @@ void main() {
         'cities:changed',
         'missions:changed',
         'messages:changed',
+        'battle:resolved',
       });
+    });
+
+    /// ⭐ Kullanıcı şartı (2026-08-16): saldırı yenen oyuncunun **Baraka ekranı** anında
+    /// tazelensin. O ekran hem şehri hem katalogu okuyor; biri eksikse ekranın yarısı
+    /// savaş öncesini göstermeye devam eder ve bu sessiz bir arızadır.
+    test('⭐ savaş olayı Baraka ekranının İKİ kaynağını da tazeler', () {
+      expect(kInvalidates['battle:resolved'], containsAll(['city', 'catalog']));
     });
 
     test('her konunun en az bir hedefi var (ölü satır yok)', () {

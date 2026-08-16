@@ -16,6 +16,7 @@ import { useSyncExternalStore } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import type { QueryClient } from '@tanstack/react-query';
 import { getSession, instanceId, onSessionChange, setSession } from './api.ts';
+import { INVALIDATES } from './realtime-topics.ts';
 import { setConflict } from './session-conflict.ts';
 
 export type ConnectionState = 'connecting' | 'online' | 'offline';
@@ -51,73 +52,10 @@ export const useConnection = (): ConnectionState =>
   useSyncExternalStore(onConnectionChange, getConnectionState, getConnectionState);
 
 /**
- * Sunucu olayı → tazelenecek sorgu anahtarları. Eşleme TEK yerde.
- *
- * ⚠️ Bu tablo **yoklama aralıklarının dayanağıdır** (`queries.ts`). Bir olay burada karşılıksız
- * kalırsa ekran ancak emniyet ağı yoklaması dönene kadar (60 sn) eski veriyi gösterir. Yeni bir
- * sunucu olayı eklendiğinde önce buraya bakılmalı.
+ * ⭐ Olay → sorgu eşlemesi **`realtime-topics.ts`te** (2026-08-16). Tablo saf olduğu için
+ * ayrı dosyada duruyor ve kapsaması bir testle kilitleniyor; bu dosya soket kurduğu için
+ * tablo burada kalsaydı sınanamazdı. Yeni bir sunucu olayı eklendiğinde önce oraya bakılmalı.
  */
-const INVALIDATES: Record<string, string[]> = {
-  'missions:changed': ['missions'],
-  'city:changed': ['city', 'catalog', 'overview'],
-  // Yeni şehir kurulması şehir ŞERİDİNİ de değiştirir; ⭐ o koordinata YOLDA olan şehir
-  // kurma görevleri de yeni sahibe "gelen saldırı" olarak görünür hâle gelir → missions da tazelenir.
-  'cities:changed': ['cities', 'city', 'world', 'missions'],
-  // Posta kutusuna düşen her satır — okunmamış rozeti anında güncellensin.
-  'messages:changed': ['messages'],
-  /**
-   * ⭐ Destek talebi (2026-08-14): açıldı · yanıtlandı · kapatıldı.
-   * `support-thread` de listede çünkü modal AÇIKKEN gelen yanıt anında görünmeli — yalnız
-   * listeyi tazelemek, açık yazışmayı bayat bırakırdı.
-   */
-  'support:changed': ['support', 'support-thread'],
-  // Savaş hem raporu hem orduyu hem şehri değiştirir.
-  'battle:resolved': ['messages', 'missions', 'city'],
-  // Sıralama günde 3 kez donuyor; donduğu an ekrandaki sıra bayatlamasın.
-  'ranking:updated': ['rankings', 'overview', 'world'],
-  // Askerî ünvan: kendi Genel Durum satırı + (ittifaktaysa) kendi satırındaki rozet.
-  'merit:granted': ['overview', 'alliance'],
-  /**
-   * ⭐ BAKIM MODU (admin Faz 2) — perde bu olayla açılıp kapanır.
-   *
-   * ⚠️ Olay yükünü DOĞRUDAN kullanmıyoruz, sorguyu tazeliyoruz: perdenin metni tek bir
-   * yerden (`/world/state`) gelsin. Yükten okusaydık ilk yüklemede sorgudan, değişimde
-   * olaydan gelen iki metin ayrışabilirdi. `world` da tazeleniyor çünkü bakımdan çıkınca
-   * diyar listesindeki geri sayımlar yeniden hesaplanmalı.
-   */
-  'world:maintenance': ['world-state', 'world'],
-  /* ⭐ İTTİFAK (2026-07-30): üyelik/metin/ad/dağıtma — ittifak ekranı + sağ panel + ittifak
-   * sütunlarını taşıyan görünümler tazelenir. */
-  'alliance:changed': ['alliance', 'alliances', 'overview', 'world', 'rankings',
-    /* ⭐ Susturma/üyelik değişimi sohbet sheet'inin yazma hakkını ve üye listesini etkiler. */
-    'alliance-chat'],
-  /**
-   * ⭐ İTTİFAK SOHBETİ (§13.15c) — olay **KANAL ODASINDAN** geliyor.
-   *
-   * ⚠️ Sheet kapalıyken odaya katılmıyoruz (`alliance:chat:close`), dolayısıyla bu satır
-   * kapalıyken HİÇ tetiklenmez — kullanıcı şartı "kapalıyken tam sessizlik" böyle sağlanıyor.
-   * ⚠️ `alliance-chat` (üye listesi) BİLEREK tazelenmiyor: her mesajda roster çekmek
-   * gereksiz trafik olurdu; liste zaten `alliance:changed` ile güncelleniyor.
-   */
-  'chat:alliance': ['alliance-chat-history'],
-  /* Lider/konsey bir mesajı kaldırdı → geçmiş tazelenir, mesaj ekrandan düşer. */
-  'chat:alliance:deleted': ['alliance-chat-history'],
-  /**
-   * ⭐ GENEL SOHBET (§13.12) — ittifak sohbetiyle aynı kalıp: olay **kanal odasından** geliyor.
-   *
-   * ⚠️ Odaya yalnız «Sohbete Bağlan» denince katılınıyor (`global:chat:open`), dolayısıyla
-   * bağlantı kopukken bu satır HİÇ tetiklenmez — kullanıcı şartı *"bağlantıyı kopardığında
-   * sohbet çevrimdışı"* böyle sağlanıyor: bir bayrakla değil, oda üyeliğiyle.
-   * ⚠️ `global-chat` (açılış paketi) BİLEREK tazelenmiyor: her mesajda yazma hakkını yeniden
-   * sormak gereksiz trafik olurdu.
-   */
-  'chat:global': ['global-chat-history'],
-  /* Yönetici bir mesajı kaldırdı → geçmiş tazelenir, mesaj ekrandan düşer. */
-  'chat:global:deleted': ['global-chat-history'],
-  /* ⭐ ÖZEL MESAJ (2026-07-31): sohbet listesi + açık pencerenin geçmişi tazelenir. Olay gövde
-   * taşımaz; balon metni tazelenen geçmişten gelir (tek doğru kaynak sunucu). */
-  'chat:message': ['chat', 'chat-history'],
-};
 
 /* ── Sohbetin istemci→sunucu ucu (§13.12.3) ─────────────────────────────────────
  *

@@ -20,6 +20,7 @@ import {
   armySpeed, distance, route, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG,
 } from '@mobilwar/engine';
 import { isVerified, UNVERIFIED_MESSAGE, unverifiedLimits } from '../auth/unverified.ts';
+import { lockCities, lockCity } from '../cities/city-lock.ts';
 import { CityService } from '../cities/city.service.ts';
 import { toDate, type Db } from '../db/client.ts';
 import { liveNumberFor } from '../settings/live.ts';
@@ -676,6 +677,18 @@ export class MissionService {
 
       /** ⭐ Kahramanlar da mağara rezervasyonuna takılır — bkz. {@link assertHeroesNotCaveReserved}. */
       await assertHeroesNotCaveReserved(t as never, opts.originCityId, heroIds);
+
+      /**
+       * ⭐⭐ **İKİ ŞEHİR birden kilitlenir** (2026-08-16) — teleport, sefer emirlerinin aksine
+       * hedefe de ANINDA yazıyor (`units` upsert'i + kahramanın `city_id`si). Yalnız kaynağı
+       * kilitleseydik hedef şehir korumasız kalırdı: tam o anda hedefe düşen bir saldırı,
+       * hayatta kalanları yazarken yeni gelen orduyu silebilirdi.
+       *
+       * ⚠️ Sıra `lockCities`e bırakıldı (artan kimlik): ters yönde iki teleport aynı anda
+       * verilirse sabit sıra olmadan kilitlenme doğar. Aşağıdaki `reserveUnits` kaynağın
+       * kilidini ikinci kez alıyor — aynı transaction'da zararsız.
+       */
+      await lockCities(t as never, [opts.originCityId, target.id]);
 
       // Birlikler kaynaktan düşer, hedefe ANINDA eklenir — arada "yolda" durumu yok.
       await this.reserveUnits(t, opts.originCityId, units, opts.at);
@@ -1474,6 +1487,21 @@ export class MissionService {
   private async reserveUnits(
     tx: Tx, cityId: number, units: Record<string, number>, at: Date,
   ): Promise<void> {
+    /**
+     * ⭐⭐ ÖNCE ŞEHRİ KİLİTLE (kullanıcı, 2026-08-16) — görev handler'larının aldığı **aynı**
+     * kilit. Gerekçesi ve kilitsizken üretilen "asker yoktan var oldu" senaryosu
+     * `cities/city-lock.ts` başlığında; oraya bakmadan bu satırı kaldırma.
+     *
+     * ⚠️ **`materialize`den ÖNCE.** Tembel üretim bir YAZMA işlemi ve savaş handler'ı da onu
+     * çağırıyor; ters sırada iki taraf çıpayı yarışarak ilerletirdi. Handler'lardaki sıra da
+     * birebir bu (`lockCity` → `materialize`, `battle.handlers.ts:89-92`).
+     *
+     * ⚠️ Buraya konuldu, çağıranlara DEĞİL: aşağıdaki yorumun ilan ettiği "**tek boğaz**"
+     * olma özelliği kilit için de geçerli. Tek istisna teleport'un HEDEF şehri — ona ordu
+     * ekleniyor ama buradan geçmiyor, o yüzden orada ayrıca kilitleniyor.
+     */
+    await lockCity(tx as never, cityId);
+
     /**
      * ⭐⭐ ÖNCE ŞEHRİ ŞİMDİYE GETİR (2026-08-14, casusluk bayatlığıyla aynı sınıf hata).
      *

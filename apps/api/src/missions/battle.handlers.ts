@@ -696,7 +696,35 @@ async function readCityResources(tx: Tx, cityId: number): Promise<{ gold: number
   return { gold: Number(rows[0]?.['gold'] ?? 0), food: Number(rows[0]?.['food'] ?? 0) };
 }
 
-/** Savaşçılar `units`, savunma birimleri `defenses` tablosuna yazılır. Sur/Kalkan SEVİYE → dokunulmaz. */
+/**
+ * Savaşçılar `units`, savunma birimleri `defenses` tablosuna yazılır. Sur/Kalkan SEVİYE → dokunulmaz.
+ *
+ * ⭐⭐ **MUTLAK DEĞİL FARK YAZILIR** (2026-08-16). Eskiden `SET count = <kalan>` deniyordu ve
+ * o "kalan", transaction'ın başında okunmuş bir anlık görüntüden geliyordu. Okuma ile yazma
+ * arasında satıra dokunan herkes **sessizce eziliyordu**:
+ *
+ *  • araya giren bir sefer emri (`reserveUnits`, `count - n`) → asker hem yola çıkmış hem
+ *    şehirde sağ kalmış olurdu: **yoktan asker.**
+ *  • sıradan bir ekran okuması bile yeter (`snapshot` → `materialize` → tembel üretim,
+ *    `count + n`): kuyruktan yeni düşen asker savaş yazınca kaybolurdu.
+ *
+ * `count - kayıp` ise hangi sırayla işlerse işlesin **adedi korur**. Kilit (`city-lock.ts`)
+ * bu pencereyi zaten kapatıyor; bu satır kilidin ulaşamadığı yollar için ikinci hat —
+ * ve ikisi birbirinin yerine geçmiyor, üst üste biniyor.
+ *
+ * ⚠️ `GREATEST(0, …)`: kayıp, satırın o anki değerinden büyük olabilir (o askerlerin bir
+ * kısmı arada başka bir yolla şehirden çıkmışsa). Adet negatife düşmemeli.
+ *
+ * ⚠️ **Kayıp negatif olamaz** ve buna güveniliyor. Motor `countFinal`i savaş öncesi adetle
+ * sınırlıyor: onarım `count0 - (count0 - count) × (1 - oran)` ile tavanı aşamaz, savunma
+ * tabanı da (§13.11.10) `min(minPerType, count0)` ile sınırlı — yani taban ölüyü geri
+ * getirse bile savaş öncesini geçmez. Motorda bu tavan kalkarsa buradaki çıkarma sessizce
+ * ters yöne çalışır.
+ *
+ * ⭐ `kayıp === 0` iken satıra **hiç dokunulmuyor** — eski mutlak yazım kayıpsız bir türü de
+ * yeniden yazıyordu ve o yazım, araya girmiş bir eklemeyi ezebiliyordu. Kayıp yoksa yazacak
+ * bir şey de yok.
+ */
 async function applySurvivors(
   tx: Tx, cityId: number, after: Record<string, number>, before: Record<string, number>,
 ): Promise<void> {
@@ -704,10 +732,14 @@ async function applySurvivors(
     if (LEVEL_BASED.has(id)) continue;          // Sur / Büyü Kalkanı / Tapınak: seviye düşmez
     const def = UNITS_BY_ID[id];
     if (!def) continue;
+    const had = Math.max(0, Math.trunc(before[id] ?? 0));
     const left = Math.max(0, Math.trunc(after[id] ?? 0));
+    const lost = had - left;
+    if (lost === 0) continue;                   // Hiç kayıp yoksa satıra hiç dokunma.
     const table = def.kind === 'defense' ? 'defenses' : 'units';
     await tx.execute(sql`
-      UPDATE ${sql.raw(table)} SET count = ${left} WHERE city_id = ${cityId} AND type = ${id}
+      UPDATE ${sql.raw(table)} SET count = GREATEST(0, count - ${lost})
+       WHERE city_id = ${cityId} AND type = ${id}
     `);
   }
 }

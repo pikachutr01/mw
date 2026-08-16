@@ -48,11 +48,23 @@ enum MwConnectionState { connecting, online, offline }
 /// ⚠️ Şimdilik yalnız çizilmiş ekranların konuları var. Tam tablo `packages/contracts`a
 /// taşınacak ve sunucuda *"gateway'in yaydığı HER konu istemci tablosunda karşılık buluyor"*
 /// kapısıyla ölçülecek (MOBIL_MIMARI §5.3).
+///
+/// ⚠️⚠️ **`battle:resolved` 2026-08-16'ya kadar tabloda HİÇ YOKTU.** Sunucu olayı aylardır
+/// savunana da yayıyordu (`realtime.bus.ts`), mobil onu görmezden geliyordu: oyuncu saldırı
+/// yerken Baraka ekranı açıksa ekrandaki ordu savaş öncesini göstermeye devam ediyordu.
+/// Kullanıcının şartı tam bu ekrandı: *"özellikle de baraka ekranında … savaş sonrası kalan
+/// ordu, savunma birimi hatta ganimet bilgisinin anlık olarak güncellenmesi gerekir."*
+/// Bu, projedeki **dördüncü** "yazıldı ama eşlenmedi" olayı (öncekiler `city:incoming_spy`,
+/// `city:changed`, `vacation:ended` — hepsi sunucu tarafındaydı, bu ilk istemci tarafı).
 const Map<String, List<String>> kInvalidates = {
   'city:changed': ['city', 'catalog'],
   'cities:changed': ['cities', 'city'],
   'missions:changed': ['missions'],
   'messages:changed': ['messages'],
+  /// ⚠️ Web'in listesi daha geniş (`temple`, `overview` de var); burada yalnız ÇİZİLMİŞ
+  /// ekranların karşılığı duruyor. Mobilde henüz Tapınak ve Komuta Merkezi yok, olmayan
+  /// sağlayıcı adını yazmak ölü satır olurdu. Ekran geldiğinde bu satır da büyüyecek.
+  'battle:resolved': ['city', 'catalog', 'missions', 'messages'],
 };
 
 /// Her şeyi tazele — kopukluk sonrası kaçan olaylar için.

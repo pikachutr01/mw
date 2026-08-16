@@ -2388,3 +2388,138 @@ describe('10 kat kuralı (saldırı puan farkı)', () => {
     expect(opt?.reason).toContain('acemi koruması');
   });
 });
+
+/* ═══ SALDIRI ANINDA VERİLEN EMİR (kullanıcı, 2026-08-16) ═══════════════════ */
+
+/**
+ * ⭐⭐ Kullanıcının şartı: *"Tam saldırı alındığı sırada ordu seçme ekranından görev
+ * veriliyorsa ve saldırı sonucu bu seçilen ordulardan yeteri kadar kalmadıysa sunucu bu
+ * işlemi reddetmelidir. Elde var olmayan orduyla hatalı işlem gerçekleşmesin."*
+ *
+ * ⚠️ Denetimde reddetmenin **zaten** çalıştığı çıktı (`reserveUnits` koşullu tek UPDATE);
+ * korumasız olan savaşın kendi YAZMASIYDI. Gerekçenin tamamı `cities/city-lock.ts` başlığında.
+ * Buradaki üç test o kilidin ve fark yazımının kapısını tutuyor.
+ */
+describe('savaş sırasında verilen sefer emri', () => {
+  it('savaştan sonra elde kalmayan orduyla sefer verilemez', async () => {
+    /* Savunanda 100 Elf var, saldırıya 300 Cüce geliyor → çoğu Elf ölür. */
+    await giveUnits(attackCity, 'dwarf', 300);
+    await giveUnits(defendCity, 'elf', 100);
+    /* Savunan kendi seferini çıkarabilsin diye Baraka gerekiyor (sefer limiti). */
+    await setBuilding(defendCity, 'barracks', 5);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 300 }, at,
+    });
+    await runDue(m.missionId);
+
+    const kalan = (await unitsOf(defendCity))['elf'] ?? 0;
+    expect(kalan, 'test kurgusu bozuk: Elf hiç ölmemiş').toBeLessThan(100);
+
+    /* Ekranı savaştan ÖNCE açmış oyuncu 100 Elf görüyordu; emri onunla veriyor. */
+    const err = await missions.sendAttack({
+      originCityId: defendCity, playerId: defender, worldId,
+      target: { k: 1, d: 1, s: 1 }, units: { elf: 100 }, at: await clock.gameNow(worldId),
+    }).catch((e: unknown) => e as MissionError);
+
+    expect((err as MissionError).code).toBe('insufficient_units');
+    /* ⚠️ Ret sessiz kalmamalı: reddedilen emir şehirden asker de DÜŞÜRMEMELİ. */
+    expect((await unitsOf(defendCity))['elf'] ?? 0).toBe(kalan);
+  });
+
+  /**
+   * ⭐⭐ **KİLİDİN KENDİSİ.** Savaş handler'ı şehri `pg_advisory_xact_lock` ile kilitliyor;
+   * bu test sefer emrinin o kilidin ARKASINDA beklediğini ölçüyor.
+   *
+   * ⚠️ Bu düzeltmeden önce emir kilidi hiç görmüyordu ve **anında geçiyordu**: savaşın okuma
+   * ile yazma arasındaki penceresine sızıp 100 askerin 50'sini yola çıkarıyor, ardından
+   * savaşın mutlak yazması o düşümü eziyordu — asker hem yolda hem şehirde sağ kalıyordu.
+   *
+   * ⚠️ Kilit AYRI bir bağlantıda tutuluyor (`h.sql.reserve()`): aynı bağlantıda alınan
+   * advisory kilit kendini bloke etmez, test hep geçerdi ve hiçbir şey ölçmezdi.
+   *
+   * ⚠️⚠️ **TUTUCU, KİLİDİ ALDIKTAN SONRA SATIRA HEMEN DOKUNMAZ** — ve bu, testin tamamının
+   * kilitlendiği nokta. İlk yazımda tutucu kilidin hemen ardından `UPDATE units` yapıyordu;
+   * o test **kilit kaldırılınca da geçiyordu**, çünkü emri bekleten şey advisory kilit değil
+   * satır kilidiydi. Yani hiçbir şey ölçmüyordu. Savaş handler'ı da tam olarak böyle
+   * davranıyor: kilidi alır, OKUR, simüle eder, **sonra** yazar; asıl tehlikeli pencere o
+   * okuma ile yazma arasıdır ve orada hiçbir satır kilidi yoktur. Bekleme burada taklit
+   * ediliyor ve emrin gerçekten advisory kilitte beklediği ölçülüyor.
+   */
+  it('⭐ şehir kilidi başkasındayken sefer emri BEKLER, sonra taze sayıyla reddedilir', async () => {
+    await giveUnits(defendCity, 'elf', 100);
+    await setBuilding(defendCity, 'barracks', 5);
+
+    const tutucu = await h.sql.reserve();
+    let bitti = false;
+    let emir: Promise<unknown>;
+    try {
+      await tutucu`BEGIN`;
+      await tutucu`SELECT pg_advisory_xact_lock(${defendCity}::bigint)`;
+      /* Savaşın okuması — satıra YAZMIYOR, yalnız görüyor. Tehlikeli pencere burada açılıyor. */
+      await tutucu`SELECT count FROM units WHERE city_id = ${defendCity} AND type = 'elf'`;
+
+      emir = missions.sendAttack({
+        originCityId: defendCity, playerId: defender, worldId,
+        target: { k: 1, d: 1, s: 1 }, units: { elf: 50 }, at: await clock.gameNow(worldId),
+      }).then((v) => { bitti = true; return v; }, (e: unknown) => { bitti = true; return e; });
+
+      await new Promise((r) => { setTimeout(r, 400); });
+      expect(bitti, 'emir kilidi beklemedi — sefer yolu şehri kilitlemiyor').toBe(false);
+
+      /* Savaşın yazması: 100 Elf'in 90'ı öldü. Emir bunu görmeden geçmemeliydi. */
+      await tutucu`UPDATE units SET count = 10 WHERE city_id = ${defendCity} AND type = 'elf'`;
+      await tutucu`COMMIT`;
+    } finally {
+      await tutucu.release();
+    }
+
+    /* Kilit bırakıldı → emir artık 10 Elf görüyor ve 50 isteği reddediliyor. */
+    const sonuc = await emir;
+    expect((sonuc as MissionError).code).toBe('insufficient_units');
+    expect((await unitsOf(defendCity))['elf']).toBe(10);
+  }, 20_000);
+
+  /**
+   * ⭐ FARK YAZIMININ ARİTMETİĞİ (`applySurvivors`).
+   *
+   * Savaş kayıpları artık `SET count = <kalan>` değil `count - <kayıp>` ile yazılıyor
+   * (gerekçe `battle.handlers.ts`). Bu test o çıkarmanın doğru olduğunu kilitliyor: `lost`
+   * yerine `left` yazmak ya da işareti ters çevirmek burada düşer.
+   *
+   * ⚠️⚠️ **Bu test EŞZAMANLILIĞI ÖLÇMEZ ve öyleymiş gibi okunmamalı.** Fark yazımının asıl
+   * kazancı, savaşın okuma ile yazma arasına giren bir BAŞKA yazarın (ör. ekran okumasının
+   * tembel üretimi, ki o şehir kilidini almıyor) ezilmemesi. Bunu deterministik olarak
+   * sınamak için handler'ın tam ortasında bir duraklama noktası gerekirdi; öyle bir kanca yok.
+   * Tek iş parçacıklı koşuda mutlak yazım da bu testten geçer — kapsam bilerek dar.
+   * Eşzamanlılığın gerçek kapısı bir üstteki kilit testi.
+   */
+  it('savaş kaybı FARK olarak yazılır — rapordaki kayıpla satırdaki düşüm eşit', async () => {
+    await giveUnits(attackCity, 'dwarf', 300);
+    await giveUnits(defendCity, 'elf', 100);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 300 }, at,
+    });
+    await runDue(m.missionId);
+
+    const [b] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT input, result FROM battles WHERE world_id = ${worldId} ORDER BY id DESC LIMIT 1
+    `);
+    const oncesi = Number(
+      (((b!['input'] as Record<string, Record<string, Record<string, unknown>>>)
+        ['defender']!)['counts']!)['elf'] ?? 0,
+    );
+    const sonrasi = Number(
+      (((b!['result'] as Record<string, Record<string, Record<string, unknown>>>)
+        ['defender']!)['counts']!)['elf'] ?? 0,
+    );
+
+    expect(oncesi).toBe(100);
+    expect((await unitsOf(defendCity))['elf'] ?? 0).toBe(100 - (oncesi - sonrasi));
+  });
+});
