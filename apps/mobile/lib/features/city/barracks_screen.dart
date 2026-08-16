@@ -20,8 +20,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/api_client.dart';
-import '../../core/clock.dart';
 import '../../ui/primitives.dart';
+import 'catalog_bits.dart';
 import 'catalog_model.dart';
 import 'city_model.dart';
 import 'city_panels.dart';
@@ -152,7 +152,7 @@ class _BarracksState extends ConsumerState<_Barracks> {
               // ⚠️ Kilit BÜTÜN satırları kapsıyor → uyarı satır satır tekrarlanmaz, panelin
               // başında bir kez yazılır.
               if (barracksUpgrading) ...[
-                _Note('Baraka yükseltiliyor; bitene kadar asker üretilemez.'),
+                MwNote('Baraka yükseltiliyor; bitene kadar asker üretilemez.'),
                 const SizedBox(height: 8),
               ],
               for (var i = 0; i < widget.catalog.units.length; i++)
@@ -309,7 +309,7 @@ class _UnitRowState extends ConsumerState<_UnitRow> {
                         style: TextStyle(fontSize: 11, color: c.muted),
                       ),
                     const SizedBox(height: 2),
-                    _CostLine(
+                    MwCostLine(
                       gold: unit.gold,
                       food: unit.food,
                       seconds: unit.seconds,
@@ -338,7 +338,7 @@ class _UnitRowState extends ConsumerState<_UnitRow> {
             children: [
               if (n > 0)
                 Expanded(
-                  child: _TotalLine(
+                  child: MwTotalLine(
                     gold: total.gold,
                     food: total.food,
                     seconds: total.seconds,
@@ -364,162 +364,4 @@ class _UnitRowState extends ConsumerState<_UnitRow> {
       ),
     );
   }
-}
-
-/// Birim başına maliyet satırı: altın · yemek · süre.
-class _CostLine extends StatelessWidget {
-  const _CostLine({
-    required this.gold,
-    required this.food,
-    required this.seconds,
-    required this.baseSeconds,
-  });
-
-  final int gold;
-  final int food;
-  final num seconds;
-  final num? baseSeconds;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = MwColors.of(context);
-    return Wrap(
-      spacing: 12,
-      runSpacing: 2,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        _Chip(icon: 'gold', text: mwNumber(gold), color: c.muted),
-        _Chip(icon: 'food', text: mwNumber(food), color: c.muted),
-        _DurationText(seconds: seconds, baseSeconds: baseSeconds),
-      ],
-    );
-  }
-}
-
-/// Girilen adedin toplamı — yetmiyorsa kırmızı.
-class _TotalLine extends StatelessWidget {
-  const _TotalLine({
-    required this.gold,
-    required this.food,
-    required this.seconds,
-    required this.baseSeconds,
-    required this.afford,
-  });
-
-  final int gold;
-  final int food;
-  final num seconds;
-  final num? baseSeconds;
-  final bool afford;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = MwColors.of(context);
-    final renk = afford ? c.muted : c.danger;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 2,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text('Toplam:', style: TextStyle(fontSize: 11, color: renk)),
-        _Chip(icon: 'gold', text: mwNumber(gold), color: renk),
-        _Chip(icon: 'food', text: mwNumber(food), color: renk),
-        _DurationText(seconds: seconds, baseSeconds: baseSeconds, color: renk),
-      ],
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.icon, required this.text, required this.color});
-
-  final String icon;
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      MwIcon(folder: 'ui', id: icon, size: 13),
-      const SizedBox(width: 3),
-      Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          color: color,
-          fontFeatures: const [FontFeature.tabularFigures()],
-        ),
-      ),
-    ],
-  );
-}
-
-/// ⭐ SÜRE — dünya hız çarpanı devredeyse **indirim etiketi** gibi.
-///
-/// ⚠️ Web'de bu, gerçek bir arızanın düzeltmesi: çarpan yalnız kuyruğa uygulanıyordu, ekrana
-/// değil. Oyuncu *"geri sayım hızlanmış görünüyor ama binanın yanında yazan süre 1x hâliyle
-/// duruyor"* dedi. Artık sunucu ikisini de gönderiyor ve ikisi birden gösteriliyor.
-///
-/// ⚠️ `baseSeconds` **yalnız farklıysa** dolu geliyor; çarpan 1'ken bu bileşen tek satır çizer.
-class _DurationText extends StatelessWidget {
-  const _DurationText({
-    required this.seconds,
-    required this.baseSeconds,
-    this.color,
-  });
-
-  final num seconds;
-  final num? baseSeconds;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = MwColors.of(context);
-    final style = TextStyle(
-      fontSize: 11,
-      color: color ?? c.muted,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
-
-    if (baseSeconds == null || baseSeconds == seconds) {
-      return Text('⏳ ${formatDuration(seconds)}', style: style);
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          formatDuration(baseSeconds!),
-          style: TextStyle(
-            fontSize: 10,
-            color: c.muted,
-            decoration: TextDecoration.lineThrough,
-            decorationColor: c.danger,
-            decorationThickness: 2,
-          ),
-        ),
-        Text(
-          '⏳ ${formatDuration(seconds)}',
-          style: style.copyWith(
-            color: Theme.of(context).colorScheme.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Kilit/uyarı notu — ön koşul ve §verify uyarılarıyla aynı ton.
-class _Note extends StatelessWidget {
-  const _Note(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: TextStyle(fontSize: 11, color: MwColors.of(context).warning),
-  );
 }

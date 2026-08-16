@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_screen.dart';
+import '../features/city/academy_screen.dart';
 import '../features/city/barracks_screen.dart';
 import '../features/city/buildings_screen.dart';
 import '../features/city/city_hub_screen.dart';
@@ -63,10 +64,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/buildings',
             builder: (_, _) => const BuildingsScreen(),
           ),
-          // ⚠️ Kalan üç şehir ekranı yer tutucu ama ROTASI VAR: olmasaydı sekme şeridine
+          GoRoute(path: '/academy', builder: (_, _) => const AcademyScreen()),
+          // ⚠️ Kalan şehir ekranları yer tutucu ama ROTASI VAR: olmasaydı sekme şeridine
           // dokunmak «Bilinmeyen sayfa» hatasına düşerdi.
           for (final s in kCityScreens.where(
-            (s) => s.path != '/barracks' && s.path != '/buildings',
+            (s) =>
+                s.path != '/barracks' &&
+                s.path != '/buildings' &&
+                s.path != '/academy',
           ))
             GoRoute(
               path: s.path,

@@ -169,4 +169,230 @@ void main() {
       expect(trainTotal(_unit(), 3).baseSeconds, isNull);
     });
   });
+
+  /// ⭐⭐ SEVİYE İLERLETME KAPILARI (2026-08-17) — Yapılar ve Akademi.
+  ///
+  /// ⚠️ Her koşul sunucunun bir reddinin aynası ve yanlışı İKİ YÖNDE de kötü: gevşek olursa
+  /// oyuncu düğmeye basar ve sebebi anlaşılmayan bir hata alır, sıkı olursa yapabileceği bir
+  /// şeyi yapamaz. Bu yüzden her kapı ayrı ayrı sınanıyor — birleşik tek bir "açık mı" testi,
+  /// hangi koşulun kapattığını söylemezdi.
+  group('canUpgradeBuilding', () {
+    bool ac({
+      bool maxed = false,
+      bool capped = false,
+      bool afford = true,
+      bool hasUnmet = false,
+      bool busy = false,
+      bool pending = false,
+      bool mutex = false,
+      bool caveLocked = false,
+    }) => canUpgradeBuilding(
+      maxed: maxed,
+      capped: capped,
+      afford: afford,
+      hasUnmet: hasUnmet,
+      busy: busy,
+      pending: pending,
+      mutex: mutex,
+      caveLocked: caveLocked,
+    );
+
+    test('her şey uygunsa açık', () => expect(ac(), isTrue));
+    test('tavandaki yapı kapalı', () => expect(ac(maxed: true), isFalse));
+    test('§verify tavanı kapalı', () => expect(ac(capped: true), isFalse));
+    test('kaynak yetmiyorsa kapalı', () => expect(ac(afford: false), isFalse));
+    test('ön koşul eksikse kapalı', () => expect(ac(hasUnmet: true), isFalse));
+
+    /// ⚠️ İnşaat aynı anda TEK: başka bir yapı emri varken HEPSİ kapalı.
+    test(
+      '⭐ başka bir yapı emri varken kapalı',
+      () => expect(ac(busy: true), isFalse),
+    );
+
+    /// ⚠️ `pending` `busy`den AYRI: uçuştaki istek ile açık kuyruk farklı şeyler. Tek alanda
+    /// birleştirilseydi iptalden sonra düğme açılmazdı.
+    test(
+      'istek uçuştayken kapalı (çift gönderim)',
+      () => expect(ac(pending: true), isFalse),
+    );
+
+    test('⭐ karşılıklı kilit kapalı', () => expect(ac(mutex: true), isFalse));
+    test(
+      '⭐ mağara meşgulken kapalı',
+      () => expect(ac(caveLocked: true), isFalse),
+    );
+  });
+
+  group('buildingMutex — karşılıklı kilit (§13.11.5a)', () {
+    test('⭐ asker üretilirken Baraka kilitli', () {
+      expect(
+        buildingMutex('barracks', unitBusy: true, techBusy: false),
+        isNotNull,
+      );
+    });
+    test('⭐ araştırma sürerken Akademi kilitli', () {
+      expect(
+        buildingMutex('academy', unitBusy: false, techBusy: true),
+        isNotNull,
+      );
+    });
+
+    /// ⚠️ Kilit ÇAPRAZ DEĞİL: asker üretimi Akademi'yi, araştırma Baraka'yı etkilemez.
+    /// Bu ayrım sunucuda da var; karıştırmak oyuncuyu yapabileceği bir yükseltmeden alıkoyardı.
+    test('⚠️ asker üretimi Akademi\'yi etkilemez', () {
+      expect(buildingMutex('academy', unitBusy: true, techBusy: false), isNull);
+    });
+    test('⚠️ araştırma Baraka\'yı etkilemez', () {
+      expect(
+        buildingMutex('barracks', unitBusy: false, techBusy: true),
+        isNull,
+      );
+    });
+    test('ilgisiz yapı hiç kilitlenmez', () {
+      expect(buildingMutex('farm', unitBusy: true, techBusy: true), isNull);
+    });
+    test('kilit metni SEBEBİ söyler (boş bool değil)', () {
+      expect(
+        buildingMutex('barracks', unitBusy: true, techBusy: false),
+        contains('Baraka'),
+      );
+    });
+  });
+
+  group('canResearch', () {
+    bool ac({
+      bool capped = false,
+      bool afford = true,
+      bool hasUnmet = false,
+      bool busyHere = false,
+      bool alreadyRunning = false,
+      bool academyUpgrading = false,
+      bool pending = false,
+    }) => canResearch(
+      capped: capped,
+      afford: afford,
+      hasUnmet: hasUnmet,
+      busyHere: busyHere,
+      alreadyRunning: alreadyRunning,
+      academyUpgrading: academyUpgrading,
+      pending: pending,
+    );
+
+    test('her şey uygunsa açık', () => expect(ac(), isTrue));
+    test('§verify tavanı kapalı', () => expect(ac(capped: true), isFalse));
+    test('kaynak yetmiyorsa kapalı', () => expect(ac(afford: false), isFalse));
+    test('ön koşul eksikse kapalı', () => expect(ac(hasUnmet: true), isFalse));
+    test(
+      'bu şehirde araştırma sürerken kapalı',
+      () => expect(ac(busyHere: true), isFalse),
+    );
+
+    /// ⚠️⚠️ AKADEMİLER ORTAK: teknik BAŞKA şehirde araştırılıyorsa burada da kapalı olmalı.
+    /// Yalnız bu şehrin kuyruğuna bakan bir ekran, aynı tekniği iki şehirden başlatmaya
+    /// davet ederdi (sunucu reddeder, oyuncu sebebini anlamaz).
+    test('⭐⭐ teknik başka şehirde araştırılıyorsa kapalı', () {
+      expect(ac(alreadyRunning: true), isFalse);
+    });
+
+    test(
+      '⭐ Akademi yükseltilirken kapalı',
+      () => expect(ac(academyUpgrading: true), isFalse),
+    );
+  });
+
+  group('defenseCapped — §verify savunmada İKİ AYRI kural', () {
+    const caps = VerifyCaps(
+      maxBuildingLevel: 3,
+      maxTechLevel: 3,
+      maxDefenseLevel: 3,
+    );
+
+    test('doğrulanmış hesapta hiç tavan yok', () {
+      expect(
+        defenseCapped(caps: null, levelBased: true, currentLevel: 99),
+        isFalse,
+      );
+      expect(
+        defenseCapped(caps: null, levelBased: false, currentLevel: 0),
+        isFalse,
+      );
+    });
+
+    /// Sur / Büyü Kalkanı → SEVİYE tavanı, «≥» (sunucudaki kuralın aynısı).
+    test('⭐ seviye taşıyan savunma tavana kadar açık', () {
+      expect(
+        defenseCapped(caps: caps, levelBased: true, currentLevel: 2),
+        isFalse,
+      );
+    });
+    test('⭐ tavana ULAŞAN kapalı (≥, > değil)', () {
+      expect(
+        defenseCapped(caps: caps, levelBased: true, currentLevel: 3),
+        isTrue,
+      );
+    });
+
+    /// ⚠️ Adetli savunma birimi doğrulanmamış hesapta TAMAMEN yasak — seviyeye bakılmaz.
+    test('⭐⭐ adetli savunma birimi doğrulanmadan HİÇ üretilemez', () {
+      expect(
+        defenseCapped(caps: caps, levelBased: false, currentLevel: 0),
+        isTrue,
+      );
+    });
+  });
+
+  group('unmetFor — seviye taşıyan kalemlerin ön koşulu', () {
+    const kale = NamedRequirement(
+      id: 'castle',
+      name: 'Kale',
+      level: 5,
+      kind: 'building',
+    );
+    const mimar = NamedRequirement(
+      id: 'architecture',
+      name: 'Mimarlık',
+      level: 2,
+      kind: 'tech',
+    );
+
+    test('hepsi karşılanmışsa boş', () {
+      expect(
+        unmetFor(
+          [kale, mimar],
+          structures: {'castle': 5},
+          techs: {'architecture': 2},
+        ),
+        isEmpty,
+      );
+    });
+
+    test('eksik olan LİSTELENİR (hangisi olduğu görünsün)', () {
+      final eksik = unmetFor(
+        [kale, mimar],
+        structures: {'castle': 4},
+        techs: {'architecture': 2},
+      );
+      expect(eksik.map((r) => r.id), ['castle']);
+    });
+
+    /// ⚠️⚠️ SUR bir YAPI koşulu ama `defenses` tablosunda yaşıyor. `structures`
+    /// (`CityDetail.structureLevels`) onu içeriyor; yalnız `buildings`e bakmak Sur'u daima 0
+    /// gösterir ve Sur ön koşullu her kalem kilitli kalırdı. Web'de ve sunucuda aynı hata yaşandı.
+    test('⚠️⚠️ Sur `structures` üzerinden okunuyor', () {
+      const sur = NamedRequirement(
+        id: 'wall',
+        name: 'Sur',
+        level: 3,
+        kind: 'building',
+      );
+      expect(
+        unmetFor([sur], structures: {'wall': 3}, techs: const {}),
+        isEmpty,
+      );
+      expect(
+        unmetFor([sur], structures: const {}, techs: const {}),
+        hasLength(1),
+      );
+    });
+  });
 }

@@ -508,7 +508,7 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 | :-- | :-- | :-- |
 | **0 — Zemin** | `flutter create` ✅ · socket.io spike ✅ · bu belge ✅ · `tokens.dart` bağlantısı + kapı ✅ · test iskeleti ✅ · `mobile.yml` ✅ · **kalan:** `contracts` Dart üreteci + 4 kapı | `flutter test` yeşil, CI koşuyor |
 | **1 — Kabuk ve oturum** ✅ | Güvenli depo ✅ · 9 başlık ✅ · **kalıcı instanceId** ✅ · yenileme (tek söz) ✅ · 409 çakışma perdesi ✅ · go_router kabuğu (alt bar + drawer) ✅ · giriş/kayıt ✅ · minimum sürüm kontrolü ✅ · misafir akışı ✅ · saat çekirdeği + eşitlik kapısı ✅ | Cihazda giriş yapılıyor, oturum hayatta kalıyor |
-| **2 — Çekirdek oyun** | ⏳ Kabuk (bilgi çubuğu · şehir şeridi · şehir sekmeleri · alt bar) ✅ · WS bağlantısı + arka plandan dönüş ✅ · **Baraka TAM** (emir ver · iptal + onay · sıralama · tek-birim sayacı) ✅ · Yapılar (okuma) ✅ · **kalan:** Savunma · Akademi · Tapınak · Dünya · Ordular/sefer · Savaş raporu · Sohbet · i18n | v1 kapsamı oynanabilir |
+| **2 — Çekirdek oyun** | ⏳ Kabuk (bilgi çubuğu · şehir şeridi · şehir sekmeleri · alt bar) ✅ · WS bağlantısı + arka plandan dönüş ✅ · **Baraka TAM** ✅ · **Yapılar TAM** (yükseltme · iptal · ön koşul · üretim önizlemesi · karşılıklı kilit) ✅ · **Akademi TAM** (şehirler arası araştırma · iptal yalnız başlatandan) ✅ · **native katman** (bottom sheet · titreşim · uzun basma künyesi) ✅ · **kalan:** Savunma · Tapınak · Dünya · Ordular/sefer · Savaş raporu · Sohbet · i18n | v1 kapsamı oynanabilir |
 | **3 — Bildirim** | ⚠️ Sunucu: `push_subscriptions` göçü + `FcmSender` + kayıt ucu · İstemci: FCM + local notifications + derin bağlantı | Bildirime tıklayınca doğru ekran açılıyor |
 | **4 — Google giriş** | Sunucu: `google.verifier.ts` + kimlik tablosu + iki adımlı kullanıcı adı akışı · İstemci: `google_sign_in` 7.x · **web'e de eklenir** | İki istemcide de çalışıyor |
 | **5 — Attestation** | Play Integrity sinyalini **topla, kapı koyma** (`MOBIL_UYGULAMA.md` §9-2) | Sinyal DB'ye düşüyor |
@@ -535,6 +535,9 @@ saf hesap ve Dart'a portu gerekiyor. v1'i bloke etmiyor, bu yüzden sona bırak�
 | 2026-08-15 | Tema/dil tercihi için sunucu ucu YOK (`updatePreferencesRequest` şeması var, uç yok) — cihazlar arası taşınması isteniyorsa eklenmeli | 🔵 karar bekliyor |
 | 2026-08-15 | `/api/v1/auth/refresh` hız sınırı listesinde değil — yenileme fırtınası korumasız | 📋 Faz 1 |
 | 2026-08-15 | Bildirim yükündeki `url` alanı **web rotaları** taşıyor (`/armies`, `/messages?dm=`) → Flutter rota eşleme tablosu gerekecek | 📋 Faz 3 |
+| 2026-08-17 | ⭐⭐ **Native davranış politikası kuruldu** (`ui/native.dart`): web'de modal olan her şey mobilde **bottom sheet**; titreşim üç seviye (emir → hafif, yıkıcı onay → orta, red → ağır); web'de tooltip olan künye mobilde **uzun basma + sheet**. Kural ortak dosyada, çünkü ekran ekran serbest bırakılsa her ekran kendi tonunu seçerdi | ✅ kuruldu |
+| 2026-08-17 | Savunma ekranı Baraka'nın ŞEKLİNDE (adetli üretim + seviye taşıyan Sur/Büyü Kalkanı bir arada). Web'de tek bileşen: `Trainable({kind})`. Mobilde de `barracks_screen` **`kind` alacak biçimde genelleştirilmeli**, ikinci bir kopya yazılmamalı | 📋 sıradaki tur |
+| 2026-08-17 | Mağara meşguliyeti (`cave.repairing` / `cave.job`) `CityDetail`te YOK → Yapılar'da mağara kilidi bugün `false`. Sunucu reddediyor, yani hata değil eksik. Mağara ekranı gelince modele eklenecek | 📋 Mağara turu |
 
 ---
 

@@ -35,6 +35,8 @@ class CityDetail {
     required this.techs,
     required this.caveUnits,
     required this.queues,
+    required this.techQueues,
+    required this.wallRepair,
     required this.serverNow,
     required this.gameNow,
   });
@@ -68,6 +70,17 @@ class CityDetail {
   final Map<String, int> caveUnits;
 
   final List<CityQueue> queues;
+
+  /// ⭐⭐ AÇIK TEKNİK ARAŞTIRMALARI — **oyuncunun TÜM şehirlerinden** (2026-08-17).
+  ///
+  /// ⚠️ `queues` yalnız BU şehrin satırlarını taşıyor; teknikte bu yetmez çünkü Akademiler
+  /// ortak: teknik başka bir şehirde araştırılıyorsa burada da düğme kapalı olmalı ve nerede
+  /// araştırıldığı yazmalı. Yalnız `queues`e bakan bir Akademi ekranı, aynı tekniği iki
+  /// şehirden başlatmaya davet ederdi (sunucu reddeder, oyuncu sebebini anlamaz).
+  final List<TechQueue> techQueues;
+
+  /// ⭐ Sur onarımı sürüyorsa penceresi; yoksa `null`. Onarımdaki Sur yükseltilemez.
+  final ({num integrity, String? from, String until})? wallRepair;
 
   /// Kaynak sayacının çıpası (gerçek saat).
   final String serverNow;
@@ -110,10 +123,60 @@ class CityDetail {
           .whereType<Map<String, dynamic>>()
           .map(CityQueue.fromJson)
           .toList(),
+      techQueues: (j['techQueues'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(TechQueue.fromJson)
+          .toList(),
+      wallRepair: _wallRepair(j['wallRepair']),
       serverNow: j['serverNow'] as String,
       gameNow: j['gameNow'] as String,
     );
   }
+}
+
+/// Başka şehirde de sürebilen teknik araştırması.
+///
+/// ⚠️ `cityId` ŞART: iptal yalnız araştırmayı BAŞLATAN şehirden yapılabiliyor (kullanıcı
+/// kuralı) ve ekran o kararı ancak bu alanla verebilir.
+class TechQueue {
+  const TechQueue({
+    required this.id,
+    required this.itemType,
+    required this.targetLevel,
+    required this.cityId,
+    required this.cityName,
+    required this.startedAt,
+    required this.finishAt,
+  });
+
+  final int id;
+  final String itemType;
+  final int? targetLevel;
+  final int cityId;
+  final String cityName;
+  final String startedAt;
+  final String finishAt;
+
+  static TechQueue fromJson(Map<String, dynamic> j) => TechQueue(
+    id: (j['id'] as num).toInt(),
+    itemType: j['itemType'] as String,
+    targetLevel: (j['targetLevel'] as num?)?.toInt(),
+    cityId: (j['cityId'] as num).toInt(),
+    cityName: j['cityName'] as String? ?? '',
+    startedAt: j['startedAt'] as String,
+    finishAt: j['finishAt'] as String,
+  );
+}
+
+({num integrity, String? from, String until})? _wallRepair(Object? raw) {
+  if (raw is! Map) return null;
+  final until = raw['until'];
+  if (until is! String) return null;
+  return (
+    integrity: raw['integrity'] as num? ?? 0,
+    from: raw['from'] as String?,
+    until: until,
+  );
 }
 
 /// Açık kuyruk satırı — üretim bandının girdisi.

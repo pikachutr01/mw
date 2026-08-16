@@ -99,40 +99,155 @@ class CatalogUnit {
   }
 }
 
-/// ⭐ §verify tavanları — e-posta doğrulaması yapmamış oyuncunun sınırları.
-class VerifyCaps {
-  const VerifyCaps({required this.maxDefenseLevel});
+/// ⭐ SEVİYE TAŞIYAN KALEM — yapı ve teknik ortak şekli.
+///
+/// İkisi de "şu an sv N, sonraki seviye şu kadara ve şu kadar sürede" diyor; alanları birebir
+/// aynı. Ayrı iki sınıf yazmak, aynı satır widget'ını iki kez yazmayı zorunlu kılardı.
+///
+/// ⚠️ `nextCost` **null olabilir**: yapı tavanına ulaşmışsa sunucu maliyeti hiç göndermiyor
+/// (`maxLevel`e gelen yapının bir sonraki seviyesi yok). Teknikte tavan kavramı yok, orada
+/// alan daima dolu. Null'ı `0` ile doldurmak "bedava yükseltme" gibi görünürdü.
+class CatalogUpgradable {
+  const CatalogUpgradable({
+    required this.id,
+    required this.name,
+    required this.level,
+    required this.maxLevel,
+    required this.nextGold,
+    required this.nextFood,
+    required this.nextSeconds,
+    required this.baseSeconds,
+    required this.production,
+    required this.requirements,
+  });
 
+  final String id;
+  final String name;
+
+  /// Şu anki seviye.
+  final int level;
+
+  /// Tavan. ⚠️ Teknikte tavan yok → `null`.
+  final int? maxLevel;
+
+  /// Bir sonraki seviyenin bedeli. ⚠️ Tavandaki yapıda `null`.
+  final int? nextGold;
+  final int? nextFood;
+
+  /// Bir sonraki seviyenin süresi (dünya çarpanı uygulanmış). Tavandaysa `null`.
+  final num? nextSeconds;
+
+  /// Çarpansız süre — yalnız `nextSeconds`ten FARKLIYSA dolu.
+  final num? baseSeconds;
+
+  /// ⭐ Saatlik üretim önizlemesi — yalnız Çiftlik ve Maden'de dolu, diğerlerinde `null`.
+  /// ⚠️ İstemci HESAPLAMIYOR: oran ve dünya çarpanı panelden ayarlanabiliyor.
+  final ({int perHour, int? nextPerHour})? production;
+
+  final List<NamedRequirement> requirements;
+
+  /// Tavana ulaşıldı mı? ⚠️ `>=` (sunucudaki kuralın aynısı).
+  bool get maxed => maxLevel != null && level >= maxLevel!;
+
+  static CatalogUpgradable fromJson(Map<String, dynamic> j) {
+    // ⚠️ Yapıda `nextCost`, teknikte de `nextCost` — ad ortak, o yüzden tek okuma yeter.
+    final cost = j['nextCost'] as Map<String, dynamic>?;
+    final pro = j['production'] as Map<String, dynamic>?;
+    return CatalogUpgradable(
+      id: j['id'] as String,
+      name: j['name'] as String,
+      level: (j['level'] as num?)?.toInt() ?? 0,
+      maxLevel: (j['maxLevel'] as num?)?.toInt(),
+      nextGold: (cost?['gold'] as num?)?.toInt(),
+      nextFood: (cost?['food'] as num?)?.toInt(),
+      nextSeconds: j['nextSeconds'] as num?,
+      baseSeconds: j['baseSeconds'] as num?,
+      production: pro == null
+          ? null
+          : (
+              perHour: (pro['perHour'] as num?)?.toInt() ?? 0,
+              nextPerHour: (pro['nextPerHour'] as num?)?.toInt(),
+            ),
+      requirements: (j['requirementNames'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(NamedRequirement.fromJson)
+          .toList(),
+    );
+  }
+}
+
+/// ⭐ §verify tavanları — e-posta doğrulaması yapmamış oyuncunun sınırları.
+///
+/// ⚠️ Alan **`null` = kısıt yok** demek (hesap doğrulanmış ya da anahtar kapalı) ve nesnenin
+/// kendisi de null olabiliyor. İkisi aynı anlama geliyor; ekran her iki durumda da tavan
+/// çizmiyor.
+class VerifyCaps {
+  const VerifyCaps({
+    required this.maxBuildingLevel,
+    required this.maxTechLevel,
+    required this.maxDefenseLevel,
+  });
+
+  final int maxBuildingLevel;
+  final int maxTechLevel;
   final int maxDefenseLevel;
 
+  /// ⚠️ Eskiden yalnız `maxDefenseLevel` okunuyordu ve alan yoksa **tüm nesne null** dönüyordu.
+  /// Yapı/teknik tavanları eklenince o kısayol tehlikeli hâle geldi: sunucu bir alanı
+  /// göndermese diğer iki tavan da sessizce kaybolurdu. Artık nesne varsa okunuyor, eksik alan
+  /// yerine "pratikte sonsuz" bir tavan konuyor — kısıt UYDURMAK, kısıtı kaçırmaktan kötü.
   static VerifyCaps? fromJson(Object? raw) {
     if (raw is! Map) return null;
-    final v = raw['maxDefenseLevel'];
-    if (v is! num) return null;
-    return VerifyCaps(maxDefenseLevel: v.toInt());
+    int at(String key) {
+      final v = raw[key];
+      return v is num ? v.toInt() : 1 << 30;
+    }
+
+    return VerifyCaps(
+      maxBuildingLevel: at('maxBuildingLevel'),
+      maxTechLevel: at('maxTechLevel'),
+      maxDefenseLevel: at('maxDefenseLevel'),
+    );
   }
 }
 
 class CityCatalog {
   const CityCatalog({
+    required this.buildings,
     required this.units,
     required this.defenses,
+    required this.techs,
     required this.verify,
   });
+
+  /// ⭐ Yapılar — Yapılar ekranının kaynağı (2026-08-17). Eskiden hiç okunmuyordu: ekran
+  /// yalnız şehirdeki seviyeleri listeliyor, yükseltme sunmuyordu.
+  final List<CatalogUpgradable> buildings;
 
   final List<CatalogUnit> units;
   final List<CatalogUnit> defenses;
 
+  /// ⭐ Teknikler — Akademi ekranının kaynağı.
+  final List<CatalogUpgradable> techs;
+
   /// `null` = tavan yok (oyuncu doğrulanmış).
   final VerifyCaps? verify;
 
-  /// ⚠️ Sıra SUNUCUDAN geliyor (`WARRIOR_ORDER`) ve korunuyor: alfabetik sıralamak, oyunun
-  /// kendi birim sırasını (zayıftan güçlüye) bozardı.
+  /// ⚠️ Sıra SUNUCUDAN geliyor (`WARRIOR_ORDER`, `BUILDING_ORDER`, `TECH_ORDER`) ve korunuyor:
+  /// alfabetik sıralamak, oyunun kendi sırasını (zayıftan güçlüye) bozardı.
   static CityCatalog fromJson(Map<String, dynamic> j) => CityCatalog(
+    buildings: _upgradables(j['buildings']),
     units: _list(j['units']),
     defenses: _list(j['defenses']),
+    techs: _upgradables(j['techs']),
     verify: VerifyCaps.fromJson(j['verify']),
   );
+
+  static List<CatalogUpgradable> _upgradables(Object? raw) =>
+      (raw as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(CatalogUpgradable.fromJson)
+          .toList();
 
   /// `id` → görünen ad; birim, savunma, yapı ve tekniklerin hepsi.
   static Map<String, String> namesFrom(Map<String, dynamic> j) {
