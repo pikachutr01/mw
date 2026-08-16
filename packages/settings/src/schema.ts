@@ -1273,16 +1273,36 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'puanı hemen yeniden türetilir.',
   },
 
-  /* ── Yerleşim (§13.6) ────────────────────────────────────────────────────── */
+  /* ── Yerleşim (§13.6) — KUŞAK (BANT) MODELİ, 2026-08-16 ──────────────────── */
+  /**
+   * ⚠️⚠️ **BU BÖLÜM 2026-08-16'da 13 AYARDAN 4'E İNDİ.** Eski model cepheyi nüfusa göre açıp
+   * içinde `A×B×C` ile skorluyordu; iki tur üst üste istenmeyen uçlara gitti (önce herkes ilk
+   * 7 diyara yığıldı, sonra %88,7'si diyar 9+'a saçıldı). Skorlama tamamen kaldırıldı.
+   *
+   * Kaldırılan anahtarlar: `targetOccupancy` · `minOpenDistricts` · `emptyReserve` ·
+   * `sampleSize` · `neighborIdeal` · `neighborSigma` · `emptinessExponent` ·
+   * `threatExponent` · `threatWindowDays` · `minThreatAnchor` · `threatFloor`.
+   *
+   * ⚠️ Ölü bırakılmadılar, **silindiler** — bu deponun kendi dersi: panelde görünen ama
+   * hiçbir şey yapmayan düğme, bir hata sınıfıdır (`combat.attackScoreRatio`, 2026-08-08).
+   */
+  {
+    key: 'placement.bandSize',
+    label: 'Kuşak genişliği',
+    type: 'int', default: 5, min: 1, max: 50, tag: 'design', unit: 'diyar',
+    description: 'Yeni oyuncular aynı anda kaç diyarlık bir dilime yerleştirilir. Dilim '
+      + 'dolunca bir sonrakine geçilir ve BİR DAHA GERİ DÖNÜLMEZ.',
+    note: 'Küçültmek oyuncuları sıkıştırır (erken temas, hızlı savaş); büyütmek dünyayı '
+      + 'yayar ve yeni oyuncular birbirini zor bulur. 500 diyarı tam bölmesi için 5 seçildi.',
+  },
   {
     key: 'placement.capitalQuota',
     label: 'Diyar başına başkent kotası',
-    type: 'int', default: 5, min: 1, max: 10, tag: 'design', unit: 'adet',
+    type: 'int', default: 3, min: 1, max: 10, tag: 'design', unit: 'adet',
     description: 'Bir diyara OTOMATİK yerleştirmeyle en fazla kaç başkent konabilir. '
-      + 'Büyütürsen oyuncular sıkışır (erken savaş, hızlı eleme); küçültürsen dünya yayılır '
-      + 've kimse kimseyi bulamaz.',
-    note: 'Diyarda 10 şehir yeri var; kalan yerler kolonilere ve terk edilmiş şehirlere '
-      + 'açık kalıyor. Kota YALNIZ otomatik yerleştirmeyi sınırlıyor.',
+      + 'Kuşağın kapasitesi bundan çıkar: kuşak genişliği × bu sayı.',
+    note: '⚠️ 2026-08-16\'da 5 → 3 (kullanıcı kararı). Diyarda 10 şehir yeri var; kalanlar '
+      + 'kolonilere ve terk edilmiş şehirlere açık. Kota YALNIZ otomatik yerleştirmeyi sınırlar.',
   },
   {
     key: 'placement.neighborQuota',
@@ -1295,128 +1315,15 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
       + 'görevleri de sayılır — o yer zaten rezerve.',
   },
   {
-    key: 'placement.targetOccupancy',
-    label: 'Cephe hedef doluluğu',
-    type: 'number', default: 0.3, min: 0.1, max: 1, tag: 'design',
-    description: 'Cephe diyarı başına hedeflenen ortalama başkent = bu × başkent kotası. '
-      + '0,30 × 5 = ~1,5. Büyütürsen oyuncular birbirine yakın doğar; küçültürsen dünya seyrelir.',
-    note: 'Açık bölge [1..N] ÖNEKİ olduğu için eski diyarlar daima aday kalır — «dünya '
-      + 'büyüdükçe geriye dönüp serpiştir» kuralı bu doluluk ağırlığından kendiliğinden çıkıyor. '
-      + '⚠️ Bu TEK BAŞINA cepheyi büyütmeye yetmez; asıl garanti «boş diyar rezervi».',
-  },
-  {
-    key: 'placement.minOpenDistricts',
-    label: 'En az açık diyar',
-    type: 'int', default: 16, min: 1, max: 500, tag: 'design', unit: 'adet',
-    description: 'Dünya bomboşken bile bu kadar diyar açık tutulur. İlk oyuncuların hepsinin '
-      + 'tek diyara yığılmasını engeller.',
-  },
-  {
-    key: 'placement.emptyReserve',
-    label: 'Boş diyar rezervi',
-    type: 'int', default: 12, min: 0, max: 200, tag: 'design', unit: 'adet',
-    description: '⭐ Açık bölgede HER ZAMAN bulunması garanti edilen bomboş diyar sayısı. '
-      + 'Cephe «dolu diyar sayısı + bu kadar» genişler, yani yeni oyuncunun önünde daima '
-      + 'taze toprak olur.',
-    note: 'Bu olmadan cephe yalnız nüfusla büyüyordu (oyuncu başına 1/3 diyar) ve nüfusu asla '
-      + 'geçemiyordu: canlıda 23 başkent → cephe tam 8 diyar, 9. diyar aday bile değildi. '
-      + '0 yazarsan o davranışa dönersin.',
-  },
-  {
-    key: 'placement.sampleSize',
-    label: 'Aday örneklem boyu',
-    type: 'int', default: 60, min: 5, max: 500, tag: 'design', unit: 'adet',
-    description: 'Açık bölgeden kaç diyar puanlanacak. Büyütmek seçimi biraz iyileştirir ama '
-      + 'kayıt sorgusunu ağırlaştırır.',
-    note: 'Tüm bölgeyi puanlamak 5.000 satır okumak demekti; örneklem hem O(1) maliyet hem '
-      + 'kümelenme kırıcı.',
-  },
-  {
-    key: 'placement.neighborIdeal',
-    label: 'İdeal komşu sayısı',
-    type: 'number', default: 1, min: 0, max: 10, tag: 'design', unit: 'oyuncu',
-    description: '⭐ Yeni oyuncunun düşmeyi TERCİH ettiği KOMŞU (farklı oyuncu) sayısı. '
-      + '1 = «yanımda bir komşu olsun ama kalabalık olmasın». 0 yaparsan herkes ıssız '
-      + 'diyarlara dağılır.',
-    note: 'Bu çarpan tasarımın özü. Varsayılan σ=0,9 ile ağırlıklar: boş 0,54 · 1 komşu 0,85 · '
-      + '2 → 0,39 · 3 → 0,050 · 4 → 0,0027. Tek komşulu diyar en cazip aday olduğu için kimse '
-      + 'ıssız çölde yalnız kalmaz; buna karşılık 4 komşulu diyar, boş diyardan 200 kat daha '
-      + 'düşük ihtimalli. ⚠️ 2026-08-08 öncesi bu 2 idi ve o oran yalnız 2 kattı — kullanıcının '
-      + '«5 başkentli diyara doluşuyorlar» şikâyetinin kaynağı.',
-  },
-  {
-    key: 'placement.neighborSigma',
-    label: 'Komşuluk toleransı',
-    type: 'number', default: 0.9, min: 0.1, max: 5, tag: 'design',
-    description: 'İdeal komşu sayısından sapmanın ne kadar cezalandırılacağı. Büyütmek '
-      + 'tercihi düzleştirir (fark etmez hâle getirir), küçültmek katılaştırır.',
-  },
-  {
-    key: 'placement.emptinessExponent',
-    label: 'Boşluk tercihi üssü',
-    type: 'number', default: 1.5, min: 0, max: 5, tag: 'design',
-    description: 'Boş diyarların ne kadar kayırılacağı. 0 = doluluk hiç bakılmaz.',
-  },
-  {
-    key: 'placement.threatExponent',
-    label: 'Güç uyumu üssü',
-    type: 'number', default: 1.5, min: 0, max: 5, tag: 'design',
-    description: '⭐ Yeni oyuncunun KENDİ KUŞAĞININ yanına düşmesini sağlar: çevresi güçlü '
-      + 'olan diyarlar cezalandırılır. **0 = güç uyumu kapalı.**',
-    note: 'Yumuşak ağırlık, sert dışlama değil — dünya doyduğunda yine de yer bulunur. '
-      + 'Tehdit, diyarın ve İKİ KOMŞU diyarının 75. persentil puanı: sefer süreleri komşu '
-      + 'diyarı zaten ulaşılabilir kılıyor.',
-  },
-  {
-    key: 'placement.threatWindowDays',
-    label: 'Tehdit çıpası penceresi',
-    type: 'int', default: 14, min: 1, max: 365, tag: 'design', unit: 'gün',
-    description: 'Güç uyumunun çıpası: son kaç günde kaydolanların medyan puanı «normal» '
-      + 'sayılacak.',
-    note: 'Tüm dünyanın ortalaması DEĞİL — çıpa yeni oyuncunun kuşağı olmalı, yoksa dünya '
-      + 'yaşlandıkça çıpa yükselir ve güç uyumu kendiliğinden işlevsizleşirdi.',
-  },
-  {
-    key: 'placement.minThreatAnchor',
-    label: 'Tehdit çıpası tabanı',
-    type: 'number', default: 250, min: 0, max: 1_000_000, tag: 'design', unit: 'puan',
-    description: '⭐ Çıpa (medyan puan) bunun altındaysa bunun yerine bu kullanılır. Bu tabanın '
-      + 'altındaki her puan «eşit derecede zayıf» sayılır.',
-    note: '⚠️ Bu taban 2026-08-08\'e kadar YOKTU ve algoritmayı bozuyordu: yeni dünyada '
-      + 'oyuncuların çoğu sıfır puanlı olduğu için medyan 0\'a yapışıyordu (canlıda 23 '
-      + 'oyuncunun 9\'u sıfır → çıpa 7). Tehdit binlerken oran 1600 çıkıyor ve güç uyumu '
-      + 'diğer iki çarpanı tamamen eziyordu. 0 yazarsan o davranışa dönersin.',
-  },
-  {
-    key: 'placement.threatFloor',
-    label: 'Güç uyumu alt sınırı',
-    type: 'number', default: 0.15, min: 0.001, max: 1, tag: 'design',
-    description: '⭐ Güç uyumu çarpanının inebileceği en düşük değer. 0,15 = güç uyumu bir '
-      + 'diyarı en fazla ~7 kat cezalandırabilir. 1 yazarsan güç uyumu tamamen etkisizleşir.',
-    note: 'Skor üç çarpanın ÇARPIMI olduğu için ölçeği kaçan bir çarpan diğer ikisini yok '
-      + 'eder. Canlıda tam bu oldu: güç uyumu 0,00001\'e inip boşluk ve komşuluk tercihlerini '
-      + 'anlamsız kıldı. Bu sınır, çarpanı belgelenmiş rolüne — yumuşak ağırlık, sert dışlama '
-      + 'değil — geri döndürüyor.',
-  },
-
-  /* ── Çoklu hesap tespiti (§9.1) ──────────────────────────────────────────────
-   *
-   * ⚠️ Bu sayıların HİÇBİRİ kendiliğinden bir şey yapmaz — hepsi tek bir rapor listesinin
-   * sıralamasını belirliyor. §9.1.1'in değişmezi: otomatik ceza YOK.
-   *
-   * ⚠️ Varsayılanlar **tahmin**, ölçüm değil. Gerçek oyuncu davranışı görülmeden doğru eşik
-   * bilinemez; bu yüzden hepsi panelde ve bu yüzden çıktı bir rapor, bir karar değil.
-   */
-  {
-    key: 'abuse.reportThreshold',
-    label: 'Rapor eşiği',
-    type: 'int', default: 60, min: 1, max: 500, tag: 'design', unit: 'puan',
-    description: 'Bir oyuncu çiftinin toplam şüphe puanı bu değere ULAŞIRSA panelde listelenir. '
-      + 'Düşürmek daha çok çift gösterir (çoğu masum çıkar ve liste okunmaz hâle gelir); '
-      + 'yükseltmek yalnız en bariz olanları bırakır.',
-    note: '⚠️ 60 seçilmesinin sebebi varsayılan ağırlıklar: «aynı cihaz» (40) TEK BAŞINA '
-      + 'eşiği geçmiyor — geçseydi aynı tableti kullanan iki kardeş her hafta rapora düşerdi. '
-      + 'Cihaz + tam IP (40+20) ya da cihaz + kayıt kohortu + devralma (40+10+15) geçiyor.',
+    key: 'placement.spillChance',
+    label: 'Kuşak taşma payı',
+    type: 'number', default: 0.12, min: 0, max: 1, tag: 'design',
+    description: 'Yeni oyuncunun sıradaki kuşağa taşma olasılığının TAVANI. Gerçek olasılık '
+      + 'kuşağın doluluğunun karesiyle büyür: kuşak boşken ~0, dolarken bu değere yaklaşır.',
+    note: '⭐ İki işi var: (1) kuşak dolarken uygun diyar sayısı bire düşüyor ve o noktada '
+      + 'herkes aynı diyara inecekti — taşma o yığılmayı dağıtıyor; (2) cephe kesin 5 diyar '
+      + 'olsaydı çoklu hesap açan biri hesaplarını hangi diyarlarda arayacağını tam bilirdi. '
+      + '0 yazarsan taşma tamamen kapanır.',
   },
   {
     key: 'abuse.weightSameDevice',

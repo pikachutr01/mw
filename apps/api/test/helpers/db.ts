@@ -142,7 +142,7 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
     INSERT INTO worlds (id, name, state, clock_offset_ms)
     VALUES (${worldId}, ${'test-' + worldId}, 'running', 0)
     ON CONFLICT (id) DO UPDATE SET state = 'running', clock_offset_ms = 0, paused_at = NULL,
-      deleted_player_seq = 0,
+      deleted_player_seq = 0, placement_band = 1,
       speed_multiplier = 1, resource_multiplier = 1,
       training_multiplier = 1, construction_multiplier = 1
   `);
@@ -156,6 +156,11 @@ export async function createWorld(h: DbHandle, worldId: number): Promise<void> {
    * dosyasında değil, sırf **test sırası kaydığı için** ortaya çıkıyor — yani sinsi ve
    * tekrarlanabilirliği düşük. Sayaç için yazılan bu sıfırlama listesi, satırın yeniden
    * kullanıldığı HER kolonu kapsamak zorunda.
+   *
+   * ⚠️⚠️ **`placement_band` 2026-08-16'da eklendi — aynı tuzağın ÜÇÜNCÜ kurbanı.** Yerleşim
+   * su seviyesi tanımı gereği yalnız İLERİ gidiyor; sıfırlanmayınca bir sonraki koşuda o
+   * dünya kimliğini alan test "boş dünya" sanıp diyar 1-5 beklerken 47. diyarı buluyordu.
+   * Arıza ilk koşuda değil İKİNCİ koşuda çıktı — listenin neden var olduğunun canlı kanıtı.
    * ⚠️ Not: bu yorum SQL'in İÇİNDE değil — orada ters tırnak kullanmak şablon dizesini
    * kapatıyor ve dosya derlenmiyor (tam bu şekilde yaşandı). */
   await h.db.execute(sql`DELETE FROM missions WHERE world_id = ${worldId}`);

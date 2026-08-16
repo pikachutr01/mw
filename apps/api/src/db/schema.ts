@@ -65,6 +65,15 @@ export const worlds = pgTable('worlds', {
    * ⚠️ `SELECT … FOR UPDATE` ile kilitlenip artırılır — iki eşzamanlı silme aynı adı üretemez.
    */
   deletedPlayerSeq: integer('deleted_player_seq').notNull().default(0),
+  /**
+   * ⭐⭐ Yerleşimde ulaşılmış en yüksek **kuşak (bant)** — 5 diyarlık dilim (2026-08-16).
+   *
+   * ⚠️ **Yalnız İLERİ gider.** Veriden türetilseydi (ilk uygun diyarı olan bant), bant 1'deki
+   * bir şehir silinince cephe geri açılırdı: yeni oyuncu çoktan güçlenmiş 1. kuşağın arasına
+   * düşer ve "hesap silip prim slot boşalt" açığı doğardı. Gerekçenin tamamı
+   * `drizzle/0049_placement_band.sql` başlığında.
+   */
+  placementBand: smallint('placement_band').notNull().default(1),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

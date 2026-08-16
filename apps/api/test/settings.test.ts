@@ -369,7 +369,8 @@ describe('⭐ dünya bazlı ayar köprüsü (panelin yazdığı katman)', () => 
    * Onlar için de panelin yaptığı yolu ölçüyoruz.
    */
   it('⭐ yerleşim ayarları da dünya katmanından okunur', async () => {
-    expect(placementConfig(worldId).capitalQuota).toBe(5);
+    // ⚠️ Varsayılan 2026-08-16'da 5 → 3 (kuşak modeli: kuşak kapasitesi = 5 diyar × bu).
+    expect(placementConfig(worldId).capitalQuota).toBe(3);
     await svc.update({ worldId, patch: { 'placement.capitalQuota': 2 }, actorId: null });
     expect(placementConfig(worldId).capitalQuota).toBe(2);
     await svc.reset(worldId, ['placement.capitalQuota']);

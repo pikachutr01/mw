@@ -1,98 +1,42 @@
 /**
- * ⭐ YERLEŞİM ALGORİTMASI (§13.6) — yeni oyuncunun başkenti nereye kurulur?
+ * ⭐⭐ YERLEŞİM ALGORİTMASI (§13.6) — yeni oyuncunun başkenti nereye kurulur?
  *
- * ⚠️ **NE VARDI:** düpedüz *"en küçük boş indeks"*. `auth.service.ts` diyarları sırayla
- * dolduruyordu: 1:1:1 → 1:1:2 → … Kullanıcı bunu canlıda gördü — *"benden sonra kayıt olan
- * bir başka hesap da 1:1:2'ye yerleştirildi"* — ve haklıydı: kodun kendi yorumu da
- * *"yerleşim algoritması Faz 3'te; şimdilik ilk boş şehir yeri"* diyordu.
+ * ⭐ **KUŞAK (BANT) MODELİ (kullanıcı, 2026-08-16).** Dünya `bandSize` diyarlık bantlara
+ * bölünür. Yeni başkentler o an **açık olan bandın içine rastgele** dağıtılır; bant doyunca
+ * bir sonraki bant açılır ve **bir daha geri dönülmez** (`worlds.placement_band`).
  *
- * ⚠️ Sıralı doldurmanın iki gerçek zararı var:
- *   1. **Komşuluk kaderdir.** Arka arkaya kaydolan iki oyuncu daima yan yana düşer; biri
- *      diğerini ilk gün ezebilir ve kaçacak yer yoktur.
- *   2. **Tahmin edilebilir.** Çoklu hesap açan biri, hesaplarını yan yana koymak için sadece
- *      arka arkaya kaydolmak zorundadır.
+ * ─ Neden değişti ─────────────────────────────────────────────────────────────────────────
+ * ⚠️⚠️ Önceki model cepheyi **nüfusa** göre açıyor ve içinde `A×B×C` ile skorluyordu. İki tur
+ * üst üste istenmeyen uçlara gitti:
+ *   • 2026-08-08 öncesi: herkes ilk 7 diyara yığıldı (cephe nüfusu asla geçemiyordu).
+ *   • 2026-08-08 sonrası: **fazla düzeltme.** Ölçüldü — gerçek servis, canlı veri, 300 sanal
+ *     kayıt: yeni oyuncuların **%88,7'si diyar 9+**'a düşüyordu; diyar 1, 3, 7 hiç
+ *     seçilmiyordu. Canlı veri de bunu doğruladı: onarımdan önce yerleşen 23 oyuncunun
+ *     **23'ü** diyar 1-7'de, sonraki 11 oyuncunun **11'i** diyar 9-28'de. Sıfır örtüşme.
  *
- * ─ Kullanıcının kuralı (§13.6 başlığı) ────────────────────────────────────────────────────
- * *"1. kıtanın erken diyarlarından başla · diyar başına en fazla 4-5 başkent · erken safhada
- * herkesi aynı diyara yığma ama birbirinden de koparma · dünya büyüdükçe geriye dönüp
- * serpiştir."*
+ * İki arızanın ortak kaynağı aynıydı: **cephe genişliği doygunluğa değil nüfusa bağlıydı.**
+ * Üstelik kendini besliyordu — cephe «dolu diyar + `emptyReserve`» olduğu için geçmişteki
+ * saçılma cepheyi genişletiyor, geniş cephe daha çok saçılma üretiyordu.
  *
- * ─ Nasıl çalışıyor ────────────────────────────────────────────────────────────────────────
- *   1. **Açık cephe** (§13.6.2): `[1..N]` ÖNEKİ — bu yüzden eski diyarlar daima aday kalır ve
- *      "geriye dönüp serpiştirme" ayrı bir mekanizma gerektirmez.
- *   2. **Örneklem**: açık bölgeden rastgele ~60 diyar. Tüm bölgeyi puanlamak 5.000 satır
- *      okumak demekti; örneklem hem O(1) maliyet hem kümelenme kırıcı.
- *   3. **Skor** `A × B × C` (§13.6.3):
- *        A = (1 − doluluk)^1,5            → boş diyar tercihi
- *        B = exp(−(komşu − ideal)² / 2σ²) → KOMŞULUK: ideal 1 komşu
- *        C = max(taban, 1/(1 + (tehdit/çıpa)^1,5)) → GÜÇ UYUMU: kendi kuşağının yanına
- *   4. **Ağırlıklı rastgele** seçim — deterministik "en iyi" DEĞİL, yoksa aynı anda kaydolan
- *      herkes aynı diyara giderdi.
- *   5. Diyar seçilince içindeki boş şehir yerlerinden biri (yine rastgele).
+ * ⭐ Bant modeli bu bağı koparıyor: cephe **yalnız doygunlukla** ilerler. Skorlama (A×B×C)
+ * tamamen kaldırıldı — bandın içinde seçim rastgeledir, çünkü bant zaten "yakınlık" garantisi
+ * veriyor ve ikinci bir tercih katmanı iki turdur ölçülemez yan etkiler üretti.
+ *
+ * ─ Nasıl çalışıyor ───────────────────────────────────────────────────────────────────────
+ *   1. **Açık bant**: `worlds.placement_band`ten başla, uygun diyarı olan ilk bandı bul.
+ *      İlerlediyse su seviyesini yaz (yalnız `GREATEST` ile — geri gitmez).
+ *   2. **Taşma**: bant doldukça küçük bir olasılıkla bir SONRAKİ bant kullanılır (aşağıya bak).
+ *   3. **Diyar seçimi**: banttaki uygun diyarlar arasında, **kalan başkent kotasıyla orantılı**
+ *      rastgele seçim. Böylece bant peş peşe değil dengeli dolar.
+ *   4. **Şehir yeri**: diyarın boş yerlerinden biri (rastgele).
  *
  * ⚠️ **Tohumlu** (`hash(worldSeed, accountId)`): aynı hesap aynı dünyada hep aynı sonucu
- * verir → hata ayıklanabilir ve denetlenebilir. `Math.random()` kullansaydık "bu oyuncu
- * neden buraya düştü" sorusu asla cevaplanamazdı.
+ * verir → *"bu oyuncu neden buraya düştü"* sorusu cevaplanabilir. `Math.random()` bunu
+ * imkânsız kılardı.
  *
- * ══════════════════════════════════════════════════════════════════════════════════════════
- * ⭐⭐ 2026-08-08 ONARIMI — algoritma canlıda TERS çalışıyordu (kullanıcı bildirdi)
- * ══════════════════════════════════════════════════════════════════════════════════════════
- * Şikâyet: *"kayıt olan herkes ilk 7 diyara doluşmuş; bazı diyarda 5 başkent, bazısında 1.
- * Bir sürü boş diyar varken 5. başkentin 4 başkentli diyara düşmesi çok çok düşük ihtimal
- * olmalı."* Canlı veriyle (23 başkent, 34 şehir) skor bileşenleri birebir yeniden hesaplandı:
- *
- * | g | başkent | şehir | A     | B     | C        | ağırlık   |
- * |---|---------|-------|-------|-------|----------|-----------|
- * | 1 | **5**   | 5     | 0,354 | 0,044 | 3,1e-3   | **4,9e-5**| ← EN YÜKSEK
- * | 4 | 1       | 1     | 0,854 | 0,707 | 1,6e-5   | 9,6e-6    |
- * | 8 | 0       | 0     | 1,000 | 0,249 | 1,2e-5   | 3,0e-6    |
- * | 9+| 0       | 0     | 1,000 | 0,249 | 1,0      | **0,249** | ← ama ADAY DEĞİL
- *
- * **Üç bağımsız arıza vardı:**
- *
- * 1. ⚠️ **Cephe 8 diyarda kilitliydi.** `ceil(24/(0,6×5)) = 8`, taban da 8 → açık bölge tam
- *    olarak `[1..8]`. 9. diyar ağırlık tablosunun tepesinde ama **örnekleme hiç girmiyordu**.
- *    Cephe oyuncu başına 1/3 diyar büyüdüğü için nüfusu asla geçemiyordu: "yeni diyar açma"
- *    diye bir olay pratikte gerçekleşmiyordu.
- *
- * 2. ⚠️⚠️ **Tehdit çıpası çöktü, C diktatör oldu.** Çıpa = son 14 günün MEDYAN puanı = **7**
- *    (23 oyuncunun 9'u sıfır puanlı). Tehdit = komşuluğun 75. persentili = binler. Oran ~1600,
- *    üssü 1,5 → C **1e-5** mertebesine iniyor. Yumuşak bir tercih olması gereken çarpan, beş
- *    büyüklük mertebesiyle A ve B'yi tamamen bastırıyordu.
- *    ⭐ Ve etkisi tasarımın **tersineydi**: g=1'i kayırıyordu, çünkü g=1'in komşuluğunda güçlü
- *    oyuncu yok — g=1'in komşuluğu zayıf, çünkü bütün yeni oyuncular oraya yığılmıştı.
- *    Kendi kendini besleyen döngü: son üç kayıt (Sauron · SAVARONA · ShoWTiMe) **üçü de**
- *    g=1'e düştü ve diyarı 2 başkentten 5'e çıkardı.
- *    ⚠️ §13.6.3 zaten *"tehdit_ref … taban değerle korunur"* diyordu; **taban hiç yazılmamıştı.**
- *
- * 3. ⚠️ **Kota yalnız başkent sayıyordu.** g=3'te 9 şehir / 10 yer ve 6 farklı oyuncu vardı,
- *    başkent 4 olduğu için hâlâ adaydı. Kullanıcının ikinci isteği tam da buydu.
- *
- * ─ Neden testler yakalamadı ───────────────────────────────────────────────────────────────
- * ⚠️⚠️ `placement.test.ts`'in dağılım testleri her oyuncuyu **`score = 0`** ile yaratıyordu.
- * O zaman çıpa 0 olur, kodun `anchor <= 0 ? 1 : …` koruması devreye girer ve **C her adayda
- * 1 çıkar** — yani 200 kayıtlık test C'yi hiç çalıştırmamış. C'yi sınayan tek test ise iki
- * oyuncu kullanıyordu (5.000.000 ve 0 → çıpa 2,5M), yani sağlıklı ölçekteydi. Arızanın
- * yaşadığı bölge (çıpa≈0, tehdit≫0) test takımından **yapısal olarak erişilemezdi.**
- *
- * ─ Onarım ─────────────────────────────────────────────────────────────────────────────────
- * **K1. Kalabalık ölçüsü artık "diyardaki FARKLI oyuncu sayısı"** (koloni de sayılır, yoldaki
- *      şehir kurma görevi de). Hem sert kota (`neighborQuota`) hem B çarpanı bunu kullanır.
- *      Kullanıcı: *"başkent olmasa bile başka oyuncuların şehirleri varsa oraya başkent
- *      atanmamalı, çok kalabalık yapıyorlar."*
- * **K2. Kota = TAVAN, hedef değil.** `neighborIdeal` 2 → **1**, `neighborSigma` 1,2 → **0,9**.
- *      Ağırlıklar: boş 0,54 · 1 komşu **0,85** · 2 → 0,39 · 3 → 0,050 · 4 → **0,0027**.
- *      Boş diyar / 4 komşulu diyar oranı 2,1 katken **200 kat** oldu — istenen "çok çok düşük
- *      ihtimal" bu. ⭐ Tasarımın özü korunuyor: **tek komşulu diyar hâlâ en cazip aday**, yani
- *      kimse ıssız çölde yalnız kalmıyor; yalnızca doyma noktası 2-4'ten 1-2'ye indi.
- * **K3. C'nin dinamik aralığı iki taraftan bağlandı:** çıpa `minThreatAnchor` ile tabanlanır
- *      (§13.6.3'ün istediği taban) ve C'nin kendisi `threatFloor` altına inemez. Artık en fazla
- *      ~7 kat cezalandırır → belgelenmiş rolüne, *"yumuşak ağırlık, sert dışlama değil"*e döner.
- * **K4. Cephede BOŞ DİYAR REZERVİ.** Açık bölge yalnız nüfusla değil, "dolu diyar sayısı +
- *      `emptyReserve`" ile de büyür. Kullanıcının değişmezi — *"bir sürü boş diyar varken"* —
- *      artık bir yan etki değil, doğrudan yazılmış bir garanti.
- * **K5. Örneklem tümüyle elenirse** önce **ilk tamamen boş diyar** denenir; `firstFreeSlot`
- *      (eski sıralı doldurma) yalnızca o da yoksa çalışır.
+ * ⚠️ Kotalar KORUNDU: `capitalQuota` (diyar başına otomatik başkent) ve `neighborQuota`
+ * (diyarda şehri olan farklı oyuncu — koloniler ve yoldaki `found_city` görevleri dâhil).
+ * Bant modeli kotanın yerine geçmiyor, onun İÇİNDE çalışıyor.
  */
 import { sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
@@ -104,6 +48,8 @@ export interface Coords { k: number; d: number; s: number }
 
 /** Panelden ayarlanabilen yerleşim sabitleri (§13.6.5: *"tüm sabitler world_config'te"*). */
 export interface PlacementConfig {
+  /** Bir kuşağın (bandın) kaç diyar geniş olduğu. */
+  bandSize: number;
   /** Diyar başına OTOMATİK yerleştirilebilecek en fazla başkent. Koloniler bu kotaya girmez. */
   capitalQuota: number;
   /**
@@ -111,57 +57,38 @@ export interface PlacementConfig {
    * diyara yeni başkent atanmaz. `capitalQuota`dan farkı: koloniler de sayılır (2026-08-08).
    */
   neighborQuota: number;
-  /** Açık cephenin hedef doluluğu — cephe diyarı başına ortalama `bu × capitalQuota` başkent. */
-  targetOccupancy: number;
-  /** Dünya bomboşken bile açık tutulacak en az diyar sayısı. */
-  minOpenDistricts: number;
-  /** ⭐ Cephede her zaman bulunması garanti edilen BOŞ diyar sayısı (2026-08-08). */
-  emptyReserve: number;
-  /** Skorlanacak aday sayısı. */
-  sampleSize: number;
-  /** Gauss komşuluk tercihinin tepe noktası (kaç KOMŞULU diyar ideal). */
-  neighborIdeal: number;
-  /** Gauss'un genişliği; büyütmek tercihi düzleştirir. */
-  neighborSigma: number;
-  /** Boşluk tercihinin üssü — büyütmek boş diyarları daha çok kayırır. */
-  emptinessExponent: number;
-  /** Güç uyumunun üssü. 0 = güç uyumu kapalı. */
-  threatExponent: number;
-  /** Tehdit çıpası: son kaç günde kaydolanların medyan puanı baz alınır. */
-  threatWindowDays: number;
-  /** ⭐ Çıpanın tabanı — medyan bunun altındaysa bu kullanılır (§13.6.3 "taban değerle korunur"). */
-  minThreatAnchor: number;
-  /** ⭐ Güç uyumunun inebileceği en düşük değer: C'nin A ve B'yi bastırmasını engeller. */
-  threatFloor: number;
+  /**
+   * ⭐⭐ **TAŞMA — bandın SONRAKİ banda sızma olasılığının tavanı** (kullanıcı, 2026-08-16).
+   *
+   * Gerçek olasılık sabit değil, bandın doluluğuyla büyüyor:
+   *
+   *     taşma = spillChance × doluluk²        (doluluk = banttaki başkent / bant kapasitesi)
+   *
+   * ⚠️ **İki somut gerekçesi var, ikisi de ölçülebilir:**
+   *
+   *  1. **Bant sonundaki yığılmayı çözer.** Bant dolmaya yaklaşırken uygun diyar sayısı
+   *     bire düşer ve o noktada yerleşen HERKES aynı diyara iner. Canlı örnek (2026-08-16):
+   *     bant 1'de kotası dolmamış tek diyar 1:4 kalmıştı — taşma olmasa sıradaki iki kayıt
+   *     da oraya düşecekti. Kare alma tam bunu hedefliyor: bant boşken taşma ~0, dolarken
+   *     devreye giriyor.
+   *  2. **Öngörülebilirliği kırar.** Cephe kesin 5 diyar olsaydı, çoklu hesap açan biri
+   *     hesaplarını hangi 5 diyarda arayacağını **tam olarak** bilirdi. Küçük bir taşma hedef
+   *     kümesini bulanıklaştırıyor — bu, algoritmanın ilk yazımındaki *"tahmin edilebilir
+   *     olmasın"* kaygısının bant modelindeki karşılığı.
+   *
+   * ⚠️ Taşma bandı da doluysa mevcut banda geri dönülür — taşma bir tercih, kaçış değil.
+   */
+  spillChance: number;
 }
 
-/**
- * ⚠️⚠️ **`worldId` ŞART, ve 2026-08-08'e kadar YOKTU.** Ayarlar `liveNumber` ile yalnız dünya 0
- * katmanından okunuyordu; panel ise `worldId: 1`'e yazıyor. Yani bu on üç düğmenin hiçbiri
- * panelden gerçekten çevrilemiyordu — kaydediliyor, görünüyor, hiçbir şey değişmiyordu.
- * Arıza `combat.attackScoreRatio`ta yakalandı (kullanıcı bildirdi); aynı köprüyü kullanan
- * yerleşim ayarları da aynı kör noktadaydı. Gerekçenin tamamı `settings/live.ts`te.
- *
- * ⚠️ `worldId` isteğe bağlı DEĞİL: varsayılan verseydik çağrı noktalarının hangisinin dünyayı
- * geçmeyi unuttuğu görünmez olurdu — hatanın tam da bu sınıfı yeniden doğardı.
- */
 export function placementConfig(worldId: number): PlacementConfig {
   const n = (key: string, fallback: number): number =>
     liveNumberFor(worldId, 'placement', key, fallback);
   return {
-    capitalQuota: n('capitalQuota', 5),
+    bandSize: n('bandSize', 5),
+    capitalQuota: n('capitalQuota', 3),
     neighborQuota: n('neighborQuota', 5),
-    targetOccupancy: n('targetOccupancy', 0.3),
-    minOpenDistricts: n('minOpenDistricts', 16),
-    emptyReserve: n('emptyReserve', 12),
-    sampleSize: n('sampleSize', 60),
-    neighborIdeal: n('neighborIdeal', 1),
-    neighborSigma: n('neighborSigma', 0.9),
-    emptinessExponent: n('emptinessExponent', 1.5),
-    threatExponent: n('threatExponent', 1.5),
-    threatWindowDays: n('threatWindowDays', 14),
-    minThreatAnchor: n('minThreatAnchor', 250),
-    threatFloor: n('threatFloor', 0.15),
+    spillChance: n('spillChance', 0.12),
   };
 }
 
@@ -201,10 +128,8 @@ interface DistrictRow {
   cities: number;
   /** Diyardaki BAŞKENT sayısı — `capitalQuota` bundan. */
   capitals: number;
-  /** ⭐ Diyarda şehri olan FARKLI oyuncu sayısı — kalabalık ölçüsü: `neighborQuota` ve B bundan. */
+  /** ⭐ Diyarda şehri olan FARKLI oyuncu sayısı — `neighborQuota` bundan (koloniler dâhil). */
   players: number;
-  /** Diyar ve iki komşusundaki oyuncuların 75. persentil puanı. */
-  threat: number;
 }
 
 export class PlacementService {
@@ -223,37 +148,40 @@ export class PlacementService {
     const db = tx ?? this.db;
     const cfg = placementConfig(worldId);
     const next = rng(seedOf(worldId, accountId) + attempt * 7919);
+    const size = Math.max(1, Math.round(cfg.bandSize));
 
-    const open = await this.openFrontier(worldId, cfg, db);
-    const sample = this.sampleDistricts(open, cfg.sampleSize, next);
-    const rows = await this.describeDistricts(worldId, sample, db);
-
-    /**
-     * ⚠️ Sert filtre: kotası dolmuş ya da hiç boş yeri kalmamış diyar elenir. Yumuşak
-     * ağırlıkla halledilmez — kota bir SINIR, tercih değil.
-     *
-     * ⭐ `players` filtresi 2026-08-08'de eklendi (kullanıcı isteği): bir diyarda başka
-     * oyuncuların KOLONİLERİ varsa orası da kalabalıktır. Öncesinde yalnız `capitals`
-     * bakılıyordu ve 9 şehirli / 6 oyunculu bir diyar hâlâ aday sayılıyordu.
-     */
-    const eligible = rows.filter(
-      (r) => r.capitals < cfg.capitalQuota
-        && r.players < cfg.neighborQuota
-        && r.cities < WORLD_SHAPE.citiesPerDistrict,
-    );
+    const band = await this.currentBand(worldId, cfg, size, db);
 
     /**
-     * Örneklemin tamamı elendiyse **önce ilk tamamen boş diyarı** dene (§K5). Örneklem
-     * cephenin rastgele 60 diyarı olduğu için rezervdeki boşları ıskalamış olabilir; o
-     * durumda eski sıralı doldurmaya düşmek, tam da şikâyet edilen 1:1:x davranışını
-     * geri getirirdi.
+     * ⭐ Taşma olasılığı bandın doluluğunun KARESİYLE büyüyor — gerekçe `spillChance`
+     * başlığında. Bant boşken ~0, dolarken devreye giriyor.
      */
-    if (eligible.length === 0) {
-      return (await this.firstOpenDistrict(worldId, next, db)) ?? this.firstFreeSlot(worldId, db);
+    const capacity = size * cfg.capitalQuota;
+    const fullness = capacity > 0 ? Math.min(1, band.capitals / capacity) : 0;
+    const spill = Math.max(0, Math.min(1, cfg.spillChance)) * fullness * fullness;
+    const spilled = next() < spill;
+
+    const first = spilled ? band.first + size : band.first;
+    let rows = await this.describeBand(worldId, first, first + size - 1, db);
+    let eligible = rows.filter((r) => this.eligible(r, cfg));
+
+    // ⚠️ Taşma bandı da doluysa mevcut banda DÖN — taşma bir tercih, kaçış değil.
+    if (eligible.length === 0 && spilled) {
+      rows = await this.describeBand(worldId, band.first, band.first + size - 1, db);
+      eligible = rows.filter((r) => this.eligible(r, cfg));
     }
+    // Her iki bant da doluysa son çare (dünya dolmaya yakın): en küçük boş indeks.
+    if (eligible.length === 0) return this.firstFreeSlot(worldId, db);
 
-    const anchor = await this.threatAnchor(worldId, cfg, db);
-    const weights = eligible.map((r) => this.score(r, cfg, anchor));
+    /**
+     * ⭐ **KALAN KOTAYLA ORANTILI rastgele seçim** (kullanıcı: *"rastgele olsun … diyarların
+     * peş peşe değil rastgele şekilde dolması önemli"*).
+     *
+     * ⚠️ Düz eşit olasılık DEĞİL: kotasında daha çok yer olan diyar daha olası. Böylece bant
+     * **dengeli** dolar; eşit olasılık, bir diyarı erken doldurup diğerini boş bırakabilirdi
+     * ve bandın son slotlarında yığılmayı ağırlaştırırdı.
+     */
+    const weights = eligible.map((r) => Math.max(1, cfg.capitalQuota - r.capitals));
     const chosen = pickWeighted(eligible, weights, next()) ?? eligible[0]!;
 
     const { k, d } = districtAt(chosen.g);
@@ -262,119 +190,71 @@ export class PlacementService {
     return s == null ? this.firstFreeSlot(worldId, db) : { k, d, s };
   }
 
-  /**
-   * Skor = A × B × C (§13.6.3).
-   *
-   * ⚠️ ÇARPIM, toplam değil: her çarpan bir VETO gücü taşımalı. Toplam olsaydı kotası dolmaya
-   * yaklaşmış ama "boş" görünen bir diyar, yüksek A'sıyla düşük B'yi örtebilirdi.
-   *
-   * ⚠️⚠️ Ama çarpımın bedeli şu: bir çarpanın ölçeği kaçarsa **diğer ikisini yok eder**.
-   * Canlıda tam olarak bu oldu — C 1e-5'e inip A ve B'yi anlamsız kıldı (dosya başındaki
-   * onarım notu). Bu yüzden C artık `threatFloor` ile alttan bağlı: veto gücü var ama
-   * diktatörlüğü yok.
-   */
-  private score(r: DistrictRow, cfg: PlacementConfig, anchor: number): number {
-    const occupancy = r.cities / WORLD_SHAPE.citiesPerDistrict;
-    const A = Math.max(0, 1 - occupancy) ** cfg.emptinessExponent;
-
-    /**
-     * ⭐ Gauss'un girdisi `capitals` DEĞİL `players`: kalabalığı yapan şey başkent değil,
-     * kaç farklı oyuncuyla yan yana olacağın. Bir oyuncunun 3 kolonisi tek komşudur;
-     * 3 farklı oyuncunun birer kolonisi üç komşudur.
-     */
-    const sigma = Math.max(0.1, cfg.neighborSigma);
-    const B = Math.exp(-((r.players - cfg.neighborIdeal) ** 2) / (2 * sigma * sigma));
-
-    // ⚠️ Çıpa 0 olabilir (taban da 0'a çekilmişse) → güç uyumu o zaman nötr.
-    const C = cfg.threatExponent <= 0 || anchor <= 0
-      ? 1
-      : Math.max(
-        Math.min(1, Math.max(0, cfg.threatFloor)),
-        1 / (1 + (r.threat / anchor) ** cfg.threatExponent),
-      );
-
-    return A * B * C;
+  /** Diyar yeni başkent alabilir mi? Üç kota da SINIR, tercih değil. */
+  private eligible(r: DistrictRow, cfg: PlacementConfig): boolean {
+    return r.capitals < cfg.capitalQuota
+      && r.players < cfg.neighborQuota
+      && r.cities < WORLD_SHAPE.citiesPerDistrict;
   }
 
   /**
-   * Açık yerleşim cephesi (§13.6.2) — `[1..N]` öneki.
+   * ⭐⭐ AÇIK KUŞAK — su seviyesinden başla, uygun diyarı olan ilk bandı bul, ilerlediyse yaz.
    *
-   * ⭐⭐ **İKİ TABAN, ve asıl olan ikincisi** (2026-08-08).
+   * ⚠️ **Su seviyesi (`worlds.placement_band`) veriden TÜRETİLMİYOR**, saklanıyor: aksi hâlde
+   * bant 1'deki bir şehir silinince cephe geri açılırdı. Gerekçe `0049_placement_band.sql`
+   * başlığında — kuşak ayrımı ve "hesap silip prim slot boşalt" açığı.
    *
-   * Eskiden yalnız nüfus vardı: `ceil((başkent+1) / (hedefDoluluk × kota))`. Bu, cepheyi
-   * oyuncu başına 1/3 diyar büyütüyordu — yani cephe nüfusu **asla** geçemiyor, dolayısıyla
-   * "yeni diyar aç" diye bir olay pratikte hiç olmuyordu. Canlıda 23 başkent → cephe tam
-   * 8 diyar, 9. diyar ağırlık tablosunun tepesinde olmasına rağmen aday bile değildi.
+   * ⚠️ Yazma `GREATEST` ile: iki kayıt aynı anda ilerletirse küçük olan büyüğü geri alamaz.
    *
-   * ⭐ İkinci taban bunu doğrudan yazıyor: **dolu diyar sayısı + `emptyReserve`**. Böylece
-   * cephede her zaman en az `emptyReserve` kadar bomboş diyar bulunur — kullanıcının
-   * *"bir sürü boş diyar varken"* değişmezi artık bir yan etki değil, garanti.
-   *
-   * ⚠️ Dolu diyar sayımı `cities` UNION `found_city` üzerinden: yolda bir koloni varsa o diyar
-   * boş sayılmaz, yoksa rezerv olduğundan büyük görünürdü.
-   * ⚠️ Sayım cephenin İÇİNDEKİ dolu diyarları değil TÜMÜNÜ sayar (koloniler cephe dışına da
-   * kurulabiliyor — canlıda 1:28:5 var). Bu yönde hata güvenli: cepheyi yalnız genişletir.
+   * ⚠️ Tarama sınırlı (`maxScan`): dünya tamamen dolarsa döngü sonsuza gitmemeli. Sınıra
+   * dayanılırsa son bant döndürülür ve `pickCapital` `firstFreeSlot`a düşer.
    */
-  private async openFrontier(worldId: number, cfg: PlacementConfig, db: Db): Promise<number> {
-    const per = WORLD_SHAPE.districtsPerContinent;
+  private async currentBand(
+    worldId: number, cfg: PlacementConfig, size: number, db: Db,
+  ): Promise<{ index: number; first: number; capitals: number }> {
     const rows = await db.execute<Record<string, unknown>>(sql`
-      WITH occ AS (
-        SELECT (k - 1) * ${per} + d AS g, is_capital
-          FROM cities WHERE world_id = ${worldId}
-        UNION ALL
-        SELECT (target_k - 1) * ${per} + target_d AS g, false AS is_capital
-          FROM missions
-         WHERE world_id = ${worldId} AND type = 'found_city'
-           AND status IN ('scheduled', 'running')
-           AND target_k IS NOT NULL AND target_d IS NOT NULL
-      )
-      SELECT COUNT(*) FILTER (WHERE is_capital)::int AS capitals,
-             COUNT(DISTINCT g)::int                  AS districts
-        FROM occ
+      SELECT placement_band FROM worlds WHERE id = ${worldId}
     `);
-    const capitals = Number(rows[0]?.['capitals'] ?? 0);
-    const districts = Number(rows[0]?.['districts'] ?? 0);
+    const start = Math.max(1, Number(rows[0]?.['placement_band'] ?? 1));
+    const maxScan = Math.ceil(TOTAL_DISTRICTS / size);
 
-    const perDistrict = Math.max(0.5, cfg.targetOccupancy * cfg.capitalQuota);
-    const byPopulation = Math.ceil((capitals + 1) / perDistrict);
-    const byReserve = districts + Math.max(0, Math.round(cfg.emptyReserve));
-
-    const want = Math.max(cfg.minOpenDistricts, byPopulation, byReserve);
-    return Math.min(TOTAL_DISTRICTS, Math.max(1, want));
-  }
-
-  /** Açık bölgeden tekrarsız örneklem. Bölge küçükse tamamını döndürür. */
-  private sampleDistricts(open: number, size: number, next: () => number): number[] {
-    const want = Math.max(1, Math.min(Math.round(size), open));
-    if (want >= open) return Array.from({ length: open }, (_, i) => i + 1);
-    const picked = new Set<number>();
-    // ⚠️ Deneme sayısı sınırlı: `want < open` olsa bile şanssız bir akış sonsuza dönebilir.
-    for (let guard = 0; picked.size < want && guard < want * 20; guard++) {
-      picked.add(Math.floor(next() * open) + 1);
+    let index = start;
+    let first = (index - 1) * size + 1;
+    let capitals = 0;
+    for (let guard = 0; guard < maxScan; guard++) {
+      first = (index - 1) * size + 1;
+      if (first > TOTAL_DISTRICTS) break;
+      const band = await this.describeBand(worldId, first, first + size - 1, db);
+      capitals = band.reduce((a, r) => a + r.capitals, 0);
+      if (band.some((r) => this.eligible(r, cfg))) break;
+      index += 1;
     }
-    return [...picked];
+
+    if (index > start) {
+      await db.execute(sql`
+        UPDATE worlds SET placement_band = GREATEST(placement_band, ${index}) WHERE id = ${worldId}
+      `);
+    }
+    return { index, first, capitals };
   }
 
-  /** Örneklemdeki diyarların doluluk / başkent / tehdit künyesi — TEK sorgu. */
-  private async describeDistricts(
-    worldId: number, sample: readonly number[], db: Db,
+  /**
+   * Bir bandın diyar künyesi — TEK sorgu.
+   *
+   * ⭐ `players` ve `cities` sayımına **yoldaki `found_city` görevleri de** giriyor
+   * (2026-08-08 kuralı korundu): o koordinat zaten rezerve, boş sayılırsa yeni oyuncu oraya
+   * doğar ve gelen ordu eli boş döner.
+   */
+  private async describeBand(
+    worldId: number, firstG: number, lastG: number, db: Db,
   ): Promise<DistrictRow[]> {
-    if (sample.length === 0) return [];
     const per = WORLD_SHAPE.districtsPerContinent;
-    const list = sql.raw(`ARRAY[${sample.join(',')}]::int[]`);
-
-    /**
-     * ⚠️ Tehdit KOMŞU DİYARLARI da kapsıyor (§13.6.3 C): yalnız diyarın kendisine bakmak,
-     * "yan diyarda bir dev var" durumunu görmezden gelirdi ve sefer süreleri komşu diyarı
-     * zaten ulaşılabilir kılıyor.
-     * ⚠️ Persentil `percentile_cont` ile: ortalama, tek bir devi kalabalığın içinde eritir.
-     *
-     * ⭐ `city` artık yalnız kurulmuş şehirler değil, **yoldaki `found_city` hedefleri** de
-     * (2026-08-08). `freeSlotIn` ve `firstFreeSlot` bu kuralı zaten uyguluyordu; kalabalık
-     * sayımının onlardan farklı davranması, aynı sınıftan sessiz bir tutarsızlık olurdu.
-     */
+    const son = Math.min(TOTAL_DISTRICTS, lastG);
+    if (firstG > son) return [];
     const rows = await db.execute<Record<string, unknown>>(sql`
-      WITH cand AS (SELECT unnest(${list}) AS g),
+      -- Cast ŞART: bağlı parametreler unknown gelir ve Postgres generate_series'in hangi
+      -- aşırı yüklemesini kullanacağını seçemez ("function ... is not unique").
+      WITH cand AS (SELECT generate_series(${firstG}::int, ${son}::int) AS g),
       city AS (
         SELECT (c.k - 1) * ${per} + c.d AS g, c.is_capital, c.player_id
           FROM cities c WHERE c.world_id = ${worldId}
@@ -389,80 +269,15 @@ export class PlacementService {
       SELECT cand.g,
              COALESCE((SELECT COUNT(*)::int FROM city WHERE city.g = cand.g), 0) AS cities,
              COALESCE((SELECT COUNT(*)::int FROM city WHERE city.g = cand.g AND city.is_capital), 0) AS capitals,
-             COALESCE((SELECT COUNT(DISTINCT city.player_id)::int FROM city WHERE city.g = cand.g), 0) AS players,
-             COALESCE((
-               SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY p.score)
-                 FROM city JOIN players p ON p.id = city.player_id
-                WHERE city.g BETWEEN cand.g - 1 AND cand.g + 1
-             ), 0) AS threat
-        FROM cand
+             COALESCE((SELECT COUNT(DISTINCT city.player_id)::int FROM city WHERE city.g = cand.g), 0) AS players
+        FROM cand ORDER BY cand.g
     `);
     return rows.map((r) => ({
       g: Number(r['g']),
       cities: Number(r['cities'] ?? 0),
       capitals: Number(r['capitals'] ?? 0),
       players: Number(r['players'] ?? 0),
-      threat: Number(r['threat'] ?? 0),
     }));
-  }
-
-  /**
-   * Tehdit çıpası: son `threatWindowDays` içinde kaydolmuş oyuncuların **medyan** puanı.
-   *
-   * ⚠️ Tüm dünyanın ortalaması DEĞİL: çıpa "yeni oyuncunun kuşağı" olmalı. Aksi hâlde dünya
-   * yaşlandıkça çıpa yükselir ve güç uyumu kendiliğinden işlevsizleşirdi.
-   *
-   * ⚠️⚠️ **TABAN ŞART** (2026-08-08). §13.6.3 bunu *"taban değerle korunur"* diye yazmıştı ama
-   * kodda `Math.max(0, …)` vardı — yani taban yoktu. Yeni bir dünyada oyuncuların çoğu sıfır
-   * puanlı olur ve **medyan 0'a yapışır**; canlıda 23 oyuncunun 9'u sıfırdı ve çıpa **7**
-   * çıkıyordu. Tehdit binler mertebesindeyken bu, C'yi 1e-5'e indirip A ve B'yi anlamsız
-   * kılıyordu. Taban, oranı "gerçek bir güç farkı" ölçmeye zorluyor: çıpanın altındaki her
-   * puan aynı derecede zayıf sayılır.
-   */
-  private async threatAnchor(worldId: number, cfg: PlacementConfig, db: Db): Promise<number> {
-    const rows = await db.execute<Record<string, unknown>>(sql`
-      SELECT COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY score), 0) AS med
-        FROM players
-       WHERE world_id = ${worldId}
-         AND created_at >= now() - (${cfg.threatWindowDays} * interval '1 day')
-    `);
-    const median = Math.max(0, Number(rows[0]?.['med'] ?? 0));
-    return Math.max(median, Math.max(0, cfg.minThreatAnchor));
-  }
-
-  /**
-   * ⭐ Cephedeki ilk **tamamen boş** diyarın rastgele bir şehir yeri (2026-08-08).
-   *
-   * `pickCapital`in örneklemi tümüyle elendiğinde devreye girer. Öncesinde doğrudan
-   * `firstFreeSlot`a düşülüyordu ve o, tanımı gereği **eski sıralı doldurma** davranışı —
-   * yani şikâyetin ta kendisi olan 1:1:x. Boş bir diyar varken oraya gitmemek için hiçbir
-   * sebep yok; `firstFreeSlot` gerçekten hiç boş diyar kalmadığında anlamlı.
-   *
-   * ⚠️ Takma ad `gs`: çıplak `g`, korelasyonlu alt sorguda `occ.g` sütununa çözülürdü
-   * (`freeSlotIn`de aynı tuzağa bir kez düşülmüştü).
-   */
-  private async firstOpenDistrict(
-    worldId: number, next: () => number, db: Db,
-  ): Promise<Coords | null> {
-    const per = WORLD_SHAPE.districtsPerContinent;
-    const rows = await db.execute<Record<string, unknown>>(sql`
-      WITH occ AS (
-        SELECT DISTINCT (k - 1) * ${per} + d AS g FROM cities WHERE world_id = ${worldId}
-        UNION
-        SELECT DISTINCT (target_k - 1) * ${per} + target_d AS g
-          FROM missions
-         WHERE world_id = ${worldId} AND type = 'found_city'
-           AND status IN ('scheduled', 'running')
-           AND target_k IS NOT NULL AND target_d IS NOT NULL
-      )
-      SELECT MIN(gs)::int AS g
-        FROM generate_series(1, ${TOTAL_DISTRICTS}) AS gs
-       WHERE NOT EXISTS (SELECT 1 FROM occ WHERE occ.g = gs)
-    `);
-    const g = rows[0]?.['g'];
-    if (g == null) return null;
-    const { k, d } = districtAt(Number(g));
-    return { k, d, s: Math.floor(next() * WORLD_SHAPE.citiesPerDistrict) + 1 };
   }
 
   /** Diyardaki boş şehir yerlerinden biri (rastgele). Hiç yoksa `null`. */
