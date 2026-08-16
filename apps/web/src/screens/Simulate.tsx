@@ -781,12 +781,13 @@ function ResultPanel({ results, shown, onShow }: {
             sütununda yüzde olarak zaten yazıyor, burada tekrar etmek yer israfıydı. */}
       </div>
 
-      {/* ⚠️ Ganimet ayrımı: motor YALNIZ ölen birimlerden çıkan ganimeti hesaplar. Gerçek bir
-          savaşta bu değer savunanın şehrindeki kaynakla havuzlanır ve taşınabilen kısmı ayrıca
-          hesaplanır (`battle.handlers.ts` → `calculateLoot`) — orası motorun işi değil. */}
+      {/* ⚠️ Ganimet ayrımı: motor YALNIZ ölen birimlerden çıkan enkazı hesaplar. Gerçek savaşta
+          kapasite önce enkaza, artarsa savunanın kasasına harcanır (`battle.handlers.ts` →
+          `calculateLoot`) — orası motorun işi değil. 2026-08-16'da ortak havuz kaldırıldı. */}
       <p className="border-t border-border px-3 py-2 text-[11px] text-muted">
-        Savaş ganimeti, <b>ölen birimlerden</b> çıkan değerdir. Gerçek bir savaşta buna
-        savunanın şehrindeki kaynak da eklenir ve taşıma kapasitesi kadarı götürülür.
+        Savaş ganimeti, <b>ölen birimlerden</b> çıkan değerdir. Gerçek bir savaşta taşıma
+        kapasiten <b>önce bu enkaza</b> harcanır; artarsa savunanın kasasından da pay alırsın.
+        Taşıyamadığın enkaz savunanın şehrinde kalır.
       </p>
     </Panel>
   );

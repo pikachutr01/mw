@@ -253,7 +253,10 @@ export interface LootConfig {
   povertyThreshold: number;
   /** Bu eşiğin altında oran sabit `minRate` — sömürünün dibi (kullanıcı: 5.000). */
   floorThreshold: number;
-  /** Taban oran — havuz `floorThreshold` altındayken (kullanıcı 2026-07-31: %5 → **%20**). */
+  /**
+   * Taban oran — **kasa** `floorThreshold` altındayken.
+   * (2026-07-31: %5 → %20 · 2026-08-16: %20 → **%30**, girdi havuzdan kasaya inince.)
+   */
   minRate: number;
   jitterMin: number;
   jitterMax: number;
@@ -275,13 +278,22 @@ export interface LootConfig {
   condition: 'attackerWon' | 'undefendedBefore' | 'never';
 }
 
+/**
+ * ⚠️⚠️ **2026-08-16'da DÖRT SAYI BİRLİKTE DEĞİŞTİ** (kullanıcı kararı) — biri diğerinden
+ * bağımsız düşünülemez, bkz. `loot.ts` başlığı:
+ *
+ *   povertyThreshold 100k → 50k · minRate %20 → %30   (oran eğrisi artık YALNIZ kasaya bakıyor,
+ *                                                      girdi küçüldüğü için eşik de indi)
+ *   jitterMin/Max 0,85–1,15 → 0,92–1,08               (eski saçılma, %40→%30 rampasının
+ *                                                      tamamından genişti; rampa ölçülemiyordu)
+ */
 export const DEFAULT_LOOT_CONFIG: LootConfig = {
   plunderRate: 0.4,
-  povertyThreshold: 100_000,
+  povertyThreshold: 50_000,
   floorThreshold: 5_000,
-  minRate: 0.20,
-  jitterMin: 0.85,
-  jitterMax: 1.15,
+  minRate: 0.30,
+  jitterMin: 0.92,
+  jitterMax: 1.08,
   gapMinRate: 0.5,
   gapBand: 50,
   gapRatioLimit: 10,

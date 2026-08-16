@@ -174,6 +174,31 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       ? { ...DEFAULT_LOOT_CONFIG, ...ctx.engine.loot }
       : DEFAULT_LOOT_CONFIG);
 
+    /**
+     * ⭐ Yağma savunandan SAVAŞ ANINDA düşülür (§13.10.4): yoldaki mal kimsenin değildir,
+     * savunan geri alamaz, saldıran ancak dönüşte alır.
+     *
+     * ⭐⭐ **`spendUpTo` — `trySpend` DEĞİL (2026-08-16).** `trySpend` "ya hep ya hiç"tir ve
+     * dönüşü burada kontrol EDİLMİYORDU: kasa yetmeseydi savunandan hiçbir şey düşmez ama
+     * saldıran ganimeti yine taşırdı — sessiz **kaynak çoğalması**. `spendUpTo` gerçekten
+     * düşüleni döndürüyor ve ganimet ona göre kırpılıyor; böylece *savunanın kaybettiği =
+     * saldıranın aldığı* eşitliği `loot.plunderRate` panelden 1'e çekilse bile korunuyor.
+     *
+     * ⚠️⚠️ **`writeBattle`den ÖNCE olmak ZORUNDA.** Kırpma sonradan yapılsaydı savaş kaydı
+     * kırpılmamış sayıyı, dönüş yükü kırpılmışı taşırdı: rapordaki ganimet ile eve gelen mal
+     * ayrışır ve bu tam olarak oyuncunun "sayılar tutmuyor" diye bildirdiği hata sınıfı olurdu.
+     */
+    if (loot.fromPlunder.gold > 0 || loot.fromPlunder.food > 0) {
+      const spent = await cities.spendUpTo(targetCityId, loot.fromPlunder, ctx.at, ctx.tx as never);
+      if (spent.gold !== loot.fromPlunder.gold || spent.food !== loot.fromPlunder.food) {
+        loot.taken = {
+          gold: loot.taken.gold - (loot.fromPlunder.gold - spent.gold),
+          food: loot.taken.food - (loot.fromPlunder.food - spent.food),
+        };
+        loot.fromPlunder = spent;
+      }
+    }
+
     const battleId = await writeBattle(ctx, {
       missionId: ctx.mission.id,
       attackerPlayerId,
@@ -225,11 +250,6 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       defenderLosses,
     });
 
-    // ⭐ Yağma savunandan SAVAŞ ANINDA düşülür (§13.10.4): yoldaki mal kimsenin değildir,
-    //    savunan geri alamaz, saldıran ancak dönüşte alır.
-    if (loot.fromPlunder.gold > 0 || loot.fromPlunder.food > 0) {
-      await cities.trySpend(targetCityId, loot.fromPlunder, ctx.at, ctx.tx as never);
-    }
     // Taşınamayan enkaz yok olmaz → savunanın şehrine eklenir.
     if (loot.leftoverDebrisToDefender.gold > 0 || loot.leftoverDebrisToDefender.food > 0) {
       await cities.add(targetCityId, loot.leftoverDebrisToDefender, ctx.at, ctx.tx as never);

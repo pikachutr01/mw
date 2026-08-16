@@ -234,6 +234,53 @@ export class CityService {
     return rows.length > 0;
   }
 
+  /**
+   * ⭐⭐ **ELDEKİ KADAR HARCA — ve NE KADAR harcandığını döndür** (2026-08-16).
+   *
+   * `trySpend`in "ya hep ya hiç"i yağma için YANLIŞ araç: orada iki koşul (altın **ve** yemek)
+   * birlikte aranıyor ve biri tutmazsa **hiçbiri** düşülmüyor. Savaş handler'ı dönüşü
+   * kontrol etmiyordu → savunandan hiçbir şey düşmeden saldıranın ganimeti taşıması, yani
+   * sessiz **kaynak çoğalması** mümkündü.
+   *
+   * Bugünkü sayılarla tetiklenemiyordu (yağma payı kasanın en çok ~%43'ü), ama oran panelden
+   * ayarlanabilir: `loot.plunderRate = 1` + jitter üstü, payı kasanın tamamına çıkarır ve
+   * yuvarlama tek birim taşırsa koşul düşer. Kural: **oyuncu ayarıyla açılabilen bir kapı,
+   * kapalı sayılmaz.**
+   *
+   * Dönen değer GERÇEKTEN düşülen miktardır; çağıran ganimeti buna göre kırpar, böylece
+   * "savunanın kaybettiği = saldıranın aldığı" eşitliği her ayarda korunur.
+   */
+  async spendUpTo(
+    cityId: number, want: CityResources, at: Date, runner: Runner = this.db,
+  ): Promise<CityResources> {
+    await this.materialize(cityId, at, runner);
+    /**
+     * ⚠️ Harcanan miktar `RETURNING`den OKUNAMAZ: o, satırın GÜNCELLENMİŞ hâlini görür ve
+     * "eskisi neydi" sorusu cevapsız kalır (PG 17'de `OLD` yok). Bu yüzden eski değer aynı
+     * ifadede bir CTE ile önce fotoğraflanıyor; veri değiştiren CTE'ler referans edilmese bile
+     * her zaman ve tam olarak bir kez koşar, yani UPDATE garanti çalışır.
+     */
+    const rows = await runner.execute<Record<string, unknown>>(sql`
+      WITH cur AS (
+        SELECT gold AS g, food AS f FROM cities WHERE id = ${cityId}
+      ), upd AS (
+        UPDATE cities SET
+          gold = gold - LEAST(gold, ${want.gold}::numeric),
+          food = food - LEAST(food, ${want.food}::numeric)
+         WHERE id = ${cityId}
+        RETURNING 1
+      )
+      SELECT LEAST(cur.g, ${want.gold}::numeric) AS spent_gold,
+             LEAST(cur.f, ${want.food}::numeric) AS spent_food
+        FROM cur
+    `);
+    const r = rows[0];
+    return {
+      gold: Number(r?.['spent_gold'] ?? 0),
+      food: Number(r?.['spent_food'] ?? 0),
+    };
+  }
+
   /** Kaynak ekler (ganimet dönüşü, nakliye varışı). */
   async add(cityId: number, amount: CityResources, at: Date, runner: Runner = this.db): Promise<void> {
     await this.materialize(cityId, at, runner);

@@ -1000,15 +1000,21 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     key: 'loot.plunderRate',
     label: 'Yağma tavan oranı',
     type: 'number', default: 0.4, min: 0, max: 1, tag: 'design',
-    description: 'Kazanan tarafın savunanın kaynağının kaçta kaçını yağmaladığı. ⭐ Ekonominin en doğrudan '
-      + 'düğmesi: büyütmek saldırıyı kârlı, küçültmek üretimi değerli kılar.',
+    description: 'Kazanan tarafın savunanın **kasasının** kaçta kaçını yağmaladığı. ⭐ Ekonominin en '
+      + 'doğrudan düğmesi: büyütmek saldırıyı kârlı, küçültmek üretimi değerli kılar.',
+    note: '⚠️ 2026-08-16: bu oran artık YALNIZ şehrin kasasına uygulanıyor. Savaşta ölen '
+      + 'birimlerden çıkan enkaz ayrı yönetiliyor — kazanan onu oransız, taşıma kapasitesi '
+      + 'yettiği kadar alır; taşınamayan kısım savunanın şehrine kalır (`engine/src/loot.ts`).',
   },
   {
     key: 'loot.povertyThreshold',
     label: 'Zenginlik eşiği',
-    type: 'int', default: 100_000, min: 0, max: 100_000_000, tag: 'design', unit: 'kaynak',
-    description: 'Bu miktarın altında kaynağı olan oyuncudan yağma oranı düşer — yeni ve fakir oyuncuyu '
+    type: 'int', default: 50_000, min: 0, max: 100_000_000, tag: 'design', unit: 'kaynak',
+    description: 'Kasası bu miktarın altında olan oyuncudan yağma oranı düşer — yeni ve fakir oyuncuyu '
       + 'tamamen boşaltmamak için.',
+    note: '⚠️ 2026-08-16\'da 100.000 → 50.000. Sebep: eğrinin girdisi «kasa + enkaz» havuzuyken '
+      + '«yalnız kasa»ya indi; girdi küçüldüğü için eşik de inmeliydi, yoksa aynı şehir '
+      + 'eskisinden düşük oran görürdü.',
   },
   {
     key: 'loot.floorThreshold',
@@ -1024,8 +1030,12 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'loot.minRate',
     label: 'Taban oran',
-    type: 'number', default: 0.20, min: 0, max: 1, tag: 'design',
+    type: 'number', default: 0.30, min: 0, max: 1, tag: 'design',
     description: 'Fakirlik indirimi uygulansa bile yağma oranı bunun altına inmez.',
+    note: '⚠️⚠️ Bu sayı ile «Rastgelelik» ayarları BİRLİKTE düşünülmeli. Tavan (%40) ile taban '
+      + 'arasındaki mesafe, jitter\'ın saçılmasından geniş olmalı — yoksa fakirlik indirimi '
+      + 'rastgeleliğin içinde kaybolur ve fakir şehir ile zengin şehir ayırt edilemez hâle '
+      + 'gelir. 2026-08-16\'da taban %20 → %30 olurken jitter tam bu yüzden daraltıldı.',
   },
   {
     /**
@@ -1048,15 +1058,18 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'loot.jitterMin',
     label: 'Rastgelelik — alt',
-    type: 'number', default: 0.85, min: 0.1, max: 2, tag: 'design',
+    type: 'number', default: 0.92, min: 0.1, max: 2, tag: 'design',
     description: 'Yağmaya eklenen rastgeleliğin alt sınırı. Aynı savaş her seferinde birebir aynı ganimeti '
-      + 'vermesin diye.',
+      + 'vermesin diye. ⚠️ Yalnız KASA payına uygulanır; enkaz oransız alınır.',
+    note: '⚠️ 2026-08-16\'da 0,85 → 0,92. Eski saçılma (±%15) %40→%30 rampasının tamamından '
+      + 'genişti: şanslı bir rulo fakir şehri zengin şehirden pahalı yapabiliyordu. Bunu '
+      + 'genişletirken «Taban oran» ile arasındaki mesafeyi kontrol et.',
   },
   {
     key: 'loot.jitterMax',
     label: 'Rastgelelik — üst',
-    type: 'number', default: 1.15, min: 0.1, max: 3, tag: 'design',
-    description: 'Rastgeleliğin üst sınırı.',
+    type: 'number', default: 1.08, min: 0.1, max: 3, tag: 'design',
+    description: 'Rastgeleliğin üst sınırı. ⚠️ Yalnız KASA payına uygulanır.',
   },
 
   /* ── Ekonomi ve süre (Faz 5) ─────────────────────────────────────────────── */

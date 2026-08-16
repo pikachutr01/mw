@@ -1,12 +1,13 @@
 /**
- * ⭐ GANİMET testleri — HAVUZ + KAYNAK-BAZLI ORAN modeli (kullanıcı tarifi, 2026-07-30).
+ * ⭐⭐ GANİMET testleri — **İKİ AYRI KAYNAK** modeli (kullanıcı tarifi, 2026-08-16).
  *
- * Kural: havuz = kasa + enkaz (kaynak başına AYRI) · oran %40 sabit (≥100k), 100k→5k arası
- * %40→%20 doğrusal, ≤5k'da %20 sabit · alınan = havuz × oran, kapasiteyle kırpılır. Kapasite
- * yetse bile orandan fazlası alınmaz — rakip ancak arka arkaya saldırarak süpürebilir.
+ * Kural: kapasite önce **enkaza** harcanır (oransız, %100), artan kapasiteyle savunanın
+ * **kasasından** `plunderRate` kadar alınır. Taşınamayan enkaz savunanın şehrine kalır.
  *
- * ⭐ Taban %5 → %20 (kullanıcı, 2026-07-31). Tavan ve eşikler değişmediği için havuzu
- * ≥100k olan testlerin sayıları AYNEN geçerli — yalnız taban koluna giren senaryolar güncellendi.
+ * ⚠️ Bu dosya 2026-08-16'da yeniden yazıldı. Önceki model `havuz = kasa + enkaz` kurup oranı
+ * TOPLAMA uyguluyordu; testlerin çoğu o havuzun aritmetiğini kilitliyordu ve artık anlamsız.
+ * Korunan iddialar: kaynak başına bağımsız oran · kapasitenin ortak ve orantılı olması ·
+ * kaybeden saldıranın hiçbir şey alamaması · determinizm · puan farkı çarpanının tek yönlülüğü.
  */
 import { describe, expect, it } from 'vitest';
 import { calculateLoot, DEFAULT_LOOT_CONFIG, plunderRate } from '../src/index.ts';
@@ -14,55 +15,51 @@ import { calculateLoot, DEFAULT_LOOT_CONFIG, plunderRate } from '../src/index.ts
 const NO_JITTER = { ...DEFAULT_LOOT_CONFIG, jitterMin: 1, jitterMax: 1 };
 const BIG_CAP = 10_000_000;
 
-describe('yağma oranı eğrisi (kaynak başına)', () => {
-  it('100k ve üstünde tam %40', () => {
+describe('yağma oranı eğrisi — girdi YALNIZ kasa', () => {
+  it('50k ve üstünde tam %40', () => {
     expect(plunderRate(500_000)).toBeCloseTo(0.4, 10);
-    expect(plunderRate(100_000)).toBeCloseTo(0.4, 10);
+    expect(plunderRate(50_000)).toBeCloseTo(0.4, 10);
   });
 
-  it('100k → 5k arası %40 → %20 DOĞRUSAL iner', () => {
-    // 60k yemek → %20 + (55/95) × %20 ≈ %31,6
-    expect(plunderRate(60_000)).toBeCloseTo(0.20 + (55_000 / 95_000) * 0.20, 10);
-    // Tam orta: 52.5k → %30
-    expect(plunderRate(52_500)).toBeCloseTo(0.30, 10);
+  it('50k → 5k arası %40 → %30 DOĞRUSAL iner', () => {
+    // Tam orta: 27.5k → %35
+    expect(plunderRate(27_500)).toBeCloseTo(0.35, 10);
+    // 20k → %30 + (15/45) × %10 ≈ %33,33
+    expect(plunderRate(20_000)).toBeCloseTo(0.30 + (15_000 / 45_000) * 0.10, 10);
     // Eşiklerde sıçrama yok.
-    expect(plunderRate(99_999)).toBeLessThan(0.4);
-    expect(plunderRate(5_001)).toBeGreaterThan(0.20);
+    expect(plunderRate(49_999)).toBeLessThan(0.4);
+    expect(plunderRate(5_001)).toBeGreaterThan(0.30);
   });
 
-  it('5k ve altında %20 sabit — sömürünün dibi', () => {
-    expect(plunderRate(5_000)).toBeCloseTo(0.20, 10);
-    expect(plunderRate(1_000)).toBeCloseTo(0.20, 10);
+  it('5k ve altında %30 sabit — sömürünün dibi', () => {
+    expect(plunderRate(5_000)).toBeCloseTo(0.30, 10);
+    expect(plunderRate(1_000)).toBeCloseTo(0.30, 10);
     expect(plunderRate(0)).toBe(0);
   });
 
-  /** ⭐ Taban sabitinin sessizce eski değerine dönmesini kilitler (kullanıcı kararı 2026-07-31). */
-  it('taban oran sabiti %20 (kullanıcı kararı)', () => {
-    expect(DEFAULT_LOOT_CONFIG.minRate).toBe(0.20);
-    expect(DEFAULT_LOOT_CONFIG.plunderRate).toBe(0.4);      // tavan DEĞİŞMEDİ
-    expect(DEFAULT_LOOT_CONFIG.povertyThreshold).toBe(100_000);
+  /** ⭐ Dört sabitin sessizce eski değerine dönmesini kilitler (kullanıcı kararı 2026-08-16). */
+  it('sabitler: tavan %40 · taban %30 · eşikler 50k/5k', () => {
+    expect(DEFAULT_LOOT_CONFIG.plunderRate).toBe(0.4);
+    expect(DEFAULT_LOOT_CONFIG.minRate).toBe(0.30);
+    expect(DEFAULT_LOOT_CONFIG.povertyThreshold).toBe(50_000);
     expect(DEFAULT_LOOT_CONFIG.floorThreshold).toBe(5_000);
+  });
+
+  /**
+   * ⚠️⚠️ Rampa (%40→%30 = 10 puan) jitter'ın saçılmasından GENİŞ olmalı; değilse fakirlik
+   * indirimi rastgeleliğin içinde kaybolur ve fakir şehir zengin şehirden ayırt edilemez.
+   * 2026-08-16'da jitter tam bu yüzden 0,85–1,15'ten 0,92–1,08'e daraltıldı.
+   */
+  it('⭐⭐ jitter saçılması fakirlik rampasından DAR olmalı', () => {
+    const c = DEFAULT_LOOT_CONFIG;
+    const rampa = c.plunderRate - c.minRate;                       // 0,10
+    const sacilma = c.plunderRate * (c.jitterMax - c.jitterMin);   // 0,40 × 0,16 = 0,064
+    expect(sacilma).toBeLessThan(rampa);
   });
 });
 
-describe('havuz modeli', () => {
-  it('kullanıcının örneği: 500k altın %40, 60k yemek düşük oranla — BAĞIMSIZ hesap', () => {
-    const r = calculateLoot({
-      winner: 'attacker',
-      debris: { gold: 0, food: 0 },
-      cityResources: { gold: 500_000, food: 60_000 },
-      carryCapacity: BIG_CAP,
-      seed: 'ornek',
-    }, NO_JITTER);
-
-    expect(r.taken.gold).toBe(200_000);                       // 500k × %40
-    const foodRate = plunderRate(60_000);
-    expect(r.taken.food).toBe(Math.round(60_000 * foodRate)); // ~%31,6
-    expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
-    expect(r.effectiveRates.food).toBeCloseTo(foodRate, 10);
-  });
-
-  it('enkaz havuza girer: kapasite yetse bile enkazın yalnız ORANI alınır', () => {
+describe('⭐⭐ enkaz önce, kasa sonra', () => {
+  it('kapasite bolsa enkazın TAMAMI alınır — oran uygulanmaz', () => {
     const r = calculateLoot({
       winner: 'attacker',
       debris: { gold: 200_000, food: 200_000 },
@@ -71,15 +68,12 @@ describe('havuz modeli', () => {
       seed: 'x',
     }, NO_JITTER);
 
-    // Eski model enkazın %100'ünü alırdı; yeni modelde havuzun %40'ı.
-    expect(r.taken.gold).toBe(80_000);
-    expect(r.taken.food).toBe(80_000);
-    // Alınmayan enkaz savunanın şehrine döner.
-    expect(r.leftoverDebrisToDefender.gold).toBe(120_000);
-    expect(r.leftoverDebrisToDefender.food).toBe(120_000);
+    expect(r.fromDebris).toEqual({ gold: 200_000, food: 200_000 });
+    expect(r.taken).toEqual({ gold: 200_000, food: 200_000 });
+    expect(r.leftoverDebrisToDefender).toEqual({ gold: 0, food: 0 });
   });
 
-  it('alınan, kasa/enkaz bileşenlerine ORANTILI bölünür', () => {
+  it('enkaz ve kasa AYRI hesaplanır: enkaz %100, kasa oranıyla', () => {
     const r = calculateLoot({
       winner: 'attacker',
       debris: { gold: 100_000, food: 0 },
@@ -88,14 +82,50 @@ describe('havuz modeli', () => {
       seed: 'y',
     }, NO_JITTER);
 
-    // Havuz 400k → alınan 160k; enkaz payı 1/4 → 40k, kasa payı 120k.
-    expect(r.taken.gold).toBe(160_000);
-    expect(r.fromDebris.gold).toBe(40_000);
-    expect(r.fromPlunder.gold).toBe(120_000);
-    expect(r.leftoverDebrisToDefender.gold).toBe(60_000);
+    expect(r.fromDebris.gold).toBe(100_000);        // enkazın tamamı
+    expect(r.fromPlunder.gold).toBe(120_000);       // kasanın %40'ı (300k × 0,4)
+    expect(r.taken.gold).toBe(220_000);
+    expect(r.leftoverDebrisToDefender.gold).toBe(0);
   });
 
-  it('kapasite yetmezse orantılı kırpılır; alınamayan miktar bilgi olarak raporlanır', () => {
+  /**
+   * ⭐⭐⭐ **KULLANICI KARARININ KİLİDİ (2026-08-16).** Yük Arabası getirmeyen ordu, savaşı
+   * kazansa bile kasadan pay ALAMAZ: kapasitesinin tamamı enkaza gider. *"Yük arabası
+   * götürmezse zaten ganimet taşıyamamayı göze alıyor demektir."*
+   */
+  it('⭐⭐⭐ kapasite enkaza yetmiyorsa kasadan HİÇBİR ŞEY alınmaz', () => {
+    const r = calculateLoot({
+      winner: 'attacker',
+      debris: { gold: 20_000, food: 20_000 },
+      cityResources: { gold: 500_000, food: 500_000 },
+      carryCapacity: 3_000,                          // enkazın çok altında
+      seed: 'kargosuz',
+    }, NO_JITTER);
+
+    expect(r.taken.gold + r.taken.food).toBe(3_000); // kapasitenin tamamı
+    expect(r.fromPlunder).toEqual({ gold: 0, food: 0 });
+    expect(r.fromDebris.gold + r.fromDebris.food).toBe(3_000);
+    // Taşınamayan enkaz savunanda kalır — 10 milyon bile olsa.
+    expect(r.leftoverDebrisToDefender.gold + r.leftoverDebrisToDefender.food).toBe(37_000);
+  });
+
+  it('enkaz bittikten sonra ARTAN kapasite kasaya gider', () => {
+    const r = calculateLoot({
+      winner: 'attacker',
+      debris: { gold: 10_000, food: 0 },
+      cityResources: { gold: 100_000, food: 0 },
+      carryCapacity: 25_000,
+      seed: 'artan',
+    }, NO_JITTER);
+
+    expect(r.fromDebris.gold).toBe(10_000);          // önce enkaz
+    expect(r.fromPlunder.gold).toBe(15_000);         // kalan 15k kapasite
+    expect(r.taken.gold).toBe(25_000);
+    // İstenen kasa payı 40k'ydı, 15k taşındı → 25k şehirde kaldı.
+    expect(r.plunderNotCarried.gold).toBe(25_000);
+  });
+
+  it('kapasite altın ve yemek için ORTAK, yetmeyince orantılı kırpılır', () => {
     const r = calculateLoot({
       winner: 'attacker',
       debris: { gold: 0, food: 0 },
@@ -110,7 +140,22 @@ describe('havuz modeli', () => {
     expect(r.plunderNotCarried.gold + r.plunderNotCarried.food).toBe(120_000);
   });
 
-  it('fakir şehir freni: 5k havuzdan tek saldırıda en fazla %20 çıkar', () => {
+  it('kaynak başına oran BAĞIMSIZ: 500k altın %40, 20k yemek daha düşük', () => {
+    const r = calculateLoot({
+      winner: 'attacker',
+      debris: { gold: 0, food: 0 },
+      cityResources: { gold: 500_000, food: 20_000 },
+      carryCapacity: BIG_CAP,
+      seed: 'ornek',
+    }, NO_JITTER);
+
+    expect(r.taken.gold).toBe(200_000);
+    expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
+    expect(r.effectiveRates.food).toBeCloseTo(plunderRate(20_000), 10);
+    expect(r.taken.food).toBe(Math.round(20_000 * plunderRate(20_000)));
+  });
+
+  it('fakir şehir freni: 5k kasadan tek saldırıda en fazla %30 çıkar', () => {
     const r = calculateLoot({
       winner: 'attacker',
       debris: { gold: 0, food: 0 },
@@ -118,8 +163,23 @@ describe('havuz modeli', () => {
       carryCapacity: BIG_CAP,
       seed: 'fakir',
     }, NO_JITTER);
-    expect(r.taken.gold).toBe(1_000);
-    expect(r.taken.food).toBe(1_000);
+    expect(r.taken.gold).toBe(1_500);
+    expect(r.taken.food).toBe(1_500);
+  });
+
+  /** ⚠️ Rapor tablosunun toplaması TUTMALI — oyuncu topladığında tutmayan tabloyu bildirir. */
+  it('taken = fromDebris + fromPlunder (yuvarlama sonrası bile)', () => {
+    for (const seed of ['a', 'b', 'c', 'd', 'e']) {
+      const r = calculateLoot({
+        winner: 'attacker',
+        debris: { gold: 3_333, food: 1_111 },
+        cityResources: { gold: 77_777, food: 33_333 },
+        carryCapacity: 12_345,
+        seed,
+      });
+      expect(r.taken.gold).toBe(r.fromDebris.gold + r.fromPlunder.gold);
+      expect(r.taken.food).toBe(r.fromDebris.food + r.fromPlunder.food);
+    }
   });
 });
 
@@ -134,6 +194,18 @@ describe('kazanma şartı', () => {
     }, NO_JITTER);
     expect(r.taken).toEqual({ gold: 0, food: 0 });
     expect(r.leftoverDebrisToDefender).toEqual({ gold: 30_000, food: 20_000 });
+  });
+
+  it('kapasite 0 (ör. Kaos ordusu): enkaz da kasa da alınmaz', () => {
+    const r = calculateLoot({
+      winner: 'attacker',
+      debris: { gold: 50_000, food: 50_000 },
+      cityResources: { gold: 500_000, food: 500_000 },
+      carryCapacity: 0,
+      seed: 'kaos',
+    }, NO_JITTER);
+    expect(r.taken).toEqual({ gold: 0, food: 0 });
+    expect(r.leftoverDebrisToDefender).toEqual({ gold: 50_000, food: 50_000 });
   });
 
   it("condition: 'undefendedBefore' — savunulan şehirden ganimet yok, enkaz savunana", () => {
@@ -155,8 +227,8 @@ describe('kazanma şartı', () => {
   });
 });
 
-describe('jitter (kullanıcı kararı: rastgelelik KALIR)', () => {
-  it('aynı seed aynı sonucu verir; farklı seed 0,85–1,15 bandında oynar', () => {
+describe('jitter — yalnız KASA payına', () => {
+  it('aynı seed aynı sonucu verir; farklı seed 0,92–1,08 bandında oynar', () => {
     const input = {
       winner: 'attacker' as const,
       debris: { gold: 0, food: 0 },
@@ -170,11 +242,23 @@ describe('jitter (kullanıcı kararı: rastgelelik KALIR)', () => {
     const base = 1_000_000 * 0.4;
     for (const seed of ['s1', 's2', 's3', 's4']) {
       const r = calculateLoot({ ...input, seed });
-      expect(r.taken.gold).toBeGreaterThanOrEqual(base * 0.85 - 1);
-      expect(r.taken.gold).toBeLessThanOrEqual(base * 1.15 + 1);
+      expect(r.taken.gold).toBeGreaterThanOrEqual(base * 0.92 - 1);
+      expect(r.taken.gold).toBeLessThanOrEqual(base * 1.08 + 1);
     }
     expect(calculateLoot({ ...input, seed: 'a' }).taken)
       .not.toEqual(calculateLoot({ ...input, seed: 'b' }).taken);
+  });
+
+  /** ⭐ Enkaz zaten %100 alınıyor; şans onu ne artırabilir ne azaltabilir. */
+  it('⭐ ENKAZ jitter görmez — her tohumda birebir aynı', () => {
+    const input = {
+      winner: 'attacker' as const,
+      debris: { gold: 40_000, food: 10_000 },
+      cityResources: { gold: 0, food: 0 },
+      carryCapacity: BIG_CAP,
+    };
+    const hepsi = ['s1', 's2', 's3', 's4'].map((seed) => calculateLoot({ ...input, seed }).taken);
+    for (const t of hepsi) expect(t).toEqual({ gold: 40_000, food: 10_000 });
   });
 
   it('jitter oranı %100 üstüne taşıramaz (kırpılır)', () => {
@@ -188,15 +272,15 @@ describe('jitter (kullanıcı kararı: rastgelelik KALIR)', () => {
 });
 
 /**
- * ⭐⭐ PUAN FARKI ÇARPANI (kullanıcı, 2026-08-14) — **yalnız AŞAĞI vururken**.
+ * ⭐⭐ PUAN FARKI ÇARPANI — **10 KAT DUVARINA YAKLAŞMA FRENİ** (2026-08-14 · rampa 2026-08-16).
  *
- * İstek iki cümleydi: *"görece puanı yüksek bir oyuncu 10 kat limitinin en altındaki birine
- * saldırınca alacağı ganimet, kendi puanına daha yakın birine saldırınca alacağından az
- * olmalı"* ve *"puanını yükseltmeden ganimet biriktirmek isteyen bir oyuncu da mümkün olmalı"*.
+ * Çarpanın ulaşılabilir bölgesi saldırı kapısıyla kesişimdir: kapı `oran ≥ 10 VE fark > band`
+ * olduğunda saldırıyı engeller, dolayısıyla çarpan ancak **`fark > band` VE `oran < 10`**
+ * bölgesinde 1'in altına inebilir. Yani ceza, duvara yaklaşmanın bedeli.
  *
- * ⚠️⚠️ İkisi ancak çarpan **tek yönlü** olursa çelişmiyor ve bu testlerin asıl konusu o:
- * düşük puanlı akıncı parayı YUKARI vurarak kazanıyor. Çift yönlü bir çarpan onu da yarılar,
- * yani açmak istediğimiz stratejiyi kapatırdı.
+ * ⚠️⚠️ İstek iki cümleydi ve ancak çarpan **tek yönlü** olursa çelişmiyor: düşük puanlı akıncı
+ * parayı YUKARI vurarak kazanıyor. Çift yönlü bir çarpan tam da açmak istediğimiz stratejiyi
+ * kapatırdı.
  */
 describe('⭐⭐ puan farkı çarpanı', () => {
   const zengin = {
@@ -214,8 +298,7 @@ describe('⭐⭐ puan farkı çarpanı', () => {
   });
 
   it('⭐ YUKARI vuruş tam oranı alır (akıncı stratejisinin can damarı)', () => {
-    // 50 puanlık akıncı, 500 puanlık zengini vuruyor — 10 kat kuralı buna izin veriyor.
-    const r = calculateLoot({ ...zengin, attackerScore: 50, defenderScore: 500 }, NO_JITTER);
+    const r = calculateLoot({ ...zengin, attackerScore: 50, defenderScore: 499 }, NO_JITTER);
     expect(r.gapFactor).toBe(1);
     expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
   });
@@ -225,21 +308,47 @@ describe('⭐⭐ puan farkı çarpanı', () => {
     expect(r.gapFactor).toBe(1);
   });
 
-  it('⭐ küçük hesap bandı içinde çarpan 1 (iki fakir ayrıca cezalandırılmaz)', () => {
-    // Fark 23 ≤ band 50: arabalı akıncı, terk edilmiş 1 puanlık şehri tam oranla vuruyor.
+  it('⭐ küçük hesap bandı içinde çarpan 1 (arabalı akıncı 0 puanlı şehri tam oranla vurur)', () => {
     const r = calculateLoot({ ...zengin, attackerScore: 24, defenderScore: 1 }, NO_JITTER);
     expect(r.gapFactor).toBe(1);
   });
 
-  it('band sınırı: fark tam 50 → çarpan 1, fark 51 → çarpan < 1', () => {
-    const tam = calculateLoot({ ...zengin, attackerScore: 51, defenderScore: 1 }, NO_JITTER);
-    expect(tam.gapFactor).toBe(1);
-    const asan = calculateLoot({ ...zengin, attackerScore: 52, defenderScore: 1 }, NO_JITTER);
-    expect(asan.gapFactor).toBeLessThan(1);
+  /**
+   * ⭐⭐⭐ **UÇURUM DÜZELTMESİ (2026-08-16).** Band `combat.attackScoreBand` ile paylaşılıyor ve
+   * orada İKİLİ bir eşik (saldırı serbest/engelli); kenarında sıçrama doğal. Aynı eşiği SÜREKLİ
+   * bir çarpana koyunca kenar uçuruma dönüşüyordu. Ulaşılabilir bölgede ölçülen en kötü hâli:
+   *
+   *     savunan 6 · saldıran 56 → 1,000   (fark 50, oran 9,33x — saldırı serbest)
+   *     savunan 6 · saldıran 57 → 0,528   (fark 51, oran 9,50x — saldırı serbest)
+   *
+   * Tek puanlık artış ganimeti yarılıyordu, üstelik band'ın korumak için var olduğu bölgede.
+   */
+  it('⭐⭐⭐ band sınırında UÇURUM YOK — ceza rampayla giriyor', () => {
+    const c = (a: number, d: number): number =>
+      calculateLoot({ ...zengin, attackerScore: a, defenderScore: d }, NO_JITTER).gapFactor;
+
+    expect(c(56, 6)).toBe(1);                  // fark 50 → tam koruma
+    expect(c(57, 6)).toBeGreaterThan(0.98);    // fark 51 → ceza yeni başlıyor (eskiden 0,528)
+    expect(c(56, 6) - c(57, 6)).toBeLessThan(0.02);
+
+    // Rampa boyunca monoton azalıyor, sıçrama yok.
+    let onceki = 1;
+    for (let a = 56; a <= 110; a++) {
+      const simdi = c(a, 6);
+      expect(simdi).toBeLessThanOrEqual(onceki + 1e-9);
+      expect(onceki - simdi).toBeLessThan(0.05);   // hiçbir adım uçurum değil
+      onceki = simdi;
+    }
+  });
+
+  it('rampanın ötesinde (2×band) davranış ESKİSİYLE aynı', () => {
+    // fark ≥ 100 → karışım tamamlanır, saf oran formülü geçerli.
+    const r = calculateLoot({ ...zengin, attackerScore: 1000, defenderScore: 500 }, NO_JITTER);
+    const beklenen = 1 - Math.min(1, (1000 / 500 - 1) / 9) * 0.5;
+    expect(r.gapFactor).toBeCloseTo(beklenen, 10);
   });
 
   it('⭐⭐ 10 kat sınırının dibinde çarpan tabanda: %40 → %20', () => {
-    // Oran tam 10 (5000 → 500) ve fark banttan çok büyük.
     const r = calculateLoot({ ...zengin, attackerScore: 5000, defenderScore: 500 }, NO_JITTER);
     expect(r.gapFactor).toBeCloseTo(0.5, 10);
     expect(r.effectiveRates.gold).toBeCloseTo(0.2, 10);
@@ -251,7 +360,6 @@ describe('⭐⭐ puan farkı çarpanı', () => {
     const dip = calculateLoot({ ...zengin, attackerScore: 5000, defenderScore: 500 }, NO_JITTER);
     expect(yakin.gapFactor).toBeGreaterThan(dip.gapFactor);
     expect(yakin.taken.gold).toBeGreaterThan(dip.taken.gold);
-    // Kullanıcının cümlesi: tavan hiçbir zaman %40'ı geçmez.
     expect(yakin.effectiveRates.gold).toBeLessThanOrEqual(0.4);
   });
 
@@ -269,18 +377,25 @@ describe('⭐⭐ puan farkı çarpanı', () => {
     expect(r.effectiveRates.gold).toBeCloseTo(0.4, 10);
   });
 
-  /**
-   * ⚠️ Fakir şehirde iki fren üst üste binmemeli: havuz eğrisi zaten %20 veriyor. Band bunu
-   * koruyor — band olmasaydı terk edilmiş şehri yağmalamak %10'a düşer ve bandın açtığı kapı
-   * işe yaramaz hâle gelirdi.
-   */
-  it('fakir şehir + band içi: oran %20\'de kalır, %10\'a düşmez', () => {
+  /** ⚠️ Fakir şehirde iki fren üst üste binmemeli: eğri zaten %30 veriyor, band onu koruyor. */
+  it('fakir şehir + band içi: oran %30\'da kalır, %15\'e düşmez', () => {
     const r = calculateLoot({
       winner: 'attacker', debris: { gold: 0, food: 0 },
       cityResources: { gold: 4_000, food: 4_000 }, carryCapacity: BIG_CAP, seed: 'fakir',
       attackerScore: 24, defenderScore: 1,
     }, NO_JITTER);
-    expect(r.effectiveRates.gold).toBeCloseTo(0.2, 10);
-    expect(r.taken.gold).toBe(800);
+    expect(r.effectiveRates.gold).toBeCloseTo(0.3, 10);
+    expect(r.taken.gold).toBe(1_200);
+  });
+
+  /** ⭐ Enkaz puan çarpanı da görmez — o, "başkasının malı" değil savaşın artığı. */
+  it('⭐ ENKAZ puan çarpanından etkilenmez', () => {
+    const r = calculateLoot({
+      winner: 'attacker', debris: { gold: 10_000, food: 0 },
+      cityResources: { gold: 0, food: 0 }, carryCapacity: BIG_CAP, seed: 'e',
+      attackerScore: 5000, defenderScore: 500,
+    }, NO_JITTER);
+    expect(r.gapFactor).toBeCloseTo(0.5, 10);
+    expect(r.taken.gold).toBe(10_000);        // çarpana rağmen enkazın tamamı
   });
 });

@@ -947,8 +947,12 @@ describe('⭐ SAVAŞ ÇÖZÜMÜ', () => {
  *
  * Evet. `plunderNotCarried` **bilgi amaçlı** bir sayıdır: "oranca alınabilirdi ama kapasite
  * yetmedi". Savunandan düşülen tek kalem `fromPlunder`dır (`battle.handlers.ts` → tek
- * `trySpend` çağrısı). Bu ayrım kolayca ters uygulanabilirdi — ve o hâlde savunan, saldıranın
+ * `spendUpTo` çağrısı). Bu ayrım kolayca ters uygulanabilirdi — ve o hâlde savunan, saldıranın
  * hiç götürmediği kaynağı kaybederdi.
+ *
+ * ⚠️ 2026-08-16'dan beri bu test aynı zamanda **enkaz önceliğinin** kanıtı: 400 Cüce'nin
+ * kapasitesi (4.000) enkazın altında kaldığı için `fromPlunder` sıfıra iner ve kasadan hiçbir
+ * şey düşmez — *"Yük Arabası götürmeyen ganimet taşıyamamayı göze almıştır"* kuralı.
  *
  * ⚠️ Mevcut testlerde bu değişmez yalnız DOLAYLI duruyordu (sur iptali testinin kasa hesabı
  * içinde). Kapasitenin gerçekten aştığı bir kurguda doğrudan ölçülmemişti; bu blok onu
