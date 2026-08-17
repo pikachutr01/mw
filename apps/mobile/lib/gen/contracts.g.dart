@@ -98,6 +98,11 @@ class WorldSlotCity {
     required this.score,
     required this.isCapital,
     required this.isOwn,
+    this.rank,
+    this.rankScore,
+    this.alliance,
+    required this.isAlly,
+    required this.hasAlliance,
     this.protection,
   });
 
@@ -108,6 +113,11 @@ class WorldSlotCity {
   final int score;
   final bool isCapital;
   final bool isOwn;
+  final int? rank;
+  final int? rankScore;
+  final String? alliance;
+  final bool isAlly;
+  final bool hasAlliance;
   final String? protection;
 
   factory WorldSlotCity.fromJson(Map<String, dynamic> json) => WorldSlotCity(
@@ -118,6 +128,11 @@ class WorldSlotCity {
         score: (json['score'] as num).toInt(),
         isCapital: json['isCapital'] as bool,
         isOwn: json['isOwn'] as bool,
+        rank: (json['rank'] as num?)?.toInt(),
+        rankScore: (json['rankScore'] as num?)?.toInt(),
+        alliance: json['alliance'] as String?,
+        isAlly: json['isAlly'] as bool,
+        hasAlliance: json['hasAlliance'] as bool,
         protection: json['protection'] as String?,
       );
 }

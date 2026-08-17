@@ -55,6 +55,27 @@ export const worldSlot = z.object({
     isCapital: z.boolean(),
     /** Bu şehir isteği yapan oyuncunun mu? */
     isOwn: z.boolean(),
+    /**
+     * ⭐ Dünya sırası — **canlı hesaplanmaz** (§13.16): `rankings` anlık görüntüsünden okunur,
+     * günde 3 kez tazelenir. Hiç anlık görüntü alınmadıysa `null`.
+     */
+    rank: z.number().int().nullable(),
+    /**
+     * ⭐ Sıranın alındığı andaki PUAN — `rank` ile **aynı satırdan** gelir, yani ikisi daima
+     * aynı ana ait.
+     * ⚠️⚠️ Yukarıdaki `score` (CANLI puan) ile karıştırma: canlı puanı `rank` ile yan yana
+     * yazmak birbirini tutmayan bir çift üretir (sıra dünkü, puan bugünkü).
+     */
+    rankScore: z.number().int().nullable(),
+    /** İttifak adı; ittifaksızsa `null`. */
+    alliance: z.string().nullable(),
+    /**
+     * ⭐ Benimle AYNI ittifakta mı. ⚠️ Kendi şehirlerimde daima `false` — sunucu `isOwn`
+     * olanları eliyor, yani "müttefik" rozeti kendi şehrimde çizilmiyor.
+     */
+    isAlly: z.boolean(),
+    /** Hedef zaten bir ittifakta mı (davet düğmesi bunun tersine bakıyor). */
+    hasAlliance: z.boolean(),
     /** Saldırıya kapalı mı (acemi koruması / tatil modu)? Sebep gösterilir, süre gösterilmez. */
     protection: z.enum(['beginner', 'vacation']).nullable(),
   }).nullable(),

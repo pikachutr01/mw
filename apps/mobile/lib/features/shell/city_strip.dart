@@ -10,18 +10,36 @@
 /// varsayılan kapalı, kapalıyken tek satırlık başlık (aktif şehrin adı + koordinatı), açınca
 /// tam şerit iniyor.
 ///
-/// ⚠️ Ordular ekranında katlanmıyor: orası zaten "ordularımı gör" ekranı, şeridi orada
-/// kapatabilmek ekranın asıl işini gizlemek olurdu.
+/// ⛔⛔ **ORDULAR EKRANINDA BU BİLEŞEN HİÇ ÇİZİLMİYOR** (2026-08-17). Orada şeridin hareket
+/// simgeli sürümü **sayfanın gövdesinde** duruyor (`features/armies/armies_screen.dart`) ve
+/// sebebi yükseklik: o sürüm hareket sayısına göre büyüyor, yani sınırsız yükseklik istiyor.
+/// Kabuktaki `Column`a konsaydı taşardı; sayfa gövdesinde ise kaydırma bedava geliyor.
+/// ⚠️ İkisi aynı anda çizilirse ekranda **iki şerit** olur — web'de tam olarak bu yaşandı.
 ///
 /// ⭐ **KAPALIYKEN DE AKTİF ŞEHİR YAZAR.** Yalnız bir ok koysaydık oyuncu Baraka'da "hangi
 /// şehrin barakası bu?" sorusunu cevaplayamazdı — kapalıyken ad başka hiçbir yerde yazmıyor.
 /// Bir satır, iki iş: bağlam + düğme.
+///
+/// ─ ⛔⛔ HAREKET SİMGELERİ BURAYA ASILMIYOR (2026-08-17) ────────────────────────────────────
+/// Web'de her kalenin altına o şehrin hareketleri simge simge diziliyor (`CityStrip.tsx`) ve
+/// Ordular ekranı bunun metinli tekrarı. Mobil uygulamaya **taşınmadı**, sebebi kullanıcının
+/// kendi kararı: *"Yapılar sayfasında yükseltilen bina yalnızca kendi satırında görünür, üstte
+/// ek olarak çıkmaz."* Aynı biçim: üstteki bant, alttaki listenin tekrarıydı ve dar ekranda
+/// içerikten yer çalıyordu. Burada bedel daha da yüksek — şerit **kabuğun içinde**, yani
+/// simgeler ekranın tamamını değil, hangi sayfada olursak olalım içeriği aşağı itiyor.
+///
+/// ⭐ Kaybolan bilgi telafi edildi ve İKİSİ de tekrar değil:
+///   • **kırmızı alarm noktası** — "hangi ŞEHRİM tehdit altında" (liste koordinat veriyor,
+///     kalemi değil) ve maliyeti sıfır piksel,
+///   • **alt bardaki rozet** (`shell.dart`) — "kaç hareket var, en kötüsü ne renk", her
+///     ekrandan görünüyor. Web'in kendi mobil düzeninde de aynı rozet var.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../features/armies/movement_rules.dart';
 import '../../gen/contracts.g.dart';
 import '../../ui/primitives.dart';
 
@@ -53,6 +71,9 @@ class CityStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // ⛔ Ordular ekranı kendi şeridini çiziyor (dosya başlığındaki gerekçe).
+    if (path.startsWith('/armies')) return const SizedBox.shrink();
+
     final cities = ref.watch(citiesProvider).value ?? const [];
     if (cities.isEmpty) return const SizedBox.shrink();
 
@@ -60,16 +81,13 @@ class CityStrip extends ConsumerWidget {
     final active =
         cities.where((c) => c.id == activeId).firstOrNull ?? cities.first;
 
-    final onArmies = path.startsWith('/armies');
-    final collapsible = !onArmies;
     final open = ref.watch(stripOpenProvider).value ?? false;
-    final show = !collapsible || open;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (collapsible) _Header(active: active, open: open),
-        if (show) _Strip(cities: cities, activeId: active.id),
+        _Header(active: active, open: open),
+        if (open) _Strip(cities: cities, activeId: active.id),
       ],
     );
   }
@@ -86,6 +104,17 @@ class _Header extends ConsumerWidget {
     final c = MwColors.of(context);
     final co = active.coordinates;
 
+    /// ⭐⭐ ALARM KAPALI ŞERİTTE DE GÖRÜNÜR. Şerit varsayılan olarak KAPALI ve oyuncu
+    /// zamanının çoğunu şehir ekranlarında geçiriyor: noktayı yalnız `_Strip`e koysaydık
+    /// uygulamanın olağan hâlinde **hiç görünmezdi** — yani özellik pratikte ölü olurdu.
+    ///
+    /// ⚠️ Alt bardaki rozetin YERİNE GEÇMEZ, onu tamamlar: rozet "bir yerde tehdit var"
+    /// diyor, buradaki nokta "şu an baktığın şehirde" diyor. Çok şehirli oyuncuda ikisi
+    /// farklı sorular.
+    final tehdit = threatenedCityIds(
+      ref.watch(movementsProvider).value ?? const [],
+    ).contains(active.id);
+
     return InkWell(
       onTap: () => ref.read(stripOpenProvider.notifier).toggle(),
       child: Container(
@@ -98,7 +127,20 @@ class _Header extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            const MwIcon(folder: 'buildings', id: 'city', size: 20),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const MwIcon(folder: 'buildings', id: 'city', size: 20),
+                if (tehdit)
+                  // ⚠️ Şeritteki noktadan küçük (9 → 7): burada simge de küçük ve aynı
+                  // boyuttaki nokta kalenin yarısını kaplıyordu.
+                  const Positioned(
+                    top: -2,
+                    right: -3,
+                    child: MwAlertDot(size: 7),
+                  ),
+              ],
+            ),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -153,6 +195,14 @@ class _Strip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    /// ⭐ Alarm noktasının kaynağı. ⚠️ Sağlayıcı BURADA okunuyor, hücrede değil: her hücre
+    /// kendi başına okusaydı beş şehirde aynı liste beş kez süzülürdü.
+    /// ⚠️ `.value ?? const []` — liste henüz gelmediyse nokta çizilmez. Yükleme sırasında
+    /// "tehdit yok" göstermek, "tehdit var" uydurmaktan iyi: birkaç yüz ms sonra beliriyor.
+    final tehdit = threatenedCityIds(
+      ref.watch(movementsProvider).value ?? const [],
+    );
+
     // ⚠️ SOLA YASLI, her hücre kendi genişliğinde (web'de kullanıcı kararı). Eşit bölünen
     // hücreler kullanılsaydı TEK şehirde o hücre ekranın tamamını kaplar, simge ortasında
     // asılı kalırdı. Sabit 72 px: beş şehir 360 px'e sığıyor, taşarsa yatayda kayıyor.
@@ -165,7 +215,11 @@ class _Strip extends ConsumerWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 4),
         itemBuilder: (context, i) {
           final city = cities[i];
-          return _Cell(city: city, active: city.id == activeId);
+          return _Cell(
+            city: city,
+            active: city.id == activeId,
+            threat: tehdit.contains(city.id),
+          );
         },
       ),
     );
@@ -173,10 +227,19 @@ class _Strip extends ConsumerWidget {
 }
 
 class _Cell extends ConsumerWidget {
-  const _Cell({required this.city, required this.active});
+  const _Cell({required this.city, required this.active, required this.threat});
 
   final CitySummary city;
   final bool active;
+
+  /// ⭐ Bu şehre düşmanca bir hareket geliyor mu (saldırı ya da casusluk).
+  ///
+  /// ⚠️ Web bu noktayı YALNIZ Ordular ekranında gösteriyor ve bu bilinçli bir sapma: orada
+  /// nokta, hareket listesinin bir yan ürünü (`onArmies ? movements : []`). Mobilde liste
+  /// zaten her ekranda çekiliyor (alt bardaki rozet onu okuyor), yani noktayı Baraka'da da
+  /// göstermenin ek bir maliyeti yok — ve "şehrime saldırı geliyor" bilgisinin en çok
+  /// gerektiği an, oyuncunun başka bir ekranda oyalandığı andır.
+  final bool threat;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -200,7 +263,16 @@ class _Cell extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            MwIcon(folder: 'buildings', id: 'city', size: active ? 34 : 32),
+            // ⚠️ `Stack` + `clipBehavior: none`: nokta simgenin köşesinden BİRAZ taşıyor.
+            // Kırpılsaydı yarım bir daire olarak görünür, kasten çizilmiş gibi durmazdı.
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                MwIcon(folder: 'buildings', id: 'city', size: active ? 34 : 32),
+                if (threat)
+                  const Positioned(top: -2, right: -2, child: MwAlertDot()),
+              ],
+            ),
             const SizedBox(height: 2),
             Text(
               city.name,

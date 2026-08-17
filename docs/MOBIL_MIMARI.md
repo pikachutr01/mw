@@ -434,6 +434,15 @@ adb exec-out screencap -p > shot.png   # ekran görüntüsü
 ⭐ **Canlıya bağlanan yapı** (yerel API kurmadan denemek için):
 `flutter build apk --debug --dart-define=MW_API=https://mobilwar.com`
 
+⛔⛔ **YEREL API'YE BAKAN YAPI `--release` OLAMAZ** (2026-08-17'de ölçüldü). Android 9+
+`usesCleartextTraffic` varsayılanını **false** yapıyor ve izin yalnız
+`android/app/src/debug/AndroidManifest.xml`'de duruyor — `main/`de yok. Yani release APK
+`http://127.0.0.1:3002`'ye **hiç bağlanamıyor** ve ekranda tek gördüğün *«Dünya listesi
+alınamadı»* oluyor: API çökmüş gibi görünüyor. `flutter run` hep debug derlediği için bu tuzak
+yıllarca görünmedi; `flutter build apk --release`e geçen ilk turda üç yanlış teşhise yol açtı.
+⚠️ APK'nın içindeki adres doğruydu — `grep -a '127.0.0.1:3002' libapp.so` bunu tek komutta
+söylüyor ve teşhisi kısaltıyor.
+
 ⚠️ **Yerel API'yi başlatmayı unutma** — `pnpm --filter @mobilwar/api dev` (Postgres için önce
 `pnpm dev:infra`). Ekranda kalıcı "yükleniyor" görüyorsan **ilk bakılacak yer burası**;
 `curl 127.0.0.1:3002/healthz` iki saniyede cevap veriyor.
@@ -508,7 +517,7 @@ bağlanmaz (*"mobil sürüm mağaza onayına tabi, web anında çıkıyor"*). Ad
 | :-- | :-- | :-- |
 | **0 — Zemin** | `flutter create` ✅ · socket.io spike ✅ · bu belge ✅ · `tokens.dart` bağlantısı + kapı ✅ · test iskeleti ✅ · `mobile.yml` ✅ · **kalan:** `contracts` Dart üreteci + 4 kapı | `flutter test` yeşil, CI koşuyor |
 | **1 — Kabuk ve oturum** ✅ | Güvenli depo ✅ · 9 başlık ✅ · **kalıcı instanceId** ✅ · yenileme (tek söz) ✅ · 409 çakışma perdesi ✅ · go_router kabuğu (alt bar + drawer) ✅ · giriş/kayıt ✅ · minimum sürüm kontrolü ✅ · misafir akışı ✅ · saat çekirdeği + eşitlik kapısı ✅ | Cihazda giriş yapılıyor, oturum hayatta kalıyor |
-| **2 — Çekirdek oyun** | ⏳ Kabuk (bilgi çubuğu · şehir şeridi · şehir sekmeleri · alt bar) ✅ · WS bağlantısı + arka plandan dönüş ✅ · **Baraka TAM** ✅ · **Yapılar TAM** (yükseltme · iptal · ön koşul · üretim önizlemesi · karşılıklı kilit) ✅ · **Akademi TAM** ✅ · **Savunma TAM** (Baraka ile tek ekran, iki kip: adetli birim + seviye taşıyan Sur/Büyü Kalkanı) ✅ · **native katman** (bottom sheet · titreşim · uzun basma künyesi) ✅ · **kalan:** Tapınak · Dünya · Ordular/sefer · Savaş raporu · Sohbet · i18n | v1 kapsamı oynanabilir |
+| **2 — Çekirdek oyun** | ⏳ Kabuk (bilgi çubuğu · şehir şeridi · şehir sekmeleri · alt bar) ✅ · WS bağlantısı + arka plandan dönüş ✅ · **Baraka TAM** ✅ · **Yapılar TAM** (yükseltme · iptal · ön koşul · üretim önizlemesi · karşılıklı kilit) ✅ · **Akademi TAM** ✅ · **Savunma TAM** (Baraka ile tek ekran, iki kip: adetli birim + seviye taşıyan Sur/Büyü Kalkanı) ✅ · **native katman** (bottom sheet · titreşim · uzun basma künyesi) ✅ · **Ordular TAM** (şehir şeridi + altına asılı hareket simgeleri · detay sheet'i + görev iptali · alt bar rozeti · şehir alarm noktası) ✅ · **Dünya listesi** (kıta/diyar seçici · 10 slot · hedef künyesi sheet'i · `/world/:k/:d` derin bağlantısı) ✅ · **kalan:** Tapınak · **sefer formu** (`world-modal.tsx`, 606 satır) · Savaş raporu · Sohbet · i18n | v1 kapsamı oynanabilir |
 | **3 — Bildirim** | ⚠️ Sunucu: `push_subscriptions` göçü + `FcmSender` + kayıt ucu · İstemci: FCM + local notifications + derin bağlantı | Bildirime tıklayınca doğru ekran açılıyor |
 | **4 — Google giriş** | Sunucu: `google.verifier.ts` + kimlik tablosu + iki adımlı kullanıcı adı akışı · İstemci: `google_sign_in` 7.x · **web'e de eklenir** | İki istemcide de çalışıyor |
 | **5 — Attestation** | Play Integrity sinyalini **topla, kapı koyma** (`MOBIL_UYGULAMA.md` §9-2) | Sinyal DB'ye düşüyor |
@@ -538,6 +547,11 @@ saf hesap ve Dart'a portu gerekiyor. v1'i bloke etmiyor, bu yüzden sona bırak�
 | 2026-08-17 | ⭐⭐ **Native davranış politikası kuruldu** (`ui/native.dart`): web'de modal olan her şey mobilde **bottom sheet**; titreşim üç seviye (emir → hafif, yıkıcı onay → orta, red → ağır); web'de tooltip olan künye mobilde **uzun basma + sheet**. Kural ortak dosyada, çünkü ekran ekran serbest bırakılsa her ekran kendi tonunu seçerdi | ✅ kuruldu |
 | 2026-08-17 | Savunma ekranı Baraka'nın ŞEKLİNDE (adetli üretim + seviye taşıyan Sur/Büyü Kalkanı bir arada). Web'de tek bileşen: `Trainable({kind})`. Mobilde de `barracks_screen` **`kind` alacak biçimde genelleştirilmeli**, ikinci bir kopya yazılmamalı | 📋 sıradaki tur |
 | 2026-08-17 | Mağara meşguliyeti (`cave.repairing` / `cave.job`) `CityDetail`te YOK → Yapılar'da mağara kilidi bugün `false`. Sunucu reddediyor, yani hata değil eksik. Mağara ekranı gelince modele eklenecek | 📋 Mağara turu |
+| 2026-08-17 | ⭐⭐ **Ordular = şerit + asılı hareket simgeleri; metinli liste YOK** (kullanıcı kararı, aynı gün iki turda netleşti). İlk yazımda tersi yapılmıştı — simgeler taşınmamış, yerine metinli liste konmuştu; gerekçe *"üstteki bant alttaki listenin tekrarı"* idi ve **yanlış tarafı sildi**. Tekrarı kaldırmanın iki yolu vardı, oyunun kendi dili simgelerden yana. Bant yalnız `/armies`te görünüyor, hareket sayısına göre aşağı uzuyor ve gerekirse kaydırılıyor. ⚠️ Bu yüzden şerit orada **kabukta değil sayfa gövdesinde** (`armies_screen.dart`): sınırsız yükseklik ancak orada mümkün. Ek olarak **alt bar rozeti** ve **kırmızı alarm noktası** kaldı — ikisi de tekrar değil, ikisi de sıfır dikey yer kaplıyor | ✅ karar verildi |
+| 2026-08-17 | ⚠️ **Metin ok karakteri `↩` (U+21A9) Android'de EMOJİ olarak çiziliyor** — dönüş rozeti, rengi ne olursa olsun mavi bir kutuya dönüşüyordu. Web'de aynı karakter düz metin. Kural: oyunun kendi görseli olmayan simgelerde **Material ikonu** kullan (`Icons.undo`), metin sembolü değil | ✅ düzeltildi |
+| 2026-08-17 | ⚠️ **`MwResource` Material ikonu çiziyordu** (`Icons.circle` / `Icons.eco`) — altın yerine düz daire, yemek yerine yaprak. Oysa `assets/ui/gold.png` ve `food.png` depoda ve `info_bar.dart` onları kullanıyordu, yani **aynı ekranda iki farklı kaynak gösterimi** vardı. Kural: kaynak/birim/yapı/teknik/görev simgeleri **daima** web'le aynı dosyalardan | ✅ düzeltildi |
+| 2026-08-17 | **Aşağı çekip tazeleme (`RefreshIndicator`) hiçbir ekranda yok.** Tek bir ekrana eklemek daha kötü olurdu: oyuncu Ordular'da öğrenip Baraka'da deneyince hiçbir şey olmazdı. Ortak bir sarmalayıcı + beş ekranın tazeleme kümesi birlikte yapılmalı | 📋 sıradaki tur adayı |
+| 2026-08-17 | `movementsProvider` **aile DEĞİL** (uç `?cityId=` desteklese de): şerit ve rozet bütün şehirleri okuyor, aile olsaydı beş şehirli oyuncuda her tazelemede beş istek giderdi. Sefer ekranı tek şehir için süzme isterse istemcide süzülür | ✅ karar verildi |
 
 ---
 

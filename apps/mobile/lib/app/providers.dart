@@ -22,6 +22,7 @@ import '../core/http_transport.dart';
 import '../core/realtime.dart';
 import '../core/session.dart';
 import '../core/storage.dart';
+import '../features/armies/movement.dart';
 import '../features/city/catalog_model.dart';
 import '../features/city/city_model.dart';
 import '../gen/contracts.g.dart';
@@ -257,8 +258,13 @@ void _tazele(Ref ref, String topic) {
         // İkisi birlikte, çünkü ikisi de aynı ucun (`/catalog`) farklı okumaları.
         ref.invalidate(catalogProvider);
         ref.invalidate(catalogNamesProvider);
-      // ⚠️ `missions` ve `messages` ekranları henüz yok; konu tabloda duruyor ki sunucu
-      // yaydığında sessizce düşmesin — ekran geldiğinde tek satır eklenecek.
+      case 'missions':
+        // ⭐ 2026-08-17: Ordular ekranı gelince tabloda karşılıksız duran ilk konu bağlandı.
+        // ⚠️ Bu satır olmadan hareket listesi yalnız 60 sn'lik emniyet ağıyla tazelenirdi:
+        // oyuncu orduyu yola çıkarır, ekranda bir dakikaya kadar hiçbir şey görmezdi.
+        ref.invalidate(movementsProvider);
+      // ⚠️ `messages` ekranı henüz yok; konu tabloda duruyor ki sunucu yaydığında sessizce
+      // düşmesin — ekran geldiğinde tek satır eklenecek.
     }
   }
 }
@@ -334,6 +340,78 @@ final cityProvider = FutureProvider.family<CityDetail, int>((ref, id) async {
   }
   return CityDetail.fromJson(body);
 });
+
+/// ⭐⭐ ORDU HAREKETLERİ — gidip gelen tüm görevler, **tek istekte tüm şehirler**.
+///
+/// ⚠️ Şehre göre AİLE (`family`) yapılmadı, oysa uç `?cityId=` süzgecini destekliyor. Sebep:
+/// şerit BÜTÜN şehirleri yan yana çiziyor ve her birinin altına kendi hareketlerini asıyor —
+/// aile olsaydı beş şehirli oyuncuda her tazelemede beş istek giderdi. Süzme istemcide, tek
+/// listeden (web'de de aynı karar).
+///
+/// ⚠️ Emniyet ağı şehirle aynı 60 sn. Gerçek tazeleme WS'ten geliyor (`missions:changed`,
+/// `battle:resolved`); bu yalnız soket kopuk kaldığı pencerede ekran donmasın diye.
+final movementsProvider = FutureProvider<List<Movement>>((ref) async {
+  // ⚠️ Oturuma bağlı: çıkışta liste boşalsın. Aksi hâlde önceki oyuncunun orduları ekranda
+  // kalırdı (`citiesProvider` ile aynı gerekçe).
+  if (ref.watch(sessionProvider) == null) return const [];
+
+  final timer = Timer(kCitySafetyNet, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/missions');
+  final list = body is Map ? body['movements'] as List<dynamic>? : null;
+  return (list ?? const [])
+      .whereType<Map<String, dynamic>>()
+      .map(Movement.fromJson)
+      .toList();
+});
+
+/// ⭐ DİYAR LİSTESİ — `GET /api/v1/world/:k/:d`, on slot.
+///
+/// ⚠️ Anahtar **kayıt (record)**: Riverpod ailesi tek parametre alıyor ve `(k, d)` bir çift.
+/// Kayıtlar değer eşitliğine sahip, yani aynı diyar için ikinci bir istek gitmiyor.
+///
+/// ⚠️ Emniyet ağı şehirle aynı 60 sn. Diyar listesi nadiren değişiyor; şehir kurulunca
+/// `cities:changed` zaten geliyor.
+final worldProvider = FutureProvider.family<List<WorldSlot>, ({int k, int d})>((
+  ref,
+  realm,
+) async {
+  if (ref.watch(sessionProvider) == null) return const [];
+
+  final timer = Timer(kCitySafetyNet, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/world/${realm.k}/${realm.d}');
+  final list = body is Map ? body['slots'] as List<dynamic>? : null;
+  return (list ?? const [])
+      .whereType<Map<String, dynamic>>()
+      .map(WorldSlot.fromJson)
+      .toList();
+});
+
+/// ⭐ GÖREV İPTALİ — yoldaki orduyu geri çağırır.
+///
+/// ⚠️ Başarıdan sonra `city` de tazeleniyor, yalnız `missions` değil: iptal edilen görev bir
+/// dönüş bacağı doğuruyor ve o ordu eve varınca şehrin asker sayısı değişiyor. Web'de de aynı
+/// ikili (`useCancelMission` → `invalidate(['missions', 'city'])`).
+class Missions {
+  const Missions(this._ref);
+
+  final Ref _ref;
+
+  Future<void> cancel(int missionId) async {
+    await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/missions/$missionId/cancel', body: const {});
+    _tazele(_ref, 'missions:changed');
+    _tazele(_ref, 'city:changed');
+  }
+}
+
+final missionsProvider = Provider<Missions>(Missions.new);
 
 /// ⭐ ŞEHİR KATALOĞU — maliyet, süre, ön koşul ve adlar.
 ///

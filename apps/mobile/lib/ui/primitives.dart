@@ -200,25 +200,40 @@ class MwEmpty extends StatelessWidget {
 }
 
 /// Kaynak göstergesi (altın/yemek). Sayı biçimi Türkçe binlik ayracıyla.
+///
+/// ⚠️⚠️ **OYUNUN KENDİ GÖRSELLERİ — Material ikonu DEĞİL** (kullanıcı bildirimi, 2026-08-17).
+/// Bu bileşen bir ara `Icons.circle` ve `Icons.eco` çiziyordu: ekranda altın yerine düz bir
+/// daire, yemek yerine bir yaprak görünüyordu. Oysa `assets/ui/gold.png` ve `food.png` zaten
+/// depoda ve bilgi çubuğu (`info_bar.dart` · `_Res`) onları kullanıyordu — yani iki kaynak
+/// gösterimi **aynı ekranda ayrışıyordu**.
+///
+/// ⭐ Kural: kaynak, birim, yapı, teknik ve görev simgelerinin hepsi web'le AYNI dosyalardan
+/// gelir (`pnpm assets:build` eşitler, `assets:check` sürüklenmeyi kırar). Material ikonu
+/// yalnız oyunun kendi görseli OLMAYAN yerlerde (ok, çarpı, geri) kullanılabilir.
 class MwResource extends StatelessWidget {
-  const MwResource({super.key, required this.kind, required this.amount});
+  const MwResource({
+    super.key,
+    required this.kind,
+    required this.amount,
+    this.size = 16,
+  });
 
-  final String kind; // 'gold' | 'food'
+  /// `gold` · `food` — dosya adıyla birebir aynı.
+  final String kind;
   final int amount;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final c = MwColors.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          kind == 'gold' ? Icons.circle : Icons.eco,
-          size: 14,
-          color: kind == 'gold' ? c.gold : c.food,
-        ),
+        MwIcon(folder: 'ui', id: kind, size: size),
         const SizedBox(width: 4),
-        Text(mwNumber(amount)),
+        Text(
+          mwNumber(amount),
+          style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+        ),
       ],
     );
   }
@@ -292,6 +307,61 @@ class MwActivityDot extends StatelessWidget {
         shape: BoxShape.circle,
         // Web'de de gölge var (`shadow-[0_0_4px_…]`): koyu zeminde nokta yoksa kayboluyor.
         boxShadow: [BoxShadow(color: c.success, blurRadius: 4)],
+      ),
+    );
+  }
+}
+
+/// ⭐ ALARM NOKTASI — «bu şehre düşmanca bir hareket geliyor».
+///
+/// ⚠️ `MwActivityDot`la KARIŞTIRILMAMALI, ikisi farklı soruyu cevaplıyor:
+///   • yeşil, sabit  → *benim* burada süren bir işim var (üretim, yükseltme)
+///   • kırmızı, atan → *bana* bir şey geliyor ve iyi bir şey değil
+/// Aynı görsel dili paylaşsalardı oyuncu kendi çiftlik yükseltmesiyle gelen saldırıyı bir
+/// bakışta ayıramazdı.
+///
+/// ⚠️ Atma (pulse) **süsleme değil**: web'de de `animate-pulse` var ve sebebi şu — nokta
+/// küçük, kale simgesinin köşesinde duruyor ve hareket etmeyen küçük bir kırmızı leke,
+/// ekrandaki onlarca sabit ögenin arasında görülmüyor.
+class MwAlertDot extends StatefulWidget {
+  const MwAlertDot({super.key, this.size = 9});
+
+  final double size;
+
+  @override
+  State<MwAlertDot> createState() => _MwAlertDotState();
+}
+
+class _MwAlertDotState extends State<MwAlertDot>
+    with SingleTickerProviderStateMixin {
+  // ⚠️ `repeat(reverse: true)`: `Curves` ile ileri geri sönen bir nabız. Tek yönlü tekrar,
+  // her turun başında sert bir sıçrama üretir.
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return FadeTransition(
+      // Tam saydamlığa inmiyor: kaybolan bir uyarı, "acaba var mıydı?" sorusu doğuruyor.
+      opacity: Tween<double>(begin: 1, end: 0.35).animate(_c),
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          color: c.danger,
+          shape: BoxShape.circle,
+          border: Border.all(color: c.borderStrong, width: 0.5),
+          boxShadow: [BoxShadow(color: c.danger, blurRadius: 4)],
+        ),
       ),
     );
   }

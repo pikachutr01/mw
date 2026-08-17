@@ -15,13 +15,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/armies/armies_screen.dart';
 import '../features/auth/auth_screen.dart';
 import '../features/city/academy_screen.dart';
 import '../features/city/trainable_screen.dart';
 import '../features/city/buildings_screen.dart';
 import '../features/city/city_hub_screen.dart';
 import '../features/guest/landing_screen.dart';
+import '../features/world/world_screen.dart';
 import '../core/city_screens.dart';
+import '../core/world_coords.dart';
 import '../features/shell/shell.dart';
 import 'providers.dart';
 import 'routing_rules.dart';
@@ -58,7 +61,25 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: kLandingPath, builder: (_, _) => const LandingScreen()),
           // ⭐ Gerçek ekranlar listeden AYRI yazılıyor ki hangisinin yer tutucu olmadığı
           // tek bakışta görünsün.
+          // ⚠️ Ordular **açılış rotası** (`kHomePath`): aşağıdaki `tabs` döngüsü onu yer
+          // tutucuya bağlamasın diye orada ayrıca eleniyor.
+          GoRoute(path: '/armies', builder: (_, _) => const ArmiesScreen()),
           GoRoute(path: '/city', builder: (_, _) => const CityHubScreen()),
+          GoRoute(path: '/world', builder: (_, _) => const WorldScreen()),
+          // ⭐⭐ DERİN BAĞLANTI `/world/:k/:d` — web'le AYNI yol. Casusluk raporundaki
+          // «Dünyada göster» bağlantısı ve bildirim yükü bu adresi taşıyor; rota olmasaydı
+          // oyuncu «Bilinmeyen sayfa» hatasına düşerdi.
+          // ⚠️ Kelepçeleme `realmFromPath`te ve saf: bozuk bir adres reddedilmiyor, en yakın
+          // geçerli diyara kırpılıyor (gerekçe orada).
+          GoRoute(
+            path: '/world/:k/:d',
+            builder: (_, s) => WorldScreen(
+              fromUrl: realmFromPath(
+                s.pathParameters['k'],
+                s.pathParameters['d'],
+              ),
+            ),
+          ),
           GoRoute(path: '/barracks', builder: (_, _) => const BarracksScreen()),
           GoRoute(
             path: '/buildings',
@@ -79,7 +100,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: s.path,
               builder: (_, _) => PlaceholderScreen(s.label),
             ),
-          for (final t in tabs.where((t) => t.path != '/city'))
+          for (final t in tabs.where(
+            (t) =>
+                t.path != '/city' && t.path != '/armies' && t.path != '/world',
+          ))
             GoRoute(
               path: t.path,
               builder: (_, _) => PlaceholderScreen(t.label),

@@ -29,6 +29,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/providers.dart';
 import '../../app/routing_rules.dart';
 import '../../core/city_screens.dart';
+import '../../features/armies/movement_rules.dart';
 import '../../ui/primitives.dart';
 import 'city_strip.dart';
 import 'city_tabs.dart';
@@ -157,14 +158,24 @@ class _GuestBar extends StatelessWidget {
 /// ⚠️ `NavigationBar` yerine elle çizildi: altıncı madde bir rota DEĞİL, yukarı açılan bir
 /// liste. `NavigationBar` her hedefi bir seçim sayıyor ve «Daha»ya dokununca onu seçili
 /// göstermeye çalışıyordu — oysa liste kapanınca hiçbir şey değişmemiş oluyor.
-class _BottomBar extends StatelessWidget {
+class _BottomBar extends ConsumerWidget {
   const _BottomBar({required this.index});
 
   final int index;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = MwColors.of(context);
+
+    /// ⭐⭐ ORDULAR ROZETİ — «ekrana bakmadan ne bekliyorum» (kullanıcı, 2026-07-28).
+    ///
+    /// ⚠️ Web'in kendi mobil düzeninde de tam olarak burada duruyor (`Shell.tsx` · alt sekme
+    /// şeridi), yani bu bir taşıma — mobil uygulamaya özel bir icat değil.
+    ///
+    /// ⭐⭐ Rozet asıl işini ORDULAR DIŞINDAKİ ekranlarda yapıyor: şeritteki alarm noktası
+    /// yalnız şerit açıkken görünüyor (varsayılan KAPALI) ve şehir ekranlarında oyuncu
+    /// çoğunlukla üretimle meşgul. Gelen saldırıyı fark ettiren tek kalıcı sinyal bu.
+    final rozet = armiesBadge(ref.watch(movementsProvider).value ?? const []);
 
     return Container(
       decoration: BoxDecoration(
@@ -185,6 +196,9 @@ class _BottomBar extends StatelessWidget {
                   label: tabs[i].label,
                   active: i == index,
                   onTap: () => context.go(tabs[i].path),
+                  // ⚠️ Bugün yalnız Ordular'da; Mesaj sekmesinin okunmamış rozeti o ekran
+                  // gelince aynı yerden bağlanacak (web'de ikisi yan yana).
+                  badge: tabs[i].path == '/armies' ? rozet : null,
                 ),
               _BarItem(
                 // Web'de de aynı simge (`menu/secenekler.png`).
@@ -207,12 +221,16 @@ class _BarItem extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.badge,
   });
 
   final String icon;
   final String label;
   final bool active;
   final VoidCallback onTap;
+
+  /// Simgenin sağ üstüne oturan sayı + ton. `null` → rozet çizilmez.
+  final ({int count, MwTone tone})? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -223,7 +241,16 @@ class _BarItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            MwIcon(folder: 'menu', id: icon, size: 24),
+            // ⚠️ `clipBehavior: none`: rozet simgenin çerçevesinden taşıyor; kırpılırsa
+            // sayının yarısı kesilir.
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                MwIcon(folder: 'menu', id: icon, size: 24),
+                if (badge != null)
+                  Positioned(top: -6, right: -10, child: _Badge(badge!)),
+              ],
+            ),
             const SizedBox(height: 2),
             Text(
               label,
@@ -237,6 +264,50 @@ class _BarItem extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Sayı rozeti — rengi «en kötü haber» kuralından geliyor (`armiesBadge`).
+class _Badge extends StatelessWidget {
+  const _Badge(this.data);
+
+  final ({int count, MwTone tone}) data;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    final bg = switch (data.tone) {
+      MwTone.danger => c.danger,
+      MwTone.warning => c.warning,
+      MwTone.success => c.success,
+    };
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        // ⚠️ Çerçeve ŞART: rozet çubuğun kendi zemininin üstünde duruyor ve sarı ton açık
+        // temada zeminle neredeyse aynı parlaklıkta — sınır olmadan yüzüyor gibi görünüyordu.
+        border: Border.all(color: c.borderStrong, width: 0.5),
+      ),
+      child: Text(
+        // ⚠️ Üç haneden büyük sayı çubuğu bozar; oyuncunun aradığı bilgi zaten "çok" —
+        // kesin sayı listede yazıyor.
+        data.count > 99 ? '99+' : '${data.count}',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 10,
+          height: 1.2,
+          fontWeight: FontWeight.w700,
+          // ⚠️ `Colors.white` YAZILMAZ (§13.13.1): üç zemin tonunun üçü de koyu ve okunan
+          // renk temadan gelmeli. `MwButton` da vurgulu zeminlerde bunu kullanıyor.
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
