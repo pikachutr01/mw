@@ -40,8 +40,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { UNITS_BY_ID } from '@mobilwar/catalog';
+import { NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE, UNITS_BY_ID } from '@mobilwar/catalog';
 import { BUILDING_INFO, TECH_INFO, UNIT_INFO } from '../apps/web/src/lib/info-texts.ts';
+import { HERO_SKILLS } from '../apps/web/src/lib/hero-skills.ts';
 import { unitStrikeLabel, unitTechNames } from '../apps/web/src/lib/unit-facts.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -95,6 +96,18 @@ const strikeLines = unitIds
 const kindLines = unitIds
   .map((id) => `  ${dartStr(id)}: ${dartStr(UNITS_BY_ID[id]!.kind)},`)
   .join('\n');
+
+/**
+ * ⭐ Kahraman yetenekleri — anahtar · simge · etiket, **sıra dâhil** (`hero-skills.ts`).
+ *
+ * ⚠️ Sıra rastgele DEĞİL: fiziksel saldırı → fiziksel savunma → büyü saldırı → büyü savunma.
+ * Oyunun kendi ekranındaki sıra bu; iki istemcide farklı olsaydı sayılar yanlış okunurdu.
+ */
+const heroSkillLines = HERO_SKILLS.map(
+  (s) =>
+    `  (key: ${dartStr(s.key)}, icon: ${dartStr(s.icon)}, ` +
+    `label: ${dartStr(s.label)}),`,
+).join('\n');
 
 const next = `// dart format off
 // ⚠️⚠️ ÜRETİLMİŞ DOSYA — ELLE DÜZENLEMEYİN.
@@ -152,6 +165,25 @@ ${entries(BUILDING_INFO)}
 const Map<String, String> kTechInfo = {
 ${entries(TECH_INFO)}
 };
+
+/// ⭐ KAHRAMAN YETENEKLERİ — dört anahtar, oyunun kendi sırasıyla.
+///
+/// ⚠️ Sıra fiziksel saldırı → fiziksel savunma → büyü saldırı → büyü savunma. İki istemcide
+/// farklı olsaydı sayılar yanlış okunurdu.
+/// ⚠️ Büyü yetenekleri ziyan DEĞİL: kahramanın büyü tabanı fizikselle aynı (1200, binary'den
+/// doğrulandı). Bu yüzden ekranda büyüden caydıran bir uyarı yok.
+const List<({String key, String icon, String label})> kHeroSkills = [
+${heroSkillLines}
+];
+
+/// ⭐ OYUNCUNUN YAZDIĞI ADLARIN SINIRI — şehir ve kahraman için aynı.
+///
+/// ⚠️ Sınır orijinalden geliyor (J2ME «Şehir Adı» formu) ve **sunucu doğrulaması aynı
+/// sayılara bakıyor**. İstemcide elle yazılsaydı, kutu sunucunun reddedeceği bir adı kabul
+/// edip düğmeyi açardı — web'de tam bu yaşandı (kutu 2-24 diyordu, sunucu 3-10 istiyordu).
+const int kNameMin = ${NAME_MIN};
+const int kNameMax = ${NAME_MAX};
+const String kNameRuleMessage = ${dartStr(NAME_RULE_MESSAGE)};
 `;
 
 const check = process.argv.includes('--check');

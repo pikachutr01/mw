@@ -25,6 +25,7 @@ import '../core/storage.dart';
 import '../features/armies/movement.dart';
 import '../features/city/catalog_model.dart';
 import '../features/city/city_model.dart';
+import '../features/temple/hero_model.dart';
 import '../features/world/mission_options.dart';
 import '../gen/contracts.g.dart';
 
@@ -264,6 +265,9 @@ void _tazele(Ref ref, String topic) {
         // ⚠️ Bu satır olmadan hareket listesi yalnız 60 sn'lik emniyet ağıyla tazelenirdi:
         // oyuncu orduyu yola çıkarır, ekranda bir dakikaya kadar hiçbir şey görmezdi.
         ref.invalidate(movementsProvider);
+      case 'temple':
+        // ⭐ Savaşta kahraman ölüyor; ekran açıkken durumu «Şehirde» kalmaya devam ediyordu.
+        ref.invalidate(templeProvider);
       // ⚠️ `messages` ekranı henüz yok; konu tabloda duruyor ki sunucu yaydığında sessizce
       // düşmesin — ekran geldiğinde tek satır eklenecek.
     }
@@ -417,19 +421,77 @@ final missionOptionsProvider =
       return MissionOptions.fromJson(body);
     });
 
-/// ⭐ ŞEHİRDEKİ KAHRAMANLAR — sefer formundaki seçici.
+/// ⭐ TAPINAK — şehrin kahramanları, seviyesi ve kapasitesi.
 ///
-/// ⚠️ Tapınak ekranı henüz yok ama uç var: seçici için tam ekran gerekmiyor, yalnız
-/// `in_city` olanların adı ve seviyesi lazım. Süzgeç `MwCityHero.listFromTemple`ta.
+/// ⚠️ Emniyet ağı şehirle aynı 60 sn: diriltme ve dönüş geri sayımları istemcide akıyor ama
+/// **bitişi sunucu yazıyor**. Çıpa tazelenmezse ekran «birazdan biter» hâlinde asılı kalırdı.
+final templeProvider = FutureProvider.family<TempleView, int>((
+  ref,
+  cityId,
+) async {
+  final timer = Timer(kCitySafetyNet, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/cities/$cityId/temple');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Tapınak okunamadı.');
+  }
+  return TempleView.fromJson(body);
+});
+
+/// ⭐ SEFERE KATILABİLECEK KAHRAMANLAR — sefer formundaki seçici.
+///
+/// ⚠️ `templeProvider`dan TÜREİYOR, ayrı bir istek DEĞİL: ikisi aynı uca gidiyor ve ayrı
+/// sağlayıcı açsaydık Tapınak ekranı açıkken sefer formu aynı veriyi ikinci kez çekerdi.
+/// ⚠️ Süzgeç yalnız `in_city`: gerekçe `MwCityHero`da.
 final cityHeroesProvider = FutureProvider.family<List<MwCityHero>, int>((
   ref,
   cityId,
 ) async {
-  final body = await ref
-      .read(apiProvider)
-      .request('GET', '/api/v1/cities/$cityId/temple');
-  return MwCityHero.listFromTemple(body);
+  final temple = await ref.watch(templeProvider(cityId).future);
+  return [
+    for (final h in temple.heroes)
+      if (h.state == 'in_city')
+        MwCityHero(id: h.id, name: h.name, level: h.level),
+  ];
 });
+
+/// ⭐ KAHRAMAN EYLEMLERİ — puan dağıt · adını değiştir · dirilt · diriltmeyi durdur.
+///
+/// ⚠️ Hepsi tapınağı, şehri VE şehir listesini tazeliyor: diriltme kaynak harcıyor (şehir),
+/// puan dağıtımı oyuncunun gücünü değiştiriyor (liste puanı gösteriyor).
+class Heroes {
+  const Heroes(this._ref);
+
+  final Ref _ref;
+
+  Future<void> _post(int cityId, String path, [Object? body]) async {
+    await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/heroes/$path', body: body);
+    _ref.invalidate(templeProvider(cityId));
+    _tazele(_ref, 'cities:changed');
+    _tazele(_ref, 'city:changed');
+  }
+
+  Future<void> setSkills(int cityId, int heroId, Map<String, int> skills) =>
+      _post(cityId, '$heroId/skills', skills);
+
+  Future<void> rename(int cityId, int heroId, String name) =>
+      _post(cityId, '$heroId/rename', {'name': name});
+
+  Future<void> revive(int cityId, int heroId) =>
+      // ⚠️ Gövdesiz istekte `content-type` yazılmıyor ve Fastify boş gövdeye 400 veriyor —
+      // bu yüzden boş bir nesne gönderiliyor (`missions/:id/cancel` ile aynı gerekçe).
+      _post(cityId, '$heroId/revive', const {});
+
+  Future<void> cancelRevive(int cityId, int heroId) =>
+      _post(cityId, '$heroId/revive/cancel', const {});
+}
+
+final heroesProvider = Provider<Heroes>(Heroes.new);
 
 /// ⭐ GÖREV İPTALİ — yoldaki orduyu geri çağırır.
 ///

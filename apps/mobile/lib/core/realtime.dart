@@ -61,10 +61,11 @@ const Map<String, List<String>> kInvalidates = {
   'cities:changed': ['cities', 'city'],
   'missions:changed': ['missions'],
   'messages:changed': ['messages'],
-  // ⚠️ Web'in listesi daha geniş (`temple`, `overview` de var); burada yalnız ÇİZİLMİŞ
-  // ekranların karşılığı duruyor. Mobilde henüz Tapınak ve Komuta Merkezi yok, olmayan
-  // sağlayıcı adını yazmak ölü satır olurdu. Ekran geldiğinde bu satır da büyüyecek.
-  'battle:resolved': ['city', 'catalog', 'missions', 'messages'],
+  // ⭐ `temple` 2026-08-17'de eklendi (Tapınak ekranı geldi): savaşta kahraman ÖLÜYOR ve
+  // ekran açıkken durumu «Şehirde» kalmaya devam ediyordu.
+  // ⚠️ Web'in listesinde ayrıca `overview` var; Komuta Merkezi mobilde henüz yok, olmayan
+  // sağlayıcı adını yazmak ölü satır olurdu. O ekran geldiğinde bu satır da büyüyecek.
+  'battle:resolved': ['city', 'catalog', 'missions', 'messages', 'temple'],
 };
 
 /// Her şeyi tazele — kopukluk sonrası kaçan olaylar için.

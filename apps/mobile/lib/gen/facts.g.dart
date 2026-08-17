@@ -144,3 +144,25 @@ const Map<String, String> kTechInfo = {
   'colonization': 'Boş koordinatlara yeni şehir kurma hakkı verir. Her yeni şehir kendi ekonomisini, ordusunu ve savunmasını getirir; üstelik teknikler tüm şehirlerde ortak olduğu için bütün teknik yatırımınızın getirisini büyütür.',
   'night_vision': 'Gece (00:00–08:00) yapılan savaşlarda görüş azalır ve her iki tarafın vuruş gücü düşer. Bu teknik gecenin getirdiği kaybı kapatır. Sur ve Büyü Kalkanı geceden hiç etkilenmez; yani gece saldırmak savunanın işine yarar.',
 };
+
+/// ⭐ KAHRAMAN YETENEKLERİ — dört anahtar, oyunun kendi sırasıyla.
+///
+/// ⚠️ Sıra fiziksel saldırı → fiziksel savunma → büyü saldırı → büyü savunma. İki istemcide
+/// farklı olsaydı sayılar yanlış okunurdu.
+/// ⚠️ Büyü yetenekleri ziyan DEĞİL: kahramanın büyü tabanı fizikselle aynı (1200, binary'den
+/// doğrulandı). Bu yüzden ekranda büyüden caydıran bir uyarı yok.
+const List<({String key, String icon, String label})> kHeroSkills = [
+  (key: 'fAtk', icon: 'fiz_sal', label: 'Fiziksel Saldırı'),
+  (key: 'fDef', icon: 'fiz_sav', label: 'Fiziksel Savunma'),
+  (key: 'mAtk', icon: 'buy_sal', label: 'Büyü Saldırı'),
+  (key: 'mDef', icon: 'buy_sav', label: 'Büyü Savunma'),
+];
+
+/// ⭐ OYUNCUNUN YAZDIĞI ADLARIN SINIRI — şehir ve kahraman için aynı.
+///
+/// ⚠️ Sınır orijinalden geliyor (J2ME «Şehir Adı» formu) ve **sunucu doğrulaması aynı
+/// sayılara bakıyor**. İstemcide elle yazılsaydı, kutu sunucunun reddedeceği bir adı kabul
+/// edip düğmeyi açardı — web'de tam bu yaşandı (kutu 2-24 diyordu, sunucu 3-10 istiyordu).
+const int kNameMin = 3;
+const int kNameMax = 15;
+const String kNameRuleMessage = 'Ad 3-15 karakter olmalı; harf, rakam ve boşluk kullanılabilir.';
