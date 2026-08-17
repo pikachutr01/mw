@@ -1,0 +1,179 @@
+{
+  "_hakkinda": [
+    "⭐⭐ SEFER MATEMATİĞİ ORTAK VEKTÖRLERİ — TS motoru (packages/engine/src/travel.ts) ile",
+    "Dart portu (apps/mobile/lib/core/travel.dart) AYNI dosyadan okuyup AYNI sonucu vermek",
+    "zorunda. Kullanıcının «tam eşitlik» kararı böylece umut değil kapı oluyor.",
+    "",
+    "⚠️ Burada asıl korunan şey `pow(D, p)`: kesirli üs iki dilde son basamakta ayrışabilir ve",
+    "sonuç yukarı yuvarlandığı için ekrandaki süre sunucununkinden BİR SANİYE sapabilir. Bir",
+    "saniye önemsiz görünüyor ama sefer önizlemesi ile gerçek varış anının ayrışması, bu",
+    "projede daha önce üç kez ısıran türden bir hata (bkz. clock-vectors.json).",
+    "",
+    "⚠️ Dosya KOPYALANMAZ, iki taraftan da göreli yolla okunur (MOBIL_MIMARI.md §5.1).",
+    "",
+    "⚠️ `speed` doğrudan veriliyor, birim id'si DEĞİL: Dart tarafı katalog taşımıyor (değerler",
+    "dünya başına override edilebiliyor) ve vektörün ölçtüğü şey katalog değil MATEMATİK."
+  ],
+
+  "distance": [
+    {
+      "ad": "aynı diyarda komşu şehir",
+      "a": { "k": 1, "d": 2, "s": 1 },
+      "b": { "k": 1, "d": 2, "s": 2 },
+      "beklenen": 1
+    },
+    {
+      "ad": "aynı kıtada bir diyar ötesi",
+      "a": { "k": 1, "d": 2, "s": 1 },
+      "b": { "k": 1, "d": 3, "s": 1 },
+      "beklenen": 20
+    },
+    {
+      "ad": "⭐ toplamalı: kıta + diyar + şehir farkları TOPLANIR (Öklid değil)",
+      "a": { "k": 1, "d": 1, "s": 1 },
+      "b": { "k": 2, "d": 3, "s": 5 },
+      "beklenen": 4044
+    },
+    {
+      "ad": "yön fark etmez (mutlak değer)",
+      "a": { "k": 3, "d": 10, "s": 9 },
+      "b": { "k": 1, "d": 2, "s": 1 },
+      "beklenen": 8168
+    },
+    {
+      "ad": "aynı nokta",
+      "a": { "k": 5, "d": 250, "s": 7 },
+      "b": { "k": 5, "d": 250, "s": 7 },
+      "beklenen": 0
+    }
+  ],
+
+  "armySpeed": [
+    {
+      "ad": "tek birim — kendi hızı",
+      "counts": { "dwarf": 10 },
+      "speeds": { "dwarf": 100 },
+      "heroCount": 0,
+      "beklenen": 100
+    },
+    {
+      "ad": "⭐ karışık ordu — EN YAVAŞ belirler",
+      "counts": { "dwarf": 10, "pegasus": 5, "chaos": 2 },
+      "speeds": { "dwarf": 100, "pegasus": 160, "chaos": 80 },
+      "heroCount": 0,
+      "beklenen": 80
+    },
+    {
+      "ad": "adet 0 olan birim SAYILMAZ",
+      "counts": { "dwarf": 10, "chaos": 0 },
+      "speeds": { "dwarf": 100, "chaos": 80 },
+      "heroCount": 0,
+      "beklenen": 100
+    },
+    {
+      "ad": "kahraman hızlıysa orduyu HIZLANDIRMAZ",
+      "counts": { "dwarf": 10 },
+      "speeds": { "dwarf": 100 },
+      "heroCount": 1,
+      "beklenen": 100
+    },
+    {
+      "ad": "⭐⭐ kahraman YAVAŞLATIR — «9 kuş + 1 kahraman» 6000 değil 200",
+      "counts": { "spy_bird": 9 },
+      "speeds": { "spy_bird": 6000 },
+      "heroCount": 1,
+      "beklenen": 200
+    },
+    {
+      "ad": "yalnız kahraman — ordu boş",
+      "counts": {},
+      "speeds": {},
+      "heroCount": 1,
+      "beklenen": 200
+    },
+    {
+      "ad": "ordu da kahraman da yok → null",
+      "counts": {},
+      "speeds": {},
+      "heroCount": 0,
+      "beklenen": null
+    },
+    {
+      "ad": "⚠️ yürüyemeyen birim (hız 0) → null, sessizce 0 kabul EDİLMEZ",
+      "counts": { "wall": 1 },
+      "speeds": { "wall": 0 },
+      "heroCount": 0,
+      "beklenen": null
+    },
+    {
+      "ad": "⚠️ bilinmeyen id → null",
+      "counts": { "griffin": 3 },
+      "speeds": {},
+      "heroCount": 0,
+      "beklenen": null
+    }
+  ],
+
+  "travelSeconds": [
+    {
+      "ad": "⭐ komşu şehir, hız 100 — cetvelin çıpası (taban + k)",
+      "input": { "distance": 1, "speed": 100 },
+      "beklenen": 2400
+    },
+    {
+      "ad": "hız 200 → süre yarıya iner (taban DAHİL hıza orantılı)",
+      "input": { "distance": 1, "speed": 200 },
+      "beklenen": 1200
+    },
+    {
+      "ad": "⭐⭐ casus kuş (6000) ordunun tam 1/60'ı",
+      "input": { "distance": 1, "speed": 6000 },
+      "beklenen": 40
+    },
+    {
+      "ad": "kesirli üs — uzak hedef",
+      "input": { "distance": 4044, "speed": 100 },
+      "beklenen": 40469
+    },
+    {
+      "ad": "⚠️ Haritacılık YALNIZ yol terimini kısaltır, tabanı DEĞİL",
+      "input": { "distance": 4044, "speed": 100, "cartography": 10 },
+      "beklenen": 27379
+    },
+    {
+      "ad": "Haritacılık 0 ile aynı sonuç (negatif kelepçesi)",
+      "input": { "distance": 1, "speed": 100, "cartography": 0 },
+      "beklenen": 2400
+    },
+    {
+      "ad": "⭐ 24 saat tavanı — zıt köşe bile aşmaz",
+      "input": { "distance": 40000, "speed": 100 },
+      "beklenen": 86400
+    },
+    {
+      "ad": "dünya hız çarpanı TÜM süreyi böler, tavan da aynı oranda iner",
+      "input": { "distance": 40000, "speed": 100, "speedMultiplier": 2 },
+      "beklenen": 43200
+    },
+    {
+      "ad": "geçiş süreleri varsayılanda 0 — bayraklar sonucu değiştirmez",
+      "input": {
+        "distance": 20,
+        "speed": 100,
+        "crossesDistrict": true,
+        "crossesContinent": true
+      },
+      "beklenen": 5423
+    },
+    {
+      "ad": "⚠️ en az 1 saniye — sıfıra inmez",
+      "input": { "distance": 0, "speed": 6000, "speedMultiplier": 100 },
+      "beklenen": 1
+    },
+    {
+      "ad": "⚠️ hız 0 sonsuz süre üretmez: 1'e kelepçelenir, sonra 24 sa tavanına çarpar",
+      "input": { "distance": 1, "speed": 0 },
+      "beklenen": 86400
+    }
+  ]
+}

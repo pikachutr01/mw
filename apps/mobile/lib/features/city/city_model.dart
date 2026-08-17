@@ -15,6 +15,8 @@
 /// (`contracts.g.dart` başlığındaki aynı kural). Eksik alan `null` kalır, ekran onu gösterir.
 library;
 
+import '../../core/travel.dart';
+
 /// Yalnız ekranın okuduğu alanlar. ⚠️ Tam yanıt çok daha büyük (mağara, sur onarımı, teknik
 /// kuyrukları, kapasite…); okunmayan alanı modele koymak, kullanılmadığı için hiç
 /// doğrulanmayan bir sözleşme yazmak olurdu.
@@ -37,6 +39,8 @@ class CityDetail {
     required this.queues,
     required this.techQueues,
     required this.wallRepair,
+    required this.map,
+    required this.travelSpeedMultiplier,
     required this.serverNow,
     required this.gameNow,
   });
@@ -81,6 +85,19 @@ class CityDetail {
 
   /// ⭐ Sur onarımı sürüyorsa penceresi; yoksa `null`. Onarımdaki Sur yükseltilemez.
   final ({num integrity, String? from, String until})? wallRepair;
+
+  /// ⭐⭐ HARİTA SABİTLERİ — sefer süresi önizlemesi bunları `travelSeconds`e veriyor.
+  ///
+  /// ⚠️ İstemci `MwMapConfig.defaults`a **güvenemez**: sabitler panelden dünya başına
+  /// ayarlanabiliyor ve bir sayı değişir değişmez ekranda yazan süre gerçek varış anından
+  /// sapardı. Sunucu bu yüzden bunları şehir yanıtında gönderiyor.
+  final MwMapConfig map;
+
+  /// ⭐ Dünya hız çarpanı — sefer süresinin TAMAMINI bölüyor (`worlds.speed_multiplier`).
+  ///
+  /// ⚠️ Ayrı bir alan, `map`in içinde değil: sunucuda da ayrı (`snap.speed.travel`) ve
+  /// haritanın geometrisiyle ilgisi yok — dünyanın temposu.
+  final num travelSpeedMultiplier;
 
   /// Kaynak sayacının çıpası (gerçek saat).
   final String serverNow;
@@ -128,6 +145,11 @@ class CityDetail {
           .map(TechQueue.fromJson)
           .toList(),
       wallRepair: _wallRepair(j['wallRepair']),
+      map: MwMapConfig.fromJson(j['map']),
+      // ⚠️ `?? 1` burada anlamlı bir varsayılan, savunma değil: çarpan yoksa dünya normal
+      // tempoda demektir. `?? 0` olsaydı süre sonsuza giderdi.
+      travelSpeedMultiplier:
+          ((j['speed'] as Map<String, dynamic>?)?['travel'] as num?) ?? 1,
       serverNow: j['serverNow'] as String,
       gameNow: j['gameNow'] as String,
     );
