@@ -17,7 +17,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_screen.dart';
 import '../features/city/academy_screen.dart';
-import '../features/city/barracks_screen.dart';
+import '../features/city/trainable_screen.dart';
 import '../features/city/buildings_screen.dart';
 import '../features/city/city_hub_screen.dart';
 import '../features/guest/landing_screen.dart';
@@ -65,13 +65,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const BuildingsScreen(),
           ),
           GoRoute(path: '/academy', builder: (_, _) => const AcademyScreen()),
+          GoRoute(path: '/defense', builder: (_, _) => const DefenseScreen()),
           // ⚠️ Kalan şehir ekranları yer tutucu ama ROTASI VAR: olmasaydı sekme şeridine
           // dokunmak «Bilinmeyen sayfa» hatasına düşerdi.
           for (final s in kCityScreens.where(
             (s) =>
                 s.path != '/barracks' &&
                 s.path != '/buildings' &&
-                s.path != '/academy',
+                s.path != '/academy' &&
+                s.path != '/defense',
           ))
             GoRoute(
               path: s.path,
