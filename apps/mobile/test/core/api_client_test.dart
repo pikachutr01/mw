@@ -67,6 +67,7 @@ Future<MwApi> _api(
   Session? session,
   void Function(SessionConflict)? onConflict,
   void Function()? onLost,
+  void Function(Session?)? onChanged,
   void Function(String?, String?)? onServerTime,
   DateTime Function()? clock,
 }) async {
@@ -79,6 +80,7 @@ Future<MwApi> _api(
     hints: _hints,
     onConflict: onConflict,
     onSessionLost: onLost,
+    onSessionChanged: onChanged,
     onServerTime: onServerTime,
     clock: clock,
     sleep: (_) async {}, // testte 800 ms beklenmez
@@ -426,6 +428,45 @@ void main() {
 
       await api.request('GET', '/a');
       expect(t.refreshes, isEmpty);
+    });
+  });
+
+  /// ⭐⭐ OTURUM DEĞİŞİMİ HABER VERİLİR — kullanıcı cihazda gördü: *"sağ üstteki ws bağlantı
+  /// noktası neden kırmızı?"*
+  ///
+  /// ⚠️⚠️ `setSession` yalnız `s == null` iken haber veriyordu. Jeton YENİLENDİĞİNDE kimse
+  /// haberdar olmuyordu → `sessionProvider` eski oturumu tutuyor → onu izleyen
+  /// `realtimeProvider` yeniden kurulmuyor → soket el sıkışmada yakalanmış BAYAT jetonla
+  /// sonsuza kadar deniyor. HTTP sağlam kalıyor (`MwApi` kendi alanını okuyor), yani arıza
+  /// yalnız gerçek zamanlı katmanda görünüyordu — teşhisi en zor arıza biçimi.
+  group('⭐⭐ oturum değişimi haber verilir', () {
+    test('⭐ jeton YENİLENİNCE haber gider (kırmızı nokta hatası)', () async {
+      final gelen = <Session?>[];
+      final t = _Transport((r, i) async {
+        if (r.path == '/api/v1/auth/refresh') {
+          return RawResponse(200, _authBody(acc: 'taze-jeton'));
+        }
+        // İlk oyun isteği 401, yenilemeden SONRAKİ tekrar 200.
+        return i == 0 ? RawResponse(401) : RawResponse(200, {'ok': true});
+      });
+      final api = await _api(t, session: _session(), onChanged: gelen.add);
+
+      await api.request('GET', '/api/v1/cities');
+
+      expect(gelen, isNotEmpty, reason: 'yenilenme sessiz kalmamalı');
+      expect(gelen.last?.accessToken, 'taze-jeton');
+    });
+
+    /// ⚠️ Düşme de haber vermeye devam etmeli — iki kanca birbirinin yerine geçmiyor.
+    test('oturum DÜŞÜNCE de haber gider ve null taşır', () async {
+      final gelen = <Session?>[];
+      // Yenileme de 401 → oturum gerçekten düşer.
+      final t = _Transport((r, i) async => RawResponse(401));
+      final api = await _api(t, session: _session(), onChanged: gelen.add);
+
+      await api.request('GET', '/api/v1/cities').catchError((_) => null);
+
+      expect(gelen.last, isNull);
     });
   });
 }

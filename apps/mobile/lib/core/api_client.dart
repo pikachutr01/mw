@@ -76,6 +76,7 @@ class MwApi {
     required ClientHints hints,
     this.onConflict,
     this.onSessionLost,
+    this.onSessionChanged,
     this.onServerTime,
     DateTime Function()? clock,
     Future<void> Function(Duration)? sleep,
@@ -103,7 +104,27 @@ class MwApi {
   final void Function(SessionConflict)? onConflict;
 
   /// Oturum gerçekten düştüğünde çağrılır (giriş ekranına dönülecek).
+  ///
+  /// ⚠️ **Yalnız DÜŞME.** Yenilenme için `onSessionChanged` var ve ikisi ayrı durmak zorunda
+  /// değil ama ayrı duruyorlar çünkü çağıranların biri (giriş ekranına dönmek) diğerinden
+  /// (soketi yeniden kurmak) farklı bir iş yapıyor.
   final void Function()? onSessionLost;
+
+  /// ⭐⭐ OTURUM **HER DEĞİŞTİĞİNDE** çağrılır — yenilenme dâhil (2026-08-17).
+  ///
+  /// ⚠️⚠️ **Bu kancanın yokluğu gerçek bir arızaydı ve cihazda görüldü:** kullanıcı
+  /// *"sağ üstteki ws bağlantı noktası neden kırmızı?"* diye sordu. HTTP çalışıyor, soket ölü.
+  ///
+  /// Sebep: `setSession` yalnız `s == null` iken haber veriyordu. Jeton başarıyla
+  /// yenilendiğinde (12 saatte bir) `sessionProvider` **eski oturumu tutmaya devam ediyor**,
+  /// dolayısıyla onu izleyen `realtimeProvider` yeniden kurulmuyor ve soket el sıkışmada
+  /// yakalanmış **bayat jetonla** sonsuza kadar deniyor. HTTP sağlam kalıyor çünkü `MwApi`
+  /// kendi `_session` alanını okuyor — yani arıza yalnız gerçek zamanlı katmanda görünüyor.
+  ///
+  /// ⚠️ Web'de bu bağ ZATEN vardı (`onSessionChange(() => start())`, `lib/realtime.ts`);
+  /// eksik olan yalnız mobildi. Aynı gün web tarafında düzeltilen "devralmadan sonra soket
+  /// dirilmiyor" hatasının ikizi: **HTTP toparlanıyor, soket toparlanmıyor.**
+  final void Function(Session?)? onSessionChanged;
 
   /// ⭐⭐ Her BAŞARILI yanıttaki sunucu damgaları — saat çıpası buradan besleniyor.
   ///
@@ -138,6 +159,9 @@ class MwApi {
     _session = s;
     _loaded = true;
     await _store.write(s);
+    // ⚠️ Sıra: önce DEĞİŞTİ, sonra DÜŞTÜ. Tersi olsaydı giriş ekranına dönüş, soketin
+    //    kapatılmasından önce koşar ve bir an ölü jetonla bağlanmaya çalışan bir soket kalırdı.
+    onSessionChanged?.call(s);
     if (s == null) onSessionLost?.call();
   }
 

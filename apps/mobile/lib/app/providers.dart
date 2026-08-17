@@ -82,6 +82,10 @@ final apiProvider = Provider<MwApi>((ref) {
     // kurmamalı. `watch` burada döngü kurardı.
     onConflict: (c) => ref.read(conflictProvider.notifier).update(c),
     onSessionLost: () => ref.read(sessionProvider.notifier).update(null),
+    // ⭐⭐ Jeton YENİLENİNCE de sağlayıcı güncellenmeli: `realtimeProvider` onu izliyor ve
+    //    güncellenmezse soket bayat jetonla el sıkışmayı sonsuza kadar dener (kırmızı nokta).
+    //    Gerekçenin tamamı `MwApi.onSessionChanged`de.
+    onSessionChanged: (s) => ref.read(sessionProvider.notifier).update(s),
     // ⭐ Saat HER başarılı yanıttan besleniyor — web'deki `queries.ts` · `get<T>` ile aynı yer.
     onServerTime: (s, g) => ref.read(clockProvider).noteServerTime(s, g),
   );
