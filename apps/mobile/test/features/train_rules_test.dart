@@ -19,6 +19,8 @@ CatalogUnit _unit({
   id: 'dwarf',
   name: 'Cüce',
   area: 1,
+  speed: 100,
+  carry: 0,
   gold: gold,
   food: food,
   seconds: seconds,

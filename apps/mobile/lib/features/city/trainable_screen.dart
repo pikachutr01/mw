@@ -33,6 +33,7 @@ import 'catalog_bits.dart';
 import 'catalog_model.dart';
 import 'city_model.dart';
 import 'city_panels.dart';
+import 'info_sheets.dart';
 import 'progress_row.dart';
 import 'train_rules.dart';
 
@@ -426,140 +427,148 @@ class _RowState extends ConsumerState<_Row> {
             busy: mine,
           );
 
-    return Container(
-      color: widget.alt ? c.raised.withValues(alpha: 0.35) : null,
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              MwIcon(folder: kind.folder, id: unit.id, size: 36),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Ad + parantez içinde eldeki adet, seviye taşıyanda «sv N».
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: unit.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          TextSpan(
-                            text: levelBased
-                                ? '  sv $have'
-                                : '  (${mwNumber(have)})',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // ⭐ Orijinal kartta mağaradaki adet de yazıyor. Yalnız 0'dan büyükse:
-                    // mağarası olmayan oyuncunun her satırda sıfır görmesi gürültü.
-                    if (inCave > 0)
-                      Text(
-                        'Mağarada: ${mwNumber(inCave)}',
-                        style: TextStyle(fontSize: 11, color: c.muted),
-                      ),
-                    const SizedBox(height: 2),
-                    MwCostLine(
-                      gold: unit.gold,
-                      food: unit.food,
-                      seconds: unit.seconds,
-                      baseSeconds: unit.baseSeconds,
-                    ),
-                    MwRequirements(
-                      unmet: unmet,
-                      structures: structures,
-                      techs: city.techs,
-                    ),
-                    if (capped)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 3),
-                        child: MwNote(
-                          levelBased
-                              ? 'E-posta doğrulanmadan en çok '
-                                    'sv ${widget.catalog.verify!.maxDefenseLevel}.'
-                              : 'E-posta doğrulaması gerekli.',
-                        ),
-                      ),
-                    if (wallLocked)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 3),
-                        child: MwNote(
-                          'Sur onarılıyor; bitene kadar yükseltilemez.',
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          // ⭐ MOBİL: emir kutusu + düğme alt satırda SAĞA yaslı (web'in dar ekran düzeni).
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (!levelBased && n > 0)
+    return InkWell(
+      // ⭐ Uzun basma → künye (kullanıcı, 2026-08-17). Kısa dokunma bilerek BOŞ: satırın
+      // gerçek eylemi sağdaki düğme ve satırın her yerini ona bağlamak yanlışlıkla emir
+      // vermeye davet ederdi.
+      onLongPress: () => showUnitInfo(context, unit),
+      child: Container(
+        color: widget.alt ? c.raised.withValues(alpha: 0.35) : null,
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                MwIcon(folder: kind.folder, id: unit.id, size: 36),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: MwTotalLine(
-                    gold: total.gold,
-                    food: total.food,
-                    seconds: total.seconds,
-                    baseSeconds: total.baseSeconds,
-                    afford: afford,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Ad + parantez içinde eldeki adet, seviye taşıyanda «sv N».
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: unit.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            TextSpan(
+                              text: levelBased
+                                  ? '  sv $have'
+                                  : '  (${mwNumber(have)})',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // ⭐ Orijinal kartta mağaradaki adet de yazıyor. Yalnız 0'dan büyükse:
+                      // mağarası olmayan oyuncunun her satırda sıfır görmesi gürültü.
+                      if (inCave > 0)
+                        Text(
+                          'Mağarada: ${mwNumber(inCave)}',
+                          style: TextStyle(fontSize: 11, color: c.muted),
+                        ),
+                      const SizedBox(height: 2),
+                      MwCostLine(
+                        gold: unit.gold,
+                        food: unit.food,
+                        seconds: unit.seconds,
+                        baseSeconds: unit.baseSeconds,
+                      ),
+                      MwRequirements(
+                        unmet: unmet,
+                        structures: structures,
+                        techs: city.techs,
+                      ),
+                      if (capped)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: MwNote(
+                            levelBased
+                                ? 'E-posta doğrulanmadan en çok '
+                                      'sv ${widget.catalog.verify!.maxDefenseLevel}.'
+                                : 'E-posta doğrulaması gerekli.',
+                          ),
+                        ),
+                      if (wallLocked)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 3),
+                          child: MwNote(
+                            'Sur onarılıyor; bitene kadar yükseltilemez.',
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              // ⚠️ Seviye taşıyanda adet kutusu HİÇ çizilmez — adet diye bir şey yok.
-              if (!levelBased) ...[
-                MwAmountInput(
-                  controller: widget.controller,
-                  enabled: !widget.locked,
-                  // Her tuşta toplam satırı ve düğme durumu yeniden hesaplanmalı.
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(width: 8),
               ],
-              // ⭐ Uçuştaki istek YALNIZ bu düğmede dönen bir gösterge (patlama efekti yok).
-              SizedBox(
-                width: 64,
-                child: mine
-                    ? const Center(
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(height: 6),
+            // ⭐ MOBİL: emir kutusu + düğme alt satırda SAĞA yaslı (web'in dar ekran düzeni).
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (!levelBased && n > 0)
+                  Expanded(
+                    child: MwTotalLine(
+                      gold: total.gold,
+                      food: total.food,
+                      seconds: total.seconds,
+                      baseSeconds: total.baseSeconds,
+                      afford: afford,
+                    ),
+                  ),
+                // ⚠️ Seviye taşıyanda adet kutusu HİÇ çizilmez — adet diye bir şey yok.
+                if (!levelBased) ...[
+                  MwAmountInput(
+                    controller: widget.controller,
+                    enabled: !widget.locked,
+                    // Her tuşta toplam satırı ve düğme durumu yeniden hesaplanmalı.
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                // ⭐ Uçuştaki istek YALNIZ bu düğmede dönen bir gösterge (patlama efekti yok).
+                SizedBox(
+                  width: 64,
+                  child: mine
+                      ? const Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : MwSmallButton(
+                          label: levelBased ? 'sv ${have + 1}' : 'Üret',
+                          onTap: acik ? () => widget.onOrder(unit, n) : null,
+                          minWidth: 64,
                         ),
-                      )
-                    : MwSmallButton(
-                        label: levelBased ? 'sv ${have + 1}' : 'Üret',
-                        onTap: acik ? () => widget.onOrder(unit, n) : null,
-                        minWidth: 64,
-                      ),
+                ),
+              ],
+            ),
+            // ⭐ Seviye emrinin ilerlemesi SATIRDA (banda girmez, paralel akar — §13.21.3).
+            if (widget.structureQueue != null) ...[
+              const SizedBox(height: 6),
+              ProgressRow(
+                startedAt: widget.structureQueue!.startedAt,
+                finishAt: widget.structureQueue!.finishAt,
+                label: 'seviye ${widget.structureQueue!.targetLevel}',
+                busy: widget.pending != null,
+                onCancel: () => widget.onCancel(widget.structureQueue!),
               ),
             ],
-          ),
-          // ⭐ Seviye emrinin ilerlemesi SATIRDA (banda girmez, paralel akar — §13.21.3).
-          if (widget.structureQueue != null) ...[
-            const SizedBox(height: 6),
-            ProgressRow(
-              startedAt: widget.structureQueue!.startedAt,
-              finishAt: widget.structureQueue!.finishAt,
-              label: 'seviye ${widget.structureQueue!.targetLevel}',
-              busy: widget.pending != null,
-              onCancel: () => widget.onCancel(widget.structureQueue!),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

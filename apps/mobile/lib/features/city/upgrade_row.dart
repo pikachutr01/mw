@@ -36,6 +36,7 @@ class UpgradeRow extends StatelessWidget {
     this.progress,
     this.trailingInfo,
     this.onNameTap,
+    this.infoText,
   });
 
   final CatalogUpgradable item;
@@ -79,6 +80,10 @@ class UpgradeRow extends StatelessWidget {
 
   /// Ada dokunulunca — bugün yalnız Mağara kullanıyor (ileride doldurma sheet'i).
   final VoidCallback? onNameTap;
+
+  /// ⭐ Künyenin AÇIKLAMA metni — üretilmiş olgulardan geliyor (`gen/facts.g.dart`).
+  /// ⚠️ Web'de bu metin popover'ın ilk satırı; mobilde sheet'in. Aynı kaynak, aynı sıra.
+  final String? infoText;
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +211,11 @@ class UpgradeRow extends StatelessWidget {
       context,
       title: item.name,
       lines: [
+        // ⭐ Açıklama EN ÜSTTE — web'deki popover sırası (metin, sonra sayılar).
+        if (infoText != null) ...[
+          Text(infoText!, style: TextStyle(color: c.muted)),
+          const SizedBox(height: 12),
+        ],
         Text('Şu anki seviye: ${item.level}', style: TextStyle(color: c.muted)),
         if (item.maxLevel != null)
           Text(

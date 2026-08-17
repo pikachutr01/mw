@@ -43,6 +43,8 @@ class CatalogUnit {
     required this.id,
     required this.name,
     required this.area,
+    required this.speed,
+    required this.carry,
     required this.gold,
     required this.food,
     required this.seconds,
@@ -57,6 +59,13 @@ class CatalogUnit {
 
   /// Kale/Sur alan bütçesinden yediği yer.
   final int area;
+
+  /// ⭐ Sefer hızı ve ganimet taşıma kapasitesi — bilgi künyesindeki «Özellikler» satırları
+  /// (2026-08-17). ⚠️ Sunucudan geliyor, katalogdan DEĞİL: ikisi de dünya başına
+  /// override edilebilir ve istemcide sabit tutmak ekranın yanılması demekti.
+  /// ⚠️ Savunma birimlerinde ikisi de 0 (sefere çıkmazlar) → satır hiç çizilmiyor.
+  final int speed;
+  final int carry;
 
   /// **Bir** birimin maliyeti; adetle çarpılır.
   final int gold;
@@ -83,6 +92,8 @@ class CatalogUnit {
       id: j['id'] as String,
       name: j['name'] as String,
       area: (j['area'] as num?)?.toInt() ?? 0,
+      speed: (j['speed'] as num?)?.toInt() ?? 0,
+      carry: (j['carry'] as num?)?.toInt() ?? 0,
       gold: (cost['gold'] as num).toInt(),
       food: (cost['food'] as num).toInt(),
       seconds: j['seconds'] as num? ?? 0,

@@ -24,6 +24,7 @@ import 'catalog_bits.dart';
 import 'catalog_model.dart';
 import 'city_model.dart';
 import 'city_panels.dart';
+import 'info_sheets.dart';
 import 'progress_row.dart';
 import 'train_rules.dart';
 import 'upgrade_row.dart';
@@ -172,6 +173,7 @@ class _AcademyState extends ConsumerState<_Academy> {
       capNote: capped
           ? 'E-posta doğrulanmadan en çok sv ${caps.maxTechLevel}.'
           : null,
+      infoText: techInfoText(t.id),
       enabled: canResearch(
         capped: capped,
         afford: afford,

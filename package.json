@@ -18,6 +18,8 @@
     "tokens:check": "pnpm --filter @mobilwar/design-tokens run check",
     "contracts:build": "pnpm --filter @mobilwar/contracts run dart:build",
     "contracts:check": "pnpm --filter @mobilwar/contracts run dart:check",
+    "facts:build": "node --experimental-strip-types ops/facts-to-dart.ts",
+    "facts:check": "node --experimental-strip-types ops/facts-to-dart.ts --check",
     "assets:build": "node ops/assets-sync.mjs",
     "assets:check": "node ops/assets-sync.mjs --check",
     "db:generate": "pnpm --filter @mobilwar/api run db:generate",
@@ -26,6 +28,7 @@
     "dev:infra:down": "docker compose -f compose.dev.yml down"
   },
   "devDependencies": {
+    "@mobilwar/catalog": "workspace:*",
     "@types/node": "^22.10.2",
     "turbo": "^2.10.8",
     "typescript": "^5.7.2",

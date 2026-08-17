@@ -25,6 +25,7 @@ import '../../ui/primitives.dart';
 import 'catalog_model.dart';
 import 'city_model.dart';
 import 'city_panels.dart';
+import 'info_sheets.dart';
 import 'progress_row.dart';
 import 'train_rules.dart';
 import 'upgrade_row.dart';
@@ -185,6 +186,7 @@ class _BuildingsState extends ConsumerState<_Buildings> {
           ? 'E-posta doğrulanmadan en çok sv ${caps.maxBuildingLevel}.'
           : null,
       lockNote: mutex,
+      infoText: buildingInfoText(b.id),
       enabled: canUpgradeBuilding(
         maxed: b.maxed,
         capped: capped,

@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@mobilwar/catalog':
+        specifier: workspace:*
+        version: link:packages/catalog
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.1

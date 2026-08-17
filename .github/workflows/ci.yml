@@ -62,5 +62,10 @@ jobs:
 
       # Mobil, web'in görsellerinin KOPYASINI taşıyor (Flutter paket dışı varlık göremiyor).
       # Kopya sürüklenirse iki istemci farklı ikon gösterir ve kimse fark etmez.
+      # ⭐ Oyun olguları (birim künyeleri · teknik listeleri) web'den mobile üretiliyor.
+      #   Sürüklenirse mobil, motorun söylemediği bir şeyi oyuncuya öğretir (gerekçe üreteçte).
+      - name: Oyun olguları senkron mu
+        run: pnpm facts:check
+
       - name: Görsel varlıklar senkron mu
         run: pnpm assets:check
