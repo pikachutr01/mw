@@ -66,9 +66,8 @@ Future<void> mwTapError() async {
 /// kapanma ve odak tuzağı **bedava** geliyor; elle çizilen bir bindirmede üçünü de ayrı ayrı
 /// doğru yapmak gerekirdi (`more_sheet.dart`ta aynı gerekçe yazılı).
 ///
-/// ⚠️ `isScrollControlled` + `DraggableScrollableSheet` DEĞİL: buradaki sheet'ler içerik
-/// kadar yer kaplıyor. Sürüklenebilir sheet, sefer formu gibi UZUN içerikler geldiğinde
-/// ayrıca eklenecek — bugün olmayan bir ihtiyaç için karmaşıklık taşımıyoruz.
+/// ⚠️ Bu sheet içerik kadar yer kaplıyor. **Uzun içerikler `mwTallSheet` kullanıyor** —
+/// gerekçe orada; bu dosya 2026-08-17'de o ihtiyacı önceden not etmişti ve sefer formu geldi.
 ///
 /// ⚠️ `useSafeArea`: liste gezinme çubuğunun altına kaymasın.
 Future<T?> mwSheet<T>(
@@ -99,6 +98,63 @@ Future<T?> mwSheet<T>(
             // boyutu büyütülmüşken sheet ekranı aşabiliyor.
             Flexible(child: SingleChildScrollView(child: child)),
           ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// ⭐⭐ UZUN SHEET — ekranın çoğunu kaplayan, içi kaydırılabilen form.
+///
+/// `mwSheet` içerik kadar yer kaplıyor ve sefer formu gibi bir ekranda bu yetmiyor: birim
+/// listesi on satır olabiliyor, altına kahraman seçici ve kargo kutuları geliyor. İçerik
+/// kadar büyüyen bir sheet o hâlde ekranı zaten dolduruyor ama **başlığı yukarı itip**
+/// gönder düğmesini klavyenin altına gömüyordu.
+///
+/// ⚠️ Çözüm `DraggableScrollableSheet` DEĞİL, sabit yükseklikli bir kutu: sürüklenebilir
+/// sheet, içinde kendi kaydırma alanı olan bir formda iki kaydırmayı çakıştırıyor (parmak
+/// listeyi mi kaydırıyor, sheet'i mi kapatıyor belirsiz kalıyor). Burada yükseklik **baştan**
+/// belli ve içeriğin kendisi neyin kayıp neyin sabit olduğuna karar veriyor.
+///
+/// ⚠️ `child` **tam yüksekliği alıyor**: form bir `Column` verip üstünü `Expanded` ile
+/// kaydırılabilir, altını (gönder düğmesi) sabit yapabiliyor. İçeriği iki ayrı builder'a
+/// bölmek denendi ve bırakıldı — ikisi aynı forma bakıyor ve durumu paylaşmak için ekrana
+/// özel bir sağlayıcı kurmak gerekiyordu; oysa depodaki diğer formlar durumu düz `setState`
+/// ile tutuyor.
+///
+/// ⚠️ `viewInsets` ŞART: klavye açılınca sheet onun üstüne çıkmalı, yoksa oyuncunun yazdığı
+/// adet kutusu klavyenin altında kalıyor.
+Future<T?> mwTallSheet<T>(
+  BuildContext context, {
+  required String title,
+  required Widget child,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    useSafeArea: true,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: SizedBox(
+        // ⚠️ Ekranın %88'i: üstte kalan şerit, arkadaki bağlamın kaybolmadığını gösteriyor
+        // ve dışarı dokunup kapatmak için bir hedef bırakıyor.
+        height: MediaQuery.of(ctx).size.height * 0.88,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                // ⚠️ `mwUpper` — Cinzel'de `i`nin noktası kaybolur, gerekçe orada.
+                child: Text(
+                  mwUpper(title),
+                  style: mwDisplayStyle(fontSize: 16),
+                ),
+              ),
+              Expanded(child: child),
+            ],
+          ),
         ),
       ),
     ),

@@ -84,6 +84,57 @@ const Map<String, MwFormRule> kFormRules = {
 MwFormRule formRule(String type) =>
     kFormRules[type] ?? (units: MwUnitScope.warriors, cargo: false);
 
+/// ⭐ SERBEST ORDU = barakadaki − mağaraya söz verilenler (kullanıcı kuralı, 2026-08-11).
+///
+/// Sunucu bunu `reserveUnits` içinde zorluyor; burası aynı sayıyı **ekranda** gösteriyor ki
+/// oyuncu reddedilecek bir emri hiç kuramasın.
+Map<String, int> freeUnits(Map<String, int> inCity, Map<String, int> promised) {
+  final out = <String, int>{};
+  inCity.forEach((id, n) {
+    final kalan = n - (promised[id] ?? 0);
+    if (kalan > 0) out[id] = kalan;
+  });
+  return out;
+}
+
+/// Seçilen ordunun taşıma kapasitesi. ⚠️ `carry` sunucudan gelen katalogdan okunuyor.
+int carryCapacity(Map<String, int> units, int Function(String id) carryOf) {
+  var toplam = 0;
+  units.forEach((id, n) {
+    if (n > 0) toplam += carryOf(id) * n;
+  });
+  return toplam;
+}
+
+/// ⭐⭐ FORM GÖNDERİLEBİLİR Mİ — tek karar, tek yerde.
+///
+/// ⚠️ Widget'ın içine dağılsaydı sınanamazdı ve buradaki dallanma az değil: beş bağımsız
+/// koşul ve ikisi göreve özel. `train_rules.dart` ile aynı gerekçe.
+///
+/// ⚠️ **Sunucunun kapısı yine üstte**: `blocked` sunucudan gelen `option.enabled`ın tersi.
+/// Dünya listesindeki kısayoldan doğrudan forma girilebildiği için bu kontrol ŞART — acemi
+/// korumasındaki bir hedefe saldırı formu açılabilir ama gönderilemez.
+bool canSendMission({
+  required String type,
+  required bool blocked,
+  required int unitCount,
+  required int heroCount,
+  required bool cargoFits,
+  required bool affordCargo,
+  required int cargoTotal,
+  required bool pending,
+}) {
+  if (blocked || pending) return false;
+  if (!hasCrew(type, unitCount, heroCount)) return false;
+
+  final rule = formRule(type);
+  if (rule.cargo && (!cargoFits || !affordCargo)) return false;
+  // ⚠️ Nakliyede kargo ZORUNLU: boş nakliyenin anlamı yok. Destek ve şehir kurmada isteğe
+  // bağlı — oralarda asıl iş birlik taşımak.
+  if (type == 'transport' && cargoTotal <= 0) return false;
+  return true;
+}
+
 /// Görev tipi → ekranda görünen ad, simge ve kısa tanıtım (§13.14: İngilizce id görünmez).
 ///
 /// ⚠️ Uzun kural paragrafları BİLEREK yok (web'de kullanıcı kaldırttı): formda yalnız oyuncunun

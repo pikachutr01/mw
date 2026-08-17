@@ -8,17 +8,25 @@
 /// ⚠️ **GİZLİLİK (§13.16.5):** burada da asker ve kaynak YOK. Sunucu göndermiyor, istemci de
 /// türetmeye çalışmıyor — onu öğrenmenin yolu casusluk.
 ///
-/// ⚠️ Sefer gönderme formu (web'deki `world-modal.tsx`) henüz taşınmadı ve **sahte düğme
-/// konmadı**: pasif bir «Saldır» düğmesi, oyuncuya var olmayan bir yetenek vaat ederdi. Eksik
-/// olduğu tek satırda yazıyor.
+/// ⭐⭐ İKİ ADIMLI AKIŞ (web'le aynı): önce **seçenek listesi**, sonra **görev formu**.
+///   1. Seçenekler SUNUCUDAN gelir (`GET /missions/options`) — istemci "kime ne gönderilebilir"i
+///      kendi hesaplamaz; hesaplasaydı kural iki yerde yaşar ve kaçınılmaz olarak kayardı.
+///   2. Seçilen tipe göre form açılır (`mission_form.dart`).
+///
+/// ⚠️ **Kapalı seçenek gizlenmez, sebebiyle gösterilir** — oyuncu neden yapamadığını görmeli.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/providers.dart';
 import '../../core/world_coords.dart';
 import '../../gen/contracts.g.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
+import 'mission_form.dart';
+import 'mission_options.dart';
+import 'mission_rules.dart';
 
 /// Koruma sebebinin oyuncuya görünen karşılığı.
 ///
@@ -66,7 +74,7 @@ Future<void> showTargetSheet(
                 style: TextStyle(color: c.muted),
               ),
               const SizedBox(height: 8),
-              _Yakinda(),
+              _Options(slot: slot, realm: realm),
             ],
           );
         }
@@ -154,7 +162,7 @@ Future<void> showTargetSheet(
             ],
 
             const SizedBox(height: 6),
-            _Yakinda(),
+            _Options(slot: slot, realm: realm),
           ],
         );
       },
@@ -162,16 +170,157 @@ Future<void> showTargetSheet(
   );
 }
 
-/// ⚠️ Sahte düğme yerine düz bir cümle: oyuncuya olmayan bir yetenek vaat etmiyoruz.
-class _Yakinda extends StatelessWidget {
+/// ⭐ SEÇENEK LİSTESİ — sunucunun bu hedefe izin verdiği görevler.
+class _Options extends ConsumerWidget {
+  const _Options({required this.slot, required this.realm});
+
+  final WorldSlot slot;
+  final MwRealm realm;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = MwColors.of(context);
+    final aktif = ref.watch(activeCityProvider).value;
+    if (aktif == null) return const SizedBox.shrink();
+
+    final istek = ref.watch(
+      missionOptionsProvider((
+        originCityId: aktif,
+        k: realm.k,
+        d: realm.d,
+        s: slot.s,
+      )),
+    );
+
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: Text(
-        'Sefer gönderme uygulamaya henüz eklenmedi.',
-        style: TextStyle(fontSize: 12, color: c.muted),
+      child: istek.when(
+        loading: () => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Center(
+            child: Text(
+              'Seçenekler yükleniyor…',
+              style: TextStyle(fontSize: 12, color: c.muted),
+            ),
+          ),
+        ),
+        error: (e, _) => MwErrorBox('Seçenekler alınamadı: $e'),
+        data: (o) {
+          /// ⚠️ «Aktif şehrin kendisi» ile «seçenek yok» AYRI cümleler: biri *"buradan
+          /// bakıyorsun zaten"*, diğeri *"bu hedefe hiçbir şey gönderemezsin"* diyor.
+          if (o.activeCity) {
+            return Text(
+              'Bu, şu anki aktif şehrin. Kendine görev gönderemezsin; başka bir şehrini '
+              'seçersen nakliye, destek ve teleport açılır.',
+              style: TextStyle(fontSize: 12, color: c.muted),
+            );
+          }
+          if (o.options.isEmpty) {
+            return Text(
+              'Bu hedefe gönderilebilecek görev yok.',
+              style: TextStyle(fontSize: 12, color: c.muted),
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Divider(height: 1, color: c.border),
+              for (final opt in o.options)
+                _OptionRow(
+                  option: opt,
+                  teleportReadyAt: o.teleportReadyAt,
+                  onTap: () => showMissionForm(
+                    context,
+                    type: opt.type,
+                    originCityId: aktif,
+                    target: (k: realm.k, d: realm.d, s: slot.s),
+                    option: opt,
+                    attacksLeft: o.attacksLeft,
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _OptionRow extends ConsumerWidget {
+  const _OptionRow({
+    required this.option,
+    required this.teleportReadyAt,
+    required this.onTap,
+  });
+
+  final MissionOption option;
+  final String? teleportReadyAt;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = MwColors.of(context);
+    final info = kMissionInfo[option.type];
+    final acik = option.enabled;
+
+    /// ⭐ Teleport beklemesi: *"hazır değil"* yetmiyor (kullanıcı, 2026-08-03), NE KADAR
+    /// kaldığı lazım. ⚠️ Süre OYUN saatinde işliyor.
+    final clock = ref.watch(clockProvider);
+    ref.watch(tickProvider);
+    final geriSayim = option.type == 'teleport' && !acik
+        ? clock.remaining(teleportReadyAt)
+        : null;
+
+    return InkWell(
+      // ⚠️ Kapalı seçenek TIKLANAMAZ ama görünür kalıyor: sebebi okunacak.
+      onTap: acik ? onTap : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: c.border)),
+        ),
+        child: Opacity(
+          opacity: acik ? 1 : 0.6,
+          child: Row(
+            children: [
+              MwIcon(folder: 'missions', id: info?.icon ?? 'attack', size: 40),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      // ⚠️ Sunucunun `label`ı yedek: yeni bir tip eklenirse ekran boş kalmasın.
+                      info?.title ?? option.label,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      acik
+                          ? (info?.hint ?? '')
+                          : (option.reason ?? 'Şu anda gönderilemez.'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: acik ? c.muted : c.danger,
+                      ),
+                    ),
+                    if (geriSayim != null)
+                      Text(
+                        'Hazır olmasına $geriSayim',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: c.warning,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (acik) Icon(Icons.chevron_right, size: 20, color: c.muted),
+            ],
+          ),
+        ),
       ),
     );
   }

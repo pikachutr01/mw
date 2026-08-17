@@ -25,6 +25,7 @@ import '../core/storage.dart';
 import '../features/armies/movement.dart';
 import '../features/city/catalog_model.dart';
 import '../features/city/city_model.dart';
+import '../features/world/mission_options.dart';
 import '../gen/contracts.g.dart';
 
 /// Önyüklemede override edilir. Override edilmeden okunursa bilerek patlar: sessizce
@@ -392,6 +393,44 @@ final worldProvider = FutureProvider.family<List<WorldSlot>, ({int k, int d})>((
       .toList();
 });
 
+/// ⭐ SEFER SEÇENEKLERİ — bir hedefe hangi görevlerin gönderilebileceği.
+///
+/// ⚠️ Kural sunucuda; istemci hesaplamıyor (gerekçe `mission_options.dart` başlığında).
+/// ⚠️ **Önbelleğe alınmıyor** (emniyet ağı yok, `keepAlive` yok): saldırı hakkı ve teleport
+/// beklemesi zamanla değişiyor, bayat bir seçenek listesi oyuncuya kapalı bir görevi açık
+/// gösterirdi. Sheet her açılışta taze soruyor.
+final missionOptionsProvider =
+    FutureProvider.family<
+      MissionOptions,
+      ({int originCityId, int k, int d, int s})
+    >((ref, q) async {
+      final body = await ref
+          .read(apiProvider)
+          .request(
+            'GET',
+            '/api/v1/missions/options'
+                '?originCityId=${q.originCityId}&k=${q.k}&d=${q.d}&s=${q.s}',
+          );
+      if (body is! Map<String, dynamic>) {
+        throw const MwApiError(0, 'Sefer seçenekleri okunamadı.');
+      }
+      return MissionOptions.fromJson(body);
+    });
+
+/// ⭐ ŞEHİRDEKİ KAHRAMANLAR — sefer formundaki seçici.
+///
+/// ⚠️ Tapınak ekranı henüz yok ama uç var: seçici için tam ekran gerekmiyor, yalnız
+/// `in_city` olanların adı ve seviyesi lazım. Süzgeç `MwCityHero.listFromTemple`ta.
+final cityHeroesProvider = FutureProvider.family<List<MwCityHero>, int>((
+  ref,
+  cityId,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/cities/$cityId/temple');
+  return MwCityHero.listFromTemple(body);
+});
+
 /// ⭐ GÖREV İPTALİ — yoldaki orduyu geri çağırır.
 ///
 /// ⚠️ Başarıdan sonra `city` de tazeleniyor, yalnız `missions` değil: iptal edilen görev bir
@@ -406,6 +445,42 @@ class Missions {
     await _ref
         .read(apiProvider)
         .request('POST', '/api/v1/missions/$missionId/cancel', body: const {});
+    _tazele(_ref, 'missions:changed');
+    _tazele(_ref, 'city:changed');
+  }
+
+  /// ⭐⭐ SEFER GÖNDER — saldırı dâhil **tüm tipler tek uçtan** (`POST /missions/send`).
+  ///
+  /// ⚠️ Başarıdan sonra `city` de tazeleniyor: birlikler ANINDA şehirden düşüyor ve kargo
+  /// kasadan çıkıyor. Yalnız `missions` tazelenseydi oyuncu, gönderdiği orduyu barakada
+  /// durur hâlde görmeye devam ederdi.
+  ///
+  /// ⚠️ `heroIds` ve `cargo` **yalnız doluysa** gönderiliyor: sunucu şeması ikisini de
+  /// isteğe bağlı tanımlıyor ve boş bir `cargo: {0,0}` göndermek, kargosuz görevlerde
+  /// anlamsız bir alan taşımak olurdu.
+  Future<void> send({
+    required String type,
+    required int originCityId,
+    required ({int k, int d, int s}) target,
+    required Map<String, int> units,
+    List<int> heroIds = const [],
+    ({int gold, int food})? cargo,
+  }) async {
+    await _ref
+        .read(apiProvider)
+        .request(
+          'POST',
+          '/api/v1/missions/send',
+          body: {
+            'type': type,
+            'originCityId': originCityId,
+            'target': {'k': target.k, 'd': target.d, 's': target.s},
+            'units': units,
+            if (heroIds.isNotEmpty) 'heroIds': heroIds,
+            if (cargo != null)
+              'cargo': {'gold': cargo.gold, 'food': cargo.food},
+          },
+        );
     _tazele(_ref, 'missions:changed');
     _tazele(_ref, 'city:changed');
   }

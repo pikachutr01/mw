@@ -36,6 +36,7 @@ class CityDetail {
     required this.defenses,
     required this.techs,
     required this.caveUnits,
+    required this.caveStoreUnits,
     required this.queues,
     required this.techQueues,
     required this.wallRepair,
@@ -72,6 +73,17 @@ class CityDetail {
 
   /// ⭐ Mağaradaki birimler. Orijinal Baraka kartında da yazıyor («Mağarada : 0»).
   final Map<String, int> caveUnits;
+
+  /// ⭐⭐ MAĞARAYA SÖZ VERİLMİŞ askerler — sefer formundaki **serbest ordu** hesabı bunu düşüyor.
+  ///
+  /// Kullanıcının örneği (2026-08-11): 50 Cüce var, 30'u mağaraya işaretli → sefere en çok
+  /// 20 Cüce çıkabilir. Askerler hâlâ barakada duruyor ama söz verilmişler ve sunucu
+  /// (`reserveUnits`) onlarla sefere çıkmayı reddediyor. Ham sayıyı göstermek, oyuncuya
+  /// sunucunun kabul etmeyeceği bir seçim yaptırmak olurdu — tam kaçınmak istediğimiz sürpriz.
+  ///
+  /// ⚠️ YALNIZ `store` yönü: `withdraw` emrindeki askerler mağaradadır, zaten barakada
+  /// görünmezler; onları da düşmek aynı askeri iki kez saymak olurdu.
+  final Map<String, int> caveStoreUnits;
 
   final List<CityQueue> queues;
 
@@ -136,6 +148,7 @@ class CityDetail {
       defenses: _counts(j['defenses']),
       techs: _counts(j['techs']),
       caveUnits: _counts((j['cave'] as Map<String, dynamic>?)?['units']),
+      caveStoreUnits: _caveStore(j['cave']),
       queues: (j['queues'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(CityQueue.fromJson)
@@ -188,6 +201,17 @@ class TechQueue {
     startedAt: j['startedAt'] as String,
     finishAt: j['finishAt'] as String,
   );
+}
+
+/// Mağaraya GİRMEKTE olan askerler; başka her durumda boş.
+///
+/// ⚠️ Yön denetimi şart: `withdraw` emrindeki askerler mağaranın içinde ve barakada zaten
+/// görünmüyorlar. Yönü ayırmadan düşmek, aynı askeri iki kez saymak olurdu.
+Map<String, int> _caveStore(Object? cave) {
+  if (cave is! Map) return const {};
+  final job = cave['job'];
+  if (job is! Map || job['direction'] != 'store') return const {};
+  return _counts(job['units']);
 }
 
 ({num integrity, String? from, String until})? _wallRepair(Object? raw) {
