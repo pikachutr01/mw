@@ -1044,9 +1044,17 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
       {r.cave?.present ? (
         <div className="mb-2 rounded-[var(--radius-sm)] border border-border bg-raised px-2.5 py-2 text-xs">
           <b className="text-ink">Mağara</b>
+          {/*
+            ⚠️ ÜÇ DURUM, İKİ DEĞİL (2026-08-17). Eskiden `broken` olmayan her şey «dayandı»
+            (yeşil) yazıyordu — oysa mağara ZATEN YIKIKSA saldırı onu yıkmamış olur ama
+            «dayandı» demek düpedüz yanlış: notta «zaten onarımdaydı» yazarken kutu başarı
+            rengiyle dayandığını söylüyordu, yani ekranın iki parçası birbiriyle çelişiyordu.
+          */}
           {r.cave.broken
             ? <span className="ml-2 font-semibold text-danger">YIKILDI</span>
-            : <span className="ml-2 text-success">dayandı</span>}
+            : r.cave.reason === 'already_repairing'
+              ? <span className="ml-2 text-warning">zaten yıkıktı</span>
+              : <span className="ml-2 text-success">dayandı</span>}
           {/* Saldırana tek işe yarar sayı: bir dahaki sefere kaç cüce gerektiği. */}
           {r.side === 'attacker' && !r.cave.broken && r.cave.reason === 'not_enough_dwarves' ? (
             <span className="tnum ml-2 text-muted">

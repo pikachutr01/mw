@@ -343,14 +343,13 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
    */
   const notes: string[] = [];
 
-  // ⭐ Savunma tabanı (§13.11.10): "en kötü ihtimalle 4'lük garnizon ayakta kalır" kuralının
-  //    gerçekten işlediği raporda GÖRÜNÜR olmalı — yoksa oyuncu sayıları hata sanır.
-  const restored = Object.entries(r.defender.floorRestored ?? {}).filter(([, n]) => n > 0);
-  if (restored.length > 0) {
-    notes.push(
-      `Savunma tabanı devreye girdi: ${restored.map(([id, n]) => `${nameOf(id)} ${n}`).join(', ')} korundu.`,
-    );
-  }
+  /**
+   * ⚠️ **SAVUNMA TABANI NOTU KALDIRILDI** (2026-08-17). Kural (§13.11.10) raporda görünmeye
+   * devam ediyor ama **satırın kendisinde**: kayıp dökümünde o birimin yanında `[taban +N]`
+   * yazıyor (`ReportLine.restoredByFloor`), hem ekranda hem düz metinde. Not, aynı sayıları
+   * ikinci kez — üstelik satırdan KOPUK, birim adlarını tekrar yazarak — söylüyordu.
+   * Bilgi kaybı yok: rozet sayıyı birimin yanında gösteriyor, yani daha okunur yerde.
+   */
 
   /**
    * ⭐ SUR HASARI — **saldıran ORANI görmez** (kullanıcı, 2026-08-08).
@@ -363,14 +362,24 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
    */
   if (integrity != null && integrity < 1 && wallLevel > 0) {
     if (integrity <= 0) {
-      notes.push(side === 'defender'
-        ? 'SUR TAMAMEN YIKILDI — onarımı bitene kadar yeni savunma birimi emri veremezsin. '
-          + 'Süren üretim kesintisiz devam eder.'
-        : 'Rakibin suru TAMAMEN YIKILDI.');
-    } else {
-      notes.push(side === 'defender'
-        ? `Sur bütünlüğü %${Math.round(integrity * 100)}'e düştü.`
-        : 'Rakibin suru hasar gördü.');
+      /**
+       * ⚠️ **DURUM DEĞİL SONUÇ.** "Sur yıkıldı" bilgisi `wall.destroyed` alanında ve iki
+       * yüzeyde de basılıyor (ekranda «Sur … YIKILDI» kutusu, düz metinde `Sur: seviye N —
+       * YIKILDI`). Not eskiden onu bir kez daha söylüyordu; oyuncu aynı cümleyi iki yerde
+       * okuyordu (2026-08-17 bildirimi). Geriye yalnız kutuda OLMAYAN şey kalıyor: yıkımın
+       * savunan için doğurduğu kısıt. Saldıranda böyle bir sonuç yok → not da yok.
+       */
+      if (side === 'defender') {
+        notes.push('Sur onarılana kadar yeni savunma birimi emri veremezsin. '
+          + 'Süren üretim kesintisiz devam eder.');
+      }
+    } else if (side === 'attacker') {
+      /**
+       * ⭐ Kısmi hasarda not YALNIZ saldıranda: oran ona gitmiyor (`wall.integrity` null),
+       * dolayısıyla kutuda «hasar var» diyen hiçbir şey yok — tek sinyal bu cümle.
+       * Savunan ise yüzdeyi zaten kutuda görüyor; ona ayrıca cümle yazmak tekrardı.
+       */
+      notes.push('Rakibin suru hasar gördü.');
     }
   }
 
@@ -399,9 +408,9 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
       notes.push(`${heroesDead.length} kahraman düştü — Tapınak'ta diriltme sürecine girdi.`);
     }
   }
-  if (heroes.captured?.mine) {
-    notes.push(`Savaştan yeni bir kahraman çıktı: ${heroes.captured.name}!`);
-  }
+  /* ⚠️ «Savaştan yeni bir kahraman çıktı» notu KALDIRILDI (2026-08-17): ekran aynı cümleyi
+     zaten kendi kutusunda basıyor (`heroes.captured.mine`). Düz metin yüzeyinde eksik
+     kalmasın diye `renderText` o satırı yazıyor. */
 
   /**
    * Ganimet: saldıran ne ALDIĞINI, savunan ne KAYBETTİĞİNİ görür.
@@ -487,20 +496,29 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
       escaped: side === 'defender' ? (r.defenderPrivate?.cave?.escaped ?? null) : null,
       repairUntil: side === 'defender' ? (r.defenderPrivate?.cave?.repairUntil ?? null) : null,
     };
+    /**
+     * ⚠️ **DURUM SÖZCÜĞÜ NOTTA TEKRARLANMIYOR** (2026-08-17). Mağaranın yıkılıp yıkılmadığı
+     * `cave.broken`/`cave.reason` alanlarında ve ekranın kutusunda yazıyor; not yalnız kutunun
+     * söylemediğini taşır — savunan için SONUÇ, saldıran için SAYI.
+     */
     if (rc.broken) {
       notes.push(side === 'defender'
-        ? 'MAĞARAN YIKILDI. İçerideki ordu şehre kaçıyor; mağara onarılana kadar kullanılamaz.'
-        : `Düşmanın mağarası YIKILDI (${tr(rc.survivingDwarves)} cüce yeterli oldu).`);
+        ? 'İçerideki ordu şehre kaçıyor; mağara onarılana kadar kullanılamaz.'
+        : `Yıkmak için ${tr(rc.survivingDwarves)} cüce yeterli oldu.`);
     } else if (rc.reason === 'already_repairing') {
-      notes.push(side === 'defender'
-        ? 'Mağaran zaten onarımdaydı; yeniden yıkılmadı ve onarım süresi uzamadı.'
-        : 'Düşmanın mağarası zaten yıkıktı.');
-    } else if (rc.reason === 'not_enough_dwarves') {
-      notes.push(side === 'defender'
-        ? `Mağaran dayandı: yıkılması için ${tr(rc.required)} cüce gerekiyordu, `
-          + `${tr(rc.survivingDwarves)} cüce sağ kaldı.`
-        : `Mağara yıkılmadı: ${tr(rc.required)} cüce gerekiyordu, `
-          + `${tr(rc.survivingDwarves)} cüce sağ kaldı.`);
+      /* Kutu bu durumu ayrı yazıyor («zaten yıkıktı»); notta yalnız savunanı ilgilendiren
+         ayrıntı kalıyor — saldırana söylenecek fazladan bir şey yok. */
+      if (side === 'defender') {
+        notes.push('Onarım süresi uzamadı; mağaran yeniden yıkılmadı.');
+      }
+    } else if (rc.reason === 'not_enough_dwarves' && side === 'defender') {
+      /**
+       * ⚠️ Saldıranda not YOK: kutu ona zaten «(gereken N cüce · sağ kalan M)» yazıyor —
+       * bir dahaki sefere kaç cüce getireceğini oradan okuyor. Savunana kutu sayı basmıyor,
+       * bu yüzden cümle ona kalıyor.
+       */
+      notes.push(`Mağaran dayandı: yıkılması için ${tr(rc.required)} cüce gerekiyordu, `
+        + `${tr(rc.survivingDwarves)} cüce sağ kaldı.`);
     }
   }
 
@@ -571,9 +589,29 @@ function renderText(r: BattleReport): string {
     out.push('');
   }
 
+  /**
+   * ⚠️ Kahraman çıkışı BURADA basılıyor çünkü notlardan kaldırıldı (ekranın kendi kutusu var,
+   * düz metnin yok). Aynı gerekçe aşağıdaki mağara satırı için de geçerli.
+   */
+  if (r.heroes.captured?.mine) {
+    out.push(`Savaştan yeni kahraman: ${r.heroes.captured.name}`);
+    out.push('');
+  }
+
   if (r.wall?.level) {
     const pct = r.wall.integrity == null ? null : Math.round(r.wall.integrity * 100);
     out.push(`Sur: seviye ${r.wall.level}${r.wall.destroyed ? ' — YIKILDI' : pct != null ? ` — bütünlük %${pct}` : ''}`);
+  }
+
+  if (r.cave?.present) {
+    /* Durum sözcüğü tek yerde: notlar artık yalnız sonucu/sayıyı taşıyor. */
+    const durum = r.cave.broken
+      ? 'YIKILDI'
+      : r.cave.reason === 'already_repairing' ? 'zaten yıkıktı' : 'dayandı';
+    const sayi = !r.cave.broken && r.cave.reason === 'not_enough_dwarves'
+      ? ` (gereken ${tr(r.cave.required)} cüce · sağ kalan ${tr(r.cave.survivingDwarves)})`
+      : '';
+    out.push(`Mağara: ${durum}${sayi}`);
   }
 
   if (r.loot) {
