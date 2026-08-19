@@ -230,7 +230,10 @@ export const TIME_SHIFT_REGISTRY: readonly TimeShiftEntry[] = [
 export const NON_TIMELINE_COLUMNS: readonly string[] = [
   // 1 — Geçmiş oyun olayları
   'battles.at', 'battles.created_at',
-  'messages.at', 'messages.read_at', 'messages.created_at',
+  /* ⚠️ `favorited_at` `read_at` ile AYNI aile: ikisi de yalnız "işaretli mi" sorusuna cevap
+     veren geçmiş damgaları. Hiçbir kural onları şimdiki zamanla karşılaştırmıyor — favori
+     süzgeci `IS NOT NULL` bakıyor, okundu rozeti de öyle. Kaydırmak tarihi çarpıtmak olurdu. */
+  'messages.at', 'messages.read_at', 'messages.favorited_at', 'messages.created_at',
   'rankings.taken_at', 'ranking_runs.taken_at', 'ranking_runs.created_at',
   'audit_log.at',
   'echo_effects.saw_at', 'echo_effects.applied_at',
