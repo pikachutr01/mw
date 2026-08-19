@@ -280,6 +280,34 @@ describe('mention', () => {
     expect(m.mentions).toEqual([]);
   });
 
+  /**
+   * ⭐⭐ EMOJİLİ MENTION 500 VERİYORDU (kullanıcı bildirimi, 2026-08-17).
+   *
+   * Aday üretimi gövdeyi **UTF-16 kod birimiyle** dilimliyor; emoji iki kod biriminden oluştuğu
+   * için dilim sınırı emojinin ortasına düştüğünde ortaya **eşi olmayan surrogate** çıkıyordu.
+   * `JSON.stringify` onu `\ud83d` diye kaçırıyor (JSON'da geçerli), ama Postgres jsonb'de
+   * eşsiz surrogate'ı REDDEDİYOR: *"Unicode low surrogate must follow a high surrogate."*
+   * Sonuç: sorgu patlıyor, uç 500 dönüyor.
+   */
+  it('⭐ emoji ile birlikte bahsetmek ÇÖKMEZ ve mention çözülür', async () => {
+    const m = await chat.send({
+      worldId, playerId: ali, body: '@Veli 😀 selam', clientMsgId: uuid(),
+    });
+    expect(m.mentions.map((x) => x.id)).toEqual([veli]);
+  });
+
+  it('emoji mention\'dan ÖNCE gelse de çökmez', async () => {
+    const m = await chat.send({
+      worldId, playerId: ali, body: '😀 @Veli selam', clientMsgId: uuid(),
+    });
+    expect(m.mentions.map((x) => x.id)).toEqual([veli]);
+  });
+
+  it('yalnız emoji içeren mesaj (mention yok) sorunsuz', async () => {
+    const m = await chat.send({ worldId, playerId: ali, body: '😀🎉', clientMsgId: uuid() });
+    expect(m.mentions).toEqual([]);
+  });
+
   /* ── Saf yardımcı: aday üretimi (sorguya giden kümenin sınırları) ────────── */
   describe('mentionCandidateNames', () => {
     it('her `@` için ad sınırları arasındaki TÜM alt dizeleri üretir', () => {
@@ -303,6 +331,37 @@ describe('mention', () => {
 
     it('`max: 0` hiç aday üretmez (özellik kapalı)', () => {
       expect(mentionCandidateNames('@Ali', 0)).toEqual([]);
+    });
+
+    /**
+     * ⭐⭐ SORGUYA GİDEN HER ADAY **İYİ BİÇİMLİ** OLMALI — emojili mention 500'ünün kökü.
+     *
+     * Aday üretimi UTF-16 kod birimiyle dilimliyor; emoji iki kod birimi olduğu için sınır
+     * ortaya düştüğünde eşsiz surrogate doğuyor ve `::jsonb` cast'i onu reddediyor.
+     *
+     * ⚠️ Hakem BAĞIMSIZ: kaynak taraf düzenli ifade kullanıyor (tip hedefi ES2022 olduğu için
+     * `isWellFormed` yok), buradaki ölçüt ise UTF-8 gidiş-dönüşü. İkisi ayrışırsa test patlar.
+     * Üstelik bu ölçüt, Postgres sürücüsünün gerçekte yaptığı şeyin aynısı: eşsiz surrogate
+     * kodlanamadığı için değiştirme karakterine dönüşür, yani dize kendine eşit kalmaz.
+     */
+    const iyiBicimli = (s: string): boolean =>
+      new TextDecoder().decode(new TextEncoder().encode(s)) === s;
+
+    it('⭐ emoji yarısından bölünen aday ÜRETİLMEZ (eşsiz surrogate)', () => {
+      for (const body of ['@dengeci 😀', '@Ali 🎉 selam', '@😀😀😀', '@Veli 👨‍👩‍👧 selam']) {
+        const uretilen = mentionCandidateNames(body, 3);
+        for (const n of uretilen) {
+          expect(iyiBicimli(n), `${body} → ${JSON.stringify(n)}`).toBe(true);
+        }
+      }
+    });
+
+    /** Ölçütün kendisi doğru mu — yoksa yukarıdaki test her şeyi geçirirdi. */
+    it('hakem sağlaması: yarım surrogate iyi biçimli SAYILMAZ', () => {
+      expect(iyiBicimli('Ali')).toBe(true);
+      expect(iyiBicimli('a😀b')).toBe(true);
+      expect(iyiBicimli('dengeci \uD83D')).toBe(false);
+      expect(iyiBicimli('\uDE00 selam')).toBe(false);
     });
   });
 });
