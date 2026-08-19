@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/city_progress.dart';
 import '../../core/clock.dart';
+import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 import 'city_model.dart';
 
@@ -24,7 +25,9 @@ import 'city_model.dart';
 class CityData extends ConsumerWidget {
   const CityData({super.key, required this.builder});
 
-  final Widget Function(BuildContext, CityDetail) builder;
+  /// ⚠️ Fizik parametresi ŞART ve kutunun `physics:` alanına konmalı — gerekçe
+  /// `MwRefresh`te: kısa içerikli ekran yoksa hiç kaydırılamıyor ve jest doğmuyor.
+  final Widget Function(BuildContext, CityDetail, ScrollPhysics) builder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,14 +42,24 @@ class CityData extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: MwErrorBox('Şehir alınamadı: $e'),
           ),
-          data: (c) => RefreshIndicator(
-            // ⭐ Aşağı çekerek tazeleme: emniyet ağı 60 sn'de bir tazeliyor ama oyuncunun
-            // "şimdi bak" diyebilmesi beklemekten iyi.
-            onRefresh: () async {
+          /* ⭐ Aşağı çekerek tazeleme: emniyet ağı 60 sn'de bir tazeliyor ama oyuncunun
+             "şimdi bak" diyebilmesi beklemekten iyi.
+
+             ⚠️⚠️ **BİR ARA BEKLEMİYORDU** (2026-08-19'da düzeltildi): `invalidate` anında
+             dönüyor, yani çark veri gelmeden kayboluyordu ve oyuncu eski sayılara bakarken
+             "tazelendi" sanıyordu. Artık yeni `future`lar bekleniyor — gerekçe `MwRefresh`te.
+             ⚠️ Fizik de eksikti: kısa içerikli bir ekran (tek satırlık Akademi) hiç
+             kaydırılamadığı için jest hiç doğmuyordu. */
+          data: (c) => MwRefresh(
+            onRefresh: () {
               ref.invalidate(cityProvider(id));
               ref.invalidate(catalogProvider(id));
+              return mwRefreshAll([
+                ref.read(cityProvider(id).future),
+                ref.read(catalogProvider(id).future),
+              ]);
             },
-            child: builder(context, c),
+            builder: (physics) => builder(context, c, physics),
           ),
         );
   }

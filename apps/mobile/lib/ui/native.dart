@@ -402,3 +402,61 @@ class _TextSheetBodyState extends State<_TextSheetBody> {
     );
   }
 }
+
+/// ⭐⭐ AŞAĞI ÇEKİP TAZELEME — her ekranın tek kapısı.
+///
+/// Emniyet ağı 60 saniyede bir tazeliyor ve WS olayları anlık; yine de oyuncunun **"şimdi
+/// bak"** diyebilmesi beklemekten iyi. Telefonda bunun tek doğal jesti aşağı çekmek.
+///
+/// ⚠️ Tek ekrana eklemek daha kötü olurdu: oyuncu Ordular'da öğrenip Baraka'da denediğinde
+/// hiçbir şey olmazsa jest "bazen çalışan bir şey" hâline gelir. Bu yüzden 2026-08-17'den beri
+/// bilerek bekletildi ve ekranların hepsi gelince tek turda bağlandı.
+///
+/// ─ ⚠️⚠️ KAPATILAN İKİ SESSİZ TUZAK ───────────────────────────────────────────────────────
+///
+/// **1. Beklenmeyen tazeleme.** `RefreshIndicator` çarkı `onRefresh`in döndürdüğü `Future`
+/// bitince kaldırıyor. `ref.invalidate(...)` ANINDA dönüyor, yani çark veri gelmeden kayboluyor
+/// ve oyuncu eski sayılara bakarken "tazelendi" sanıyor. Depoda bu kusur gerçekten vardı
+/// (`city_panels.dart` · `CityData`, bu turda düzeltildi). Doğrusu: geçersiz kıl, **sonra yeni
+/// `future`u bekle**.
+///
+/// **2. Kısa içerik çekilemiyor.** `ListView` varsayılan fizikte, içerik ekranı doldurmuyorsa
+/// **hiç kaydırılmıyor** → aşağı çekme jesti hiç doğmuyor. Boş bir posta kutusunda ya da tek
+/// şehirli oyuncuda tazeleme sessizce ölürdü. `AlwaysScrollableScrollPhysics` şart.
+///
+/// ⭐ İkinci tuzağı **API kapatıyor**: `builder` fiziği parametre olarak veriyor, yani çağıran
+/// onu yazmayı "unutamaz" — kutunun içine koymak zorunda. Bir `child` alsaydık fiziği
+/// dışarıdan dayatmanın yolu yok ve her yeni ekran aynı hatayı yeniden yapardı.
+class MwRefresh extends StatelessWidget {
+  const MwRefresh({super.key, required this.onRefresh, required this.builder});
+
+  /// ⚠️ **Yeni veriyi BEKLEMELİ.** `mwRefreshAll` bunu doğru yapan yardımcı.
+  final Future<void> Function() onRefresh;
+
+  /// Kaydırılabilir kök. ⚠️ Verilen fizik kutunun `physics:` alanına konmak ZORUNDA.
+  final Widget Function(ScrollPhysics physics) builder;
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+    onRefresh: onRefresh,
+    child: builder(const AlwaysScrollableScrollPhysics()),
+  );
+}
+
+/// ⭐ TAZELEMEYİ DOĞRU BEKLEYEN YARDIMCI.
+///
+/// Kullanım kalıbı — **önce geçersiz kıl, sonra yeni `future`u iste**:
+/// ```dart
+/// onRefresh: () {
+///   ref.invalidate(cityProvider(id));
+///   return mwRefreshAll([ref.read(cityProvider(id).future)]);
+/// }
+/// ```
+///
+/// ⚠️⚠️ **HATALAR YUTULUYOR** ve bu bilinçli. `Future.wait` içlerden biri patlarsa fırlatıyor;
+/// o hata `onRefresh`ten çıkıp yakalanmamış zone hatasına dönüşür ve hata perdesi açılır. Oysa
+/// ekranın kendisi zaten hata kutusunu çiziyor (`when(error: …)`) — tazeleme jestinin işi
+/// hatayı GÖSTERMEK değil, çarkı doğru anda kaldırmak.
+Future<void> mwRefreshAll(List<Future<Object?>> futures) async {
+  await Future.wait(futures.map((f) => f.catchError((Object _) => null)));
+}

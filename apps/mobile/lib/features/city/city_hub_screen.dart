@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/providers.dart';
 import '../../core/city_activity.dart';
 import '../../core/city_screens.dart';
+import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 
 class CityHubScreen extends ConsumerWidget {
@@ -29,54 +30,69 @@ class CityHubScreen extends ConsumerWidget {
     final city = cityId == null ? null : ref.watch(cityProvider(cityId)).value;
     final activity = cityActivity(city, cityId);
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        MwPanel(
-          title: 'Şehir',
-          child: Column(
-            children: [
-              for (final s in kCityScreens)
-                InkWell(
-                  onTap: () => context.go(s.path),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      children: [
-                        MwIcon(folder: 'buildings', id: s.icon, size: 32),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                s.label,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
+    return MwRefresh(
+      onRefresh: () {
+        if (cityId == null) return mwRefreshAll(const []);
+        ref.invalidate(cityProvider(cityId));
+        ref.invalidate(citiesProvider);
+        return mwRefreshAll([
+          ref.read(cityProvider(cityId).future),
+          ref.read(citiesProvider.future),
+        ]);
+      },
+      builder: (physics) => ListView(
+        physics: physics,
+        padding: const EdgeInsets.all(12),
+        children: [
+          MwPanel(
+            title: 'Şehir',
+            child: Column(
+              children: [
+                for (final s in kCityScreens)
+                  InkWell(
+                    onTap: () => context.go(s.path),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          MwIcon(folder: 'buildings', id: s.icon, size: 32),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.label,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                s.hint,
-                                style: TextStyle(fontSize: 12, color: c.muted),
-                              ),
-                            ],
+                                Text(
+                                  s.hint,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: c.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        // ⚠️ Nokta okun SOLUNDA: ok her satırda var ve göz onu sınır sayıyor;
-                        //    dışına konan bir nokta satırdan kopuk görünürdü.
-                        if (activity[s.path] == true) ...[
-                          const MwActivityDot(),
-                          const SizedBox(width: 8),
+                          // ⚠️ Nokta okun SOLUNDA: ok her satırda var ve göz onu sınır sayıyor;
+                          //    dışına konan bir nokta satırdan kopuk görünürdü.
+                          if (activity[s.path] == true) ...[
+                            const MwActivityDot(),
+                            const SizedBox(width: 8),
+                          ],
+                          Icon(Icons.chevron_right, color: c.muted),
                         ],
-                        Icon(Icons.chevron_right, color: c.muted),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

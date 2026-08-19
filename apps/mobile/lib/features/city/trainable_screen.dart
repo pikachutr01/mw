@@ -85,7 +85,7 @@ class _Trainable extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return CityData(
-      builder: (context, city) {
+      builder: (context, city, physics) {
         final catalog = ref.watch(catalogProvider(city.id));
         return catalog.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -93,7 +93,8 @@ class _Trainable extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: MwErrorBox('Katalog alınamadı: $e'),
           ),
-          data: (cat) => _Body(kind: kind, city: city, catalog: cat),
+          data: (cat) =>
+              _Body(kind: kind, city: city, catalog: cat, physics: physics),
         );
       },
     );
@@ -101,11 +102,20 @@ class _Trainable extends ConsumerWidget {
 }
 
 class _Body extends ConsumerStatefulWidget {
-  const _Body({required this.kind, required this.city, required this.catalog});
+  const _Body({
+    required this.kind,
+    required this.city,
+    required this.catalog,
+    required this.physics,
+  });
 
   final TrainKind kind;
   final CityDetail city;
   final CityCatalog catalog;
+
+  /// ⚠️ `MwRefresh`ten gelen fizik — kutunun `physics:` alanına konmak ZORUNDA, yoksa kısa
+  /// içerikli ekran hiç kaydırılamıyor ve aşağı çekme jesti doğmuyor.
+  final ScrollPhysics physics;
 
   @override
   ConsumerState<_Body> createState() => _BodyState();
@@ -190,6 +200,7 @@ class _BodyState extends ConsumerState<_Body> {
             clock.gameNow();
 
     return ListView(
+      physics: widget.physics,
       padding: const EdgeInsets.all(12),
       children: [
         // ⭐ Bant YALNIZ emir varken. Boş panel çizmiyoruz.

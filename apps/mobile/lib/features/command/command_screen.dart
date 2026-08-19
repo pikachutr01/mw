@@ -22,6 +22,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/providers.dart';
+import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 import '../alliance/alliance_screen.dart';
 import 'command_rules.dart';
@@ -42,28 +44,51 @@ class _CommandScreenState extends ConsumerState<CommandScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-      children: [
-        MwTabs(
-          value: _tab,
-          items: const [
-            (id: 'overview', label: 'Durum'),
-            (id: 'alliance', label: 'İttifak'),
-            (id: 'rankings', label: 'Sıralama'),
-            (id: 'search', label: 'Arama'),
-          ],
-          onChange: (v) => setState(() => _tab = v),
-        ),
-        const SizedBox(height: 10),
+    /* ⚠️⚠️ Tazeleme AKTİF SEKMEYE bağlı: dört sekme dört ayrı uç okuyor ve hepsini birden
+       geçersiz kılmak, oyuncunun bakmadığı üç isteği her jeste eklemek olurdu. Arama sekmesi
+       DIŞARIDA — orada tazelenecek bir şey yok, sorgu zaten oyuncunun kendi eylemi. */
+    return MwRefresh(
+      onRefresh: () {
         switch (_tab) {
-          // ⭐ 2026-08-19: İttifak ekranı gelince web'deki dörtlü sekme tamamlandı.
-          'alliance' => const AllianceScreen(),
-          'rankings' => const RankingPanel(),
-          'search' => const SearchPanel(),
-          _ => const OverviewPanel(),
-        },
-      ],
+          case 'alliance':
+            ref.invalidate(allianceProvider);
+            return mwRefreshAll([ref.read(allianceProvider(0).future)]);
+          case 'rankings':
+            // ⚠️ Sıralama 8 saatte bir donuyor; jest yine de anlamlı — oyuncu "güncelleme
+            // geldi mi" diye bakabilmeli.
+            ref.invalidate(rankingsProvider);
+            return mwRefreshAll(const []);
+          case 'search':
+            return mwRefreshAll(const []);
+          default:
+            ref.invalidate(overviewProvider);
+            return mwRefreshAll([ref.read(overviewProvider.future)]);
+        }
+      },
+      builder: (physics) => ListView(
+        physics: physics,
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        children: [
+          MwTabs(
+            value: _tab,
+            items: const [
+              (id: 'overview', label: 'Durum'),
+              (id: 'alliance', label: 'İttifak'),
+              (id: 'rankings', label: 'Sıralama'),
+              (id: 'search', label: 'Arama'),
+            ],
+            onChange: (v) => setState(() => _tab = v),
+          ),
+          const SizedBox(height: 10),
+          switch (_tab) {
+            // ⭐ 2026-08-19: İttifak ekranı gelince web'deki dörtlü sekme tamamlandı.
+            'alliance' => const AllianceScreen(),
+            'rankings' => const RankingPanel(),
+            'search' => const SearchPanel(),
+            _ => const OverviewPanel(),
+          },
+        ],
+      ),
     );
   }
 }

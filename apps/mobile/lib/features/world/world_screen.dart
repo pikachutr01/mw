@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/world_coords.dart';
 import '../../gen/contracts.g.dart';
+import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 import 'target_sheet.dart';
 
@@ -290,14 +291,24 @@ class _List extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: MwErrorBox('Diyar alınamadı: $e'),
       ),
-      data: (slots) => ListView.builder(
-        padding: const EdgeInsets.only(bottom: 12),
-        itemCount: slots.length,
-        itemBuilder: (context, i) => _Row(
-          slot: slots[i],
-          alt: i.isOdd,
-          activeCityId: activeCityId,
-          realm: realm,
+      /* ⚠️ Tazeleme YALNIZ diyarı geçersiz kılıyor, şehri değil: bu ekranda oyuncunun
+         merak ettiği şey slotların doluluğu. Şehir listesi de çekmek, ilgisiz bir isteği
+         her jeste eklemek olurdu. */
+      data: (slots) => MwRefresh(
+        onRefresh: () {
+          ref.invalidate(worldProvider(realm));
+          return mwRefreshAll([ref.read(worldProvider(realm).future)]);
+        },
+        builder: (physics) => ListView.builder(
+          physics: physics,
+          padding: const EdgeInsets.only(bottom: 12),
+          itemCount: slots.length,
+          itemBuilder: (context, i) => _Row(
+            slot: slots[i],
+            alt: i.isOdd,
+            activeCityId: activeCityId,
+            realm: realm,
+          ),
         ),
       ),
     );

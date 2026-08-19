@@ -59,31 +59,44 @@ class TempleScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: MwErrorBox('Tapınak alınamadı: $e'),
       ),
-      data: (t) => ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          MwPanel(
-            title: 'Tapınak',
-            trailing: Text(
-              'sv ${t.templeLevel} · ${t.heroCount}/${t.maxHeroes}',
-              style: TextStyle(
-                fontSize: 11,
-                color: MwColors.of(context).onPanelHeader,
-                fontFeatures: const [FontFeature.tabularFigures()],
+      /* ⚠️ Şehir de tazeleniyor: diriltme kaynak harcıyor ve üst bardaki kasa aynı jestle
+         güncellenmezse oyuncu iki farklı tazelikte iki sayı görür. */
+      data: (t) => MwRefresh(
+        onRefresh: () {
+          ref.invalidate(templeProvider(cityId));
+          ref.invalidate(cityProvider(cityId));
+          return mwRefreshAll([
+            ref.read(templeProvider(cityId).future),
+            ref.read(cityProvider(cityId).future),
+          ]);
+        },
+        builder: (physics) => ListView(
+          physics: physics,
+          padding: const EdgeInsets.all(12),
+          children: [
+            MwPanel(
+              title: 'Tapınak',
+              trailing: Text(
+                'sv ${t.templeLevel} · ${t.heroCount}/${t.maxHeroes}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: MwColors.of(context).onPanelHeader,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
-            ),
-            child: t.heroes.isEmpty
-                ? const MwEmpty('Bu şehirde hiç kahraman yok.')
-                : Column(
-                    children: [
-                      for (var i = 0; i < t.heroes.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 10),
-                        _HeroCard(hero: t.heroes[i], cityId: cityId),
+              child: t.heroes.isEmpty
+                  ? const MwEmpty('Bu şehirde hiç kahraman yok.')
+                  : Column(
+                      children: [
+                        for (var i = 0; i < t.heroes.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 10),
+                          _HeroCard(hero: t.heroes[i], cityId: cityId),
+                        ],
                       ],
-                    ],
-                  ),
-          ),
-        ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

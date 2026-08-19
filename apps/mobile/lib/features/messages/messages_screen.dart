@@ -121,63 +121,77 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
       page: gecerli,
     );
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-      children: [
-        _Tabs(
-          tab: _tab,
-          counts: counts,
-          chatUnread: sohbetler?.unread ?? 0,
-          onTab: _switchTab,
-        ),
-        const SizedBox(height: 10),
-
-        if (_error != null) ...[
-          MwErrorBox(_error!),
-          const SizedBox(height: 10),
-        ],
-
-        MwPanel(
-          title: _tab == 'reports' ? 'Raporlar' : 'Mesajlar',
-          trailing: _Trailing(
-            selecting: _selecting,
-            total: toplam,
-            onToggleSelect: () =>
-                setState(() => _selected = _selecting ? null : <String>{}),
+    /* ⚠️ İKİ KAYNAK da tazeleniyor: posta kutusu ve sohbet listesi ayrı uçlar ve ekran
+       ikisini birleştirip gösteriyor (`mergeInbox`). Yalnız birini tazelemek, listenin
+       yarısını bayat bırakırdı. */
+    return MwRefresh(
+      onRefresh: () {
+        ref.invalidate(messagesProvider(sorgu));
+        ref.invalidate(chatConversationsProvider);
+        return mwRefreshAll([
+          ref.read(messagesProvider(sorgu).future),
+          ref.read(chatConversationsProvider.future),
+        ]);
+      },
+      builder: (physics) => ListView(
+        physics: physics,
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        children: [
+          _Tabs(
+            tab: _tab,
+            counts: counts,
+            chatUnread: sohbetler?.unread ?? 0,
+            onTab: _switchTab,
           ),
-          child: sayfa.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: 28),
-              child: Center(child: CircularProgressIndicator()),
+          const SizedBox(height: 10),
+
+          if (_error != null) ...[
+            MwErrorBox(_error!),
+            const SizedBox(height: 10),
+          ],
+
+          MwPanel(
+            title: _tab == 'reports' ? 'Raporlar' : 'Mesajlar',
+            trailing: _Trailing(
+              selecting: _selecting,
+              total: toplam,
+              onToggleSelect: () =>
+                  setState(() => _selected = _selecting ? null : <String>{}),
             ),
-            error: (e, _) => MwErrorBox('Posta kutusu alınamadı: $e'),
-            data: (_) => _List(
-              items: gorunen,
-              tab: _tab,
-              selected: _selected,
-              onOpen: _open,
-              onToggle: _toggle,
-              onLongPress: _startSelection,
+            child: sayfa.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 28),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => MwErrorBox('Posta kutusu alınamadı: $e'),
+              data: (_) => _List(
+                items: gorunen,
+                tab: _tab,
+                selected: _selected,
+                onOpen: _open,
+                onToggle: _toggle,
+                onLongPress: _startSelection,
+              ),
             ),
           ),
-        ),
 
-        if (_selecting) ...[
-          const SizedBox(height: 10),
-          _SelectionBar(
-            visible: gorunen,
-            selected: _selected!,
-            busy: _busy,
-            onSelectAll: _toggleAll,
-            onDelete: () => _deleteSelected(gorunen),
-          ),
-        ],
+          if (_selecting) ...[
+            const SizedBox(height: 10),
+            _SelectionBar(
+              visible: gorunen,
+              selected: _selected!,
+              busy: _busy,
+              onSelectAll: _toggleAll,
+              onDelete: () => _deleteSelected(gorunen),
+            ),
+          ],
 
-        if (sayfaSayisi > 1) ...[
-          const SizedBox(height: 10),
-          _Pager(page: gecerli, pageCount: sayfaSayisi, onPage: _goPage),
+          if (sayfaSayisi > 1) ...[
+            const SizedBox(height: 10),
+            _Pager(page: gecerli, pageCount: sayfaSayisi, onPage: _goPage),
+          ],
         ],
-      ],
+      ),
     );
   }
 

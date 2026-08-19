@@ -29,6 +29,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../gen/contracts.g.dart';
+import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 import 'movement.dart';
 import 'movement_icon.dart';
@@ -74,29 +75,42 @@ class _Strip extends ConsumerWidget {
     ///   • bir şehirdeki hareket sayısı arttıkça sütun uzuyor → dikey.
     /// İkisi dik açıda olduğu için iç içe kaydırma çakışmıyor (aynı eksende olsalardı
     /// jestler birbirini yerdi).
-    return SingleChildScrollView(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 16),
-        child: Row(
-          // ⚠️ `start`: az hareketi olan şehir yukarıda hizalı kalsın. `center` olsaydı
-          // kaleler birbirine göre kayar ve şeridin üst hattı bozulurdu.
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final city in cities) ...[
-              _Cell(
-                city: city,
-                active: city.id == activeId,
-                threat: tehdit.contains(city.id),
-                // ⚠️ Sıra SUNUCUDAN geliyor (`ORDER BY m.created_at, m.id`) ve **korunuyor**:
-                // hareketler şehrin altına ASILDIKLARI sırayla dizili kalmalı (kullanıcı
-                // kuralı). Varışa göre dizilseydi simgeler her saniye yer değiştirir,
-                // oyuncunun parmağı hedefi kaçırırdı.
-                movements: all.where((m) => m.cityId == city.id).toList(),
-              ),
-              const SizedBox(width: 4),
+    /* ⚠️ Aşağı çekip tazeleme DIŞTAKİ (dikey) kaydırıcıya bağlı: içteki yatay ve `RefreshIndicator`
+       yatay kaydırmadan jest üretmiyor. İkisi dik açıda olduğu için çakışma da yok. */
+    return MwRefresh(
+      onRefresh: () {
+        ref.invalidate(movementsProvider);
+        ref.invalidate(citiesProvider);
+        return mwRefreshAll([
+          ref.read(movementsProvider.future),
+          ref.read(citiesProvider.future),
+        ]);
+      },
+      builder: (physics) => SingleChildScrollView(
+        physics: physics,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 16),
+          child: Row(
+            // ⚠️ `start`: az hareketi olan şehir yukarıda hizalı kalsın. `center` olsaydı
+            // kaleler birbirine göre kayar ve şeridin üst hattı bozulurdu.
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final city in cities) ...[
+                _Cell(
+                  city: city,
+                  active: city.id == activeId,
+                  threat: tehdit.contains(city.id),
+                  // ⚠️ Sıra SUNUCUDAN geliyor (`ORDER BY m.created_at, m.id`) ve **korunuyor**:
+                  // hareketler şehrin altına ASILDIKLARI sırayla dizili kalmalı (kullanıcı
+                  // kuralı). Varışa göre dizilseydi simgeler her saniye yer değiştirir,
+                  // oyuncunun parmağı hedefi kaçırırdı.
+                  movements: all.where((m) => m.cityId == city.id).toList(),
+                ),
+                const SizedBox(width: 4),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
