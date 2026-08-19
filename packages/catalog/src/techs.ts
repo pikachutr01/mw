@@ -33,12 +33,68 @@ import type { TechDef, TechId, TechStat } from './types.ts';
  * konumları. En büyük çarpan Zırh'ta (×7), en küçüğü Gece Görüş (×1,7) ve Kimya'da (×1,8) —
  * yani ikisi listede **geriye** düştü. Ölçüm sıralaması dokümanın grup mantığından farklı çıktı
  * ve ölçüm kazandı.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * ⭐⭐ 2026-08-18 — ORAN STANDARDI + ÜÇ FİYAT DÜZELTMESİ
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * Yukarıdaki tur tabanları **savaş statı** ölçüsüyle sıralamıştı ve o ölçü doğruydu; bu tur onu
+ * bozmuyor, iki kör noktasını kapatıyor.
+ *
+ * ### 1) Altın/yemek oranı 1,20'de standartlaştı
+ *
+ * Oranlar 1,00 ile 1,25 arasında dağınıktı ve **Zırh tek başına 1,00'daydı** — oyunun her
+ * yerindeki "altın daha ağır" desenine uymayan tek teknik. Ölçüm (2026-08-18):
+ *
+ * | kalem | altın ÷ yemek |   | gelir (eşit sv) | yemek ÷ altın |
+ * | :-- | --: |   | :-- | --: |
+ * | kahraman diriltme | 1,50 |   | sv 10 | 1,31 |
+ * | yapılar (Teleport hariç) | 1,27 |   | sv 20 | 1,43 |
+ * | **teknikler** | **1,16** |   | sv 40 | 1,70 |
+ * | savunma / savaşçı | ~1,03 |   | | |
+ *
+ * ⚠️ Teknikler zaten ailenin **ılımlı** ucundaydı; sorun ailenin ortalaması değil, içindeki
+ * dağınıklıktı. 1,20 seçildi: yapıların (1,27) altında kalıyor — teknik "ılımlı kategori"
+ * olarak korunuyor — ama Zırh'ın aykırılığı kapanıyor.
+ *
+ * ⚠️ **Oran değişimi PUANI etkilemez**: puan `(altın + yemek) / 1000`, yani toplam sabitken
+ * bölüşümün değişmesi hiçbir şeyi oynatmaz. Bu turda puanı oynatan şey yalnız aşağıdaki üç
+ * TABAN değişikliği.
+ *
+ * ⚠️ Yemek yapısal olarak fazla veriyor (gelir altın başına ~1,3 yemek, harcama ~0,9 tüketiyor;
+ * makas seviyeyle açılıyor ve oyunda asker bakım masrafı YOK). Yani gerçek kısıt altın. Bu,
+ * tekniklerin oranını daha da altın ağırlıklı yapmamak için ikinci sebep.
+ *
+ * ### 2) Gece Görüş 500 → 700: savaş statı ölçüsünün göremediği teknik
+ *
+ * ⚠️⚠️ Yukarıdaki turda Gece Görüş **en az yükselen** teknikti (×1,7) çünkü ölçüt lineer stat
+ * kanalıydı ve Gece Görüş o kanalda hiç görünmüyor: etkisi `combat.ts` · `nightMultiplier`'da,
+ * **tüm gece savaşlarında Can ve Büyü Canı çarpanını** geri kazandırıyor. Savaşların yaklaşık
+ * yarısı gece → dar bir teknik değil, yarı zamanlı KÜRESEL bir savunma çarpanı. Üstelik kapısı
+ * oyunun en derini (Akademi 10 + Casusluk 12). Fiyatta 7. sırada olması ölçüm hatasıydı.
+ *
+ * ### 3) Kimya 350 → 400 · Haritacılık 250 → 300 · Casusluk 300 → 320
+ *
+ * • **Kimya**, Demircilik'ten (400) ucuzdu; oysa kapısı daha derin (Ak 4 ↔ 1) ve etkilediği
+ *   birimler daha pahalı (Mancınık · Kazancı · Mangonel ↔ Cüce · Gnom · Tuzak). Eşitlendi.
+ * • **Haritacılık** oyunun en ucuz tekniğiydi ama etkisi kalıcı ve evrensel: her seferin
+ *   süresini kısaltıyor (`travel.ts` · `cartographyStep`) ve Yük Arabası'nı açıyor.
+ * • **Casusluk** onunla birlikte küçük bir adım aldı ki ikisi arasındaki sıra korunsun.
+ *
+ * ⚠️ **Zırh'ın KAPISI bilerek dokunulmadan bırakıldı.** Akademi 1'de açılan bir teknik olarak
+ * fiyat sıralamasının ikinci basamağında durması bir çelişki — ama çözümü fiyatı düşürmek
+ * DEĞİL (o, güçlü bir tekniği daha da ucuzlatırdı), kapıyı derinleştirmek. Ön-şart değişikliği
+ * ayrı ve bilinçli bir karar olmalı; bu tur yalnız fiyat turudur.
+ *
+ * ⚠️ **Eğri dikliğine (`rate`) dokunulmadı.** Taban DOĞRUSAL: %10 artış seviye 1'i de 20'yi de
+ * %10 artırır, yani "erken ucuz–geç pahalı" ayarını taban yapamaz; onun kaldıracı
+ * `techTuning.<id>:rate`. Teknikten tekniğe farklı diklik, oyuncunun taban fiyatlara bakarak
+ * yapamayacağı bir karşılaştırma yaratacağı için bu turda tercih edilmedi.
  */
 export const TECHS: readonly TechDef[] = [
   {
     id: 'archery', name: { tr: 'Okçuluk' }, rate: 0.05, stat: 'atk',
     units: ['elf', 'pegasus', 'archer_tower', 'ballista'],
-    baseGold: 450, baseFood: 400,
+    baseGold: 450, baseFood: 380,
   },
   {
     /**
@@ -99,17 +155,17 @@ export const TECHS: readonly TechDef[] = [
      */
     id: 'blacksmithing', name: { tr: 'Demircilik' }, rate: 0.05, stat: 'atk',
     units: ['dwarf', 'cavalry', 'gnome', 'shaman', 'trap', 'guard'],
-    baseGold: 400, baseFood: 350,
+    baseGold: 400, baseFood: 330,
   },
   {
     id: 'chemistry', name: { tr: 'Kimya' }, rate: 0.05, stat: 'atk',
     units: ['mangonel', 'oil_cauldron', 'mangonel_tower'],
-    baseGold: 350, baseFood: 300,
+    baseGold: 400, baseFood: 330,
   },
   {
     id: 'instinct', name: { tr: 'İçgüdü' }, rate: 0.05, stat: 'atk',
     units: ['dragon', 'ogre', 'chaos'],
-    baseGold: 650, baseFood: 550,
+    baseGold: 700, baseFood: 580,
   },
   {
     /* ⭐ 2026-07-29: BÜYÜ KALKANI BU LİSTEDEN ÇIKARILDI. Binary'de Büyücülük uygulayıcısı
@@ -117,7 +173,7 @@ export const TECHS: readonly TechDef[] = [
      * nesnelerine hiç dokunmaz. Kalkanın magicHp'si zaten 0 → etkisiz. Kalkanı güçlendiren TILSIM. */
     id: 'sorcery', name: { tr: 'Büyücülük' }, rate: 0.05, stat: 'matk',
     units: ['shaman', 'pegasus', 'dragon', 'chaos'],
-    baseGold: 600, baseFood: 500,
+    baseGold: 650, baseFood: 540,
   },
   {
     /**
@@ -136,7 +192,7 @@ export const TECHS: readonly TechDef[] = [
     id: 'armor', name: { tr: 'Zırh' }, rate: 0.06, stat: 'pmit',
     units: ['dwarf', 'elf', 'cavalry', 'pegasus', 'dragon', 'mangonel', 'ogre', 'shaman', 'gnome',
       'chaos', 'oil_cauldron', 'guard'],
-    baseGold: 700, baseFood: 700,
+    baseGold: 700, baseFood: 580,
   },
   {
     // "Savunma ünitelerinin fiziksel savunma gücünü %6 arttırır" (Okçu Kulesi, Mangonel, Balista, Sur)
@@ -172,7 +228,7 @@ export const TECHS: readonly TechDef[] = [
     id: 'masonry', name: { tr: 'Taş Ustalığı' }, rate: 0.06, stat: 'pmit',
     rateByUnit: { wall: 0.05 },
     units: ['archer_tower', 'mangonel_tower', 'ballista', 'wall'],
-    baseGold: 550, baseFood: 450,
+    baseGold: 550, baseFood: 460,
   },
   {
     /* "Büyü savunma gücünü %5 arttırır" — Mancınık/Kaos/Yük/Casus HARİÇ.
@@ -260,13 +316,13 @@ export const TECHS: readonly TechDef[] = [
      * D2 tam o uçurumun üstünde; diğer 19 senaryo bu parametreye duyarsız.
      */
     rateByUnit: { magic_shield: 0.05 },
-    baseGold: 700, baseFood: 600,
+    baseGold: 700, baseFood: 580,
   },
   // ── Savaş statlarına doğrudan etkisi olmayan teknikler ───────────────────────
-  { id: 'espionage', name: { tr: 'Casusluk' }, rate: 0, stat: null, units: [], baseGold: 300, baseFood: 250 },
-  { id: 'cartography', name: { tr: 'Haritacılık' }, rate: 0, stat: null, units: [], baseGold: 250, baseFood: 200 },
+  { id: 'espionage', name: { tr: 'Casusluk' }, rate: 0, stat: null, units: [], baseGold: 320, baseFood: 270 },
+  { id: 'cartography', name: { tr: 'Haritacılık' }, rate: 0, stat: null, units: [], baseGold: 300, baseFood: 250 },
   { id: 'colonization', name: { tr: 'Sömürgecilik' }, rate: 0, stat: null, units: [], baseGold: 1200, baseFood: 1000 },
-  { id: 'night_vision', name: { tr: 'Gece Görüş' }, rate: 0, stat: null, units: [], baseGold: 500, baseFood: 450 },
+  { id: 'night_vision', name: { tr: 'Gece Görüş' }, rate: 0, stat: null, units: [], baseGold: 700, baseFood: 580 },
 ] as const;
 
 export const TECHS_BY_ID: Readonly<Record<string, TechDef>> = Object.fromEntries(

@@ -116,8 +116,13 @@ import { DEFAULT_CATALOG_CONFIG, catalogHash, mergeCatalogConfig } from '../src/
  * 12000/3000 → 7000/1750. Büyüme oranlarına DOKUNULMADI — `1,8` Java'nın kendi sabiti.
  * ⭐ Altıncı değişiklikte eklenen `d` alanı bu turda işini gördü: Sur/Kalkan `BUILDINGS`
  * tablosunda değil `UNITS`te, yani eski yük onları da kaçırabilirdi.
+ *
+ * ⚠️ **2026-08-18, SEKİZİNCİ değişiklik: `2aea7b08` → `ac6c705b`.** Teknik tabanlarının oran
+ * standardı (altın/yemek 1,20) ve üç fiyat düzeltmesi: Gece Görüş 500 → 700, Kimya 350 → 400,
+ * Haritacılık 250 → 300 (+ Casusluk 300 → 320). Gerekçelerin tamamı `techs.ts` başlığında.
+ * ⭐ Bu tur `TECHS` tablosunda; yani özet onu ilk yükten (`t`) beri zaten görüyordu.
  */
-const DEFAULT_HASH = '2aea7b08';
+const DEFAULT_HASH = 'ac6c705b';
 
 describe('catalogHash', () => {
   it('⭐ varsayılan özet SABİT', () => {
@@ -135,7 +140,7 @@ describe('catalogHash', () => {
     const cfg = mergeCatalogConfig({ economy: { foodRate: 1.2 } });
     expect(cfg).not.toBe(DEFAULT_CATALOG_CONFIG);
     expect(catalogHash(cfg)).not.toBe(DEFAULT_HASH);
-    expect(catalogHash(cfg)).toBe('65367cf0');
+    expect(catalogHash(cfg)).toBe('c356c281');
   });
 
   /**
