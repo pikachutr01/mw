@@ -136,3 +136,36 @@ class WorldSlotCity {
         protection: json['protection'] as String?,
       );
 }
+
+class ChatConversation {
+  const ChatConversation({
+    required this.channelId,
+    required this.playerId,
+    required this.username,
+    this.lastMessage,
+    required this.lastFromMe,
+    this.lastMessageAt,
+    required this.unreadCount,
+    required this.blocked,
+  });
+
+  final int channelId;
+  final int playerId;
+  final String username;
+  final String? lastMessage;
+  final bool lastFromMe;
+  final String? lastMessageAt;
+  final int unreadCount;
+  final bool blocked;
+
+  factory ChatConversation.fromJson(Map<String, dynamic> json) => ChatConversation(
+        channelId: (json['channelId'] as num).toInt(),
+        playerId: (json['playerId'] as num).toInt(),
+        username: json['username'] as String,
+        lastMessage: json['lastMessage'] as String?,
+        lastFromMe: json['lastFromMe'] as bool,
+        lastMessageAt: json['lastMessageAt'] as String?,
+        unreadCount: (json['unreadCount'] as num).toInt(),
+        blocked: json['blocked'] as bool,
+      );
+}

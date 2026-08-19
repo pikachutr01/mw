@@ -177,6 +177,24 @@ class _BottomBar extends ConsumerWidget {
     /// çoğunlukla üretimle meşgul. Gelen saldırıyı fark ettiren tek kalıcı sinyal bu.
     final rozet = armiesBadge(ref.watch(movementsProvider).value ?? const []);
 
+    /// ⭐ MESAJ ROZETİ — okunmamış rapor + mesaj toplamı (2026-08-18).
+    ///
+    /// ⚠️ Sorgu **tek satırlık** (`pageSize: 1`): alt bar yalnız `unread` sayısını okuyor ve
+    /// sunucu onu süzgeçten bağımsız hesaplıyor, yani yirmi satır taşımanın anlamı yok.
+    /// Web'de de aynı çağrı (`Shell.tsx` · `useMessages({ pageSize: 1 })`).
+    ///
+    /// ⚠️ Tonu **daima kırmızı**: Ordular rozetinin üç tonu «bu bana tehdit mi» sorusuna
+    /// cevap veriyor, posta kutusunda ise böyle bir ayrım yok — okunmamış her satır aynı
+    /// derecede "bakılmayı bekliyor". Aynı bileşeni farklı bir anlamla renklendirmek
+    /// tonların anlamını bulanıklaştırırdı.
+    /// ⚠️ **İKİ KAYNAK toplanıyor** (2026-08-18, Sohbet turunda tamamlandı): posta kutusu
+    /// (`messages` tablosu) ve DM sohbetleri (`chat_*`). Yalnız birincisini saysaydık, gelen
+    /// bir özel mesaj alt barda hiç görünmezdi — oyuncunun ekrana bakmadan fark edeceği tek
+    /// sinyal bu rozet.
+    final okunmamis =
+        (ref.watch(messagesProvider(kUnreadQuery)).value?.unread ?? 0) +
+        (ref.watch(chatConversationsProvider).value?.unread ?? 0);
+
     return Container(
       decoration: BoxDecoration(
         color: c.panelHeader,
@@ -196,9 +214,15 @@ class _BottomBar extends ConsumerWidget {
                   label: tabs[i].label,
                   active: i == index,
                   onTap: () => context.go(tabs[i].path),
-                  // ⚠️ Bugün yalnız Ordular'da; Mesaj sekmesinin okunmamış rozeti o ekran
-                  // gelince aynı yerden bağlanacak (web'de ikisi yan yana).
-                  badge: tabs[i].path == '/armies' ? rozet : null,
+                  // ⚠️ İki rozet, iki kaynak, aynı yer (web'de de yan yana).
+                  badge: switch (tabs[i].path) {
+                    '/armies' => rozet,
+                    '/messages' when okunmamis > 0 => (
+                      count: okunmamis,
+                      tone: MwTone.danger,
+                    ),
+                    _ => null,
+                  },
                 ),
               _BarItem(
                 // Web'de de aynı simge (`menu/secenekler.png`).

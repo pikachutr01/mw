@@ -16,6 +16,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../ui/primitives.dart';
+import '../chat/global_chat_sheet.dart';
 import 'shell.dart';
 
 /// Listeyi açar. ⚠️ `showModalBottomSheet` kullanılıyor: geri tuşuyla kapanması, dışarı
@@ -42,6 +43,28 @@ class _MoreSheet extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          /* ⭐⭐ GENEL SOHBET — rota DEĞİL, buradan açılan bir sheet (2026-08-19).
+           *
+           * ⚠️ Rota olsaydı ekranın kendisi «bağlı» hâli olurdu ve oyuncu başka bir sayfaya
+           * geçtiğinde bağlantı kopardı; oysa web'de sohbet rotaların DIŞINDA yaşıyor
+           * (*"oyuncu sohbet açıkken Baraka'ya geçip üretim yapabilmeli"*). Sheet de aynı
+           * şeyi yapmıyor — mobilde sheet açıkken zaten başka sayfaya geçilmiyor ve
+           * kullanıcının mobil için tarifi tam olarak buydu: *"alttan açılsın, açık olduğu
+           * sürece sohbete bağlı kabul edilsin."*
+           *
+           * ⚠️⚠️ **Panelden kapalıysa madde HİÇ çizilmiyor** (`globalChat` bayrağı): kullanıcı
+           * şartı özelliğin "tamamen iptal" edilebilmesi ve canlıya çıkışta bu vana
+           * kapatılacak. Açık bırakılan bir madde, dokununca hata veren bir kapı olurdu. */
+          if (ref.watch(worldStateProvider).value?.globalChat ?? false)
+            ListTile(
+              dense: true,
+              leading: const MwIcon(folder: 'menu', id: 'mesaj', size: 22),
+              title: const Text('Genel Sohbet'),
+              onTap: () {
+                Navigator.of(context).pop();
+                showGlobalChatSheet(context);
+              },
+            ),
           for (final m in drawerItems)
             ListTile(
               dense: true,

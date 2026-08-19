@@ -21,7 +21,9 @@ import '../features/city/academy_screen.dart';
 import '../features/city/trainable_screen.dart';
 import '../features/city/buildings_screen.dart';
 import '../features/city/city_hub_screen.dart';
+import '../features/command/command_screen.dart';
 import '../features/guest/landing_screen.dart';
+import '../features/messages/messages_screen.dart';
 import '../features/temple/temple_screen.dart';
 import '../features/world/world_screen.dart';
 import '../core/city_screens.dart';
@@ -89,6 +91,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/academy', builder: (_, _) => const AcademyScreen()),
           GoRoute(path: '/defense', builder: (_, _) => const DefenseScreen()),
           GoRoute(path: '/temple', builder: (_, _) => const TempleScreen()),
+          GoRoute(path: '/messages', builder: (_, _) => const MessagesScreen()),
+          GoRoute(path: '/command', builder: (_, _) => const CommandScreen()),
           // ⚠️ Kalan şehir ekranları yer tutucu ama ROTASI VAR: olmasaydı sekme şeridine
           // dokunmak «Bilinmeyen sayfa» hatasına düşerdi.
           for (final s in kCityScreens.where(
@@ -105,7 +109,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           for (final t in tabs.where(
             (t) =>
-                t.path != '/city' && t.path != '/armies' && t.path != '/world',
+                t.path != '/city' &&
+                t.path != '/armies' &&
+                t.path != '/world' &&
+                t.path != '/messages' &&
+                t.path != '/command',
           ))
             GoRoute(
               path: t.path,

@@ -163,6 +163,29 @@ const List<({String key, String icon, String label})> kHeroSkills = [
 /// ⚠️ Sınır orijinalden geliyor (J2ME «Şehir Adı» formu) ve **sunucu doğrulaması aynı
 /// sayılara bakıyor**. İstemcide elle yazılsaydı, kutu sunucunun reddedeceği bir adı kabul
 /// edip düğmeyi açardı — web'de tam bu yaşandı (kutu 2-24 diyordu, sunucu 3-10 istiyordu).
+/// ⭐ ASKERÎ UNVANLAR — basamak → (rozet dosyası, Türkçe ad).
+///
+/// ⚠️ `id` aynı zamanda `assets/ranks/<id>.png` dosya adı. Elle yazılan bir liste,
+/// rozetin **sessizce** çizilmemesine yol açardı: `MwIcon` bulunamayan dosyada hata vermiyor.
+/// ⚠️ Eşik ve süre BURADA YOK — ikisi de panelden dünya başına değiştirilebiliyor, sabit bir
+/// tablo ayarı değiştirilmiş dünyada yalan söylerdi.
+const Map<int, ({String id, String name})> kMeritTiers = {
+  1: (id: 'subay', name: 'Subay'),
+  2: (id: 'komutan', name: 'Komutan'),
+  3: (id: 'baskomutan', name: 'Başkomutan'),
+  4: (id: 'maresal', name: 'Mareşal'),
+};
+
+/// ⭐ SEVİYE TAŞIYAN KALEMLER — `defenses` tablosunda adet değil SEVİYE tutuyorlar.
+///
+/// ⚠️ İki sonucu var ve ikisi de Genel Durum tablosunda görünüyor: sayı «sv. N» diye
+/// yazılıyor ve şehirler arası **toplanmıyor** (toplam sütununda «-»).
+const Set<String> kLevelBased = {
+  'wall',
+  'magic_shield',
+  'temple',
+};
+
 const int kNameMin = 3;
 const int kNameMax = 15;
 const String kNameRuleMessage = 'Ad 3-15 karakter olmalı; harf, rakam ve boşluk kullanılabilir.';

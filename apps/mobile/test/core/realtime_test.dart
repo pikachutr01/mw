@@ -109,7 +109,65 @@ void main() {
         'missions:changed',
         'messages:changed',
         'battle:resolved',
+        'chat:message',
+        'chat:global',
+        'chat:global:deleted',
+        'chat:alliance',
+        'chat:alliance:deleted',
+        'alliance:changed',
       });
+    });
+
+    /// ⭐⭐ ODA OLAYLARI `kInvalidates`ten AYRI bir listede ve öyle kalmalı (2026-08-19).
+    ///
+    /// ⚠️ O tablonun her satırı "bir sorguyu tazele" demek; `kRoomEvents`in tazeleyecek bir
+    /// sorgusu YOK — «yazıyor…» ve «kaç kişi bağlı» hiçbir tabloda durmuyor, yalnız o anda
+    /// var. İkisini birleştirmek, yük taşıyan bir olayın yanlışlıkla sorgu tazelemesine (ya
+    /// da tersine, bir konunun yükünün okunmaya çalışılmasına) yol açardı.
+    test('⭐⭐ oda olayları konu tablosuyla ÇAKIŞMIYOR', () {
+      for (final ad in kRoomEvents) {
+        expect(
+          kInvalidates.containsKey(ad),
+          isFalse,
+          reason:
+              '$ad iki tabloda birden — biri yük taşır, diğeri sorgu tazeler',
+        );
+      }
+    });
+
+    /// ⚠️ Üç oda türünün üçünün de «yazıyor» olayı dinleniyor olmalı: biri eksikse o sohbette
+    /// gösterge sessizce hiç yanmaz ve bunu hiçbir hata bildirmez.
+    test('⭐ üç oda türünün yazıyor olayı da dinleniyor', () {
+      for (final r in MwChatRoom.values) {
+        expect(
+          kRoomEvents,
+          contains(r.typingEvent),
+          reason: '${r.name} odasının «yazıyor» olayı dinlenmiyor',
+        );
+      }
+    });
+
+    /// ⚠️⚠️ Sunucuda ÜÇ AYRI slot var ve her slot tek kanal tutuyor. İki oda türü aynı olay
+    /// adını paylaşsaydı, biri diğerini odadan atardı — oyuncu DM ile genel sohbeti aynı anda
+    /// açık tutabiliyor.
+    test('⭐⭐ üç oda türünün olay adları BİRBİRİNDEN farklı', () {
+      final acilis = MwChatRoom.values.map((r) => r.openEvent).toSet();
+      final kapanis = MwChatRoom.values.map((r) => r.closeEvent).toSet();
+      expect(acilis.length, MwChatRoom.values.length);
+      expect(kapanis.length, MwChatRoom.values.length);
+    });
+
+    /// ⭐ ÖZEL MESAJ İKİ ŞEYİ tazelemek zorunda (2026-08-18): sohbet LİSTESİ (önizleme ve
+    /// okunmamış rozeti) ve açık sohbetin GEÇMİŞİ (balonun kendisi).
+    ///
+    /// ⚠️ Yalnız geçmiş yazılsaydı, sohbet kapalıyken gelen mesaj hiçbir yerde görünmezdi:
+    /// olay gelir, kimse dinlemez, Mesajlar sekmesi eski önizlemeyi göstermeye devam eder.
+    /// ⚠️ Yalnız liste yazılsaydı, sohbet AÇIKKEN gelen mesaj ekrana hiç düşmezdi.
+    test('⭐ `chat:message` hem listeyi hem geçmişi tazeliyor', () {
+      expect(
+        kInvalidates['chat:message'],
+        containsAll(['chat', 'chat-history']),
+      );
     });
 
     /// ⭐ Kullanıcı şartı (2026-08-16): saldırı yenen oyuncunun **Baraka ekranı** anında
@@ -117,6 +175,20 @@ void main() {
     /// savaş öncesini göstermeye devam eder ve bu sessiz bir arızadır.
     test('⭐ savaş olayı Baraka ekranının İKİ kaynağını da tazeler', () {
       expect(kInvalidates['battle:resolved'], containsAll(['city', 'catalog']));
+    });
+
+    /// ⭐ 2026-08-18: Komuta Merkezi gelince liste **web'in `BATTLE_KEYS` dizisiyle birebir**
+    /// oldu. ⚠️ `overview` eksikken Genel Durum toplamları 5 dakikaya kadar savaş öncesini
+    /// yazıyordu — web'de tam bu denetimde çıkmıştı.
+    test('⭐ savaş olayı web tarafının BATTLE_KEYS listesiyle birebir', () {
+      expect(kInvalidates['battle:resolved']!.toSet(), {
+        'messages',
+        'missions',
+        'city',
+        'catalog',
+        'temple',
+        'overview',
+      });
     });
 
     test('her konunun en az bir hedefi var (ölü satır yok)', () {

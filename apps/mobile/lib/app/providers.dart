@@ -23,8 +23,15 @@ import '../core/realtime.dart';
 import '../core/session.dart';
 import '../core/storage.dart';
 import '../features/armies/movement.dart';
+import '../features/alliance/alliance_model.dart';
+import '../features/chat/chat_message.dart';
+import '../features/chat/room_message.dart';
+import '../features/command/overview_model.dart';
+import '../features/command/ranking_model.dart';
 import '../features/city/catalog_model.dart';
 import '../features/city/city_model.dart';
+import '../features/messages/battle_report.dart';
+import '../features/messages/message.dart';
 import '../features/temple/hero_model.dart';
 import '../features/world/mission_options.dart';
 import '../gen/contracts.g.dart';
@@ -251,6 +258,11 @@ void _tazele(Ref ref, String topic) {
         ref.invalidate(citiesProvider);
       case 'city':
         ref.invalidate(cityProvider);
+      case 'overview':
+        // ⭐ 2026-08-18: Komuta Merkezi gelince web'in tablosundaki `overview` anahtarı
+        // mobilde de karşılık buldu. ⚠️ Savaş şehirdeki orduyu, savunmayı ve kasayı
+        // değiştiriyor; Genel Durum tablosu üçünü de gösteriyor.
+        ref.invalidate(overviewProvider);
       case 'catalog':
         // ⚠️⚠️ **`catalogProvider` 2026-08-16'ya kadar EKSİKTİ** — yalnız ad sözlüğü
         // tazeleniyordu. Oysa Baraka ekranının kendisi `catalogProvider`ı okuyor
@@ -268,8 +280,29 @@ void _tazele(Ref ref, String topic) {
       case 'temple':
         // ⭐ Savaşta kahraman ölüyor; ekran açıkken durumu «Şehirde» kalmaya devam ediyordu.
         ref.invalidate(templeProvider);
-      // ⚠️ `messages` ekranı henüz yok; konu tabloda duruyor ki sunucu yaydığında sessizce
-      // düşmesin — ekran geldiğinde tek satır eklenecek.
+      case 'messages':
+        // ⭐ 2026-08-18: Posta kutusu ekranı gelince tablodaki son karşılıksız konu bağlandı.
+        // ⚠️ **Aile ayrımı yapılmıyor** (`invalidate(messagesProvider)` — tek argümanla tüm
+        // aile): alt bardaki rozet sorgusu (`pageSize: 1`) ile ekranın liste sorgusu ayrı
+        // anahtarlarda ve ikisi de aynı anda düşmeli. Web'de bu tam olarak yanlış yapılmıştı
+        // (`getQueryData(['messages'])` TAM eşleşme arıyordu) ve iyimser rozet düşüşü aylarca
+        // sessizce ölü kaldı.
+        ref.invalidate(messagesProvider);
+      case 'chat':
+        ref.invalidate(chatConversationsProvider);
+      case 'alliance':
+        // 2026-08-19: Ittifak ekrani gelince tabloda karsiliksiz duran konu baglandi.
+        // Aile ayrimi yok: hangi sayfa acikse o tazelensin.
+        ref.invalidate(allianceProvider);
+      case 'alliance-chat-history':
+        ref.invalidate(allianceChatHistoryProvider);
+      case 'global-chat-history':
+        ref.invalidate(globalChatHistoryProvider);
+      case 'chat-history':
+        // ⚠️ Aile ayrımı yapılmıyor: açık sohbet hangisiyse onun geçmişi tazelenmeli ve olay
+        // hangi kanala ait olduğunu **taşımıyor** (kural: olay haber taşır, veri değil).
+        // Kapalı kanalların tazelenmesi bedava — dinleyicisi olmayan aile üyesi zaten ölü.
+        ref.invalidate(chatHistoryProvider);
     }
   }
 }
@@ -549,6 +582,733 @@ class Missions {
 }
 
 final missionsProvider = Provider<Missions>(Missions.new);
+
+/// ⭐⭐ POSTA KUTUSU — `GET /api/v1/messages`, **sunucu tarafında sayfalı ve süzgeçli**.
+///
+/// ⚠️ Anahtar `kind` ve `page` TAŞIYOR: sekme ya da sayfa değişince gerçekten yeni bir istek
+/// gidiyor. Bir ara web'de tek bir `['messages']` anahtarı vardı ve istemci `slice` ile
+/// "sayfalıyordu" — yani sayfalama görsel bir yanılsamaydı.
+///
+/// ⚠️ **Rozet sorgusu da BU sağlayıcı**, `pageSize: 1` ile (web'de de öyle: `Shell.tsx`).
+/// Ayrı bir sayaç ucu açmak, aynı sayıyı iki yoldan getirmek olurdu; alt bar yalnız `unread`i
+/// okuyor ve tek satırlık bir sayfa onu da taşıyor.
+///
+/// ⚠️ Emniyet ağı diğerleriyle aynı 60 sn. Gerçek tazeleme WS'ten geliyor
+/// (`messages:changed`, `battle:resolved`).
+final messagesProvider =
+    FutureProvider.family<
+      MessagePage,
+      ({String kind, int page, int pageSize})
+    >((ref, q) async {
+      // ⚠️ Oturuma bağlı: çıkışta kutu boşalsın, yeni girişte yeniden çekilsin
+      // (`citiesProvider` ile aynı gerekçe).
+      if (ref.watch(sessionProvider) == null) return MessagePage.empty;
+
+      final timer = Timer(kCitySafetyNet, ref.invalidateSelf);
+      ref.onDispose(timer.cancel);
+
+      final body = await ref
+          .read(apiProvider)
+          .request(
+            'GET',
+            '/api/v1/messages'
+                '?kind=${q.kind}&page=${q.page}&limit=${q.pageSize}',
+          );
+      if (body is! Map<String, dynamic>) {
+        throw const MwApiError(0, 'Posta kutusu okunamadı.');
+      }
+      return MessagePage.fromJson(body);
+    });
+
+/// ⭐ ALT BARDAKİ OKUNMAMIŞ ROZETİ — tek satırlık sayfa.
+///
+/// ⚠️ Sayı **iki sekmenin toplamı** (`unread`), sekme ayrımı yok: alt bardaki tek rozet
+/// "posta kutusunda bekleyen bir şey var mı" sorusuna cevap veriyor, hangi sekmede olduğu
+/// ekran açılınca zaten görünüyor.
+const kUnreadQuery = (kind: 'all', page: 0, pageSize: 1);
+
+/// ⭐ TEK MESAJIN GÖVDESİ — liste ucundan AYRI (sunucuda 2026-08-03'te ayrıldı).
+///
+/// Liste 60 saniyede bir dönüyor ve gövdeler küçük değil: bir savaş raporunda ganimet
+/// dökümü, mağara dökümü ve iki birim sözlüğü; bir casus raporunda hedefin TÜM birim ve
+/// savunma sayımı. Gövde yalnız detay açılınca gerekiyor.
+///
+/// ⚠️ Emniyet ağı YOK ve olmamalı: gövde yazıldığı gibi kalıyor, tazelenecek bir şeyi yok.
+/// ⚠️ Sözleşme borcu: gövde `jsonb` ve türü sunucuda da `Record<string, unknown>` — burada
+/// tiplemek sahte bir kapı olurdu. Alanlar okunduğu yerde savunmayla çözülüyor.
+final messageBodyProvider = FutureProvider.family<Map<String, dynamic>, int>((
+  ref,
+  id,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/messages/$id');
+  final icerik = body is Map ? body['body'] : null;
+  return icerik is Map<String, dynamic> ? icerik : const {};
+});
+
+/// ⭐⭐ SAVAŞ RAPORU — `GET /api/v1/battles/:id`.
+///
+/// ⚠️ **Her açılışta sunucudan** çekiliyor: emniyet ağı yok ama önbellek de tutulmuyor
+/// (`autoDispose` varsayılan). Rapor bir savaşın KANITI; önbellekten bayat gösterilmesi
+/// "sayılar tutmuyor" tartışması doğurur. Web'de aynı karar (`staleTime: 0` +
+/// `refetchOnMount: 'always'`).
+final battleProvider = FutureProvider.family<BattleReport, int>((
+  ref,
+  battleId,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/battles/$battleId');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Rapor okunamadı.');
+  }
+  return BattleReport.fromJson(body);
+});
+
+/// ⭐ POSTA KUTUSU EYLEMLERİ — okundu işaretle · sil · ittifak davetini karara bağla.
+///
+/// ⚠️ **İyimser güncelleme YOK** (web'den bilinçli ayrılma). Web `markRead`i iyimser yapıyor:
+/// rozet sunucu yanıtını beklemeden düşüyor. Burada gerek kalmadı çünkü mobilde detay bir
+/// **sheet** ve açılış animasyonu zaten sunucu turundan uzun; iyimser yol, karşılığında
+/// geri-alma dalı ve ikinci bir doğruluk kaynağı isterdi.
+class Messages {
+  const Messages(this._ref);
+
+  final Ref _ref;
+
+  /// ⚠️ Sunucu 204 dönüyor ve zaten okunmuş satırı hiç güncellemiyor: ikinci kez çağırmak
+  /// zararsız. Bu yüzden istemcide "okunmuş muydu" kontrolü yapılmıyor.
+  Future<void> markRead(int id) async {
+    await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/messages/$id/read', body: const {});
+    _tazele(_ref, 'messages:changed');
+  }
+
+  /// ⭐ Tek satır da toplu seçim de **AYNI uçtan** (`ids` dizisi) — sunucuda tek sahiplik
+  /// koşulu var, ikinci bir yol açsaydık sızıntı tam oradan çıkardı.
+  Future<void> delete(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/messages/delete', body: {'ids': ids});
+    _tazele(_ref, 'messages:changed');
+  }
+
+  /// ⭐ İTTİFAK DAVETİ / BAŞVURUSU — Kabul/Red, mesaj kutusundan (orijinal t=8/9 akışı).
+  ///
+  /// ⚠️ İstek çoktan sonuçlandıysa sunucu 409 dönüyor ve hata kutusunda görünüyor; istemci
+  /// "hâlâ açık mı" diye ayrıca sormuyor — cevap ancak sunucuda kesin.
+  Future<void> decideInvite(int inviteId, {required bool accept}) async {
+    await _ref
+        .read(apiProvider)
+        .request(
+          'POST',
+          '/api/v1/alliance/invites/$inviteId/${accept ? 'accept' : 'reject'}',
+          body: const {},
+        );
+    _tazele(_ref, 'messages:changed');
+    _tazele(_ref, 'cities:changed');
+  }
+}
+
+final messagesActionsProvider = Provider<Messages>(Messages.new);
+
+/// ⭐ DÜNYA DURUMU — `GET /api/v1/world/state`.
+///
+/// ⚠️ Bugün yalnız **Genel Sohbet açık mı** okunuyor. Aynı uç bakım perdesini de besliyor
+/// (`paused` · `notice`) ama o perde mobilde HENÜZ YOK; alanı okuyup kullanmamak, ekranda
+/// karşılığı olmayan bir veri taşımak olurdu. Perde geldiğinde bu sağlayıcı büyüyecek.
+///
+/// ⚠️ Sohbet bayrağı burada olmak ZORUNDA: kart ve kısayol, oyuncu sohbete **bağlanmadan
+/// önce** çizilip çizilmeyeceğini bilmeli — cevabı sohbetin kendi açılış paketinden okuyamaz
+/// (o paket ancak bağlanınca geliyor). Sunucu bu isteği bellekten karşılıyor, sorgu yok.
+final worldStateProvider = FutureProvider<({bool globalChat})>((ref) async {
+  if (ref.watch(sessionProvider) == null) return (globalChat: false);
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/world/state');
+  return (
+    globalChat: (body is Map ? body['globalChat'] as bool? : null) ?? false,
+  );
+});
+
+/// ⭐⭐ GENEL SOHBET AÇILIŞ PAKETİ — kanal kimliği ve yazma hakkı.
+///
+/// ⚠️⚠️ **YALNIZ bağlanınca çekiliyor.** Sağlayıcıyı ekran mount olduğunda okuyoruz ve ekran
+/// yalnız «Sohbete Bağlan» denince mount oluyor — yani kopukken hiç istek gitmiyor.
+/// Kullanıcı şartı olan *"bağlantıyı kopardığında sohbet çevrimdışı"* bir bayrakla değil,
+/// **hiç sorgu açmamakla** sağlanıyor (web'de de aynı karar).
+final globalChatOpenProvider = FutureProvider<RoomOpen>((ref) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/chat/global');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Genel sohbet açılamadı.');
+  }
+  return RoomOpen.fromJson(body);
+});
+
+/// ⭐ GENEL SOHBET GEÇMİŞİ — en yeni sayfa.
+///
+/// ⚠️ Eski sayfalar burada değil, ekranın durumunda birikiyor (DM'le aynı gerekçe:
+/// Riverpod'da "sonsuz sorgu" karşılığı yok).
+/// ⚠️ Emniyet ağı YOK: tazeleme `chat:global` olayından geliyor ve o olay **kanal odasından**,
+/// yani bağlı değilken hiç tetiklenmiyor — istenen tam da bu.
+final globalChatHistoryProvider = FutureProvider<RoomHistoryPage>((ref) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/chat/global/messages');
+  return body is Map<String, dynamic>
+      ? RoomHistoryPage.fromJson(body)
+      : RoomHistoryPage.empty;
+});
+
+/// ⭐⭐ İTTİFAĞIM — `GET /api/v1/alliance`.
+///
+/// ⚠️ Yanıt İKİ ŞEKİLDEN biri: üyeysem `alliance` dolu, değilsem `null` + kurma şartı. İki
+/// ayrı sağlayıcı açmadık çünkü **tek istek** ikisini de karara bağlıyor ve hangisinin
+/// geleceğini istemci önceden bilmiyor.
+///
+/// ⚠️ Aile anahtarı SAYFA: üye listesi sunucuda sayfalı (0 tabanlı).
+/// ⚠️ Emniyet ağı YOK — üyelik ve rütbe `alliance:changed` olayıyla tazeleniyor; sıra ve puan
+/// zaten 8 saatte bir donuyor, 60 saniyede bir çekmenin anlamı olmazdı.
+final allianceProvider =
+    FutureProvider.family<({AllianceView? mine, AllianceNone? none}), int>((
+      ref,
+      page,
+    ) async {
+      if (ref.watch(sessionProvider) == null) return (mine: null, none: null);
+      final body = await ref
+          .read(apiProvider)
+          .request('GET', '/api/v1/alliance?page=$page');
+      if (body is! Map<String, dynamic>) {
+        throw const MwApiError(0, 'Ittifak okunamadi.');
+      }
+      final a = body['alliance'];
+      if (a is Map<String, dynamic>) {
+        return (mine: AllianceView.fromJson(a), none: null);
+      }
+      return (mine: null, none: AllianceNone.fromJson(body));
+    });
+
+/// Ittifak arama/listesi — bos sorgu en iyi 25'i getiriyor.
+final allianceListProvider =
+    FutureProvider.family<List<AllianceListRow>, String>((ref, query) async {
+      final body = await ref
+          .read(apiProvider)
+          .request(
+            'GET',
+            '/api/v1/alliances?query=${Uri.encodeQueryComponent(query.trim())}',
+          );
+      final list = body is Map ? body['alliances'] as List<dynamic>? : null;
+      return (list ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(AllianceListRow.fromJson)
+          .toList();
+    });
+
+/// Herkese acik ittifak kunyesi. Uye listesi buradan SIZMAZ — yalniz toplamlar.
+final allianceProfileProvider = FutureProvider.family<AllianceProfile, int>((
+  ref,
+  id,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/alliances/$id');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Ittifak kunyesi okunamadi.');
+  }
+  return AllianceProfile.fromJson(body);
+});
+
+/// ⭐⭐ İTTİFAK SOHBETİ AÇILIŞ PAKETİ — kanal · rütbem · üye listesi.
+///
+/// ⚠️ Genel sohbetle aynı model: **yalnız sheet açıkken** okunuyor, kopukken hiç istek
+/// gitmiyor. Kullanıcı şartı «kapalıyken tam sessizlik» burada da geçerli.
+///
+/// ⚠️ Üye listesi mesaj geldikçe TAZELENMİYOR (`chat:alliance` yalnız geçmişi tazeliyor):
+/// her mesajda roster çekmek gereksiz trafik olurdu. Susturma yapıldığında elle tazeleniyor —
+/// o anda liste gerçekten değişiyor.
+final allianceChatOpenProvider = FutureProvider<AllianceRoomOpen>((ref) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/alliance/chat');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Ittifak sohbeti acilamadi.');
+  }
+  return AllianceRoomOpen.fromJson(body);
+});
+
+/// Ittifak sohbeti gecmisinin en yeni sayfasi. Emniyet agi YOK — tazeleme `chat:alliance`
+/// olayindan ve o olay **kanal odasindan**, yani sheet kapaliyken hic tetiklenmiyor.
+final allianceChatHistoryProvider = FutureProvider<RoomHistoryPage>((
+  ref,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/alliance/chat/messages');
+  return body is Map<String, dynamic>
+      ? RoomHistoryPage.fromJson(body)
+      : RoomHistoryPage.empty;
+});
+
+/// ⭐ HESAP KÜNYESİ — e-posta + doğrulama durumu (`GET /api/v1/auth/me`).
+///
+/// ⚠️ Ayrı bir sorgu olmasının sebebi §verify: doğrulanmamış hesap gerçekten kısıtlı
+/// (saldırı/nakliye/mesaj yok, seviye ve savaşçı tavanı var) ve ekranın bunu **düğmeyi
+/// sunmadan önce** bilmesi gerekiyor. Bugün tek okuyanı sohbetin yazma kutusu.
+///
+/// ⚠️ Yoklama YOK: doğrulama tek yönlü ve nadir bir olay. Web'de de aynı karar (`useAccount`,
+/// `staleTime` 5 dk).
+///
+/// ⚠️ Hata **yutulmuyor** ama sonucu `null`: `writeGate` bilgiyi bilmiyorken kutuyu AÇIK
+/// bırakıyor (gerekçe orada — son sözü sunucu söyler).
+final accountProvider = FutureProvider<({String? email, bool emailVerified})>((
+  ref,
+) async {
+  if (ref.watch(sessionProvider) == null) {
+    return (email: null, emailVerified: false);
+  }
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/auth/me');
+  return (
+    email: body is Map ? body['email'] as String? : null,
+    emailVerified:
+        (body is Map ? body['emailVerified'] as bool? : null) ?? false,
+  );
+});
+
+/// ⭐⭐ SOHBET LİSTESİ — `GET /api/v1/chat/conversations`, DM konuşmaları.
+///
+/// ⚠️ **Posta kutusundan AYRI bir veri yolu ve bu sunucu tarafında da böyle**: rapor kutusu
+/// (`messages`) kalıcı ve oyuncu-bazlı, sohbet anlık ve kanal-bazlı. DM satırı `messages`
+/// tablosuna hiç yazılmıyor (rapor kutusunu kirletmesin diye). İki kaynağı Mesajlar
+/// sekmesinde **istemci** birleştiriyor — web'de de aynı karar (2026-07-31).
+///
+/// ⚠️ Sayfalanmıyor, **bilerek**: DM listesi doğası gereği kısa (aktif konuşmalar) ve iki
+/// kaynağı sunucuda birleştirmek `messages ∪ chat_channels` gibi bir birleşim sorgusu ister;
+/// kazanç yok, karmaşa çok.
+///
+/// ⚠️ Emniyet ağı YOK ve olmamalı: tazeleme `chat:message` olayından geliyor, kopukluktan
+/// dönüşte de `kTopicAll` her şeyi tazeliyor (`realtime.dart`). Web'de de yoklama yok.
+final chatConversationsProvider =
+    FutureProvider<({List<ChatConversation> items, int unread})>((ref) async {
+      if (ref.watch(sessionProvider) == null) {
+        return (items: const <ChatConversation>[], unread: 0);
+      }
+      final body = await ref
+          .read(apiProvider)
+          .request('GET', '/api/v1/chat/conversations');
+      final list = body is Map ? body['items'] as List<dynamic>? : null;
+      final items = (list ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ChatConversation.fromJson)
+          .toList();
+      return (
+        items: items,
+        unread: (body is Map ? (body['unread'] as num?)?.toInt() : null) ?? 0,
+      );
+    });
+
+/// ⭐ SOHBET GEÇMİŞİNİN **EN YENİ SAYFASI**.
+///
+/// ⚠️ Eski sayfalar bu sağlayıcıdan gelmiyor: onları sheet kendi durumunda biriktiriyor
+/// (`chat_sheet.dart`). Sebep, Riverpod'da "sonsuz sorgu" karşılığının olmaması ve depodaki
+/// formların durumu düz `setState` ile tutması — ekrana özel bir Notifier kurmak, sefer
+/// formunda bir kez denenip **bırakılan** yol (`MOBIL_MIMARI.md` §9, 2026-08-17).
+///
+/// ⚠️ Bölünme sağlam çünkü iki taraf da **id ile tekilleşiyor**: WS olayı bu sağlayıcıyı
+/// tazelediğinde gelen sayfa, biriktirilmiş eski sayfalarla çakışsa bile mükerrer balon
+/// çıkmıyor.
+final chatHistoryProvider = FutureProvider.family<ChatHistoryPage, int>((
+  ref,
+  channelId,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/chat/conversations/$channelId/messages');
+  return body is Map<String, dynamic>
+      ? ChatHistoryPage.fromJson(body)
+      : ChatHistoryPage.empty;
+});
+
+/// ⭐ SOHBET EYLEMLERİ — aç · gönder · okundu · sil · engelle · şikayet et.
+///
+/// ⚠️ Hepsi `chat:message` konusunu elle tazeliyor, çünkü bu uçların hiçbiri WS olayı
+/// üretmiyor (olay yalnız KARŞI tarafa mesaj düştüğünde yazılıyor). Kendi işlemimin sonucunu
+/// kendi ekranımda görmek için tazelemeyi burada yapmak zorundayım.
+class Chat {
+  const Chat(this._ref);
+
+  final Ref _ref;
+
+  MwApi get _api => _ref.read(apiProvider);
+
+  /// Sohbeti açar; yoksa yaratır. Dönen kanal kimliğiyle geçmiş çekiliyor.
+  ///
+  /// ⚠️ İki yönde TEK kanal var (`dm_key`), yani aynı oyuncuyla ikinci kez "aç" demek yeni
+  /// bir sohbet doğurmuyor — istemcinin "zaten var mı" diye ayrıca sorması gerekmiyor.
+  Future<int> open(int withPlayerId) async {
+    final body = await _api.request(
+      'POST',
+      '/api/v1/chat/conversations',
+      body: {'withPlayerId': withPlayerId},
+    );
+    final id = body is Map ? (body['channelId'] as num?)?.toInt() : null;
+    if (id == null) throw const MwApiError(0, 'Sohbet açılamadı.');
+    _tazele(_ref, 'chat:message');
+    return id;
+  }
+
+  /// ⚠️ `clientMsgId` **şart**: ağ tekrarında çift gönderimi, WS yankısında çift balonu
+  /// engelliyor. Sunucu şeması onu `uuid` olarak doğruluyor.
+  Future<void> send(int channelId, String text, String clientMsgId) async {
+    await _api.request(
+      'POST',
+      '/api/v1/chat/conversations/$channelId/messages',
+      body: {'body': text, 'clientMsgId': clientMsgId},
+    );
+    _ref.invalidate(chatHistoryProvider(channelId));
+    _ref.invalidate(chatConversationsProvider);
+  }
+
+  Future<void> markRead(int channelId) async {
+    await _api.request(
+      'POST',
+      '/api/v1/chat/conversations/$channelId/read',
+      body: const {},
+    );
+    _ref.invalidate(chatConversationsProvider);
+  }
+
+  /// ⚠️ **YALNIZ bende siler**; karşı tarafta sohbet aynen duruyor. Posta kutusunun toplu
+  /// silme ucundan (`messages/delete`) bu yüzden ayrı: orada satır gerçekten yok oluyor.
+  Future<void> clear(int channelId) async {
+    await _api.request('DELETE', '/api/v1/chat/conversations/$channelId');
+    _tazele(_ref, 'chat:message');
+  }
+
+  /// ⚠️ Engel **dünya kapsamlı ve tek tablo** (`player_blocks`): DM'den engellenen de genel
+  /// sohbetten engellenen de aynı listede. İkinci bir liste tutmak ikisini senkron tutma
+  /// yükü getirirdi.
+  Future<void> setBlocked(int playerId, {required bool blocked}) async {
+    if (blocked) {
+      await _api.request(
+        'POST',
+        '/api/v1/chat/blocks',
+        body: {'playerId': playerId},
+      );
+    } else {
+      await _api.request('DELETE', '/api/v1/chat/blocks/$playerId');
+    }
+    _tazele(_ref, 'chat:message');
+  }
+
+  /// Şikayet — **yalnız KAYIT**, otomatik ceza yok (§9.1.1).
+  Future<void> report(int channelId, {String reason = 'abuse'}) async {
+    await _api.request(
+      'POST',
+      '/api/v1/chat/reports',
+      body: {'channelId': channelId, 'reason': reason},
+    );
+  }
+}
+
+final chatProvider = Provider<Chat>(Chat.new);
+
+/// ⭐ GENEL SOHBET EYLEMLERİ — gönder.
+///
+/// ⚠️ Susturma ve mesaj silme **taşınmadı**: ikisi de `AdminGuard` altında ve yönetim işleri
+/// web panelinde yapılıyor. Mobil istemciye yönetici düğmesi koymak, panelin yetki modelini
+/// ikinci bir yüzeyde tekrar etmek olurdu. `RoomOpen.isStaff` yine de okunuyor — ileride
+/// eklenecek düğme için sunucuya ikinci bir istek gerekmesin diye.
+class GlobalChat {
+  const GlobalChat(this._ref);
+
+  final Ref _ref;
+
+  Future<void> send(String text, String clientMsgId) async {
+    await _ref
+        .read(apiProvider)
+        .request(
+          'POST',
+          '/api/v1/chat/global/messages',
+          body: {'body': text, 'clientMsgId': clientMsgId},
+        );
+    // ⚠️ Kendi mesajım için WS olayı BANA gelmiyor (sunucu `socket.to(...)` ile yayıyor,
+    // yani göndereni hariç tutuyor) → geçmişi elle tazelemek ŞART.
+    _ref.invalidate(globalChatHistoryProvider);
+  }
+}
+
+final globalChatProvider = Provider<GlobalChat>(GlobalChat.new);
+
+/// Ittifak sohbeti eylemleri — gonder · sustur · susturmayi kaldir · mesaj kaldir.
+///
+/// Moderasyon **BURADA VAR**, genel sohbette YOK ve fark bilincli: orada yetki `AdminGuard`
+/// (oyun yonetimi, web paneli), burada **ittifak rutbesi** — ve ittifak lideri oyunu
+/// telefondan oynuyor olabilir.
+class AllianceChat {
+  const AllianceChat(this._ref);
+
+  final Ref _ref;
+
+  MwApi get _api => _ref.read(apiProvider);
+
+  Future<void> send(String text, String clientMsgId) async {
+    await _api.request(
+      'POST',
+      '/api/v1/alliance/chat/messages',
+      body: {'body': text, 'clientMsgId': clientMsgId},
+    );
+    // Kendi mesajim icin WS olayi BANA gelmiyor (sunucu gondereni haric tutuyor).
+    _ref.invalidate(allianceChatHistoryProvider);
+  }
+
+  /// `minutes: null` **KALICI** demek ve alan zorunlu: govdeden dusseydi en agir ceza kazara
+  /// verilirdi (sozlesmedeki gerekce).
+  Future<void> mute(int playerId, {required int? minutes}) async {
+    await _api.request(
+      'POST',
+      '/api/v1/alliance/chat/mutes',
+      body: {'playerId': playerId, 'minutes': minutes},
+    );
+    // Uye listesi gercekten degisti -> roster tazeleniyor.
+    _ref.invalidate(allianceChatOpenProvider);
+  }
+
+  Future<void> unmute(int playerId) async {
+    // Govdesiz istek: uc 204 donuyor ve govde beklemiyor.
+    await _api.request('DELETE', '/api/v1/alliance/chat/mutes/$playerId');
+    _ref.invalidate(allianceChatOpenProvider);
+  }
+
+  /// Satir SILINMIYOR, `deleted_at` isaretleniyor — denetim izi kaliyor.
+  Future<void> deleteMessage(int messageId) async {
+    await _api.request('DELETE', '/api/v1/alliance/chat/messages/$messageId');
+    _ref.invalidate(allianceChatHistoryProvider);
+  }
+}
+
+final allianceChatProvider = Provider<AllianceChat>(AllianceChat.new);
+
+/// Ittifak yonetimi — kur · katil · ayril · dagit · adlandir · metin · toplu mesaj · uye islemleri.
+///
+/// Hepsi basaridan sonra `alliance:changed` konusunu tazeliyor: uyelik, rutbe ve uye listesi
+/// ayni olayla besleniyor ve sunucu da onu yayiyor.
+class Alliance {
+  const Alliance(this._ref);
+
+  final Ref _ref;
+
+  MwApi get _api => _ref.read(apiProvider);
+
+  void _tazeleHepsi() {
+    _tazele(_ref, 'alliance:changed');
+    // Genel Durum panelindeki ittifak satirlari da degisiyor.
+    _ref.invalidate(overviewProvider);
+  }
+
+  Future<void> found(String name) async {
+    await _api.request('POST', '/api/v1/alliance', body: {'name': name});
+    _tazeleHepsi();
+  }
+
+  /// Basvuru — sonuc ANINDA gelmiyor: yonetim kabul edene kadar bekliyor.
+  /// Bu yuzden ekran «Basvuruldu» rozetine donuyor, ittifaga girmis gibi davranmiyor.
+  Future<void> apply(int allianceId) async {
+    await _api.request(
+      'POST',
+      '/api/v1/alliance/applications',
+      body: {'allianceId': allianceId},
+    );
+    _tazeleHepsi();
+  }
+
+  /// Davet — Konsey ve ustu. Karsi taraf posta kutusundan Kabul/Red veriyor.
+  Future<void> invite(int playerId) async {
+    await _api.request(
+      'POST',
+      '/api/v1/alliance/invites',
+      body: {'playerId': playerId},
+    );
+    _tazele(_ref, 'messages:changed');
+  }
+
+  /// Lider tek uye kalmissa ayrilmak ittifagi DAGITIYOR — onay metni bunu soylemek zorunda.
+  Future<void> leave() async {
+    await _api.request('POST', '/api/v1/alliance/leave', body: const {});
+    _tazeleHepsi();
+  }
+
+  Future<void> disband() async {
+    await _api.request('POST', '/api/v1/alliance/disband', body: const {});
+    _tazeleHepsi();
+  }
+
+  Future<void> rename(String name) async {
+    await _api.request('POST', '/api/v1/alliance/rename', body: {'name': name});
+    _tazeleHepsi();
+  }
+
+  Future<void> setText(String text) async {
+    await _api.request('POST', '/api/v1/alliance/text', body: {'text': text});
+    _tazeleHepsi();
+  }
+
+  /// Toplu mesaj — her uyenin posta kutusuna satir dusuyor, sohbete DEGIL.
+  Future<void> broadcast(String text) async {
+    await _api.request(
+      'POST',
+      '/api/v1/alliance/message',
+      body: {'text': text},
+    );
+    _tazele(_ref, 'messages:changed');
+  }
+
+  /// `kick` · `promote` · `demote` · `transfer` — dordu de ayni kalipta.
+  Future<void> memberAction(int playerId, String action) async {
+    await _api.request(
+      'POST',
+      '/api/v1/alliance/members/$playerId/$action',
+      body: const {},
+    );
+    _tazeleHepsi();
+  }
+}
+
+final allianceActionsProvider = Provider<Alliance>(Alliance.new);
+
+/// ⭐⭐ GENEL DURUM — `GET /api/v1/command/overview`.
+///
+/// ⚠️ Emniyet ağı şehirle aynı 60 sn: tablodaki kaynak sayıları şehir okumasıyla birlikte
+/// **tembel birikimi işletiyor**, yani "şu an"ı gösteriyor ve akıyor. Sıra/puan ise donuk
+/// (8 saatte bir) — aynı ekranda iki farklı tazelik var ve bunu ekran açıkça yazıyor
+/// (`snapshotNote`).
+///
+/// ⚠️ `battle:resolved` bu sağlayıcıyı da tazeliyor (aşağıdaki `_tazele`): savaş şehirdeki
+/// orduyu, savunmayı ve kasayı değiştiriyor ve tablo üçünü de gösteriyor. Web'in tablosunda
+/// `overview` tam bu yüzden var.
+final overviewProvider = FutureProvider<Overview>((ref) async {
+  if (ref.watch(sessionProvider) == null) {
+    throw const MwApiError(0, 'Oturum yok.');
+  }
+  final timer = Timer(kCitySafetyNet, ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/command/overview');
+  if (body is! Map<String, dynamic>) {
+    throw const MwApiError(0, 'Genel durum okunamadı.');
+  }
+  return Overview.fromJson(body);
+});
+
+/// ⭐ SIRALAMA — üç dal, sunucu sayfalaması.
+///
+/// ⚠️ Emniyet ağı YOK ve olmamalı: sıralama **8 saatte bir** donuyor, yani 60 saniyede bir
+/// tazelemek aynı veriyi 480 kez çekmek olurdu. `ranking:updated` olayı web'de bunu
+/// tazeliyor; mobilde o konu tabloya henüz girmedi (Komuta Merkezi'nden önce karşılığı yoktu)
+/// ve donmuş bir veri için emniyet ağı doğru araç değil — ekran açıkken güncelleme anına denk
+/// gelmek nadir.
+///
+/// ⚠️ Sayfa **1 tabanlı** (sunucu da öyle). Posta kutusu 0 tabanlı; ikisi ayrı sözleşme.
+final rankingsProvider =
+    FutureProvider.family<RankingPage, ({String kind, int page})>((
+      ref,
+      q,
+    ) async {
+      final body = await ref
+          .read(apiProvider)
+          .request(
+            'GET',
+            '/api/v1/command/rankings?kind=${q.kind}&page=${q.page}',
+          );
+      return body is Map<String, dynamic>
+          ? RankingPage.fromJson(body)
+          : RankingPage.empty;
+    });
+
+/// ⭐ ARAMA — oyuncu adına ya da koordinata göre.
+///
+/// ⚠️ **Önbelleğe alınmıyor** (`family` anahtarı sorgunun kendisi): her tuş vuruşunda yeni bir
+/// anahtar doğuyor ve eskiler dinleyicisi kalmayınca kendiliğinden düşüyor. Sonuçları
+/// önbellekte tutmanın bir değeri yok — arama bir kerelik bir eylem.
+///
+/// ⚠️ Kısa sorgu **hiç istek atmıyor**: sunucu 2 karakterden kısa sorguda boş liste dönüyor
+/// (indeks önekle çalışıyor) ve boşuna gidiş-dönüş yapmanın anlamı yok. Karar `canSearch`te.
+final searchProvider = FutureProvider.family<List<SearchHit>, String>((
+  ref,
+  query,
+) async {
+  final body = await ref
+      .read(apiProvider)
+      .request(
+        'GET',
+        '/api/v1/command/search?kind=player&name=${Uri.encodeQueryComponent(query.trim())}',
+      );
+  final list = body is Map ? body['items'] as List<dynamic>? : null;
+  return (list ?? const [])
+      .whereType<Map<String, dynamic>>()
+      .map(SearchHit.fromJson)
+      .toList();
+});
+
+/// ⭐ «DÜNYADA BUL» — oyuncu kimliğinden BAŞKENT koordinatı.
+///
+/// ⚠️ Aynı uç, farklı kip (`byId`). Ayrı bir uç açılmadı çünkü gizlilik kuralı (yalnız
+/// başkent) o ucun içinde tek yerde duruyor; ikinci bir uç onu ikinci kez uygulamak zorunda
+/// kalırdı ve biri unutulduğunda sızıntı tam oradan çıkardı.
+///
+/// ⚠️ Sağlayıcı DEĞİL, düz bir fonksiyon ve `MwApi`yi parametre alıyor: tek çağıranı bir
+/// düğme ve sonucu önbelleğe alınacak bir şey değil. `Ref` almasaydı widget'tan
+/// çağrılamazdı (`WidgetRef` ile `Ref` ayrı tipler) — API'yi geçirmek ikisini de kurtarıyor.
+Future<SearchHit?> findInWorld(MwApi api, int playerId) async {
+  final body = await api.request(
+    'GET',
+    '/api/v1/command/search?kind=player&byId=$playerId',
+  );
+  final list = body is Map ? body['items'] as List<dynamic>? : null;
+  for (final e in (list ?? const []).whereType<Map<String, dynamic>>()) {
+    final hit = SearchHit.fromJson(e);
+    if (hit.playerId == playerId) return hit;
+  }
+  return null;
+}
+
+/// ⭐ RAPOR SÖZLÜĞÜ — posta kutusundaki ham `id`'lerin adı ve **katalog sırası**.
+///
+/// ⚠️ Rapor bir ŞEHRE bağlı değil ama katalog aile ve şehir istiyor. Adlar dünya ölçeğinde
+/// (şehre göre değişen şey süre ve maliyet, ad değil), bu yüzden **aktif şehrin** kataloğu
+/// okunuyor: şehir ekranları onu zaten çekmiş oluyor, ikinci bir istek gitmiyor.
+///
+/// ⚠️ Şehri olmayan oyuncuda boş sözlük → rapor ham `id` gösterir, çökmez (web'deki `nameOf`
+/// ile aynı degrade).
+///
+/// ⚠️ **Sıra yalnız birim ve savunmadan** kuruluyor: rapordaki kartlar Baraka/Savunma
+/// ekranlarıyla aynı sırada dizilmeli. Teknik ve yapı adları sözlükte var ama sıraya
+/// girmiyor — onlar kart olarak değil, düz metin olarak yazılıyor.
+final reportNamesProvider =
+    FutureProvider<({Map<String, String> names, List<String> order})>((
+      ref,
+    ) async {
+      final cityId = await ref.watch(activeCityProvider.future);
+      if (cityId == null) {
+        return (names: const <String, String>{}, order: const <String>[]);
+      }
+      final cat = await ref.watch(catalogProvider(cityId).future);
+      final askerler = [...cat.units, ...cat.defenses];
+      return (
+        names: {
+          for (final u in askerler) u.id: u.name,
+          for (final b in cat.buildings) b.id: b.name,
+          for (final t in cat.techs) t.id: t.name,
+        },
+        order: [for (final u in askerler) u.id],
+      );
+    });
 
 /// ⭐ ŞEHİR KATALOĞU — maliyet, süre, ön koşul ve adlar.
 ///

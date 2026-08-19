@@ -40,7 +40,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE, UNITS_BY_ID } from '@mobilwar/catalog';
+import {
+  LEVEL_BASED, MERIT_TIERS, NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE, UNITS_BY_ID,
+} from '@mobilwar/catalog';
 import { BUILDING_INFO, TECH_INFO, UNIT_INFO } from '../apps/web/src/lib/info-texts.ts';
 import { HERO_SKILLS } from '../apps/web/src/lib/hero-skills.ts';
 import { unitStrikeLabel, unitTechNames } from '../apps/web/src/lib/unit-facts.ts';
@@ -108,6 +110,31 @@ const heroSkillLines = HERO_SKILLS.map(
     `  (key: ${dartStr(s.key)}, icon: ${dartStr(s.icon)}, ` +
     `label: ${dartStr(s.label)}),`,
 ).join('\n');
+
+/**
+ * ⭐ ASKERÎ UNVANLAR — basamak · id · ad (`packages/catalog/src/merit.ts`).
+ *
+ * ⚠️ `id` aynı zamanda **rozet dosyasının adı** (`assets/ranks/<id>.png`), yani elle
+ * yazılmış bir liste rozetin sessizce çizilmemesine yol açardı (`MwIcon` bulunamayan dosyada
+ * hata vermiyor).
+ * ⚠️ `threshold` ve `days` BİLEREK taşınmıyor: ikisi de panelden dünya başına
+ * override edilebiliyor (`merit.thresholds` · `merit.days`) ve sabit bir tabloya dökmek,
+ * ayarı değiştirilmiş bir dünyada sessizce yanlış olurdu — dosya başlığındaki kuralın aynısı.
+ */
+const meritLines = MERIT_TIERS.map(
+  (t) => `  ${t.tier}: (id: ${dartStr(t.id)}, name: ${dartStr(t.name)}),`,
+).join('\n');
+
+/**
+ * ⭐ SEVİYE TAŞIYAN KALEMLER — Sur · Büyü Kalkanı · Tapınak (`units.ts` · `LEVEL_BASED`).
+ *
+ * ⚠️ Bunlar `defenses` tablosunda **adet değil SEVİYE** tutuyor (§13.11.1b). Genel Durum
+ * tablosunda çıplak sayı yazsaydık «Sur 5» beş adet sur gibi okunurdu; ayrıca şehirler arası
+ * TOPLANAMAZLAR.
+ */
+const levelBasedLines = [...LEVEL_BASED]
+  .map((id) => `  ${dartStr(id)},`)
+  .join('\n');
 
 const next = `// dart format off
 // ⚠️⚠️ ÜRETİLMİŞ DOSYA — ELLE DÜZENLEMEYİN.
@@ -181,6 +208,24 @@ ${heroSkillLines}
 /// ⚠️ Sınır orijinalden geliyor (J2ME «Şehir Adı» formu) ve **sunucu doğrulaması aynı
 /// sayılara bakıyor**. İstemcide elle yazılsaydı, kutu sunucunun reddedeceği bir adı kabul
 /// edip düğmeyi açardı — web'de tam bu yaşandı (kutu 2-24 diyordu, sunucu 3-10 istiyordu).
+/// ⭐ ASKERÎ UNVANLAR — basamak → (rozet dosyası, Türkçe ad).
+///
+/// ⚠️ \`id\` aynı zamanda \`assets/ranks/<id>.png\` dosya adı. Elle yazılan bir liste,
+/// rozetin **sessizce** çizilmemesine yol açardı: \`MwIcon\` bulunamayan dosyada hata vermiyor.
+/// ⚠️ Eşik ve süre BURADA YOK — ikisi de panelden dünya başına değiştirilebiliyor, sabit bir
+/// tablo ayarı değiştirilmiş dünyada yalan söylerdi.
+const Map<int, ({String id, String name})> kMeritTiers = {
+${meritLines}
+};
+
+/// ⭐ SEVİYE TAŞIYAN KALEMLER — \`defenses\` tablosunda adet değil SEVİYE tutuyorlar.
+///
+/// ⚠️ İki sonucu var ve ikisi de Genel Durum tablosunda görünüyor: sayı «sv. N» diye
+/// yazılıyor ve şehirler arası **toplanmıyor** (toplam sütununda «-»).
+const Set<String> kLevelBased = {
+${levelBasedLines}
+};
+
 const int kNameMin = ${NAME_MIN};
 const int kNameMax = ${NAME_MAX};
 const String kNameRuleMessage = ${dartStr(NAME_RULE_MESSAGE)};

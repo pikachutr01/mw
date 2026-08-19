@@ -124,10 +124,20 @@ Future<T?> mwSheet<T>(
 ///
 /// ⚠️ `viewInsets` ŞART: klavye açılınca sheet onun üstüne çıkmalı, yoksa oyuncunun yazdığı
 /// adet kutusu klavyenin altında kalıyor.
+/// ⚠️⚠️ `titleIsUserText`: başlık OYUNCUNUN YAZDIĞI bir metinse (kullanıcı adı, şehir adı)
+/// Cinzel **kullanılmaz**. Cinzel küçük harf taşımıyor, küçük harfleri büyük harf gibi
+/// çiziyor: web'de bir ara şehir adına uygulandı ve oyuncu «Mithlond» yazdığı hâlde ekranda
+/// «MİTHLOND» görünüyordu (`mwDisplayStyle` başlığındaki kural). Sohbet başlığı tam olarak
+/// bu durumda — karşı tarafın adı orada yazıyor.
+///
+/// ⚠️ `trailing`: başlığın sağına oturan eylem (sohbet menüsü). Ayrı bir satıra koymak,
+/// zaten dar olan sheet'ten bir satır daha yerdi.
 Future<T?> mwTallSheet<T>(
   BuildContext context, {
   required String title,
   required Widget child,
+  bool titleIsUserText = false,
+  Widget? trailing,
 }) {
   return showModalBottomSheet<T>(
     context: context,
@@ -146,10 +156,25 @@ Future<T?> mwTallSheet<T>(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                // ⚠️ `mwUpper` — Cinzel'de `i`nin noktası kaybolur, gerekçe orada.
-                child: Text(
-                  mwUpper(title),
-                  style: mwDisplayStyle(fontSize: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      // ⚠️ `mwUpper` yalnız SİSTEM metninde — Cinzel'de `i`nin noktası
+                      // kaybolur (gerekçe `mwUpper`da). Oyuncunun yazdığı ad gövde fontunda.
+                      child: Text(
+                        titleIsUserText ? title : mwUpper(title),
+                        overflow: TextOverflow.ellipsis,
+                        style: titleIsUserText
+                            ? const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              )
+                            : mwDisplayStyle(fontSize: 16),
+                      ),
+                    ),
+                    ?trailing,
+                  ],
                 ),
               ),
               Expanded(child: child),
@@ -232,4 +257,148 @@ Future<bool> mwConfirmSheet(
   );
   if (ok == true) await mwTapDestructive();
   return ok ?? false;
+}
+
+/// ⭐⭐ METİN GİRİŞ SHEET'İ — ad değiştirme, ittifak metni, toplu mesaj.
+///
+/// Web'de bunlar ayrı ayrı modal/inline formlar; mobilde tek bir kapı. ⚠️ Ortak dosyada
+/// çünkü dördü de **aynı üç şeyi** istiyor: klavye açılınca kutunun görünür kalması, sınıra
+/// yaklaşınca sayaç ve boş/geçersiz metinde kapalı düğme. Ekran ekran yazılsaydı üçünden
+/// biri her seferinde unutulurdu.
+///
+/// ⚠️ `viewInsets` dolgusu ŞART: klavye kutuyu örterse oyuncu ne yazdığını göremiyor.
+///
+/// ⚠️ Dönüş `null` = **iptal**; boş dize ise gerçek bir değer (ittifak metnini silmek meşru).
+/// İkisini birleştirmek "metni temizle" işlemini imkânsız kılardı.
+Future<String?> mwTextSheet(
+  BuildContext context, {
+  required String title,
+  required String initial,
+  required int maxLength,
+  String hint = '',
+  String? note,
+  bool multiline = false,
+  bool Function(String)? validate,
+}) {
+  final controller = TextEditingController(text: initial);
+  return showModalBottomSheet<String>(
+    context: context,
+    useSafeArea: true,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: _TextSheetBody(
+            title: title,
+            controller: controller,
+            maxLength: maxLength,
+            hint: hint,
+            note: note,
+            multiline: multiline,
+            validate: validate,
+          ),
+        ),
+      ),
+    ),
+  ).whenComplete(controller.dispose);
+}
+
+class _TextSheetBody extends StatefulWidget {
+  const _TextSheetBody({
+    required this.title,
+    required this.controller,
+    required this.maxLength,
+    required this.hint,
+    required this.note,
+    required this.multiline,
+    required this.validate,
+  });
+
+  final String title;
+  final TextEditingController controller;
+  final int maxLength;
+  final String hint;
+  final String? note;
+  final bool multiline;
+  final bool Function(String)? validate;
+
+  @override
+  State<_TextSheetBody> createState() => _TextSheetBodyState();
+}
+
+class _TextSheetBodyState extends State<_TextSheetBody> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_yenile);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_yenile);
+    super.dispose();
+  }
+
+  void _yenile() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    final metin = widget.controller.text;
+    // ⚠️ Doğrulayıcı yoksa varsayılan kural "boş olmasın": çağıranların hepsi bir metin
+    // istiyor ve boş bir gönderi hiçbirinde anlamlı değil.
+    final gecerli = widget.validate?.call(metin) ?? metin.trim().isNotEmpty;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          // ⚠️ Başlık SİSTEM metni → `mwUpper` + Cinzel (gerekçe `mwUpper`da).
+          child: Text(
+            mwUpper(widget.title),
+            style: mwDisplayStyle(fontSize: 16),
+          ),
+        ),
+        if (widget.note != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              widget.note!,
+              style: TextStyle(fontSize: 12, color: c.muted),
+            ),
+          ),
+        TextField(
+          controller: widget.controller,
+          autofocus: true,
+          minLines: widget.multiline ? 3 : 1,
+          maxLines: widget.multiline ? 6 : 1,
+          maxLength: widget.maxLength,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: InputDecoration(
+            hintText: widget.hint,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        MwButton(
+          label: 'Kaydet',
+          onTap: gecerli
+              ? () => Navigator.of(context).pop(widget.controller.text.trim())
+              : null,
+        ),
+        const SizedBox(height: 8),
+        MwButton(
+          label: 'Vazgeç',
+          kind: MwButtonKind.ghost,
+          // ⚠️ `null` döndürüyor — boş dizeden AYRI: biri "iptal", diğeri "metni temizle".
+          onTap: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
 }

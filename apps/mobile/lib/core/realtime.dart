@@ -57,19 +57,117 @@ enum MwConnectionState { connecting, online, offline }
 /// Bu, projedeki **dördüncü** "yazıldı ama eşlenmedi" olayı (öncekiler `city:incoming_spy`,
 /// `city:changed`, `vacation:ended` — hepsi sunucu tarafındaydı, bu ilk istemci tarafı).
 const Map<String, List<String>> kInvalidates = {
-  'city:changed': ['city', 'catalog'],
+  'city:changed': ['city', 'catalog', 'overview'],
   'cities:changed': ['cities', 'city'],
   'missions:changed': ['missions'],
   'messages:changed': ['messages'],
+
+  /// ⭐ ÖZEL MESAJ (2026-08-18) — sohbet listesi + açık sohbetin geçmişi.
+  ///
+  /// ⚠️ Olay **İKİ tarafa da** gidiyor: alıcı balonu görsün, gönderenin ikinci cihazı
+  /// senkronlansın. ⚠️ Gövde TAŞIMIYOR (NOTIFY 8000 bayt sınırı + "olay haber taşır, veri
+  /// değil" kuralı) — balonun metni tazelenen geçmişten geliyor, tek doğru kaynak sunucu.
+  'chat:message': ['chat', 'chat-history'],
+
+  /// ⭐ GENEL SOHBET (2026-08-19) — olay **KANAL ODASINDAN** geliyor.
+  ///
+  /// ⚠️⚠️ Odaya yalnız «Sohbete Bağlan» denince katılınıyor (`global:chat:open`), dolayısıyla
+  /// bağlı değilken bu satır **HİÇ tetiklenmiyor**. Kullanıcı şartı olan *"bağlantıyı
+  /// kopardığında sohbet çevrimdışı"* bir bayrakla değil, **oda üyeliğiyle** sağlanıyor.
+  /// ⚠️ Açılış paketi (`global-chat`) BİLEREK tazelenmiyor: her mesajda yazma hakkını yeniden
+  /// sormak gereksiz trafik olurdu.
+  /// Ittifak sohbeti — genel sohbetle ayni kalip: olay **KANAL ODASINDAN** geliyor.
+  ///
+  /// Sheet kapaliyken odaya katilmiyoruz, dolayisiyla bu satir kapaliyken HIC tetiklenmiyor —
+  /// kullanici sarti «kapaliyken tam sessizlik» boyle saglaniyor.
+  /// Uye listesi (`alliance-chat`) BILEREK tazelenmiyor: her mesajda roster cekmek gereksiz
+  /// trafik olurdu. Susturma yapildiginda elle tazeleniyor.
+  /// Ittifak degisimi — uyelik, rutbe, ad, metin, dagitma.
+  ///
+  /// `alliance-chat` (sohbetin uye listesi) BILEREK yok: sohbet sheet'i acikken rutbe
+  /// degisirse liste bir tur bayat kalir ve bedeli yalnizca bir dugmenin gec gorunmesi.
+  /// Her uyelik olayinda roster cekmek ise her mesajda cekmek kadar gereksiz.
+  'alliance:changed': ['alliance', 'overview'],
+  'chat:alliance': ['alliance-chat-history'],
+
+  /// Lider/konsey bir mesaji kaldirdi -> gecmis tazelenir, mesaj ekrandan duser.
+  'chat:alliance:deleted': ['alliance-chat-history'],
+  'chat:global': ['global-chat-history'],
+
+  /// Yönetici bir mesajı kaldırdı → geçmiş tazelenir, mesaj ekrandan düşer.
+  'chat:global:deleted': ['global-chat-history'],
   // ⭐ `temple` 2026-08-17'de eklendi (Tapınak ekranı geldi): savaşta kahraman ÖLÜYOR ve
   // ekran açıkken durumu «Şehirde» kalmaya devam ediyordu.
-  // ⚠️ Web'in listesinde ayrıca `overview` var; Komuta Merkezi mobilde henüz yok, olmayan
-  // sağlayıcı adını yazmak ölü satır olurdu. O ekran geldiğinde bu satır da büyüyecek.
-  'battle:resolved': ['city', 'catalog', 'missions', 'messages', 'temple'],
+  // ⭐ `overview` 2026-08-18'de eklendi (Komuta Merkezi geldi) — böylece liste **web'in
+  // `BATTLE_KEYS` dizisiyle birebir** oldu. Savaş şehirdeki orduyu, savunmayı ve kasayı
+  // değiştiriyor; Genel Durum tablosu üçünü de gösteriyor ve eksikken toplamlar 5 dakikaya
+  // kadar savaş öncesini yazardı.
+  'battle:resolved': [
+    'city',
+    'catalog',
+    'missions',
+    'messages',
+    'temple',
+    'overview',
+  ],
+  // ⚠️ `city:changed` de `overview` taşıyor (web'de de öyle): bina dikmek şehrin kaynağını ve
+  // yapı seviyesini değiştiriyor, tablo ikisini de gösteriyor.
 };
 
 /// Her şeyi tazele — kopukluk sonrası kaçan olaylar için.
 const String kTopicAll = '*';
+
+/// ⭐⭐ SOHBET ODASI TÜRLERİ — sunucuda **ÜÇ AYRI olay çifti ve ÜÇ AYRI slot** var.
+///
+/// ⚠️⚠️ Tek bir `chat:open` yeterli DEĞİL ve bu sunucuda gerekçesiyle yazılı
+/// (`realtime.gateway.ts`): her slot TEK kanal kimliği tutuyor ve açılışta önce eskisinden
+/// çıkılıyor. Oyuncu aynı anda bir DM sohbeti, ittifak sohbeti ve genel sohbet açık
+/// tutabiliyor — ortak slot ikisini birbirinin odasından atardı.
+enum MwChatRoom {
+  /// `chat:open` — DM. ⚠️ Odanın tek işi «yazıyor…»: mesajın kendisi kişisel odaya gidiyor
+  /// ki sohbet KAPALIYKEN de ulaşsın.
+  dm('chat:open', 'chat:close', 'chat:typing'),
+
+  /// `alliance:chat:open` — ittifak sohbeti. Mesaj olayı da bu odadan geliyor, yani sheet
+  /// kapalıyken oyuncu hiçbir şey almıyor («kapalıyken tam sessizlik» şartı).
+  alliance('alliance:chat:open', 'alliance:chat:close', 'alliance:chat:typing'),
+
+  /// `global:chat:open` — genel sohbet. Aynı kural: bağlanmadan hiçbir olay gelmiyor.
+  global('global:chat:open', 'global:chat:close', 'global:chat:typing');
+
+  const MwChatRoom(this.openEvent, this.closeEvent, this.typingEvent);
+
+  final String openEvent;
+  final String closeEvent;
+  final String typingEvent;
+}
+
+/// ⭐ YÜK TAŞIYAN OLAY — konu haberlerinden AYRI bir yol.
+///
+/// ⚠️⚠️ Bu ayrım tasarımın özü: `kInvalidates` olayları **haber** taşıyor (`{topic, ref}`) ve
+/// istemci sorguyu tazeliyor — tek doğru kaynak HTTP kalıyor. Ama «yazıyor…» ve «kaç kişi
+/// bağlı» kalıcı bir kayda dayanmıyor, **yalnız o anda** var. Onları sorguyla çekmenin bir
+/// yolu yok; bu yüzden yükleriyle birlikte doğrudan iletiliyorlar.
+///
+/// ⚠️ Bu kapıdan **veri** geçirilmemeli. Bir mesajın gövdesini buradan almak, ekranı
+/// veritabanından ayrışabilen ikinci bir kaynağa bağlamak olurdu (`chat:message` olayının
+/// gövde taşımamasının sebebi de bu).
+typedef MwRoomEvent = ({String name, Map<String, dynamic> data});
+
+/// Dinlenen yük taşıyan olaylar.
+///
+/// ⚠️ Liste `kInvalidates`ten AYRI ve öyle kalmalı: o tablonun her satırı "bir sorguyu
+/// tazele" demek, buradakilerin tazeleyecek bir sorgusu YOK. İkisini birleştirmek, gövde
+/// taşıyan bir olayın yanlışlıkla sorgu tazelemesine (ya da tersine) yol açardı.
+///
+/// ⚠️ `global:chat:presence` yükü `{count}` taşıyor — kaç kişinin bağlı olduğu hiçbir tabloda
+/// durmuyor, yalnız o anda var. Sorguyla çekmenin bir yolu yok.
+const List<String> kRoomEvents = [
+  'chat:typing',
+  'alliance:chat:typing',
+  'global:chat:typing',
+  'global:chat:presence',
+];
 
 /// ⚠️ Engine.IO varsayılan `pingTimeout` 20 sn. Bundan uzun süre uzakta kaldıysak bağlantının
 /// SAĞ olduğunu iddia eden bir soket bile şüpheli: sunucu bizi çoktan düşürmüş olabilir ve
@@ -155,6 +253,18 @@ class Realtime {
   final _states = StreamController<MwConnectionState>.broadcast();
   Stream<MwConnectionState> get onStateChange => _states.stream;
 
+  /// Yük taşıyan oda olayları — «yazıyor…» ve mevcudiyet sayacı.
+  final _roomEvents = StreamController<MwRoomEvent>.broadcast();
+  Stream<MwRoomEvent> get onRoomEvent => _roomEvents.stream;
+
+  /// ⭐ AÇIK ODALAR — tür başına en fazla bir kanal (sunucudaki slot modeliyle birebir).
+  ///
+  /// ⚠️⚠️ Bu tablo **yeniden bağlanma için ŞART**. Soket koptuğunda sunucu tarafındaki oda
+  /// üyeliği de gidiyor; istemci hangi odalarda olduğunu hatırlamazsa sohbet ekranı açık
+  /// kalır ama hiçbir olay gelmez — üstelik ekran bunu fark etmez, yalnız sessizleşir. Tam
+  /// olarak `battle:resolved`in bir zamanlar yaptığı sessiz arıza.
+  final Map<MwChatRoom, int> _rooms = {};
+
   void _setState(MwConnectionState next) {
     if (_state == next) return;
     _state = next;
@@ -196,6 +306,11 @@ class Realtime {
       // ⭐ Kopukken kaçan olaylar olabilir → bağlanır bağlanmaz HER ŞEYİ tazele.
       // WS "hızlı" katman, "kayıpsız" katman değil; kalıcı kayıt zaten veritabanında.
       onTopic(kTopicAll);
+      // ⭐⭐ Odalara YENİDEN katıl: sunucu tarafındaki üyelik soketle birlikte öldü.
+      // Bu satır olmadan sohbet ekranı açık kalır ve sessizce hiçbir olay almaz.
+      for (final e in _rooms.entries) {
+        s.emit(e.key.openEvent, {'channelId': e.value});
+      }
     });
     s.onDisconnect((_) => _setState(MwConnectionState.offline));
 
@@ -218,7 +333,54 @@ class Realtime {
       s.on(konu, (_) => onTopic(konu));
     }
 
+    // Yük taşıyan oda olayları. ⚠️ Dinleyici kalıcı: oda kapalıyken olay zaten gelmiyor
+    // (sunucu odaya yayın yapıyor), yani abonelikleri açıp kapamaya gerek yok.
+    for (final ad in kRoomEvents) {
+      s.on(ad, (raw) {
+        if (_roomEvents.isClosed) return;
+        _roomEvents.add((
+          name: ad,
+          data: raw is Map<String, dynamic>
+              ? raw
+              : raw is Map
+              ? raw.map((k, v) => MapEntry('$k', v))
+              : const <String, dynamic>{},
+        ));
+      });
+    }
+
     s.connect();
+  }
+
+  /// ⭐ ODAYA KATIL — ekran açılırken çağrılıyor.
+  ///
+  /// ⚠️ Kayıt `_rooms`e ÖNCE yazılıyor, emit sonra: soket o anda kopuksa emit kayboluyor ama
+  /// kayıt kalıyor ve yeniden bağlanınca `onConnect` odayı geri açıyor.
+  void openRoom(MwChatRoom room, int channelId) {
+    _rooms[room] = channelId;
+    _socket?.emit(room.openEvent, {'channelId': channelId});
+  }
+
+  /// ⭐ ODADAN ÇIK — ekran kapanırken.
+  ///
+  /// ⚠️ Kayıt SİLİNİYOR, yoksa yeniden bağlanmada kapanmış bir sohbetin odasına geri
+  /// katılırdık ve oyuncu kapattığı sohbetin «yazıyor…» olaylarını almaya devam ederdi.
+  void closeRoom(MwChatRoom room) {
+    if (_rooms.remove(room) == null) return;
+    _socket?.emit(room.closeEvent, <String, dynamic>{});
+  }
+
+  /// «Yazıyor…» yayınla. ⚠️ Kısma (throttle) ÇAĞIRANIN işi: sunucu olay kovasıyla korunuyor
+  /// ama her tuş vuruşunda paket yollamanın anlamı yok (web'de 2,5 sn'de bir).
+  void sendTyping(MwChatRoom room) {
+    final id = _rooms[room];
+    if (id == null) return;
+    // ⚠️ DM kanal kimliği İSTİYOR (sunucu açık kanalla karşılaştırıyor), oda sohbetleri
+    // istemiyor — kimliği kendi slotlarından okuyorlar.
+    _socket?.emit(
+      room.typingEvent,
+      room == MwChatRoom.dm ? {'channelId': id} : <String, dynamic>{},
+    );
   }
 
   void disconnect() {
@@ -253,6 +415,7 @@ class Realtime {
   void dispose() {
     disconnect();
     _states.close();
+    _roomEvents.close();
   }
 }
 

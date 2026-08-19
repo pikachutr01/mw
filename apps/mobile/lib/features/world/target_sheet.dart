@@ -20,10 +20,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/api_client.dart';
 import '../../core/world_coords.dart';
 import '../../gen/contracts.g.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
+import '../chat/chat_rules.dart';
+import '../chat/chat_sheet.dart';
 import 'mission_form.dart';
 import 'mission_options.dart';
 import 'mission_rules.dart';
@@ -161,6 +164,17 @@ Future<void> showTargetSheet(
               ),
             ],
 
+            /* ⭐ MESAJ GÖNDER (2026-08-18, Sohbet turu) — orijinalin «Mesaj» maddesi.
+             *
+             * ⚠️ Yalnız BAŞKASININ şehrinde: kendine mesaj göndermek sunucuda `self_message`
+             * ile reddediliyor ve reddedilecek bir düğmeyi sunmanın anlamı yok.
+             * ⚠️ Sefer seçeneklerinin (`_Options`) ÜSTÜNDE değil altında: bu sheet'in asıl işi
+             * ordu göndermek, mesaj ikincil bir eylem. */
+            if (!city.isOwn) ...[
+              const SizedBox(height: 10),
+              _MessageButton(playerId: city.playerId, username: city.username),
+            ],
+
             const SizedBox(height: 6),
             _Options(slot: slot, realm: realm),
           ],
@@ -168,6 +182,77 @@ Future<void> showTargetSheet(
       },
     ),
   );
+}
+
+/// ⭐ «MESAJ GÖNDER» — hedefin künyesinden doğrudan sohbet açar.
+///
+/// ⚠️ Sohbet **açılırken yaratılıyor** (`POST /chat/conversations`): iki yönde tek kanal var
+/// (`dm_key`), yani ikinci kez basmak yeni bir sohbet doğurmuyor. İstemcinin "zaten var mı"
+/// diye ayrıca sorması gerekmiyor.
+///
+/// ⚠️ Kanal yeni açıldığı için `blocked` bilgisi elimizde YOK — liste sorgusundan geliyor ve
+/// o sorgu bu kanalı ilk mesaja kadar taşımayabiliyor. `false` veriliyor ve bu **güvenli
+/// taraf**: kutu açık kalır, engel varsa sunucu `blocked_by_me` ile reddeder ve metni
+/// `chatErrorText` yazar. Tersi (kutuyu kapatmak) engellemediği birine yazmayı imkânsız
+/// kılardı.
+class _MessageButton extends ConsumerStatefulWidget {
+  const _MessageButton({required this.playerId, required this.username});
+
+  final int playerId;
+  final String username;
+
+  @override
+  ConsumerState<_MessageButton> createState() => _MessageButtonState();
+}
+
+class _MessageButtonState extends ConsumerState<_MessageButton> {
+  bool _busy = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_error != null) ...[MwErrorBox(_error!), const SizedBox(height: 8)],
+        MwButton(
+          label: 'Mesaj gönder',
+          kind: MwButtonKind.ghost,
+          busy: _busy,
+          onTap: _open,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _open() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final channelId = await ref.read(chatProvider).open(widget.playerId);
+      if (!mounted) return;
+      // ⚠️ Hedef künyesi KAPANIYOR, sohbet onun üstüne açılmıyor: iki sheet üst üste
+      // yığıldığında geri tuşu oyuncuyu beklemediği bir ekrana düşürüyor.
+      Navigator.of(context).pop();
+      await showChatSheet(context, (
+        channelId: channelId,
+        playerId: widget.playerId,
+        username: widget.username,
+        blocked: false,
+      ));
+    } on MwApiError catch (e) {
+      await mwTapError();
+      if (mounted) setState(() => _error = chatErrorText(e.code));
+    } catch (_) {
+      await mwTapError();
+      if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 }
 
 /// ⭐ SEÇENEK LİSTESİ — sunucunun bu hedefe izin verdiği görevler.
