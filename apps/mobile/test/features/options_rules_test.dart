@@ -33,7 +33,8 @@ void main() {
       expect(themeModeFromString(null), ThemeMode.system);
       expect(themeModeFromString(''), ThemeMode.system);
       expect(themeModeFromString('koyu'), ThemeMode.system);
-      expect(themeModeFromString('Dark'), ThemeMode.system); // büyük harf ≠ 'dark'
+      // ⚠️ Büyük harf eşleşmiyor: `switch` birebir dize karşılaştırması yapıyor.
+      expect(themeModeFromString('Dark'), ThemeMode.system);
     });
 
     test('seçenek listesi üç tane ve «Sistem» başta', () {
