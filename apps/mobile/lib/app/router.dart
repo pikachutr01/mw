@@ -25,6 +25,7 @@ import '../features/command/command_screen.dart';
 import '../features/guest/landing_screen.dart';
 import '../features/messages/messages_screen.dart';
 import '../features/temple/temple_screen.dart';
+import '../features/options/options_screen.dart';
 import '../features/world/world_screen.dart';
 import '../core/city_screens.dart';
 import '../core/world_coords.dart';
@@ -81,6 +82,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 s.pathParameters['k'],
                 s.pathParameters['d'],
               ),
+              /* ⭐ `?s=` — vurgulanacak slot (2026-08-19). Yola ÜÇÜNCÜ segment eklenmedi:
+                 eski bağlantıları kırardı ve slot adresin kimliği değil bir **ipucu**;
+                 diyarı açan şey `k:d`, `s` yalnız "hangisine bak" diyor. Web'de de aynı
+                 biçim (`World.tsx` · `useSearchParams`). */
+              highlight: int.tryParse(s.uri.queryParameters['s'] ?? ''),
             ),
           ),
           GoRoute(path: '/barracks', builder: (_, _) => const BarracksScreen()),
@@ -119,7 +125,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: t.path,
               builder: (_, _) => PlaceholderScreen(t.label),
             ),
-          for (final d in drawerItems)
+          // ⭐ Seçenekler artık gerçek ekran (2026-08-20) — listeden ayrı yazılıyor ki
+          //    hangisinin yer tutucu OLMADIĞI tek bakışta görünsün.
+          GoRoute(path: '/options', builder: (_, _) => const OptionsScreen()),
+          for (final d in drawerItems.where((d) => d.path != '/options'))
             GoRoute(
               path: d.path,
               builder: (_, _) => PlaceholderScreen(d.label),

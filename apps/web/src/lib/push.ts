@@ -67,7 +67,10 @@ export async function getPushStatus(): Promise<PushStatus> {
      baktığı için `undefined` yine işaretli çiziliyordu), yine de iki listenin ayrışması
      yorumu yalana çevirmişti. */
   const empty: Record<string, boolean> = {
-    attack: true, dm: true, report: true, production: true, mention: true,
+    // ⛔ `attack` 2026-08-19'da çıktı: kategori artık ayarlanabilir değil (push hiç atmıyor).
+    // ⚠️ `ticket` BURADA EKSİKTİ — yorumun uyardığı ayrışmanın ikinci örneği, aynı turda
+    //    kapatıldı. Yedek listenin sunucudaki `NOTIFY_CONFIGURABLE` ile aynı kalması şart.
+    dm: true, report: true, production: true, mention: true, ticket: true,
   };
   if (!supported()) return { state: 'unsupported', prefs: empty };
 

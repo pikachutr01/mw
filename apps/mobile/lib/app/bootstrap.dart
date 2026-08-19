@@ -14,8 +14,10 @@ import '../core/client_hints.dart';
 import '../core/device_identity.dart';
 import '../core/storage.dart';
 import '../features/shell/session_conflict.dart';
+import '../features/options/options_rules.dart';
 import '../features/shell/update_gate.dart';
 import '../gen/tokens.dart';
+import '../ui/keyboard_guard.dart';
 import 'providers.dart';
 import 'router.dart';
 
@@ -64,6 +66,18 @@ Future<void> bootstrap() async {
     deviceId = null;
   }
 
+  /* ⭐⭐ TEMA TERCİHİ DE BURADA (2026-08-20). Sağlayıcıdan async okunsaydı ilk kare `system`
+     ile çizilir, disk dönünce tema değişirdi: cihazı gündüz modunda olup «Gece» seçmiş bir
+     oyuncu her açılışta beyaz bir parlama görürdü.
+     ⚠️ Okunamazsa `system`e düşüyor — `themeModeFromString` bozuk değeri de oraya düşürüyor,
+     yani tek bir varsayılan var ve iki yerde tanımlı değil. */
+  ThemeMode tema;
+  try {
+    tema = themeModeFromString(await store.read(kThemeKey));
+  } catch (_) {
+    tema = ThemeMode.system;
+  }
+
   final container = ProviderContainer(
     overrides: [
       clientHintsProvider.overrideWithValue(hints),
@@ -72,6 +86,9 @@ Future<void> bootstrap() async {
       // açık kapı bırakırdı.
       storeProvider.overrideWithValue(store),
       deviceIdProvider.overrideWithValue(deviceId),
+      // ⚠️ Override ile giriyor, kaptaki duruma elle yazılarak DEĞİL: `Notifier.state`e
+      //    dışarıdan yazmak Riverpod'da korumalı bir üye ve analiz bunu uyarı olarak yakalıyor.
+      initialThemeProvider.overrideWithValue(tema),
     ],
   );
 
@@ -99,14 +116,20 @@ class MobilWarApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: MwTheme.light(),
       darkTheme: MwTheme.dark(),
-      themeMode: ThemeMode.system,
       routerConfig: ref.watch(routerProvider),
       // ⚠️ Çakışma perdesi ROTA DEĞİL bindirme: kapanamaz olmalı ve altındaki ekran
       // yerinde durmalı (oyuncu devralınca kaldığı yerden devam etsin).
       // ⚠️ SIRA ÖNEMLİ: sürüm kapısı EN DIŞTA. Sürümü geçersiz bir uygulamanın oturum
       // çakışması perdesini göstermesinin anlamı yok — ilk soru "bu uygulama çalışabilir mi".
-      builder: (context, child) => UpdateGate(
-        child: SessionConflictGate(child: child ?? const SizedBox.shrink()),
+      // ⭐ Klavye bekçisi EN DIŞTA (ama perdelerin dışında değil): `didChangeMetrics`i
+      //    dinliyor, çizime karışmıyor. Uygulamadaki HER yazı alanını kapsaması gerekiyor,
+      //    tek tek ekranlara dağıtılırsa bir sonraki ekran onu almayı unutur.
+      // ⭐ Tema tercihi izleniyor: Seçenekler'den değişince uygulama anında dönüyor.
+      themeMode: ref.watch(themeProvider),
+      builder: (context, child) => MwKeyboardGuard(
+        child: UpdateGate(
+          child: SessionConflictGate(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }

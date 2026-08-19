@@ -227,6 +227,37 @@ h1, h2, h3, .display {
 }
 
 /**
+ * ⭐⭐ HEDEF SATIRI KISA BİR AN PARLIYOR (kullanıcı, 2026-08-19): rapordaki bir koordinata
+ * tıklayıp Dünya ekranı açıldığında *"o koordinata kısa bir anlığına highlight verelim ki
+ * oyuncu ekranı açınca hangi şehre gittiğini anlasın."*
+ *
+ * ⚠️ **TEK darbe** (kullanıcı, 2026-08-19: *"İki kere parlayıp sönmesin. Tek bir kere şık
+ * şekilde olsa yeterli"*). İlk yazımda iki kez yanıp sönüyordu; tek ve yumuşak bir darbe
+ * hem daha sakin hem yeterince fark ediliyor.
+ * ⚠️ Yükseliş HIZLI, sönüş YAVAŞ (`%18`de tepe, sonra `ease-out`): göz hareketi yakalıyor
+ * ama ekran çırpınmıyor. Simetrik bir darbe "yanıp söndü" yerine "titredi" gibi duruyor.
+ * ⚠️ Renk `--color-accent` üzerinden ve **saydam**: satırın kendi zeminini (tek/çift şerit,
+ * aktif şehir kenarı) ezmiyor, üstüne biniyor.
+ * ⚠️ Süre CSS'te 1,2 sn ama JS sınıfı 1,6 sn sonra kaldırıyor — animasyon bitmeden sınıf
+ * gitmesin diye kasıtlı olarak biraz uzun.
+ */
+@keyframes mw-flash {
+  0%   { background-color: transparent; }
+  18%  { background-color: color-mix(in srgb, var(--color-accent) 38%, transparent); }
+  100% { background-color: transparent; }
+}
+.mw-flash { animation: mw-flash 1.2s cubic-bezier(0.2, 0.8, 0.3, 1) 1 both; }
+
+/* ⚠️ Hareket duyarlılığı olan oyuncuda yanıp sönme YOK — yerine sabit bir vurgu kalıyor,
+   yani bilgi kaybolmuyor, yalnız hareket kalkıyor. */
+@media (prefers-reduced-motion: reduce) {
+  .mw-flash {
+    animation: none;
+    background-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+}
+
+/**
  * ⭐ SAYI KUTULARINDA OK YOK (kullanıcı kararı 2026-07-28). Tarayıcının artır/azalt okları
  * dar kutuda yerin yarısını yiyor ve dokunmatikte yanlışlıkla basılıyordu; adet zaten elle
  * yazılıyor ya da "hepsi" düğmesiyle dolduruluyor.

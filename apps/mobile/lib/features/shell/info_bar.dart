@@ -51,15 +51,28 @@ class InfoBar extends ConsumerWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: c.panelHeader,
+        /* ⭐ DÜZ RENK DEĞİL, İNCE BİR DEĞRADE (kullanıcı, 2026-08-19: *"fazla sade"*).
+           ⚠️ Ham renk yazılmıyor — ikisi de `panelHeader` token'ından TÜRETİLİYOR
+           (§13.13.1). Böylece iki temada da doğru yönde koyulaşıyor ve `tokens:check`
+           paleti değiştirdiğinde çubuk kendiliğinden uyuyor. */
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.lerp(c.panelHeader, Colors.white, 0.10)!,
+            c.panelHeader,
+            Color.lerp(c.panelHeader, Colors.black, 0.10)!,
+          ],
+          stops: const [0, 0.55, 1],
+        ),
         border: Border(bottom: BorderSide(color: c.borderStrong, width: 2)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
           // ── SOL: kaynak (sabit genişlik) ──────────────────────────────────
           _Res(kind: 'gold', value: r.gold.floor()),
-          const SizedBox(width: 10),
+          const SizedBox(width: 6),
           _Res(kind: 'food', value: r.food.floor()),
 
           // ── ORTA: koordinat ───────────────────────────────────────────────
@@ -68,16 +81,21 @@ class InfoBar extends ConsumerWidget {
           // koordinat sayfa başlığının yerini alıyor ve VURGULU (kullanıcı, 2026-07-30).
           Expanded(
             child: Center(
-              child: Text(
-                city == null
-                    ? ''
-                    : '${city.coordinates.k}:${city.coordinates.d}:${city.coordinates.s}',
-                style: TextStyle(
-                  color: c.onPanelHeader,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
+              child: city == null
+                  ? const SizedBox.shrink()
+                  : _Plaka(
+                      child: Text(
+                        '${city.coordinates.k}:${city.coordinates.d}'
+                        ':${city.coordinates.s}',
+                        style: TextStyle(
+                          color: c.onPanelHeader,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
             ),
           ),
 
@@ -88,14 +106,19 @@ class InfoBar extends ConsumerWidget {
             GestureDetector(
               onTap: () => context.go('/options'),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
+                  color: c.info.withValues(alpha: 0.15),
                   border: Border.all(color: c.info),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   'Tatilde',
-                  style: TextStyle(fontSize: 10, color: c.info),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: c.info,
+                  ),
                 ),
               ),
             ),
@@ -104,6 +127,31 @@ class InfoBar extends ConsumerWidget {
           const ConnectionDot(),
         ],
       ),
+    );
+  }
+}
+
+/// ⭐ ÇUBUK ÜZERİNDEKİ KABARTMA KUTU — kaynak ve koordinat aynı kabı paylaşıyor.
+///
+/// ⚠️ Tek bir yerde tanımlı olması şart: iki kutunun kenar yarıçapı ya da saydamlığı
+/// birbirinden kayarsa çubuk "toplanmamış" görünür ve bu tam olarak düzeltmeye çalıştığımız
+/// izlenim. Renkler `panelHeader`ın üstüne binen saydamlıklar — ham renk yok.
+class _Plaka extends StatelessWidget {
+  const _Plaka({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: Color.lerp(c.panelHeader, Colors.black, 0.14),
+        border: Border.all(color: c.borderStrong.withValues(alpha: 0.55)),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: child,
     );
   }
 }
@@ -118,24 +166,35 @@ class _Res extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // ⭐ Web'in kendi görselleri (`assets/ui/gold.png` · `food.png`), Material ikonu değil.
-        MwIcon(folder: 'ui', id: kind, size: 16),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 74,
-          child: Text(
-            mwNumber(value),
-            style: TextStyle(
-              color: MwColors.of(context).onPanelHeader,
-              fontSize: 13,
-              fontFeatures: const [FontFeature.tabularFigures()],
+    final c = MwColors.of(context);
+    return _Plaka(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ⭐ Web'in kendi görselleri (`assets/ui/gold.png` · `food.png`), Material ikonu değil.
+          MwIcon(folder: 'ui', id: kind, size: 15),
+          const SizedBox(width: 4),
+          SizedBox(
+            // ⚠️ 74 → 68: kutunun kendi dolgusu genişlik eklediği için sayı alanı biraz
+            //    daraltıldı, yoksa üç kutu dar telefonda orta bölgeyi eziyordu.
+            width: 68,
+            child: Text(
+              mwNumber(value),
+              style: TextStyle(
+                /* ⚠️⚠️ Sayı `gold`/`food` token'ıyla boyanmak İSTENDİ ama VAZGEÇİLDİ:
+                   açık temada `panelHeader` (#C89B5A) ile `gold` (#9A7413) birbirine çok
+                   yakın iki kahve tonu ve sayı okunmaz hâle geliyordu. Koyu temada sorun
+                   yok, ama tek bir temada bozulan bir renk seçimi yine bozuk bir seçimdir.
+                   Rengi İKONLAR taşıyor; sayı iki temada da garantili kontrastta. */
+                color: c.onPanelHeader,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -161,15 +220,22 @@ class ConnectionDot extends ConsumerWidget {
       _ => (c.danger, 'Bağlantı koptu'),
     };
 
+    /* ⭐ Nokta artık kendi kabında: 9 px'lik çıplak bir daire çubuğun sağ ucunda kaybolmuş
+       gibi duruyordu. Halka onu bir GÖSTERGE hâline getiriyor ve renk aynı kalıyor.
+       ⚠️ Dokunma hedefi büyütülmedi — nokta tıklanabilir değil, yalnız ipucu taşıyor. */
     return Tooltip(
       message: etiket,
       child: Container(
-        width: 9,
-        height: 9,
+        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: renk,
+          color: renk.withValues(alpha: 0.18),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.black.withValues(alpha: 0.3)),
+          border: Border.all(color: renk.withValues(alpha: 0.55)),
+        ),
+        child: Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: renk, shape: BoxShape.circle),
         ),
       ),
     );

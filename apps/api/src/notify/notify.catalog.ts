@@ -28,8 +28,29 @@
  * 2️⃣ **KALKIŞ UYARISI PUSH ATMAZ** (`push: false`). Saldırı/casusluk *başlatıldığı anda*
  *    hedefin telefonunu titretmek oyunun en temel gerilimini — **ani saldırı** — yok
  *    ediyordu. Savunan çevrimiçiyse toast'ı yine görür (uygulama zaten açık), çevrimdışıysa
- *    hiçbir şey gitmez ve orduyu varışta öğrenir. Sonuç bildirimi (kazandın/kaybettin)
- *    varışta push olarak gider — haber değeri orada.
+ *    hiçbir şey gitmez ve orduyu varışta öğrenir. ~~Sonuç bildirimi (kazandın/kaybettin)
+ *    varışta push olarak gider~~ → 3️⃣ bunu da kapattı.
+ *
+ * ══ 2026-08-19 · SAVAŞ VE CASUSLUK ARTIK HİÇ PUSH ATMIYOR (kullanıcı) ═══════════════════
+ *
+ * 3️⃣ ⛔ **`attack` kategorisinin DÖRDÜ de `push: false`.** Kullanıcının çerçevesi: mobil
+ *    bildirim eklenmeden ÖNCE bu haberler telefondan kesiliyor — *"Oyunculara artık saldırı
+ *    ve casusluk bildirimleri hiçbir zaman gitmesin… sadece push göndermesin, toast olarak
+ *    gözükmeye devam etsin."*
+ *
+ *    Kapsam: «Saldırı geliyor!» · «Casus kuş geliyor!» (ikisi 2️⃣'den beri zaten sessizdi) ·
+ *    **savaş sonucu** (kazandın/kaybettin/berabere) · **casusluk raporu** (iki yüzü de).
+ *
+ *    ⚠️ **Toast KESİLMEDİ.** Oyun açıkken hepsi sağ altta görünmeye devam ediyor; kesilen
+ *    yalnız kilitli telefona düşen bildirim. `NotifyService.deliverOne`daki tek dallanma bunu
+ *    yapısal olarak garanti ediyor: `push === false` kapısı toast dalının ALTINDA duruyor.
+ *
+ *    ⚠️ Seçenekler'deki «Savaş ve casusluk» anahtarı da kaldırıldı — geriye ayarlanacak bir
+ *    şey kalmadı. Kategori sunucuda DURUYOR ama artık `NOTIFY_CONFIGURABLE` dışında; sebebi
+ *    (eski `{"attack": false}` kayıtlarının toast'ı kalıcı susturması) orada yazılı.
+ *
+ *    ⚠️ Ünvan bildirimi (`merit`) push atmaya DEVAM ediyor: aynı savaştan doğuyor ama haberi
+ *    savaş değil, oyuncunun kendi rozetinin değişmesi.
  */
 import { UNITS_BY_ID, BUILDINGS_BY_ID, TECHS_BY_ID } from '@mobilwar/catalog';
 
@@ -158,11 +179,17 @@ const REPORT_TEXT: Readonly<Record<string, {
   place?: 'origin' | 'target';
   body?: string;
   category?: NotifyCategory;
+  /** ⭐ 2026-08-19'da eklendi: satır bazında push kapatabilmek için (3️⃣). Boşsa push açık. */
+  push?: boolean;
 }>> = {
-  /* ⚠️ Casusluk `attack` kategorisinde: Seçenekler'deki tek anahtar ("Savaş ve casusluk")
-     hem gelen uyarıyı hem sonucu yönetiyor (kullanıcı kararı 2026-08-07). */
-  'spy_report:spy': { title: 'Casusluk raporu', place: 'target', category: 'attack' },
-  'spy_report:target': { title: 'Casusluk önleme raporu', place: 'origin', category: 'attack' },
+  /* ⚠️ Casusluk `attack` kategorisinde ve **push ATMIYOR** (3️⃣): oyun açıkken toast görünür,
+     kilitli telefona hiçbir şey düşmez. Kategori artık Seçenekler'de görünmüyor. */
+  'spy_report:spy': {
+    title: 'Casusluk raporu', place: 'target', category: 'attack', push: false,
+  },
+  'spy_report:target': {
+    title: 'Casusluk önleme raporu', place: 'origin', category: 'attack', push: false,
+  },
 
   'transport_report:receiver': { title: 'Nakliye ulaştı', place: 'origin' },
   'transport_report:sender': { title: 'Nakliyen ulaştı', place: 'target' },
@@ -301,8 +328,12 @@ export function notificationForOutbox(
      * varışta konuşur. Başlık kazanan/kaybeden, gövde ise güzergâhın oyuncuyu ilgilendiren
      * ucu — saldıran *"hangi şehre vurdum"*, savunan *"saldırı nereden geldi"* okur.
      *
-     * ⚠️ Kategori `report` değil **`attack`**: oyuncu savaş sonuçlarını nakliye/ittifak
-     * bildirimlerinden ayrı kapatabilsin (Seçenekler'deki "Savaş ve casusluk" anahtarı).
+     * ⚠️ Kategori `report` değil **`attack`**: satırın savaş/casusluk kovasına ait olduğunu
+     * yazıyor. ⛔ Anahtarı Seçenekler'den 2026-08-19'da kalktı, kova kaldı.
+     *
+     * ⛔ **`push: false` (3️⃣, 2026-08-19).** Bu dal "kalkışta sus, varışta konuş" kuralının
+     * *konuşan* yarısıydı; kullanıcı o yarıyı da kapattı. Savaşın bittiğini oyuncu artık
+     * **oyuna girince** öğreniyor — açıkken toast, kapalıyken hiçbir şey.
      */
     case 'battle:resolved': {
       const winner = String(payload['winner'] ?? '');
@@ -318,7 +349,7 @@ export function notificationForOutbox(
           title: winner === 'attacker' ? 'Savaşı kazandın'
             : winner === 'defender' ? 'Savaşı kaybettin' : 'Savaş berabere bitti',
           body: placeOf(route, 'target'),
-          url: '/messages', tag,
+          url: '/messages', tag, push: false,
         }));
       }
       if (defender != null) {
@@ -327,7 +358,7 @@ export function notificationForOutbox(
           title: winner === 'defender' ? 'Saldırıyı püskürttün'
             : winner === 'attacker' ? 'Savunmayı kaybettin' : 'Savaş berabere bitti',
           body: placeOf(route, 'origin'),
-          url: '/messages', tag,
+          url: '/messages', tag, push: false,
         }));
       }
       return out;
@@ -469,6 +500,10 @@ export function notificationForOutbox(
         body: t.body ?? placeOf(payload['route'], t.place ?? 'target'),
         url: '/messages',
         tag: `msg:${kind}:${to}`,
+        // ⚠️ Yalnız YAZILIYSA geçiyor: alanı koşulsuz koymak, tabloda `push` belirtmeyen her
+        //    satıra `undefined` yazardı ve `exactOptionalPropertyTypes` kapalı olsa da niyet
+        //    bulanıklaşırdı. Varsayılan "push açık" tabloda görünmeyerek ifade ediliyor.
+        ...(t.push === undefined ? {} : { push: t.push }),
       })];
     }
 

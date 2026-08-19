@@ -437,6 +437,15 @@ function MissionForm({
    */
   const crewOk = hasCrew(type, Object.keys(units).length, heroIds.length);
 
+  /* «Tüm ordu» düğmesinin iki sorusu: seçilebilecek asker var mı, hepsi seçilmiş mi.
+     ⚠️ Adedi 0 olan birim «seçilmiş» sayılıyor — yoksa şehirde hiç Elf yokken düğme asla
+     «Temizle»ye dönmezdi. */
+  const hasAnyUnit = list.some((u) => (freeUnits[u.id] ?? 0) > 0);
+  const allPicked = list.every((u) => {
+    const have = freeUnits[u.id] ?? 0;
+    return have <= 0 || Number(picked[u.id] ?? 0) >= have;
+  });
+
   // Nakliyede kargo ZORUNLU (boş nakliyenin anlamı yok), destek ve şehir kurmada isteğe bağlı.
   const canSend = cityId != null
     && !blocked
@@ -447,7 +456,14 @@ function MissionForm({
 
   return (
     <div className="space-y-3 p-3">
-      <div className="flex items-center gap-2.5">
+      {/**
+        * ⭐ SABİT ÜST BÖLÜM (kullanıcı, 2026-08-19): *"süreyi dinamik hesaplayan gösterge de
+        * scroll içinde olmasın, seçilen askere göre anlık görünemiyor. Sağ üstte header da
+        * görünsün."* Süre her birim seçiminde değişiyor ve kayan bir başlıkta oyuncu tam da
+        * değiştiği anda onu göremiyordu. `sticky bottom-0` alt bölümün aynadaki hâli.
+        */}
+      <div className="sticky top-0 z-10 -mx-3 -mt-3 flex items-center gap-2.5
+        border-b-2 border-strong bg-surface p-3">
         <MissionIcon id={info?.icon ?? 'attack'} size={36} />
         <b className="display text-base text-ink">{info?.title ?? type}</b>
         {/* Süre seçilen ordunun EN YAVAŞ birimine göre canlı hesaplanır. */}
@@ -477,6 +493,25 @@ function MissionForm({
       {/* ── Ordu seçimi ── */}
       {rule.units !== 'none' ? (
         <>
+          {/**
+            * ⭐ TÜM ORDU (kullanıcı, 2026-08-19): *"Hepsini ayrı ayrı hepsi seçmek yerine
+            * komple tek seferde seçsin."*
+            *
+            * ⚠️ Düğme **çift yönlü** ve etiketi ne yapacağını yazıyor: tek yönlü olsaydı
+            * yanlışlıkla basan oyuncunun geri dönüşü, satır satır kutuları sıfırlamak olurdu.
+            * ⚠️ Yalnız gerçekten asker VARSA çiziliyor — boş şehirde işlevsiz bir düğme.
+            */}
+          {hasAnyUnit ? (
+            <div className="flex justify-end">
+              <Button size="sm" variant="ghost"
+                onClick={() => setPicked(allPicked ? {} : Object.fromEntries(
+                  list.filter((u) => (freeUnits[u.id] ?? 0) > 0)
+                    .map((u) => [u.id, String(freeUnits[u.id])]),
+                ))}>
+                {allPicked ? 'Temizle' : 'Tüm ordu'}
+              </Button>
+            </div>
+          ) : null}
           <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
             {list.map((u) => {
               /**

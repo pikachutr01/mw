@@ -27,6 +27,12 @@ Future<void> showMoreSheet(BuildContext context) {
     context: context,
     // ⚠️ `useSafeArea`: liste gezinme çubuğunun altına kaymasın.
     useSafeArea: true,
+    /* ⚠️ `useRootNavigator` — `ui/native.dart`taki üç sheet ile aynı gerekçe: `ShellRoute`
+       kendi navigator'ını kuruyor ve onsuz sheet kabuğun gövdesine hapsoluyor, yani alt bardan
+       açılan bir menü alt barın ÜSTÜNDE bitiyordu. */
+    useRootNavigator: true,
+    /* ⚠️ Material'ın kendi tutamağı BURADA kalıyor: bu sheet'in başlık bandı yok (düz bir
+       menü listesi), yani tutamağın altında boş şerit sorunu da yok. */
     showDragHandle: true,
     builder: (_) => const _MoreSheet(),
   );

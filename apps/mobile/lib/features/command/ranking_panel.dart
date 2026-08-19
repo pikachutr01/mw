@@ -143,39 +143,61 @@ class _Pager extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = MwColors.of(context);
+
+    /* ⭐ «BENİ GÖSTER» ARTIK İKON DÜĞME, SAĞ UÇTA (kullanıcı, 2026-08-19: *"daha az dikkat
+       çekici şekilde yapalım, aynı şeritte sağ tarafta bir ikon buton olarak gözüksün"*).
+
+       Eskiden sayfalayıcının yanında metinli bir düğmeydi (*«Beni göster (1.204)»*) ve
+       şeridin ortasındaki en geniş, en gürültülü öge oydu — oysa sayfa gezinmesi asıl iş.
+
+       ⚠️ Sıra numarası SİLİNMEDİ, ipucuna taşındı: uzun basınca hâlâ okunuyor. Ekrandan
+       tamamen kaldırmak, oyuncunun kendi sırasını öğrenmek için sayfayı açmasını gerektirirdi.
+       ⚠️ Sıralamaya hiç girmemiş oyuncuda `myPage` null ve düğme HİÇ çizilmiyor — 1. sayfaya
+       atan bir düğme, oyuncuya orada olduğunu düşündürürdü. */
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        IconButton(
-          onPressed: page.page <= 1 ? null : () => onPage(page.page - 1),
-          icon: const Icon(Icons.chevron_left),
-          visualDensity: VisualDensity.compact,
-        ),
-        Text(
-          'Sayfa: ${page.page} / ${page.pages}',
-          style: TextStyle(
-            fontSize: 12,
-            color: c.muted,
-            fontFeatures: const [FontFeature.tabularFigures()],
+        // ⚠️ Sol tarafta ikon düğme kadar boşluk: sayfalayıcı gerçekten ORTALANMIŞ kalsın,
+        //    sağdaki düğme onu sola kaydırmasın.
+        const SizedBox(width: 40),
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: page.page <= 1 ? null : () => onPage(page.page - 1),
+                icon: const Icon(Icons.chevron_left),
+                visualDensity: VisualDensity.compact,
+              ),
+              Text(
+                'Sayfa: ${page.page} / ${page.pages}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: c.muted,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              IconButton(
+                onPressed: page.page >= page.pages
+                    ? null
+                    : () => onPage(page.page + 1),
+                icon: const Icon(Icons.chevron_right),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ),
         ),
-        IconButton(
-          onPressed: page.page >= page.pages
+        SizedBox(
+          width: 40,
+          child: page.myPage == null
               ? null
-              : () => onPage(page.page + 1),
-          icon: const Icon(Icons.chevron_right),
-          visualDensity: VisualDensity.compact,
+              : IconButton(
+                  tooltip: 'Beni göster (${mwNumber(page.myRank ?? 0)})',
+                  onPressed: () => onPage(page.myPage!),
+                  icon: const Icon(Icons.my_location, size: 20),
+                  visualDensity: VisualDensity.compact,
+                  color: c.muted,
+                ),
         ),
-        /* ⭐ «Beni göster» — sıralamaya hiç girmemiş oyuncuda `myPage` null ve düğme HİÇ
-           çizilmiyor. 1. sayfaya atan bir düğme, oyuncuya orada olduğunu düşündürürdü. */
-        if (page.myPage != null) ...[
-          const SizedBox(width: 4),
-          MwSmallButton(
-            label: 'Beni göster (${mwNumber(page.myRank ?? 0)})',
-            kind: MwButtonKind.ghost,
-            onTap: () => onPage(page.myPage!),
-          ),
-        ],
       ],
     );
   }

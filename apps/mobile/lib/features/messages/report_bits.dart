@@ -76,22 +76,39 @@ class _Part extends StatelessWidget {
       return Text('—', style: TextStyle(color: colors.muted));
     }
     final ad = coord.owner ?? coord.name;
+    /* ⭐ TIKLANABİLİRLİĞİ KENDİNİ BELLİ EDİYOR (kullanıcı, 2026-08-19: *"mavi renkli
+       gösterilen kaynak şehir → hedef şehir kısmında bu ögeler tıklanabilir olduklarını belli
+       etsinler"*).
+
+       ⚠️ Mavi renk TEK BAŞINA yetmiyordu: rapordaki başka metinler de renkli (kayıp kırmızı,
+       taban yeşil) ve oyuncu rengi "bağlantı" değil "vurgu" diye okuyor. Şimdi üç kanal
+       birden: yumuşak zemin + çerçeve + küçük bir harita ikonu — yani "bu bir düğme" bilgisi
+       renkten bağımsız da okunuyor. */
     return InkWell(
       onTap: () {
         onNavigate?.call();
-        context.go('/world/${coord.k}/${coord.d}');
+        /* ⭐ `?s=` — rapordaki koordinat Dünya listesinde kısa bir an parlıyor (kullanıcı,
+           2026-08-19): *"oyuncu ekranı açınca hangi şehre gittiğini anlasın"*. */
+        context.go('/world/${coord.k}/${coord.d}?s=${coord.s}');
       },
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 3, 7, 3),
+        decoration: BoxDecoration(
+          color: colors.info.withValues(alpha: 0.10),
+          border: Border.all(color: colors.info.withValues(alpha: 0.45)),
+          borderRadius: BorderRadius.circular(6),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Icon(Icons.place_outlined, size: 13, color: colors.info),
+            const SizedBox(width: 3),
             Text(
               '${coord.k}:${coord.d}:${coord.s}',
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: colors.info,
                 // ⚠️ `tnum` yalnız koordinatta: tablo rakamları ada uygulanınca harfler
                 // seyreliyor (web'de de aynı ayrım).

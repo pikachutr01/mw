@@ -11,6 +11,8 @@
 /// karıştırmak rastgele bir oyuncuya sohbet açardı.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,6 +51,38 @@ class _BodyState extends ConsumerState<_Body> {
   bool _busy = false;
   String? _error;
 
+  /// ⭐ BAŞKENT KOORDİNATI (kullanıcı, 2026-08-19): *"sıra puan gibi bilgilerinin yanında
+  /// başkent koordinatı da yazsın. Sadece başkent"*.
+  ///
+  /// ⚠️ Yeni uç YOK: «Dünyada bul»un çağırdığı arama ucu (`kind=player&byId=`) yapısı gereği
+  /// `is_capital` ile sınırlı, yani "sadece başkent" şartı zaten sunucuda yazılı.
+  ///
+  /// ⚠️⚠️ Koordinat **sıralama listesine EKLENMEDİ**. Öyle yapmak tek istekte bir sayfa dolusu
+  /// başkent dağıtırdı; bu depo o farka duyarlı (kahramanın `xp` alanı, ekranda görünmediği
+  /// hâlde ağ sekmesinden okunabildiği için sorgudan çıkarılmıştı). Künye açılınca **tek**
+  /// oyuncu için istek gidiyor — «Dünyada bul»un bugünkü maliyetiyle aynı.
+  SearchHit? _hit;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadCapital());
+  }
+
+  /// ⚠️ Hata **yutuluyor**: koordinat künyenin süsü, ana işlevi değil. Kırmızı bir kutu
+  /// çizmek, «Mesaj gönder» için açılmış bir sheet'i bozuk gösterirdi. Düğme yine çalışıyor
+  /// ve orada hata görünür hâle geliyor.
+  Future<void> _loadCapital() async {
+    final playerId = widget.row.playerId;
+    if (playerId == null) return;
+    try {
+      final hit = await findInWorld(ref.read(apiProvider), playerId);
+      if (mounted) setState(() => _hit = hit);
+    } catch (_) {
+      /* koordinat gösterilmez */
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.row;
@@ -80,6 +114,13 @@ class _BodyState extends ConsumerState<_Body> {
               if ((r.alliance ?? '').isNotEmpty)
                 _Chip(label: 'İttifak', value: r.alliance!),
             ],
+            /* ⚠️ Yalnız koordinat GELDİĞİNDE çiziliyor. «Başkent —» yazmak oyuncunun başkenti
+               yokmuş gibi okunurdu; yükleniyor iskeleti çizmek de tek satır için gürültü. */
+            if (_hit != null)
+              _Chip(
+                label: 'Başkent',
+                value: '${_hit!.k}:${_hit!.d}:${_hit!.s}',
+              ),
           ],
         ),
 
@@ -158,7 +199,8 @@ class _BodyState extends ConsumerState<_Body> {
       _error = null;
     });
     try {
-      final hit = await findInWorld(ref.read(apiProvider), playerId);
+      // ⭐ Künye için çekilmiş sonuç varsa ikinci istek atılmıyor.
+      final hit = _hit ?? await findInWorld(ref.read(apiProvider), playerId);
       if (!mounted) return;
       if (hit == null) {
         // ⚠️ Sessiz geçilmiyor: oyuncu düğmeye bastı ve hiçbir şey olmaması "bozuk" demek.
@@ -168,7 +210,8 @@ class _BodyState extends ConsumerState<_Body> {
       // ⚠️ ÖNCE kapat, SONRA git — oyuncu nereye düştüğünü görsün (rapor güzergâhındaki
       // `MwRouteLine` ile aynı kural).
       Navigator.of(context).pop();
-      context.go('/world/${hit.k}/${hit.d}');
+      // ⭐ `?s=` — hedef slot Dünya listesinde kısa bir an parlıyor (2026-08-19).
+      context.go('/world/${hit.k}/${hit.d}?s=${hit.s}');
     } catch (_) {
       await mwTapError();
       if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');

@@ -86,46 +86,98 @@ class _Strip extends ConsumerWidget {
           ref.read(citiesProvider.future),
         ]);
       },
-      builder: (physics) => SingleChildScrollView(
-        physics: physics,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(8, 10, 8, 16),
-          child: Row(
+      builder: (physics) => LayoutBuilder(
+        builder: (context, kutu) {
+          /* ⭐⭐ HÜCRE GENİŞLİĞİ ARTIK EKRANA GÖRE (kullanıcı, 2026-08-19: *"şehirler yan yana
+             eşit genişlik kaplasın… yatayda scroll oluşturmayacak şekilde ekrana sığsın"*).
+
+             Eskiden sabit 76 px'ti ve dört-beş şehirli oyuncuda toplam genişlik ekranı
+             aşıyordu: şerit yatayda kayıyor, sondaki şehir yarım görünüyordu — yani "kimisi
+             dar" izlenimi buradan geliyordu, hücreler aslında eşitti.
+
+             ⚠️⚠️ Düz `Expanded` KULLANILMADI ve bu eski bir ders: tek şehirli oyuncuda hücre
+             ekranın tamamına yayılır, kale ortada asılı kalırdı (web'de yaşandı, önceki
+             yorumda yazılıydı). Bunun yerine genişlik **hesaplanıyor ve kelepçeleniyor**:
+                • az şehir → `_kEnFazla`yı geçmiyor, kale şişmiyor,
+                • çok şehir → `_kEnAz`ın altına inmiyor; sığmıyorsa yatay kaydırma
+                  KALIYOR. Onuncu şehri 30 px'e sıkıştırmak "sığdı" demek olmazdı. */
+          const bosluk = 4.0;
+          final kullanilabilir =
+              kutu.maxWidth - 16 - bosluk * (cities.length - 1);
+          final genislik = (kullanilabilir / cities.length).clamp(
+            _kEnAz,
+            _kEnFazla,
+          );
+          final sigiyor =
+              genislik * cities.length + bosluk * (cities.length - 1) <=
+              kutu.maxWidth - 16;
+
+          final serit = Row(
             // ⚠️ `start`: az hareketi olan şehir yukarıda hizalı kalsın. `center` olsaydı
             // kaleler birbirine göre kayar ve şeridin üst hattı bozulurdu.
             crossAxisAlignment: CrossAxisAlignment.start,
+            // ⚠️ Sığıyorsa `min`: hücreler sola yaslı kalsın, ortaya toplanmasın.
+            mainAxisSize: MainAxisSize.min,
             children: [
-              for (final city in cities) ...[
+              for (var i = 0; i < cities.length; i++) ...[
+                if (i > 0) const SizedBox(width: bosluk),
                 _Cell(
-                  city: city,
-                  active: city.id == activeId,
-                  threat: tehdit.contains(city.id),
+                  city: cities[i],
+                  width: genislik,
+                  active: cities[i].id == activeId,
+                  threat: tehdit.contains(cities[i].id),
                   // ⚠️ Sıra SUNUCUDAN geliyor (`ORDER BY m.created_at, m.id`) ve **korunuyor**:
                   // hareketler şehrin altına ASILDIKLARI sırayla dizili kalmalı (kullanıcı
                   // kuralı). Varışa göre dizilseydi simgeler her saniye yer değiştirir,
                   // oyuncunun parmağı hedefi kaçırırdı.
-                  movements: all.where((m) => m.cityId == city.id).toList(),
+                  movements: all
+                      .where((m) => m.cityId == cities[i].id)
+                      .toList(),
                 ),
-                const SizedBox(width: 4),
               ],
             ],
-          ),
-        ),
+          );
+
+          return SingleChildScrollView(
+            physics: physics,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 10, 8, 16),
+              // ⚠️ Sığıyorsa yatay kaydırıcı HİÇ kurulmuyor: boşta duran bir kaydırıcı,
+              //    parmağı yanlışlıkla yatay sürüklendiğinde şeridi oynatıp "kaydı" hissi
+              //    veriyordu.
+              child: sigiyor
+                  ? serit
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: serit,
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
+/// Hücrenin inebileceği en dar ölçü — altına inince kale simgesi ve koordinat okunmaz olur.
+const double _kEnAz = 58;
+
+/// En geniş ölçü — tek şehirli oyuncuda kalenin ekrana yayılmasını önler.
+const double _kEnFazla = 96;
+
 class _Cell extends ConsumerWidget {
   const _Cell({
     required this.city,
+    required this.width,
     required this.active,
     required this.threat,
     required this.movements,
   });
 
   final CitySummary city;
+
+  /// Şeritten geliyor — bütün hücrelerde AYNI (gerekçe `_Strip`te).
+  final double width;
   final bool active;
   final bool threat;
   final List<Movement> movements;
@@ -137,10 +189,7 @@ class _Cell extends ConsumerWidget {
     final co = city.coordinates;
 
     return SizedBox(
-      // ⚠️ Sabit 76 px: beş şehir 380 px'e sığıyor, taşarsa yatayda kayıyor. Esnek hücre
-      // kullanılsaydı TEK şehirde o hücre ekranın tamamını kaplar, kale ortasında asılı
-      // kalırdı (web'de yaşandı).
-      width: 76,
+      width: width,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

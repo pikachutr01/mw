@@ -50,6 +50,7 @@ export class BattleController {
     @Query('kind') kind?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('type') type?: string,
   ): Promise<Record<string, unknown>> {
     const player = req.player!;
     const take = Math.min(100, Math.max(1, Number(limit ?? 20) || 20));
@@ -64,9 +65,36 @@ export class BattleController {
      * İstemcideki `isReport()` zaten `endsWith('_report')` diyordu; artık ikisi aynı kural.
      */
     const isReport = sql`kind LIKE '%\\_report' ESCAPE '\\'`;
-    const filter = kind === 'reports' ? sql`AND ${isReport}`
+    const kindFilter = kind === 'reports' ? sql`AND ${isReport}`
       : kind === 'messages' ? sql`AND NOT (${isReport})`
         : sql``;
+
+    /**
+     * ⭐⭐ TÜR SÜZGECİ (kullanıcı, 2026-08-19): *"Mesajlar sayfasının raporlar bölümüne filtre
+     * ekleyelim… Filtre seçilince sunucu yeniden seçilen filtreye göre listeyi gönderir."*
+     *
+     * ⚠️⚠️ Süzgeç SUNUCUDA olmak ZORUNDA ve bu, sayfalamanın sunucuya inmesiyle aynı
+     * gerekçe: istemcide süzülseydi sunucu 20 satır döndürür, istemci onların 3'ünü gösterir
+     * ve sayfa 3 satır görünürdü. Aynı hata bu uçta bir kez yapıldı (`kind` süzgeci), notu
+     * yukarıda duruyor.
+     *
+     * İki özel değer var, gerisi doğrudan `kind` eşleşmesi:
+     *   • `all` (ya da boş) → süzme yok,
+     *   • `favorites`       → yalnız favorilenenler (tür fark etmez).
+     *
+     * ⚠️ Bilinmeyen bir `type` **sessizce yok sayılıyor**, hata döndürülmüyor: süzgeç bir
+     * gezinme tercihi ve bayat bir istemcinin gönderdiği eski bir tür yüzünden posta
+     * kutusunun tamamen açılmaması orantısız olurdu. Liste yine doğru, yalnız süzülmemiş.
+     */
+    const known = new Set([
+      'battle_report', 'spy_report', 'transport_report',
+      'support_report', 'found_city_report', 'return_report', 'system',
+    ]);
+    const typeFilter = type === 'favorites' ? sql`AND favorited_at IS NOT NULL`
+      : type != null && known.has(type) ? sql`AND kind = ${type}`
+        : sql``;
+
+    const filter = sql`${kindFilter} ${typeFilter}`;
 
     /**
      * ⭐ `body` BU LİSTEDE YOK (2026-08-03) — gövdeler `GET messages/:id` ile ayrı geliyor.
@@ -78,13 +106,31 @@ export class BattleController {
      * Yani her dakika, hiç kullanılmayan onlarca KB taşınıyordu.
      */
     const rows = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT id, kind, side, battle_id, mission_id, subject, at, read_at
+      SELECT id, kind, side, battle_id, mission_id, subject, at, read_at, favorited_at
         FROM messages m
        WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
          ${filter}
        ORDER BY id DESC
        LIMIT ${take} OFFSET ${pageNo * take}
     `);
+
+    /**
+     * ⭐ SÜZGEÇLİ TOPLAM — sayfa sayısı bundan hesaplanıyor.
+     *
+     * ⚠️⚠️ Aşağıdaki `counts` sorgusu bilerek **süzgeçsiz** (sekme rozetleri iki kümeyi de
+     * gösteriyor) ve o yüzden tür süzgeci seçiliyken sayfa sayısını ondan hesaplamak
+     * SESSİZCE YANLIŞ olurdu: 200 raporu olan oyuncu «Casusluk» seçtiğinde 3 casus raporu
+     * görür ama sayfalayıcı «1 / 10» yazardı ve boş sayfalara gezinirdi. Bu yüzden süzgeç
+     * varken toplam ayrıca sayılıyor; süzgeç yokken fazladan sorgu HİÇ atılmıyor.
+     */
+    const filtered = type == null || type === 'all' || type === ''
+      ? null
+      : (await this.db.execute<Record<string, unknown>>(sql`
+          SELECT COUNT(*)::int AS n
+            FROM messages m
+           WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
+             ${filter}
+        `))[0];
 
     /** Toplam ve okunmamış — hem genel hem süzgece göre; sekme rozetleri ikisini de istiyor. */
     const [counts] = await this.db.execute<Record<string, unknown>>(sql`
@@ -94,7 +140,8 @@ export class BattleController {
         COUNT(*) FILTER (WHERE ${isReport})::int AS total_reports,
         COUNT(*) FILTER (WHERE NOT (${isReport}))::int AS total_messages,
         COUNT(*) FILTER (WHERE ${isReport} AND read_at IS NULL)::int AS unread_reports,
-        COUNT(*) FILTER (WHERE NOT (${isReport}) AND read_at IS NULL)::int AS unread_messages
+        COUNT(*) FILTER (WHERE NOT (${isReport}) AND read_at IS NULL)::int AS unread_messages,
+        COUNT(*) FILTER (WHERE favorited_at IS NOT NULL)::int AS total_favorites
       FROM messages
      WHERE world_id = ${player.worldId} AND player_id = ${player.playerId}
     `);
@@ -105,13 +152,16 @@ export class BattleController {
       page: pageNo,
       pageSize: take,
       /** Süzgeçli toplam — istemci sayfa sayısını bundan hesaplar. */
-      total: kind === 'reports' ? n('total_reports')
-        : kind === 'messages' ? n('total_messages') : n('total_all'),
+      total: filtered != null ? Number(filtered['n'] ?? 0)
+        : kind === 'reports' ? n('total_reports')
+          : kind === 'messages' ? n('total_messages') : n('total_all'),
       counts: {
         reports: n('total_reports'),
         messages: n('total_messages'),
         unreadReports: n('unread_reports'),
         unreadMessages: n('unread_messages'),
+        /** ⭐ Favori sayısı — süzgeç çipinin yanında rozet olarak gösteriliyor. */
+        favorites: n('total_favorites'),
       },
       items: rows.map((r) => ({
         id: Number(r['id']),
@@ -122,6 +172,9 @@ export class BattleController {
         subject: String(r['subject']),
         at: toDate(r['at']).toISOString(),
         readAt: r['read_at'] == null ? null : toDate(r['read_at']).toISOString(),
+        // ⚠️ Damga değil BOOL taşınıyor: istemci "ne zaman favorilendi"yi hiçbir yerde
+        //    göstermiyor ve göstermeyeceği bir alanı her satırda taşımak gereksiz.
+        favorite: r['favorited_at'] != null,
       })),
       serverNow: new Date().toISOString(),
     };
@@ -140,10 +193,10 @@ export class BattleController {
   async messageBody(
     @Param('id') id: string,
     @Req() req: AuthedRequest,
-  ): Promise<{ id: number; body: Record<string, unknown> }> {
+  ): Promise<{ id: number; body: Record<string, unknown>; favorite: boolean }> {
     const player = req.player!;
     const [row] = await this.db.execute<Record<string, unknown>>(sql`
-      SELECT id, body FROM messages
+      SELECT id, body, favorited_at FROM messages
        WHERE id = ${Number(id)}
          AND world_id = ${player.worldId}
          AND player_id = ${player.playerId}
@@ -152,7 +205,50 @@ export class BattleController {
     return {
       id: Number(row['id']),
       body: (row['body'] ?? {}) as Record<string, unknown>,
+      /**
+       * ⚠️ Favori durumu gövde ucunda DA dönüyor, yalnız listede değil: savaş raporu
+       * listeden AÇILMADAN da görülebiliyor (bildirim derin bağlantısı) ve o yolda
+       * istemcinin elinde liste satırı hiç olmuyor. Yıldızın yanlış durumda çizilmesi,
+       * oyuncunun favorisini yanlışlıkla kaldırması demekti.
+       */
+      favorite: row['favorited_at'] != null,
     };
+  }
+
+  /**
+   * ⭐⭐ FAVORİYE AL / FAVORİDEN ÇIKAR (kullanıcı, 2026-08-19): *"bir raporu açıp gösterdikten
+   * sonra bu raporun bir köşesine favorileme butonu koyalım… Yine aynı görüntüleme sayfasından
+   * favori kaldırılabilsin."*
+   *
+   * ⚠️ Gövde **istenen DURUMU** taşıyor (`{favorite: true|false}`), bir "toggle" değil. Toggle
+   * olsaydı iki istemci (web + telefon) aynı raporu aynı anda açtığında ikinci dokunuş ilkini
+   * geri alırdı ve oyuncu neden favorinin kaybolduğunu anlayamazdı. Durum göndermek bu yarışı
+   * yapısal olarak imkânsız kılıyor.
+   *
+   * ⚠️ Sahiplik koşulu `WHERE`de (`markRead` ile aynı kalıp): başkasının mesajı hiç
+   * güncellenmiyor ve var olup olmadığı da sızmıyor.
+   *
+   * ⚠️ Bu uç outbox'a YAZMIYOR: favori tamamen kişisel bir işaret, başka hiçbir ekranı
+   * ilgilendirmiyor ve bir WS olayı üretmesi gereksiz gürültü olurdu.
+   */
+  @Post('messages/:id/favorite')
+  @HttpCode(204)
+  async setFavorite(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: AuthedRequest,
+  ): Promise<void> {
+    const player = req.player!;
+    const parsed = z.object({ favorite: z.boolean() }).safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'invalid_request' });
+
+    await this.db.execute(sql`
+      UPDATE messages
+         SET favorited_at = ${parsed.data.favorite ? sql`now()` : sql`NULL`}
+       WHERE id = ${Number(id)}
+         AND world_id = ${player.worldId}
+         AND player_id = ${player.playerId}
+    `);
   }
 
   @Post('messages/:id/read')

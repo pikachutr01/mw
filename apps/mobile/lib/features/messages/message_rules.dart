@@ -78,6 +78,78 @@ const Map<String, ({String? icon, String title})> kReportType = {
 /// eklendiğinde burayı güncellemek gerekmesin.
 bool isReport(String kind) => kind.endsWith('_report');
 
+/// ⭐ SAVAŞ RAPORUNDA KARŞI TARAFIN ADI — konu satırından ayıklanıyor.
+///
+/// Sunucu konuyu `"<sonuç> · <karşı tarafın adı>"` diye yazıyor (`battle.handlers.ts`):
+/// *«Saldırın başarılı · alfa9lth»*. Kullanıcı 2026-08-19'da sonucun ORADAN kalkmasını istedi:
+/// *"saldırı raporunda üstte Saldırın başarılı yazmasın. Bunun yanında yazan kullanıcı adı
+/// üstteki dakikanın yanında gözüksün."*
+///
+/// ⚠️ Sonuç zaten büyük harflerle kendi bandında yazıyor (*KAZANDINIZ !*), yani konu satırının
+/// ilk yarısı üçüncü kez tekrar ediyordu.
+///
+/// ⚠️⚠️ Ayırıcı **son** geçtiği yerden bölünüyor, ilkinden değil: oyuncu adı boşluk
+/// içeremiyor ama gelecekte sonuç metni ` · ` taşırsa ilk geçişten bölmek adı yanlış keserdi.
+/// ⚠️ Ayırıcı yoksa `null` — uydurulmuyor. Çağıran o zaman konuyu eskisi gibi tam yazıyor,
+/// yani sunucu biçimi değişirse bilgi KAYBOLMUYOR, yalnız düzen eski hâline dönüyor.
+String? battleCounterpart(String subject) {
+  const ayirac = ' · ';
+  final i = subject.lastIndexOf(ayirac);
+  if (i < 0) return null;
+  final ad = subject.substring(i + ayirac.length).trim();
+  return ad.isEmpty ? null : ad;
+}
+
+/// ⭐⭐ RAPOR TÜR SÜZGECİ (kullanıcı, 2026-08-19): *"Casusluk raporları, saldırı raporları,
+/// diğer sistem mesajları vs ayrı ayrı filtreleme özelliği ekleyelim. Nakliyesi, desteği falan
+/// ne kadar farklı türde rapor varsa ona göre filtre ekleyelim. Filtre varsayılan olarak
+/// hepsini gösterir."*
+///
+/// ⚠️ Değerler doğrudan `messages.kind` — sunucu bunları `kind = $1` olarak kullanıyor, yani
+/// arada bir eşleme tablosu YOK. Eşleme olsaydı iki tarafın ayrışabileceği bir yer daha
+/// doğardı.
+/// ⚠️ `favorites` bir tür DEĞİL, bir işaret; sunucu onu ayrı ele alıyor.
+/// ⚠️ `return_report` listede YOK — dönüş 2026-07-30'dan beri rapor üretmiyor, yalnız eski
+/// kayıtlarda var. «Hepsi» ile hâlâ görülüyor; ölü bir tür için çip koymak gürültü olurdu.
+/// ⚠️⚠️ Liste ve etiketler web'deki `REPORT_FILTERS` ile **elle hizalı** olmak zorunda: i18n
+/// paketi 2026-08-19'da reddedildi, yani iki istemci metni ayrı yazıyor ve ayrışmayı
+/// yakalayacak bir kapı YOK.
+const List<({String id, String label})> kReportFilters = [
+  (id: 'all', label: 'Hepsi'),
+  (id: 'battle_report', label: 'Saldırı'),
+  (id: 'spy_report', label: 'Casusluk'),
+  (id: 'transport_report', label: 'Nakliye'),
+  (id: 'support_report', label: 'Destek'),
+  (id: 'found_city_report', label: 'Şehir kurma'),
+  (id: 'favorites', label: 'Favoriler'),
+];
+
+/// ⭐ SAYFA BAŞINA KAYIT SEÇENEKLERİ — web'in açılır listesiyle **birebir aynı**.
+///
+/// ⚠️ Sıra da aynı: oyuncu iki istemcide aynı listeyi görmeli, yoksa "web'de 20 seçmiştim"
+/// diye arayan biri farklı bir yerde bulur.
+const List<int> kMessagePageSizes = [10, 20, 50];
+
+/// Varsayılan — web ile aynı. ⚠️ Mobil eskiden **20**'de sabitti; kullanıcı seçiciyi
+/// isteyince ortak varsayılana inildi ki iki istemci aynı yerden başlasın.
+const int kMessagePageSizeDefault = 10;
+
+/// ⭐⭐ DİSKTEN OKUNAN SAYFA BOYUNU DOĞRULA.
+///
+/// ⚠️⚠️ **Ham değer asla doğrudan kullanılmaz.** Depoda bozuk/eski/elle değiştirilmiş bir
+/// değer olabilir ve sunucu `limit`i **1..100 arasına kıskaçlıyor** (`battle.controller.ts`).
+/// Yani `5000` istenseydi liste 100 satır dönerdi ama ekran `pageCount`u 5000'e göre hesaplayıp
+/// **«1 / 1»** yazardı: sayfalayıcı sessizce yalan söyler, oyuncu geri kalan mesajlarına
+/// hiçbir zaman ulaşamazdı. Listede olmayan her değer varsayılana düşer.
+///
+/// `null` (henüz seçim yapılmamış) da varsayılana düşer — hata değil, ilk açılış.
+int normalizeMessagePageSize(String? raw) {
+  final n = raw == null ? null : int.tryParse(raw);
+  return n != null && kMessagePageSizes.contains(n)
+      ? n
+      : kMessagePageSizeDefault;
+}
+
 /// Sayfa sayısı — en az 1. ⚠️ Boş kutuda `0 / 0` yazmak "veri gelmedi" gibi görünürdü.
 int pageCount(int total, int pageSize) {
   if (pageSize <= 0) return 1;

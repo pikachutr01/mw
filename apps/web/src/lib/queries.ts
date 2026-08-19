@@ -295,6 +295,8 @@ export interface MessageRow {
   subject: string;
   at: string;
   readAt: string | null;
+  /** ⭐ Oyuncunun favorilediği rapor (2026-08-19). Liste satırındaki yıldızı bu belirliyor. */
+  favorite: boolean;
   /**
    * ⚠️ `body` BU TİPTE YOK — liste ucu artık gövde taşımıyor (2026-08-03). Gövde modal
    * açılınca `useMessageBody(id)` ile geliyor; gerekçe `battle.controller.ts`'te.
@@ -544,6 +546,8 @@ export interface MessagePage {
   total: number;
   counts: {
     reports: number; messages: number; unreadReports: number; unreadMessages: number;
+    /** ⭐ Favori sayısı — süzgeç çipinin rozeti. */
+    favorites: number;
   };
   items: MessageRow[];
 }
@@ -559,11 +563,24 @@ export interface MessagePage {
  * o yol bozulmadı, süzgeçsiz çağrı hâlâ genel sayacı veriyor.
  */
 export const useMessages = (
-  opts: { kind?: 'reports' | 'messages'; page?: number; pageSize?: number } = {},
+  opts: {
+    kind?: 'reports' | 'messages'; page?: number; pageSize?: number;
+    /**
+     * ⭐ Rapor tür süzgeci (2026-08-19). `all` ya da yok → süzme yok; `favorites` özel;
+     * gerisi doğrudan `kind` eşleşmesi.
+     *
+     * ⚠️ Sorgu anahtarına DA giriyor: girmeseydi süzgeç değişince React Query önbellekten
+     * eski listeyi verir ve ekran süzülmemiş satırları göstermeye devam ederdi.
+     */
+    type?: string;
+  } = {},
 ): UseQueryResult<MessagePage> => useQuery({
-  queryKey: ['messages', opts.kind ?? 'all', opts.page ?? 0, opts.pageSize ?? 20],
+  queryKey: [
+    'messages', opts.kind ?? 'all', opts.page ?? 0, opts.pageSize ?? 20, opts.type ?? 'all',
+  ],
   queryFn: () => get<MessagePage>(
-    `/api/v1/messages?kind=${opts.kind ?? 'all'}&page=${opts.page ?? 0}&limit=${opts.pageSize ?? 20}`,
+    `/api/v1/messages?kind=${opts.kind ?? 'all'}&page=${opts.page ?? 0}`
+    + `&limit=${opts.pageSize ?? 20}&type=${opts.type ?? 'all'}`,
   ),
   refetchInterval: useSafetyNet(),
   /** ⚠️ Sayfa değişince liste boşalıp zıplamasın — önceki sayfa yerinde kalır. */
@@ -831,11 +848,44 @@ export const useBattle = (battleId: number | null): UseQueryResult<BattleReport>
  */
 export const useMessageBody = (
   id: number | null,
-): UseQueryResult<{ id: number; body: Record<string, unknown> }> => useQuery({
+): UseQueryResult<MessageBody> => useQuery({
   queryKey: ['message-body', id],
-  queryFn: () => get<{ id: number; body: Record<string, unknown> }>(`/api/v1/messages/${id}`),
+  queryFn: () => get<MessageBody>(`/api/v1/messages/${id}`),
   enabled: id != null,
 });
+
+export interface MessageBody {
+  id: number;
+  body: Record<string, unknown>;
+  /**
+   * ⚠️ Favori durumu gövde ucunda DA geliyor: rapor bildirim derin bağlantısıyla listeden
+   * GEÇMEDEN açılabiliyor ve o yolda elimizde liste satırı hiç olmuyor.
+   */
+  favorite: boolean;
+}
+
+/**
+ * ⭐⭐ FAVORİYE AL / ÇIKAR (kullanıcı, 2026-08-19).
+ *
+ * ⚠️ İstenen DURUM gönderiliyor, «toggle» değil: iki istemci aynı raporu açıkken ikinci
+ * dokunuş ilkini geri alırdı (gerekçenin tamamı `battle.controller.ts`te).
+ *
+ * ⚠️ Hem listeyi hem gövdeyi geçersiz kılıyor: yıldız iki yerde birden çiziliyor ve
+ * «Favoriler» süzgeci seçiliyken favoriden çıkarılan satırın listeden düşmesi gerekiyor.
+ */
+export function useSetFavorite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, favorite }: { id: number; favorite: boolean }) =>
+      // ⚠️ `api` gövdeyi kendisi `JSON.stringify`liyor — burada stringify etmek çift
+      //    kodlama olurdu (diğer mutasyonlar da düz nesne veriyor).
+      api(`/api/v1/messages/${id}/favorite`, { method: 'POST', body: { favorite } }),
+    onSuccess: (_d, { id }) => {
+      void qc.invalidateQueries({ queryKey: ['messages'] });
+      void qc.invalidateQueries({ queryKey: ['message-body', id] });
+    },
+  });
+}
 
 export interface ReportLine {
   id: string;
@@ -892,17 +942,26 @@ export interface BattleReport {
   loot: { gold: number; food: number } | null;
   /** Yalnız saldıran: ortaya çıkan havuz vs fiilen taşınan. */
   lootBreakdown: {
-    /** Savaşta ortaya çıkan enkaz — saldıran KAYBETSE de dolu (tamamı savunana gider). */
+    /** Savaşın ortaya çıkardığı TOPLAM: ölen ordunun enkazı + kasadan alınabilecek pay. */
     revealed: { gold: number; food: number };
     /** Fiilen eve taşınan yük. Saldıran kaybettiyse `null` → «Taşınan» satırı hiç çizilmez. */
     carried: { gold: number; food: number } | null;
-    /**
-     * ⭐ Oranca alınabilecekken TAŞIMA KAPASİTESİNE sığmayıp şehirde kalan kısım.
-     * `null` = kapasite yetti → satır hiç çizilmez.
-     */
+    /** ⚠️ Ekranda satır olarak çizilmiyor (2026-08-19); `detail.plunderLeft` ile aynı sayı. */
     leftBehind: { gold: number; food: number } | null;
     /** Hayatta kalan ordunun toplam taşıma kapasitesi. */
     capacity: number | null;
+    /**
+     * ⭐⭐ Info ikonunun açtığı ayrıntılı hesap. `null` = eski savaş kaydı (motor
+     * `plunderNotCarried`ı sonradan ekledi) → ikon hiç çizilmez.
+     */
+    detail: {
+      debrisTotal: { gold: number; food: number };
+      debrisCarried: { gold: number; food: number };
+      debrisLeft: { gold: number; food: number };
+      plunderTotal: { gold: number; food: number };
+      plunderCarried: { gold: number; food: number };
+      plunderLeft: { gold: number; food: number };
+    } | null;
   } | null;
   notes: string[];
   text: string;

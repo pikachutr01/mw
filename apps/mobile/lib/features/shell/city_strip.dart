@@ -115,15 +115,34 @@ class _Header extends ConsumerWidget {
       ref.watch(movementsProvider).value ?? const [],
     ).contains(active.id);
 
-    return InkWell(
+    /* ⭐ `InkWell` DEĞİL `GestureDetector` (kullanıcı, 2026-08-19: *"tıklama efektini beyaz
+       parlama görüntüsünü kaldıralım"*). Material'ın dalga efekti bu koyu, çerçeveli şeritte
+       beyaz bir sıçrama olarak görünüyordu.
+
+       ⚠️ Yerine titreşim KONMADI: `ui/native.dart`taki politika *"her dokunuşta titremiyor,
+       titreşim yalnız sunucu bir şey onayladığında"* diyor. Burada geri bildirim zaten
+       görünür — chevron dönüyor ve şerit iniyor. Kaybolan bir şey yok.
+       ⚠️ `behavior: opaque`: `Container`ın saydam bölgeleri de dokunmayı yakalasın, yoksa
+       satırın boşluklarına basınca hiçbir şey olmuyordu. */
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => ref.read(stripOpenProvider.notifier).toggle(),
       child: Container(
         margin: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
         decoration: BoxDecoration(
-          color: c.raised.withValues(alpha: 0.5),
-          border: Border.all(color: c.border),
-          borderRadius: BorderRadius.circular(8),
+          /* ⭐ Düz yarı saydam yerine ince bir değrade + belirgin kenar: şerit artık
+             "tıklanabilir bir başlık" gibi duruyor, arka planla kaynaşmıyor. */
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              c.raised.withValues(alpha: 0.85),
+              c.raised.withValues(alpha: 0.45),
+            ],
+          ),
+          border: Border.all(color: c.borderStrong.withValues(alpha: 0.7)),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
@@ -156,16 +175,31 @@ class _Header extends ConsumerWidget {
             // cevabı ekranda başka hiçbir yerde kalmıyor.
             if (active.isCapital) ...[
               const SizedBox(width: 6),
-              Text(
-                'BAŞKENT',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: c.muted,
-                  letterSpacing: 0.5,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: c.gold.withValues(alpha: 0.14),
+                  border: Border.all(color: c.gold.withValues(alpha: 0.5)),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'BAŞKENT',
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w700,
+                    color: c.gold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
             ],
-            const SizedBox(width: 8),
+
+            /* ⭐ SIRALAMA DEĞİŞTİ (kullanıcı, 2026-08-19): boşluk artık koordinatın ÖNÜNDE.
+               Eskiden `ad · koordinat · [boşluk] · chevron` idi, yani koordinat adın peşine
+               takılıyor ve şehir adının uzunluğuna göre satırda oynuyordu. Şimdi
+               `ad · [boşluk] · koordinat · chevron`: koordinat sağa yaslı ve sabit bir
+               sütunda duruyor, chevron da en sağda. */
+            const Spacer(),
             Text(
               '${co.k}:${co.d}:${co.s}',
               style: TextStyle(
@@ -174,11 +208,11 @@ class _Header extends ConsumerWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 2),
             AnimatedRotation(
               turns: open ? 0.5 : 0,
               duration: const Duration(milliseconds: 150),
-              child: Icon(Icons.expand_more, size: 18, color: c.muted),
+              child: Icon(Icons.expand_more, size: 20, color: c.muted),
             ),
           ],
         ),

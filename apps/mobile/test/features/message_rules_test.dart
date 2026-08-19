@@ -162,6 +162,108 @@ void main() {
     });
   });
 
+  /// ⭐ SAVAŞ RAPORUNDA KARŞI TARAFIN ADI — konu satırından ayıklanıyor.
+  group('savaş raporu karşı tarafı', () {
+    test('sunucunun yazdığı konudan adı ayıklıyor', () {
+      expect(battleCounterpart('Saldırın başarılı · alfa9lth'), 'alfa9lth');
+      expect(battleCounterpart('Saldırın püskürtüldü · wstest'), 'wstest');
+      expect(battleCounterpart('Şehrin yağmalandı · alfa9lth'), 'alfa9lth');
+    });
+
+    /// ⚠️⚠️ ASIL KORUNAN DAVRANIŞ: ayırıcı yoksa `null` ve çağıran konuyu ESKİSİ gibi tam
+    /// yazıyor. Uydurulmuş bir ad döndürseydik, sunucu biçimi değiştiği gün ekranda konunun
+    /// rastgele bir parçası kullanıcı adı gibi görünürdü — sessiz ve teşhisi zor.
+    test('⭐ ayırıcı yoksa null — uydurulmuyor', () {
+      expect(battleCounterpart('Saldırın başarılı'), isNull);
+      expect(battleCounterpart(''), isNull);
+      expect(battleCounterpart('tek kelime'), isNull);
+    });
+
+    test('ayırıcıdan sonrası boşsa null', () {
+      expect(battleCounterpart('Saldırın başarılı · '), isNull);
+      expect(battleCounterpart('Saldırın başarılı ·   '), isNull);
+    });
+
+    /// ⚠️ SON ayırıcıdan bölünüyor: sonuç metni ileride ` · ` taşırsa adın başı kesilmemeli.
+    test('⭐ birden çok ayırıcıda SONUNCUSU esas alınıyor', () {
+      expect(battleCounterpart('Saldırın · başarılı · alfa9lth'), 'alfa9lth');
+    });
+  });
+
+  /// ⭐ RAPOR TÜR SÜZGECİ — çip listesi.
+  group('rapor süzgeci', () {
+    /// ⚠️ «Hepsi» İLK olmak zorunda: varsayılan o ve şerit yatayda kayıyor. Sona düşseydi
+    /// dar telefonda seçili çip ekran dışında kalırdı.
+    test('varsayılan «Hepsi» listenin başında', () {
+      expect(kReportFilters.first.id, 'all');
+    });
+
+    /// ⚠️ `favorites` bir `kind` DEĞİL, sunucuda ayrı ele alınan özel bir değer. Listede
+    /// olması şart — favori süzgecinin tek giriş kapısı bu çip.
+    test('favoriler çipi var ve sonda', () {
+      expect(kReportFilters.last.id, 'favorites');
+    });
+
+    /// ⚠️⚠️ Kimlikler doğrudan `messages.kind` — sunucu `kind = $1` diye kullanıyor. Bir harf
+    /// kayması süzgeci **sessizce boş liste** yapardı: hata yok, yalnız hiçbir satır eşleşmez.
+    test('⭐ tür kimlikleri gerçek `kind` değerleriyle aynı', () {
+      final turler = kReportFilters
+          .map((f) => f.id)
+          .where((id) => id != 'all' && id != 'favorites');
+      for (final id in turler) {
+        expect(
+          isReport(id),
+          isTrue,
+          reason: '$id bir rapor türü değil — sunucuda hiçbir satıra eşleşmez',
+        );
+      }
+    });
+
+    test('kimlikler tekil, etiketler boş değil', () {
+      final idler = kReportFilters.map((f) => f.id).toList();
+      expect(idler.toSet().length, idler.length);
+      for (final f in kReportFilters) {
+        expect(f.label.trim(), isNotEmpty);
+      }
+    });
+  });
+
+  /// ⭐ SAYFA BAŞINA KAYIT — seçim diskte duruyor, yani ham dize olarak geri geliyor.
+  group('sayfa boyu tercihi', () {
+    test('seçenekler web ile birebir ve varsayılan listede', () {
+      expect(kMessagePageSizes, [10, 20, 50]);
+      expect(kMessagePageSizes, contains(kMessagePageSizeDefault));
+    });
+
+    test('geçerli seçim olduğu gibi dönüyor', () {
+      for (final n in kMessagePageSizes) {
+        expect(normalizeMessagePageSize('$n'), n);
+      }
+    });
+
+    /// İlk açılış — henüz hiç seçim yapılmamış.
+    test('kayıt yoksa varsayılan', () {
+      expect(normalizeMessagePageSize(null), kMessagePageSizeDefault);
+    });
+
+    /// ⭐⭐ ASIL KORUNAN ARIZA. Depodaki değer oyuncunun elinin altında ve sunucu `limit`i
+    /// 1..100 arasına kıskaçlıyor. `5000` doğrudan geçseydi liste 100 satır döner, ekran
+    /// sayfa sayısını 5000'e göre hesaplayıp «1 / 1» yazardı: sayfalayıcı sessizce yalan
+    /// söyler ve oyuncu kalan mesajlarına HİÇBİR ZAMAN ulaşamazdı.
+    test('⭐ listede olmayan değer varsayılana düşüyor', () {
+      expect(normalizeMessagePageSize('5000'), kMessagePageSizeDefault);
+      expect(normalizeMessagePageSize('25'), kMessagePageSizeDefault);
+      expect(normalizeMessagePageSize('0'), kMessagePageSizeDefault);
+      expect(normalizeMessagePageSize('-10'), kMessagePageSizeDefault);
+    });
+
+    test('sayı olmayan kayıt varsayılana düşüyor', () {
+      expect(normalizeMessagePageSize('yirmi'), kMessagePageSizeDefault);
+      expect(normalizeMessagePageSize(''), kMessagePageSizeDefault);
+      expect(normalizeMessagePageSize('10x'), kMessagePageSizeDefault);
+    });
+  });
+
   group('sekme rozeti', () {
     test('sekmesine göre okunmamış sayısı', () {
       const c = (unreadReports: 3, unreadMessages: 7);

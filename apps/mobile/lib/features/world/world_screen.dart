@@ -19,6 +19,8 @@
 /// sheet bugün yalnız hedefi tanıtıyor. Sahte bir düğme koymak yerine eksik olduğu yazılı.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -30,10 +32,16 @@ import '../../ui/primitives.dart';
 import 'target_sheet.dart';
 
 class WorldScreen extends ConsumerStatefulWidget {
-  const WorldScreen({super.key, this.fromUrl});
+  const WorldScreen({super.key, this.fromUrl, this.highlight});
 
   /// Derin bağlantıdan gelen diyar (`/world/:k/:d`). Yoksa `null`.
   final MwRealm? fromUrl;
+
+  /// ⭐⭐ Kısa bir an parlayacak slot (`?s=`, 2026-08-19). Kullanıcı isteği: *"savaş raporu,
+  /// casusluk raporu gibi ekranlardan bir koordinata tıklayıp dünya ekranını açıyorsak, o
+  /// koordinata kısa bir anlığına highlight verelim ki oyuncu ekranı açınca hangi şehre
+  /// gittiğini anlasın."*
+  final int? highlight;
 
   @override
   ConsumerState<WorldScreen> createState() => _WorldScreenState();
@@ -47,6 +55,39 @@ class _WorldScreenState extends ConsumerState<WorldScreen> {
   /// ⚠️ Adres temizlenebilsin diye yerel kopya: go_router'ın parametresini "unutmanın" başka
   /// yolu, gerçekten `/world`e gitmek olurdu ve bu geri tuşunu bozardı.
   bool _urlBirakildi = false;
+
+  /// Şu an parlayan slot. `null` → vurgu yok.
+  ///
+  /// ⚠️ Zamanlayıcı `dispose`ta iptal ediliyor: ekran kapandıktan sonra `setState` çağırmak
+  /// Flutter'da hata üretiyor ve bu, kısa ömürlü animasyonlarda en sık yapılan kaçak.
+  int? _parlayan;
+  Timer? _parlamaTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _parlamayiBaslat();
+  }
+
+  /// ⚠️ Diyar elle değiştirilince vurgu SÖNÜYOR: başka bir diyarda aynı numaralı slotu
+  /// parlatmak yanlış yeri işaret etmek olurdu.
+  void _parlamayiBaslat() {
+    final s = widget.highlight;
+    if (s == null || s < 1) return;
+    _parlayan = s;
+    _parlamaTimer?.cancel();
+    /* ⚠️ 1,6 sn: kullanıcı *"kısa bir an parlayıp sönen"* dedi. Daha kısası göz kırpmayla
+       kaçırılıyor, daha uzunu ekranda takılı kalmış gibi duruyor. Web'deki süreyle aynı. */
+    _parlamaTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _parlayan = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _parlamaTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +111,12 @@ class _WorldScreenState extends ConsumerState<WorldScreen> {
         _Selector(
           realm: realm,
           canGoHome: home != null,
-          onChange: (r) => setState(() => _sel = r),
+          onChange: (r) => setState(() {
+            _sel = r;
+            // ⚠️ Diyar değişti → vurgu artık yanlış yeri gösterir, söndürülüyor.
+            _parlayan = null;
+            _parlamaTimer?.cancel();
+          }),
           onHome: () => setState(() {
             final a = homeAction(fromUrl);
             _sel = a.sel;
@@ -80,7 +126,11 @@ class _WorldScreenState extends ConsumerState<WorldScreen> {
         Expanded(
           child: !hazir
               ? const Center(child: CircularProgressIndicator())
-              : _List(realm: realm, activeCityId: activeId),
+              : _List(
+                  realm: realm,
+                  activeCityId: activeId,
+                  highlight: _parlayan,
+                ),
         ),
       ],
     );
@@ -128,22 +178,14 @@ class _Selector extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Text('Diyar', style: TextStyle(fontSize: 11, color: c.muted)),
-          const SizedBox(width: 4),
-          _Step(
-            label: '−',
-            onTap: realm.d > 1
-                ? () => onChange((k: realm.k, d: realm.d - 1))
-                : null,
-          ),
-          _RealmField(
+          const SizedBox(width: 6),
+          /* ⭐ ÜÇÜ TEK BİR DENETİM (kullanıcı, 2026-08-19: *"butonlar ile input birbirine çok
+             yakın"*). Ayrı ayrı duran üç parçayı birbirinden UZAKLAŞTIRMAK yerine
+             birleştirdim: tek çerçeve, aralarında ince ayraçlar. Yakınlık artık kaza değil
+             tasarım — dokunma hedefleri de bitişik olduğu için parmak kaymıyor. */
+          _RealmStepper(
             value: realm.d,
-            onCommit: (d) => onChange((k: realm.k, d: d)),
-          ),
-          _Step(
-            label: '+',
-            onTap: realm.d < kMaxRealm
-                ? () => onChange((k: realm.k, d: realm.d + 1))
-                : null,
+            onChange: (d) => onChange((k: realm.k, d: d)),
           ),
           const Spacer(),
           // ⭐ «Kendi diyarıma dön» — kale simgesi, web'deki gibi.
@@ -160,26 +202,72 @@ class _Selector extends StatelessWidget {
   }
 }
 
-class _Step extends StatelessWidget {
-  const _Step({required this.label, required this.onTap});
+/// ⭐ BİRLEŞİK DİYAR ADIMLAYICISI — `[−][ 42 ][+]` tek çerçevede.
+class _RealmStepper extends StatelessWidget {
+  const _RealmStepper({required this.value, required this.onChange});
 
-  final String label;
+  final int value;
+  final ValueChanged<int> onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    final ayrac = Container(width: 1, height: 30, color: c.border);
+
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: c.raised,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Step(
+            icon: Icons.remove,
+            onTap: value > 1 ? () => onChange(value - 1) : null,
+          ),
+          ayrac,
+          // ⚠️ Alan kendi çerçevesini ÇİZMİYOR (`borderless`): kabuk zaten bir çerçeve,
+          //    ikincisi kutu içinde kutu görünürdü.
+          _RealmField(value: value, onCommit: onChange),
+          ayrac,
+          _Step(
+            icon: Icons.add,
+            onTap: value < kMaxRealm ? () => onChange(value + 1) : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Step extends StatelessWidget {
+  const _Step({required this.icon, required this.onTap});
+
+  final IconData icon;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = MwColors.of(context);
     return SizedBox(
-      width: 30,
-      height: 32,
+      width: 34,
+      height: 30,
       child: TextButton(
         onPressed: onTap,
         style: TextButton.styleFrom(
           padding: EdgeInsets.zero,
           minimumSize: Size.zero,
-          foregroundColor: c.muted,
+          shape: const RoundedRectangleBorder(),
+          foregroundColor: Theme.of(context).colorScheme.primary,
+          disabledForegroundColor: c.muted.withValues(alpha: 0.4),
         ),
-        child: Text(label, style: const TextStyle(fontSize: 16)),
+        // ⚠️ Metin «−»/«+» yerine ikon: yazı tipine göre eksi işareti bazen tire gibi ince
+        //    çiziliyordu ve iki düğme farklı ağırlıkta görünüyordu.
+        child: Icon(icon, size: 17),
       ),
     );
   }
@@ -250,8 +338,8 @@ class _RealmFieldState extends State<_RealmField> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 62,
-      height: 34,
+      width: 52,
+      height: 30,
       child: TextField(
         controller: _c,
         focusNode: _focus,
@@ -259,25 +347,27 @@ class _RealmFieldState extends State<_RealmField> {
         textAlign: TextAlign.center,
         textInputAction: TextInputAction.done,
         onSubmitted: (_) => _isle(),
-        style: const TextStyle(
-          fontSize: 14,
-          fontFeatures: [FontFeature.tabularFigures()],
-        ),
-        decoration: const InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          border: OutlineInputBorder(),
-        ),
+        style: mwFieldTextStyle,
+        // ⭐ Dekorasyon artık ORTAK (`primitives.dart`): buradaki kopya, beyaz çerçeve
+        //    kusurunun ikinci nüshasıydı. `borderless` — kabuk zaten çerçeveli.
+        decoration: mwFieldDecoration(context, borderless: true),
       ),
     );
   }
 }
 
 class _List extends ConsumerWidget {
-  const _List({required this.realm, required this.activeCityId});
+  const _List({
+    required this.realm,
+    required this.activeCityId,
+    required this.highlight,
+  });
 
   final MwRealm realm;
   final int? activeCityId;
+
+  /// Kısa bir an parlayan slot; `null` → vurgu yok.
+  final int? highlight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -299,18 +389,55 @@ class _List extends ConsumerWidget {
           ref.invalidate(worldProvider(realm));
           return mwRefreshAll([ref.read(worldProvider(realm).future)]);
         },
-        builder: (physics) => ListView.builder(
+        /* ⭐ KENARLARA YAPIŞIK DEĞİL (kullanıcı, 2026-08-19). Liste eskiden tam genişlikteydi
+           ve uygulamanın geri kalanı 12 px kenar boşluğuyla çalıştığı için Dünya tek başına
+           farklı görünüyordu.
+
+           ⚠️ `ListView.builder` yerine tek çocuklu `ListView`: satırlar **ortak bir kartın**
+           içine giriyor ve kart yuvarlatılmış köşeleri kırpıyor. Sanallaştırma kaybı yok —
+           bir diyarda daima 10 slot var (`kSlotsPerRealm`), yani liste sabit ve kısa. */
+        builder: (physics) => ListView(
           physics: physics,
-          padding: const EdgeInsets.only(bottom: 12),
-          itemCount: slots.length,
-          itemBuilder: (context, i) => _Row(
-            slot: slots[i],
-            alt: i.isOdd,
-            activeCityId: activeCityId,
-            realm: realm,
-          ),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+          children: [_Kart(child: Column(children: _satirlar(slots)))],
         ),
       ),
+    );
+  }
+
+  List<Widget> _satirlar(List<WorldSlot> slots) => [
+    for (var i = 0; i < slots.length; i++)
+      _Row(
+        slot: slots[i],
+        alt: i.isOdd,
+        flash: slots[i].s == highlight,
+        // ⚠️ Son satırın alt çizgisi YOK: kartın kendi kenarı zaten orada duruyor ve iki
+        //    çizgi üst üste binince alt kenar kalın görünüyordu.
+        son: i == slots.length - 1,
+        activeCityId: activeCityId,
+        realm: realm,
+      ),
+  ];
+}
+
+/// Dünya listesinin ve iskeletinin ortak kabı — ikisi ayrı çizilirse yükleme bitince
+/// kart kenarı bir anlığına kayıyor.
+class _Kart extends StatelessWidget {
+  const _Kart({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: child,
     );
   }
 }
@@ -322,36 +449,49 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = MwColors.of(context);
     return ListView(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
       children: [
-        for (var i = 0; i < 10; i++)
-          Container(
-            height: 46,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
-              color: i.isOdd ? c.raised.withValues(alpha: 0.35) : null,
-              border: Border(bottom: BorderSide(color: c.border)),
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 26,
-                  child: Text(
-                    '${i + 1}',
-                    style: TextStyle(color: c.muted, fontSize: 12),
-                  ),
-                ),
+        _Kart(
+          child: Column(
+            children: [
+              for (var i = 0; i < 10; i++)
                 Container(
-                  width: 110,
-                  height: 10,
+                  height: 46,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: c.raised,
-                    borderRadius: BorderRadius.circular(4),
+                    color: i.isOdd ? c.raised.withValues(alpha: 0.35) : null,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: i == 9 ? Colors.transparent : c.border,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 26,
+                        child: Text(
+                          '${i + 1}',
+                          style: TextStyle(color: c.muted, fontSize: 12),
+                        ),
+                      ),
+                      Container(
+                        width: 110,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: c.raised,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
+        ),
       ],
     );
   }
@@ -361,12 +501,20 @@ class _Row extends ConsumerWidget {
   const _Row({
     required this.slot,
     required this.alt,
+    required this.son,
+    required this.flash,
     required this.activeCityId,
     required this.realm,
   });
 
   final WorldSlot slot;
   final bool alt;
+
+  /// ⭐ Rapordan gelen hedef — kısa bir an parlıyor (gerekçe `WorldScreen.highlight`te).
+  final bool flash;
+
+  /// Listenin son satırı mı — alt çizgi çizilmiyor (kartın kenarı zaten orada).
+  final bool son;
   final int? activeCityId;
   final MwRealm realm;
 
@@ -381,91 +529,132 @@ class _Row extends ConsumerWidget {
     /// anlamı aynı kanala yığar ve ikisi de okunmaz hâle gelirdi.
     final aktif = city != null && city.id == activeCityId;
 
+    final zemin = alt ? c.raised.withValues(alpha: 0.35) : null;
+
     return InkWell(
       onTap: () => showTargetSheet(context, slot: slot, realm: realm),
-      child: Container(
-        // ⚠️ SABİT yükseklik: boş slot da dolu slot kadar yer kaplıyor, böylece 10 satır her
-        // diyarda aynı yüksekliği tutuyor ve göz sütunları kaydırmadan tarıyor.
-        height: 46,
-        decoration: BoxDecoration(
-          color: alt ? c.raised.withValues(alpha: 0.35) : null,
-          border: Border(
-            bottom: BorderSide(color: c.border),
-            left: BorderSide(
-              color: aktif ? scheme.primary : Colors.transparent,
-              width: 3,
+      /* ⭐⭐ TEK BİR DARBE (kullanıcı, 2026-08-19: *"İki kere parlayıp sönmesin. Tek bir kere
+         şık şekilde olsa yeterli"*). `1 → 0` sönümü + `easeOutCubic`: yükseliş ilk karede
+         hazır, sönüş yavaş. Simetrik bir darbe "yanıp söndü" değil "titredi" gibi duruyor.
+
+         ⚠️⚠️ Renk satırın ZEMİNİNE karıştırılıyor (`Color.lerp`), üstüne katman olarak
+         BİNMİYOR. Üste binen saydam bir katman yazıyı da boyar ve parlama sırasında slot
+         numarası ile oyuncu adı okunmaz hâle gelirdi — oysa vurgunun amacı tam da onları
+         okutmak.
+         ⚠️ `flash` false iken `TweenAnimationBuilder` HİÇ kurulmuyor: on satırın dokuzunda
+         boşuna bir animasyon nesnesi tutmanın anlamı yok. */
+      child: !flash
+          ? _govde(context, zemin, aktif, scheme, c)
+          : TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 1, end: 0),
+              duration: const Duration(milliseconds: 1200),
+              curve: Curves.easeOutCubic,
+              builder: (context, t, _) => _govde(
+                context,
+                Color.lerp(
+                  zemin ?? Colors.transparent,
+                  scheme.primary,
+                  0.38 * t,
+                ),
+                aktif,
+                scheme,
+                c,
+              ),
             ),
+    );
+  }
+
+  /// Satırın kendisi — zemin rengi dışarıdan geliyor ki parlama onu değiştirebilsin.
+  Widget _govde(
+    BuildContext context,
+    Color? zemin,
+    bool aktif,
+    ColorScheme scheme,
+    MwColors c,
+  ) {
+    final city = slot.city;
+    return Container(
+      // ⚠️ SABİT yükseklik: boş slot da dolu slot kadar yer kaplıyor, böylece 10 satır her
+      // diyarda aynı yüksekliği tutuyor ve göz sütunları kaydırmadan tarıyor.
+      height: 46,
+      decoration: BoxDecoration(
+        color: zemin,
+        border: Border(
+          bottom: BorderSide(color: son ? Colors.transparent : c.border),
+          left: BorderSide(
+            color: aktif ? scheme.primary : Colors.transparent,
+            width: 3,
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 24,
-              child: Text(
-                '${slot.s}',
-                style: TextStyle(
-                  color: c.muted,
-                  fontSize: 12,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 24,
+            child: Text(
+              '${slot.s}',
+              style: TextStyle(
+                color: c.muted,
+                fontSize: 12,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            Expanded(
-              child: city == null
-                  ? Text('—', style: TextStyle(color: c.muted))
-                  : Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            city.username,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              // ⭐ Kendi şehrim vurgulu; müttefik rozetle ayrılıyor.
-                              color: city.isOwn ? scheme.primary : null,
-                            ),
+          ),
+          Expanded(
+            child: city == null
+                ? Text('—', style: TextStyle(color: c.muted))
+                : Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          city.username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            // ⭐ Kendi şehrim vurgulu; müttefik rozetle ayrılıyor.
+                            color: city.isOwn ? scheme.primary : null,
                           ),
                         ),
-                        if (city.isAlly) ...[
-                          const SizedBox(width: 4),
-                          const MwIcon(folder: 'ui', id: 'alliance', size: 14),
-                        ],
-                        // ⭐ Koruma rozeti: saldırılamayacak hedefi oyuncu **listede** görmeli,
-                        // sefer formuna girip reddedilmeden önce.
-                        if (city.protection != null) ...[
-                          const SizedBox(width: 4),
-                          Icon(Icons.shield_outlined, size: 13, color: c.info),
-                        ],
+                      ),
+                      if (city.isAlly) ...[
+                        const SizedBox(width: 4),
+                        const MwIcon(folder: 'ui', id: 'alliance', size: 14),
                       ],
-                    ),
-            ),
-            // ⭐ Sıra TEK BAŞINA yetmiyor (web'de kullanıcı kararı): «12.» bir hedefin ne kadar
-            // güçlü olduğunu söylemiyor, aradaki FARK söylüyor.
-            // ⚠️ `rank` yoksa puan da yazılmıyor: ikisi aynı anlık görüntü satırından geliyor,
-            // biri yoksa diğeri de yok. Tek başına puan yazmak, sıranın "hesaplanamadığını"
-            // değil "sıfır" olduğunu ima ederdi.
-            SizedBox(
-              width: 96,
-              child: Text(
-                city?.rank == null
-                    ? '—'
-                    : city!.rankScore == null
-                    ? '${city.rank}'
-                    : '${city.rank} / ${mwNumber(city.rankScore!)}',
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: c.muted,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+                      // ⭐ Koruma rozeti: saldırılamayacak hedefi oyuncu **listede** görmeli,
+                      // sefer formuna girip reddedilmeden önce.
+                      if (city.protection != null) ...[
+                        const SizedBox(width: 4),
+                        Icon(Icons.shield_outlined, size: 13, color: c.info),
+                      ],
+                    ],
+                  ),
+          ),
+          // ⭐ Sıra TEK BAŞINA yetmiyor (web'de kullanıcı kararı): «12.» bir hedefin ne kadar
+          // güçlü olduğunu söylemiyor, aradaki FARK söylüyor.
+          // ⚠️ `rank` yoksa puan da yazılmıyor: ikisi aynı anlık görüntü satırından geliyor,
+          // biri yoksa diğeri de yok. Tek başına puan yazmak, sıranın "hesaplanamadığını"
+          // değil "sıfır" olduğunu ima ederdi.
+          SizedBox(
+            width: 96,
+            child: Text(
+              city?.rank == null
+                  ? '—'
+                  : city!.rankScore == null
+                  ? '${city.rank}'
+                  : '${city.rank} / ${mwNumber(city.rankScore!)}',
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: c.muted,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

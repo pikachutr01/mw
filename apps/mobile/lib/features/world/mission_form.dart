@@ -128,6 +128,22 @@ class _MissionFormState extends ConsumerState<MissionForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        /* ⭐⭐ BAŞLIK ARTIK KAYMIYOR (kullanıcı, 2026-08-19: *"süreyi dinamik hesaplayan
+           gösterge de scroll içinde olmasın, seçilen askere göre anlık görünemiyor. Sağ üstte
+           header da görünsün."*).
+
+           Süre önizlemesi seçilen birime göre HER dokunuşta değişiyor; kayan bir başlıkta
+           oyuncu birim seçerken onu göremiyordu — yani formun en dinamik sayısı, tam da
+           değiştiği anda ekran dışındaydı. Şimdi kaydırma alanının DIŞINDA. */
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: _Header(
+            icon: info?.icon ?? 'attack',
+            title: info?.title ?? widget.type,
+            eta: _etaText(city, catalog),
+          ),
+        ),
+
         // ── Kayan bölüm ────────────────────────────────────────────────────
         Expanded(
           child: SingleChildScrollView(
@@ -135,13 +151,6 @@ class _MissionFormState extends ConsumerState<MissionForm> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _Header(
-                  icon: info?.icon ?? 'attack',
-                  title: info?.title ?? widget.type,
-                  eta: _etaText(city, catalog),
-                ),
-                const SizedBox(height: 12),
-
                 if (_blocked) ...[
                   MwErrorBox(
                     widget.option?.reason ?? 'Bu görev şu anda gönderilemez.',
@@ -227,28 +236,64 @@ class _MissionFormState extends ConsumerState<MissionForm> {
     List<CatalogUnit> gorunur,
     Map<String, int> serbest,
     MwColors c,
-  ) => Container(
-    decoration: BoxDecoration(
-      border: Border.all(color: c.border),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: Column(
+  ) {
+    /* ⭐ TÜM ORDU (kullanıcı, 2026-08-19): *"Bir tane de tüm orduyu seçecek buton ekleyelim.
+       Hepsini ayrı ayrı hepsi seçmek yerine komple tek seferde seçsin."*
+
+       ⚠️ Düğme **çift yönlü** ve etiketi ne yapacağını yazıyor. Tek yönlü olsaydı yanlışlıkla
+       basan oyuncunun geri dönüş yolu, satır satır kutuları sıfırlamak olurdu. */
+    final hepsiSecili =
+        gorunur.isNotEmpty &&
+        gorunur.every((u) => (_units[u.id] ?? 0) >= (serbest[u.id] ?? 0));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < gorunur.length; i++)
-          _UnitRow(
-            unit: gorunur[i],
-            have: serbest[gorunur[i].id] ?? 0,
-            picked: _units[gorunur[i].id] ?? 0,
-            alt: i.isOdd,
-            onChange: (n) => setState(() {
-              n > 0 ? _units[gorunur[i].id] = n : _units.remove(gorunur[i].id);
+        Align(
+          alignment: Alignment.centerRight,
+          child: MwSmallButton(
+            label: hepsiSecili ? 'Temizle' : 'Tüm ordu',
+            kind: MwButtonKind.ghost,
+            onTap: () => setState(() {
+              _units.clear();
+              if (!hepsiSecili) {
+                for (final u in gorunur) {
+                  final n = serbest[u.id] ?? 0;
+                  if (n > 0) _units[u.id] = n;
+                }
+              }
               _error = null;
             }),
           ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var i = 0; i < gorunur.length; i++)
+                _UnitRow(
+                  unit: gorunur[i],
+                  have: serbest[gorunur[i].id] ?? 0,
+                  picked: _units[gorunur[i].id] ?? 0,
+                  alt: i.isOdd,
+                  onChange: (n) => setState(() {
+                    n > 0
+                        ? _units[gorunur[i].id] = n
+                        : _units.remove(gorunur[i].id);
+                    _error = null;
+                  }),
+                ),
+            ],
+          ),
+        ),
       ],
-    ),
-  );
+    );
+  }
 
   String _bosOrduMetni() => switch (_rule.units) {
     MwUnitScope.spy => 'Şehrinde Casus Kuş yok. Önce Baraka\'dan üret.',
@@ -416,10 +461,29 @@ class _UnitRow extends StatefulWidget {
 
 class _UnitRowState extends State<_UnitRow> {
   final _c = TextEditingController();
+  final _focus = FocusNode();
+
+  /* ⭐⭐ DIŞARIDAN GELEN DEĞİŞİKLİK KUTUYA YANSIYOR (2026-08-19, «Tüm ordu» düğmesi için ŞART).
+     Kutunun metni satırın kendi durumunda; ebeveyn `_units`i toptan doldurduğunda satır bunu
+     bilmezse kutular boş kalır ve ekran ile gönderilecek ordu **birbirinden ayrışır** — bu,
+     oyuncunun gördüğüyle sunucuya gidenin farklı olduğu, en pahalı arıza sınıfı.
+
+     ⚠️ Odak BİZDEYSE dokunulmuyor: oyuncu yazarken metnin parmağının altından değişmesi,
+     `_RealmField`te de aynı gerekçeyle yasak. */
+  @override
+  void didUpdateWidget(covariant _UnitRow old) {
+    super.didUpdateWidget(old);
+    if (widget.picked == old.picked || _focus.hasFocus) return;
+    final metin = widget.picked == 0 ? '' : '${widget.picked}';
+    if (_c.text == metin) return;
+    _c.text = metin;
+    _c.selection = TextSelection.collapsed(offset: metin.length);
+  }
 
   @override
   void dispose() {
     _c.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -465,7 +529,13 @@ class _UnitRowState extends State<_UnitRow> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          MwAmountInput(controller: _c, hint: '0', width: 64, onChanged: _yaz),
+          MwAmountInput(
+            controller: _c,
+            focusNode: _focus,
+            hint: '0',
+            width: 64,
+            onChanged: _yaz,
+          ),
           const SizedBox(width: 4),
           MwSmallButton(
             label: 'hepsi',

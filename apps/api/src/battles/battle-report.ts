@@ -102,20 +102,47 @@ export interface BattleReport {
   loot: { gold: number; food: number } | null;
   /**
    * Yalnız saldıran.
-   *   `revealed` — savaşta ORTAYA ÇIKAN enkaz (ölen birimlerin bıraktığı). Savaşın sonucundan
-   *     BAĞIMSIZ: saldıran kaybetse de enkaz oluşur, yalnız tamamı savunanın şehrine gider.
+   *   `revealed` — savaşın ORTAYA ÇIKARDIĞI toplam: ölen ordunun enkazı **+** şehrin
+   *     kasasından oranca alınabilecek pay. Savaşın sonucundan bağımsız tanımlı.
    *   `carried`  — fiilen eve taşınan yük. Saldıran kaybettiyse **null** (taşınacak şey yok).
+   *   `detail`   — info ikonunun açtığı ayrıntı; iki kaynağın da üç parçası.
    */
   lootBreakdown: {
     revealed: { gold: number; food: number };
     carried: { gold: number; food: number } | null;
     /**
-     * ⭐ Oranca alınabilecekken TAŞIMA KAPASİTESİNE sığmayıp şehirde kalan kısım.
-     * `null` = kapasite yetti, geride bir şey kalmadı → satır hiç çizilmez.
+     * ⭐ Oranca alınabilecekken TAŞIMA KAPASİTESİNE sığmayıp şehirde kalan KASA payı.
+     * ⚠️ Ekranda artık satır olarak çizilmiyor (2026-08-19, kullanıcı) — `detail` içindeki
+     * `plunderLeft` ile aynı sayı ve ayrıntı orada yaşıyor. Alan düz metin dökümü
+     * (`renderText`) için duruyor.
      */
     leftBehind: { gold: number; food: number } | null;
     /** Hayatta kalan ordunun toplam taşıma kapasitesi — "neden yetmedi" sorusunun ölçüsü. */
     capacity: number | null;
+    /**
+     * ⭐⭐ AYRINTILI GANİMET HESABI (kullanıcı, 2026-08-19): *"kenarda bir de info ikonu olsun.
+     * Buna tıklanınca tüm ayrıntılı ganimet hesabı tooltip üzerine gösterilsin."*
+     *
+     * ⚠️⚠️ Bu alan olmadan ekrandaki iki sayı **kapanmıyordu** ve canlı veriyle doğrulandı
+     * (savaş #29): «Ortaya çıkan» 7.046.425, «Taşınan» 223.819, fark 6.822.606 — ama o farkın
+     * yalnız 785.542'si kasadan sığmayan pay, kalan 6.037.064'ü **enkazdan** sığmayan kısım ve
+     * ekranda hiç görünmüyordu. Oyuncu aritmetiği kapatamıyordu çünkü üçüncü kova gizliydi.
+     *
+     * ⭐ İki kaynak, her biri üç parça — toplamları daima `revealed`e eşit:
+     *   `debrisTotal  = debrisCarried  + debrisLeft`   (ölen ordunun enkazı)
+     *   `plunderTotal = plunderCarried + plunderLeft`  (kasadan alınabilecek pay)
+     *
+     * ⚠️ `null` = ESKİ savaş kaydı. Motor `plunderNotCarried`ı sonradan ekledi; o satırlarda
+     * ayrıştırma yapılamıyor ve uydurma bir döküm göstermektense ikon hiç çizilmiyor.
+     */
+    detail: {
+      debrisTotal: { gold: number; food: number };
+      debrisCarried: { gold: number; food: number };
+      debrisLeft: { gold: number; food: number };
+      plunderTotal: { gold: number; food: number };
+      plunderCarried: { gold: number; food: number };
+      plunderLeft: { gold: number; food: number };
+    } | null;
   } | null;
   notes: string[];
   text: string;
@@ -285,6 +312,36 @@ function revealedLoot(r: BattleRow['result']): { gold: number; food: number } {
   return {
     gold: l.taken.gold + l.plunderNotCarried.gold + l.leftoverDebrisToDefender.gold,
     food: l.taken.food + l.plunderNotCarried.food + l.leftoverDebrisToDefender.food,
+  };
+}
+
+/**
+ * ⭐⭐ AYRINTILI GANİMET DÖKÜMÜ — info ikonunun içeriği (2026-08-19).
+ *
+ * ⚠️ `plunderNotCarried` YOKSA `null` dönüyor: motor onu sonradan ekledi ve eski savaşlarda
+ * kasa payı ile enkaz payını AYIRMANIN bir yolu yok. Uydurma bir döküm göstermektense ikonu
+ * hiç çizmemek doğru — raporun geri kalanı yine tam.
+ *
+ * ⚠️ `debrisTotal` `result.debris`ten DEĞİL, iki parçanın toplamından kuruluyor. İkisi aynı
+ * sayı (canlı veriyle doğrulandı) ama parçalardan türetmek dökümün kendi içinde kapanmasını
+ * **garanti ediyor**: `debris` alanı bir gün ayrı bir yerde yuvarlanırsa tooltip'te toplam ile
+ * satırlar birbirini tutmaz ve bu tam da düzeltmeye çalıştığımız arıza sınıfı.
+ */
+function lootDetail(r: BattleRow['result']): NonNullable<BattleReport['lootBreakdown']>['detail'] {
+  const l = r.loot;
+  if (!l?.plunderNotCarried) return null;
+  const topla = (
+    a: { gold: number; food: number },
+    b: { gold: number; food: number },
+  ): { gold: number; food: number } => ({ gold: a.gold + b.gold, food: a.food + b.food });
+
+  return {
+    debrisTotal: topla(l.fromDebris, l.leftoverDebrisToDefender),
+    debrisCarried: l.fromDebris,
+    debrisLeft: l.leftoverDebrisToDefender,
+    plunderTotal: topla(l.fromPlunder, l.plunderNotCarried),
+    plunderCarried: l.fromPlunder,
+    plunderLeft: l.plunderNotCarried,
   };
 }
 
@@ -461,7 +518,8 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
         revealed: revealedLoot(r),
         carried: won ? r.loot.taken : null,
         leftBehind: kapasiteAsildi ? left : null,
-        capacity: kapasiteAsildi ? (r.attackerCarryCapacity ?? null) : null,
+        capacity: r.attackerCarryCapacity ?? null,
+        detail: lootDetail(r),
       };
     }
     if (side === 'defender' && (r.loot.leftoverDebrisToDefender.gold > 0 || r.loot.leftoverDebrisToDefender.food > 0)) {

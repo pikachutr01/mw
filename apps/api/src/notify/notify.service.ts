@@ -23,7 +23,8 @@ import type { Db } from '../db/client.ts';
 import type { RealtimeBus } from '../realtime/realtime.bus.ts';
 import type { Notification } from './notify.catalog.ts';
 import {
-  NOTIFY_DEFAULTS, notifyLimits, VAPID, pushEnabled, type NotifyCategory,
+  NOTIFY_CONFIGURABLE, NOTIFY_DEFAULTS, isConfigurable, notifyLimits, VAPID, pushEnabled,
+  type NotifyCategory, type NotifyConfigurable,
 } from './notify.limits.ts';
 import { log } from '../common/logger.ts';
 const NOTIFY_LOG = log('notify');
@@ -229,31 +230,49 @@ export class NotifyService {
 
   /* ── Tercihler ────────────────────────────────────────────────────────────── */
 
-  /** Kategori açık mı? Anahtar yoksa `NOTIFY_DEFAULTS`, yani yeni kategoriler kendiliğinden açık. */
+  /**
+   * Kategori açık mı? Anahtar yoksa `NOTIFY_DEFAULTS`, yani yeni kategoriler kendiliğinden açık.
+   *
+   * ⚠️⚠️ **Ayarlanamayan kategoride kayıtlı değer OKUNMUYOR** (`isConfigurable`). `attack`
+   * anahtarı Seçenekler'den kaldırıldı ama eski hesaplarda `{"attack": false}` yazıyor
+   * olabilir; okusaydık o oyuncuların saldırı toast'ı sonsuza kadar susardı ve geri açmanın
+   * yolu olmazdı. Gerekçenin tamamı `NOTIFY_CONFIGURABLE` başlığında.
+   */
   private async wants(playerId: number, category: NotifyCategory): Promise<boolean> {
     const [row] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT a.notify_prefs FROM players p JOIN accounts a ON a.id = p.account_id
        WHERE p.id = ${playerId}
     `);
     if (!row) return false;
+    if (!isConfigurable(category)) return true;
     const prefs = (row['notify_prefs'] ?? {}) as Record<string, unknown>;
     return prefs[category] === undefined ? NOTIFY_DEFAULTS[category] : prefs[category] !== false;
   }
 
-  async prefs(accountId: number): Promise<Record<NotifyCategory, boolean>> {
+  /**
+   * ⚠️ Yalnız **ayarlanabilir** kategoriler dönüyor. `attack`i de döndürseydik Seçenekler
+   * ekranı ona ait bir anahtar çizmediği hâlde yanıtta görünürdü — bir sonraki okuyan
+   * "arayüzde eksik" sanıp geri eklerdi.
+   */
+  async prefs(accountId: number): Promise<Record<NotifyConfigurable, boolean>> {
     const [row] = await this.db.execute<Record<string, unknown>>(sql`
       SELECT notify_prefs FROM accounts WHERE id = ${accountId}
     `);
     const stored = (row?.['notify_prefs'] ?? {}) as Record<string, unknown>;
-    const out = { ...NOTIFY_DEFAULTS } as Record<NotifyCategory, boolean>;
-    for (const key of Object.keys(out) as NotifyCategory[]) {
-      if (stored[key] !== undefined) out[key] = stored[key] !== false;
+    const out = {} as Record<NotifyConfigurable, boolean>;
+    for (const key of NOTIFY_CONFIGURABLE) {
+      out[key] = stored[key] === undefined
+        ? NOTIFY_DEFAULTS[key]
+        : stored[key] !== false;
     }
     return out;
   }
 
   /** Kısmî güncelleme: yalnız gönderilen anahtarlar yazılır (jsonb birleştirme). */
-  async setPrefs(accountId: number, patch: Partial<Record<NotifyCategory, boolean>>): Promise<void> {
+  async setPrefs(
+    accountId: number,
+    patch: Partial<Record<NotifyConfigurable, boolean>>,
+  ): Promise<void> {
     await this.db.execute(sql`
       UPDATE accounts SET notify_prefs = notify_prefs || ${JSON.stringify(patch)}::jsonb
        WHERE id = ${accountId}

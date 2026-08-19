@@ -17,7 +17,8 @@ import { fmt } from '../lib/hooks.ts';
 import { describeUnits, nameOf } from '../lib/names.ts';
 import {
   useAllianceDecide, useBattle, useChatConversations, useCity, useClearConversation,
-  useDeleteMessages, useMarkRead, useMessageBody, useMessages, useTemple,
+  useDeleteMessages, useMarkRead, useMessageBody, useMessages, useSetFavorite, useTemple,
+  type BattleReport as BattleReportShape,
   type ChatConversation, type MessageRow, type ReportHeroLine,
 } from '../lib/queries.ts';
 import { useOpenChat } from '../lib/chat-context.tsx';
@@ -28,6 +29,7 @@ import {
 } from '../lib/sim-prefill.ts';
 import { Button, CatalogIcon, Empty, ErrorBox, Panel, Res, UserText } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
+import { Tooltip } from '../components/Tooltip.tsx';
 import { MissionIcon } from '../components/ui.tsx';
 import { formatGameTime } from '@mobilwar/contracts';
 
@@ -90,14 +92,73 @@ type InboxRow =
 const rowKey = (r: InboxRow): string =>
   (r.kind === 'chat' ? `c${r.chat.channelId}` : `m${r.message.id}`);
 
+/**
+ * ⭐ SAYFA BAŞINA KAYIT **HATIRLANIYOR** (kullanıcı isteği, 2026-08-19): *"bir tanesi
+ * seçildiğinde istenen kayıt kadar geliyor ama sayfadan çıkıp geri gelindiğinde bu seçim
+ * hatırlanmıyor"*.
+ *
+ * ⚠️ **Okunan değer DOĞRULANIYOR, olduğu gibi kullanılmıyor.** `localStorage` oyuncunun
+ * düzenleyebildiği bir alan; oradan gelen `5000` doğrudan `pageCount` hesabına girseydi sunucu
+ * 100'e kıskaçladığı için sayfa sayısı **sessizce yanlış** olurdu (liste 100 satır gösterir,
+ * ekran "1 / 1" yazar). Listede olmayan her değer varsayılana düşer.
+ *
+ * ⚠️ Tercih **cihaza** yazılıyor, hesaba değil: sunucuda `updatePreferences` şeması var ama
+ * ucu yok (`MOBIL_MIMARI.md` fikir defteri, 2026-08-15) ve kullanıcı açıkça `localStorage`
+ * dedi. Mobil aynı mantığı kendi deposunda yürütüyor — iki istemci birbirinin seçimini
+ * görmez, bu **bilinçli**: ekran boyu farklı, uygun sayfa boyu da farklı olabilir.
+ */
+/**
+ * ⭐⭐ RAPOR TÜR SÜZGECİ (kullanıcı, 2026-08-19): *"Casusluk raporları, saldırı raporları,
+ * diğer sistem mesajları vs ayrı ayrı filtreleme özelliği ekleyelim. Nakliyesi, desteği falan
+ * ne kadar farklı türde rapor varsa ona göre filtre ekleyelim. Filtre varsayılan olarak
+ * hepsini gösterir."*
+ *
+ * ⚠️ Değerler doğrudan `messages.kind` — sunucu bunları `kind = $1` olarak kullanıyor, yani
+ * burada bir eşleme tablosu YOK. Eşleme olsaydı iki tarafın ayrışabileceği bir yer daha
+ * doğardı.
+ * ⚠️ `favorites` özel bir değer: bir tür değil, bir işaret. Sunucu onu ayrı ele alıyor.
+ * ⚠️ `return_report` listede YOK — dönüş 2026-07-30'dan beri rapor üretmiyor, yalnız eski
+ * kayıtlarda var. «Hepsi» ile hâlâ görülüyor; ölü bir tür için çip koymak gürültü olurdu.
+ * ⚠️ Liste mobildekiyle AYNI sırada ve aynı etiketlerle: i18n paketi olmadığı için iki
+ * istemci metni ayrı yazıyor, sıranın da elle hizalanması gerekiyor (`message_rules.dart`).
+ */
+const REPORT_FILTERS: readonly (readonly [string, string])[] = [
+  ['all', 'Hepsi'],
+  ['battle_report', 'Saldırı'],
+  ['spy_report', 'Casusluk'],
+  ['transport_report', 'Nakliye'],
+  ['support_report', 'Destek'],
+  ['found_city_report', 'Şehir kurma'],
+  ['favorites', 'Favoriler'],
+];
+
+const PAGE_SIZES: readonly number[] = [10, 20, 50];
+const PAGE_SIZE_KEY = 'mw-messages-page-size';
+const DEFAULT_PAGE_SIZE = 10;
+
+function readPageSize(): number {
+  const raw = Number(localStorage.getItem(PAGE_SIZE_KEY));
+  return PAGE_SIZES.includes(raw) ? raw : DEFAULT_PAGE_SIZE;
+}
+
 export function Messages() {
   // ⭐ Açılışta RAPORLAR seçili (kullanıcı kararı): oyuncunun ilk merak ettiği savaş sonucudur.
   const [tab, setTab] = useState<Tab>('reports');
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  // ⚠️ Başlangıç değeri FONKSİYON olarak veriliyor: `useState(readPageSize())` her çizimde
+  //    `localStorage`ı okurdu ve okuma senkron bir disk erişimi.
+  const [pageSize, setPageSize] = useState(readPageSize);
 
-  // ⚠️ Sorgu sekmeye ve sayfaya BAĞLI: değişince gerçekten yeni bir istek gider (§sunucu sayfalama).
-  const messages = useMessages({ kind: tab, page, pageSize });
+  /**
+   * ⭐ Rapor tür süzgeci (2026-08-19). Varsayılan «Hepsi».
+   *
+   * ⚠️ Sekme değişince SIFIRLANIYOR (`switchTab`): Mesajlar sekmesinde «Casusluk» süzgeci
+   * anlamsız ve orada takılı kalsaydı sekme boş görünürdü — oyuncu bunu bir arıza sanardı.
+   */
+  const [type, setType] = useState('all');
+
+  // ⚠️ Sorgu sekmeye, sayfaya ve SÜZGECE bağlı: değişince gerçekten yeni bir istek gider.
+  const messages = useMessages({ kind: tab, page, pageSize, type });
   const chats = useChatConversations();
   const markRead = useMarkRead();
   const deleteMessages = useDeleteMessages();
@@ -251,7 +312,13 @@ export function Messages() {
           ] as const).map(
             ([id, label, n]) => {
               return (
-                <button key={id} onClick={() => { setTab(id); setPage(0); setSelected(new Set()); }}
+                <button key={id}
+                  onClick={() => {
+                    setTab(id); setPage(0); setSelected(new Set());
+                    // ⚠️ Süzgeç sekmeyle birlikte sıfırlanıyor: Mesajlar sekmesinde
+                    //    «Casusluk» süzgeci anlamsız ve takılı kalsaydı sekme boş görünürdü.
+                    setType('all');
+                  }}
                   className={`relative flex-1 rounded-[var(--radius-sm)] border-2 px-2 py-1.5 text-xs ${
                     tab === id
                       ? 'border-strong bg-accent text-on-accent'
@@ -272,6 +339,37 @@ export function Messages() {
 
       <Panel title={tab === 'reports' ? 'Raporlar' : 'Mesajlar'}
         right={total > 0 ? `${total} kayıt` : undefined}>
+        {/**
+          * ⭐ TÜR SÜZGECİ — YALNIZ Raporlar sekmesinde (kullanıcı isteği tek sekmeyi anıyor:
+          * *"Mesajlar sayfasının raporlar bölümüne filtre ekleyelim"*). Mesajlar sekmesinde
+          * yalnız üç tür var (ittifak daveti/başvurusu/duyuru) ve süzgeç orada kazançtan çok
+          * gürültü olurdu.
+          * ⚠️ Süzgeç değişince sayfa SIFIRLANIYOR: 5. sayfadayken «Casusluk» seçen oyuncu
+          * aksi hâlde 3 kayıtlık bir kümenin 5. sayfasını ister ve boş liste görürdü.
+          */}
+        {tab === 'reports' ? (
+          <label className="flex items-center gap-2 border-b border-border px-3 py-2
+            text-xs text-muted">
+            Tür
+            {/**
+              * ⚠️ Çip şeridi DEĞİL açılır liste (kullanıcı, 2026-08-19: *"teker teker badge
+              * şeklinde değil de selectbox dan seçecek şekilde yapalım"*). Yedi çip satırı
+              * dolduruyordu ve sayfa boyu seçicisi zaten aynı denetimi kullanıyor — iki ayrı
+              * seçim dili yerine tek dil.
+              */}
+            <select value={type}
+              onChange={(e) => { setType(e.target.value); setPage(0); setSelected(new Set()); }}
+              className="rounded-[var(--radius-sm)] border border-border bg-raised px-1.5
+                py-0.5 text-xs text-ink">
+              {REPORT_FILTERS.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {id === 'favorites' && (counts?.favorites ?? 0) > 0
+                    ? `${label} (${counts?.favorites})` : label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {visible.length > 0 ? (
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
@@ -405,7 +503,10 @@ export function Messages() {
         <Pagination
           page={current} pageCount={pageCount} pageSize={pageSize}
           onPage={(p) => { setPage(p); setSelected(new Set()); }}
-          onPageSize={(n) => { setPageSize(n); setPage(0); setSelected(new Set()); }}
+          onPageSize={(n) => {
+            setPageSize(n); setPage(0); setSelected(new Set());
+            localStorage.setItem(PAGE_SIZE_KEY, String(n));
+          }}
         />
       </Panel>
 
@@ -414,7 +515,10 @@ export function Messages() {
   );
 }
 
-/** Sayfa başına kayıt sayısı DEĞİŞTİRİLEBİLİR (kullanıcı isteği); varsayılan 10. */
+/**
+ * Sayfa başına kayıt sayısı DEĞİŞTİRİLEBİLİR (kullanıcı isteği); varsayılan 10 ve seçim
+ * cihazda **hatırlanıyor** (2026-08-19) — gerekçe `PAGE_SIZE_KEY` başlığında.
+ */
 function Pagination({
   page, pageCount, pageSize, onPage, onPageSize,
 }: {
@@ -433,7 +537,7 @@ function Pagination({
         Sayfa başına
         <select value={pageSize} onChange={(e) => onPageSize(Number(e.target.value))}
           className="rounded-[var(--radius-sm)] border border-border bg-raised px-1 py-0.5 text-xs text-ink">
-          {[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
+          {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
     </div>
@@ -485,6 +589,20 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
     nav('/simulate');
   };
 
+  /**
+   * ⭐⭐ FAVORİ YILDIZI (kullanıcı, 2026-08-19): *"bir raporu açıp gösterdikten sonra bu
+   * raporun bir köşesine favorileme butonu koyalım… Yine aynı görüntüleme sayfasından favori
+   * kaldırılabilsin."*
+   *
+   * ⚠️⚠️ Durumun kaynağı ÖNCE gövde ucu, sonra liste satırı. Yalnız `m.favorite`e
+   * baksaydık rapor bildirim derin bağlantısıyla listeden GEÇMEDEN açıldığında yıldız daima
+   * boş görünürdü — ve oyuncu favorisini "eklemek" isterken aslında KALDIRIRDI. Savaş
+   * raporunda gövde ucu hiç çağrılmıyor (`battleId` varken `null` veriliyor), orada liste
+   * satırı tek kaynak ve doğru olan da o.
+   */
+  const setFavorite = useSetFavorite();
+  const favorite = detail.data?.favorite ?? m.favorite;
+
   return (
     <Modal title={<UserText>{m.subject}</UserText>} onClose={onClose} width="lg"
       footer={(
@@ -496,8 +614,22 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
         </>
       )}>
       <div className="px-3 py-3">
-        <div className="mb-2 text-[11px] text-muted">
-          {formatGameTime(m.at)}
+        <div className="mb-2 flex items-center gap-2 text-[11px] text-muted">
+          <span className="flex-1">{formatGameTime(m.at)}</span>
+          {/* ⚠️ İstenen DURUM gönderiliyor, «toggle» değil (gerekçe `useSetFavorite`ta). */}
+          <button
+            type="button"
+            aria-pressed={favorite}
+            title={favorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+            disabled={setFavorite.isPending}
+            onClick={() => setFavorite.mutate({ id: m.id, favorite: !favorite })}
+            className={`rounded-[var(--radius-sm)] border px-2 py-0.5 text-sm leading-5 ${
+              favorite
+                ? 'border-gold text-gold'
+                : 'border-border text-muted hover:bg-raised'
+            }`}>
+            {favorite ? '★' : '☆'}
+          </button>
         </div>
         {/*
           Güzergâh TÜM raporlarda ve tek yerde — gövde tipine göre tekrarlanmıyor.
@@ -553,7 +685,8 @@ function RouteLine({ origin, target, onNavigate }: {
 
   const go = (c: Coord): void => {
     onNavigate?.();
-    nav(`/world/${c.k}/${c.d}`);
+    // ⭐ `?s=` — rapordaki koordinat Dünya ekranında kısa bir an parlıyor.
+    nav(`/world/${c.k}/${c.d}?s=${c.s}`);
   };
 
   const Part = ({ c }: { c: Coord | null | undefined }): React.ReactElement => (
@@ -967,19 +1100,36 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
 
   return (
     <div>
-      {/* Sonuç başlığı — orijinal oyunun kalıbı (k.java): "Kazandınız !" / "Kaybettiniz !" */}
-      <div className={`display mb-1 text-base font-bold ${r.won ? 'text-success' : 'text-danger'}`}>
-        {r.winner === 'draw' ? 'Berabere' : r.won ? 'Kazandınız !' : 'Kaybettiniz !'}
+      {/*
+        ⭐⭐ SONUÇ BANDI (kullanıcı, 2026-08-19): *"Hiyerarşik düzen olarak en önemli ve
+        kullanıcının ilk görmek isteyeceği bilgiyi en üste almamız lazım. KAZANDINIZ veya
+        KAYBETTİNİZ yazısı mesela en üstte olsa iyi olur."* Metin zaten en üstteydi ama tur
+        sayısıyla aynı satırda, aynı ağırlıktaydı. Mobil ile birebir aynı bant.
+        Kalıp orijinal oyunun kendi dizesi (k.java): "Kazandınız !" / "Kaybettiniz !".
+      */}
+      <div className={`mb-2 flex items-center gap-2 rounded-[var(--radius-sm)] border px-3 py-2
+        ${r.winner === 'draw' ? 'border-border bg-raised'
+          : r.won ? 'border-success bg-success/10' : 'border-danger bg-danger/10'}`}>
+        <b className={`display flex-1 text-lg
+          ${r.winner === 'draw' ? 'text-muted' : r.won ? 'text-success' : 'text-danger'}`}>
+          {r.winner === 'draw' ? 'Berabere' : r.won ? 'Kazandınız !' : 'Kaybettiniz !'}
+        </b>
         {/*
           ⭐ GECE = YALNIZ AY SİMGESİ (kullanıcı, 2026-08-05): *"Sadece kazanan veya kaybeden
-          yazısının yanında ay simgesi olması yeterli, tooltip çıkmasına da gerek yok."*
-          Önceden burada "· gece savaşı", notlarda da "vuruş gücü düştü (Gece Görüşü etkili)"
-          yazıyordu — ikisi de kalktı.
-          ⚠️ `title` bilerek YOK; kullanıcı tooltip de istemiyor. Simge yine de ekran
-          okuyucuya sessiz kalmasın diye `aria-label` taşıyor.
+          yazısının yanında ay simgesi olması yeterli."*
+          ⭐⭐ 2026-08-19: **AYNI KULLANICI KARARINI TERSİNE ÇEVİRDİ.** 2026-08-05'te
+          *"tooltip çıkmasına da gerek yok"* denmişti ve burada `title` bilerek yoktu; şimdi
+          *"ay ikonu üzerine tıklanınca bilgilendirici bir tooltip ile Savaş gece gerçekleşti
+          şeklinde bir bilgi gösterelim"* isteniyor. Eski notu silmiyoruz — kararın iki kez
+          değiştiğini görmek, bir sonraki turda üçüncü kez tartışmamayı sağlıyor.
         */}
-        {r.night ? <span className="ml-1.5" aria-label="gece savaşı">🌙</span> : null}
-        <span className="ml-2 text-xs font-normal text-muted">{r.turns} tur</span>
+        {r.night ? (
+          <Tooltip label={'Savaş gece gerçekleşti. Gece görüşü tekniği olmayan saldıran ordu '
+            + 'daha az vuruş gücüyle savaşır.'}>
+            <span className="cursor-help text-lg" aria-label="gece savaşı">🌙</span>
+          </Tooltip>
+        ) : null}
+        <span className="tnum text-xs text-muted">{r.turns} tur</span>
       </div>
       {/* Diğer raporlarla aynı görünüm ve aynı davranış: tıklanınca Dünya'da açılır. */}
       <RouteLine origin={r.coords?.origin} target={r.coords?.target} onNavigate={onNavigate} />
@@ -1002,7 +1152,21 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
               <tbody>
                 {s.lines.map((l) => (
                   <tr key={l.id} className="border-t border-border">
-                    <td className="py-1 text-ink">{l.name}</td>
+                    {/*
+                      ⭐ Birim resmi (kullanıcı, 2026-08-19: *"Askerlerin küçük resimleri de
+                      yanlarında gösterilebilir"*) — mobil tabloyla aynı.
+                      ⚠️⚠️ Klasör bölümün anahtarına göre: savunma yapıları `defenses/`,
+                      askerler `units/` altında. Yanlış klasör hata vermez, resim SESSİZCE
+                      kaybolur — mobilde tam olarak o hata bir kez yapıldı.
+                    */}
+                    <td className="flex items-center gap-1.5 py-1 text-ink">
+                      <img
+                        src={`/assets/${s.key === 'defenderStructs' ? 'defenses' : 'units'}/${l.id}.png`}
+                        alt="" width={22} height={22}
+                        className="icon-shadow h-[22px] w-[22px] shrink-0 object-contain"
+                      />
+                      {l.name}
+                    </td>
                     <td className="tnum py-1 text-right text-muted">{fmt(l.before)}</td>
                     <td className="py-1 text-center text-muted">→</td>
                     <td className="tnum py-1 text-right text-ink">{fmt(l.after)}</td>
@@ -1073,51 +1237,51 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
       ) : null}
 
       {/*
-        ⚠️ İki blok AYRI koşulda: kaybeden saldıranda «Ganimet» satırı YOK ama «Ortaya çıkan»
-        VAR — ölen askerlerden enkaz oluşur, yalnız tamamı savunanın şehrine gider. Eskiden
-        ikisi tek `r.loot` koşuluna bağlıydı ve sunucu ganimeti `null` yapınca döküm de
-        kaybolurdu (2026-08-08 düzeltmesinin istemci yarısı).
+        ⭐⭐ GANİMET ÜÇ SATIRDAN İKİYE İNDİ (kullanıcı, 2026-08-19) — mobil ile birebir aynı.
+
+        Kullanıcı haklı olarak *"en üstteki Ganimet ile Taşınan aynı bilgiyi veriyor"* dedi:
+          • «Ganimet: …»      → eve dönen yük
+          • «Ortaya çıkan: …» → savaşın ürettiği toplam
+          • «Taşınan: …»      → eve dönen yük  ← Ganimet'in AYNISI
+        Kalanlar: **Ortaya çıkan** ve **Taşınan**. İkisi farklı sorulara cevap veriyor.
+
+        ⛔ «Kapasiten yetmedi — şehirde kaldı» satırı KALDIRILDI (*"Kazananın bunu bilmesine
+        gerek yok"*). ⚠️ Satır 2026-08-08'de gerçek bir oyuncu sorusuna cevaptı; bilgi
+        tamamen kaybolmuyor, iki sayının farkı aynı soruyu cevaplıyor. Sunucudaki
+        `leftBehind`/`capacity` alanları DURUYOR, yalnız çizilmiyor.
+
+        ⚠️ `lootBreakdown` yoksa eski tek satıra düşülüyor: eski kayıtlarda döküm alanı yok.
       */}
-      {r.loot || r.lootBreakdown ? (
-        <div className="mb-2 space-y-1 text-xs">
-          {r.loot ? (
-            <div className="flex items-center gap-2 text-ink">
-              <span>{r.side === 'attacker' ? 'Ganimet:' : 'Yağmalanan:'}</span>
-              <Res kind="gold" value={fmt(r.loot.gold)} size={14} />
-              <Res kind="food" value={fmt(r.loot.food)} size={14} />
-            </div>
-          ) : null}
-          {/* Oyuncu isteği (mesajlar.txt): ortaya çıkan ile taşınabilen ayrı yazılsın. */}
-          {r.lootBreakdown ? (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted">
-              <span>Ortaya çıkan:</span>
-              <Res kind="gold" value={fmt(r.lootBreakdown.revealed.gold)} size={13} />
-              <Res kind="food" value={fmt(r.lootBreakdown.revealed.food)} size={13} />
-              {r.lootBreakdown.carried ? (
-                <>
-                  <span>· Taşınan:</span>
-                  <Res kind="gold" value={fmt(r.lootBreakdown.carried.gold)} size={13} />
-                  <Res kind="food" value={fmt(r.lootBreakdown.carried.food)} size={13} />
-                </>
-              ) : null}
-            </div>
+      {r.lootBreakdown ? (
+        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink">
+          <span className="text-muted">Ortaya çıkan:</span>
+          <Res kind="gold" value={fmt(r.lootBreakdown.revealed.gold)} size={13} />
+          <Res kind="food" value={fmt(r.lootBreakdown.revealed.food)} size={13} />
+          {r.lootBreakdown.carried ? (
+            <>
+              <span className="text-muted">· Taşınan:</span>
+              <Res kind="gold" value={fmt(r.lootBreakdown.carried.gold)} size={13} />
+              <Res kind="food" value={fmt(r.lootBreakdown.carried.food)} size={13} />
+            </>
           ) : null}
           {/*
-            ⭐ «Neden bu kadar az ganimet?» sorusunun cevabı (oyuncu bildirimi, 2026-08-08).
-            Yağma oranı şehrin kasasına uygulanıyor ama eve dönen yük TAŞIMA KAPASİTESİYLE
-            sınırlı. Canlı örnekte 521 bin altın alınabilirken 79.862 taşınabildi; rapor
-            farktan hiç söz etmediği için oyuncu ganimetin az OLUŞTUĞUNU sandı.
-            ⚠️ Satır yalnız gerçekten geride bir şey kaldığında çizilir — kapasite yettiğinde
-            «0 kaldı» yazmak bilgi değil gürültü olurdu.
+            ⭐⭐ AYRINTILI HESAP (kullanıcı, 2026-08-19): *"kenarda bir de info ikonu olsun.
+            Buna tıklanınca tüm ayrıntılı ganimet hesabı tooltip üzerine gösterilsin."*
+
+            ⚠️⚠️ Bu ikon olmadan ekrandaki iki sayı **kapanmıyordu** ve canlı veriyle
+            doğrulandı (savaş #29): fark 6.822.606 iken «şehirde kaldı» 785.542 yazıyordu.
+            Arada, ekranda hiç görünmeyen üçüncü bir kova vardı — enkazdan taşınamayan kısım.
+            Tooltip iki kaynağı da üç parçasıyla gösteriyor ve toplamları `revealed`e eşit.
           */}
-          {r.lootBreakdown?.leftBehind ? (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-warning">
-              <span>Kapasiten yetmedi{r.lootBreakdown.capacity != null
-                ? ` (${fmt(r.lootBreakdown.capacity)})` : ''} — şehirde kaldı:</span>
-              <Res kind="gold" value={fmt(r.lootBreakdown.leftBehind.gold)} size={13} />
-              <Res kind="food" value={fmt(r.lootBreakdown.leftBehind.food)} size={13} />
-            </div>
+          {r.lootBreakdown.detail ? (
+            <LootDetail d={r.lootBreakdown.detail} capacity={r.lootBreakdown.capacity} />
           ) : null}
+        </div>
+      ) : r.loot ? (
+        <div className="mb-2 flex items-center gap-2 text-xs text-ink">
+          <span>{r.side === 'attacker' ? 'Ganimet:' : 'Yağmalanan:'}</span>
+          <Res kind="gold" value={fmt(r.loot.gold)} size={14} />
+          <Res kind="food" value={fmt(r.loot.food)} size={14} />
         </div>
       ) : null}
 
@@ -1185,6 +1349,65 @@ function ProvenanceLine({ p }: { p: { seed: number; engineVersion: string; catal
 }
 
 /** Kahraman kartları — Tapınak'taki görsel dil: portre + ad + seviye + durum rozeti. */
+/**
+ * ⭐⭐ AYRINTILI GANİMET HESABI — «Ortaya çıkan» satırının yanındaki info ikonu (2026-08-19).
+ *
+ * ⚠️⚠️ Var olma sebebi somut bir arıza: ekrandaki iki sayı birbirini tutmuyordu. Canlı
+ * örnekte (savaş #29) «Ortaya çıkan» 7.046.425, «Taşınan» 223.819 ve aradaki 6.822.606'nın
+ * yalnız 785.542'si kasadan sığmayan paydı; kalan 6.037.064 **enkazdan** sığmayan kısımdı ve
+ * hiçbir yerde yazmıyordu. Oyuncu aritmetiği kapatamıyordu çünkü üçüncü kova gizliydi.
+ *
+ * ⭐ Son satır («kapasite önce enkaza») dökümün en değerli parçası: aynı savaşta oyuncu
+ * kasadan **sıfır** almıştı ve sebebi buydu — 6,2 milyonluk enkaz kapasitenin tamamını
+ * yutmuştu. O kural olmadan «kasadan 0 taşındı» satırı bir hata gibi okunuyor.
+ *
+ * ⚠️ Mobildeki `MwTapTip` ile **aynı bilgiyi aynı sırayla** veriyor; iki istemcinin dökümü
+ * ayrışırsa aynı savaş iki farklı hesap anlatır.
+ */
+function LootDetail({ d, capacity }: {
+  d: NonNullable<NonNullable<BattleReportShape['lootBreakdown']>['detail']>;
+  capacity: number | null;
+}) {
+  const satir = (label: string, v: { gold: number; food: number }) => (
+    <span className="flex items-center gap-1.5">
+      <span className="min-w-[6.5rem] text-muted">{label}</span>
+      <Res kind="gold" value={fmt(v.gold)} size={12} />
+      <Res kind="food" value={fmt(v.food)} size={12} />
+    </span>
+  );
+
+  return (
+    <Tooltip label={(
+      <span className="block space-y-1.5 text-[11px]">
+        <span className="block">
+          <b className="block text-ink">Enkaz — ölen ordudan çıktı</b>
+          {satir('Oluşan', d.debrisTotal)}
+          {satir('Taşınan', d.debrisCarried)}
+          {satir('Şehirde kaldı', d.debrisLeft)}
+        </span>
+        <span className="block border-t border-border pt-1.5">
+          <b className="block text-ink">Kasa — şehrin deposundan</b>
+          {satir('Alınabilirdi', d.plunderTotal)}
+          {satir('Taşınan', d.plunderCarried)}
+          {satir('Şehirde kaldı', d.plunderLeft)}
+        </span>
+        <span className="block border-t border-border pt-1.5 text-muted">
+          {capacity != null ? (
+            <span className="tnum block">Taşıma kapasiten: {fmt(capacity)}</span>
+          ) : null}
+          Kapasite önce enkaza harcanır; artarsa kasadan alınır.
+        </span>
+      </span>
+    )}>
+      <button type="button" aria-label="Ganimet hesabı"
+        className="ml-0.5 flex size-4 cursor-help items-center justify-center rounded-full
+          border border-border text-[9px] leading-none text-muted">
+        i
+      </button>
+    </Tooltip>
+  );
+}
+
 function HeroStrip({ title, heroes }: { title: string; heroes: ReportHeroLine[] }) {
   if (heroes.length === 0) return null;
   return (

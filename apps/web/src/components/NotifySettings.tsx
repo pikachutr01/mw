@@ -16,14 +16,13 @@ import {
 import { Badge, Button, Panel } from './ui.tsx';
 
 const CATEGORIES: readonly (readonly [string, string, string])[] = [
-  /* ⭐ 2026-08-07 (kullanıcı): anahtar artık yalnız "gelen uyarı"yı değil savaş ve casusluk
-     SONUÇLARINI da yönetiyor — `battle:resolved` ve `spy_report` bildirimleri `report`
-     kategorisinden buraya taşındı. Etiket bu yüzden genişletildi; anahtarın kendisi
-     (`attack`) DEĞİŞMEDİ, yoksa hesaplardaki mevcut tercihler anlamsızlaşırdı.
-     ⚠️ Gelen saldırı/casusluk uyarısı artık yalnız oyun AÇIKKEN görünür (kapalıyken push
-     atılmıyor, ani saldırı gölgelenmesin); ipucu bunu açıkça söylüyor. */
-  ['attack', 'Savaş ve casusluk',
-    'Oyun açıkken gelen saldırı uyarısı; savaş ve casusluk sonuçlandığında sonuç bildirimi.'],
+  /* ⛔ **«Savaş ve casusluk» (`attack`) anahtarı 2026-08-19'da KALDIRILDI** (kullanıcı kararı).
+     Saldırı, casusluk ve savaş sonucu artık hiçbir koşulda push atmıyor — yalnız oyun açıkken
+     toast olarak görünüyor. Ayarlanacak bir şey kalmadığı için satır da gitti.
+
+     ⚠️ Sunucuda kategori DURUYOR ama `NOTIFY_CONFIGURABLE` dışında; yani buraya geri eklemek
+     tek başına işe yaramaz, önce o listeye girmesi gerekir. Gerekçe `notify.limits.ts`te.
+     ⚠️ Toast'ı kapatan bir anahtar bilerek YAPILMADI: kullanıcı toast'ın kalmasını istedi. */
   ['dm', 'Özel mesaj', 'Bir oyuncu sana mesaj yazdığında.'],
   ['report', 'Raporlar ve ittifak', 'Savaş bitince, rapor düşünce, davet gelince.'],
   ['production', 'Üretim ve inşaat', 'Bina, birim ya da araştırma tamamlandığında.'],

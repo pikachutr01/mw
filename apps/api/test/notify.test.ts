@@ -227,12 +227,17 @@ describe('notify.catalog', () => {
     expect(notes[1]?.playerId).toBe(2);
     expect(notes[1]?.title).toBe('Savunmayı kaybettin');
     expect(notes[1]?.body).toBe('Karakule (2:5:1)');          // saldırı nereden geldi
-    // Savaş sonucu artık `report` değil `attack` kategorisinde (tek anahtar, §Seçenekler).
+    // Kategori `attack` — kova olarak duruyor, ama Seçenekler'de anahtarı YOK (2026-08-19).
     expect(notes[0]?.category).toBe('attack');
     // Aynı savaş, aynı tag → bildirim merkezinde iki satır birikmez.
     expect(notes[0]?.tag).toBe(notes[1]?.tag);
-    // Sonuç bildirimi push ATAR — kalkış uyarısının tersi.
-    expect(notes[0]?.push).toBeUndefined();
+    /* ⛔⛔ 2026-08-19: SONUÇ BİLDİRİMİ DE PUSH ATMIYOR (kullanıcı). Bu iddia daha önce tam
+       TERSİNİ kilitliyordu (`toBeUndefined`) ve o hâliyle kuralın yarısıydı: kalkışta susup
+       varışta konuşmak. Kullanıcı ikinci yarıyı da kapattı, telefona hiçbir savaş haberi
+       düşmüyor. ⚠️ Toast KESİLMEDİ — `push: false` yalnız çevrimdışı dalı kapatıyor
+       (`deliverOne`daki kapı toast dalının ALTINDA). */
+    expect(notes[0]?.push).toBe(false);
+    expect(notes[1]?.push).toBe(false);
   });
 
   it('savunan püskürtürse başlıklar tersine döner', () => {
@@ -264,12 +269,46 @@ describe('notify.catalog', () => {
     expect(sender?.title).toBe('Casusluk raporu');
     expect(sender?.body).toBe('Çığlıktepe (1:45:7)');
     expect(sender?.category).toBe('attack');
+    // ⛔ Casusluk raporu da push atmıyor (2026-08-19); tabloya `push: false` yazıldı.
+    expect(sender?.push).toBe(false);
 
     const [target] = notificationForOutbox('message:written', {
       playerId: 2, kind: 'spy_report', side: 'target', route,
     }, 1);
     expect(target?.title).toBe('Casusluk önleme raporu');
     expect(target?.body).toBe('Karakule (2:5:1)');
+    expect(target?.push).toBe(false);
+  });
+
+  /**
+   * ⭐⭐ KAPININ KENDİSİ — «saldırı ve casusluk hiçbir zaman push atmasın» kuralı tek bir
+   * iddiada. Yukarıdaki testler dört bildirimi ayrı ayrı ölçüyor; bu ise **kategoriyi**
+   * ölçüyor, yani yarın `attack` kovasına eklenecek BEŞİNCİ bir bildirim `push: false`
+   * yazmayı unutursa burada kırılır. Tek tek testler o yeni satırı hiç görmezdi.
+   */
+  it('⭐ `attack` kovasındaki HİÇBİR bildirim push atmıyor', () => {
+    const rows: [string, Record<string, unknown>][] = [
+      ['city:incoming_attack', {
+        missionId: 7, defenderPlayerId: 1, targetCity: route.target,
+        arrivesAt: '2026-07-31T14:00:00.000Z', units: { dwarf: 10 },
+      }],
+      ['city:incoming_spy', {
+        missionId: 9, defenderPlayerId: 1, targetCity: route.target,
+        arrivesAt: '2026-07-31T14:00:00.000Z', birds: 5,
+      }],
+      ['battle:resolved', {
+        battleId: 1, attackerPlayerId: 1, defenderPlayerId: 2, winner: 'attacker', route,
+      }],
+      ['message:written', { playerId: 1, kind: 'spy_report', side: 'spy', route }],
+      ['message:written', { playerId: 2, kind: 'spy_report', side: 'target', route }],
+    ];
+    const hepsi = rows.flatMap(([topic, payload]) => notificationForOutbox(topic, payload, 1));
+    // Beş satır, altı bildirim (savaş iki taraf üretiyor) — kova gerçekten dolu.
+    expect(hepsi.length).toBe(6);
+    for (const note of hepsi) {
+      expect(note.category, `${note.title} kategorisi`).toBe('attack');
+      expect(note.push, `${note.title} push`).toBe(false);
+    }
   });
 
   it('nakliyenin alıcı ve gönderen kopyası farklı metin alır', () => {
@@ -467,8 +506,32 @@ describe('NotifyService.deliver', () => {
     expect(sender.sent).toHaveLength(0);
 
     // Başka bir kategori etkilenmez — eksik anahtar varsayılana düşer.
-    await service.deliver(note(ali, 'attack'));
+    await service.deliver(note(ali, 'report'));
     expect(bus.events).toHaveLength(1);
+  });
+
+  /**
+   * ⭐⭐ KALDIRILAN ANAHTARIN BIRAKTIĞI TUZAK. `attack` anahtarı Seçenekler'den 2026-08-19'da
+   * kaldırıldı, ama hesaplarda `{"attack": false}` yazan ESKİ kayıtlar duruyor olabilir.
+   * Tercih hâlâ okunsaydı o oyuncuların savaş toast'ı **sonsuza kadar** susardı ve geri
+   * açmanın hiçbir yolu olmazdı: arayüzde anahtar yok, API'de şema onu reddediyor.
+   *
+   * `wants()` bu yüzden ayarlanamayan kategoride kayıtlı değere hiç bakmıyor. Göç yazmaya da
+   * gerek kalmadı — kayıt duruyor, yalnız okunmuyor.
+   */
+  it('⭐ eski `{"attack": false}` kaydı toast’ı SUSTURMUYOR (anahtar kaldırıldı)', async () => {
+    await subscribe(ali, 'ali');
+    const sender = new FakeSender();
+    const { service, bus } = build({ online: [ali], sender });
+
+    await h.db.execute(sql`
+      UPDATE accounts SET notify_prefs = '{"attack": false}'::jsonb
+       WHERE id = (SELECT account_id FROM players WHERE id = ${ali})
+    `);
+    await service.deliver(note(ali, 'attack'));
+
+    expect(bus.events).toHaveLength(1);
+    expect(sender.sent).toHaveLength(0);          // çevrimiçi zaten push almaz
   });
 
   it('aboneliği olmayan çevrimdışı oyuncuda sessizce hiçbir şey olmaz', async () => {
@@ -558,19 +621,22 @@ describe('NotifyService.prefs', () => {
     const accountId = Number(row!['account_id']);
 
     /**
-     * ⚠️ Liste `NOTIFY_DEFAULTS` ile birebir olmak ZORUNDA — bu bir bekçi testi: yeni bir
-     * kategori eklenince burası kırmızı yanar ve `NotifySettings.tsx`teki anahtarı da
+     * ⚠️ Liste **`NOTIFY_CONFIGURABLE`** ile birebir olmak ZORUNDA — bu bir bekçi testi: yeni
+     * bir kategori eklenince burası kırmızı yanar ve `NotifySettings.tsx`teki anahtarı da
      * eklemeyi hatırlatır. (`mention` 2026-08-07'de tam olarak böyle yakalandı.)
+     *
+     * ⛔ `attack` 2026-08-19'da listeden ÇIKTI: ayarlanabilir değil, bu yüzden `prefs()` de
+     * döndürmüyor. Kova sunucuda duruyor ama oyuncunun ayarına tabi değil.
      */
     expect(await service.prefs(accountId)).toEqual({
-      attack: true, dm: true, report: true, production: true, mention: true,
+      dm: true, report: true, production: true, mention: true,
       /** ⭐ Destek talebine yönetici yanıtı (2026-08-14) — `mention` gibi GÖÇSÜZ eklendi. */
       ticket: true,
     });
 
     await service.setPrefs(accountId, { production: false });
     expect(await service.prefs(accountId)).toEqual({
-      attack: true, dm: true, report: true, production: false, mention: true, ticket: true,
+      dm: true, report: true, production: false, mention: true, ticket: true,
     });
 
     await service.setPrefs(accountId, { dm: false });

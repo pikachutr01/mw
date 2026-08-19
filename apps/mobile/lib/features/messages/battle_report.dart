@@ -288,18 +288,22 @@ class BattleLootBreakdown {
     required this.carried,
     required this.leftBehind,
     required this.capacity,
+    required this.detail,
   });
 
-  /// Savaşta ortaya çıkan enkaz — saldıran KAYBETSE de dolu (tamamı savunana gider).
+  /// Savaşın ortaya çıkardığı TOPLAM: ölen ordunun enkazı + kasadan alınabilecek pay.
   final MwRes revealed;
 
   /// Fiilen eve taşınan yük; saldıran kaybettiyse `null`.
   final MwRes? carried;
 
-  /// Kapasiteye sığmayıp şehirde kalan kısım. `null` = kapasite yetti → satır çizilmez.
+  /// ⚠️ Ekranda satır olarak çizilmiyor (2026-08-19); `detail.plunderLeft` ile aynı sayı.
   final MwRes? leftBehind;
 
   final int? capacity;
+
+  /// ⭐ Info ikonunun açtığı ayrıntı. `null` = eski savaş kaydı → ikon çizilmiyor.
+  final BattleLootDetail? detail;
 
   static BattleLootBreakdown? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -308,6 +312,57 @@ class BattleLootBreakdown {
       carried: BattleReport.res(raw['carried']),
       leftBehind: BattleReport.res(raw['leftBehind']),
       capacity: (raw['capacity'] as num?)?.toInt(),
+      detail: BattleLootDetail.fromJson(raw['detail']),
+    );
+  }
+}
+
+/// ⭐⭐ AYRINTILI GANİMET HESABI (kullanıcı, 2026-08-19) — info ikonunun tooltip içeriği.
+///
+/// ⚠️⚠️ Var olma sebebi somut bir arıza: ekrandaki iki sayı birbirini tutmuyordu. Canlı
+/// örnekte (savaş #29) «Ortaya çıkan» 7.046.425, «Taşınan» 223.819 ve aradaki 6.822.606'nın
+/// yalnız 785.542'si kasadan sığmayan paydı; kalan 6.037.064 **enkazdan** sığmayan kısımdı ve
+/// hiçbir yerde yazmıyordu.
+///
+/// ⭐ İki kaynak, her biri üç parça; toplamları daima `revealed`e eşit:
+///   `debrisTotal  = debrisCarried  + debrisLeft`
+///   `plunderTotal = plunderCarried + plunderLeft`
+class BattleLootDetail {
+  const BattleLootDetail({
+    required this.debrisTotal,
+    required this.debrisCarried,
+    required this.debrisLeft,
+    required this.plunderTotal,
+    required this.plunderCarried,
+    required this.plunderLeft,
+  });
+
+  final MwRes debrisTotal;
+  final MwRes debrisCarried;
+  final MwRes debrisLeft;
+  final MwRes plunderTotal;
+  final MwRes plunderCarried;
+  final MwRes plunderLeft;
+
+  /// ⚠️ Alanlardan biri eksikse `null` dönüyor, sıfırla doldurulmuyor: yarım bir döküm,
+  /// düzeltmeye çalıştığımız "kapanmayan hesap" arızasının aynısını üretirdi.
+  static BattleLootDetail? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final dt = BattleReport.res(raw['debrisTotal']);
+    final dc = BattleReport.res(raw['debrisCarried']);
+    final dl = BattleReport.res(raw['debrisLeft']);
+    final pt = BattleReport.res(raw['plunderTotal']);
+    final pc = BattleReport.res(raw['plunderCarried']);
+    final pl = BattleReport.res(raw['plunderLeft']);
+    if (dt == null || dc == null || dl == null) return null;
+    if (pt == null || pc == null || pl == null) return null;
+    return BattleLootDetail(
+      debrisTotal: dt,
+      debrisCarried: dc,
+      debrisLeft: dl,
+      plunderTotal: pt,
+      plunderCarried: pc,
+      plunderLeft: pl,
     );
   }
 }

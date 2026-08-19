@@ -60,6 +60,36 @@ Future<void> mwTapError() async {
   }
 }
 
+/// ⭐⭐ ÜÇ SHEET TÜRÜNÜN ORTAK AÇILIŞ AYARLARI — tek yerde.
+///
+/// ⚠️⚠️ **`useRootNavigator: true` ŞART** (2026-08-19). `ShellRoute` kendi iç navigator'ını
+/// kuruyor; onsuz sheet **kabuğun gövdesinin içinde** açılıyordu, yani üstte şehir şeridinin
+/// altından başlayıp altta gezinme çubuğunda kesiliyordu. Sonucu iki katlıydı:
+///   • sheet ekranın ancak ~%70'ini kullanabiliyordu (kullanıcı: *"daha yüksek yapalım"*),
+///   • `mwTallSheet`in `%94 × ekran yüksekliği` hesabı **yalan** oluyordu — istediği yükseklik
+///     kutusuna sığmadığı için sessizce kırpılıyordu.
+/// Kök navigator'da sheet gerçekten ekranın tamamını kaplıyor ve ölçüler anlamına kavuşuyor.
+///
+/// ⚠️ **`showDragHandle: false` ve tutamağı KENDİMİZ çiziyoruz.** Material'ınki sheet'in
+/// zemininde, başlık bandının ÜSTÜNDE duruyordu; bant renkli olduğu için tutamağın altında
+/// boş bir şerit kalıyor ve "başlığın üstünde boşluk var" izlenimi doğuyordu (kullanıcı
+/// bildirdi). Tutamak artık bandın İÇİNDE — `_SheetBaslik`te.
+/// ⚠️ Sürükleyerek kapatma KAYBOLMADI: `enableDrag` varsayılan olarak açık ve sheet'in
+/// tamamı sürüklenebiliyor; değişen yalnız tutamağın çizildiği yer.
+///
+/// ⚠️ `clipBehavior: antiAlias`: bant kenardan kenara uzandığı için sheet'in yuvarlatılmış
+/// üst köşelerini taşardı; kırpma olmadan bandın köşeleri keskin görünüyordu.
+Future<T?> _sheet<T>(BuildContext context, WidgetBuilder builder) =>
+    showModalBottomSheet<T>(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      showDragHandle: false,
+      isScrollControlled: true,
+      clipBehavior: Clip.antiAlias,
+      builder: builder,
+    );
+
 /// ⭐ ORTAK BOTTOM SHEET — ekranların tek sheet kapısı.
 ///
 /// ⚠️ `showModalBottomSheet` tercih ediliyor çünkü geri tuşuyla kapanma, dışarı dokununca
@@ -70,35 +100,36 @@ Future<void> mwTapError() async {
 /// gerekçe orada; bu dosya 2026-08-17'de o ihtiyacı önceden not etmişti ve sefer formu geldi.
 ///
 /// ⚠️ `useSafeArea`: liste gezinme çubuğunun altına kaymasın.
+/// ⚠️⚠️ `titleIsUserText`: başlık OYUNCUNUN YAZDIĞI bir metinse (şehir adı, kullanıcı adı)
+/// **true** verilmeli — `mwTallSheet`teki aynı bayrağın ikizi. Cinzel küçük harf taşımıyor ve
+/// `mwUpper` metni gerçekten büyütüyor: «Mithlond» ekranda «MİTHLOND» oluyordu. Kullanıcı
+/// 2026-08-19'da Dünya'daki hedef künyesinde bunu yakaladı; bayrak `mwSheet`te YOKTU, yani
+/// oyuncu adları düzeltilemez biçimde büyük yazılıyordu.
 Future<T?> mwSheet<T>(
   BuildContext context, {
   required String title,
   required Widget child,
+  bool titleIsUserText = false,
 }) {
-  return showModalBottomSheet<T>(
-    context: context,
-    useSafeArea: true,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              // ⚠️ `mwUpper` ŞART: Cinzel küçük harfi büyük harf gibi çiziyor ve `i`nin
-              // noktası kayboluyordu («ÇIFTLIK»). Metni önceden Türkçe kurallarıyla
-              // büyütünce doğru glif (`İ`) çiziliyor. Gerekçenin tamamı `mwUpper`da.
-              child: Text(mwUpper(title), style: mwDisplayStyle(fontSize: 16)),
+  return _sheet<T>(
+    context,
+    (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ⭐ Başlık bandı `mwTallSheet` ile ORTAK (gerekçe `_SheetBaslik`te).
+          _SheetBaslik(title: title, titleIsUserText: titleIsUserText),
+          // ⚠️ Uzun içerik sığmazsa kaydırılabilir olmalı: telefon yatayken ya da yazı
+          // boyutu büyütülmüşken sheet ekranı aşabiliyor.
+          // ⚠️ Yan dolgu artık BURADA, dışta değil: bant kenardan kenara uzanmalı.
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: child,
             ),
-            // ⚠️ Uzun içerik sığmazsa kaydırılabilir olmalı: telefon yatayken ya da yazı
-            // boyutu büyütülmüşken sheet ekranı aşabiliyor.
-            Flexible(child: SingleChildScrollView(child: child)),
-          ],
-        ),
+          ),
+        ],
       ),
     ),
   );
@@ -139,43 +170,33 @@ Future<T?> mwTallSheet<T>(
   bool titleIsUserText = false,
   Widget? trailing,
 }) {
-  return showModalBottomSheet<T>(
-    context: context,
-    useSafeArea: true,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) => Padding(
+  return _sheet<T>(
+    context,
+    (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
       child: SizedBox(
-        // ⚠️ Ekranın %88'i: üstte kalan şerit, arkadaki bağlamın kaybolmadığını gösteriyor
-        // ve dışarı dokunup kapatmak için bir hedef bırakıyor.
-        height: MediaQuery.of(ctx).size.height * 0.88,
+        /* ⚠️ Ekranın %94'ü: üstte kalan şerit, arkadaki bağlamın kaybolmadığını gösteriyor
+           ve dışarı dokunup kapatmak için bir hedef bırakıyor.
+           ⭐ %88'den yükseltildi (kullanıcı, 2026-08-19: *"bu bottom sheet in yüksekliği daha
+           fazla olabilir, daha geniş bir alanda görünsün"*). Sefer formunda birim listesi +
+           kahraman seçici + kargo kutusu aynı anda duruyor ve %88'de liste sürekli kayıyordu.
+           ⚠️ %100 YAPILMADI: kalan şerit kapatma hedefi ve "bu bir katman" ipucu. */
+        height: MediaQuery.of(ctx).size.height * 0.94,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      // ⚠️ `mwUpper` yalnız SİSTEM metninde — Cinzel'de `i`nin noktası
-                      // kaybolur (gerekçe `mwUpper`da). Oyuncunun yazdığı ad gövde fontunda.
-                      child: Text(
-                        titleIsUserText ? title : mwUpper(title),
-                        overflow: TextOverflow.ellipsis,
-                        style: titleIsUserText
-                            ? const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.3,
-                              )
-                            : mwDisplayStyle(fontSize: 16),
-                      ),
-                    ),
-                    ?trailing,
-                  ],
-                ),
+              /* ⭐⭐ BAŞLIK ARTIK KENDİ ZEMİNİNDE (kullanıcı, 2026-08-19: *"Bu bottom
+                 sheetlerin kendini belli eden bir header kısımları olsa daha güzel görünecek.
+                 Başlık içerik ile aynı arka plana sahip olunca karışabiliyor."*).
+
+                 ⚠️ Renk `panelHeader` — uygulamadaki her panelin başlık bandı zaten o renkte
+                 (`MwPanel`). Sheet'e ÖZEL bir başlık rengi icat etmek, aynı işi yapan iki
+                 farklı görsel dil demek olurdu. */
+              _SheetBaslik(
+                title: title,
+                titleIsUserText: titleIsUserText,
+                trailing: trailing,
               ),
               Expanded(child: child),
             ],
@@ -184,6 +205,74 @@ Future<T?> mwTallSheet<T>(
       ),
     ),
   );
+}
+
+/// Sheet başlık bandı — `mwTallSheet` ve `mwSheet` aynı bandı kullanıyor.
+///
+/// ⚠️ Tek yerde: iki sheet türünün başlığı ayrışırsa oyuncu aynı uygulamada iki farklı
+/// "başlık" kavramı görür. `MwPanel`in bandıyla da aynı renkte, aynı sebeple.
+class _SheetBaslik extends StatelessWidget {
+  const _SheetBaslik({
+    required this.title,
+    required this.titleIsUserText,
+    this.trailing,
+  });
+
+  final String title;
+  final bool titleIsUserText;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: c.panelHeader,
+        border: Border(bottom: BorderSide(color: c.borderStrong, width: 2)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          /* ⭐ SÜRÜKLEME TUTAMAĞI BANDIN İÇİNDE (kullanıcı, 2026-08-19: *"header kısmı en
+             üstteki bottom sheet i aşağı yukarı kaydıran çizgiyi de kapsasın. Şu anki gibi
+             bir header olunca onun üzerinde bir boşluk kalmış gibi görünüyor."*).
+             Material'ın kendi tutamağı sheet zemininde, bandın ÜSTÜNDE duruyordu. */
+          Container(
+            width: 34,
+            height: 4,
+            decoration: BoxDecoration(
+              color: c.onPanelHeader.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                // ⚠️ `mwUpper` yalnız SİSTEM metninde — Cinzel'de `i`nin noktası kaybolur
+                // (gerekçe `mwUpper`da). Oyuncunun yazdığı ad gövde fontunda.
+                child: Text(
+                  titleIsUserText ? title : mwUpper(title),
+                  overflow: TextOverflow.ellipsis,
+                  style: titleIsUserText
+                      ? TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                          color: c.onPanelHeader,
+                        )
+                      : mwDisplayStyle(fontSize: 16, color: c.onPanelHeader),
+                ),
+              ),
+              ?trailing,
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// ⭐ BİLGİ SHEET'İ — uzun basınca açılan künye.
@@ -281,25 +370,20 @@ Future<String?> mwTextSheet(
   bool Function(String)? validate,
 }) {
   final controller = TextEditingController(text: initial);
-  return showModalBottomSheet<String>(
-    context: context,
-    useSafeArea: true,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (ctx) => Padding(
+  return _sheet<String>(
+    context,
+    (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      // ⚠️ Yan dolgu gövdenin İÇİNDE: başlık bandı kenardan kenara uzanmalı.
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: _TextSheetBody(
-            title: title,
-            controller: controller,
-            maxLength: maxLength,
-            hint: hint,
-            note: note,
-            multiline: multiline,
-            validate: validate,
-          ),
+        child: _TextSheetBody(
+          title: title,
+          controller: controller,
+          maxLength: maxLength,
+          hint: hint,
+          note: note,
+          multiline: multiline,
+          validate: validate,
         ),
       ),
     ),
@@ -356,47 +440,54 @@ class _TextSheetBodyState extends State<_TextSheetBody> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // ⭐ Diğer iki sheet ile ORTAK bant (gerekçe `_SheetBaslik`te). Başlık SİSTEM metni.
+        _SheetBaslik(title: widget.title, titleIsUserText: false),
         Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          // ⚠️ Başlık SİSTEM metni → `mwUpper` + Cinzel (gerekçe `mwUpper`da).
-          child: Text(
-            mwUpper(widget.title),
-            style: mwDisplayStyle(fontSize: 16),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.note != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    widget.note!,
+                    style: TextStyle(fontSize: 12, color: c.muted),
+                  ),
+                ),
+              TextField(
+                controller: widget.controller,
+                autofocus: true,
+                minLines: widget.multiline ? 3 : 1,
+                maxLines: widget.multiline ? 6 : 1,
+                maxLength: widget.maxLength,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  hintText: widget.hint,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              MwButton(
+                label: 'Kaydet',
+                onTap: gecerli
+                    ? () => Navigator.of(
+                        context,
+                      ).pop(widget.controller.text.trim())
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              MwButton(
+                label: 'Vazgeç',
+                kind: MwButtonKind.ghost,
+                // ⚠️ `null` döndürüyor — boş dizeden AYRI: biri "iptal", diğeri "metni temizle".
+                onTap: () => Navigator.of(context).pop(),
+              ),
+            ],
           ),
-        ),
-        if (widget.note != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              widget.note!,
-              style: TextStyle(fontSize: 12, color: c.muted),
-            ),
-          ),
-        TextField(
-          controller: widget.controller,
-          autofocus: true,
-          minLines: widget.multiline ? 3 : 1,
-          maxLines: widget.multiline ? 6 : 1,
-          maxLength: widget.maxLength,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(
-            hintText: widget.hint,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-          ),
-        ),
-        const SizedBox(height: 12),
-        MwButton(
-          label: 'Kaydet',
-          onTap: gecerli
-              ? () => Navigator.of(context).pop(widget.controller.text.trim())
-              : null,
-        ),
-        const SizedBox(height: 8),
-        MwButton(
-          label: 'Vazgeç',
-          kind: MwButtonKind.ghost,
-          // ⚠️ `null` döndürüyor — boş dizeden AYRI: biri "iptal", diğeri "metni temizle".
-          onTap: () => Navigator.of(context).pop(),
         ),
       ],
     );

@@ -956,10 +956,20 @@ export const messages = pgTable('messages', {
   /** OYUN saatinde — rapor "ne zaman oldu" der, "ne zaman yazıldı" demez. */
   at: timestamp('at', { withTimezone: true }).notNull(),
   readAt: timestamp('read_at', { withTimezone: true }),
+  /**
+   * ⭐ Oyuncunun favorilediği rapor (2026-08-19). ⚠️ `boolean` DEĞİL damga — `read_at` ile
+   * aynı kalıp: ne zaman favorilendiği bilgisini bedavaya taşıyor. Gerekçenin tamamı
+   * `drizzle/0051_message_favorites.sql` başlığında.
+   */
+  favoritedAt: timestamp('favorited_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('messages_player').on(t.playerId, t.id),
   index('messages_unread').on(t.playerId).where(sql`${t.readAt} IS NULL`),
+  // ⚠️ KISMÎ: favoriler posta kutusunun çok küçük bir kısmı; tam indeks hiç favorilemeyen
+  //    oyuncuya da yazma maliyeti çıkarırdı.
+  index('messages_favorites').on(t.playerId, t.id)
+    .where(sql`${t.favoritedAt} IS NOT NULL`),
 ]);
 
 /**

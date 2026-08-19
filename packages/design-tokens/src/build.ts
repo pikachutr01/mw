@@ -173,6 +173,26 @@ class MwTheme {
     return ThemeData(
       brightness: brightness,
       scaffoldBackgroundColor: bg,
+      /* ⭐⭐ SAYFA GEÇİŞİNİN ZEMİNİ (kullanıcı bildirimi, 2026-08-19): *"bir sayfayı ilk
+         açtığım anda arka plan kahverengi iken çok kısa bir süre sonra siyaha dönüşüyor."*
+
+         ⚠️⚠️ Sebep Flutter'ın varsayılanıydı, bizim kodumuz değil: Android'de sayfa geçişi
+         \`ZoomPageTransitionsBuilder\` ve o, geçiş süresince zemini **\`colorScheme.surface\`**
+         ile boyuyor. Bizim palette \`surface\` (#1E1810) sıcak bir koyu kahve, ekranın asıl
+         zemini \`bg\` (#15110C) ise neredeyse siyah — yani her sayfa açılışında yarım saniye
+         kahve, sonra siyah. Renk yanıp sönmesi kod hatası gibi görünüyordu.
+
+         ⭐ Çözüm geçişi kaldırmak DEĞİL, zeminini doğru renge bağlamak: animasyon duruyor,
+         yalnız arkasındaki renk artık ekranın gerçek zeminiyle aynı.
+         ⚠️ YALNIZ Android yazılı: iOS'un varsayılan geçişi böyle bir zemin boyamıyor ve
+         listeye eklenmeyen platform Flutter'ın kendi varsayılanını kullanmaya devam ediyor.
+         Ürün bugün Android (\`MOBIL_MIMARI.md\` §1); olmayan bir sorunu iOS için de yazmak,
+         yarın Flutter varsayılanı değişince bakımı bize kalan ikinci bir satır olurdu. */
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(backgroundColor: bg),
+        },
+      ),
       // ⭐ Gövde fontu uygulamanın TAMAMINA uygulanıyor — web'de \`body\` ile aynı.
       // ⚠️ Sayılar da bu fontta: web'de sayılar bir ara monospace'teydi ve o fontun ÇİZGİLİ
       // sıfırı 8 ile karışıyordu; gövde fontuna alınınca sorun çözüldü (kullanıcı kararı).

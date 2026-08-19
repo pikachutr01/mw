@@ -21,6 +21,7 @@ class MessageRow {
     required this.subject,
     required this.at,
     required this.readAt,
+    required this.favorite,
   });
 
   final int id;
@@ -53,6 +54,11 @@ class MessageRow {
   /// `null` → okunmamış. Okundu damgası, sayı değil: "kaç kez okundu" diye bir soru yok.
   final String? readAt;
 
+  /// ⭐ Oyuncunun favorilediği rapor (2026-08-19). ⚠️ Sunucu damga tutuyor
+  /// (`favorited_at`), tel üzerinde BOOL geliyor: istemci "ne zaman"ı hiçbir yerde
+  /// göstermiyor ve göstermeyeceği bir alanı her satırda taşımanın anlamı yok.
+  final bool favorite;
+
   bool get unread => readAt == null;
 
   static MessageRow fromJson(Map<String, dynamic> j) => MessageRow(
@@ -64,6 +70,7 @@ class MessageRow {
     subject: j['subject'] as String? ?? '',
     at: j['at'] as String? ?? '',
     readAt: j['readAt'] as String?,
+    favorite: j['favorite'] as bool? ?? false,
   );
 }
 
@@ -98,6 +105,7 @@ class MessagePage {
       messages: 0,
       unreadReports: 0,
       unreadMessages: 0,
+      favorites: 0,
     ),
   );
 
@@ -117,6 +125,7 @@ class MessagePage {
         messages: n('messages'),
         unreadReports: n('unreadReports'),
         unreadMessages: n('unreadMessages'),
+        favorites: n('favorites'),
       ),
     );
   }
@@ -128,10 +137,14 @@ class MessageCounts {
     required this.messages,
     required this.unreadReports,
     required this.unreadMessages,
+    required this.favorites,
   });
 
   final int reports;
   final int messages;
   final int unreadReports;
   final int unreadMessages;
+
+  /// ⭐ Favori sayısı — süzgeç çipinin yanındaki rozet.
+  final int favorites;
 }

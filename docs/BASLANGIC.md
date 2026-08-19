@@ -18,10 +18,17 @@
 > daveti** · **tatil modu** · dört dünya hız çarpanı (hepsi **1**) · motor **1.1.0**.
 > Kod `mw/`, GitHub'da, **696 test yeşil**, **36 migration**, 80 commit.
 >
+> **📱 MOBİL (2026-08-19):** Flutter uygulamasının **Faz 2'si KAPANDI** — alt barın beş sekmesi
+> de gerçek ekran, Komuta Merkezi'nin dört sekmesi dolu, aşağı çekip tazeleme on ekranda.
+> Ayrıntı ve sıradaki faz `MOBIL_MIMARI.md` faz tablosunda. ⚠️ Fazlar oradaki **mobil**
+> numaralandırması; yukarıdaki Faz 0/1/2 sunucu ve web'in fazları, ikisi ayrı sayaç.
+>
 > **🚦 SIRADAKİ İŞ — kullanıcı henüz seçmedi.** Sıradaki turun konusunu SOR; aşağıdakiler
 > envanterde duran adaylar, sıralama değil:
 > - **Moderasyon minimumu** — şikayet kuyruğu var, inceleme ekranı yok (§1.8)
-> - **Yardım ekranı** hâlâ yer tutucu · i18n hiç yok
+> - **Yardım ekranı** hâlâ yer tutucu (içerik `referans/teknik_ve_yapi_dokumantasyonu.md`'de
+>   hazır bekliyor; mobilde de yok). ⛔ **i18n bu listeden ÇIKTI** — 2026-08-19'da vazgeçildi,
+>   iki istemci metnini ayrı yazıyor (`MOBIL_MIMARI.md` §1)
 > - ~~**Genel Sohbet**~~ ✅ **2026-08-10'da bitti** (§13.12) — dünya başına tek oda, bağlan/kopar
 >   modeli, roster'sız `@` bahsetme, engelleme süzgeci, yönetici susturma + mesaj silme.
 >   ⚠️ **Erken aşamaya özel:** canlıya çıkarken panelden `globalChat.enabled` KAPATILACAK

@@ -156,7 +156,8 @@ class _Hit extends StatelessWidget {
 
     return InkWell(
       // ⚠️ Diyara gidiliyor, şehir yerine değil: Dünya ekranı bir DİYAR listesi (§13.16).
-      onTap: () => context.go('/world/${hit.k}/${hit.d}'),
+      // ⭐ `?s=` — arama sonucundaki slot Dünya listesinde kısa bir an parlıyor.
+      onTap: () => context.go('/world/${hit.k}/${hit.d}?s=${hit.s}'),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
         child: Row(

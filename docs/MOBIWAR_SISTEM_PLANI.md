@@ -30,7 +30,8 @@
 5. **Gece/gündüz teması** hem web hem Flutter'da, **antik oyun renk paleti** ile ve **tek kaynaktan**
    yönetilen tasarım token'ları üzerinden. Tasarım: §13.13.
 6. **Adlandırma:** dosya adları, URL yolları, kod/DB/config tanımlayıcıları **İngilizce**;
-   **açıklamalar (yorumlar) ve dokümanlar Türkçe**; kullanıcıya görünen metinler i18n dosyasında.
+   **açıklamalar (yorumlar) ve dokümanlar Türkçe**; ~~kullanıcıya görünen metinler i18n
+   dosyasında~~ → **i18n'den 2026-08-19'da vazgeçildi**, metin doğrudan koda yazılıyor (§13.14.2).
    Sözleşme: §13.14. (Bu karar §13.7 config anahtarlarını ve katalog `id`'lerini İngilizceye çevirir.)
 7. **Savunma tabanı:** her savunma birimi tipinden savaş sonrası **en az 4 tanesi kalır** (savaş
    öncesi adedi 4'ü geçmişse). Her şehir küçük ordulara karşı asgari savunma şansını kalıcı korur;
@@ -3963,9 +3964,12 @@ fontlar kendi sunucumuzda barındırılır (CDN yok), `latin-ext` alt kümesi + 
 ### 13.14.2 Türkçe
 - **Kod yorumları** — açıklama gerekiyorsa Türkçe yazılır (*"neden"i anlat, "ne"yi değil*).
 - **Dokümanlar** (`*.md`), commit mesajı gövdesi, PR açıklaması, `audit_log` insan-okur alanları.
-- **Kullanıcıya görünen metin asla koda gömülmez** → `apps/web/src/i18n/tr.json`
+- ⛔ ~~**Kullanıcıya görünen metin asla koda gömülmez** → `apps/web/src/i18n/tr.json`
   (anahtar İngilizce, değer Türkçe): `"chat.tabs.alliance": "İttifak"`. `en.json` iskelet olarak
-  açılır (şimdilik boş; ileride ikinci dil bedava gelir). Flutter aynı anahtar setini kullanır.
+  açılır (şimdilik boş; ileride ikinci dil bedava gelir). Flutter aynı anahtar setini kullanır.~~
+  **2026-08-19'da VAZGEÇİLDİ** (kullanıcı kararı). Metin web'de JSX, mobilde Dart içinde, **ayrı
+  ayrı** yazılıyor. Ölçüm ve gerekçe `MOBIL_MIMARI.md` §1'de. ⚠️ Bu satır **tarih olarak**
+  duruyor; kural sanıp uygulamaya kalkmayın.
 - Katalogda görünen ad ayrı alandır: `{ "id": "archer_tower", "name": { "tr": "Okçu Kulesi" } }`.
 
 ### 13.14.3 Türkçe → İngilizce eşleme (planın önceki bölümlerinde geçenler)

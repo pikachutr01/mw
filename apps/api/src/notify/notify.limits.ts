@@ -28,6 +28,30 @@ export const NOTIFY_CATEGORIES = [
 export type NotifyCategory = (typeof NOTIFY_CATEGORIES)[number];
 
 /**
+ * ⭐⭐ OYUNCUNUN AYARLAYABİLDİĞİ kategoriler — Seçenekler ekranındaki anahtarlar.
+ *
+ * `attack` 2026-08-19'da **listeden çıktı** (kullanıcı kararı): saldırı ve casusluk artık
+ * hiçbir koşulda push GÖNDERMİYOR, yalnız oyun açıkken toast olarak görünüyor. Geriye
+ * ayarlanacak bir şey kalmadığı için anahtarı da kaldırıldı.
+ *
+ * ⚠️⚠️ **Ayrı bir liste olmasının sebebi bir TUZAK.** `attack` bir kategori olarak duruyor
+ * (dört bildirim onu taşıyor), ama hesaplarda `{"attack": false}` yazan ESKİ kayıtlar var.
+ * Yalnız arayüz satırını silseydik o oyuncuların toast'ı sonsuza kadar susardı ve geri
+ * açmanın hiçbir yolu olmazdı — sessiz, kalıcı ve teşhisi imkânsız bir arıza. `wants()` bu
+ * listede olmayan kategoride kayıtlı değere HİÇ bakmıyor, bu yüzden göç de gerekmiyor.
+ *
+ * ⚠️ `prefsBody` (PATCH şeması) da bundan üretiliyor: istemci artık `attack` yazamaz.
+ */
+export const NOTIFY_CONFIGURABLE = [
+  'dm', 'report', 'production', 'mention', 'ticket',
+] as const;
+export type NotifyConfigurable = (typeof NOTIFY_CONFIGURABLE)[number];
+
+/** Kategori oyuncunun ayarına tabi mi? Değilse tercih okunmaz, bildirim daima geçer. */
+export const isConfigurable = (c: NotifyCategory): c is NotifyConfigurable =>
+  (NOTIFY_CONFIGURABLE as readonly string[]).includes(c);
+
+/**
  * Varsayılanlar — **hepsi AÇIK** (kullanıcı kararı 2026-07-31).
  *
  * `accounts.notify_prefs`'te anahtar YOKSA buraya bakılır; `false` yazılıysa kapalıdır. Bu
@@ -36,6 +60,11 @@ export type NotifyCategory = (typeof NOTIFY_CATEGORIES)[number];
  * kendiliğinden açık geldi.
  */
 export const NOTIFY_DEFAULTS: Readonly<Record<NotifyCategory, boolean>> = {
+  /**
+   * ⛔ Oyuncu tarafından KAPATILAMAZ (`NOTIFY_CONFIGURABLE` dışında). Değer yine de burada
+   * duruyor: `wants()` bu kategoriye hiç bakmasa da tip `Record<NotifyCategory, boolean>`
+   * eksiksiz olmayı istiyor ve "varsayılan açık" doğru cevap.
+   */
   attack: true,
   dm: true,
   report: true,

@@ -43,10 +43,14 @@ import 'message.dart';
 import 'message_rules.dart';
 import 'message_sheet.dart';
 
-/// ⚠️ Sayfa boyu SABİT ve seçici yok. Web'de 10/20/50 arasında bir açılır liste var; telefonda
-/// o bir masaüstü mobilyası — parmakla kaydırmak sayfa değiştirmekten ucuz. 20 seçildi:
-/// satırlar iki satırlık ve 20 kayıt bir ekrandan biraz uzun, yani sayfalama nadiren gerekiyor.
-const int kMessagePageSize = 20;
+/* ⚠️ ESKİ KARAR GERİ ALINDI (kullanıcı, 2026-08-19). Burada *"sayfa boyu SABİT ve seçici yok;
+   telefonda açılır liste bir masaüstü mobilyası"*  yazıyordu ve boy 20'de sabitti. Kullanıcı
+   seçiciyi istedi: *"Uygulamada da henüz bu özellik yok gibi görünüyor. Ekleyip aynı mantığı
+   buraya da uygulayalım."* Seçenekler ve varsayılan artık `message_rules.dart`ta, web'le
+   birebir; seçim `messagePageSizeProvider` ile cihazda kalıcı.
+
+   ⚠️ Açılır liste yerine ÜÇ KÜÇÜK DÜĞME: üç seçenek için menü açmak fazladan bir dokunuş ve
+   fazladan bir katman olurdu; sekme şeridi (`_TabButton`) zaten aynı dili konuşuyor. */
 
 class MessagesScreen extends ConsumerStatefulWidget {
   const MessagesScreen({super.key});
@@ -58,6 +62,12 @@ class MessagesScreen extends ConsumerStatefulWidget {
 class _MessagesScreenState extends ConsumerState<MessagesScreen> {
   String _tab = 'reports';
   int _page = 0;
+
+  /// ⭐ Rapor tür süzgeci (2026-08-19). Varsayılan «Hepsi».
+  ///
+  /// ⚠️ Sekme değişince SIFIRLANIYOR: Mesajlar sekmesinde «Casusluk» süzgeci anlamsız ve
+  /// orada takılı kalsaydı sekme boş görünürdü — oyuncu bunu bir arıza sanardı.
+  String _type = 'all';
 
   /// `null` → seçim kipi kapalı. Boş küme ile `null` FARKLI: kip açık ama hiçbir şey seçili
   /// değil hâli gerçek bir durum (oyuncu «Seç»e bastı, henüz dokunmadı).
@@ -76,6 +86,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
     setState(() {
       _tab = tab;
       _page = 0;
+      _type = 'all';
       _selected = null;
     });
   }
@@ -85,10 +96,43 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
     _selected = null;
   });
 
+  /// ⚠️ Süzgeç değişince sayfa SIFIRLANIYOR: 5. sayfadayken «Casusluk» seçen oyuncu aksi
+  /// hâlde 3 kayıtlık bir kümenin 5. sayfasını ister ve boş liste görürdü.
+  void _setType(String t) {
+    if (t == _type) return;
+    setState(() {
+      _type = t;
+      _page = 0;
+      _selected = null;
+    });
+  }
+
+  /// ⚠️ Sayfa **sıfırlanıyor**: 10'luk listenin 5. sayfasındayken 50'ye geçen oyuncu aksi
+  /// hâlde var olmayan bir sayfaya bakardı. `clampPage` bunu düzeltirdi ama gözle görülür bir
+  /// zıplamayla ve fazladan bir istekle — web de aynı sebeple `setPage(0)` yapıyor.
+  void _setPageSize(int n) {
+    if (n == ref.read(messagePageSizeProvider).value) return;
+    setState(() {
+      _page = 0;
+      _selected = null;
+    });
+    unawaited(ref.read(messagePageSizeProvider.notifier).select(n));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final sorgu = (kind: _tab, page: _page, pageSize: kMessagePageSize);
-    final sayfa = ref.watch(messagesProvider(sorgu));
+    /* ⚠️⚠️ SAYFA BOYU GELMEDEN SORGU AÇILMIYOR. Tercih diskten okunuyor ve ilk karede henüz
+       yok. Varsayılanla bir sorgu açıp sonra gerçek değerle ikincisini açmak, 50 seçmiş bir
+       oyuncuda posta kutusunu HER açılışta iki kez istemek olurdu. Riverpod'da koşullu
+       `watch` serbest (bağımlılık kümesi her `build`te yeniden kuruluyor), bu yüzden sorguyu
+       geciktirmek tek satırlık bir iş. Ekran zaten bir yükleniyor durumu çiziyor. */
+    final boyut = ref.watch(messagePageSizeProvider).value;
+    final sorgu = boyut == null
+        ? null
+        : (kind: _tab, page: _page, pageSize: boyut, type: _type);
+    final sayfa = sorgu == null
+        ? const AsyncValue<MessagePage>.loading()
+        : ref.watch(messagesProvider(sorgu));
 
     /* ⭐ SAYAÇLAR HER İKİ SEKME İÇİN de gerekiyor ve **süzgeçten bağımsız** geliyor: oyuncu
        Raporlar sekmesindeyken Mesajlar rozetini de görmeli. Bu yüzden sayaçlar hangi sekmede
@@ -105,7 +149,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
        bakar. Gösterilen sayfa ile İSTENEN sayfa daima aynı olmalı — kelepçe `clampPage`te ve
        testle kilitli. */
     final toplam = data?.total ?? 0;
-    final sayfaSayisi = pageCount(toplam, kMessagePageSize);
+    final sayfaSayisi = pageCount(toplam, boyut ?? kMessagePageSizeDefault);
     final gecerli = clampPage(_page, sayfaSayisi);
     if (gecerli != _page) {
       // ⚠️ Çerçeve sonrası: `build` içinde `setState` çağırmak Flutter'da hatadır.
@@ -126,10 +170,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
        yarısını bayat bırakırdı. */
     return MwRefresh(
       onRefresh: () {
-        ref.invalidate(messagesProvider(sorgu));
+        // ⚠️ Tercih daha okunmadıysa tazelenecek bir posta kutusu sorgusu da YOK; sohbet
+        //    listesi yine tazeleniyor, o sayfa boyundan bağımsız.
+        if (sorgu != null) ref.invalidate(messagesProvider(sorgu));
         ref.invalidate(chatConversationsProvider);
         return mwRefreshAll([
-          ref.read(messagesProvider(sorgu).future),
+          if (sorgu != null) ref.read(messagesProvider(sorgu).future),
           ref.read(chatConversationsProvider.future),
         ]);
       },
@@ -148,6 +194,19 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
           if (_error != null) ...[
             MwErrorBox(_error!),
             const SizedBox(height: 10),
+          ],
+
+          /* ⭐ TÜR SÜZGECİ — YALNIZ Raporlar sekmesinde. Kullanıcının isteği tek sekmeyi
+             anıyor (*"Mesajlar sayfasının raporlar bölümüne filtre ekleyelim"*) ve Mesajlar
+             sekmesinde yalnız üç tür var (ittifak daveti/başvurusu/duyuru) — orada süzgeç
+             kazançtan çok gürültü olurdu. */
+          if (_tab == 'reports') ...[
+            _Filtreler(
+              secili: _type,
+              favoriler: counts?.favorites ?? 0,
+              onSelect: _setType,
+            ),
+            const SizedBox(height: 8),
           ],
 
           MwPanel(
@@ -186,10 +245,14 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen> {
             ),
           ],
 
-          if (sayfaSayisi > 1) ...[
-            const SizedBox(height: 10),
-            _Pager(page: gecerli, pageCount: sayfaSayisi, onPage: _goPage),
-          ],
+          const SizedBox(height: 10),
+          _Footer(
+            page: gecerli,
+            pageCount: sayfaSayisi,
+            pageSize: boyut,
+            onPage: _goPage,
+            onPageSize: _setPageSize,
+          ),
         ],
       ),
     );
@@ -733,10 +796,137 @@ class _SelectionBar extends StatelessWidget {
   }
 }
 
-/// Sayfalayıcı — «‹ 2 / 5 ›».
+/// ⭐ RAPOR TÜR SÜZGECİ — açılır liste.
 ///
-/// ⚠️ Yalnız birden çok sayfa varsa çiziliyor: tek sayfalık bir kutuda «1 / 1» yazmak,
-/// olmayan bir gezinme sunmak olurdu.
+/// ⚠️ Çip şeridi DEĞİL (kullanıcı, 2026-08-19: *"teker teker badge şeklinde değil de
+/// selectbox dan seçecek şekilde yapalım"*). İlk yazımda yedi çip yatay kayan bir şeritteydi:
+/// tek satıra sığıyordu ama seçili olmayan seçeneklerin çoğu ekran dışında kalıyordu, yani
+/// oyuncu neyin var olduğunu görmek için kaydırmak zorundaydı. Açılır liste hepsini tek
+/// dokunuşta gösteriyor.
+///
+/// ⚠️ `DropdownButton` — uygulamada zaten var (Dünya'daki kıta seçici) ve Android'in kendi
+/// menüsünü açıyor. Bottom sheet'e çevirmek, yedi satırlık bir seçim için fazladan bir katman
+/// olurdu; native davranış politikası *"web'de modal olan şey"* için sheet diyor, açılır liste
+/// zaten native bir denetim.
+class _Filtreler extends StatelessWidget {
+  const _Filtreler({
+    required this.secili,
+    required this.favoriler,
+    required this.onSelect,
+  });
+
+  final String secili;
+
+  /// Favori sayısı — 0 ise parantez hiç yazılmıyor («Favoriler (0)» bir bilgi değil).
+  final int favoriler;
+  final void Function(String) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.raised.withValues(alpha: 0.5),
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Text('Tür', style: TextStyle(fontSize: 12, color: c.muted)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: DropdownButton<String>(
+              value: secili,
+              isExpanded: true,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              items: [
+                for (final f in kReportFilters)
+                  DropdownMenuItem(
+                    value: f.id,
+                    child: Text(
+                      f.id == 'favorites' && favoriler > 0
+                          ? '${f.label} ($favoriler)'
+                          : f.label,
+                    ),
+                  ),
+              ],
+              onChanged: (v) => v == null ? null : onSelect(v),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Liste altı — sayfalayıcı ve sayfa boyu seçici.
+///
+/// ⚠️ **Seçici HER ZAMAN çiziliyor, sayfalayıcı yalnız birden çok sayfa varsa.** İkisi farklı
+/// sorular: "başka sayfa var mı" duruma bağlı, "kaç kayıt görmek istiyorum" değil. Seçiciyi de
+/// gizleseydik tek sayfaya düşen bir kutuda oyuncu boyu bir daha DEĞİŞTİREMEZDİ — 50'yi seçip
+/// listeyi tek sayfaya indiren biri 10'a geri dönemezdi.
+class _Footer extends StatelessWidget {
+  const _Footer({
+    required this.page,
+    required this.pageCount,
+    required this.pageSize,
+    required this.onPage,
+    required this.onPageSize,
+  });
+
+  final int page;
+  final int pageCount;
+
+  /// `null` → tercih henüz diskten okunmadı; hiçbir düğme seçili görünmez.
+  final int? pageSize;
+  final void Function(int) onPage;
+  final void Function(int) onPageSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return Column(
+      children: [
+        if (pageCount > 1) ...[
+          _Pager(page: page, pageCount: pageCount, onPage: onPage),
+          const SizedBox(height: 4),
+        ],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Sayfa başına',
+              style: TextStyle(fontSize: 13, color: c.muted),
+            ),
+            const SizedBox(width: 10),
+            for (final n in kMessagePageSizes)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: MwSmallButton(
+                  label: '$n',
+                  minWidth: 46,
+                  kind: n == pageSize
+                      ? MwButtonKind.primary
+                      : MwButtonKind.ghost,
+                  onTap: () => onPageSize(n),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Sayfalayıcı — «‹ 2 / 5 ›».
 class _Pager extends StatelessWidget {
   const _Pager({
     required this.page,

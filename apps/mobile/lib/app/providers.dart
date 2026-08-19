@@ -11,6 +11,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,6 +33,8 @@ import '../features/city/catalog_model.dart';
 import '../features/city/city_model.dart';
 import '../features/messages/battle_report.dart';
 import '../features/messages/message.dart';
+import '../features/messages/message_rules.dart';
+import '../features/options/options_rules.dart';
 import '../features/temple/hero_model.dart';
 import '../features/world/mission_options.dart';
 import '../gen/contracts.g.dart';
@@ -44,6 +47,34 @@ final clientHintsProvider = Provider<ClientHints>(
 );
 
 final storeProvider = Provider<Store>((ref) => SecureStore());
+
+/// ⭐⭐ TEMA TERCİHİ — Gece / Gündüz / Sistem (kullanıcı, 2026-08-20).
+///
+/// ⚠️⚠️ **Başlangıç değeri ÖNYÜKLEMEDE okunuyor ve override ile giriyor** (`bootstrap.dart`),
+/// tıpkı cihaz kimliği gibi. Async bir sağlayıcıya bağlansaydı ilk kare `system` ile çizilir,
+/// disk okuması dönünce tema değişirdi: cihazı gündüz modunda olup «Gece» seçmiş bir oyuncu
+/// **her açılışta beyaz bir parlama** görürdü. Aynı sınıf arıza (sayfa geçişinde renk sıçraması)
+/// bugün ayrıca düzeltildi; ikincisini baştan yapmamak daha ucuz.
+///
+/// ⚠️ Yazma iyimser: durum önce dönüyor, disk sonra. Yazma başarısız olursa tema bu oturumda
+/// doğru çalışır ama hatırlanmaz — sessiz ve kabul edilebilir bir gerileme.
+/// Önyüklemede diskten okunan başlangıç değeri; override edilmezse `system`.
+///
+/// ⚠️ `deviceIdProvider` ile aynı kalıp — orada da senkron gereken bir değer önyüklemede
+/// okunup override ile giriyor. İkinci bir mekanizma icat etmenin gerekçesi yok.
+final initialThemeProvider = Provider<ThemeMode>((ref) => ThemeMode.system);
+
+class ThemePref extends Notifier<ThemeMode> {
+  @override
+  ThemeMode build() => ref.read(initialThemeProvider);
+
+  Future<void> select(ThemeMode m) async {
+    state = m;
+    await ref.read(storeProvider).write(kThemeKey, themeModeToString(m));
+  }
+}
+
+final themeProvider = NotifierProvider<ThemePref, ThemeMode>(ThemePref.new);
 
 final identityProvider = Provider<DeviceIdentity>(
   (ref) => DeviceIdentity(ref.watch(storeProvider)),
@@ -359,6 +390,37 @@ final activeCityProvider = AsyncNotifierProvider<ActiveCity, int?>(
   ActiveCity.new,
 );
 
+/// ⚠️ Web'le **aynı anahtar** (`localStorage['mw-messages-page-size']`) — `kActiveCityKey`
+/// ile aynı gerekçe: değerler paylaşılmıyor, isimlendirme paylaşılıyor.
+const String kMessagePageSizeKey = 'mw-messages-page-size';
+
+/// ⭐ POSTA KUTUSUNDA SAYFA BAŞINA KAYIT (kullanıcı isteği, 2026-08-19) — cihazda kalıcı.
+///
+/// ⚠️ Neden bir sağlayıcı, ekranın `initState`inde bir okuma DEĞİL: ekran ilk karede
+/// varsayılanla sorgu açar, disk okuması dönünce ikinci bir sorgu daha açardı — oyuncunun
+/// 50 seçtiği bir kutuda her açılışta **iki istek**. Sağlayıcı asenkron olduğu için ekran
+/// zaten var olan yükleniyor durumunu kullanıyor ve tek istek gidiyor.
+///
+/// ⚠️ Yazma **iyimser**: durum önce dönüyor, disk sonra. Diske yazma başarısız olursa seçim
+/// bu oturumda çalışır ama hatırlanmaz — sessiz ve kabul edilebilir bir gerileme. Tersi
+/// (diski bekleyip listeyi geç tazelemek) her seçimde gözle görülür bir takılma olurdu.
+class MessagePageSize extends AsyncNotifier<int> {
+  @override
+  Future<int> build() async => normalizeMessagePageSize(
+    await ref.read(storeProvider).read(kMessagePageSizeKey),
+  );
+
+  Future<void> select(int n) async {
+    final gecerli = normalizeMessagePageSize('$n');
+    state = AsyncData(gecerli);
+    await ref.read(storeProvider).write(kMessagePageSizeKey, '$gecerli');
+  }
+}
+
+final messagePageSizeProvider = AsyncNotifierProvider<MessagePageSize, int>(
+  MessagePageSize.new,
+);
+
 /// ⚠️ Emniyet ağı — web'deki `SAFETY_NET_MS` ile aynı 60 sn.
 ///
 /// Web bunu WS bağlıyken 5 dakikaya çıkarıyor (`WS_IDLE_MS`); mobilde **henüz WS yok**, yani
@@ -595,10 +657,13 @@ final missionsProvider = Provider<Missions>(Missions.new);
 ///
 /// ⚠️ Emniyet ağı diğerleriyle aynı 60 sn. Gerçek tazeleme WS'ten geliyor
 /// (`messages:changed`, `battle:resolved`).
+/// ⚠️ Aile anahtarı `type`i DE taşıyor: taşımasaydı süzgeç değişince Riverpod aynı aile
+/// üyesini döndürür ve ekran süzülmemiş listeyi göstermeye devam ederdi (web'de sorgu
+/// anahtarına eklenmesiyle aynı gerekçe).
 final messagesProvider =
     FutureProvider.family<
       MessagePage,
-      ({String kind, int page, int pageSize})
+      ({String kind, int page, int pageSize, String type})
     >((ref, q) async {
       // ⚠️ Oturuma bağlı: çıkışta kutu boşalsın, yeni girişte yeniden çekilsin
       // (`citiesProvider` ile aynı gerekçe).
@@ -612,7 +677,8 @@ final messagesProvider =
           .request(
             'GET',
             '/api/v1/messages'
-                '?kind=${q.kind}&page=${q.page}&limit=${q.pageSize}',
+                '?kind=${q.kind}&page=${q.page}&limit=${q.pageSize}'
+                '&type=${q.type}',
           );
       if (body is! Map<String, dynamic>) {
         throw const MwApiError(0, 'Posta kutusu okunamadı.');
@@ -625,7 +691,7 @@ final messagesProvider =
 /// ⚠️ Sayı **iki sekmenin toplamı** (`unread`), sekme ayrımı yok: alt bardaki tek rozet
 /// "posta kutusunda bekleyen bir şey var mı" sorusuna cevap veriyor, hangi sekmede olduğu
 /// ekran açılınca zaten görünüyor.
-const kUnreadQuery = (kind: 'all', page: 0, pageSize: 1);
+const kUnreadQuery = (kind: 'all', page: 0, pageSize: 1, type: 'all');
 
 /// ⭐ TEK MESAJIN GÖVDESİ — liste ucundan AYRI (sunucuda 2026-08-03'te ayrıldı).
 ///
@@ -696,6 +762,23 @@ class Messages {
     _tazele(_ref, 'messages:changed');
   }
 
+  /// ⭐⭐ FAVORİYE AL / ÇIKAR (kullanıcı, 2026-08-19).
+  ///
+  /// ⚠️ İstenen DURUM gönderiliyor, «toggle» değil: iki istemci aynı raporu açıkken ikinci
+  /// dokunuş ilkini geri alırdı (gerekçenin tamamı `battle.controller.ts`te).
+  /// ⚠️ Liste tazeleniyor: «Favoriler» süzgeci açıkken favoriden çıkarılan satır listeden
+  /// düşmeli, ayrıca çipin yanındaki sayaç da değişiyor.
+  Future<void> setFavorite(int id, {required bool favorite}) async {
+    await _ref
+        .read(apiProvider)
+        .request(
+          'POST',
+          '/api/v1/messages/$id/favorite',
+          body: {'favorite': favorite},
+        );
+    _tazele(_ref, 'messages:changed');
+  }
+
   /// ⭐ İTTİFAK DAVETİ / BAŞVURUSU — Kabul/Red, mesaj kutusundan (orijinal t=8/9 akışı).
   ///
   /// ⚠️ İstek çoktan sonuçlandıysa sunucu 409 dönüyor ve hata kutusunda görünüyor; istemci
@@ -714,6 +797,118 @@ class Messages {
 }
 
 final messagesActionsProvider = Provider<Messages>(Messages.new);
+
+/* ══ SEÇENEKLER EKRANI (2026-08-20) ═══════════════════════════════════════════════════════
+   ⚠️ Dört küçük uç, dört küçük sağlayıcı. Tek bir "seçenekler" sorgusunda toplamak cazipti
+   ama yanlış olurdu: dördü farklı hızda eskiyor (tatil durumu dakikada, hesap künyesi ayda
+   bir) ve tek anahtar hepsini en hızlısının temposuna bağlardı. */
+
+/// Hesap künyesi — e-posta ve doğrulama durumu (`GET /auth/me`).
+final accountInfoProvider = FutureProvider<({String? email, bool verified})>((
+  ref,
+) async {
+  if (ref.watch(sessionProvider) == null) return (email: null, verified: false);
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/auth/me');
+  final m = body is Map<String, dynamic> ? body : const <String, dynamic>{};
+  return (
+    email: m['email'] as String?,
+    verified: m['emailVerified'] as bool? ?? false,
+  );
+});
+
+/// Bildirim kategorileri (`GET /push/prefs`). ⚠️ Anahtar kümesi SUNUCUDAN geliyor: istemcide
+/// sabit bir liste tutmak, sunucuda kategori değişince sessizce ayrışırdı (`attack` tam olarak
+/// böyle kaldırıldı).
+final notifyPrefsProvider = FutureProvider<Map<String, bool>>((ref) async {
+  if (ref.watch(sessionProvider) == null) return const {};
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/push/prefs');
+  final p = body is Map ? body['prefs'] : null;
+  if (p is! Map) return const {};
+  return {
+    for (final e in p.entries)
+      if (e.value is bool) '${e.key}': e.value as bool,
+  };
+});
+
+/// Tatil modu durumu (`GET /vacation`).
+typedef MwVacation = ({
+  bool onVacation,
+  String? until,
+  String? canLeaveAt,
+  List<String> blockers,
+});
+
+final vacationProvider = FutureProvider<MwVacation>((ref) async {
+  if (ref.watch(sessionProvider) == null) {
+    return (
+      onVacation: false,
+      until: null,
+      canLeaveAt: null,
+      blockers: const <String>[],
+    );
+  }
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/vacation');
+  final m = body is Map<String, dynamic> ? body : const <String, dynamic>{};
+  return (
+    onVacation: m['onVacation'] as bool? ?? false,
+    until: m['until'] as String?,
+    canLeaveAt: m['canLeaveAt'] as String?,
+    blockers: (m['blockers'] as List<dynamic>? ?? const [])
+        .map((e) => '$e')
+        .toList(),
+  );
+});
+
+/// Engellenen oyuncular (`GET /chat/blocks`).
+final blockedPlayersProvider =
+    FutureProvider<List<({int playerId, String username})>>((ref) async {
+      if (ref.watch(sessionProvider) == null) return const [];
+      final body = await ref
+          .read(apiProvider)
+          .request('GET', '/api/v1/chat/blocks');
+      final list = body is Map ? body['items'] as List<dynamic>? : null;
+      return (list ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (e) => (
+              playerId: (e['playerId'] as num?)?.toInt() ?? 0,
+              username: e['username'] as String? ?? '',
+            ),
+          )
+          .toList();
+    });
+
+/// Seçenekler ekranının yazma işlemleri.
+class OptionsActions {
+  const OptionsActions(this._ref);
+
+  final Ref _ref;
+
+  /// ⚠️ Tek kategori gönderiliyor, tüm harita değil: sunucu jsonb birleştirme yapıyor ve
+  /// tümünü göndermek, başka bir cihazda az önce değişen bir anahtarı geri almak olurdu.
+  Future<void> setNotifyPref(String key, {required bool on}) async {
+    await _ref
+        .read(apiProvider)
+        .request('PATCH', '/api/v1/push/prefs', body: {key: on});
+    _ref.invalidate(notifyPrefsProvider);
+  }
+
+  Future<void> setVacation({required bool on}) async {
+    await _ref
+        .read(apiProvider)
+        .request(
+          'POST',
+          '/api/v1/vacation/${on ? 'enter' : 'leave'}',
+          body: const {},
+        );
+    _ref.invalidate(vacationProvider);
+    // ⚠️ Şehirler de tazeleniyor: tatilde üretim duruyor ve bilgi çubuğundaki kaynak
+    //    sayacı bunu bilmezse artmaya devam ediyormuş gibi görünür.
+    _ref.invalidate(citiesProvider);
+  }
+}
+
+final optionsActionsProvider = Provider<OptionsActions>(OptionsActions.new);
 
 /// ⭐ DÜNYA DURUMU — `GET /api/v1/world/state`.
 ///
@@ -784,7 +979,7 @@ final allianceProvider =
           .read(apiProvider)
           .request('GET', '/api/v1/alliance?page=$page');
       if (body is! Map<String, dynamic>) {
-        throw const MwApiError(0, 'Ittifak okunamadi.');
+        throw const MwApiError(0, 'İttifak okunamadı.');
       }
       final a = body['alliance'];
       if (a is Map<String, dynamic>) {
@@ -818,7 +1013,7 @@ final allianceProfileProvider = FutureProvider.family<AllianceProfile, int>((
       .read(apiProvider)
       .request('GET', '/api/v1/alliances/$id');
   if (body is! Map<String, dynamic>) {
-    throw const MwApiError(0, 'Ittifak kunyesi okunamadi.');
+    throw const MwApiError(0, 'İttifak künyesi okunamadı.');
   }
   return AllianceProfile.fromJson(body);
 });
@@ -836,7 +1031,7 @@ final allianceChatOpenProvider = FutureProvider<AllianceRoomOpen>((ref) async {
       .read(apiProvider)
       .request('GET', '/api/v1/alliance/chat');
   if (body is! Map<String, dynamic>) {
-    throw const MwApiError(0, 'Ittifak sohbeti acilamadi.');
+    throw const MwApiError(0, 'İttifak sohbeti açılamadı.');
   }
   return AllianceRoomOpen.fromJson(body);
 });

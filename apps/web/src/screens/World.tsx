@@ -15,8 +15,8 @@
  *
  * ⚠️ **Gizlilik (§13.16.5):** liste asker ve kaynak GÖSTERMEZ — bunu öğrenmenin yolu casusluktur.
  */
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { fmt } from '../lib/hooks.ts';
 import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
@@ -82,15 +82,66 @@ export function World() {
     ? { k: Math.min(10, urlK), d: Math.min(500, urlD) }
     : null;
 
+  /**
+   * ⭐⭐ HEDEF SLOTU KISA BİR AN PARLIYOR (kullanıcı, 2026-08-19): *"savaş raporu, casusluk
+   * raporu gibi ekranlardan bir koordinata tıklayıp dünya ekranını açıyorsak, o koordinata
+   * kısa bir anlığına highlight verelim ki oyuncu ekranı açınca hangi şehre gittiğini
+   * anlasın."*
+   *
+   * ⚠️⚠️ Adres `/world/:k/:d` **değişmedi**; slot bir **sorgu parametresi** (`?s=`) olarak
+   * geliyor. Yola üçüncü bir segment eklemek eski bağlantıları kırardı ve slot zaten adresin
+   * kimliği değil, bir **vurgu ipucu**: diyarı açan şey k:d, s yalnız "hangisine bak" diyor.
+   *
+   * ⚠️ Diyar değiştiğinde vurgu kendiliğinden ölür (`useEffect` bağımlılığı): oyuncu başka
+   * bir diyara geçtiğinde eski slotun parlaması yanlış yeri işaret ederdi.
+   */
+  const [search] = useSearchParams();
+  const highlightSlot = Number(search.get('s'));
+  const [flash, setFlash] = useState<number | null>(null);
+
+  /**
+   * ⚠️⚠️ **BİR KEZ parlıyor** (kullanıcı bildirimi, 2026-08-19): *"dünyada diyar değişince
+   * aynı satıra yapmaya devam ediyor. İlk açılışta bir kere yapması lazım."*
+   *
+   * İlk yazımda etkinin bağımlılıkları arasında `k` ve `d` vardı; oyuncu diyar değiştirince
+   * etki yeniden koşuyor ve **başka bir diyarda** aynı numaralı slotu parlatıyordu — yani
+   * vurgu yanlış yeri işaret ediyordu. Bu `ref` "bu `?s=` için zaten parladık" diyor ve
+   * yeniden çizimler onu tetikleyemiyor.
+   *
+   * ⚠️ Anahtar `k:d:s` üçlüsü, yalnız `s` DEĞİL: oyuncu başka bir rapordan aynı slot
+   * numarasına ama başka bir diyara giderse o gerçekten yeni bir vurgu.
+   */
+  const flashedRef = useRef<string | null>(null);
+
   const home = city.data?.coordinates;
   /* ⚠️ Öncelik zinciri ve «eve dön» kararı `lib/world-coords.ts`te — orada test edilebiliyor,
      burada edilemiyordu ve 2026-08-16 hatası tam bu yüzden gözden kaçtı. */
   const { k, d } = visibleCoords(sel, fromUrl, home ?? null);
   const world = useWorld(k, d, sel != null || fromUrl != null || home != null);
-  const setK = (n: number): void => setSel({ k: n, d });
-  const setD = (n: number): void => setSel({ k, d: n });
+  /* ⚠️ Diyar elle değişince vurgu ANINDA söndürülüyor: `useEffect`in erken dönmesi yeni bir
+     parlama başlatmıyor ama ekranda duran eskisini de kaldırmıyordu. */
+  const setK = (n: number): void => { setFlash(null); setSel({ k: n, d }); };
+  const setD = (n: number): void => { setFlash(null); setSel({ k, d: n }); };
 
   const slots = world.data?.slots ?? [];
+
+  /* ⚠️ Vurgu LİSTE GELDİKTEN sonra başlıyor (`slots.length` bağımlılığı): veri gelmeden
+     tetiklenirse animasyon boş iskeletin üstünde akıp biter ve oyuncu hiçbir şey görmez.
+     ⚠️ Süre 1,6 sn: kullanıcı *"kısa bir an parlayıp sönen"* dedi. Daha kısası göz kırpmayla
+     kaçırılabiliyor, daha uzunu ekranda takılı kalmış gibi duruyor. */
+  useEffect(() => {
+    if (!Number.isInteger(highlightSlot) || highlightSlot <= 0) return;
+    if (slots.length === 0) return;
+    // ⚠️ Oyuncu diyarı ELLE değiştirdiyse (`sel`) vurgu artık geçersiz: adresteki slot
+    //    başka bir diyarda başka bir şeye denk gelir.
+    if (sel != null) return;
+    const key = `${k}:${d}:${highlightSlot}`;
+    if (flashedRef.current === key) return;
+    flashedRef.current = key;
+    setFlash(highlightSlot);
+    const t = setTimeout(() => setFlash(null), 1600);
+    return () => clearTimeout(t);
+  }, [highlightSlot, slots.length, k, d, sel]);
 
   return (
     <div className="space-y-2">
@@ -200,6 +251,8 @@ export function World() {
                  * 2,30 ile hafifçe DÜŞTÜ; gözü ayıran şey sıcak-soğuk zıtlığı).
                  */
                 const isActive = c != null && c.id === cityId;
+                // ⭐ Rapordan gelen slot — kısa bir an parlıyor (gerekçe `flash` başlığında).
+                const isFlash = flash === slot.s;
                 return (
                   <tr
                     key={slot.s}
@@ -210,7 +263,7 @@ export function World() {
                       i % 2 === 1 ? 'bg-row-alt' : ''
                     } ${c?.isOwn ? 'text-own' : 'text-ink'} ${
                       isActive ? 'bg-raised/60 shadow-[inset_3px_0_0_0_var(--color-accent)]' : ''
-                    }`}
+                    } ${isFlash ? 'mw-flash' : ''}`}
                   >
                     <Td className="tnum text-center text-muted">{slot.s}</Td>
                     {/*

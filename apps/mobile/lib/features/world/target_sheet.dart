@@ -60,6 +60,12 @@ Future<void> showTargetSheet(
     // ⚠️ Boş slotta başlık koordinat: «—» yazmak sheet'i kimliksiz bırakırdı.
     context,
     title: city == null ? koord : cityLabel(city.name),
+    /* ⭐ ŞEHİR ADI OYUNCUNUN YAZDIĞI METİN (kullanıcı, 2026-08-19): *"otomatik büyük harfle
+       yazmayalım, orijinal şehir ve kullanıcı adlarını gösterelim"*. `mwSheet` bugüne kadar
+       başlığı koşulsuz `mwUpper` + Cinzel ile çiziyordu — «Mithlond» ekranda «MİTHLOND»
+       görünüyordu, yani depoda zaten yazılı olan kuralın (`primitives.dart` · Cinzel uyarısı)
+       ihlaliydi. Boş slotta başlık koordinat olduğu için orada bayrak KAPALI kalıyor. */
+    titleIsUserText: city != null,
     child: Builder(
       builder: (ctx) {
         final c = MwColors.of(ctx);

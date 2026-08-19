@@ -3,13 +3,17 @@
 /// ⭐ **Savaş animasyonu YOK** (kullanıcı kararı): rapor bir metin dökümüdür. Sayıların
 /// kendisi sunucuda `battles.result`'tan türetiliyor; burada yalnız gösteriliyor.
 ///
-/// ─ ⚠️ TABLO YOK, SATIR VAR ───────────────────────────────────────────────────────────────
-/// Web'de döküm gerçek bir `<table>`: altı sütun (birim · katılan · → · kalan · ölen · taban).
-/// Telefonda o tablo 360 dp'ye sığmıyor ve yatay kaydırmaya alınsaydı raporun EN ÖNEMLİ
-/// kısmı ekranın dışında kalırdı — oyuncu kaydırmayı fark etmeden "ölen" sütununu hiç
-/// görmezdi. Aynı veri satır başına tek bir hizada yazılıyor: solda ad, sağda
-/// «katılan → kalan» ve altında kayıp. Sütun başlıkları da kalktı, çünkü satırın kendisi
-/// zaten okunuyor (`120 → 84` ile `−36` başlık istemiyor).
+/// ─ ⚠️ TABLO — 2026-08-19'da GERİ GELDİ ───────────────────────────────────────────────────
+/// Burada bir süre *"tablo yok, satır var"* yazıyordu: web'in altı sütunlu `<table>`ı 360
+/// dp'ye sığmadığı için döküm serbest metne indirgenmişti («ad · 120 → 84 · −36»). Kullanıcı
+/// sonucu doğrudan reddetti (2026-08-19): *"Bu şekilde anlaması epeyi güç. Gerçek bir tablo
+/// bile çizebiliriz bu ordular için."*
+///
+/// ⭐ Sığdırma sorunu **sütun sayısını azaltarak** çözüldü, tabloyu bırakarak değil: web'in
+/// altı sütunu yerine ÜÇ sütun (Katılan · Kalan · Kayıp). Ok işareti ve «taban» sütunu
+/// kalktı — biri süs, diğeri nadir ve satırın altına ikinci satır olarak yazılıyor.
+/// ⚠️ Yatay kaydırma yine YOK: raporun en önemli kısmı ekran dışında kalmamalı.
+/// ⭐ Solda birim resmi (kullanıcı isteği) — ad okunmadan hangi birim olduğu anlaşılıyor.
 library;
 
 import 'package:flutter/material.dart';
@@ -67,40 +71,32 @@ class _Body extends ConsumerWidget {
       // (`MwPanel`de aynı kusur ölçülmüştü: panel bomboş şekilde alta kadar uzamıştı).
       mainAxisSize: MainAxisSize.min,
       children: [
-        /* Sonuç başlığı — orijinal oyunun kalıbı (`k.java`). Karar `battleHeadline`da:
-           beraberlik `won` ile ifade edilemiyor ve o ayrım testle kilitli. */
-        Row(
-          children: [
-            Text(
-              battleHeadline(winner: r.winner, won: r.won),
-              style: mwDisplayStyle(
-                fontSize: 17,
-                color: r.won ? c.success : c.danger,
-              ),
-            ),
-            // ⭐ GECE = YALNIZ AY SİMGESİ (kullanıcı, 2026-08-05): *"Sadece kazanan veya
-            // kaybeden yazısının yanında ay simgesi olması yeterli."* Önceden «· gece savaşı»
-            // ve notlarda «vuruş gücü düştü» yazıyordu; ikisi de kalktı.
-            if (r.night) ...[
-              const SizedBox(width: 6),
-              const Text('🌙', style: TextStyle(fontSize: 14)),
-            ],
-            const SizedBox(width: 8),
-            Text(
-              '${r.turns} tur',
-              style: TextStyle(fontSize: 11, color: c.muted),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
+        /* ⭐⭐ SONUÇ EN ÜSTTE VE BİR BANT (kullanıcı, 2026-08-19: *"Hiyerarşik düzen olarak en
+           önemli ve kullanıcının ilk görmek isteyeceği bilgiyi en üste almamız lazım.
+           KAZANDINIZ veya KAYBETTİNİZ yazısı mesela en üstte olsa iyi olur."*).
+
+           Metin zaten en üstteydi ama satır içinde, tur sayısıyla aynı ağırlıkta duruyordu.
+           Şimdi tam genişlikte, renkli zeminli bir bant: rapor açılır açılmaz okunan tek şey.
+           ⚠️ Kalıp `battleHeadline`dan geliyor — beraberlik `won` ile ifade edilemiyor ve o
+           ayrım testle kilitli (`k.java` kalıbı). */
+        _SonucBandi(r: r),
+        const SizedBox(height: 10),
 
         MwRouteLine(origin: r.origin, target: r.target, onNavigate: onNavigate),
 
+        /* ⭐⭐ ORDULAR ARTIK GERÇEK BİR TABLO (kullanıcı: *"Bizim ve rakip ordunun savaşa
+           katılan ve kalan askerlerini daha şık şekilde gösteren bir mimariye geçelim. Bu
+           şekilde anlaması epeyi güç. Gerçek bir tablo bile çizebiliriz… Askerlerin küçük
+           resimleri de yanlarında gösterilebilir."*).
+
+           Eskiden her satır «ad · 120 → 84 · −36» biçiminde serbest bir metindi: sütun
+           yoktu, başlık yoktu, ok işareti ile eksi işareti aynı satırda yarışıyordu.
+           Şimdi başlıklı üç sütun (Katılan · Kalan · Kayıp) ve solda birim resmi. */
         for (final s in r.sections)
           if (s.lines.isNotEmpty)
             MwReportSection(
               title: s.title,
-              child: Column(children: [for (final l in s.lines) _LineRow(l)]),
+              child: _OrduTablosu(section: s),
             ),
 
         if (r.myHeroes.isNotEmpty)
@@ -138,17 +134,31 @@ class _Body extends ConsumerWidget {
           const SizedBox(height: 8),
         ],
 
-        /* ⚠️ İki blok AYRI koşulda: kaybeden saldıranda «Ganimet» satırı YOK ama «Ortaya
-           çıkan» VAR — ölen askerlerden enkaz oluşur, yalnız tamamı savunanın şehrine gider.
-           Bir ara ikisi tek koşula bağlıydı ve sunucu ganimeti `null` yapınca döküm de
-           kaybolurdu (2026-08-08 düzeltmesinin istemci yarısı). */
-        if (r.loot != null)
+        /* ⭐⭐ GANİMET ÜÇ SATIRDAN İKİYE İNDİ (kullanıcı, 2026-08-19).
+
+           Eskiden üç blok vardı ve kullanıcı haklı olarak *"en üstteki Ganimet ile Taşınan
+           aynı bilgiyi veriyor"* dedi:
+             • «Ganimet: …»            → eve dönen yük
+             • «Ortaya çıkan: …»       → savaş sonrası enkazdan doğan toplam
+             • «Taşınan: …»            → eve dönen yük  ← Ganimet'in AYNISI
+           Kalanlar: **Ortaya çıkan** (savaşın ürettiği toplam) ve **Taşınan** (bunun eve
+           gelen kısmı). İkisi farklı sorulara cevap veriyor, tekrar yok.
+
+           ⛔ «Kapasiten yetmedi — şehirde kaldı» satırı da KALDIRILDI (kullanıcının kararı:
+           *"Kazananın bunu bilmesine gerek yok"*). ⚠️ Bu satır 2026-08-08'de bir oyuncu
+           sorusuna cevap olarak eklenmişti («neden bu kadar az ganimet?»); artık iki sayının
+           farkı zaten aynı soruyu cevaplıyor.
+
+           ⚠️ `lootBreakdown` yoksa ESKİ tek satıra düşülüyor: eski kayıtlarda döküm alanı yok
+           ve o raporlarda ganimeti hiç göstermemek bilgi kaybı olurdu. */
+        if (r.lootBreakdown != null)
+          _LootBreakdown(r.lootBreakdown!)
+        else if (r.loot != null)
           MwResPair(
             label: r.side == 'attacker' ? 'Ganimet:' : 'Yağmalanan:',
             gold: r.loot!.gold,
             food: r.loot!.food,
           ),
-        if (r.lootBreakdown != null) _LootBreakdown(r.lootBreakdown!),
 
         if (r.notes.isNotEmpty) ...[
           const SizedBox(height: 6),
@@ -164,75 +174,6 @@ class _Body extends ConsumerWidget {
 
         _Provenance(r.provenance),
       ],
-    );
-  }
-}
-
-/// Bir birim satırı: solda ad, sağda «katılan → kalan» ve kayıp.
-///
-/// ⚠️ Ad `Expanded` + `ellipsis`: uzun bir birim adı sayıları ekranın dışına itmemeli —
-/// taşan şey ad olmalı, çünkü sayılar raporun asıl bilgisi.
-class _LineRow extends StatelessWidget {
-  const _LineRow(this.l);
-
-  final ReportLine l;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = MwColors.of(context);
-    const tnum = [FontFeature.tabularFigures()];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  l.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${mwNumber(l.before)} → ${mwNumber(l.after)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: c.muted,
-                  fontFeatures: tnum,
-                ),
-              ),
-              const SizedBox(width: 10),
-              // ⚠️ Kayıp 0 olsa bile «−0» yazılıyor: sütun hizası bozulmasın ve "bu birim hiç
-              // kayıp vermedi" bilgisi de görünsün. Satırın kendisi zaten sayı taşıyor.
-              SizedBox(
-                width: 58,
-                child: Text(
-                  '−${mwNumber(l.lost)}',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: l.lost > 0 ? c.danger : c.muted,
-                    fontFeatures: tnum,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (l.restoredByFloor > 0)
-            Text(
-              'taban +${mwNumber(l.restoredByFloor)}',
-              style: TextStyle(
-                fontSize: 10,
-                color: c.success,
-                fontFeatures: tnum,
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
@@ -398,15 +339,29 @@ class _LootBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = MwColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        MwResPair(
-          label: 'Ortaya çıkan:',
-          gold: b.revealed.gold,
-          food: b.revealed.food,
-          size: 13,
+        Row(
+          children: [
+            Flexible(
+              child: MwResPair(
+                label: 'Ortaya çıkan:',
+                gold: b.revealed.gold,
+                food: b.revealed.food,
+                size: 13,
+              ),
+            ),
+            /* ⭐⭐ AYRINTILI HESAP (kullanıcı, 2026-08-19): *"kenarda bir de info ikonu olsun.
+               Buna tıklanınca tüm ayrıntılı ganimet hesabı tooltip üzerine gösterilsin."*
+
+               ⚠️⚠️ Bu ikon olmadan ekrandaki iki sayı **kapanmıyordu**; canlı veriyle
+               doğrulandı (savaş #29). Gerekçenin tamamı `BattleLootDetail`de.
+               ⚠️ Eski kayıtta `detail` null → ikon HİÇ çizilmiyor: boş bir tooltip açan bir
+               ikon, çalışmıyormuş gibi görünürdü. */
+            if (b.detail != null)
+              _GanimetBilgisi(detail: b.detail!, capacity: b.capacity),
+          ],
         ),
         if (b.carried != null)
           MwResPair(
@@ -415,21 +370,265 @@ class _LootBreakdown extends StatelessWidget {
             food: b.carried!.food,
             size: 13,
           ),
-        /* ⭐ «Neden bu kadar az ganimet?» sorusunun cevabı (oyuncu bildirimi, 2026-08-08):
-           yağma oranı kasaya uygulanıyor ama eve dönen yük TAŞIMA KAPASİTESİYLE sınırlı.
-           ⚠️ Satır yalnız gerçekten geride bir şey kaldığında çizilir — kapasite yettiğinde
-           «0 kaldı» yazmak bilgi değil gürültü olurdu. */
-        if (b.leftBehind != null)
-          MwResPair(
-            label: b.capacity != null
-                ? 'Kapasiten yetmedi (${mwNumber(b.capacity!)}) — şehirde kaldı:'
-                : 'Kapasiten yetmedi — şehirde kaldı:',
-            gold: b.leftBehind!.gold,
-            food: b.leftBehind!.food,
-            size: 13,
-            color: c.warning,
-          ),
+        /* ⛔ «Kapasiten yetmedi — şehirde kaldı» SATIRI 2026-08-19'da kaldırıldı (kullanıcı:
+           *"Kazananın bunu bilmesine gerek yok"*) — ama bilgi kaybolmadı, yukarıdaki info
+           ikonunun altına taşındı. ⚠️ İlk denemede satır tamamen silinmişti ve gerekçem
+           *"iki sayının farkı aynı soruyu cevaplıyor"* idi; canlı veri bunu **çürüttü**:
+           fark iki ayrı sebebi (enkazdan sığmayan + kasadan sığmayan) birbirine karıştırıyor
+           ve tek başına hiçbir soruyu cevaplamıyordu. */
       ],
+    );
+  }
+}
+
+/// ⭐⭐ GANİMET HESABI İKONU — dokununca tüm döküm tooltip olarak açılıyor (2026-08-19).
+///
+/// ⚠️ Metin **web'deki `LootDetail` ile aynı bilgiyi aynı sırayla** veriyor; iki istemcinin
+/// dökümü ayrışırsa aynı savaş iki farklı hesap anlatır.
+///
+/// ⭐ Son satır («kapasite önce enkaza») dökümün en değerli parçası: canlı örnekte oyuncu
+/// kasadan **sıfır** almıştı ve sebebi buydu — 6,2 milyonluk enkaz kapasitenin tamamını
+/// yutmuştu. O kural yazılmadan «kasadan 0 taşındı» satırı bir hata gibi okunuyor.
+class _GanimetBilgisi extends StatelessWidget {
+  const _GanimetBilgisi({required this.detail, required this.capacity});
+
+  final BattleLootDetail detail;
+  final int? capacity;
+
+  String _satir(String etiket, MwRes v) =>
+      '$etiket: ${mwNumber(v.gold)} altın, ${mwNumber(v.food)} yemek';
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    final metin = [
+      'ENKAZ — ölen ordudan çıktı',
+      _satir('Oluşan', detail.debrisTotal),
+      _satir('Taşınan', detail.debrisCarried),
+      _satir('Şehirde kaldı', detail.debrisLeft),
+      '',
+      'KASA — şehrin deposundan',
+      _satir('Alınabilirdi', detail.plunderTotal),
+      _satir('Taşınan', detail.plunderCarried),
+      _satir('Şehirde kaldı', detail.plunderLeft),
+      '',
+      if (capacity != null) 'Taşıma kapasiten: ${mwNumber(capacity!)}',
+      'Kapasite önce enkaza harcanır; artarsa kasadan alınır.',
+    ].join('\n');
+
+    return MwTapTip(
+      message: metin,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Icon(Icons.info_outline, size: 16, color: c.muted),
+      ),
+    );
+  }
+}
+
+/// ⭐ SONUÇ BANDI — raporun ilk ve en büyük bilgisi.
+class _SonucBandi extends StatelessWidget {
+  const _SonucBandi({required this.r});
+
+  final BattleReport r;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    // ⚠️ Beraberlikte ne yeşil ne kırmızı: `won` false ama kaybedilmiş de değil.
+    final beraber = r.winner == 'draw';
+    final renk = beraber ? c.muted : (r.won ? c.success : c.danger);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: renk.withValues(alpha: 0.12),
+        border: Border.all(color: renk.withValues(alpha: 0.55)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              battleHeadline(winner: r.winner, won: r.won),
+              style: mwDisplayStyle(fontSize: 20, color: renk),
+            ),
+          ),
+          /* ⭐ GECE = YALNIZ AY SİMGESİ (kullanıcı, 2026-08-05): *"Sadece kazanan veya kaybeden
+             yazısının yanında ay simgesi olması yeterli."*
+             ⭐ 2026-08-19: simge artık **tıklanınca açıklıyor**. Eskiden ne olduğunu bilmeyen
+             oyuncu için sessiz bir süstü — kullanıcı bunu doğrudan istedi. */
+          if (r.night) ...[
+            const MwTapTip(
+              message:
+                  'Savaş gece gerçekleşti. Gece görüşü tekniği olmayan saldıran ordu '
+                  'daha az vuruş gücüyle savaşır.',
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text('🌙', style: TextStyle(fontSize: 18)),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            '${r.turns} tur',
+            style: TextStyle(
+              fontSize: 11,
+              color: c.muted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ⭐⭐ ORDU TABLOSU — başlıklı üç sütun ve solda birim resmi.
+///
+/// ⚠️⚠️ **Klasör bölümün anahtarına göre**: savunma yapıları `assets/defenses/` altında,
+/// askerler `assets/units/` altında. `MwIcon` eksik dosyada **sessizce boş kutu** çiziyor,
+/// yani yanlış klasör hata vermez — yalnız resimler kaybolur. Bu oturumda tam olarak o hata
+/// bir kez yapıldı (`MwUnitChips`), o yüzden ayrım burada açıkça yazılı.
+class _OrduTablosu extends StatelessWidget {
+  const _OrduTablosu({required this.section});
+
+  final ReportSection section;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    final klasor = section.key == 'defenderStructs' ? 'defenses' : 'units';
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // ── Sütun başlıkları ───────────────────────────────────────────────
+          Container(
+            color: c.raised,
+            padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+            child: Row(
+              children: [
+                const Expanded(child: SizedBox.shrink()),
+                _Baslik('Katılan', c),
+                _Baslik('Kalan', c),
+                _Baslik('Kayıp', c),
+              ],
+            ),
+          ),
+          for (var i = 0; i < section.lines.length; i++)
+            _TabloSatiri(
+              line: section.lines[i],
+              folder: klasor,
+              alt: i.isOdd,
+              son: i == section.lines.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Baslik extends StatelessWidget {
+  const _Baslik(this.text, this.c);
+
+  final String text;
+  final MwColors c;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: _kSutun,
+    child: Text(
+      text,
+      textAlign: TextAlign.right,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.3,
+        color: c.muted,
+      ),
+    ),
+  );
+}
+
+/// Sayı sütunlarının genişliği — üçü de aynı olmalı, yoksa başlıklar rakamlarla hizasız kalır.
+const double _kSutun = 62;
+
+class _TabloSatiri extends StatelessWidget {
+  const _TabloSatiri({
+    required this.line,
+    required this.folder,
+    required this.alt,
+    required this.son,
+  });
+
+  final ReportLine line;
+  final String folder;
+  final bool alt;
+  final bool son;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    const tnum = [FontFeature.tabularFigures()];
+
+    Widget sayi(String metin, Color? renk) => SizedBox(
+      width: _kSutun,
+      child: Text(
+        metin,
+        textAlign: TextAlign.right,
+        style: TextStyle(fontSize: 12.5, color: renk, fontFeatures: tnum),
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+      decoration: BoxDecoration(
+        color: alt ? c.raised.withValues(alpha: 0.4) : null,
+        border: Border(
+          bottom: BorderSide(color: son ? Colors.transparent : c.border),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              MwIcon(folder: folder, id: line.id, size: 26),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  line.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12.5),
+                ),
+              ),
+              sayi(mwNumber(line.before), c.muted),
+              // ⚠️ «Kalan» vurgulu: oyuncunun tablodan okuduğu asıl sayı bu — savaştan sonra
+              //    elinde ne kaldığı.
+              sayi(mwNumber(line.after), null),
+              sayi(
+                line.lost > 0 ? '−${mwNumber(line.lost)}' : '−0',
+                line.lost > 0 ? c.danger : c.muted,
+              ),
+            ],
+          ),
+          if (line.restoredByFloor > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 33, top: 1),
+              child: Text(
+                'savunma tabanı +${mwNumber(line.restoredByFloor)}',
+                style: TextStyle(fontSize: 10, color: c.success),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

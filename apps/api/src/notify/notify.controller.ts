@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
-import { NOTIFY_CATEGORIES, VAPID, pushEnabled } from './notify.limits.ts';
+import { NOTIFY_CONFIGURABLE, VAPID, pushEnabled } from './notify.limits.ts';
 import { NotifyService } from './notify.service.ts';
 
 const subscribeBody = z.object({
@@ -24,9 +24,15 @@ const subscribeBody = z.object({
   keys: z.object({ p256dh: z.string().min(1).max(300), auth: z.string().min(1).max(300) }),
 });
 
+/**
+ * ⚠️ Şema **`NOTIFY_CONFIGURABLE`**ten üretiliyor, `NOTIFY_CATEGORIES`ten değil: `attack`
+ * artık ayarlanamıyor (2026-08-19) ve istemcinin onu yazabilmesi, kaldırılmış bir anahtarı
+ * arka kapıdan geri getirirdi. Zod bilinmeyen anahtarı sessizce kırpıyor, yani eski bir
+ * istemci `attack: false` gönderse de yazılmaz.
+ */
 const prefsBody = z.object(
-  Object.fromEntries(NOTIFY_CATEGORIES.map((c) => [c, z.boolean().optional()])),
-) as z.ZodType<Partial<Record<(typeof NOTIFY_CATEGORIES)[number], boolean>>>;
+  Object.fromEntries(NOTIFY_CONFIGURABLE.map((c) => [c, z.boolean().optional()])),
+) as z.ZodType<Partial<Record<(typeof NOTIFY_CONFIGURABLE)[number], boolean>>>;
 
 @Controller('api/v1/push')
 @UseGuards(AuthGuard)

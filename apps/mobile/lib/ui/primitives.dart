@@ -432,14 +432,27 @@ Future<bool> mwConfirm(
 /// (`max(1, …)`) alanın hiç boşalamamasına yol açıyor: oyuncu `1`i silmek isteyince alan
 /// anında 1'e geri sıçrıyor ve `23` yazmak için önce metni seçmek gerekiyordu. Web'de tam
 /// olarak bu hata yaşandı (kullanıcı: *"1 yazısı minimum değer olduğu için silinemiyor"*).
+/// ⭐ 2026-08-19 — KUTU KÜÇÜLDÜ ve **BEYAZ ÇERÇEVE KALKTI** (kullanıcı: *"inputların
+/// çevresindeki beyaz çerçeveyi kaldırıp biraz ufaltalım… Bu input bileşeni tüm oyun için tek
+/// bir yerden yönetiliyorsa bunu ortak yerden değiştirelim"*).
+///
+/// ⚠️⚠️ Beyaz çerçevenin kaynağı `const OutlineInputBorder()` idi: rengini vermeyen bir
+/// `InputBorder`, Material'ın kendi varsayılanına düşüyor ve o varsayılan **tema paletimizden
+/// gelmiyor**. Yani depo kuralının (*"ham renk yazılmaz, her şey token'dan"*) sessiz bir
+/// ihlaliydi — kutu iki temada da yanlış renkte bir kenar çiziyordu. Kenar artık `border`
+/// token'ından, odakta `focusRing`den.
+///
+/// ⚠️ Yükseklik 38 → **32**, yazı 14 → 13. Kutu satırdaki düğmeyle aynı yükseklikte olmalı
+/// (`MwSmallButton` 34 → 30); ikisi ayrı ölçüde kalırsa satır dengesiz görünüyor.
 class MwAmountInput extends StatelessWidget {
   const MwAmountInput({
     super.key,
     required this.controller,
     this.hint = 'adet',
-    this.width = 78,
+    this.width = 72,
     this.enabled = true,
     this.onChanged,
+    this.focusNode,
   });
 
   final TextEditingController controller;
@@ -448,34 +461,116 @@ class MwAmountInput extends StatelessWidget {
   final bool enabled;
   final ValueChanged<String>? onChanged;
 
+  /// ⚠️ Çağıran, kutunun odakta olup olmadığını bilmek isteyebiliyor: dışarıdan gelen bir
+  /// değişikliği kutuya yazarken oyuncunun yazdığının üstüne yazmamak için (sefer formundaki
+  /// «Tüm ordu» düğmesi bunun için var).
+  final FocusNode? focusNode;
+
   @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: 38,
-      child: TextField(
-        controller: controller,
-        enabled: enabled,
-        keyboardType: TextInputType.number,
-        textAlign: TextAlign.center,
-        onChanged: onChanged,
-        style: const TextStyle(
-          fontSize: 14,
-          fontFeatures: [FontFeature.tabularFigures()],
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(fontSize: 12, color: MwColors.of(context).muted),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 8,
-          ),
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    height: 32,
+    child: TextField(
+      controller: controller,
+      focusNode: focusNode,
+      enabled: enabled,
+      keyboardType: TextInputType.number,
+      textAlign: TextAlign.center,
+      onChanged: onChanged,
+      style: mwFieldTextStyle,
+      decoration: mwFieldDecoration(context, hint: hint),
+    ),
+  );
+}
+
+/// Sayı alanlarının ortak yazı biçimi — tabular rakam ŞART, yoksa yazarken genişlik oynuyor.
+const TextStyle mwFieldTextStyle = TextStyle(
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+
+/// ⭐⭐ SAYI ALANLARININ TEK DEKORASYON KAYNAĞI (kullanıcı, 2026-08-19: *"Bu input bileşeni
+/// tüm oyun için tek bir yerden yönetiliyorsa bunu ortak yerden değiştirelim"*).
+///
+/// ⚠️⚠️ Beyaz çerçevenin sebebi buydu: `MwAmountInput` ve Dünya'daki diyar alanı **ayrı ayrı**
+/// `const OutlineInputBorder()` yazıyordu. Rengini vermeyen bir `InputBorder` Material'ın
+/// kendi varsayılanına düşüyor ve o varsayılan **paletimizden gelmiyor** — yani ham renk
+/// yasağının (§13.13.1) sessiz bir ihlaliydi, iki yerde birden.
+///
+/// ⚠️ `borderless: true` → alan kendi çerçevesini çizmez; onu saran kabuk çizer (birleşik
+/// adımlayıcıda `[−][42][+]` tek bir çerçeve içinde yaşıyor, ikinci bir kenar kutu içinde
+/// kutu görüntüsü yaratırdı).
+InputDecoration mwFieldDecoration(
+  BuildContext context, {
+  String? hint,
+  bool borderless = false,
+}) {
+  final c = MwColors.of(context);
+  OutlineInputBorder kenar(Color renk, double kalinlik) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(6),
+    borderSide: borderless
+        ? BorderSide.none
+        : BorderSide(color: renk, width: kalinlik),
+  );
+
+  return InputDecoration(
+    hintText: hint,
+    hintStyle: TextStyle(fontSize: 11, color: c.muted),
+    isDense: true,
+    filled: !borderless,
+    fillColor: c.raised,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+    border: kenar(c.border, 1),
+    enabledBorder: kenar(c.border, 1),
+    focusedBorder: kenar(Theme.of(context).colorScheme.primary, 1.5),
+    disabledBorder: kenar(c.border.withValues(alpha: 0.5), 1),
+  );
+}
+
+/// ⭐⭐ DOKUNUNCA AÇILAN İPUCU — Material `Tooltip`, ama uzun basmayla değil **TIKLAMAYLA**.
+///
+/// Kullanıcı isteği (2026-08-19): savaş raporundaki ay simgesine *"tıklanınca bilgilendirici
+/// bir tooltip ile «Savaş gece gerçekleşti» şeklinde bir bilgi gösterelim"*. Aynı istekte
+/// *"bir tooltip paketi araştırıp en mantıklı olanını projeye dahil edebilirsin"* de deniyor.
+///
+/// ⛔ **Paket EKLENMEDİ ve bu bilinçli bir karar.** Üç sebep:
+///   1. Flutter'ın kendi `Tooltip`i işi zaten yapıyor; eksik olan tek şey tetikleyiciydi ve o
+///      da `TooltipState.ensureTooltipVisible()` ile tek satır. Bir paket, tek satırlık bir
+///      boşluk için kalıcı bir bağımlılık olurdu.
+///   2. Depo `build_runner`/`freezed`i de aynı gerekçeyle reddetmişti (`MOBIL_MIMARI.md` §1):
+///      her yeni bağımlılık kendi sürüm bakımını ve kendi kırılma biçimini getiriyor.
+///   3. Yerleşik `Tooltip` tema ve erişilebilirlik desteğini hazır taşıyor; üçüncü parti bir
+///      balon ikisini de elle kurmayı gerektirirdi.
+///
+/// ⚠️ Uzun basma DA çalışmaya devam ediyor (Material'ın varsayılanı) — tıklama ek bir yol,
+/// mevcut davranışı kaldıran bir değişiklik değil.
+class MwTapTip extends StatefulWidget {
+  const MwTapTip({super.key, required this.message, required this.child});
+
+  final String message;
+  final Widget child;
+
+  @override
+  State<MwTapTip> createState() => _MwTapTipState();
+}
+
+class _MwTapTipState extends State<MwTapTip> {
+  final _key = GlobalKey<TooltipState>();
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    key: _key,
+    message: widget.message,
+    triggerMode: TooltipTriggerMode.tap,
+    // ⚠️ Kendiliğinden kapanma süresi uzatıldı: varsayılan 1,5 sn bir cümleyi okumaya yetmiyor.
+    showDuration: const Duration(seconds: 4),
+    child: GestureDetector(
+      // ⚠️ `triggerMode.tap` bazı sarmalayıcılarda jesti yutulabiliyor; açık çağrı garanti.
+      onTap: () => _key.currentState?.ensureTooltipVisible(),
+      child: widget.child,
+    ),
+  );
 }
 
 /// İnce ilerleme çubuğu — geri sayımların altında.
@@ -518,6 +613,11 @@ class MwBar extends StatelessWidget {
 }
 
 /// Küçük düğme — satır içi eylemler (Üret · İptal et · ↑ ↓).
+///
+/// ⚠️ 2026-08-19'da **30 px**'e indi (kullanıcı: Baraka/Savunma/Akademi/Yapılar satırlarında
+/// *"biraz fazla büyük görünüyor"*). Ölçü `MwAmountInput`in 32'siyle bilerek eşleşmiyor:
+/// düğme kutudan 2 px kısa olunca satır optik olarak hizalı duruyor (kutunun kenarı ince bir
+/// çerçeve, düğmeninki dolu bir yüzey).
 class MwSmallButton extends StatelessWidget {
   const MwSmallButton({
     super.key,
@@ -550,10 +650,10 @@ class MwSmallButton extends StatelessWidget {
         side: kind == MwButtonKind.ghost
             ? BorderSide(color: c.borderStrong)
             : null,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        minimumSize: Size(minWidth, 34),
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        minimumSize: Size(minWidth, 30),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       child: Text(label),

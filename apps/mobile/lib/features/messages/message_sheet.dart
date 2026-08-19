@@ -19,6 +19,8 @@
 /// götüren düğme, çalışıyormuş gibi görünen bir kapı olurdu. O ekran gelince buraya eklenecek.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -59,19 +61,52 @@ class _Detail extends ConsumerWidget {
       if (Navigator.of(context).canPop()) Navigator.of(context).pop();
     }
 
+    /* ⭐ SAVAŞ RAPORUNDA KONU SATIRI KALKTI (kullanıcı, 2026-08-19). Konu
+       *«Saldırın başarılı · alfa9lth»* biçimindeydi ve ilk yarısı, hemen altındaki
+       *KAZANDINIZ !* bandının tekrarıydı. Kalan yarısı — karşı tarafın adı — damganın
+       yanına taşındı, böylece bir satır tamamen kazanıldı.
+
+       ⚠️ Yalnız SAVAŞ raporunda: diğer türlerde konu gerçek bilgi taşıyor (nakliyede ne
+       geldiği, ittifak duyurusunun başlığı) ve orada kısaltmak bilgi kaybı olurdu.
+       ⚠️ Ayırıcı bulunamazsa (`rakip == null`) konu eskisi gibi kendi satırında yazılıyor —
+       sunucu biçimi değişirse düzen bozulur ama bilgi kaybolmaz. */
+    final savas = m.battleId != null;
+    final rakip = savas ? battleCounterpart(m.subject) : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // ⚠️ Damga **geçmişe** bakıyor → `timeAgo`, `remaining` değil. Çıpası da `serverNow`:
-        // rapor bir oyun olayı değil, geçmiş kaydı; bakımda yaşı donmamalı (`clock.dart`).
-        Text(
-          clock.timeAgo(m.at),
-          style: TextStyle(fontSize: 11, color: c.muted),
+        Row(
+          children: [
+            // ⚠️ Damga **geçmişe** bakıyor → `timeAgo`, `remaining` değil. Çıpası da
+            // `serverNow`: rapor bir oyun olayı değil, geçmiş kaydı; bakımda yaşı donmamalı.
+            Text(
+              clock.timeAgo(m.at),
+              style: TextStyle(fontSize: 11, color: c.muted),
+            ),
+            if (rakip != null) ...[
+              Text(' · ', style: TextStyle(fontSize: 11, color: c.muted)),
+              // ⚠️ Oyuncunun yazdığı ad → gövde fontu, `mwUpper` YOK (Cinzel kuralı).
+              Flexible(
+                child: Text(
+                  rakip,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+            const Spacer(),
+            _FavoriDugmesi(m: m),
+          ],
         ),
-        // ⭐ Sunucunun yazdığı konu — başlığı tekrarlamıyorsa. Tekrarlıyorsa iki kez aynı
-        // cümleyi okutmanın anlamı yok (web'de de aynı koşul).
-        if (m.subject.isNotEmpty && m.subject != tur.title) ...[
+        // ⭐ Sunucunun yazdığı konu — başlığı tekrarlamıyorsa ve yukarı taşınmadıysa.
+        if (rakip == null &&
+            m.subject.isNotEmpty &&
+            m.subject != tur.title) ...[
           const SizedBox(height: 2),
           Text(m.subject, style: const TextStyle(fontSize: 13)),
         ],
@@ -82,6 +117,64 @@ class _Detail extends ConsumerWidget {
         else
           _PlainDetail(m: m, onDone: kapat),
       ],
+    );
+  }
+}
+
+/// ⭐⭐ FAVORİ YILDIZI (kullanıcı, 2026-08-19): *"bir raporu açıp gösterdikten sonra bu raporun
+/// bir köşesine favorileme butonu koyalım… Yine aynı görüntüleme sayfasından favori
+/// kaldırılabilsin."*
+///
+/// ⚠️⚠️ Durum **yerel olarak da tutuluyor** (`_favori`). Yalnız `m.favorite`e baksaydık: sheet
+/// açılırken satırın bir KOPYASI alınıyor ve liste tazelenene kadar o kopya değişmiyor —
+/// yıldıza basan oyuncu hiçbir şey olmadığını görürdü. İyimser durum + arkada istek, bu
+/// depodaki diğer iyimser güncellemelerle aynı kalıp.
+///
+/// ⚠️ Hata olursa durum **geri alınıyor**: yıldızın yalan söylemesi, favorinin kaydolmamasından
+/// daha kötü — oyuncu kaydettiğini sanıp bir daha bakmaz.
+class _FavoriDugmesi extends ConsumerStatefulWidget {
+  const _FavoriDugmesi({required this.m});
+
+  final MessageRow m;
+
+  @override
+  ConsumerState<_FavoriDugmesi> createState() => _FavoriDugmesiState();
+}
+
+class _FavoriDugmesiState extends ConsumerState<_FavoriDugmesi> {
+  late bool _favori = widget.m.favorite;
+  bool _busy = false;
+
+  Future<void> _degistir() async {
+    final hedef = !_favori;
+    setState(() {
+      _favori = hedef;
+      _busy = true;
+    });
+    try {
+      await ref
+          .read(messagesActionsProvider)
+          .setFavorite(widget.m.id, favorite: hedef);
+    } catch (_) {
+      await mwTapError();
+      if (mounted) setState(() => _favori = !hedef);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return IconButton(
+      onPressed: _busy ? null : () => unawaited(_degistir()),
+      tooltip: _favori ? 'Favorilerden çıkar' : 'Favorilere ekle',
+      visualDensity: VisualDensity.compact,
+      icon: Icon(
+        _favori ? Icons.star : Icons.star_border,
+        size: 22,
+        color: _favori ? c.gold : c.muted,
+      ),
     );
   }
 }

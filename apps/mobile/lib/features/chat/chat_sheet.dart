@@ -252,39 +252,48 @@ class _BodyState extends ConsumerState<_Body> {
 
     return Column(
       children: [
+        /* ⭐ MESAJ ALANI KENDİ ZEMİNİNDE (kullanıcı, 2026-08-19: sohbet *"fazla sade olmuş"*).
+           Baloncuklar, yazma kutusu ve başlık aynı yüzeyde duruyordu; üçü de aynı renkte
+           olunca sheet tek bir düz alan gibi görünüyordu. Zemin sayfa arka planı
+           (`scaffoldBackgroundColor`) — yeni bir renk icat etmiyor, uygulamanın zaten
+           kullandığı ikinci yüzeyi ödünç alıyor. */
         Expanded(
-          child: page.isLoading && mesajlar.isEmpty
-              ? const Center(child: CircularProgressIndicator())
-              : page.hasError && mesajlar.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: MwErrorBox('Sohbet okunamadı: ${page.error}'),
-                )
-              : mesajlar.isEmpty
-              ? const MwEmpty('Henüz mesaj yok. İlk mesajı sen yaz.')
-              : ListView.builder(
-                  controller: _scroll,
-                  // ⭐ Gerekçesi dosya başlığında: index 0 DİPTE, eski sayfa eklemek görüntüyü
-                  // hiç oynatmıyor. Web'in `prevHeight` hesabının tamamı bu satırla düşüyor.
-                  reverse: true,
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  itemCount: mesajlar.length + (_loadingOlder ? 1 : 0),
-                  itemBuilder: (_, i) {
-                    if (i >= mesajlar.length) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Center(
-                          child: Text(
-                            'eski mesajlar yükleniyor…',
-                            style: TextStyle(fontSize: 11, color: c.muted),
+          child: Container(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: page.isLoading && mesajlar.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : page.hasError && mesajlar.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: MwErrorBox('Sohbet okunamadı: ${page.error}'),
+                  )
+                : mesajlar.isEmpty
+                ? const MwEmpty('Henüz mesaj yok. İlk mesajı sen yaz.')
+                : ListView.builder(
+                    controller: _scroll,
+                    // ⭐ Gerekçesi dosya başlığında: index 0 DİPTE, eski sayfa eklemek
+                    // görüntüyü hiç oynatmıyor. Web'in `prevHeight` hesabının tamamı bu
+                    // satırla düşüyor.
+                    reverse: true,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    itemCount: mesajlar.length + (_loadingOlder ? 1 : 0),
+                    itemBuilder: (_, i) {
+                      if (i >= mesajlar.length) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: Text(
+                              'eski mesajlar yükleniyor…',
+                              style: TextStyle(fontSize: 11, color: c.muted),
+                            ),
                           ),
-                        ),
-                      );
-                    }
-                    final m = mesajlar[i];
-                    return _Bubble(m: m, mine: isMine(m, myId));
-                  },
-                ),
+                        );
+                      }
+                      final m = mesajlar[i];
+                      return _Bubble(m: m, mine: isMine(m, myId));
+                    },
+                  ),
+          ),
         ),
 
         /* ⭐⭐ «YAZIYOR…» KENDİ ŞERİDİNDE ve **koşulsuz** çiziliyor (kullanıcı, 2026-08-09):
@@ -465,11 +474,25 @@ class _Bubble extends ConsumerWidget {
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.78,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            padding: const EdgeInsets.fromLTRB(11, 7, 11, 5),
+            /* ⭐ BALONCUK ŞEKLİ (kullanıcı, 2026-08-19: *"Direkt mesajlaşma bottom sheet i
+               daha şık olacak. Fazla sade olmuş."*).
+
+               ⚠️ **Kuyruk köşesi**: konuşana bakan köşe sivri, diğer üçü yuvarlak. Eskiden
+               dört köşe de aynıydı ve iki taraf yalnız RENKLE ayrılıyordu — koyu temada iki
+               renk birbirine yaklaşınca ayrım zayıflıyordu. Şekil, renkten bağımsız ikinci
+               bir kanal.
+               ⚠️ Gölge yok: uygulamanın hiçbir yerinde yok ve baloncuklara özel gölge,
+               sohbeti oyunun geri kalanından koparırdı. */
             decoration: BoxDecoration(
               color: mine ? scheme.primary : c.raised,
-              border: Border.all(color: mine ? scheme.primary : c.border),
-              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: mine ? scheme.primary : c.borderStrong),
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(12),
+                topRight: const Radius.circular(12),
+                bottomLeft: Radius.circular(mine ? 12 : 3),
+                bottomRight: Radius.circular(mine ? 3 : 12),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -477,20 +500,23 @@ class _Bubble extends ConsumerWidget {
               children: [
                 // ⚠️ Oyuncunun yazdığı metin → gövde fontu, düz metin. Sunucu HTML/markdown
                 // kabul etmiyor ve Flutter da yorumlamıyor: XSS yüzeyi sıfır.
-                Text(
-                  m.body,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: mine ? scheme.onPrimary : scheme.onSurface,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    m.body,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      height: 1.3,
+                      color: mine ? scheme.onPrimary : scheme.onSurface,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
                   clock.timeAgo(m.createdAt),
                   style: TextStyle(
                     fontSize: 10,
                     color: mine
-                        ? scheme.onPrimary.withValues(alpha: 0.75)
+                        ? scheme.onPrimary.withValues(alpha: 0.7)
                         : c.muted,
                   ),
                 ),

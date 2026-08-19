@@ -22,8 +22,6 @@ class CityHubScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final c = MwColors.of(context);
-
     /// ⭐ Aktivite noktaları — sekme şeridiyle AYNI kaynaktan (`core/city_activity.dart`).
     /// ⚠️ Ek istek yok: `cityProvider` zaten önbellekte.
     final cityId = ref.watch(activeCityProvider).value;
@@ -40,58 +38,131 @@ class CityHubScreen extends ConsumerWidget {
           ref.read(citiesProvider.future),
         ]);
       },
-      builder: (physics) => ListView(
-        physics: physics,
-        padding: const EdgeInsets.all(12),
-        children: [
-          MwPanel(
-            title: 'Şehir',
-            child: Column(
+      /* ⭐⭐ MENÜ YENİDEN DÜZENLENDİ (kullanıcı, 2026-08-19: *"Menü biraz daha yüksek ve
+         seçenekler de daha büyük görünebilir. İçerik ekranın yukarısında kalıyor, alt kısım
+         boş görünüyor."*).
+
+         İki değişiklik:
+         1️⃣ **Dış `MwPanel` kaldırıldı.** Başlığı «Şehir» idi ve alt bardaki sekme zaten aynı
+            kelimeyi yazıyor; panel başlığı + kendi dolgusu ~50 px'i tekrar eden bir bilgiye
+            harcıyordu. Her seçenek artık kendi kartı — menüde istenen şey de tam olarak
+            "ayrı ayrı seçilebilir beş şey" görüntüsü.
+         2️⃣ **Satır yüksekliği ekrandan hesaplanıyor.** Sabit yükseklikli beş satır kısa
+            telefonda taşıyor, uzun telefonda altta kocaman bir boşluk bırakıyordu; ikisi de
+            "yerleşim düşünülmemiş" izlenimi veriyor. Yükseklik kelepçeli: çok kısa ekranda
+            `_kEnAz`ın altına inmiyor (o zaman liste kayar, doğru davranış), çok uzun ekranda
+            `_kEnFazla`yı geçmiyor — yoksa beş kart afiş gibi görünürdü. */
+      builder: (physics) => LayoutBuilder(
+        builder: (context, kutu) {
+          const bosluk = 8.0;
+          const dikeyDolgu = 12.0 * 2;
+          final pay =
+              kutu.maxHeight - dikeyDolgu - bosluk * (kCityScreens.length - 1);
+          final yukseklik = (pay / kCityScreens.length).clamp(
+            _kEnAz,
+            _kEnFazla,
+          );
+
+          return ListView(
+            physics: physics,
+            padding: const EdgeInsets.all(12),
+            children: [
+              for (final s in kCityScreens) ...[
+                if (s != kCityScreens.first) const SizedBox(height: bosluk),
+                _Secenek(
+                  screen: s,
+                  height: yukseklik,
+                  busy: activity[s.path] == true,
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Kartın inebileceği en kısa ölçü — altına inince ikon ve iki satır yazı sıkışıyor.
+const double _kEnAz = 74;
+
+/// En uzun ölçü — uzun telefonda beş kartın afişe dönüşmesini önler.
+const double _kEnFazla = 108;
+
+class _Secenek extends StatelessWidget {
+  const _Secenek({
+    required this.screen,
+    required this.height,
+    required this.busy,
+  });
+
+  final CityScreen screen;
+  final double height;
+
+  /// Bu ekranda süren bir iş var mı (üretim, yükseltme, araştırma).
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      height: height,
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.go(screen.path),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                // ⭐ İşi süren ekranın kenarı vurgulu: nokta tek başına küçük kalıyordu ve
+                //    hub, oyuncunun "nerede ne oluyor" diye baktığı ilk yer.
+                color: busy ? scheme.primary.withValues(alpha: 0.6) : c.border,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
               children: [
-                for (final s in kCityScreens)
-                  InkWell(
-                    onTap: () => context.go(s.path),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          MwIcon(folder: 'buildings', id: s.icon, size: 32),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  s.label,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  s.hint,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: c.muted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // ⚠️ Nokta okun SOLUNDA: ok her satırda var ve göz onu sınır sayıyor;
-                          //    dışına konan bir nokta satırdan kopuk görünürdü.
-                          if (activity[s.path] == true) ...[
-                            const MwActivityDot(),
-                            const SizedBox(width: 8),
-                          ],
-                          Icon(Icons.chevron_right, color: c.muted),
-                        ],
+                // ⚠️ İkon yüksekliğe göre büyüyor ama 52'yi geçmiyor: varlıklar 64 px
+                //    çizildi, üstüne çıkmak bulanıklaştırır.
+                MwIcon(
+                  folder: 'buildings',
+                  id: screen.icon,
+                  size: (height * 0.46).clamp(32, 52),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        screen.label,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 2),
+                      Text(
+                        screen.hint,
+                        style: TextStyle(fontSize: 12.5, color: c.muted),
+                      ),
+                    ],
                   ),
+                ),
+                // ⚠️ Nokta okun SOLUNDA: ok her satırda var ve göz onu sınır sayıyor;
+                //    dışına konan bir nokta satırdan kopuk görünürdü.
+                if (busy) ...[const MwActivityDot(), const SizedBox(width: 10)],
+                Icon(Icons.chevron_right, color: c.muted),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

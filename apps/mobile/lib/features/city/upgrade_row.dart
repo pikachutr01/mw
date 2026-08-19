@@ -205,46 +205,96 @@ class UpgradeRow extends StatelessWidget {
     );
   }
 
+  /// ⭐⭐ KÜNYE ARTIK WEB'İN POPOVER'IYLA BİREBİR (kullanıcı, 2026-08-19: *"bilgileri gerçek
+  /// değerlerle güncelleyelim. Web ile aynı bilgileri vermeleri gerekir. Mevcut seviye
+  /// bilgisinin bottom sheet de yazmasına gerek yok… en yüksek seviyeyi de burada
+  /// göstermeyelim."*).
+  ///
+  /// Web (`City.tsx` · `BuildingInfo`) yalnız İKİ şey gösteriyor: açıklama metni ve —
+  /// üreten yapılarda — saatlik üretimin şimdiki/sonraki değeri. Mobil bunlara üç şey daha
+  /// ekliyordu ve üçü de kaldırıldı:
+  ///
+  /// ⚠️ **«Şu anki seviye»** — satırın kendisinde zaten yazıyor, sheet onu tekrar ediyordu.
+  /// ⚠️ **«En yüksek seviye»** — web hiç göstermiyor; oyuncunun kararına girmiyor.
+  /// ⚠️ **Ön koşullar** — kaldırıldı ama bilgi KAYBOLMADI: karşılanmayan koşullar satırın
+  ///    kendisinde «Gerekli: …» olarak yazıyor (`catalog_bits.dart`). Sheet'te ikinci bir
+  ///    kopya tutmak, ikisinin ayrışabileceği bir yer daha açardı.
+  ///
+  /// ⚠️ Üretim satırlarına **birim adı eklendi** (`altın`/`yemek`). Eskiden yalnız «/ saat»
+  /// yazıyordu ve Çiftlik ile Maden künyeleri birbirinden ayırt edilemiyordu — web bu ayrımı
+  /// baştan beri yapıyor.
+  ///
+  /// ⚠️ Rakamlar SUNUCUDAN (`item.production`), istemcide hesaplanmıyor: oranlar panelden
+  /// dünya başına değiştirilebiliyor ve ikinci bir hesap yeri, yönetici oranı değiştirdiği
+  /// anda ekranın yalan söylemesi olurdu (web'de aynı kural yazılı).
   Future<void> _showInfo(BuildContext context) async {
     final c = MwColors.of(context);
+    final p = item.production;
+    final birim = item.id == 'farm' ? 'yemek' : 'altın';
+
     await mwInfoSheet(
       context,
       title: item.name,
       lines: [
         // ⭐ Açıklama EN ÜSTTE — web'deki popover sırası (metin, sonra sayılar).
-        if (infoText != null) ...[
-          Text(infoText!, style: TextStyle(color: c.muted)),
-          const SizedBox(height: 12),
-        ],
-        Text('Şu anki seviye: ${item.level}', style: TextStyle(color: c.muted)),
-        if (item.maxLevel != null)
-          Text(
-            'En yüksek seviye: ${item.maxLevel}',
-            style: TextStyle(color: c.muted),
-          ),
+        if (infoText != null) Text(infoText!, style: TextStyle(color: c.muted)),
         // ⭐ Üretim önizlemesi — yalnız Çiftlik ve Maden'de dolu geliyor.
-        if (item.production != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Üretim: ${mwNumber(item.production!.perHour)} / saat',
-            style: TextStyle(color: c.muted),
+        if (p != null) ...[
+          if (infoText != null) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: c.border),
+            const SizedBox(height: 10),
+          ],
+          _UretimSatiri(
+            label: 'Şu an (sv ${item.level})',
+            value: '${mwNumber(p.perHour)} $birim / saat',
           ),
-          if (item.production!.nextPerHour != null)
-            Text(
-              'Sonraki seviyede: ${mwNumber(item.production!.nextPerHour!)} / saat',
-              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          // ⚠️ Tavandaki yapıda "sonraki seviye" YOK — satırı hiç çizme, «—» yazma
+          //    (web'deki aynı karar).
+          if (p.nextPerHour != null) ...[
+            const SizedBox(height: 4),
+            _UretimSatiri(
+              label: 'Sonraki seviye (sv ${item.level + 1})',
+              value: '${mwNumber(p.nextPerHour!)} $birim / saat',
+              vurgu: true,
             ),
+          ],
         ],
-        if (item.requirements.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text('Ön koşullar', style: TextStyle(fontWeight: FontWeight.w600)),
-          for (final r in item.requirements)
-            Text(
-              '${r.name} ${r.level}'
-              '  (${r.kind == 'building' ? (structures[r.id] ?? 0) : (techs[r.id] ?? 0)})',
-              style: TextStyle(color: c.muted),
-            ),
-        ],
+      ],
+    );
+  }
+}
+
+/// Künyedeki etiket/değer satırı — web'deki `PopoverRow` karşılığı.
+class _UretimSatiri extends StatelessWidget {
+  const _UretimSatiri({
+    required this.label,
+    required this.value,
+    this.vurgu = false,
+  });
+
+  final String label;
+  final String value;
+
+  /// Sonraki seviye satırı vurgulu: oyuncunun karar verdiği sayı o.
+  final bool vurgu;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, color: c.muted)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: vurgu ? Theme.of(context).colorScheme.primary : null,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
       ],
     );
   }

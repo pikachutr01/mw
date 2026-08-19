@@ -23,7 +23,7 @@
  * hesaplandığı gibi açıklamalar **Yardım** sayfasında toplanacak.
  */
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { LEVEL_BASED, MERIT_BY_TIER } from '@mobilwar/catalog';
 import { formatGameHhmm } from '@mobilwar/contracts';
@@ -453,6 +453,9 @@ function Rankings(): React.ReactElement {
  * ⚠️ Kahraman sekmesinde satırın adı KAHRAMANIN adı, mesaj ise **sahibine** gider — bu yüzden
  * modalda iki ad birden gösteriliyor, yoksa oyuncu kime yazdığını bilemezdi.
  */
+/** Arama ucunun (`kind=player&byId=`) döndürdüğü satırdan kullandığımız kısım — hep BAŞKENT. */
+type PlayerHit = { playerId: number; k: number; d: number; s: number };
+
 function RankingRowModal({ row, kind, onClose }: {
   row: RankingRow; kind: RankingKind; onClose: () => void;
 }): React.ReactElement {
@@ -462,16 +465,46 @@ function RankingRowModal({ row, kind, onClose }: {
   const playerId = row.playerId ?? null;
   const playerName = kind === 'hero' ? row.owner ?? row.name : row.name;
 
+  /**
+   * ⭐ BAŞKENT KOORDİNATI (kullanıcı, 2026-08-19): *"sıra puan gibi bilgilerinin yanında
+   * başkent koordinatı da yazsın. Sadece başkent"*.
+   *
+   * ⚠️ **Yeni bir uç açılmadı ve sıralama sorgusuna alan EKLENMEDİ.** Aynı bilgi zaten bu
+   * modaldaki «Dünyada bul» düğmesinin çağırdığı uçtan geliyor ve o uç yapısı gereği
+   * `c.is_capital` ile sınırlı — yani "sadece başkent" şartı sunucuda zaten yazılı.
+   *
+   * ⚠️⚠️ Alternatif (koordinatı `rankings` sorgusuna eklemek) daha hızlı olurdu ama tek
+   * istekte **bir sayfa dolusu** başkent dağıtırdı. Bu depo o farka duyarlı: kahramanın `xp`
+   * alanı, ekranda görünmese de ağ sekmesinden okunabildiği için sorgudan çıkarılmıştı
+   * (`command.controller.ts`). Oyuncu başına tek istek, «Dünyada bul»un bugünkü maliyetiyle
+   * aynı — yeni bir toplu sızıntı yolu açmıyor.
+   */
+  const [hit, setHit] = useState<PlayerHit | null>(null);
+  useEffect(() => {
+    if (playerId == null) return;
+    let alive = true;
+    void api<{ items: PlayerHit[] }>(`/api/v1/command/search?kind=player&byId=${playerId}`)
+      .then((res) => {
+        if (alive) setHit(res.items.find((x) => x.playerId === playerId) ?? null);
+      })
+      .catch(() => {/* koordinat gösterilemez; modalın geri kalanı çalışmaya devam eder */});
+    return () => { alive = false; };
+  }, [playerId]);
+
   const findInWorld = async (): Promise<void> => {
     if (playerId == null) return;
+    // ⭐ Künye için çekilen sonuç BURADA da kullanılıyor: düğme artık çoğu zaman hiç istek
+    //    atmıyor. Yedek yol duruyor, çünkü ilk istek başarısız olmuş olabilir.
+    // ⭐ `?s=` — hedef slot Dünya ekranında kısa bir an parlıyor (`World.tsx` · `flash`).
+    if (hit) { onClose(); navigate(`/world/${hit.k}/${hit.d}?s=${hit.s}`); return; }
     setBusy(true);
     try {
-      const res = await api<{ items: { playerId: number; k: number; d: number }[] }>(
+      const res = await api<{ items: PlayerHit[] }>(
         `/api/v1/command/search?kind=player&byId=${playerId}`);
-      const hit = res.items.find((x) => x.playerId === playerId);
+      const found = res.items.find((x) => x.playerId === playerId);
       // ⚠️ Modal ÖNCE kapanıyor: altındaki ekran değişirken modal açık kalsaydı oyuncu
       // gittiği yeri görmezdi (rapor güzergâhındaki `RouteLine` ile aynı gerekçe).
-      if (hit) { onClose(); navigate(`/world/${hit.k}/${hit.d}`); }
+      if (found) { onClose(); navigate(`/world/${found.k}/${found.d}?s=${found.s}`); }
     } finally {
       setBusy(false);
     }
@@ -494,6 +527,12 @@ function RankingRowModal({ row, kind, onClose }: {
               {row.alliance ? <span>İttifak <b className="text-ink">{row.alliance}</b></span> : null}
             </>
           )}
+          {/* ⚠️ Satır yalnız koordinat GELDİĞİNDE çiziliyor: "Başkent —" yazmak, oyuncunun
+              başkenti yokmuş gibi okunurdu. Yükleniyor durumu da göstermiyoruz; künyenin
+              geri kalanı anında hazır ve tek satır için iskelet çizmek gürültü olurdu. */}
+          {hit ? (
+            <span>Başkent <b className="tnum text-ink">{coords(hit)}</b></span>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-2">

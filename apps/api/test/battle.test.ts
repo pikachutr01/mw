@@ -1060,6 +1060,71 @@ describe('⭐ ortaya çıkan ganimet: ölü olmasa da yağma görünür', () => 
 });
 
 /**
+ * ⭐⭐ AYRINTILI GANİMET DÖKÜMÜ KENDİ İÇİNDE KAPANIYOR (kullanıcı bildirimi, 2026-08-19).
+ *
+ * Oyuncu canlı bir raporda *"ortaya çıkandan taşınanı çıkarınca bu sayı çıkmıyor"* dedi ve
+ * haklıydı. Veri doğruydu, EKRAN eksikti: kalan **iki** kovaya bölünüyor (kasadan sığmayan +
+ * enkazdan sığmayan) ama rapor yalnız birincisini yazıyordu. Canlı örnek (savaş #29):
+ *   Ortaya çıkan 7.046.425 · Taşınan 223.819 · fark 6.822.606
+ *   ama «şehirde kaldı» 785.542 yazıyordu — aradaki 6.037.064 enkazdan sığmayan kısımdı.
+ *
+ * ⚠️⚠️ Bu test o arızanın TEKRAR ETMESİNİ engelliyor: dökümün üç kimliği de burada
+ * kilitli. Biri bozulursa ekran yine kapanmayan bir hesap gösterir ve **hata vermez** —
+ * yalnız oyuncu aritmetiği tutturamaz. Sessiz arıza, bu yüzden test şart.
+ */
+describe('⭐⭐ ganimet dökümü kendi içinde kapanıyor', () => {
+  it('enkaz ve kasa parçaları toplamlarına, ikisi birden «ortaya çıkan»a eşit', async () => {
+    // Kalabalık savunma → bol enkaz; dolu kasa → alınabilir yağma; dar kapasite → ikisi de taşar.
+    await giveUnits(attackCity, 'dwarf', 2000);
+    await giveUnits(defendCity, 'dwarf', 400);
+    await setResources(defendCity, 1_000_000, 1_000_000);
+    const at = await clock.gameNow(worldId);
+
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dwarf: 2000 }, at,
+    });
+    await runDue(m.missionId);
+
+    const b = (await h.db.execute<Record<string, unknown>>(sql`
+      SELECT id, at, night, winner, input, result FROM battles WHERE world_id = ${worldId}
+    `))[0]!;
+    const row: BattleRow = {
+      id: Number(b['id']), at: toDate(b['at']), night: Boolean(b['night']),
+      winner: String(b['winner']),
+      input: b['input'] as BattleRow['input'], result: b['result'] as BattleRow['result'],
+    };
+    const atk = buildBattleReport(row, 'attacker');
+    const d = atk.lootBreakdown!.detail!;
+    expect(d, 'döküm üretilmedi — info ikonu hiç çizilmez').not.toBeNull();
+
+    for (const k of ['gold', 'food'] as const) {
+      // 1️⃣ Enkaz: taşınan + kalan = oluşan.
+      expect(d.debrisCarried[k] + d.debrisLeft[k], `enkaz ${k}`).toBe(d.debrisTotal[k]);
+      // 2️⃣ Kasa: taşınan + kalan = alınabilir.
+      expect(d.plunderCarried[k] + d.plunderLeft[k], `kasa ${k}`).toBe(d.plunderTotal[k]);
+      /* 3️⃣ ⭐ ASIL KİMLİK: iki kaynağın toplamı ekrandaki «Ortaya çıkan». Bu tutmazsa
+             oyuncunun gördüğü iki sayı arasındaki fark hiçbir şeyi açıklamaz — bildirilen
+             arıza tam olarak buydu. */
+      expect(
+        d.debrisTotal[k] + d.plunderTotal[k],
+        `ortaya çıkan ${k}`,
+      ).toBe(atk.lootBreakdown!.revealed[k]);
+      // 4️⃣ Taşınan = iki kaynaktan taşınanların toplamı.
+      expect(
+        d.debrisCarried[k] + d.plunderCarried[k],
+        `taşınan ${k}`,
+      ).toBe(atk.lootBreakdown!.carried![k]);
+    }
+
+    /* ⚠️ Kurgunun gerçekten "taşamayan" bir savaş olduğunu doğrula — yoksa test kimlikleri
+       hep sıfırlarla sağlar ve hiçbir şey ölçmez. */
+    expect(d.debrisTotal.gold, 'kurgu bozuk: enkaz oluşmalıydı').toBeGreaterThan(0);
+    expect(d.plunderTotal.gold, 'kurgu bozuk: kasadan alınabilir olmalıydı').toBeGreaterThan(0);
+  });
+});
+
+/**
  * ⭐⭐ RAPORDAKİ BİRİM SIRASI = BARAKA/SAVUNMA EKRANI SIRASI (kullanıcı, 2026-08-12).
  *
  * Eskiden satırlar «en çok kaybedilen üstte» diziliyordu. Bunun bedeli, kaybın kendisinden
