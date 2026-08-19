@@ -39,6 +39,45 @@ const WORDY = /[\p{L}\p{N}]/u;
 const isWordy = (ch: string | undefined): boolean => ch != null && WORDY.test(ch);
 
 /**
+ * ⭐⭐ ADAY ARALIK BİR ADA BENZİYOR MU — **iki fonksiyonun ORTAK ön koşulu.**
+ *
+ * İkisi de gövdeyi aynı şekilde dilimliyor ve aynı aralıkları elemek zorunda; kural iki yerde
+ * ayrı yazılıydı ve üçüncü bir koşul eklenince (aşağıdaki surrogate kapısı) ayrışma riski
+ * gerçek hâle geldi. Tek yerde durması, `mentionCandidateNames`in sorguya gönderdiği küme ile
+ * `resolveMentions`in eşleştirdiği kümenin **tanımı gereği** aynı kalmasını sağlıyor.
+ *
+ * 1. **Baş/son boşluklu aralık reddedilir.** `normalizeName` onları kırpıp eşleşme ürettiği
+ *    için bu kontrol olmadan `"@ Eru"` mention sayılır, `"@Eru "` ise adın dışına taşan bir
+ *    aralık yazardı.
+ *
+ * 2. ⚠️⚠️ **EŞSİZ SURROGATE REDDEDİLİR** (2026-08-17 arızası). Dilimleme UTF-16 kod birimiyle
+ *    yapılıyor — indeksler istemciye gidip kalın yazılacak aralığı belirlediği için öyle olmak
+ *    ZORUNDA (JS dize indeksi = UTF-16). Ama emoji iki kod birimidir: sınır emojinin ortasına
+ *    düştüğünde aralık **yarım bir surrogate** taşır. `JSON.stringify` bunu `\ud83d` diye
+ *    kaçırır — JSON'da geçerlidir — ama Postgres jsonb'ye çevirirken *"Unicode low surrogate
+ *    must follow a high surrogate"* diyerek REDDEDER ve genel sohbetin gönderme ucu 500 döner.
+ *    Kullanıcının bildirdiği hata buydu: bir oyuncuyu anıp emoji göndermek.
+ *
+ *    Elemek bilgi kaybettirmez: kullanıcı adı yalnız harf/rakam/boşluktan oluşur
+ *    (`name-rules.ts`), dolayısıyla yarım surrogate taşıyan bir aralık hiçbir ada eşleşemez.
+ *    ⚠️ Çözüm "kod noktasıyla dilimlemek" DEĞİL: o, `Mention.at/len`i istemcinin kullandığı
+ *    birimden koparır ve kalın yazılan aralık kayardı.
+ */
+/**
+ * Eşi olmayan surrogate: ya ardında düşük yarısı gelmeyen bir yüksek yarı, ya da önünde yüksek
+ * yarısı olmayan bir düşük yarı.
+ *
+ * ⚠️ `String.prototype.isWellFormed()` bunu tek satırda yapardı ama **tip hedefi ES2022**
+ * (`tsconfig.base.json`); web ve admin de orada. Çalışma zamanı (Node 22) desteklese de
+ * derleme kırılıyordu — bu yüzden taşınabilir bir düzenli ifade. Davranış birebir aynı, bir
+ * test ikisinin eşitliğini kilitliyor.
+ */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+const isNameShaped = (raw: string): boolean =>
+  raw.trim() === raw && !LONE_SURROGATE.test(raw);
+
+/**
  * Gövdedeki `@ad` geçişlerini çözer.
  *
  * ⚠️ **`body` KIRPILMIŞ (`trim`) olmalı** — servis DB'ye kırpılmış gövdeyi yazıyor. Farklı bir
@@ -98,12 +137,10 @@ export function resolveMentions(
        * ⚠️ Normalize edilmiş ada bakıyoruz ama aralığı HAM uzunlukla yazıyoruz. Fark yalnız
        * çoklu boşlukta doğar ("@Eru  Ilúvatar"): ad eşleşir, kalın yazılan aralık ise
        * oyuncunun gerçekten yazdığı metni kapsar — ekranda kayma olmaz.
-       * ⚠️ Baş/son boşluk taşıyan aralık REDDEDİLİR — `normalizeName` onları kırpıp eşleşme
-       * ürettiği için bu kontrol olmadan `"@ Eru"` (boşluklu) ve `"@Eru "` (sondan uzun)
-       * geçerli mention sayılırdı; ilki hiç mention değil, ikincisinde de kalın yazılan
-       * aralık adın dışına taşardı.
+       * ⚠️ Ada benzemeyen aralıklar (baş/son boşluk · yarım surrogate) `isNameShaped`te
+       * eleniyor; gerekçeleri orada.
        */
-      if (raw.trim() !== raw) continue;
+      if (!isNameShaped(raw)) continue;
       const id = byName.get(normalizeName(raw));
       if (id == null) continue;
 
@@ -157,8 +194,9 @@ export function mentionCandidateNames(body: string, max: number): string[] {
     const maxLen = Math.min(USERNAME_MAX, body.length - i - 1);
     for (let len = maxLen; len >= USERNAME_MIN; len--) {
       const raw = body.slice(i + 1, i + 1 + len);
-      /* Baş/son boşluklu aralık ada çözülmez (`resolveMentions` da reddediyor) → sorguya girmesin. */
-      if (raw.trim() !== raw) continue;
+      /* ⚠️ `resolveMentions` ile AYNI kapı (`isNameShaped`): sorguya giden küme ile
+         eşleştirilen küme ayrışmamalı — ve yarım surrogate buradan geçerse jsonb patlar. */
+      if (!isNameShaped(raw)) continue;
       out.add(normalizeName(raw));
     }
 

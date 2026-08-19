@@ -1392,16 +1392,27 @@ describe('savaş raporu (§Faz 2 çıkışı — animasyon YOK, metin)', () => {
 
     const def = buildBattleReport(row, 'defender');
     const notes = def.notes.join(' ');
-    expect(notes).toMatch(/Savunma tabanı devreye girdi/);
-    expect(notes).toMatch(/Balista 3/);
-    expect(notes).toMatch(/Okçu Kulesi 2/);
+    const struct = def.sections.find((s) => s.key === 'defenderStructs')!;
+
+    /**
+     * ⚠️ **2026-08-17'de yer değişti, kaybolmadı.** Savunma tabanı bilgisi artık ayrı bir not
+     * değil, korunan birimin KENDİ SATIRINDAKİ rozet (`restoredByFloor`) — hem ekranda hem düz
+     * metinde. Eskiden ikisi birden yazılıyordu ve oyuncu aynı sayıyı iki yerde okuyordu.
+     */
+    const rozet = (id: string): number | undefined =>
+      struct.lines.find((l) => l.id === id)?.restoredByFloor;
+    expect(rozet('ballista')).toBe(3);
+    expect(rozet('archer_tower')).toBe(2);
+    expect(def.text).toMatch(/Balista: .*\[taban \+3\]/);
+    expect(notes).not.toMatch(/Savunma tabanı devreye girdi/);
+
     // Sur bütünlüğü raporlanır; Sur SEVİYE olduğu için birim SATIRI olarak görünmez,
     // ayrı bir Sur kartı/satırı olarak görünür.
-    expect(notes).toMatch(/Sur bütünlüğü %25/);
-    const struct = def.sections.find((s) => s.key === 'defenderStructs')!;
     expect(struct.lines.some((l) => l.id === 'wall')).toBe(false);
     expect(def.wall).toMatchObject({ level: 3, integrity: 0.25, destroyed: false });
     expect(def.text).toMatch(/Sur: seviye 3 — bütünlük %25/);
+    /* ⚠️ Yüzde TEK yerde: kutuda/metin satırında. Not olarak ikinci kez yazılmıyor. */
+    expect(notes).not.toMatch(/Sur bütünlüğü %/);
 
     /* ⭐ ESKİ ŞEKİL DEGRADE: bu sentetik result 2026-07-30 zenginleştirmesinden önceki
      * kayıtları taklit eder (heroesDetail/coords YOK) → rapor boş kahraman listeleri ve
@@ -2521,5 +2532,137 @@ describe('savaş sırasında verilen sefer emri', () => {
 
     expect(oncesi).toBe(100);
     expect((await unitsOf(defendCity))['elf'] ?? 0).toBe(100 - (oncesi - sonrasi));
+  });
+});
+
+/**
+ * ⭐⭐ RAPORDA AYNI BİLGİ İKİ KEZ YAZILMAZ (kullanıcı bildirimi, 2026-08-17: *"sur yıkıldı
+ * bilgisi iki defa yazıyor"*).
+ *
+ * Raporun iki anlatım katmanı var ve ikisi de aynı ekranda basılıyor: **yapısal alanlar**
+ * (`wall` · `cave` · `heroes.captured` · satırlardaki `restoredByFloor`) ve **notlar**.
+ * Kural: durumu yapısal alan söyler, not yalnız yapısal alanın SÖYLEMEDİĞİNİ taşır.
+ *
+ * ⚠️ DB gerekmiyor — `buildBattleReport` saf bir dönüşüm.
+ */
+describe('⭐⭐ rapor: aynı bilgi iki kez yazılmaz', () => {
+  const row = (over: Partial<BattleRow['result']> = {}): BattleRow => ({
+    id: 7, at: new Date(), night: false, winner: 'attacker',
+    input: {
+      attacker: { counts: { dwarf: 500 } },
+      defender: { counts: { dwarf: 100, wall: 5 } },
+    },
+    result: {
+      winner: 'attacker', turns: 3,
+      attacker: {
+        alive: 0, lost: 0, floorRestored: {}, heroes: [], wallIntegrity: null,
+        counts: { dwarf: 400 },
+      },
+      defender: {
+        alive: 0, lost: 0, floorRestored: {}, heroes: [], wallIntegrity: 0,
+        counts: { dwarf: 0 },
+      },
+      debris: { gold: 0, food: 0 },
+      wall: { level: 5, destroyed: true },
+      ...over,
+    } as BattleRow['result'],
+  });
+
+  /** Kutu/satır ne diyorsa notlarda TEKRARLANMAMALI. */
+  const notes = (r: BattleRow, side: 'attacker' | 'defender'): string =>
+    buildBattleReport(r, side).notes.join(' | ');
+
+  it('⭐ sur yıkımı: durum `wall.destroyed`ta, notlarda TEKRARLANMIYOR', () => {
+    const r = row();
+    /* Yapısal alan iki tarafa da yıkımı söylüyor — tek kaynak burası. */
+    expect(buildBattleReport(r, 'attacker').wall).toMatchObject({ destroyed: true });
+    expect(buildBattleReport(r, 'defender').wall).toMatchObject({ destroyed: true });
+
+    /* Not artık "YIKILDI" demiyor. */
+    expect(notes(r, 'attacker')).not.toMatch(/YIKILDI/i);
+    expect(notes(r, 'defender')).not.toMatch(/YIKILDI/i);
+  });
+
+  it('saldıranda sur yıkımı için not HİÇ yazılmıyor (kutuda zaten var)', () => {
+    expect(notes(row(), 'attacker')).not.toMatch(/[Ss]ur/);
+  });
+
+  it('⭐ savunanda yalnız SONUÇ kalıyor — kutunun söylemediği kısıt', () => {
+    const n = notes(row(), 'defender');
+    expect(n).toMatch(/yeni savunma birimi emri veremezsin/);
+    expect(n).not.toMatch(/TAMAMEN/);
+  });
+
+  it('kısmi hasarda yüzde savunana bir kez yazılıyor (kutuda), notta değil', () => {
+    const r = row({
+      defender: {
+        alive: 0, lost: 0, floorRestored: {}, heroes: [], wallIntegrity: 0.4,
+        counts: { dwarf: 0 },
+      },
+      wall: { level: 5, destroyed: false },
+    } as Partial<BattleRow['result']>);
+    expect(buildBattleReport(r, 'defender').wall?.integrity).toBe(0.4);
+    expect(notes(r, 'defender')).not.toMatch(/bütünlük/);
+    /* ⚠️ Saldıranda oran YOK → tek sinyal not; o yüzden orada cümle KALMALI. */
+    expect(buildBattleReport(r, 'attacker').wall?.integrity).toBeNull();
+    expect(notes(r, 'attacker')).toMatch(/hasar gördü/);
+  });
+
+  it('⭐ savunma tabanı: satırdaki rozette, notta DEĞİL', () => {
+    const r = row({
+      defender: {
+        alive: 0, lost: 0, floorRestored: { dwarf: 4 }, heroes: [], wallIntegrity: 1,
+        counts: { dwarf: 4 },
+      },
+      wall: { level: 5, destroyed: false },
+    } as Partial<BattleRow['result']>);
+    const rep = buildBattleReport(r, 'defender');
+    const satir = rep.sections.flatMap((sec) => sec.lines).find((l) => l.id === 'dwarf');
+    expect(satir?.restoredByFloor).toBe(4);
+    expect(rep.notes.join(' ')).not.toMatch(/Savunma tabanı/);
+  });
+
+  it('⭐ yeni kahraman: kutuda bir kez, notlarda DEĞİL — düz metinde de duruyor', () => {
+    const r = row({
+      heroesDetail: { attacker: [], defender: [], captured: { name: 'Turgut', side: 'attacker' } },
+    } as Partial<BattleRow['result']>);
+    const rep = buildBattleReport(r, 'attacker');
+    expect(rep.heroes.captured).toMatchObject({ name: 'Turgut', mine: true });
+    expect(rep.notes.join(' ')).not.toMatch(/Turgut/);
+    /* Düz metin yüzeyinde kutu yok → orada görünmeye devam etmeli. */
+    expect(rep.text).toMatch(/Turgut/);
+  });
+
+  describe('mağara', () => {
+    const withCave = (cave: Record<string, unknown>): BattleRow => row({
+      cave: { present: true, level: 3, ...cave },
+    } as Partial<BattleRow['result']>);
+
+    it('⭐ yıkım durumu kutuda; notta yalnız sonuç/sayı', () => {
+      const r = withCave({ broken: true, required: 100, survivingDwarves: 150, reason: null });
+      expect(buildBattleReport(r, 'defender').cave).toMatchObject({ broken: true });
+      expect(notes(r, 'defender')).not.toMatch(/YIKILDI/);
+      expect(notes(r, 'defender')).toMatch(/şehre kaçıyor/);
+      expect(notes(r, 'attacker')).not.toMatch(/YIKILDI/);
+      expect(notes(r, 'attacker')).toMatch(/cüce yeterli oldu/);
+    });
+
+    it('⭐ dayandığında sayılar SALDIRANA yalnız kutudan gider, not yazılmaz', () => {
+      const r = withCave({
+        broken: false, required: 100, survivingDwarves: 40, reason: 'not_enough_dwarves',
+      });
+      expect(buildBattleReport(r, 'attacker').cave)
+        .toMatchObject({ required: 100, survivingDwarves: 40 });
+      expect(notes(r, 'attacker')).not.toMatch(/cüce/);
+      /* Savunana kutu sayı basmıyor → cümle ona kalıyor. */
+      expect(notes(r, 'defender')).toMatch(/100 cüce gerekiyordu/);
+    });
+
+    it('düz metinde mağara satırı var (orada kutu yok)', () => {
+      const r = withCave({
+        broken: false, required: 100, survivingDwarves: 40, reason: 'not_enough_dwarves',
+      });
+      expect(buildBattleReport(r, 'attacker').text).toMatch(/Mağara: dayandı \(gereken 100 cüce/);
+    });
   });
 });

@@ -600,8 +600,18 @@ describe('mağaranın savaşta yıkılması', () => {
 
     const def = buildBattleReport(battle, 'defender');
     const atk = buildBattleReport(battle, 'attacker');
-    expect(def.notes.some((n) => n.includes('MAĞARAN YIKILDI'))).toBe(true);
-    expect(atk.notes.some((n) => n.includes('mağarası YIKILDI'))).toBe(true);
+    /**
+     * ⚠️ **2026-08-17: durum sözcüğü nottan çıktı.** «Yıkıldı» bilgisi artık yalnız
+     * `cave.broken` alanında (ekranda kutu, düz metinde «Mağara: YIKILDI») — not onu ikinci
+     * kez söylemiyor. Not yalnız kutunun SÖYLEMEDİĞİNİ taşıyor: savunana sonuç, saldırana sayı.
+     */
+    expect(def.cave?.broken).toBe(true);
+    expect(atk.cave?.broken).toBe(true);
+    expect(def.notes.join(' ')).not.toMatch(/YIKILDI/);
+    expect(atk.notes.join(' ')).not.toMatch(/YIKILDI/);
+    expect(def.notes.some((n) => n.includes('şehre kaçıyor'))).toBe(true);
+    expect(atk.notes.some((n) => n.includes('cüce yeterli oldu'))).toBe(true);
+    expect(def.text).toMatch(/Mağara: YIKILDI/);
     // Saldıranın notunda mağaranın içi geçmez.
     expect(atk.notes.join(' ')).not.toMatch(/kaç(ıyor|tı)/);
     /* ⭐ SIZINTI KİLİDİ: bu çağrı controller MASKESİZ, doğrudan `battles.result` ile yapılıyor —
@@ -625,6 +635,17 @@ describe('mağaranın savaşta yıkılması', () => {
       winner: String(rows[0]!['winner']), input: rows[0]!['input'], result: rows[0]!['result'],
     } as never;
     const atk = buildBattleReport(battle, 'attacker');
-    expect(atk.notes.some((n) => n.includes('506') && n.includes('yıkılmadı'))).toBe(true);
+    /**
+     * ⚠️ Sayı SALDIRANA artık kutudan gidiyor (`cave.required`), notla değil — ekran onu
+     * «(gereken 506 cüce · sağ kalan N)» diye basıyor ve not aynı sayıyı tekrar ediyordu.
+     * Düz metin yüzeyinde kutu olmadığı için satır orada yazılıyor.
+     */
+    expect(atk.cave).toMatchObject({ broken: false, required: 506 });
+    expect(atk.notes.join(' ')).not.toMatch(/506/);
+    expect(atk.text).toMatch(/Mağara: dayandı \(gereken 506 cüce/);
+
+    /* Savunana kutu sayı basmıyor → cümle ona kalıyor. */
+    const def2 = buildBattleReport(battle, 'defender');
+    expect(def2.notes.some((n) => n.includes('506') && n.includes('gerekiyordu'))).toBe(true);
   });
 });
