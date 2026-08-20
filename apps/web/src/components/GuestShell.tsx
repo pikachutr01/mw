@@ -18,6 +18,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { AuthModal, type AuthMode } from './AuthModal.tsx';
 import { Button, MenuIcon } from './ui.tsx';
+import { RestartBanner } from './RestartBanner.tsx';
 
 /**
  * Misafirin gezebildiği ekranlar. Geri kalan her şey oturum istiyor.
@@ -121,6 +122,11 @@ export function GuestShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
+
+        {/* ⭐ Yeniden başlatma duyurusu misafir sayfalarında da görünür: ana sayfayı ve
+            simülatörü giriş yapmadan gezen oyuncu da haberi almalı. Genişlik/dolgu
+            `main` ile AYNI, yoksa şerit gövdeden taşar. */}
+        <div className="mx-auto w-full max-w-5xl px-3 pt-3 sm:px-4"><RestartBanner /></div>
 
         <main className="mx-auto w-full max-w-5xl flex-1 px-3 py-4 sm:px-4">{children}</main>
 

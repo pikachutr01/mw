@@ -21,6 +21,7 @@ import { coords } from '../lib/format.ts';
 import { ActivityDot, cityActivity } from '../lib/city-activity.tsx';
 import { matchCityScreen } from '../lib/city-screens.ts';
 import { fmt, gameNow, useMediaQuery, useTick } from '../lib/hooks.ts';
+import { RestartBanner } from './RestartBanner.tsx';
 import { VerifyBanner } from './VerifyBanner.tsx';
 import { NotifyBanner } from './NotifyBanner.tsx';
 import {
@@ -177,6 +178,10 @@ export function Shell({ children }: { children: ReactNode }) {
         <main className="flex h-full w-full min-w-0 max-w-3xl flex-col">
           <div className="shrink-0">
             <InfoBar />
+            {/* ⭐ Yeniden başlatma duyurusu bilgi çubuğundan SONRAKİ İLK ŞEY (kullanıcı,
+                2026-08-21: "en üstte navbarın altına"). Doğrulama şeridinin de üstünde:
+                o bir kısıtı anlatıyor, bu ise oyunun akıbetini. */}
+            <RestartBanner />
             {/* Doğrulama uyarısı şehir şeridinin ÜSTÜNDE: bilgi çubuğundan sonraki ilk şey. */}
             <VerifyBanner />
             {/* ⚠️ Bildirim daveti doğrulamadan SONRA: ikisi aynı anda görünebilir ve
