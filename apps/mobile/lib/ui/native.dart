@@ -359,6 +359,28 @@ Future<bool> mwConfirmSheet(
 ///
 /// ⚠️ Dönüş `null` = **iptal**; boş dize ise gerçek bir değer (ittifak metnini silmek meşru).
 /// İkisini birleştirmek "metni temizle" işlemini imkânsız kılardı.
+///
+/// ─ ⚠️⚠️ DENETLEYİCİYİ BU FONKSİYON KURMAZ — `_TextSheetBody` SAHİPLENİR ──────────────────
+/// İlk yazımda denetleyici burada kuruluyor ve `.whenComplete(controller.dispose)` ile
+/// atılıyordu. Bu **çökme üretti** (2026-08-20, cihazda yakalandı): sheet'in `Future`u
+/// `Navigator.pop` ile ANINDA tamamlanıyor, oysa kapanma animasyonu daha sürüyor ve
+/// `TextField` hâlâ ağaçta. Denetleyici altından çekilince odak değişimi şuraya düşüyordu:
+///
+///   `EditableTextState._handleFocusChanged` → `_openOrCloseInputConnectionIfNeeded`
+///   → `TextEditingController.clearComposing` → *"used after being disposed"*
+///
+/// ⚠️⚠️ **Ekranda görünen hata bu DEĞİLDİ.** Atılmış denetleyici çizimi yarıda bırakıyor,
+/// arkasından `RenderFlex overflowed by 99700 pixels` ve `'_dependents.isEmpty': is not true`
+/// geliyordu; kırmızı ekran **sonuncusunu** yazıyor. 2026-08-20'de o son iddia kök neden
+/// sanılıp `keyboard_guard.dart`ta aranmıştı — yanlış yer. Ders: kırmızı ekran ilk değil
+/// **son** istisnayı gösterir; kök neden için `flutter run` konsolundaki İLK bloğa bak.
+///
+/// ⚠️ Arıza yalnız **klavye AÇIKKEN kapatınca** çıkıyor: klavye kapalıysa pop sonrası bir odak
+/// değişimi olmuyor ve atılmış denetleyiciye kimse dokunmuyor. Bu yüzden "bazen çalışıyor"
+/// görünüyordu — sınarken alanı odaklayıp öyle kaydet.
+///
+/// ⭐ Doğrusu: denetleyiciyi **onu kullanan parçacık** kursun ve `dispose()`unda atsın; o an
+/// `TextField` çoktan ağaçtan çıkmış olur.
 Future<String?> mwTextSheet(
   BuildContext context, {
   required String title,
@@ -369,7 +391,6 @@ Future<String?> mwTextSheet(
   bool multiline = false,
   bool Function(String)? validate,
 }) {
-  final controller = TextEditingController(text: initial);
   return _sheet<String>(
     context,
     (ctx) => Padding(
@@ -378,7 +399,7 @@ Future<String?> mwTextSheet(
       child: SafeArea(
         child: _TextSheetBody(
           title: title,
-          controller: controller,
+          initial: initial,
           maxLength: maxLength,
           hint: hint,
           note: note,
@@ -387,13 +408,13 @@ Future<String?> mwTextSheet(
         ),
       ),
     ),
-  ).whenComplete(controller.dispose);
+  );
 }
 
 class _TextSheetBody extends StatefulWidget {
   const _TextSheetBody({
     required this.title,
-    required this.controller,
+    required this.initial,
     required this.maxLength,
     required this.hint,
     required this.note,
@@ -402,7 +423,7 @@ class _TextSheetBody extends StatefulWidget {
   });
 
   final String title;
-  final TextEditingController controller;
+  final String initial;
   final int maxLength;
   final String hint;
   final String? note;
@@ -414,15 +435,23 @@ class _TextSheetBody extends StatefulWidget {
 }
 
 class _TextSheetBodyState extends State<_TextSheetBody> {
+  /// ⚠️⚠️ Denetleyici BURADA kuruluyor ve BURADA atılıyor — gerekçe `mwTextSheet`in
+  /// başlığında. Dışarıda kurup `whenComplete` ile atmak çökmeye yol açıyordu.
+  late final TextEditingController _controller;
+
   @override
   void initState() {
     super.initState();
-    widget.controller.addListener(_yenile);
+    _controller = TextEditingController(text: widget.initial);
+    _controller.addListener(_yenile);
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_yenile);
+    // ⚠️ Sıra önemli: önce dinleyici, sonra denetleyici. `dispose` zaten dinleyicileri
+    // düşürüyor ama açık bırakmak "atılmıştan sonra bildirim" penceresi açardı.
+    _controller.removeListener(_yenile);
+    _controller.dispose();
     super.dispose();
   }
 
@@ -431,7 +460,7 @@ class _TextSheetBodyState extends State<_TextSheetBody> {
   @override
   Widget build(BuildContext context) {
     final c = MwColors.of(context);
-    final metin = widget.controller.text;
+    final metin = _controller.text;
     // ⚠️ Doğrulayıcı yoksa varsayılan kural "boş olmasın": çağıranların hepsi bir metin
     // istiyor ve boş bir gönderi hiçbirinde anlamlı değil.
     final gecerli = widget.validate?.call(metin) ?? metin.trim().isNotEmpty;
@@ -457,7 +486,7 @@ class _TextSheetBodyState extends State<_TextSheetBody> {
                   ),
                 ),
               TextField(
-                controller: widget.controller,
+                controller: _controller,
                 autofocus: true,
                 minLines: widget.multiline ? 3 : 1,
                 maxLines: widget.multiline ? 6 : 1,
@@ -474,9 +503,7 @@ class _TextSheetBodyState extends State<_TextSheetBody> {
               MwButton(
                 label: 'Kaydet',
                 onTap: gecerli
-                    ? () => Navigator.of(
-                        context,
-                      ).pop(widget.controller.text.trim())
+                    ? () => Navigator.of(context).pop(_controller.text.trim())
                     : null,
               ),
               const SizedBox(height: 8),

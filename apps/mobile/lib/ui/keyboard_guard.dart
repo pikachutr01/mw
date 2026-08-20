@@ -17,19 +17,24 @@
 /// koşuyor (`_klavyeVardi`): yalnız açık→kapalı GEÇİŞİNDE odak bırakılıyor.
 ///
 /// ─ ⚠️⚠️ GÖRÜNÜM `didChangeDependencies`TE ALINIYOR, `didChangeMetrics`TE DEĞİL ───────────
-/// İlk yazımda `View.of(context)` doğrudan `didChangeMetrics` içinde çağrılıyordu ve bu
-/// **kırmızı ekrana** yol açtı (kullanıcı bildirdi, 2026-08-20):
+/// `View.of` masum bir okuma değil, **inherited bağımlılık KAYDEDEN** bir arama
+/// (`dependOnInheritedWidgetOfExactType`). Onu `build`/`didChangeDependencies` dışında çağırmak
+/// bağımlılık defterini bozuyor ve arıza çağrıldığı yerde değil, ilgili inherited öge
+/// kaldırılırken patlıyor. Bu yüzden bağımlılık **yaşam döngüsünün kendi yerinde** kuruluyor,
+/// `didChangeMetrics` yalnız saklanan nesneden **okuyor** (okuma bağımlılık üretmez).
 ///
-///   `'_dependents.isEmpty': is not true` — `InheritedElement.debugDeactivated`
+/// ⚠️⚠️ **DÜZELTME (2026-08-20) — bu blok bir gün boyunca YANLIŞ bir neden yazıyordu.**
+/// Burada *"ilk yazımdaki `View.of` çağrısı kullanıcının bildirdiği kırmızı ekrana yol açtı"*
+/// diyordu. **Yanlış.** O kırmızı ekran cihazda yeniden üretildi ve kök nedeni başka bir
+/// dosyaydı: `native.dart` · `mwTextSheet` denetleyiciyi `TextField` hâlâ ağaçtayken atıyordu
+/// (ayrıntı orada). Yanılgının sebebi öğretici: kırmızı ekran **son** istisnayı yazıyor,
+/// ilkini değil. Ekranda `_dependents.isEmpty` görünüyordu; oysa `flutter run` konsolundaki
+/// İLK blok *"A TextEditingController was used after being disposed"* diyordu ve gerisi
+/// artçıydı.
 ///
-/// Sebep: `View.of` masum bir okuma değil, **inherited bağımlılık KAYDEDEN** bir arama
-/// (`dependOnInheritedWidgetOfExactType`). Onu `build`/`didChangeDependencies` dışında, hem de
-/// çerçeve ağacı taşırken çağırmak bağımlılık defterini bozuyor; arıza da çağrıldığı yerde
-/// değil, ilgili inherited öge kaldırılırken patlıyor — yani teşhisi zor.
-///
-/// ⭐ Doğrusu: bağımlılığı **yaşam döngüsünün kendi yerinde** kur (`didChangeDependencies`),
-/// görünümü sakla, `didChangeMetrics` yalnız saklanan nesneden **okusun**. Okuma bir bağımlılık
-/// üretmiyor.
+/// ⭐ Yukarıdaki kural yine de DOĞRU ve kalıyor — yalnız gerekçesi "şu çökmeyi düzeltti" değil,
+/// "böylesi zaten geçersiz kullanım". ⚠️ Bir düzeltmeyi, hatayı üreten deneyi tekrarlamadan
+/// "tamam" diye yazmanın bedeli tam olarak bu paragraf.
 ///
 /// ⚠️ Eşik 0 değil **`_kEsik`**: bazı cihazlarda klavye kapandığında gezinme çubuğu yüzünden
 /// birkaç piksellik bir alt boşluk kalıyor ve tam sıfır arayan bir kural o cihazlarda hiç
