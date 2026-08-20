@@ -77,29 +77,44 @@ class _Detail extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        /* ⚠️⚠️ SOL GRUP `Expanded` İÇİNDE, YILDIZ DIŞINDA — `Spacer` YETMİYOR.
+           Önceki düzen «damga · ad · Spacer · yıldız» idi ve yıldız sağa DEĞİL ortaya yakın
+           duruyordu (kullanıcı bildirdi, 2026-08-20). Sebep: adı saran `Flexible` ile `Spacer`
+           (kendisi de bir `Expanded`) **ikisi de `flex: 1`**, yani boşta kalan genişliği yarı
+           yarıya bölüşüyorlardı. Ad kısa olduğu için `Flexible` payının çoğunu kullanmıyor ama
+           payı yine ayrılıyor; artan yer satırın SONUNDA boşluk olarak kalıyor ve yıldız
+           içeri kaymış görünüyordu.
+           ⭐ Doğrusu tek esneyen kutu bırakmak: sol grubun tamamı `Expanded`, yıldız onun
+           dışında → yıldız kenara yaslanıyor, ellipsis de iç `Flexible`la korunuyor. */
         Row(
           children: [
-            // ⚠️ Damga **geçmişe** bakıyor → `timeAgo`, `remaining` değil. Çıpası da
-            // `serverNow`: rapor bir oyun olayı değil, geçmiş kaydı; bakımda yaşı donmamalı.
-            Text(
-              clock.timeAgo(m.at),
-              style: TextStyle(fontSize: 11, color: c.muted),
-            ),
-            if (rakip != null) ...[
-              Text(' · ', style: TextStyle(fontSize: 11, color: c.muted)),
-              // ⚠️ Oyuncunun yazdığı ad → gövde fontu, `mwUpper` YOK (Cinzel kuralı).
-              Flexible(
-                child: Text(
-                  rakip,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+            Expanded(
+              child: Row(
+                children: [
+                  // ⚠️ Damga **geçmişe** bakıyor → `timeAgo`, `remaining` değil. Çıpası da
+                  // `serverNow`: rapor bir oyun olayı değil, geçmiş kaydı; bakımda yaşı
+                  // donmamalı.
+                  Text(
+                    clock.timeAgo(m.at),
+                    style: TextStyle(fontSize: 11, color: c.muted),
                   ),
-                ),
+                  if (rakip != null) ...[
+                    Text(' · ', style: TextStyle(fontSize: 11, color: c.muted)),
+                    // ⚠️ Oyuncunun yazdığı ad → gövde fontu, `mwUpper` YOK (Cinzel kuralı).
+                    Flexible(
+                      child: Text(
+                        rakip,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-            const Spacer(),
+            ),
             _FavoriDugmesi(m: m),
           ],
         ),
