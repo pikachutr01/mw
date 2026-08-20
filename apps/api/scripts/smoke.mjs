@@ -87,7 +87,15 @@ async function main() {
   ok(aCity.isCapital === true, 'şehir başkent olarak işaretli');
 
   const city = await call('GET', `/api/v1/cities/${aCity.id}`, { token: A });
-  ok(city.body?.resources?.gold === 4000, 'başlangıç kesesi 4.000 altın', city.body?.resources);
+  /**
+   * ⚠️ Burada başlangıç kesesinin SAYISI sınanmaz, yalnız **dolu geldiği** sınanır.
+   * Sayı 2026-08-20'ye kadar `=== 4000` diye yazılıydı ve iki yeniden dengelemeyi kaçırdı
+   * (4000 → 1000 → 5000): smoke her koşuda kırmızı verdi, kimse bakmadı ve betiğin
+   * *"API mi bozuk, arayüz mü"* sorusuna cevap veren aracı olma değeri gitti.
+   * Ders: **denge sabiti smoke'un işi değil.** Sayının doğruluğunu katalog/vitest sahipleniyor
+   * (`STARTING_RESOURCES`); buranın işi şehrin kaynakla tohumlandığını görmek.
+   */
+  ok(city.body?.resources?.gold > 0, 'başlangıç kesesi dolu geldi', city.body?.resources);
   ok(city.body?.buildings?.castle === 1, 'Kale 1 ile başlıyor', city.body?.buildings);
   ok(city.body?.capacity?.castle?.total === 10, 'Kale bütçesi 10', city.body?.capacity);
 
@@ -113,7 +121,13 @@ async function main() {
   ok(busy.status === 409, 'aynı kategoride ikinci iş 409', busy.body);
 
   const afterSpend = await call('GET', `/api/v1/cities/${aCity.id}`, { token: A });
-  ok(afterSpend.body.resources.gold < 4000, 'kaynak düştü', afterSpend.body.resources);
+  // ⚠️ Sabitle değil, ÖNCEKİ okumayla kıyasla — ölçülen şey "harcama kaseye işliyor mu",
+  // kesenin kaç altınla başladığı değil (bkz. yukarıdaki başlangıç kesesi notu).
+  ok(
+    afterSpend.body.resources.gold < city.body.resources.gold,
+    'kaynak düştü',
+    { önce: city.body.resources.gold, sonra: afterSpend.body.resources.gold },
+  );
   ok(afterSpend.body.queues.length === 1, 'açık kuyruk listeleniyor');
 
   const cancel = await call('DELETE', `/api/v1/cities/queues/${q.body.id}`, { token: A });
@@ -136,9 +150,20 @@ async function main() {
       target: bCity.coordinates, units: { dwarf: 5 },
     },
   });
-  // Savunan acemi koruması altında → koruma hatası birim hatasından ÖNCE gelir.
+  /**
+   * ⭐ Beklenen kod **`email_unverified`**, `target_protected` DEĞİL: smoke'un açtığı hesap
+   * doğrulanmamıştır ve doğrulanmamış hesabın saldırı yasağı, hedefin acemi korumasından
+   * ÖNCE bakılır. Sıralama doğru — kapı saldıranın KENDİ hesabıyla ilgili ve oyuncuya
+   * elinden gelen şeyi söylüyor ("doğrula, kısıt kalksın").
+   *
+   * ⚠️ Bu satır 2026-08-20'ye kadar `target_protected` bekliyordu ve doğrulama kapısı
+   * eklendiğinden beri **ölçmek istediği şeyi hiç ölçmüyordu** — üstelik üstündeki yorum
+   * artık geçerli olmayan bir sıralamayı anlatıyordu. Acemi korumasının kendisi buradan
+   * ERİŞİLEMEZ; onun kapsamı `battle.test.ts` (kural) + `player-ban.test.ts` (403 eşlemesi).
+   * Buranın işi rotanın bağlı olduğunu ve saldırının bir kapıya takıldığını görmek.
+   */
   ok(noUnits.status === 403, 'korumalı oyuncuya saldırı 403', noUnits.body);
-  ok(noUnits.body?.code === 'target_protected', 'hata kodu target_protected', noUnits.body);
+  ok(noUnits.body?.code === 'email_unverified', 'hata kodu email_unverified', noUnits.body);
 
   console.log('\n10. Görev ve mesaj listeleri');
   const missions = await call('GET', '/api/v1/missions', { token: A });
