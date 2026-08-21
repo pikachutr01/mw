@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { UNITS_BY_ID } from '@mobilwar/catalog';
-import { armySpeed, distance, travelSeconds } from '@mobilwar/engine';
+import { armySpeed, DEFAULT_MAP_CONFIG, distance, travelSeconds } from '@mobilwar/engine';
 
 interface Coords { k: number; d: number; s: number }
 
@@ -35,6 +35,8 @@ const VECTORS = JSON.parse(
     counts: Record<string, number>;
     speeds: Record<string, number>;
     heroCount: number;
+    /** ⭐ Dünya ayarı — yazılmadıysa **açık** (motorun varsayılanı). */
+    cargoIgnoresSpeed?: boolean;
     beklenen: number | null;
   }[];
   travelSeconds: {
@@ -58,7 +60,12 @@ describe('mesafe — ortak vektörler', () => {
 describe('ordu hızı — ortak vektörler', () => {
   for (const t of VECTORS.armySpeed) {
     it(t.ad, () => {
-      expect(armySpeed(t.counts, t.heroCount)).toBe(t.beklenen);
+      /* ⚠️ Ayar vektörden geliyor: Yük Arabası muafiyeti dünya başına açılıp kapanabiliyor
+         (`map.cargoIgnoresSpeed`) ve iki dil de aynı bayrağı görmek zorunda. */
+      const cfg = t.cargoIgnoresSpeed === undefined
+        ? DEFAULT_MAP_CONFIG
+        : { ...DEFAULT_MAP_CONFIG, cargoIgnoresSpeed: t.cargoIgnoresSpeed };
+      expect(armySpeed(t.counts, t.heroCount, cfg)).toBe(t.beklenen);
     });
   }
 

@@ -116,4 +116,52 @@ void main() {
       );
     });
   });
+
+  /// ⭐⭐ HIZLANDIRILMIŞ DÜNYA ROZETİ (kullanıcı, 2026-08-21) — navbardaki rozetin İÇERİĞİ.
+  ///
+  /// ⚠️ Kural web'de 2026-08-09'da kullanıcı kararıyla daraltıldı: rozette **yalnız 1'den
+  /// farklı** satırlar yazıyor. Eskiden dördü birden çiziliyor, normal olanlar soluk «1x»
+  /// diye görünüyordu — gerçekten değişmiş olan satırı gürültüye gömüyorlardı.
+  group('MwWorldSpeed', () {
+    test('⭐ eksik alanlar 1e düşüyor (dünya normal tempoda)', () {
+      final s = MwWorldSpeed.fromJson(const {'travel': 3});
+      expect(s.travel, 3);
+      expect(s.resource, 1);
+      expect(s.training, 1);
+      expect(s.construction, 1);
+    });
+
+    test('⭐ alan hiç gelmezse tamamen varsayılan', () {
+      expect(MwWorldSpeed.fromJson(null).travel, 1);
+      expect(MwWorldSpeed.fromJson('bozuk').resource, 1);
+    });
+
+    /// ⚠️ Liste BOŞSA rozet hiç çizilmiyor — klasik dünyada ekranda hiçbir şey yok.
+    test('⭐⭐ klasik dünyada hızlandırılmış satır YOK', () {
+      expect(MwWorldSpeed.normal.hizlandirilmis, isEmpty);
+      expect(
+        MwWorldSpeed.fromJson(const {
+          'resource': 1,
+          'travel': 1,
+          'training': 1,
+          'construction': 1,
+        }).hizlandirilmis,
+        isEmpty,
+      );
+    });
+
+    test('⭐⭐ yalnız DEĞİŞEN satırlar listeleniyor', () {
+      final s = MwWorldSpeed.fromJson(const {
+        'resource': 1,
+        'travel': 4,
+        'training': 2,
+        'construction': 1,
+      });
+      expect(s.hizlandirilmis.map((e) => e.label), [
+        'Sefer hızı',
+        'Birim üretimi',
+      ]);
+      expect(s.hizlandirilmis.map((e) => e.value), [4, 2]);
+    });
+  });
 }

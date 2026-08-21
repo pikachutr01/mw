@@ -221,17 +221,37 @@ function HeroCard({ hero, temple }: { hero: HeroRow; temple: TempleView }) {
               onClick={() => {
                 void confirm({
                   title: <><UserText>{hero.name}</UserText> diriltilsin mi?</>,
+                  /*
+                    ⭐ MALİYET ve SÜRE AYRI SATIRLARDA, ETİKETLİ (kullanıcı, 2026-08-22 —
+                    mobil için istendi, *"Web için de aynı mantık geçerli"*).
+
+                    ⚠️ **TİRE KALDIRILDI**: oyuncuya görünen metinlerde tire/çizgi yasak
+                    (deponun yazım kuralı) ve burada bir tane vardı («… yemek — şehrin
+                    kaynağından»). Yerine nokta ve etiketli satır düzeni geldi; cümle iki
+                    parçaya bölününce ayırıcıya zaten gerek kalmadı.
+                    ⚠️ Süre BAŞTAN BERİ yazıyordu, kaldırılmadı: kullanıcının şikâyeti
+                    mobildeki eksikliğiydi, buradaki düzen ona hizalandı.
+                  */
                   body: (
-                    <div className="space-y-1 text-sm">
-                      <p>
-                        Maliyet <Res kind="gold" value={fmt(hero.reviveCost!.gold)} />{' '}
-                        <Res kind="food" value={fmt(hero.reviveCost!.food)} /> — şehrin kaynağından
-                        düşer ve <strong>iptal edilse bile iade edilmez</strong>.
+                    <div className="space-y-1.5 text-sm">
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-muted">Maliyet</span>
+                        <Res kind="gold" value={fmt(hero.reviveCost!.gold)} />
+                        <Res kind="food" value={fmt(hero.reviveCost!.food)} />
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <span className="text-muted">Süre</span>
+                        <span className="tnum font-semibold text-accent">
+                          {formatDuration(hero.reviveSeconds ?? 0)}
+                        </span>
                       </p>
                       <p className="text-muted">
-                        Süre: {formatDuration(hero.reviveSeconds ?? 0)} · Kahramanın seviyesi
-                        arttıkça süre de maliyet de yükselir; <strong>bu şehrin Tapınağını</strong>{' '}
-                        yükseltmek süreyi kısaltır.
+                        Kaynak şehrinin kasasından düşer ve{' '}
+                        <strong>iptal edilse bile iade edilmez</strong>.
+                      </p>
+                      <p className="text-muted">
+                        Kahramanın seviyesi arttıkça süre de maliyet de yükselir.{' '}
+                        <strong>Bu şehrin Tapınağını</strong> yükseltmek süreyi kısaltır.
                       </p>
                     </div>
                   ),

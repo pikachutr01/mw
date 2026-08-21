@@ -20,7 +20,7 @@
  *
  * İstemci aynı fonksiyonu YALNIZ önizleme için kullanır; otorite `execute_at` yazan sunucudur.
  */
-import { HERO_SPEED, UNITS_BY_ID } from '@mobilwar/catalog';
+import { HERO_SPEED, SPEED_EXEMPT_WHEN_ESCORTED, UNITS_BY_ID } from '@mobilwar/catalog';
 
 export interface Coordinates {
   /** kıta */
@@ -53,6 +53,20 @@ export interface MapConfig {
   capHours: number;
   /** Haritacılık seviye başına hız kazancı. */
   cartographyStep: number;
+  /**
+   * ⭐⭐ YÜK ARABASI KAFİLEYİ YAVAŞLATMASIN (kullanıcı, 2026-08-21) — dünya ayarı.
+   *
+   * Açıkken (**varsayılan**) `SPEED_EXEMPT_WHEN_ESCORTED` birimleri, orduda başka yürüyen
+   * birim varken en-yavaş hesabına girmiyor: araba kafilenin hızına ayak uyduruyor.
+   * Kapalıyken davranış 2026-08-21 öncesiyle **bit-bit aynı**: arabanın 140 hızı da hesaba
+   * giriyor ve bir ejderha ordusunu (160) 140'a çekiyor.
+   *
+   * ⚠️ Muafiyet **refakat şartlı**: araba yalnız başına gönderildiğinde (nakliye · destek ·
+   * şehir kurma) yine kendi hızıyla yürüyor — yoksa "hızı olmayan birim" üretirdik.
+   * ⚠️ Kahraman refakatçi SAYILMAZ: tek arabayla giden bir kahraman, arabayı kendi hızına
+   * (200) çekseydi araba fiziksel olarak imkânsız bir hızda ilerlemiş olurdu.
+   */
+  cargoIgnoresSpeed: boolean;
 }
 
 /**
@@ -74,6 +88,8 @@ export const DEFAULT_MAP_CONFIG: MapConfig = {
   continentCrossSeconds: 0,
   capHours: 24,
   cartographyStep: 0.05,
+  // ⭐ Varsayılan AÇIK (kullanıcı kararı, 2026-08-21).
+  cargoIgnoresSpeed: true,
 };
 
 /** Kısmi override'ı varsayılanla birleştirir (`mergeCombatConfig` deseni). */
@@ -125,14 +141,34 @@ export function route(a: Coordinates, b: Coordinates, cfg: MapConfig = DEFAULT_M
  * Bilinmeyen birim id'si veya yürüyemeyen (hız 0) birim varsa `null` döner — çağıran bunu
  * doğrulama hatası olarak işler.
  */
-export function armySpeed(counts: Record<string, number>, heroCount = 0): number | null {
-  let slowest = Infinity;
+export function armySpeed(
+  counts: Record<string, number>, heroCount = 0, cfg: MapConfig = DEFAULT_MAP_CONFIG,
+): number | null {
+  /**
+   * ⭐⭐ İKİ ADAY BİRDEN (2026-08-21): tüm birimlerin en yavaşı ve **muaflar hariç** en yavaşı.
+   *
+   * ⚠️ Tek geçişte ikisini de toplamak şart, çünkü hangisinin kullanılacağı ancak döngü
+   * bittiğinde belli oluyor: muaf olmayan hiç birim yoksa (yalnız yük arabası gönderilmiş)
+   * muafiyet **düşüyor** ve arabanın kendi hızı geçerli oluyor.
+   * ⚠️ Geçersizlik kapısı (`speed <= 0` → `null`) muaf birimler için de işliyor: muafiyet
+   * "hızı yok sayılır" demek, "birim geçerlidir" demek değil.
+   */
+  let slowestAll = Infinity;
+  let slowestEscort = Infinity;
   for (const [id, n] of Object.entries(counts)) {
     if (!(n > 0)) continue;
     const speed = UNITS_BY_ID[id]?.speed ?? 0;
     if (speed <= 0) return null;
-    if (speed < slowest) slowest = speed;
+    if (speed < slowestAll) slowestAll = speed;
+    if (SPEED_EXEMPT_WHEN_ESCORTED.has(id)) continue;
+    if (speed < slowestEscort) slowestEscort = speed;
   }
+
+  /* Muafiyet YALNIZ refakatçi varken: `slowestEscort` sonsuzsa orduda muaf olmayan birim yok. */
+  let slowest = cfg.cargoIgnoresSpeed && Number.isFinite(slowestEscort)
+    ? slowestEscort
+    : slowestAll;
+
   if (heroCount > 0 && HERO_SPEED < slowest) slowest = HERO_SPEED;
   return Number.isFinite(slowest) ? slowest : null;
 }

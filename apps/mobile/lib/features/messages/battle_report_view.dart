@@ -326,6 +326,15 @@ class _CaveBox extends StatelessWidget {
               style: TextStyle(fontSize: 11, color: c.muted),
             ),
           ],
+          /* ⭐ SONUÇ CÜMLESİ KUTUNUN İÇİNDE (kullanıcı, 2026-08-21): *"mağara yıkıldığında
+             içindeki ordu şehre kaçıyor bilgi notunu aynı kutu içinde yazalım. Ayrı ayrı
+             notlar olmasın."* Eskiden `notes` listesine düşüyor ve raporun EN ALTINDA, mağara
+             kutusundan kopuk bir madde işareti olarak çıkıyordu.
+             ⚠️ Metin sunucudan (`cave.note`); web'deki karşılığıyla AYNI dize. */
+          if (cave.note != null) ...[
+            const SizedBox(height: 4),
+            Text(cave.note!, style: TextStyle(fontSize: 11, color: c.muted)),
+          ],
         ],
       ),
     );
@@ -449,9 +458,28 @@ class _SonucBandi extends StatelessWidget {
       ),
       child: Row(
         children: [
+          /* ⭐⭐ `mwUpper` ŞART (kullanıcı, 2026-08-21): *"en üstte büyük yazan KAYBETTİNİZ
+             yazısında büyük İ harfi gözükmüyor."*
+
+             ⚠️⚠️ Sebep FONT ve **fontun içinde ölçüldü** (`Cinzel-VF.ttf`, glyf tablosu):
+               • `i` (U+0069) → gövde yüksekliği 600, **noktasız**; dotless `ı` (U+0131) ile
+                 birebir aynı glif yapısı. Cinzel küçük harfi küçük BÜYÜK harf gibi çiziyor
+                 (kural `mwDisplayStyle` başlığında) ve bu sürümde noktayı hiç koymuyor.
+               • `İ` (U+0130) → yüksekliği 851 olan BİLEŞİK glif: büyük `I` + üstünde nokta.
+             Yani «Kaybettiniz» ekranda zaten büyük görünüyordu ama `i`ler noktasız çiziliyordu
+             — «İ kayboldu» şikâyeti tam olarak buydu. U+0130 fontta VAR, tofu çıkmıyor.
+
+             ⚠️ Dart'ın `toUpperCase()`i yerelden bağımsız (`i` → `I`), yani hatanın aynısını
+             üretirdi. `mwUpper` `i` → `İ` yapıyor.
+             ⚠️ «KAZANDINIZ»da `i` yok — kusur yalnız kaybedilen savaşta görünüyordu.
+             ⚠️ **WEB'DE AYNI YAMA YOK ve bu bilinçli**: web Google Fonts'un Cinzel'ini
+             kullanıyor ve orada küçük `i` NOKTALI çiziliyor (tuvalde ölçüldü). Gerekçe
+             `Messages.tsx`teki karşı notta.
+             ⚠️ `battleHeadline`ın kendisi DEĞİŞMEDİ: kaynak dize orijinal oyunun `k.java`
+             metni ve testle kilitli; büyütme yalnız çizim anında yapılıyor. */
           Expanded(
             child: Text(
-              battleHeadline(winner: r.winner, won: r.won),
+              mwUpper(battleHeadline(winner: r.winner, won: r.won)),
               style: mwDisplayStyle(fontSize: 20, color: renk),
             ),
           ),
@@ -459,11 +487,12 @@ class _SonucBandi extends StatelessWidget {
              yazısının yanında ay simgesi olması yeterli."*
              ⭐ 2026-08-19: simge artık **tıklanınca açıklıyor**. Eskiden ne olduğunu bilmeyen
              oyuncu için sessiz bir süstü — kullanıcı bunu doğrudan istedi. */
+          /* ⭐ 2026-08-21: ipucu TEK CÜMLEYE indi (kullanıcı: *"gece savaşı tooltip ine sadece
+             savaş gece gerçekleşti yazsın, detaylı açıklama yazmasın"*). Kalkan kısım gece
+             görüşünün vuruş gücüne etkisini anlatıyordu. Web'deki `Tooltip` ile aynı dize. */
           if (r.night) ...[
             const MwTapTip(
-              message:
-                  'Savaş gece gerçekleşti. Gece görüşü tekniği olmayan saldıran ordu '
-                  'daha az vuruş gücüyle savaşır.',
+              message: 'Savaş gece gerçekleşti.',
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 child: Text('🌙', style: TextStyle(fontSize: 18)),

@@ -179,7 +179,7 @@ void main() {
       for (final r in [MwRole.member, MwRole.council]) {
         final k = leaveGate(myRole: r, memberCount: 5);
         expect(k.canLeave, isTrue);
-        expect(k.disbands, isFalse);
+        expect(k.reason, isNull);
       }
     });
 
@@ -191,14 +191,21 @@ void main() {
       expect(k.reason, contains('Liderlik Devri'));
     });
 
-    /// ⚠️⚠️ **TEK ÜYE KALAN LİDERDE AYRILMAK = DAĞITMAK** ve sunucu bunu sessizce yapıyor.
-    /// Ekran bunu söylemezse lider ittifağını kazara siler — `disbands` bayrağı onay metnini
-    /// değiştirmek için var.
-    test('⭐⭐ son üye kalan Lider ayrılınca ittifak DAĞILIYOR', () {
-      final k = leaveGate(myRole: MwRole.leader, memberCount: 1);
-      expect(k.canLeave, isTrue);
-      expect(k.disbands, isTrue);
-    });
+    /// ⭐⭐ **SON ÜYE KALAN LİDER DE AYRILAMAZ** (kullanıcı, 2026-08-21: *"ittifağı
+    /// dağıtmadan son kişi ayrılamaz"*).
+    ///
+    /// ⚠️⚠️ Test ESKİDEN TERSİNİ kilitliyordu (*"ayrılınca ittifak DAĞILIYOR"*) ve o hâliyle
+    /// sunucunun sessiz davranışını yansıtıyordu: «Ayrıl» düğmesi geri alınamaz bir SİLME
+    /// yapıyordu. Artık sunucu `must_disband` hatası veriyor, kapı da düğmeyi çizdirmiyor.
+    /// ⚠️ Sebep metni «dağıt» demek ZORUNDA: düğme yoksa oyuncunun tek çıkış yolu o cümle.
+    test(
+      '⭐⭐ son üye kalan Lider AYRILAMAZ, sebebi dağıtmaya yönlendiriyor',
+      () {
+        final k = leaveGate(myRole: MwRole.leader, memberCount: 1);
+        expect(k.canLeave, isFalse);
+        expect(k.reason, contains('dağıt'));
+      },
+    );
   });
 
   group('yetki kapıları', () {
@@ -213,6 +220,43 @@ void main() {
       expect(canEditText(MwRole.council), isTrue);
       expect(canBroadcast(MwRole.council), isTrue);
       expect(canInvite(MwRole.council), isTrue);
+    });
+
+    /// ⭐⭐ DÜNYA KÜNYESİNDEKİ DAVET DÜĞMESİ (kullanıcı, 2026-08-22) — web'deki
+    /// `canInviteToAlliance` ile birebir aynı karar. İki şart birden.
+    ///
+    /// ⚠️ İkinci şart (hedefin ittifakı yok) yalnız görsel incelik değil: sunucu zaten
+    /// `target_has_alliance` ile reddediyor, yani düğme kesin reddedilecek bir istek
+    /// gönderirdi.
+    test('⭐⭐ davet düğmesi: rütbe VE hedefin ittifaksızlığı birlikte', () {
+      // Yetki var, hedef boşta → açık.
+      expect(
+        canInviteToAlliance(myRole: MwRole.council, targetHasAlliance: false),
+        isTrue,
+      );
+      expect(
+        canInviteToAlliance(myRole: MwRole.leader, targetHasAlliance: false),
+        isTrue,
+      );
+      // Yetki var ama hedefin ittifakı var → kapalı.
+      expect(
+        canInviteToAlliance(myRole: MwRole.leader, targetHasAlliance: true),
+        isFalse,
+      );
+      // Asker davet edemiyor.
+      expect(
+        canInviteToAlliance(myRole: MwRole.member, targetHasAlliance: false),
+        isFalse,
+      );
+    });
+
+    /// ⚠️ Rütbe HENÜZ BİLİNMİYORSA (ittifakım yok ya da sorgu gelmedi) düğme çizilmiyor:
+    /// bir an görünüp kaybolan düğme, yanlışlıkla basılabilen düğmedir.
+    test('⭐ rütbe null iken davet KAPALI (fail-closed)', () {
+      expect(
+        canInviteToAlliance(myRole: null, targetHasAlliance: false),
+        isFalse,
+      );
     });
 
     test('Asker hiçbirini yapamıyor', () {

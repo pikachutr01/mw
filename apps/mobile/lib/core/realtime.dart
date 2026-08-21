@@ -62,6 +62,18 @@ const Map<String, List<String>> kInvalidates = {
   'missions:changed': ['missions'],
   'messages:changed': ['messages'],
 
+  /// ⭐⭐ ORDU EVE DÖNDÜ (kullanıcı, 2026-08-21): *"ordu şehre geri döndüğünde oyun açık
+  /// durumda olunca görevlerde anlık olarak kullanılabilir hâle gelmeli."*
+  ///
+  /// ⚠️⚠️ Bu satır 2026-08-21'e kadar YAZILAMIYORDU: sunucu olayı `missions:changed` konusuna
+  /// düzleştiriyordu, yani `city:army_returned` adı istemciye hiç ulaşmıyordu
+  /// (`realtime.bus.ts`). Bedeli dönen KAHRAMANDA görünüyordu: `temple` tazelenmediği için
+  /// Tapınak onu hâlâ «görevde» gösteriyor, sefer formu seçtirmiyordu.
+  ///
+  /// ⚠️ Web'deki `INVALIDATES` ile **birebir aynı** liste; ikisi ayrışırsa aynı olay iki
+  /// istemcide farklı ekranları tazeler.
+  'city:army_returned': ['city', 'catalog', 'missions', 'temple', 'overview'],
+
   /// ⭐ ÖZEL MESAJ (2026-08-18) — sohbet listesi + açık sohbetin geçmişi.
   ///
   /// ⚠️ Olay **İKİ tarafa da** gidiyor: alıcı balonu görsün, gönderenin ikinci cihazı

@@ -20,6 +20,7 @@ import '../../app/providers.dart';
 import '../../core/city_progress.dart';
 import '../../core/realtime.dart';
 import '../../ui/primitives.dart';
+import '../city/city_model.dart';
 
 class InfoBar extends ConsumerWidget {
   const InfoBar({super.key});
@@ -71,9 +72,24 @@ class InfoBar extends ConsumerWidget {
       child: Row(
         children: [
           // ── SOL: kaynak (sabit genişlik) ──────────────────────────────────
-          _Res(kind: 'gold', value: r.gold.floor()),
+          /* ⭐ Uzun basınca SAATLİK ÜRETİM (kullanıcı, 2026-08-21) — web'deki `ResRate`
+             ipucunun karşılığı. Sayı `production.*PerHour`dan geliyor, istemcide yeniden
+             HESAPLANMIYOR: aynı sayı zaten sayacın akış hızını belirliyor
+             (`extrapolateResources`). İkinci bir kaynaktan hesaplasaydık «ipucu +50 diyor
+             ama sayaç başka hızda akıyor» ayrışması kaçınılmaz olurdu. */
+          _Res(
+            kind: 'gold',
+            value: r.gold.floor(),
+            perHour: city?.goldPerHour,
+            onVacation: city?.onVacation ?? false,
+          ),
           const SizedBox(width: 6),
-          _Res(kind: 'food', value: r.food.floor()),
+          _Res(
+            kind: 'food',
+            value: r.food.floor(),
+            perHour: city?.foodPerHour,
+            onVacation: city?.onVacation ?? false,
+          ),
 
           // ── ORTA: koordinat ───────────────────────────────────────────────
           // ⚠️ Şehir ADI burada YOK, web'in mobil düzeniyle aynı: ad zaten şeritte yazıyor
@@ -124,6 +140,9 @@ class InfoBar extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
           ],
+          /* ⭐ Hızlandırılmış dünya rozeti — web'de de bağlantı noktasının SOLUNDA, sağ
+             bölgenin son bilgisi. Dünya klasikse hiç çizilmiyor. */
+          if (city != null) _SpeedBadge(speed: city.speed),
           const ConnectionDot(),
         ],
       ),
@@ -159,41 +178,133 @@ class _Plaka extends StatelessWidget {
 /// ⚠️ Sabit genişlik ŞART: şehir değişince sayının uzunluğu değişiyor ve sabitlenmezse orta
 /// bölge sağa sola zıplıyor (web'de yaşandı, gerekçe dosya başlığında).
 class _Res extends StatelessWidget {
-  const _Res({required this.kind, required this.value});
+  const _Res({
+    required this.kind,
+    required this.value,
+    this.perHour,
+    this.onVacation = false,
+  });
 
   final String kind;
   final int value;
 
+  /// Saatlik üretim — uzun basınca açılan ipucunda yazıyor. Şehir henüz gelmediyse `null`.
+  final num? perHour;
+
+  /// ⚠️ Tatilde sunucu üretimi 0 döndürüyor; ipucu bunu **sebebiyle** söylemek zorunda,
+  /// yoksa oyuncu «üretimim niye sıfır» diye sorar (web'de aynı gerekçe yazılı).
+  final bool onVacation;
+
   @override
   Widget build(BuildContext context) {
     final c = MwColors.of(context);
-    return _Plaka(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ⭐ Web'in kendi görselleri (`assets/ui/gold.png` · `food.png`), Material ikonu değil.
-          MwIcon(folder: 'ui', id: kind, size: 15),
-          const SizedBox(width: 4),
-          SizedBox(
-            // ⚠️ 74 → 68: kutunun kendi dolgusu genişlik eklediği için sayı alanı biraz
-            //    daraltıldı, yoksa üç kutu dar telefonda orta bölgeyi eziyordu.
-            width: 68,
-            child: Text(
-              mwNumber(value),
-              style: TextStyle(
-                /* ⚠️⚠️ Sayı `gold`/`food` token'ıyla boyanmak İSTENDİ ama VAZGEÇİLDİ:
+    final baslik = kind == 'gold' ? 'Altın' : 'Yemek';
+    final oran = (perHour ?? 0).round();
+    final ipucu = onVacation
+        ? '$baslik\nÜretim: +${mwNumber(oran)} / saat\nTatil modunda üretim durur.'
+        : '$baslik\nÜretim: +${mwNumber(oran)} / saat';
+
+    return MwTapTip(
+      // ⚠️ Uzun basma: çubuk ekranın en üstünde ve parmağın sık geçtiği yer (gerekçe
+      //    `MwTapTip.longPress` başlığında).
+      longPress: true,
+      message: ipucu,
+      child: _Plaka(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ⭐ Web'in kendi görselleri (`assets/ui/gold.png` · `food.png`), Material ikonu değil.
+            MwIcon(folder: 'ui', id: kind, size: 15),
+            const SizedBox(width: 4),
+            SizedBox(
+              // ⚠️ 74 → 68: kutunun kendi dolgusu genişlik eklediği için sayı alanı biraz
+              //    daraltıldı, yoksa üç kutu dar telefonda orta bölgeyi eziyordu.
+              width: 68,
+              /* ⭐⭐ SIĞMAYAN SAYI KIRILMAZ, KÜÇÜLÜR (kullanıcı, 2026-08-21: *"altın ve yemek
+               miktarı 8 haneyi geçtiğinde son satırı alt satıra inip kötü bir görüntü
+               oluşturuyor"*).
+
+               ⚠️⚠️ Arıza tam olarak buradaydı: sayı SABİT 68 px'lik bir kutuda yaşıyor ama
+               `Text`in satır sınırı yoktu → «12.345.678» 68 px'e sığmayınca Flutter onu
+               ikinci satıra sarıyordu. Çubuk tek satırlık olduğu için alt satır kırpılıp
+               yarım harf görünüyordu.
+
+               ⚠️ Çözüm kutuyu GENİŞLETMEK DEĞİL: sabit genişlik bilerek konmuş (dosya
+               başlığındaki kural) — şehir değiştikçe sayının uzunluğu değişiyor ve kutu
+               esnek olsaydı ortadaki koordinat plakası sağa sola zıplardı. `FittedBox`
+               genişliği sabit tutup yalnız **çizim ölçeğini** düşürüyor.
+
+               ⚠️ `scaleDown`, `contain` DEĞİL: `contain` kısa sayıları kutuyu doldurmak için
+               BÜYÜTÜRDÜ ve «1.250» ile «12.345.678» iki ayrı punto ile yazılırdı.
+               `scaleDown` yalnız taşarsa küçültüyor, sığan sayı 13 punto kalıyor.
+
+               ⚠️ `alignment: centerLeft`: küçülen sayı ikondan kopup kutunun ortasına
+               kaymasın — hizalama ikonla aynı kenardan başlıyor. */
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  mwNumber(value),
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    /* ⚠️⚠️ Sayı `gold`/`food` token'ıyla boyanmak İSTENDİ ama VAZGEÇİLDİ:
                    açık temada `panelHeader` (#C89B5A) ile `gold` (#9A7413) birbirine çok
                    yakın iki kahve tonu ve sayı okunmaz hâle geliyordu. Koyu temada sorun
                    yok, ama tek bir temada bozulan bir renk seçimi yine bozuk bir seçimdir.
                    Rengi İKONLAR taşıyor; sayı iki temada da garantili kontrastta. */
-                color: c.onPanelHeader,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFeatures: const [FontFeature.tabularFigures()],
+                    color: c.onPanelHeader,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ⭐⭐ HIZLANDIRILMIŞ DÜNYA ROZETİ — web'deki `SpeedBadge`in mobil karşılığı
+/// (kullanıcı, 2026-08-21: *"Bu bilginin aynısını uygulamaya da alalım. Navbar da aynı
+/// konumda gözüksün ve üzerine tıklanınca aynı şekilde hızlandırılmış etkileri göstersin."*).
+///
+/// ⚠️ **Yalnız bir değer 1'den farklıysa çizilir.** Her şey normalken ekranda hiçbir şey yok;
+/// rozet varsa oyuncu «bu dünya klasik değil» bilgisini ilk bakışta alıyor.
+/// ⚠️ İçerik de süzülü: normal hızdaki satırlar yazılmıyor (gerekçe `MwWorldSpeed`de).
+/// ⚠️ Dokunmayla açılıyor (`longPress` DEĞİL): kaynak kutularının aksine burası küçük ve
+/// tek işi bu — web'de de tıklanınca açılıyor.
+class _SpeedBadge extends StatelessWidget {
+  const _SpeedBadge({required this.speed});
+
+  final MwWorldSpeed speed;
+
+  @override
+  Widget build(BuildContext context) {
+    final satirlar = speed.hizlandirilmis;
+    if (satirlar.isEmpty) return const SizedBox.shrink();
+
+    /* ⚠️ `mwNumber` KULLANILMIYOR: o `int` alıyor ve çarpanlar kesirli olabiliyor (panelde
+       0,5 ile 10 arası serbest). Tam sayı çarpan «2x», kesirli olan «2,5x» yazılıyor —
+       ondalık ayırıcı Türkçede virgül. */
+    String carpan(num v) =>
+        v == v.roundToDouble() ? '${v.round()}' : '$v'.replaceAll('.', ',');
+
+    final metin = [
+      'Hızlandırılmış dünya',
+      ...satirlar.map((e) => '${e.label}: ${carpan(e.value)}x'),
+    ].join('\n');
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: MwTapTip(
+        message: metin,
+        // ⚠️ Emoji, `MwIcon` değil: `assets/ui/` altında bir şimşek görseli yok ve tek bir
+        //    rozet için katalog dışı bir dosya eklemek asset denetimini bulandırırdı.
+        child: const Text('⚡', style: TextStyle(fontSize: 15)),
       ),
     );
   }

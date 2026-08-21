@@ -123,6 +123,8 @@ class _MissionFormState extends ConsumerState<MissionForm> {
       affordCargo: yeter,
       cargoTotal: kargoToplam,
       pending: _busy,
+      // ⭐ Saldırıda «savaşan birim var mı» kapısı için (2026-08-21).
+      unitIds: _units.keys,
     );
 
     return Column(
@@ -295,10 +297,13 @@ class _MissionFormState extends ConsumerState<MissionForm> {
     );
   }
 
+  /// ⚠️ «kahraman tek başına da gidebilir» eki KALDIRILDI (kullanıcı, 2026-08-21).
+  /// Kural DEĞİŞMEDİ — kahraman hâlâ tek başına gidebiliyor (`kArmyOptional`); yalnız boş
+  /// ordu kutusu bunu duyurmuyor. Metin web'deki `world-modal.tsx` ile birebir aynı.
   String _bosOrduMetni() => switch (_rule.units) {
     MwUnitScope.spy => 'Şehrinde Casus Kuş yok. Önce Baraka\'dan üret.',
     _ when kArmyOptional.contains(widget.type) =>
-      'Şehrinde savaşçı yok — kahraman tek başına da gidebilir.',
+      'Şehrinde savaşçı veya kahraman yok.',
     _ => 'Şehrinde savaşçı yok. Önce Baraka\'dan üret.',
   };
 
@@ -314,10 +319,13 @@ class _MissionFormState extends ConsumerState<MissionForm> {
     /// ⚠️ Kahraman sayısı da geçiliyor: kahraman orduyu **yavaşlatabilir**. Geçmezsek
     /// «9 kuş + 1 kahraman» önizlemesi 40 sn yazar, sunucu 20 dk hesaplar (gerekçe
     /// `core/travel.dart` · `armySpeed`).
+    /* ⚠️ `cfg` de geçiliyor (2026-08-21): Yük Arabası muafiyeti dünya ayarı
+       (`map.cargoIgnoresSpeed`) ve önizleme sunucuyla aynı kuralı görmek zorunda. */
     final hiz = armySpeed(
       _units,
       (id) => _unit(catalog, id)?.speed,
       heroCount: _heroIds.length,
+      cfg: city.map,
     );
     if (hiz == null) return '—';
 
@@ -575,8 +583,9 @@ class _HeroPicker extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 4),
+          // ⚠️ «(isteğe bağlı)» eki KALDIRILDI (kullanıcı, 2026-08-21) — web başlığıyla aynı.
           child: Text(
-            'Kahraman (isteğe bağlı)',
+            'Kahraman',
             style: TextStyle(fontSize: 11, color: c.muted),
           ),
         ),

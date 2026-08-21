@@ -223,8 +223,15 @@ const MAP_MAP: Readonly<Record<string, keyof MapConfig>> = {
   'map.continentCrossSeconds': 'continentCrossSeconds',
   'map.cartographyStep': 'cartographyStep',
   'map.capHours': 'capHours',
+  'map.cargoIgnoresSpeed': 'cargoIgnoresSpeed',
 };
 
+/**
+ * ⚠️⚠️ **BOOLEAN da kabul ediliyor** (2026-08-21). Eşleme baştan beri yalnız `number` geçiriyor
+ * ve `map.cargoIgnoresSpeed` eklendiğinde bu **sessizce** onu düşürürdü: panelde anahtar
+ * görünür, kaydedilir, motora hiç ulaşmazdı. Aynı tuzak `combat.ts` başlığında da yazılı
+ * («panelde görünen ayar motora hiç ulaşmaz»).
+ */
 export function mapOverrides(
   values: Values, overridden: readonly string[],
 ): Partial<MapConfig> | undefined {
@@ -234,8 +241,8 @@ export function mapOverrides(
     const field = MAP_MAP[key];
     if (!field) continue;
     const v = pick(values, key);
-    if (typeof v !== 'number') continue;
-    (out as Record<string, number>)[field] = v;
+    if (typeof v !== 'number' && typeof v !== 'boolean') continue;
+    (out as Record<string, number | boolean>)[field] = v;
     touched = true;
   }
   return touched ? out : undefined;

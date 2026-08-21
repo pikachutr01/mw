@@ -187,8 +187,21 @@ export class AllianceService {
   }
 
   /**
-   * Ayrıl. ⭐ Lider yalnız TEK üyeyse ayrılabilir — o zaman ittifak kendiliğinden dağılır;
-   * başka üye varsa önce Liderlik Devri (kullanıcı kararı: lidersiz ittifak kalamaz).
+   * Ayrıl. ⭐ Lider **hiçbir koşulda** ayrılamaz: başka üye varsa önce Liderlik Devri,
+   * tek kalmışsa İttifakı Dağıt (kullanıcı kararı: lidersiz ittifak kalamaz).
+   *
+   * ⚠️⚠️ **TEK ÜYE DALI DEĞİŞTİ** (kullanıcı, 2026-08-21): *"İttifakta kalan son üyenin,
+   * liderin ittifaktan ayrılmasına izin vermeyelim, ittifağı dağıtmadan son kişi ayrılamaz."*
+   *
+   * Eskiden `leave()` son üye lidere geldiğinde `disbandInner`ı **sessizce** çağırıyordu:
+   * oyuncu «Ayrıl» diyor, ittifak dağılıyordu. İki sorun vardı ve ikisi de yıkıcı:
+   *   • İttifak adı, mesaj metni ve kuruluş emeği «Ayrıl» düğmesinin arkasında yok oluyordu —
+   *     dağıtma geri alınamaz bir işlem ve kendi onayı var (`mwConfirm` / `Confirm`).
+   *   • Ekran ile sonuç ayrışıyordu: düğme «Ayrıl» diyor, olan «Dağıt».
+   * Artık hata dönüyor; oyuncunun açıkça «İttifakı Dağıt» demesi gerekiyor. `disband()` ucu
+   * DEĞİŞMEDİ, tek yıkıcı kapı orası.
+   *
+   * @returns `disbanded` alanı **artık daima `false`** — imza geriye uyum için duruyor.
    */
   async leave(o: { worldId: number; playerId: number }): Promise<{ disbanded: boolean }> {
     return this.db.transaction(async (tx) => {
@@ -203,8 +216,11 @@ export class AllianceService {
           throw new AllianceError('leader_must_transfer',
             'Lider ittifaktan ayrılamaz — önce Liderlik Devri yapmalısın.');
         }
-        await this.disbandInner(tx as never, o.worldId, me.allianceId, o.playerId);
-        return { disbanded: true };
+        /* ⚠️ Son üye: ayrılmak yerine DAĞITMAK gerekiyor. Hata kodu ayrı (`must_disband`)
+           çünkü istemcinin göstereceği çıkış yolu da ayrı: burada «Liderlik Devri» yok,
+           tek seçenek «İttifakı Dağıt». */
+        throw new AllianceError('must_disband',
+          'İttifaktaki son üye sensin — ayrılmak yerine ittifakı dağıtmalısın.');
       }
 
       /**

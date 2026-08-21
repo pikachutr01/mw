@@ -58,11 +58,18 @@ void main() {
         final speeds = (t['speeds'] as Map<String, dynamic>).map(
           (k, v) => MapEntry(k, v as int),
         );
+        /* ⚠️ Ayar vektörden geliyor: Yük Arabası muafiyeti dünya başına açılıp
+           kapanabiliyor (`map.cargoIgnoresSpeed`). Yazılmadıysa varsayılan **açık** —
+           motorun `DEFAULT_MAP_CONFIG`i ile aynı. */
+        final ayar = t['cargoIgnoresSpeed'];
         expect(
           armySpeed(
             counts,
             (id) => speeds[id],
             heroCount: t['heroCount'] as int,
+            cfg: ayar is bool
+                ? MwMapConfig(cargoIgnoresSpeed: ayar)
+                : MwMapConfig.defaults,
           ),
           t['beklenen'],
         );

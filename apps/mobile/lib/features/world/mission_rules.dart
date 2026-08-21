@@ -43,6 +43,29 @@ bool hasCrew(String type, int unitCount, int heroCount) {
       heroCount > 0;
 }
 
+/// ⭐⭐ TEK BAŞINA SALDIRI BAŞLATAMAYAN BİRİMLER — sunucudaki `CANNOT_ATTACK_ALONE`
+/// kümesinin elle senkron kopyası.
+///
+/// ⚠️⚠️ Katalog Dart'a üretilmiyor, bu yüzden liste burada elle duruyor ve **dosya
+/// başlığındaki senkron uyarısı buna da geçerli**: sunucuda küme büyürse burası da büyümeli,
+/// yoksa form sunucunun reddedeceği bir seferi göndermeye çalışır (gürültülü hâl,
+/// sessizinden iyi).
+///
+/// ⚠️⚠️ **GNOM BİLEREK DIŞARIDA.** İlk yazımda kural savaşmayan birimlerin TAMAMINI
+/// (`NONCOMBAT`) kapsıyordu; kullanıcı düzeltti (2026-08-22): *"Savaşmayan birim olsa bile o
+/// bir savaşçı sonuçta."* Gnom bir asker, yük arabası bir taşıt.
+const Set<String> kCannotAttackAlone = {'cargo_wagon'};
+
+/// ⭐⭐ YALNIZ YÜK ARABASI İLE SALDIRI BAŞLATILAMAZ (kullanıcı, 2026-08-21: *"Artık bir
+/// saldırı için yalnızca yük arabası seçilirse görev başlatılamasın."*).
+///
+/// ⚠️ YALNIZ saldırı: nakliye · destek · şehir kurmada tek başına Yük Arabası **meşru**
+/// (kullanıcının açık şartı).
+bool attackHasEscort(String type, Iterable<String> unitIds) {
+  if (type != 'attack') return true;
+  return unitIds.any((id) => !kCannotAttackAlone.contains(id));
+}
+
 /// Formda hangi birimler listelenir.
 enum MwUnitScope {
   /// Casus Kuş HARİÇ her savaşçı.
@@ -123,9 +146,15 @@ bool canSendMission({
   required bool affordCargo,
   required int cargoTotal,
   required bool pending,
+
+  /// ⭐ Seçilen birimlerin id'leri — saldırıdaki «savaşan birim var mı» kapısı için
+  /// (2026-08-21). ⚠️ Varsayılan boş: eski çağıranlar saldırı DIŞI görevlerde kapıdan
+  /// etkilenmiyor, `attackHasEscort` yalnız `attack` tipinde iş yapıyor.
+  Iterable<String> unitIds = const [],
 }) {
   if (blocked || pending) return false;
   if (!hasCrew(type, unitCount, heroCount)) return false;
+  if (!attackHasEscort(type, unitIds)) return false;
 
   final rule = formRule(type);
   if (rule.cargo && (!cargoFits || !affordCargo)) return false;

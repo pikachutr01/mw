@@ -25,6 +25,7 @@ import '../../core/world_coords.dart';
 import '../../gen/contracts.g.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
+import '../alliance/alliance_rules.dart';
 import '../chat/chat_rules.dart';
 import '../chat/chat_sheet.dart';
 import 'mission_form.dart';
@@ -69,7 +70,6 @@ Future<void> showTargetSheet(
     child: Builder(
       builder: (ctx) {
         final c = MwColors.of(ctx);
-        final scheme = Theme.of(ctx).colorScheme;
 
         if (city == null) {
           return Column(
@@ -109,7 +109,12 @@ Future<void> showTargetSheet(
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                color: city.isOwn ? scheme.primary : null,
+                                /* ⚠️ `c.own`, `scheme.primary` DEĞİL — künye Dünya
+                                   listesinden açılıyor ve orada da aynı token kullanılıyor.
+                                   Biri bronz biri lacivert kalsaydı aynı ekranın iki
+                                   parçası «benim şehrim»i farklı renkle söylerdi.
+                                   Gerekçe `MwColors.own` başlığında. */
+                                color: city.isOwn ? c.own : null,
                               ),
                             ),
                           ),
@@ -179,6 +184,19 @@ Future<void> showTargetSheet(
             if (!city.isOwn) ...[
               const SizedBox(height: 10),
               _MessageButton(playerId: city.playerId, username: city.username),
+              /* ⭐⭐ İTTİFAĞA DAVET (kullanıcı, 2026-08-22) — doküman zaten *"dünya ekranında
+                 İttifak Daveti seçeneği"* diyordu ve web'de baştan beri vardı; mobilde
+                 **hiç yoktu**, yani Konsey/Lider oyuncu telefondan kimseyi davet edemiyordu.
+
+                 ⚠️ Düğme kendi yetkisini KENDİ soruyor (`_InviteButton` içinde), burada
+                 koşul yok: karar iki veriye birden bağlı (benim rütbem + hedefin ittifakı)
+                 ve rütbe ayrı bir sorgudan geliyor. Koşulu buraya yazsaydık o sorguyu bu
+                 gövdede beklemek gerekirdi. */
+              _InviteButton(
+                playerId: city.playerId,
+                username: city.username,
+                targetHasAlliance: city.hasAlliance,
+              ),
             ],
 
             const SizedBox(height: 6),
@@ -252,6 +270,114 @@ class _MessageButtonState extends ConsumerState<_MessageButton> {
     } on MwApiError catch (e) {
       await mwTapError();
       if (mounted) setState(() => _error = chatErrorText(e.code));
+    } catch (_) {
+      await mwTapError();
+      if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
+
+/// ⭐⭐ «İTTİFAĞA DAVET» — hedefin künyesinden doğrudan davet gönderir (2026-08-22).
+///
+/// Web'deki `PlayerActions` · `InviteRow` karşılığı. Karşı taraf daveti **posta kutusundan**
+/// Kabul/Red ediyor; burada yapılan tek şey daveti yollamak.
+///
+/// ⚠️⚠️ Kendi rütbem AYRI bir sorgudan geliyor (`allianceProvider`) ve o sorgu **yalnız
+/// gerektiğinde** açılıyor: hedefin zaten ittifakı varsa davet hiçbir hâlde gönderilemez,
+/// o yüzden rütbeyi sormanın da anlamı yok. Web'de de aynı optimizasyon var
+/// (`useAlliance(0, city.hasAlliance !== true)`).
+///
+/// ⚠️ Sorgu henüz gelmemişken düğme ÇİZİLMİYOR (`?? 0` kapalı tarafa düşüyor): bir an görünüp
+/// kaybolan bir düğme, yanlışlıkla basılabilen bir düğmedir.
+/// ⚠️ Onay isteniyor (`mwConfirmSheet`): davet karşı tarafın kutusuna düşen, geri alınamayan
+/// bir bildirim. Web'de de onaylı.
+class _InviteButton extends ConsumerStatefulWidget {
+  const _InviteButton({
+    required this.playerId,
+    required this.username,
+    required this.targetHasAlliance,
+  });
+
+  final int playerId;
+  final String username;
+  final bool targetHasAlliance;
+
+  @override
+  ConsumerState<_InviteButton> createState() => _InviteButtonState();
+}
+
+class _InviteButtonState extends ConsumerState<_InviteButton> {
+  bool _busy = false;
+  bool _sent = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+
+    /* ⚠️ Hedefin ittifakı varsa sorgu HİÇ açılmıyor — gereksiz istek atmamak için. */
+    final myRole = widget.targetHasAlliance
+        ? null
+        : ref.watch(allianceProvider(0)).value?.mine?.myRole;
+
+    if (!canInviteToAlliance(
+      myRole: myRole,
+      targetHasAlliance: widget.targetHasAlliance,
+    )) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
+        if (_error != null) ...[MwErrorBox(_error!), const SizedBox(height: 8)],
+        if (_sent)
+          Text(
+            'Davet gönderildi.',
+            style: TextStyle(fontSize: 12, color: c.success),
+          )
+        else
+          MwButton(
+            label: 'İttifağa davet',
+            kind: MwButtonKind.ghost,
+            busy: _busy,
+            onTap: _invite,
+          ),
+      ],
+    );
+  }
+
+  Future<void> _invite() async {
+    final ok = await mwConfirmSheet(
+      context,
+      title: 'İttifağa davet',
+      body:
+          '${widget.username} oyuncusuna ittifak daveti gönderilecek. Emin misiniz!',
+      confirmLabel: 'Gönder',
+    );
+    if (!ok || !mounted) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(allianceActionsProvider).invite(widget.playerId);
+      if (mounted) setState(() => _sent = true);
+    } on MwApiError catch (e) {
+      await mwTapError();
+      /* ⚠️ Sunucunun KENDİ metni yazılıyor, kod çevrilmiyor: `target_has_alliance`,
+         `already_pending`, `forbidden` gibi dallar var ve her birine ayrı cümle uydurmak
+         sunucuyla ayrışan ikinci bir metin kümesi üretirdi. */
+      if (mounted) {
+        setState(
+          () => _error = e.message.isEmpty ? 'Davet gönderilemedi.' : e.message,
+        );
+      }
     } catch (_) {
       await mwTapError();
       if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');

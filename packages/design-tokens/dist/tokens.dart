@@ -30,7 +30,7 @@ class MwLightColors {
   static const Color focusRing = Color(0xFF8A5A2B);
   static const Color panelHeader = Color(0xFFC89B5A);
   static const Color onPanelHeader = Color(0xFF2B2116);
-  static const Color rowAlt = Color(0xFFF3E9D6);
+  static const Color rowAlt = Color(0xFFEDE0C6);
   static const Color bolt = Color(0xFFA97540);
 }
 

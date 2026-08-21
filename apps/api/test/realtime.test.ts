@@ -229,6 +229,24 @@ describe('outbox → istemci olayı eşlemesi', () => {
     expect(e.ref).toEqual({ cityId: 8 });
   });
 
+  /**
+   * ⭐⭐ ORDU DÖNÜŞÜ KENDİ KONUSUNDA YAYILIR (kullanıcı, 2026-08-21).
+   *
+   * ⚠️⚠️ 2026-08-21'e kadar bu olay `missions:changed` konusuna **düzleştiriliyordu**. Zararı
+   * göze batmıyordu çünkü Ordular listesi zaten tazeleniyordu; ama olayın adı istemciye hiç
+   * ulaşmadığı için iki istemcinin eşleme tablosuna `city:army_returned` satırı YAZILAMIYORDU
+   * ve dönen kahramanın ekranı (`temple`) tazelenemiyordu. Belirti sessizdi: kahraman eve
+   * varıyor, Tapınak onu «görevde» göstermeye devam ediyor, oyuncu sefere seçemiyordu.
+   *
+   * ⚠️ Test konuyu ADIYLA kilitliyor: biri tekrar `missions:changed`e düzleştirirse
+   * istemcideki `temple` satırı sessizce ölür, hata çıkmaz.
+   */
+  it('⭐ ordu dönüşü KENDİ konusunda yayılır (missions:changed\'e düzleştirilmez)', () => {
+    const e = eventForOutbox('city:army_returned', { cityId: 8, playerId: 6 }, 3)!;
+    expect(e.topic).toBe('city:army_returned');
+    expect(e.playerIds).toEqual([6]);
+  });
+
   it('bilinmeyen konu olay üretmez (sessizce yutulur)', () => {
     expect(eventForOutbox('admin:abuse_report', { x: 1 }, 1)).toBeNull();
   });

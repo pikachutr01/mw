@@ -14,7 +14,9 @@
  * çıkarılıyorsa bilinçli olsun ve karşılığı sunucuda da yazılsın.
  */
 import { describe, expect, it } from 'vitest';
-import { ARMY_OPTIONAL, HERO_MISSIONS, hasCrew } from '../src/lib/mission-rules.ts';
+import {
+  ARMY_OPTIONAL, attackHasEscort, HERO_MISSIONS, hasCrew,
+} from '../src/lib/mission-rules.ts';
 
 describe('kahraman gönderilebilen görevler', () => {
   it('dört görev: saldırı · destek · teleport · şehir kurma', () => {
@@ -69,6 +71,43 @@ describe('hasCrew — «gönder» düğmesinin kapısı', () => {
   it('⚠️ ikisi de yoksa HİÇBİR görevde geçmez', () => {
     for (const type of ['attack', 'transport', 'spy', 'support', 'teleport', 'found_city']) {
       expect(hasCrew(type, 0, 0), type).toBe(false);
+    }
+  });
+});
+
+/**
+ * ⭐⭐ YALNIZ YÜK ARABASI İLE SALDIRI BAŞLATILAMAZ (kullanıcı, 2026-08-21: *"Artık bir saldırı
+ * için yalnızca yük arabası seçilirse görev başlatılamasın… Ama sadece saldırı için geçerli,
+ * nakliye, destek gibi görevlerde sadece yük arabası seçilebilir."*).
+ *
+ * ⚠️ Sunucudaki kapının aynası (`mission.service.ts` · `sendAttack` → `no_units`). İkisi
+ * ayrışırsa ya düğme boşuna pasif kalır (sessiz) ya da form sunucunun reddedeceği bir seferi
+ * gönderir (gürültülü).
+ */
+describe('attackHasEscort — yalnız araba ile saldırı yasağı', () => {
+  it('⭐⭐ yalnız Yük Arabası ile saldırı GEÇMEZ', () => {
+    expect(attackHasEscort('attack', ['cargo_wagon'])).toBe(false);
+  });
+
+  /**
+   * ⚠️⚠️ **GNOM GEÇER ve bu bilinçli.** Kural ilk yazımda `NONCOMBAT` kümesine bağlanmıştı,
+   * yani gnom da kapıya takılıyordu. Kullanıcı düzeltti (2026-08-22): *"Savaşmayan birim olsa
+   * bile o bir savaşçı sonuçta."* Test o kararı kilitliyor — biri kümeyi tekrar `NONCOMBAT`e
+   * bağlarsa burası düşer.
+   */
+  it('⭐⭐ yalnız Gnom ile saldırı GEÇER (gnom bir asker)', () => {
+    expect(attackHasEscort('attack', ['gnome'])).toBe(true);
+    expect(attackHasEscort('attack', ['gnome', 'cargo_wagon'])).toBe(true);
+  });
+
+  it('yanında bir savaşçı varsa GEÇER', () => {
+    expect(attackHasEscort('attack', ['cargo_wagon', 'dwarf'])).toBe(true);
+  });
+
+  /* ⚠️⚠️ Kapı YALNIZ saldırıda: nakliye · destek · şehir kurmada tek başına araba MEŞRU. */
+  it('⭐⭐ saldırı DIŞINDAKİ görevlerde araba tek başına serbest', () => {
+    for (const type of ['transport', 'support', 'found_city', 'teleport']) {
+      expect(attackHasEscort(type, ['cargo_wagon']), type).toBe(true);
     }
   });
 });

@@ -89,7 +89,13 @@ export interface BattleReport {
   };
   /** Sur bilgisi — savunanda sur hiç yoksa null. */
   wall: { level: number | null; integrity: number | null; destroyed: boolean } | null;
-  /** Mağara sonucu; `escaped` YALNIZ savunanda dolar (içerik saldırana ASLA gitmez). */
+  /**
+   * Mağara sonucu; `escaped` YALNIZ savunanda dolar (içerik saldırana ASLA gitmez).
+   *
+   * ⚠️ **SAVUNANDA `null` = mağara yıkılmadı** (2026-08-21). Mağara duruyor olabilir; rapor
+   * onu yalnız YIKILDIĞINDA anlatıyor (gerekçe `buildBattleReport` içinde). Yani bu alanın
+   * boş olması «mağara yok» demek DEĞİL.
+   */
   cave: {
     present: boolean;
     broken: boolean;
@@ -98,6 +104,12 @@ export interface BattleReport {
     reason: string | null;
     escaped: Record<string, number> | null;
     repairUntil: string | null;
+    /**
+     * ⭐ Kutunun İÇİNDE basılan sonuç cümlesi (2026-08-21) — eskiden `notes` dizisindeydi.
+     * Yıkılmayan mağarada `null`. ⚠️ Eski raporlarda alan yok; istemciler `null` görüp
+     * satırı hiç çizmiyor.
+     */
+    note: string | null;
   } | null;
   loot: { gold: number; food: number } | null;
   /**
@@ -417,27 +429,24 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
    * Saldırana yalnız **hasar var/yok** bilgisi gidiyor; savunan kendi surunun tam durumunu
    * görmeye devam ediyor. (Aynı ayrım `wallProduction` notunda da uygulanıyor.)
    */
-  if (integrity != null && integrity < 1 && wallLevel > 0) {
-    if (integrity <= 0) {
-      /**
-       * ⚠️ **DURUM DEĞİL SONUÇ.** "Sur yıkıldı" bilgisi `wall.destroyed` alanında ve iki
-       * yüzeyde de basılıyor (ekranda «Sur … YIKILDI» kutusu, düz metinde `Sur: seviye N —
-       * YIKILDI`). Not eskiden onu bir kez daha söylüyordu; oyuncu aynı cümleyi iki yerde
-       * okuyordu (2026-08-17 bildirimi). Geriye yalnız kutuda OLMAYAN şey kalıyor: yıkımın
-       * savunan için doğurduğu kısıt. Saldıranda böyle bir sonuç yok → not da yok.
-       */
-      if (side === 'defender') {
-        notes.push('Sur onarılana kadar yeni savunma birimi emri veremezsin. '
-          + 'Süren üretim kesintisiz devam eder.');
-      }
-    } else if (side === 'attacker') {
-      /**
-       * ⭐ Kısmi hasarda not YALNIZ saldıranda: oran ona gitmiyor (`wall.integrity` null),
-       * dolayısıyla kutuda «hasar var» diyen hiçbir şey yok — tek sinyal bu cümle.
-       * Savunan ise yüzdeyi zaten kutuda görüyor; ona ayrıca cümle yazmak tekrardı.
-       */
-      notes.push('Rakibin suru hasar gördü.');
-    }
+  /**
+   * ⛔ **SUR YIKILINCA ÇIKAN KISIT NOTU KALDIRILDI** (kullanıcı, 2026-08-21): *"sur
+   * yıkıldığında «Sur onarılana kadar yeni savunma birimi emri veremezsin» şeklindeki bilgi
+   * notunu kaldır."* Cümle 2026-08-17'de tam da «kutuda olmayan tek şey budur» gerekçesiyle
+   * bırakılmıştı; kullanıcı kısıtın raporda anlatılmasını istemiyor.
+   *
+   * ⚠️ **KURALIN KENDİSİ DURUYOR** — kalkan yalnız cümle. Sur yıkıkken yeni savunma birimi
+   * emri hâlâ reddediliyor; oyuncu bunu emri verdiği anda, kendi ekranında öğreniyor.
+   * ⚠️ «Sur … YIKILDI» bilgisi `wall.destroyed` alanında ve iki yüzeyde de basılıyor
+   * (ekranda kutu, düz metinde `Sur: seviye N — YIKILDI`), yani yıkım görünürlüğünü
+   * korumaya devam ediyor.
+   *
+   * ⭐ Kısmi hasarda not YALNIZ saldıranda: oran ona gitmiyor (`wall.integrity` null),
+   * dolayısıyla kutuda «hasar var» diyen hiçbir şey yok — tek sinyal bu cümle. Savunan ise
+   * yüzdeyi zaten kutuda görüyor; ona ayrıca cümle yazmak tekrardı.
+   */
+  if (side === 'attacker' && integrity != null && integrity > 0 && integrity < 1 && wallLevel > 0) {
+    notes.push('Rakibin suru hasar gördü.');
   }
 
   /**
@@ -544,7 +553,40 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
    */
   const rc = r.cave;
   let cave: BattleReport['cave'] = null;
-  if (rc?.present) {
+  /**
+   * ⭐⭐ **SAVUNAN MAĞARAYI YALNIZ YIKILDIĞINDA GÖRÜR** (kullanıcı, 2026-08-21): *"Savunma
+   * raporuna mağaranın dayandığı bilgisi yazılmasın, sadece yıkılırsa yazılsın. Aynı şekilde
+   * «Mağaran dayandı: yıkılması için xxx cüce gerekiyordu» gibi ek bilgi de eklenmesin."*
+   *
+   * ⚠️ Kapı hem KUTUYU hem NOTU kapatıyor: `cave` null bırakılınca iki istemci de (ve düz
+   * metin dökümü de) mağara bölümünü hiç çizmiyor. Alanı doldurup «istemci gizlesin» demek,
+   * aynı kararı üç yerde tekrarlamak olurdu — biri unutulduğunda bilgi geri sızardı.
+   *
+   * ⚠️ «zaten yıkıktı» hâli de savunana GÖSTERİLMİYOR: o da bir yıkım değil, saldırının
+   * mağarayı değiştirmediği bir durum. Kullanıcının ölçütü *"sadece yıkılırsa"*.
+   *
+   * ⭐ SALDIRAN DEĞİŞMEDİ: ona kutu «gereken N cüce · sağ kalan M» sayısını veriyor ve bu
+   * sayı bir sonraki saldırının planı — kullanıcının kaldırdığı şey savunanın gördüğü tekrar.
+   */
+  if (rc?.present && (side === 'attacker' || rc.broken)) {
+    /**
+     * ⭐ **SONUÇ CÜMLESİ ARTIK KUTUNUN İÇİNDE** (kullanıcı, 2026-08-21): *"mağara yıkıldığında
+     * içindeki ordu şehre kaçıyor bilgi notunu aynı kutu içinde yazalım. Ayrı ayrı notlar
+     * olmasın."* Cümle eskiden `notes` dizisine giriyordu ve ekranın en altında, mağara
+     * kutusundan kopuk bir madde işareti olarak çıkıyordu.
+     *
+     * ⚠️ Metin yine SUNUCUDA tek yerde: iki istemcinin cümleyi kendi içine gömmesi, aynı
+     * olayın iki farklı anlatımına açık kapı bırakırdı (`kReportFilters` etiketlerinde tam
+     * bu ayrışma riski yazılı).
+     * ⚠️ **DURUM SÖZCÜĞÜ BURADA TEKRARLANMIYOR** (2026-08-17): yıkılıp yıkılmadığı
+     * `broken`/`reason` alanlarında; bu cümle yalnız kutunun söylemediğini taşır — savunan
+     * için SONUÇ, saldıran için SAYI.
+     */
+    const note = rc.broken
+      ? (side === 'defender'
+        ? 'İçerideki ordu şehre kaçıyor; mağara onarılana kadar kullanılamaz.'
+        : `Yıkmak için ${tr(rc.survivingDwarves)} cüce yeterli oldu.`)
+      : null;
     cave = {
       present: true,
       broken: rc.broken,
@@ -553,31 +595,8 @@ export function buildBattleReport(battle: BattleRow, side: ReportSide): BattleRe
       reason: rc.reason,
       escaped: side === 'defender' ? (r.defenderPrivate?.cave?.escaped ?? null) : null,
       repairUntil: side === 'defender' ? (r.defenderPrivate?.cave?.repairUntil ?? null) : null,
+      note,
     };
-    /**
-     * ⚠️ **DURUM SÖZCÜĞÜ NOTTA TEKRARLANMIYOR** (2026-08-17). Mağaranın yıkılıp yıkılmadığı
-     * `cave.broken`/`cave.reason` alanlarında ve ekranın kutusunda yazıyor; not yalnız kutunun
-     * söylemediğini taşır — savunan için SONUÇ, saldıran için SAYI.
-     */
-    if (rc.broken) {
-      notes.push(side === 'defender'
-        ? 'İçerideki ordu şehre kaçıyor; mağara onarılana kadar kullanılamaz.'
-        : `Yıkmak için ${tr(rc.survivingDwarves)} cüce yeterli oldu.`);
-    } else if (rc.reason === 'already_repairing') {
-      /* Kutu bu durumu ayrı yazıyor («zaten yıkıktı»); notta yalnız savunanı ilgilendiren
-         ayrıntı kalıyor — saldırana söylenecek fazladan bir şey yok. */
-      if (side === 'defender') {
-        notes.push('Onarım süresi uzamadı; mağaran yeniden yıkılmadı.');
-      }
-    } else if (rc.reason === 'not_enough_dwarves' && side === 'defender') {
-      /**
-       * ⚠️ Saldıranda not YOK: kutu ona zaten «(gereken N cüce · sağ kalan M)» yazıyor —
-       * bir dahaki sefere kaç cüce getireceğini oradan okuyor. Savunana kutu sayı basmıyor,
-       * bu yüzden cümle ona kalıyor.
-       */
-      notes.push(`Mağaran dayandı: yıkılması için ${tr(rc.required)} cüce gerekiyordu, `
-        + `${tr(rc.survivingDwarves)} cüce sağ kaldı.`);
-    }
   }
 
   const coords = r.coords ?? battle.fallbackCoords ?? null;
@@ -670,6 +689,9 @@ function renderText(r: BattleReport): string {
       ? ` (gereken ${tr(r.cave.required)} cüce · sağ kalan ${tr(r.cave.survivingDwarves)})`
       : '';
     out.push(`Mağara: ${durum}${sayi}`);
+    /* ⚠️ Sonuç cümlesi 2026-08-21'de `notes`tan `cave.note`a taşındı; düz metinde de mağara
+       satırının ALTINDA kalması gerekiyor, yoksa dökümün sonundaki maddelerden düşerdi. */
+    if (r.cave.note) out.push(`  ${r.cave.note}`);
   }
 
   if (r.loot) {

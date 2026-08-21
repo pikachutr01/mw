@@ -120,6 +120,9 @@ void main() {
   });
 
   group('canSendMission', () {
+    /// ⚠️ `unitIds` varsayılanı **savaşan** bir birim (`dwarf`): saldırıdaki «savaşan birim
+    /// var mı» kapısı 2026-08-21'de eklendi ve varsayılanı boş bırakmak buradaki her saldırı
+    /// senaryosunu kapatırdı. Kapının kendisi ayrı bir grupta ölçülüyor.
     bool gonder({
       String type = 'attack',
       bool blocked = false,
@@ -129,6 +132,7 @@ void main() {
       bool affordCargo = true,
       int cargoTotal = 0,
       bool pending = false,
+      Iterable<String> unitIds = const ['dwarf'],
     }) => canSendMission(
       type: type,
       blocked: blocked,
@@ -138,10 +142,45 @@ void main() {
       affordCargo: affordCargo,
       cargoTotal: cargoTotal,
       pending: pending,
+      unitIds: unitIds,
     );
 
     test('ordu seçiliyse saldırı gönderilebilir', () {
       expect(gonder(), isTrue);
+    });
+
+    /// ⭐⭐ SALDIRIDA SAVAŞAN BİRİM ŞART (kullanıcı, 2026-08-21: *"Artık bir saldırı için
+    /// yalnızca yük arabası seçilirse görev başlatılamasın… Ama sadece saldırı için geçerli,
+    /// nakliye, destek gibi görevlerde sadece yük arabası seçilebilir."*).
+    test('⭐⭐ yalnız Yük Arabası ile SALDIRI gönderilemez', () {
+      expect(gonder(unitIds: const ['cargo_wagon']), isFalse);
+      // Yanına bir savaşçı girince açılıyor.
+      expect(gonder(unitIds: const ['cargo_wagon', 'dwarf']), isTrue);
+    });
+
+    /// ⚠️⚠️ **GNOM GEÇER ve bu bilinçli.** İlk yazımda kural savaşmayan birimlerin tamamını
+    /// kapsıyordu; kullanıcı düzeltti (2026-08-22): *"Savaşmayan birim olsa bile o bir savaşçı
+    /// sonuçta."* Test o kararı kilitliyor.
+    test('⭐⭐ yalnız Gnom ile saldırı GÖNDERİLEBİLİR (gnom bir asker)', () {
+      expect(gonder(unitIds: const ['gnome']), isTrue);
+      expect(gonder(unitIds: const ['gnome', 'cargo_wagon']), isTrue);
+    });
+
+    /// ⚠️⚠️ Kapı YALNIZ saldırıda: nakliye · destek · şehir kurmada tek başına araba meşru.
+    test('⭐⭐ nakliye/destek/kuruluşta tek başına araba SERBEST', () {
+      expect(
+        gonder(
+          type: 'transport',
+          cargoTotal: 100,
+          unitIds: const ['cargo_wagon'],
+        ),
+        isTrue,
+      );
+      expect(gonder(type: 'support', unitIds: const ['cargo_wagon']), isTrue);
+      expect(
+        gonder(type: 'found_city', unitIds: const ['cargo_wagon']),
+        isTrue,
+      );
     });
 
     /// ⚠️⚠️ Dünya listesindeki kısayol seçenek listesini ATLAYABİLİYOR — acemi korumasındaki

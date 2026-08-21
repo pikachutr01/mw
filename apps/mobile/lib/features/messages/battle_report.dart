@@ -245,6 +245,7 @@ class BattleCave {
     required this.survivingDwarves,
     required this.reason,
     required this.escaped,
+    required this.note,
   });
 
   final bool present;
@@ -260,6 +261,15 @@ class BattleCave {
   /// silerek gönderiyor ve istemci onu yeniden türetmeye çalışmıyor.
   final Map<String, int> escaped;
 
+  /// ⭐ Kutunun İÇİNDE basılan sonuç cümlesi (kullanıcı, 2026-08-21: *"aynı kutu içinde
+  /// yazalım. Ayrı ayrı notlar olmasın."*) — eskiden `notes` listesinde, raporun en altındaydı.
+  ///
+  /// ⚠️ Metin SUNUCUDAN geliyor, burada yazılmıyor: savunan için «içerideki ordu şehre
+  /// kaçıyor…», saldıran için «yıkmak için N cüce yeterli oldu». Cümleyi istemciye gömmek,
+  /// aynı olayın web ile mobilde ayrışmasına açık kapı bırakırdı.
+  /// ⚠️ Yıkılmayan mağarada ve ESKİ kayıtlarda `null` → satır hiç çizilmiyor.
+  final String? note;
+
   static BattleCave? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final esc = raw['escaped'];
@@ -269,6 +279,7 @@ class BattleCave {
       needed: (raw['required'] as num?)?.toInt() ?? 0,
       survivingDwarves: (raw['survivingDwarves'] as num?)?.toInt() ?? 0,
       reason: raw['reason'] as String?,
+      note: raw['note'] as String?,
       escaped: {
         if (esc is Map)
           for (final e in esc.entries)

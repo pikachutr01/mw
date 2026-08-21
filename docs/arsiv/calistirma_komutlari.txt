@@ -1,8 +1,137 @@
-İlk terminal: docker compose -f compose.dev.yml up -d && pnpm db:migrate && pnpm build
-İkinci terminal:    cd C:/Projects/misc/ghidra/mw/apps/api && node --env-file=../../.env dist/main.js
-üçüncü terminal: cd mw/apps/web && pnpm --filter @mobilwar/web dev
-admin panel: cd mw/apps/admin && pnpm --filter @mobilwar/admin dev
+═══════════════════════════════════════════════════════════════════════════════
+ MobilWar — ÇALIŞTIRMA KOMUTLARI  (web · api · admin · mobil)
+═══════════════════════════════════════════════════════════════════════════════
+ Depo kökü:  C:\Projects\misc\ghidra\mw
+ Portlar:    api 3002  ·  web 5173  ·  admin 5174  ·  postgres 5432
+
+ ⚠️ Her blok AYRI bir terminal ister (hepsi ön planda çalışan süreçler).
+ ⚠️ Komutlar aksi yazmadıkça DEPO KÖKÜNDEN çalıştırılır.
 
 
-Bir şeyler test giderse: node apps/api/scripts/smoke.mjs http://localhost:3002
-API'nin bütün uçlarını gerçek HTTP'den geçirir, "API mi bozuk arayüz mü" sorusunu tek seferde cevaplar
+───────────────────────────────────────────────────────────────────────────────
+ 0) ALTYAPI — Postgres (her bilgisayar açılışında bir kez)
+───────────────────────────────────────────────────────────────────────────────
+    cd C:\Projects\misc\ghidra\mw
+    pnpm dev:infra
+
+  Kontrol:  docker ps        → mw-postgres "Up (healthy)" görünmeli
+  Durdurma: pnpm dev:infra:down
+
+  ⚠️ Bilgisayar kapanınca konteyner durur ama SİLİNMEZ; veri
+     `mw-pgdata` biriminde durur. Yukarıdaki komut duranı geri kaldırır.
+  ⚠️ Redis ve Mailpit KAPALI (bilinçli, gerekçesi compose.dev.yml içinde).
+     Dev'de mailler API log'una basılır, ayrı bir posta kutusu aramayın.
+
+
+───────────────────────────────────────────────────────────────────────────────
+ 1) GÖÇ + DERLEME — yalnız şema/kod değiştiyse
+───────────────────────────────────────────────────────────────────────────────
+    pnpm db:migrate          # yeni migration varsa ŞART (api açılmadan önce)
+    pnpm build               # turbo ile derleme
+
+  ⚠️ turbo çalışmazsa (Windows Smart App Control turbo.exe'yi ara sıra
+     engelliyor) yedek yol:
+    pnpm build:turbosuz
+
+
+───────────────────────────────────────────────────────────────────────────────
+ 2) API   →  http://localhost:3002        (1. terminal)
+───────────────────────────────────────────────────────────────────────────────
+    pnpm --filter @mobilwar/api dev
+
+  Ne yapar: `tsc` ile derler, sonra `node --watch dist/main.js` koşar.
+  Hazır işareti (log'da):   "api hazır → http://localhost:3002/healthz · ws /ws"
+  Sağlık kontrolü:          http://localhost:3002/healthz  → 200
+
+  Derlemeden koşmak (izlemesiz, daha hızlı açılış):
+    cd apps\api
+    node --env-file=..\..\.env dist\main.js
+
+  ⚠️ .env dosyası DEPO KÖKÜNDE. `--env-file` yolu bu yüzden `../../.env`.
+  ⚠️ API kapalıyken web'de "proxy error ECONNREFUSED", mobilde "veri gelmiyor"
+     görünür. Belirti arayüzde çıkar, sebep buradadır.
+
+
+───────────────────────────────────────────────────────────────────────────────
+ 3) WEB   →  http://localhost:5173        (2. terminal)
+───────────────────────────────────────────────────────────────────────────────
+    pnpm --filter @mobilwar/web dev
+
+  ⚠️ Web, /api isteklerini Vite proxy'si ile 3002'ye taşır. Yani ÖNCE API.
+     API kapalıyken sayfa açılır ama tüm veri boş gelir.
+
+
+───────────────────────────────────────────────────────────────────────────────
+ 4) ADMİN →  http://localhost:5174        (3. terminal)
+───────────────────────────────────────────────────────────────────────────────
+    pnpm --filter @mobilwar/admin dev
+
+
+───────────────────────────────────────────────────────────────────────────────
+ 5) MOBİL (Flutter)                        (4. terminal)
+───────────────────────────────────────────────────────────────────────────────
+ ⭐ ÖNERİLEN — tüneli de kuran başlatıcı:
+
+    cd C:\Projects\misc\ghidra\mw\apps\mobile
+    .\tool\dev.ps1
+
+  Betik sırayla: adb'yi bulur → bağlı cihazı seçer → `adb reverse` tünelini
+  kurar → /healthz'i yoklar → `flutter run --debug` koşar.
+  Birden fazla cihaz varsa:   .\tool\dev.ps1 -Device R6CW500FM4M
+
+ ─ ELLE yapmak gerekirse (üç adım, SIRASI önemli) ─────────────────────────────
+
+    adb devices                          # cihaz "device" durumunda mı
+    adb reverse tcp:3002 tcp:3002        # ⚠️ ASIL ADIM — bunsuz bağlanamaz
+    flutter run --debug
+
+  Tünel kuruldu mu:   adb reverse --list   → "tcp:3002 tcp:3002" görünmeli
+
+ ⚠️⚠️ "flutter run çalıştı ama API'ye bağlanamıyor" arızasının SEBEBİ HEP BU:
+    Uygulama geliştirmede http://127.0.0.1:3002'ye bakar; telefonda oradaki
+    dinleyici `adb reverse` tünelidir. Tünel KALICI DEĞİL, şu üç durumda düşer:
+       • USB kablosu çıkıp takılınca
+       • `flutter install` / `flutter run` kurulum adımında
+       • telefon yeniden başlayınca
+    Düştüğünde ekran "API çökmüş" gibi görünür, oysa API sapasağlamdır.
+    Çözüm tek satır:  adb reverse tcp:3002 tcp:3002
+
+ ⛔ `flutter run --release` KULLANMA: release APK yerel API'ye ASLA bağlanamaz
+    (Android 9+ cleartext yasağı; izin yalnız debug manifestinde). Hata mesajı
+    bunu söylemez, yalnız "Dünya listesi alınamadı" yazar.
+
+ ⚠️ adb PATH'te yoksa bu makinedeki tam yol:
+       C:\Android\Sdk\platform-tools\adb.exe
+    (Android Studio varsayılanı olan %LOCALAPPDATA%\Android\Sdk DEĞİL.)
+
+
+───────────────────────────────────────────────────────────────────────────────
+ 6) SIRAYLA AÇILIŞ ÖZETİ  (sıfırdan, bilgisayar yeni açıldıysa)
+───────────────────────────────────────────────────────────────────────────────
+    1. pnpm dev:infra                          # postgres
+    2. pnpm db:migrate                         # yalnız yeni göç varsa
+    3. pnpm --filter @mobilwar/api dev         # 1. terminal → 3002
+    4. pnpm --filter @mobilwar/web dev         # 2. terminal → 5173
+    5. pnpm --filter @mobilwar/admin dev       # 3. terminal → 5174
+    6. cd apps\mobile ; .\tool\dev.ps1         # 4. terminal → telefon
+
+
+───────────────────────────────────────────────────────────────────────────────
+ 7) ARIZA ARAMA
+───────────────────────────────────────────────────────────────────────────────
+  API mi bozuk arayüz mü — tek seferde cevaplar:
+    node apps\api\scripts\smoke.mjs http://localhost:3002
+    (API'nin bütün uçlarını gerçek HTTP'den geçirir.)
+
+  Belirti                                   → İlk bakılacak yer
+  ──────────────────────────────────────────────────────────────────────────
+  Mobilde veri gelmiyor, yükleme takılı      → adb reverse tcp:3002 tcp:3002
+  Web'de "proxy error ECONNREFUSED"          → API kapalı (2. blok)
+  API açılırken veritabanı hatası            → pnpm dev:infra + pnpm db:migrate
+  Yeni alan/uç görünmüyor                    → API bayat; süreci yeniden başlat
+  turbo komutu sessizce ölüyor               → pnpm build:turbosuz
+  Mobilde "Dünya listesi alınamadı"          → --release ile kurulmuş olabilir
+
+  Testler:
+    pnpm test                 # tüm çalışma alanı (turbo)
+    pnpm test:turbosuz        # turbo engellenirse yedek yol

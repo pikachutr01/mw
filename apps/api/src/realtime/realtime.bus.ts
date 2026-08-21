@@ -229,9 +229,25 @@ export function eventForOutbox(
         ref: { missionId: num(payload['missionId']), cityId: num(payload['targetCityId']) },
       };
 
+    /**
+     * ⭐⭐ ORDU EVE DÖNDÜ — **kendi konusu** (kullanıcı, 2026-08-21: *"ordu şehre geri
+     * döndüğünde oyun açık durumda olunca görevlerde anlık olarak kullanılabilir hâle
+     * gelmeli"*).
+     *
+     * ⚠️⚠️ Bu olay 2026-08-21'e kadar `missions:changed` konusuna **düzleştiriliyordu**, yani
+     * olayın kendi adı istemciye HİÇ ulaşmıyordu. Sonuç: iki istemcinin eşleme tablosunda
+     * `city:army_returned` satırı yazılamıyordu ve dönen KAHRAMAN'ın ekranı (`temple`)
+     * tazelenmiyordu — kahraman eve varmış ama Tapınak onu hâlâ «görevde» gösteriyordu ve
+     * oyuncu yeni sefere seçemiyordu.
+     *
+     * ⚠️ Düzleştirme kaldırıldı ama **hiçbir şey kaybolmuyor**: aynı dönüş için scheduler
+     * ayrıca `mission:completed` yayıyor (o da `missions:changed`e gidiyor) ve handler
+     * `city:changed` yayıyor. Yani Ordular listesi ve şehir verisi bu satır olmadan da
+     * tazeleniyordu; eksik olan tek şey kahramandı.
+     */
     case 'city:army_returned':
       return {
-        topic: 'missions:changed', worldId,
+        topic: 'city:army_returned', worldId,
         playerIds: players(num(payload['playerId'])),
         ref: { cityId: num(payload['cityId']) },
       };

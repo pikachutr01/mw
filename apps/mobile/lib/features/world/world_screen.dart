@@ -613,8 +613,12 @@ class _Row extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            // ⭐ Kendi şehrim vurgulu; müttefik rozetle ayrılıyor.
-                            color: city.isOwn ? scheme.primary : null,
+                            /* ⭐ Kendi şehrim vurgulu; müttefik rozetle ayrılıyor.
+                               ⚠️ `c.own` (lacivert), `scheme.primary` (bronz) DEĞİL —
+                               kullanıcı 2026-08-21: *"açık modda pek belli olmuyor"*.
+                               Web aynı şikâyetle 2026-08-11'de geçmişti; gerekçenin
+                               tamamı `MwColors.own` başlığında. */
+                            color: city.isOwn ? c.own : null,
                           ),
                         ),
                       ),

@@ -2108,6 +2108,16 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
     description: 'Hiçbir sefer bundan uzun sürmez. ⚠️ Düşürmek haritanın uzak yarısını tek bir '
       + 'süreye eziyor: 1 kıta ötesi ile 5 kıta ötesi ayırt edilemez hâle gelir.',
   },
+  {
+    key: 'map.cargoIgnoresSpeed',
+    label: 'Yük Arabası kafileyi yavaşlatmasın',
+    type: 'boolean', default: true, tag: 'design',
+    description: 'Açıkken Yük Arabası, yanında başka birim varken sefer süresine HİÇ '
+      + 'girmez: kafile en yavaş SAVAŞÇISININ hızıyla gider. Kapalıyken arabanın 140 hızı da '
+      + 'hesaba girer ve bir Ejderha ordusunu (160) yavaşlatır.',
+    note: '⚠️ Muafiyet refakat şartlı: araba tek başına gönderildiğinde (nakliye, destek, '
+      + 'şehir kurma) her hâlükârda kendi hızıyla yürür. ⚠️ Gnom bu muafiyete DAHİL DEĞİL.',
+  },
 
   /* ── Askerî ünvanlar ─────────────────────────────────────────────────────────
    *

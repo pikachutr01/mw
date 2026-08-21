@@ -24,6 +24,15 @@ import 'dart:math' as math;
 /// gelirse buraya değil, **sunucu yanıtına** taşınmalı.
 const int kHeroSpeed = 200;
 
+/// ⭐⭐ ORDUYU YAVAŞLATMAYAN BİRİMLER — refakatçi varken hız hesabına girmezler.
+///
+/// ⚠️⚠️ Sunucudaki `SPEED_EXEMPT_WHEN_ESCORTED` kümesinin **elle senkron kopyası**: katalog
+/// Dart'a üretilmiyor (gerekçe dosya başlığında). Ayrışırsa önizleme sunucudan farklı bir
+/// süre yazar ve bunu yakalayacak bir kapı YOK — bu yüzden kümeyi büyütürken iki tarafa da
+/// bakılmalı.
+/// ⚠️ Gnom bilerek DIŞARIDA (kullanıcı kararı, 2026-08-21); sunucuda da öyle.
+const Set<String> kSpeedExemptWhenEscorted = {'cargo_wagon'};
+
 /// Harita sabitleri.
 ///
 /// ⚠️⚠️ Varsayılanlar burada duruyor ama **istemci onlara güvenmemeli**: panelden dünya başına
@@ -40,6 +49,7 @@ class MwMapConfig {
     this.continentCrossSeconds = 0,
     this.capHours = 24,
     this.cartographyStep = 0.05,
+    this.cargoIgnoresSpeed = true,
   });
 
   /// Bir diyar farkının kaç «şehir» ettiği.
@@ -66,6 +76,15 @@ class MwMapConfig {
 
   /// Haritacılık seviye başına hız kazancı.
   final num cartographyStep;
+
+  /// ⭐⭐ YÜK ARABASI KAFİLEYİ YAVAŞLATMASIN — dünya ayarı (`map.cargoIgnoresSpeed`).
+  ///
+  /// Açıkken (varsayılan) araba, orduda başka yürüyen birim varken en-yavaş hesabına
+  /// girmiyor. Kapalıyken 2026-08-21 öncesi davranış: arabanın 140 hızı da sayılıyor.
+  /// ⚠️ Muafiyet refakat şartlı; gerekçenin tamamı motorun `MapConfig`inde.
+  /// ⚠️ Bu bayrak **önizleme** için: otorite `execute_at` yazan sunucu. Ayrışırsa oyuncuya
+  /// yazan süre ile gerçekleşen süre tutmaz — alanı eklememek tam olarak bunu üretirdi.
+  final bool cargoIgnoresSpeed;
 
   static const MwMapConfig defaults = MwMapConfig();
 
@@ -94,6 +113,11 @@ class MwMapConfig {
       ),
       capHours: at('capHours', d.capHours),
       cartographyStep: at('cartographyStep', d.cartographyStep),
+      /* ⚠️ Sayı değil BOOLEAN: `at()` yardımcısı `num` bekliyor, bu alan onunla okunamaz.
+         Eksik/bozuk gelirse varsayılana (açık) düşüyor. */
+      cargoIgnoresSpeed: raw['cargoIgnoresSpeed'] is bool
+          ? raw['cargoIgnoresSpeed'] as bool
+          : d.cargoIgnoresSpeed,
     );
   }
 }
@@ -138,18 +162,30 @@ MwRoute route(
 /// ⚠️ Hız çözümü **dışarıdan** (`speedOf`): katalog Dart'a üretilmiyor, gerekçe dosya başlığında.
 /// ⚠️ Bilinmeyen id ya da yürüyemeyen birim (hız ≤ 0) → `null`. Çağıran bunu doğrulama hatası
 /// sayar; sessizce 0 kabul etmek sonsuz süre üretirdi.
+/// ⭐⭐ **YÜK ARABASI MUAFİYETİ** (2026-08-21) — `cfg.cargoIgnoresSpeed` açıkken, orduda
+/// başka yürüyen birim varken araba en-yavaş hesabına GİRMEZ. Motorun `armySpeed`i ile
+/// birebir aynı kural; ikisi ayrışırsa önizleme ile gerçek varış anı ayrışır.
 int? armySpeed(
   Map<String, int> counts,
   int? Function(String id) speedOf, {
   int heroCount = 0,
+  MwMapConfig cfg = MwMapConfig.defaults,
 }) {
-  int? enYavas;
+  /* ⚠️ İki aday birden toplanıyor: hangisinin geçerli olacağı ancak döngü bitince belli
+     oluyor. Muaf olmayan hiç birim yoksa (yalnız araba gönderilmiş) muafiyet DÜŞÜYOR ve
+     arabanın kendi hızı geçerli oluyor. */
+  int? hepsi;
+  int? refakat;
   for (final e in counts.entries) {
     if (e.value <= 0) continue;
     final s = speedOf(e.key) ?? 0;
     if (s <= 0) return null;
-    if (enYavas == null || s < enYavas) enYavas = s;
+    if (hepsi == null || s < hepsi) hepsi = s;
+    if (kSpeedExemptWhenEscorted.contains(e.key)) continue;
+    if (refakat == null || s < refakat) refakat = s;
   }
+
+  int? enYavas = (cfg.cargoIgnoresSpeed && refakat != null) ? refakat : hepsi;
   if (heroCount > 0 && (enYavas == null || kHeroSpeed < enYavas)) {
     enYavas = kHeroSpeed;
   }

@@ -111,6 +111,49 @@
       "speeds": {},
       "heroCount": 0,
       "beklenen": null
+    },
+    {
+      "ad": "⭐⭐ Yük Arabası kafileyi YAVAŞLATMAZ — ejderha ordusu 160'ta kalır",
+      "counts": { "dragon": 10, "cargo_wagon": 5 },
+      "speeds": { "dragon": 160, "cargo_wagon": 140 },
+      "heroCount": 0,
+      "beklenen": 160
+    },
+    {
+      "ad": "⭐ araba muaf ama EN YAVAŞ savaşçı yine belirler (cüce 100)",
+      "counts": { "dwarf": 10, "dragon": 10, "cargo_wagon": 5 },
+      "speeds": { "dwarf": 100, "dragon": 160, "cargo_wagon": 140 },
+      "heroCount": 0,
+      "beklenen": 100
+    },
+    {
+      "ad": "⭐⭐ TEK BAŞINA araba — muafiyet DÜŞER, kendi hızı geçerli",
+      "counts": { "cargo_wagon": 5 },
+      "speeds": { "cargo_wagon": 140 },
+      "heroCount": 0,
+      "beklenen": 140
+    },
+    {
+      "ad": "⚠️ kahraman REFAKATÇİ SAYILMAZ — araba + kahraman yine 140",
+      "counts": { "cargo_wagon": 5 },
+      "speeds": { "cargo_wagon": 140 },
+      "heroCount": 1,
+      "beklenen": 140
+    },
+    {
+      "ad": "⚠️ ayar KAPALIYKEN araba yine yavaşlatıyor (eski davranış)",
+      "counts": { "dragon": 10, "cargo_wagon": 5 },
+      "speeds": { "dragon": 160, "cargo_wagon": 140 },
+      "heroCount": 0,
+      "cargoIgnoresSpeed": false,
+      "beklenen": 140
+    },
+    {
+      "ad": "⚠️⚠️ GNOM muaf DEĞİL — ejderha ordusunu 120'ye çeker",
+      "counts": { "dragon": 10, "gnome": 5 },
+      "speeds": { "dragon": 160, "gnome": 120 },
+      "heroCount": 0,
+      "beklenen": 120
     }
   ],
 

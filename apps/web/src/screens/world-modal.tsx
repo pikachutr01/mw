@@ -25,7 +25,9 @@ import {
   AmountInput, Badge, Button, Empty, ErrorBox, MissionIcon, UserText,
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
-import { ARMY_OPTIONAL, HERO_MISSIONS, hasCrew } from '../lib/mission-rules.ts';
+import {
+  ARMY_OPTIONAL, attackHasEscort, HERO_MISSIONS, hasCrew,
+} from '../lib/mission-rules.ts';
 import { canInviteToAlliance } from '../lib/chat-moderation.ts';
 
 /**
@@ -321,7 +323,8 @@ function HeroPicker({ cityId, picked, onChange }: {
 
   return (
     <div>
-      <div className="mb-1 text-[11px] text-muted">Kahraman (isteğe bağlı)</div>
+      {/* ⚠️ «(isteğe bağlı)» eki KALDIRILDI (kullanıcı, 2026-08-21) — mobil başlıkla aynı. */}
+      <div className="mb-1 text-[11px] text-muted">Kahraman</div>
       <ul className="divide-y divide-border rounded-[var(--radius-sm)] border border-border">
         {list.map((h) => (
           <li key={h.id}>
@@ -383,7 +386,10 @@ function MissionForm({
    * `armySpeed({}, 1)` zaten `HERO_SPEED`i (200) döndürüyor. Ordu da kahraman da yoksa
    * fonksiyon kendiliğinden `null` veriyor, ayrı bir dala gerek yok.
    */
-  const speed = armySpeed(units, HERO_MISSIONS.has(type) ? heroIds.length : 0);
+  /* ⚠️ `mapCfg` hız hesabına da giriyor (2026-08-21): Yük Arabası muafiyeti
+     (`map.cargoIgnoresSpeed`) dünya ayarı ve önizleme sunucuyla aynı kuralı görmeli, yoksa
+     araba içeren kafilede yazan süre ile gerçekleşen süre ayrışır. */
+  const speed = armySpeed(units, HERO_MISSIONS.has(type) ? heroIds.length : 0, mapCfg);
   const cartography = city.data?.techs['cartography'] ?? 0;
   // Dünya hız çarpanı sunucu hesabıyla AYNI olmalı — yoksa gösterilen süre hızlı dünyada
   // çarpan katı kadar yanlış çıkar.
@@ -447,9 +453,14 @@ function MissionForm({
   });
 
   // Nakliyede kargo ZORUNLU (boş nakliyenin anlamı yok), destek ve şehir kurmada isteğe bağlı.
+  /* ⭐ Saldırıda savaşan birim şartı (2026-08-21) — sunucudaki kapının aynası
+     (`mission.service.ts` · `sendAttack`). Gerekçe `attackHasEscort`da. */
+  const escortOk = attackHasEscort(type, Object.keys(units));
+
   const canSend = cityId != null
     && !blocked
     && crewOk
+    && escortOk
     && (!rule.cargo || (cargoFits && affordCargo))
     && (type !== 'transport' || cargoTotal > 0)
     && !send.isPending;
@@ -547,10 +558,18 @@ function MissionForm({
           </ul>
           {list.every((u) => (freeUnits[u.id] ?? 0) <= 0) ? (
             <Empty>
+              {/*
+                ⚠️ «kahraman tek başına da gidebilir» eki KALDIRILDI (kullanıcı, 2026-08-21:
+                *"Kahramanın tek başına gidebileceği bilgisini buraya yazmaya gerek yok"*).
+                Kural DEĞİŞMEDİ — kahraman hâlâ tek başına gidebiliyor (`ARMY_OPTIONAL`);
+                yalnız boş ordu kutusu artık bunu duyurmuyor. Kahraman seçici zaten hemen
+                altında ve gönder düğmesi kahramanla açılıyor, yani bilgi ekranda duruyor.
+                ⚠️ Metin mobildekiyle BİREBİR aynı (`mission_form.dart` · `_bosOrduMetni`).
+              */}
               {rule.units === 'spy'
                 ? 'Şehrinde Casus Kuş yok. Önce Baraka\'dan üret.'
                 : ARMY_OPTIONAL.has(type)
-                  ? 'Şehrinde savaşçı yok — kahraman tek başına da gidebilir.'
+                  ? 'Şehrinde savaşçı veya kahraman yok.'
                   : 'Şehrinde savaşçı yok. Önce Baraka\'dan üret.'}
             </Empty>
           ) : null}

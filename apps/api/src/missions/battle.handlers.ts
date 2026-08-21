@@ -385,14 +385,24 @@ export function createAttackHandler(cities: CityService): MissionHandler {
       xpShare: result.xp * (attackerWon ? winShare : loseShare),
     });
 
-    /* ⭐ YENİ KAHRAMAN — yalnız kazanan tarafta, kendi şehrinde. */
-    const capturedHero = await maybeCaptureHero(ctx, {
+    /**
+     * ⭐ YENİ KAHRAMAN — yalnız kazanan tarafta.
+     *
+     * ⚠️ SALDIRAN kazandıysa kahraman savaş alanında doğuyor ve ordu kafilesiyle eve
+     * yürüyor (`travels`); SAVUNAN kazandıysa zaten kendi şehrinde. Gerekçenin tamamı
+     * `maybeCaptureHero` içinde.
+     */
+    const captured = await maybeCaptureHero(ctx, {
       playerId: attackerWon ? attackerPlayerId : defenderCity.playerId,
       worldId: ctx.worldId,
       cityId: attackerWon ? originCityId : targetCityId,
       chance: result.captureChance,
       maxHeroes: cfg.capture.maxHeroes,
+      travels: attackerWon,
     });
+    const capturedHero = captured?.name ?? null;
+    /** ⚠️ Dönüş görevi bu yüzden ZORUNLU: kahraman `mission_heroes`'a yazıldı. */
+    const capturedTravels = captured != null && attackerWon;
 
     /**
      * ⭐ RAPOR ZENGİNLEŞTİRME (kullanıcı 2026-07-30): rapor modalı `battles.result`'tan
@@ -461,7 +471,17 @@ export function createAttackHandler(cities: CityService): MissionHandler {
     const survivors = warriorsOnly(result.attacker.counts);
     const anySurvivor = attackerSurvivorCount > 0;
     const heroesComingHome = attackerHeroes.carriedIds.length > 0;
-    if (anySurvivor || heroesComingHome) {
+    /**
+     * ⚠️⚠️ **`capturedTravels` KOŞULU ŞART** (2026-08-21): savaştan çıkan kahraman
+     * `mission_heroes`'a yazıldı ve `city_id`'si NULL. Dönüş görevi kurulmazsa o satır
+     * bitmiş bir görevi işaret eder ve kahraman **kalıcı olarak ortada kalır** — ne evde
+     * görünür ne de bir seferde.
+     *
+     * ⚠️ Görünürde imkânsız bir hâl için yazılmadı: saldıran KAZANIP tek bir savaşçısı bile
+     * kalmayabiliyor (karşılıklı imha) ve tam o savaşta kahraman çıkabiliyor. O dalda
+     * `anySurvivor` da `heroesComingHome` de false olurdu.
+     */
+    if (anySurvivor || heroesComingHome || capturedTravels) {
       await scheduleReturn(ctx, {
         originCityId, battleId, units: survivors, loot, heroOnly: !anySurvivor,
       });
@@ -1041,7 +1061,15 @@ async function maybeCaptureHero(ctx: HandlerContext, o: {
   cityId: number | null;
   chance: number;
   maxHeroes: number;
-}): Promise<string | null> {
+  /**
+   * ⭐⭐ Kahraman SAVAŞ ALANINDA mı doğdu (kullanıcı, 2026-08-21)?
+   *
+   * Savunan kazandığında kahraman zaten kendi şehrinde beliriyor → yolculuk yok, `false`.
+   * Saldıran kazandığında ise kahraman **rakibin şehrinin önünde** doğuyor ve ordunun geri
+   * kalanıyla birlikte eve yürümek zorunda → `true`.
+   */
+  travels: boolean;
+}): Promise<{ id: number; name: string } | null> {
   if (o.cityId == null || o.chance <= 0) return null;
   /* Determinizm (§5): rulo görevin kimliğinden türer → savaş yeniden oynatılınca aynı sonuç. */
   const rng = createRng(`capture:${ctx.mission.id}:${o.playerId}`);
@@ -1058,11 +1086,50 @@ async function maybeCaptureHero(ctx: HandlerContext, o: {
   `);
   const taken = takenRows.map((r: Record<string, unknown>) => String(r['name']));
   const name = pickHeroName(() => rng.next(), taken);
-  await ctx.tx.execute(sql`
+
+  /**
+   * ⚠️⚠️ **YOLCULUK EDEN KAHRAMANIN `city_id`'si NULL** — şemanın kendi kuralı
+   * (`schema.ts` · *"Kahramanın durduğu şehir. Seferdeyken NULL"*). Şehir kimliği yazılırsa
+   * kahraman **hem evde hem yolda** görünür.
+   */
+  const rows = await ctx.tx.execute<Record<string, unknown>>(sql`
     INSERT INTO heroes (world_id, player_id, city_id, name, level, xp, status)
-    VALUES (${o.worldId}, ${o.playerId}, ${o.cityId}, ${name}, 0, 0, 'alive')
+    VALUES (${o.worldId}, ${o.playerId}, ${o.travels ? null : o.cityId}, ${name}, 0, 0, 'alive')
+    RETURNING id
   `);
-  return name;
+  const id = Number(rows[0]!['id']);
+
+  /**
+   * ⭐⭐ **YENİ KAHRAMAN DÖNÜŞ KAFİLESİNE BİNİYOR** (kullanıcı, 2026-08-21: *"bir savaşta
+   * kahraman çıktığında ortaya çıkan kahraman o savaştaki ordu geri dönene kadar başka bir
+   * savaşa gönderilemesin. Çünkü kahraman zaten o savaştan çıkmıştır ve henüz eve
+   * varmamıştır."*).
+   *
+   * ⚠️⚠️ Eskiden kahraman `city_id = originCityId` ve `status = 'alive'` ile **anında** eve
+   * yazılıyordu: savaş rakibin kapısında çözülüyor, ordu saatlerce yolda oluyor ama kahraman
+   * o saniye sefere hazır görünüyordu. Yani oyuncu, ordusu daha dönmeden kahramanını başka
+   * bir saldırıya yollayabiliyordu.
+   *
+   * ⭐ Çözüm yeni bir kilit DEĞİL, var olan mekanizma: `mission_heroes`. Bu tablo bu kod
+   * tabanında *"kahraman şehirden ÇIKTI"* demek (`cave.service.ts`te yazılı) ve üzerindeki
+   * `mission_heroes_hero` tekil indeksi bir kahramanın aynı anda tek seferde olmasını zaten
+   * garanti ediyor; sefer seçicileri de oradan süzüyor.
+   *
+   * ⚠️ Satır **ŞU ANKİ görevin** kimliğiyle yazılıyor, dönüşünkiyle değil: `scheduleReturn`
+   * hemen ardından `UPDATE mission_heroes SET mission_id = <dönüş>` çalıştırıyor ve kahramanı
+   * kendiliğinden taşıyor. Dönüş kimliğini burada beklemek, iki fonksiyon arasında sıraya
+   * bağlı ikinci bir bağ kurardı.
+   * ⚠️ Varışta ek kod GEREKMİYOR: `createReturnHandler` zaten `mission_heroes`taki herkesin
+   * `city_id`'sini şehre yazıp satırları siliyor.
+   * ⚠️⚠️ Çağıran, bu satır yazıldığında dönüş görevinin **kurulacağını garanti etmek
+   * zorunda** — yoksa kahraman `city_id = NULL` ile ortada kalır.
+   */
+  if (o.travels) {
+    await ctx.tx.execute(sql`
+      INSERT INTO mission_heroes (mission_id, hero_id) VALUES (${ctx.mission.id}, ${id})
+    `);
+  }
+  return { id, name };
 }
 
 async function writeBattle(ctx: HandlerContext, o: {

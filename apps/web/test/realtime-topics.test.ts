@@ -78,3 +78,43 @@ describe('eşleme tablosu', () => {
     }
   });
 });
+
+/**
+ * ⭐⭐ ORDU EVE DÖNÜNCE NE TAZELENİR — kapsama kilidi (kullanıcı, 2026-08-21).
+ *
+ * Kullanıcının şartı: *"ordu şehre geri döndüğünde oyun açık durumda olunca görevlerde
+ * anlık olarak kullanılabilir hâle gelmeli."*
+ *
+ * ⚠️⚠️ Bu olay tabloya girmeden ÖNCE sunucu onu `missions:changed` konusuna düzleştiriyordu
+ * (`realtime.bus.ts`) — yani satırı yazmak mümkün değildi, olay adı istemciye hiç ulaşmıyordu.
+ * Test hem satırı hem **neden var olduğunu** kilitliyor: biri konuyu tekrar düzleştirirse
+ * `temple` sessizce kaybolur ve belirti yalnız "kahramanı sefere seçemiyorum" olarak görünür.
+ */
+describe('ordu dönüşü ekranları tazeliyor', () => {
+  const DONUSUN_DEGISTIRDIKLERI: Record<string, string> = {
+    'eve gelen askerler (Baraka)': 'city',
+    'birimlerin güncel adedi (katalog)': 'catalog',
+    'ganimetin kasaya eklenmesi': 'city',
+    '⭐ dönen kahraman (Tapınak + sefer formu)': 'temple',
+    'Ordular listesinden satırın düşmesi': 'missions',
+    'Komuta Merkezi dökümü': 'overview',
+  };
+
+  const keys = INVALIDATES['city:army_returned'] ?? [];
+
+  for (const [ne, anahtar] of Object.entries(DONUSUN_DEGISTIRDIKLERI)) {
+    it(`${ne} → ${anahtar}`, () => {
+      expect(keys).toContain(anahtar);
+    });
+  }
+
+  /**
+   * ⚠️ Dönüş, `city:changed`in tazelediği her şeyi kapsamak ZORUNDA: handler ikisini birden
+   * yayıyor ve dönüş şehre hem birlik hem ganimet yazıyor, yani daha geniş bir olay.
+   */
+  it('şehir olayının tazelediği her şeyi kapsar', () => {
+    for (const key of INVALIDATES['city:changed'] ?? []) {
+      expect(keys).toContain(key);
+    }
+  });
+});

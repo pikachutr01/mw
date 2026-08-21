@@ -366,15 +366,35 @@ describe('ayrılma / dağıtma', () => {
     expect((await roleOf(asker)).allianceId).toBeNull();
   });
 
-  it('⭐ TEK üye kalan liderin ayrılışı ittifağı dağıtır', async () => {
+  /**
+   * ⭐⭐ **SON ÜYE AYRILAMAZ, DAĞITMAK ZORUNDA** (kullanıcı, 2026-08-21: *"İttifakta kalan
+   * son üyenin, liderin ittifaktan ayrılmasına izin vermeyelim, ittifağı dağıtmadan son kişi
+   * ayrılamaz."*).
+   *
+   * ⚠️⚠️ Test ESKİDEN TERSİNİ kilitliyordu: *"TEK üye kalan liderin ayrılışı ittifağı
+   * dağıtır"*. O davranış sessizdi ve iki şeyi birbirine karıştırıyordu — «Ayrıl» düğmesi
+   * geri alınamaz bir SİLME yapıyordu. Dağıtmanın kendi ucu ve kendi onayı var.
+   */
+  it('⭐⭐ TEK üye kalan lider AYRILAMAZ — önce dağıtmalı', async () => {
     await giveCastle(lider, 5);
     const a = await service.found({ worldId, playerId: lider, name: 'yalniz' });
-    const r = await service.leave({ worldId, playerId: lider });
-    expect(r.disbanded).toBe(true);
-    const rows = await h.db.execute<Record<string, unknown>>(sql`
+
+    await expect(service.leave({ worldId, playerId: lider }))
+      .rejects.toMatchObject({ code: 'must_disband' });
+
+    /* ⚠️ İttifak AYAKTA kalmalı: reddedilen bir ayrılma hiçbir yan etki bırakmamalı. */
+    const ayakta = await h.db.execute<Record<string, unknown>>(sql`
       SELECT 1 FROM alliances WHERE id = ${a.id}
     `);
-    expect(rows).toHaveLength(0);
+    expect(ayakta).toHaveLength(1);
+    expect((await roleOf(lider)).allianceId).toBe(a.id);
+
+    /* Çıkış yolu duruyor ve tek yıkıcı kapı orası. */
+    await service.disband({ worldId, playerId: lider });
+    const silinmis = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM alliances WHERE id = ${a.id}
+    `);
+    expect(silinmis).toHaveLength(0);
   });
 
   it('dağıtma: üyeler boşa düşer, bekleyen istekler iptal olur, kayıt silinir', async () => {
@@ -466,12 +486,16 @@ describe('sistem bildirimleri', () => {
     expect(await systemOf(lider)).toEqual([]);
   });
 
-  it('⭐ son üye lider ayrılınca kimseye bildirim gitmez', async () => {
+  /**
+   * ⚠️ Test 2026-08-21'de **yolunu değiştirdi**, iddiasını değil: son üye lider artık
+   * «Ayrıl» diyemiyor (`must_disband`), aynı sona `disband()` ile varıyor. Kilitlenen şey
+   * yine aynı — tek "üye" eylemi yapanın kendisi olduğunda kimseye bildirim gitmemeli.
+   */
+  it('⭐ son üye lider ittifağı dağıtınca kimseye bildirim gitmez', async () => {
     await giveCastle(lider, 5);
     await service.found({ worldId, playerId: lider, name: 'yalniz' });
-    const r = await service.leave({ worldId, playerId: lider });
-    expect(r.disbanded).toBe(true);
-    // Tek "üye" ayrılanın kendisiydi → kendi eylemini haber vermek gürültü olurdu.
+    await service.disband({ worldId, playerId: lider });
+    // Tek "üye" dağıtanın kendisiydi → kendi eylemini haber vermek gürültü olurdu.
     expect(await systemOf(lider)).toEqual([]);
   });
 

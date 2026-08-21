@@ -41,7 +41,7 @@ class CityDetail {
     required this.techQueues,
     required this.wallRepair,
     required this.map,
-    required this.travelSpeedMultiplier,
+    required this.speed,
     required this.serverNow,
     required this.gameNow,
   });
@@ -105,11 +105,17 @@ class CityDetail {
   /// sapardı. Sunucu bu yüzden bunları şehir yanıtında gönderiyor.
   final MwMapConfig map;
 
-  /// ⭐ Dünya hız çarpanı — sefer süresinin TAMAMINI bölüyor (`worlds.speed_multiplier`).
+  /// ⭐ Dünyanın TEMPOSU — dört ayrı çarpan (`worlds.*_multiplier`).
   ///
-  /// ⚠️ Ayrı bir alan, `map`in içinde değil: sunucuda da ayrı (`snap.speed.travel`) ve
-  /// haritanın geometrisiyle ilgisi yok — dünyanın temposu.
-  final num travelSpeedMultiplier;
+  /// ⚠️ `map`in içinde değil: sunucuda da ayrı (`snap.speed`) ve haritanın geometrisiyle
+  /// ilgisi yok.
+  /// ⚠️ 2026-08-22'ye kadar burada yalnız `travel` vardı; navbar rozeti (web'deki
+  /// `SpeedBadge`) dördünü birden gösterdiği için tamamı okunur oldu.
+  final MwWorldSpeed speed;
+
+  /// Sefer süresinin TAMAMINI bölen çarpan. ⚠️ Kısayol olarak duruyor: `speed.travel`in
+  /// çağıranları bu adla yazılmıştı ve hepsini değiştirmek bu turun işi değildi.
+  num get travelSpeedMultiplier => speed.travel;
 
   /// Kaynak sayacının çıpası (gerçek saat).
   final String serverNow;
@@ -161,12 +167,60 @@ class CityDetail {
       map: MwMapConfig.fromJson(j['map']),
       // ⚠️ `?? 1` burada anlamlı bir varsayılan, savunma değil: çarpan yoksa dünya normal
       // tempoda demektir. `?? 0` olsaydı süre sonsuza giderdi.
-      travelSpeedMultiplier:
-          ((j['speed'] as Map<String, dynamic>?)?['travel'] as num?) ?? 1,
+      speed: MwWorldSpeed.fromJson(j['speed']),
       serverNow: j['serverNow'] as String,
       gameNow: j['gameNow'] as String,
     );
   }
+}
+
+/// ⭐⭐ DÜNYANIN TEMPOSU — dört çarpan (`worlds.*_multiplier`), web'deki `snap.speed`.
+///
+/// ⚠️ Varsayılan **1** ve bu anlamlı bir değer, savunma değil: çarpan yoksa dünya normal
+/// tempoda demektir. `0` olsaydı süreler sonsuza giderdi.
+class MwWorldSpeed {
+  const MwWorldSpeed({
+    this.resource = 1,
+    this.travel = 1,
+    this.training = 1,
+    this.construction = 1,
+  });
+
+  final num resource;
+  final num travel;
+  final num training;
+  final num construction;
+
+  static const MwWorldSpeed normal = MwWorldSpeed();
+
+  static MwWorldSpeed fromJson(Object? raw) {
+    if (raw is! Map) return normal;
+    num at(String key) {
+      final v = raw[key];
+      return v is num ? v : 1;
+    }
+
+    return MwWorldSpeed(
+      resource: at('resource'),
+      travel: at('travel'),
+      training: at('training'),
+      construction: at('construction'),
+    );
+  }
+
+  /// ⭐⭐ ROZETİN İÇERİĞİ — **yalnız 1'den farklı satırlar** (web'de kullanıcı kararı,
+  /// 2026-08-09).
+  ///
+  /// ⚠️ Eskiden web'de dördü birden çiziliyor, normal olanlar soluk «1x» diye görünüyordu.
+  /// Rozetin başlığı zaten «Hızlandırılmış dünya»; altında «Sefer hızı 1x» yazması oyuncuya
+  /// hiçbir şey söylemiyor, üstelik gerçekten değişmiş olan satırı gürültüye gömüyordu.
+  /// ⚠️ Liste BOŞSA rozetin kendisi de çizilmiyor — dünya klasikse ekranda hiçbir şey yok.
+  List<({String label, num value})> get hizlandirilmis => [
+    (label: 'Kaynak üretimi', value: resource),
+    (label: 'Sefer hızı', value: travel),
+    (label: 'Birim üretimi', value: training),
+    (label: 'İnşaat/araştırma', value: construction),
+  ].where((e) => e.value != 1).toList();
 }
 
 /// Başka şehirde de sürebilen teknik araştırması.

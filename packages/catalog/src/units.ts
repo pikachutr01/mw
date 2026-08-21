@@ -126,6 +126,41 @@ export const OUT_OF_BATTLE: ReadonlySet<string> = new Set(['cargo_wagon', 'spy_b
 export const SETTLE_ON_LOSS: readonly string[] = ['cargo_wagon'];
 
 /**
+ * ⭐⭐ ORDUYU YAVAŞLATMAYAN BİRİMLER — refakatçi varken hız hesabına GİRMEZLER
+ * (kullanıcı, 2026-08-21: *"Yük arabası orduyla beraber savaşa gönderildiğinde artık ordudaki
+ * en yavaş ünitenin hızına endeksli olsun, kendisi orduyu yavaşlatan ünite olmasın."*).
+ *
+ * ⚠️ Kural **koşullu**: yalnız başına gönderildiğinde (nakliye · destek · şehir kurma) araba
+ * yine kendi hızıyla (140) yürüyor. Muafiyet "araba hızsızdır" demek değil, "kafiledeyken
+ * kafileye ayak uydurur" demek.
+ *
+ * ⚠️⚠️ **GNOM BİLEREK DIŞARIDA** (kullanıcının açık kararı). Gnom da savaşmayan bir birim
+ * (`NONCOMBAT`) ve hızı 120 — yani bir pegasus/ejderha ordusunu o da yavaşlatıyor. Yine de
+ * listeye alınmadı: kullanıcı muafiyeti **yalnız yük arabası** için istedi.
+ *
+ * ⚠️ Muafiyetin kendisi dünya ayarına bağlı (`MapConfig.cargoIgnoresSpeed`); bu küme yalnız
+ * "hangi birimler" sorusunu cevaplıyor, "açık mı" sorusunu değil.
+ */
+export const SPEED_EXEMPT_WHEN_ESCORTED: ReadonlySet<string> = new Set(['cargo_wagon']);
+
+/**
+ * ⭐⭐ TEK BAŞINA SALDIRI BAŞLATAMAYAN BİRİMLER (kullanıcı, 2026-08-21: *"Artık bir saldırı
+ * için yalnızca yük arabası seçilirse görev başlatılamasın."*).
+ *
+ * ⚠️⚠️ **GNOM BİLEREK DIŞARIDA** ve bu kararın gerekçesi kullanıcının kendi cümlesi
+ * (2026-08-22): *"Savaşmayan birim olsa bile o bir savaşçı sonuçta."* İlk yazımda kural
+ * `NONCOMBAT` kümesine bağlanmıştı ve gnom da kapıya takılıyordu — motorda gnomun da vuruş
+ * yapmaması teknik olarak doğru bir gerekçeydi ama oyunun kendi dili başka: gnom bir asker,
+ * yük arabası bir taşıt.
+ *
+ * ⚠️ Küme `SPEED_EXEMPT_WHEN_ESCORTED` ile AYNI üyeye sahip ama AYRI duruyor: ikisi farklı
+ * soruları cevaplıyor (biri "hız hesabına girer mi", diğeri "tek başına saldırabilir mi").
+ * Tek kümeye bağlasaydık, yarın hız muafiyetine gnom eklendiğinde saldırı kapısı da sessizce
+ * değişirdi.
+ */
+export const CANNOT_ATTACK_ALONE: ReadonlySet<string> = new Set(['cargo_wagon']);
+
+/**
  * ⭐ YALNIZ SAVUNAN TARAFTA kayıp veren savaş-dışı birimler (2026-08-07 ölçümü).
  *
  * Casus Kuş savunanda kaybedilince yük arabasıyla **aynı orantısal kuralla** gidiyor

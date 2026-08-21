@@ -17,6 +17,7 @@
  * edilemiyorlardı ve iki kaymanın da bekçisi yoktu. Sunucu tarafındaki karşılıkları ise
  * `apps/api/test/missions.test.ts` tutuyor (*«YALNIZ KAHRAMAN destek olarak gönderilebilir»*).
  */
+import { CANNOT_ATTACK_ALONE } from '@mobilwar/catalog';
 
 /**
  * ⭐ KAHRAMAN GÖNDERİLEBİLEN GÖREVLER (kullanıcı, 2026-08-03).
@@ -51,4 +52,21 @@ export const ARMY_OPTIONAL: ReadonlySet<string> = new Set([
 export function hasCrew(type: string, unitCount: number, heroCount: number): boolean {
   if (unitCount > 0) return true;
   return ARMY_OPTIONAL.has(type) && HERO_MISSIONS.has(type) && heroCount > 0;
+}
+
+/**
+ * ⭐⭐ YALNIZ YÜK ARABASI İLE SALDIRI BAŞLATILAMAZ (kullanıcı, 2026-08-21) — arabanın
+ * yanında en az bir başka birim ("refakatçi") olmalı.
+ *
+ * ⚠️⚠️ Kural ilk yazımda `NONCOMBAT` kümesine bağlanmıştı ve **gnom da kapıya takılıyordu**.
+ * Kullanıcı düzeltti (2026-08-22): *"Savaşmayan birim olsa bile o bir savaşçı sonuçta."*
+ * Ölçüt artık katalogdaki `CANNOT_ATTACK_ALONE` ve sunucu da aynı kümeden besleniyor
+ * (`mission.service.ts` · `sendAttack`).
+ *
+ * ⚠️ YALNIZ saldırı: nakliye · destek · şehir kurmada tek başına Yük Arabası **meşru**.
+ * ⚠️ Casus Kuş bu kapıya gelmiyor; saldırı listesinde zaten hiç görünmüyor.
+ */
+export function attackHasEscort(type: string, unitIds: readonly string[]): boolean {
+  if (type !== 'attack') return true;
+  return unitIds.some((id) => !CANNOT_ATTACK_ALONE.has(id));
 }

@@ -13,8 +13,8 @@
  */
 import { sql } from 'drizzle-orm';
 import {
-  DEFAULT_CATALOG_CONFIG, HERO_SPEED, maxCities, teleportCooldownSeconds, UNITS_BY_ID,
-  type CatalogConfig,
+  CANNOT_ATTACK_ALONE, DEFAULT_CATALOG_CONFIG, HERO_SPEED, maxCities,
+  teleportCooldownSeconds, UNITS_BY_ID, type CatalogConfig,
 } from '@mobilwar/catalog';
 import {
   armySpeed, distance, route, travelSeconds, type MapConfig, DEFAULT_MAP_CONFIG,
@@ -254,13 +254,37 @@ export class MissionService {
     }
 
     /**
+     * ⭐⭐ **YALNIZ YÜK ARABASI İLE SALDIRI BAŞLATILAMAZ** (kullanıcı, 2026-08-21).
+     *
+     * ⚠️⚠️ Kural ilk yazımda `NONCOMBAT` kümesine bağlanmıştı — yani gnom da kapıya
+     * takılıyordu. Kullanıcı bunu **düzeltti** (2026-08-22): *"Sadece yük arabası seçilirse
+     * savaş engellensin, buna gnomu dahil etme. Savaşmayan birim olsa bile o bir savaşçı
+     * sonuçta."* Motorda gnomun da vuruş yapmaması teknik olarak doğruydu ama oyunun kendi
+     * dili başka: gnom bir asker, yük arabası bir taşıt. Ölçüt artık `CANNOT_ATTACK_ALONE`.
+     *
+     * ⚠️ Casus Kuş bu kapıya HİÇ ulaşmıyor: `attackForbiddenUnits` onu bir üstte eliyor.
+     * ⚠️ Kapı YALNIZ `sendAttack`te: nakliye · destek · şehir kurma ortak `march()` yolundan
+     * gidiyor ve orada tek başına yük arabası **meşru** (kullanıcının açık şartı).
+     * ⚠️ Ordu tamamen boşsa yukarıdaki `no_units` zaten devrede; bu kapı yalnız "dolu ama
+     * hepsi araba" hâlini yakalıyor.
+     */
+    if (Object.keys(units).every((id) => CANNOT_ATTACK_ALONE.has(id))) {
+      throw new MissionError(
+        'no_units',
+        'Yalnızca Yük Arabası ile saldırı başlatılamaz — yanına asker ekle.',
+      );
+    }
+
+    /**
      * Ordunun hızı = EN YAVAŞ ÜYE. Kahraman orduyu hızlandırmaz ama **yavaşlatabilir**
      * (2026-08-03) — gerekçe `travel.ts` `armySpeed`te.
      * ⚠️ Bu yüzden `heroIds` hız hesabından ÖNCE çözülüyor; sıra ters olsaydı kahraman
      * sayısı henüz bilinmezdi.
      */
     const heroIds = [...new Set(opts.heroIds ?? [])];
-    const speed = armySpeed(units, heroIds.length);
+    /* ⚠️ Harita ayarı hız hesabına giriyor: Yük Arabası muafiyeti dünya başına açılıp
+       kapanabiliyor (`map.cargoIgnoresSpeed`). */
+    const speed = armySpeed(units, heroIds.length, this.map(opts.worldId));
     if (speed == null) throw new MissionError('unit_cannot_march', 'Bu ordu sefere çıkamaz.');
 
     return this.db.transaction(async (tx) => {
@@ -314,7 +338,9 @@ export class MissionService {
                 ${executeAt.toISOString()}::timestamptz,
                 ${JSON.stringify({
         distance: D, speed, travelSeconds: seconds, cartography,
-        ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map),
+        /* ⚠️ Son argüman `true`: saldırı kahraman taşımasa bile YENİ kahraman üretebiliyor ve
+           o kahramanın dönüş süresi buradan okunuyor (gerekçe `heroTravel` başlığında). */
+        ...this.heroTravel(heroIds, leg, cartography, speedMultiplier, map, true),
         departedAt: opts.at.toISOString(),
         /**
          * ⭐⭐ GANİMET FARK ÇARPANININ GİRDİSİ — **gönderim anında** damgalanıyor (2026-08-14).
@@ -967,7 +993,7 @@ export class MissionService {
      * Boş orduda `armySpeed({}, 1)` `HERO_SPEED`i (200) döndürüyor — yalnız-kahraman seferi
      * bu sayede kendiliğinden doğru hızda yürüyor, ayrı bir dala gerek yok.
      */
-    const speed = armySpeed(units, heroIds.length);
+    const speed = armySpeed(units, heroIds.length, this.map(o.worldId));
     if (speed == null) throw new MissionError('unit_cannot_march', 'Bu ordu sefere çıkamaz.');
 
     return this.db.transaction(async (tx) => {
@@ -1646,8 +1672,21 @@ export class MissionService {
    */
   private heroTravel(
     heroIds: number[], leg: RouteLeg, cartography: number, speedMultiplier: number, map: MapConfig,
+    /**
+     * ⭐ Kahraman GÖNDERİLMEMİŞ olsa da yaz (2026-08-21) — **saldırıda daima `true`.**
+     *
+     * ⚠️⚠️ Gerekçe: saldırı, kahraman taşımasa bile **yeni bir kahraman ÜRETEBİLİYOR**
+     * (`maybeCaptureHero`). O kahraman savaş alanında doğuyor ve ordunun tamamı ölmüşse
+     * eve **yalnız başına** yürüyor; süreyi `payload.heroTravelSeconds` veriyor. Alan
+     * yazılmasaydı `scheduleReturn` ordu hızına düşerdi ve kahraman kendi hızıyla değil,
+     * ölmüş bir ordunun hızıyla yürümüş olurdu.
+     * ⚠️ Saldırı dışındaki seferlerde (casus/nakliye/destek/kuruluş) kahraman ÜREMİYOR,
+     * bu yüzden orada bayrak kapalı ve alan hâlâ yalnız gerçekten kahraman taşıyan
+     * görevlere yazılıyor.
+     */
+    daimaYaz = false,
   ): Record<string, number> {
-    if (heroIds.length === 0) return {};
+    if (heroIds.length === 0 && !daimaYaz) return {};
     return {
       heroTravelSeconds: travelSeconds(
         { ...leg, speed: HERO_SPEED, cartography, speedMultiplier }, map,

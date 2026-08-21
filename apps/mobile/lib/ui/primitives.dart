@@ -36,6 +36,22 @@ class MwColors {
       dark ? MwDarkColors.panelHeader : MwLightColors.panelHeader;
   Color get onPanelHeader =>
       dark ? MwDarkColors.onPanelHeader : MwLightColors.onPanelHeader;
+
+  /// ⭐⭐ «BENİM ŞEHRİM» RENGİ — paletteki `own` token'ı (lacivert), accent DEĞİL.
+  ///
+  /// ⚠️⚠️ Token web'de 2026-08-11'de tam olarak bu şikâyet için doğdu ve mobil onu
+  /// kullanmıyordu: *"açık modda kendi şehirlerimizin yazısı belli olmuyor"* (aynı bildirim
+  /// mobil için 2026-08-21'de geldi). Sebep ölçülü: açık temada `accent` bronz (#8A5A2B),
+  /// gövde mürekkebi koyu kahve (#2B2116) — ikisi **aynı ailede** ve yalnız açıklıkla
+  /// ayrılıyor, yani 12 punto bir liste satırında «biraz solmuş yazı» gibi okunuyor.
+  ///
+  /// ⚠️ `own` laciverte geçiyor ve kazanç açıklıkta DEĞİL **tonda**: web'deki ölçümde
+  /// mürekkeple açıklık oranı 2,69 → 2,30 ile hafifçe DÜŞTÜ ama gözü ayıran şey sıcak-soğuk
+  /// zıtlığı oldu. Koyu temada zaten sorun yoktu; token orada da ayrı bir değer taşıyor.
+  ///
+  /// ⚠️ Aktif şehir belirteci (sol kenarlık, parlama) `accent` KALIYOR: o başka bir anlam
+  /// ("şu an buradasın") ve ikisini aynı renge yıkmak web'de bilerek reddedildi.
+  Color get own => dark ? MwDarkColors.own : MwLightColors.own;
 }
 
 /// ⭐ BAŞLIK YAZI TİPİ — web'deki `.display` sınıfının karşılığı (Cinzel).
@@ -546,10 +562,25 @@ InputDecoration mwFieldDecoration(
 /// ⚠️ Uzun basma DA çalışmaya devam ediyor (Material'ın varsayılanı) — tıklama ek bir yol,
 /// mevcut davranışı kaldıran bir değişiklik değil.
 class MwTapTip extends StatefulWidget {
-  const MwTapTip({super.key, required this.message, required this.child});
+  const MwTapTip({
+    super.key,
+    required this.message,
+    required this.child,
+    this.longPress = false,
+  });
 
   final String message;
   final Widget child;
+
+  /// ⭐ UZUN BASMAYLA açılsın (kullanıcı, 2026-08-21: navbardaki altın/yemek için
+  /// *"uzun basınca … göstersin"*).
+  ///
+  /// ⚠️⚠️ Dokunmayla açılan bir ipucu her yere uygun DEĞİL: bilgi çubuğundaki kaynak
+  /// kutuları ekranın en üstünde ve parmağın sık geçtiği yer; tek dokunuşla açılsaydı
+  /// oyuncu istemeden sürekli balon açardı. Uzun basma niyeti belli eden bir jest.
+  /// ⚠️ Bayrak açıkken `GestureDetector` sarmalayıcısı **kullanılmıyor**: o `onTap`
+  /// dinliyor ve uzun basma isteğini tek dokunuşa geri çevirirdi.
+  final bool longPress;
 
   @override
   State<MwTapTip> createState() => _MwTapTipState();
@@ -562,14 +593,18 @@ class _MwTapTipState extends State<MwTapTip> {
   Widget build(BuildContext context) => Tooltip(
     key: _key,
     message: widget.message,
-    triggerMode: TooltipTriggerMode.tap,
+    triggerMode: widget.longPress
+        ? TooltipTriggerMode.longPress
+        : TooltipTriggerMode.tap,
     // ⚠️ Kendiliğinden kapanma süresi uzatıldı: varsayılan 1,5 sn bir cümleyi okumaya yetmiyor.
     showDuration: const Duration(seconds: 4),
-    child: GestureDetector(
-      // ⚠️ `triggerMode.tap` bazı sarmalayıcılarda jesti yutulabiliyor; açık çağrı garanti.
-      onTap: () => _key.currentState?.ensureTooltipVisible(),
-      child: widget.child,
-    ),
+    child: widget.longPress
+        ? widget.child
+        : GestureDetector(
+            // ⚠️ `triggerMode.tap` bazı sarmalayıcılarda jesti yutulabiliyor; açık çağrı garanti.
+            onTap: () => _key.currentState?.ensureTooltipVisible(),
+            child: widget.child,
+          ),
   );
 }
 
@@ -653,7 +688,26 @@ class MwSmallButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 9),
         minimumSize: Size(minWidth, 30),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+        /* ⭐⭐ FONT AİLESİ AÇIKÇA YAZILIYOR (kullanıcı, 2026-08-21: *"tapınak sayfasında
+           kahramanların Özellikler ve Adını Değiştir butonlarının yazı fontu tırnaksız
+           görünüyor, uygulamanın genel yazı fontundan farklı"*).
+
+           ⚠️⚠️ Sebep: `styleFrom(textStyle:)` düğmenin varsayılan yazı biçimini **tamamen
+           değiştiriyor**, üstüne eklemiyor. Varsayılan `textTheme.labelLarge`dı ve
+           `ThemeData.fontFamily` sayesinde Spectral taşıyordu; ailesiz bir `TextStyle`
+           koyunca Flutter platform varsayılanına (Android'de Roboto) düşüyor. Yani düğme
+           tırnaksız yazıyordu, gövde metni tırnaklı — aynı ekranda iki font.
+
+           ⚠️ Bu depodaki **TEK** `textStyle:` ezmesi ve kusur da yalnız burada görünüyordu;
+           `MwButton` ve diğerleri biçimi ezmediği için tema fontunu miras alıyor.
+           ⚠️ Boyut/kalınlığı düşürüp aileyi temadan almak da denenebilirdi ama `styleFrom`
+           tek parça bir biçim alıyor: aileyi yazmamak, onu **silmek** demek. */
+        textStyle: const TextStyle(
+          fontFamily: MwFonts.body,
+          fontFamilyFallback: MwFonts.bodyFallback,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       child: Text(label),

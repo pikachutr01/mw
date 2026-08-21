@@ -609,11 +609,18 @@ describe('mağaranın savaşta yıkılması', () => {
     expect(atk.cave?.broken).toBe(true);
     expect(def.notes.join(' ')).not.toMatch(/YIKILDI/);
     expect(atk.notes.join(' ')).not.toMatch(/YIKILDI/);
-    expect(def.notes.some((n) => n.includes('şehre kaçıyor'))).toBe(true);
-    expect(atk.notes.some((n) => n.includes('cüce yeterli oldu'))).toBe(true);
+    /**
+     * ⭐ **2026-08-21: cümle NOTTAN kutuya taşındı** (kullanıcı: *"aynı kutu içinde yazalım.
+     * Ayrı ayrı notlar olmasın."*). Metin aynı, yeri değişti: `cave.note`.
+     */
+    expect(def.cave?.note).toContain('şehre kaçıyor');
+    expect(atk.cave?.note).toContain('cüce yeterli oldu');
+    expect(def.notes.join(' ')).not.toMatch(/kaçıyor/);
+    expect(atk.notes.join(' ')).not.toMatch(/cüce/);
     expect(def.text).toMatch(/Mağara: YIKILDI/);
-    // Saldıranın notunda mağaranın içi geçmez.
+    // Saldıranın hiçbir yüzeyinde mağaranın içi geçmez (kutu, not, düz metin).
     expect(atk.notes.join(' ')).not.toMatch(/kaç(ıyor|tı)/);
+    expect(atk.cave?.note).not.toMatch(/kaç(ıyor|tı)/);
     /* ⭐ SIZINTI KİLİDİ: bu çağrı controller MASKESİZ, doğrudan `battles.result` ile yapılıyor —
      * `defenderPrivate` içeride dursa bile kurucu saldırana `escaped`/`repairUntil` VERMEZ.
      * (Controller ayrıca anahtarı komple siler; bu iki katmanın İLKİ burada kilitli.) */
@@ -644,8 +651,18 @@ describe('mağaranın savaşta yıkılması', () => {
     expect(atk.notes.join(' ')).not.toMatch(/506/);
     expect(atk.text).toMatch(/Mağara: dayandı \(gereken 506 cüce/);
 
-    /* Savunana kutu sayı basmıyor → cümle ona kalıyor. */
+    /**
+     * ⭐⭐ **SAVUNAN DAYANAN MAĞARAYI HİÇ GÖRMÜYOR** (kullanıcı, 2026-08-21): *"Savunma
+     * raporuna mağaranın dayandığı bilgisi yazılmasın, sadece yıkılırsa yazılsın. Aynı şekilde
+     * «Mağaran dayandı: yıkılması için xxx cüce gerekiyordu» gibi ek bilgi de eklenmesin."*
+     *
+     * ⚠️ Eskiden tam tersi kilitliydi: sayı savunana NOT olarak yazılıyordu çünkü kutu ona
+     * sayı basmıyordu. Şimdi kutunun kendisi de yok.
+     * ⚠️ SALDIRAN etkilenmedi — yukarıdaki üç satır onu kilitlemeye devam ediyor.
+     */
     const def2 = buildBattleReport(battle, 'defender');
-    expect(def2.notes.some((n) => n.includes('506') && n.includes('gerekiyordu'))).toBe(true);
+    expect(def2.cave).toBeNull();
+    expect(def2.notes.join(' ')).not.toMatch(/506|cüce|[Mm]ağara/);
+    expect(def2.text).not.toMatch(/Mağara/);
   });
 });

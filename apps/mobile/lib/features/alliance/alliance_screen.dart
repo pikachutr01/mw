@@ -215,15 +215,12 @@ class _ActionsState extends ConsumerState<_Actions> {
           if (canRename(a.myRole))
             _btn('İttifağı yeniden adlandır', _rename, ghost: true),
 
-          /* ⚠️⚠️ **LİDER, ÜYE VARKEN AYRILAMAZ** — düğme çizilmiyor ve sebebi yazılıyor.
-             Gizlemek tek başına yanlış olurdu: oyuncu düğmenin nereye gittiğini sorar. */
+          /* ⚠️⚠️ **LİDER HİÇBİR KOŞULDA AYRILAMAZ** — düğme çizilmiyor ve sebebi yazılıyor.
+             Gizlemek tek başına yanlış olurdu: oyuncu düğmenin nereye gittiğini sorar.
+             ⚠️ Tek üye kalan lider için sebep «dağıtmalısın» diyor ve dağıtma düğmesi hemen
+             altında duruyor, yani çıkış yolu ekranda. */
           if (kapi.canLeave)
-            _btn(
-              // ⚠️ Tek üye kalan liderde ayrılmak DAĞITIYOR — etiket bunu söylemek zorunda.
-              kapi.disbands ? 'İttifaktan ayrıl (dağılır)' : 'İttifaktan ayrıl',
-              _leave,
-              danger: true,
-            )
+            _btn('İttifaktan ayrıl', _leave, danger: true)
           else if (kapi.reason != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -236,8 +233,12 @@ class _ActionsState extends ConsumerState<_Actions> {
               ),
             ),
 
-          // ⚠️ Dağıtma yalnız Lider'de ve ayrı bir düğme: "ayrıl" ile aynı şey değil.
-          if (canDisband(a.myRole) && a.memberCount > 1)
+          /* ⚠️ Dağıtma yalnız Lider'de ve ayrı bir düğme: "ayrıl" ile aynı şey değil.
+             ⚠️⚠️ `memberCount > 1` koşulu KALDIRILDI (2026-08-21): tek üye kalan liderde
+             düğme gizleniyordu çünkü onun için «Ayrıl» zaten dağıtıyordu. Artık ayrılmak
+             hata veriyor — koşul kalsaydı son üye lider ittifağını **hiçbir yoldan**
+             kapatamazdı. */
+          if (canDisband(a.myRole))
             _btn('İttifağı dağıt', _disband, danger: true),
         ],
       ),
@@ -329,20 +330,14 @@ class _ActionsState extends ConsumerState<_Actions> {
     await ref.read(allianceActionsProvider).rename(ad);
   }
 
+  /// ⚠️ Bu akışa artık YALNIZ lider olmayan üye giriyor (`leaveGate` liderde düğmeyi
+  /// çizmiyor), bu yüzden onay metninin «dağılır» dalı da kalktı.
   Future<void> _leave() async {
-    final kapi = leaveGate(
-      myRole: widget.a.myRole,
-      memberCount: widget.a.memberCount,
-    );
     final ok = await mwConfirmSheet(
       context,
       title: 'İttifaktan ayrıl',
-      /* ⚠️⚠️ Tek üye kalan liderde ayrılmak DAĞITIYOR ve sunucu bunu sessizce yapıyor —
-         onay metni farklı olmak zorunda, yoksa lider ittifağını kazara siler. */
-      body: kapi.disbands
-          ? 'Son üye sensin: ayrılırsan ittifak DAĞILIR ve adı serbest kalır. Emin misiniz!'
-          : '${widget.a.name} ittifağından ayrılacaksın. Emin misiniz!',
-      confirmLabel: kapi.disbands ? 'Ayrıl ve dağıt' : 'Ayrıl',
+      body: '${widget.a.name} ittifağından ayrılacaksın. Emin misiniz!',
+      confirmLabel: 'Ayrıl',
     );
     if (!ok || !mounted) return;
     await ref.read(allianceActionsProvider).leave();

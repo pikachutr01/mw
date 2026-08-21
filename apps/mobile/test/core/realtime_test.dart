@@ -106,6 +106,7 @@ void main() {
       expect(kInvalidates.keys.toSet(), {
         'city:changed',
         'cities:changed',
+        'city:army_returned',
         'missions:changed',
         'messages:changed',
         'battle:resolved',
@@ -116,6 +117,33 @@ void main() {
         'chat:alliance:deleted',
         'alliance:changed',
       });
+    });
+
+    /// ⭐⭐ ORDU EVE DÖNÜNCE NE TAZELENİR (kullanıcı, 2026-08-21): *"ordu şehre geri
+    /// döndüğünde oyun açık durumda olunca görevlerde anlık olarak kullanılabilir hâle
+    /// gelmeli."*
+    ///
+    /// ⚠️⚠️ Bu satır 2026-08-21'e kadar YAZILAMIYORDU: sunucu olayı `missions:changed`
+    /// konusuna düzleştiriyordu, yani adı istemciye hiç ulaşmıyordu. Eksik olan tek şey
+    /// `temple`ydı ve belirtisi yalnız «dönen kahramanı sefere seçemiyorum» olarak
+    /// görünüyordu — hata yok, boş liste yok, sessiz.
+    test('⭐ ordu dönüşü kahramanı da tazeliyor (temple)', () {
+      expect(kInvalidates['city:army_returned'], contains('temple'));
+      expect(kInvalidates['city:army_returned']!.toSet(), {
+        'city',
+        'catalog',
+        'missions',
+        'temple',
+        'overview',
+      });
+    });
+
+    /// ⚠️ Dönüş `city:changed`in tazelediği her şeyi kapsamak zorunda: handler ikisini
+    /// birden yayıyor ve dönüş şehre hem birlik hem ganimet yazıyor.
+    test('ordu dönüşü, şehir olayının tazelediklerini kapsıyor', () {
+      for (final k in kInvalidates['city:changed']!) {
+        expect(kInvalidates['city:army_returned'], contains(k));
+      }
     });
 
     /// ⭐⭐ ODA OLAYLARI `kInvalidates`ten AYRI bir listede ve öyle kalmalı (2026-08-19).

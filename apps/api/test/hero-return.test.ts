@@ -303,7 +303,17 @@ describe('kahramansız ordu yok olunca', () => {
     expect(await returnMission()).toBeUndefined();
   });
 
-  it('kahraman taşımayan görevin yükünde heroTravelSeconds YOKTUR', async () => {
+  /**
+   * ⚠️⚠️ **TEST TERSİNE DÖNDÜ (2026-08-21).** Eskiden *"kahraman taşımayan görevin yükünde
+   * `heroTravelSeconds` YOKTUR"* diye kilitliyordu ve gerekçesi *"her göreve ölü bir alan
+   * eklemiyoruz"* idi. O gerekçe **artık doğru değil**: saldırı, kahraman taşımasa bile
+   * YENİ kahraman üretebiliyor (`maybeCaptureHero`) ve o kahraman ordunun tamamı ölmüşse
+   * eve kendi hızıyla yürüyor. Alan olmasaydı `scheduleReturn` ordu hızına düşerdi.
+   *
+   * ⚠️ Kural yalnız SALDIRIDA genişledi: casus/nakliye/destek/kuruluş seferleri kahraman
+   * üretmiyor, orada alan hâlâ yalnız gerçekten kahraman taşıyan görevlere yazılıyor.
+   */
+  it('⭐ SALDIRI yükünde heroTravelSeconds daima var (kahraman taşımasa bile)', async () => {
     await giveUnits(attackCity, 'dwarf', 10);
     const at = await clock.gameNow(worldId);
     const m = await missions.sendAttack({
@@ -313,7 +323,155 @@ describe('kahramansız ordu yok olunca', () => {
     const [row] = await h.db.execute<Record<string, unknown>>(sql`
       SELECT payload FROM missions WHERE id = ${m.missionId}
     `);
-    // ⚠️ Alan yalnız gerekince yazılıyor — her göreve ölü bir alan eklemiyoruz.
-    expect(row!['payload']).not.toHaveProperty('heroTravelSeconds');
+    const payload = row!['payload'] as Record<string, unknown>;
+    expect(payload).toHaveProperty('heroTravelSeconds');
+    /* ⚠️ Kahraman hızı (200) cüceden (100) YÜKSEK → süresi de KISA olmalı. Eşitlik çıkarsa
+       alan ordu hızıyla hesaplanmış demektir ve kusur sessizce geri gelmiş olur. */
+    expect(Number(payload['heroTravelSeconds']))
+      .toBeLessThan(Number(payload['travelSeconds']));
+  });
+});
+
+/* ── (f) SAVAŞTAN ÇIKAN KAHRAMAN EVE YÜRÜR (kullanıcı, 2026-08-21) ───────────── */
+
+/**
+ * ⭐⭐ Kullanıcının şartı: *"Bir savaşta kahraman çıktığında ortaya çıkan kahraman o savaştaki
+ * ordu geri dönene kadar başka bir savaşa gönderilemesin. Çünkü kahraman zaten o savaştan
+ * çıkmıştır ve henüz eve varmamıştır."*
+ *
+ * ⚠️⚠️ Eski davranış: kahraman `city_id = <saldıranın şehri>` ile **anında** yazılıyordu.
+ * Savaş rakibin kapısında çözülüyor, ordu saatlerce yolda oluyor, kahraman o saniye sefere
+ * hazır görünüyordu.
+ *
+ * ⚠️ İhtimal motorda ölçülüyor (`captureChance`) ve gerçek bir savaşta %100 yapmak zor;
+ * bu yüzden testler dünyaya özel motor ayarı geçiriyor (`engineFor`). Ölçülen şey ihtimal
+ * DEĞİL, kahraman çıktıktan SONRAKİ yerleşim.
+ */
+describe('savaştan çıkan kahraman', () => {
+  /** Kesin yakalama: eşik kapalı, tapınak başına pay devasa, ölçek 1. */
+  const kesinYakalama = (): SchedulerService => new SchedulerService(
+    h.db, clock, registry,
+    {
+      worldId,
+      retryBackoffMs: 0,
+      engineFor: () => ({
+        combat: { capture: { xpGate: -1, xpScale: 1, perTempleLevel: 100_000 } },
+      }),
+    },
+  );
+
+  async function kos(missionId: number): Promise<void> {
+    await h.db.execute(sql`
+      UPDATE missions SET execute_at = now() - interval '1 second' WHERE id = ${missionId}
+    `);
+    await kesinYakalama().tick();
+  }
+
+  /** Yeni doğan kahraman = savaştan önce var olmayan satır. */
+  async function yeniKahraman(playerId: number): Promise<Record<string, unknown> | undefined> {
+    const rows = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT * FROM heroes WHERE player_id = ${playerId} ORDER BY id DESC LIMIT 1
+    `);
+    return rows[0];
+  }
+
+  it('⭐⭐ SALDIRAN kazanınca kahraman EVDE DEĞİL, dönüş kafilesinde', async () => {
+    await setBuilding(attackCity, 'temple', 5);      // T > 0 şart
+    await giveUnits(attackCity, 'ogre', 20_000);
+    await giveUnits(defendCity, 'dragon', 8000);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { ogre: 20_000 }, at,
+    });
+    await kos(m.missionId);
+
+    const kahraman = await yeniKahraman(attacker);
+    expect(kahraman).toBeDefined();
+    expect(kahraman!['status']).toBe('alive');
+    /* ⭐ ASIL İDDİA: şehirde DEĞİL — savaş alanından eve yürüyor. */
+    expect(kahraman!['city_id']).toBeNull();
+
+    /* ⭐ Ve dönüş görevine bağlı: `mission_heroes_hero` tekil indeksi sayesinde bu satır
+       varken başka bir sefere seçilmesi **veritabanı seviyesinde** imkânsız. */
+    const ret = await returnMission();
+    expect(ret).toBeDefined();
+    const [mh] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT mission_id FROM mission_heroes WHERE hero_id = ${kahraman!['id']}
+    `);
+    expect(Number(mh!['mission_id'])).toBe(Number(ret!['id']));
+  });
+
+  it('⭐ dönüş varınca kahraman şehre yerleşiyor ve serbest kalıyor', async () => {
+    await setBuilding(attackCity, 'temple', 5);
+    await giveUnits(attackCity, 'ogre', 20_000);
+    await giveUnits(defendCity, 'dragon', 8000);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { ogre: 20_000 }, at,
+    });
+    await kos(m.missionId);
+
+    const ret = await returnMission();
+    await runDue(Number(ret!['id']));
+
+    const kahraman = await yeniKahraman(attacker);
+    expect(Number(kahraman!['city_id'])).toBe(attackCity);
+    const kalan = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM mission_heroes WHERE hero_id = ${kahraman!['id']}
+    `);
+    expect(kalan).toHaveLength(0);
+  });
+
+  /**
+   * ⚠️ SAVUNANIN kahramanı YÜRÜMEZ: savaş zaten onun kapısında geçti, kahraman kendi
+   * şehrinde doğuyor. Ona da yolculuk yazsaydık, hiç ayrılmadığı şehre "dönmesi" için
+   * bekletmiş olurduk.
+   */
+  it('⭐⭐ SAVUNAN kazanınca kahraman ANINDA kendi şehrinde', async () => {
+    await setBuilding(defendCity, 'temple', 5);
+    /**
+     * ⚠️⚠️ **Saldıran GÜÇLÜ ama YETERSİZ olmalı** ve kurulum motorla ölçülerek seçildi.
+     *
+     * Tecrübe `(aLM + dLM) × (dLM / aLM) × 0,001` ve saldıran zayıfken sonuç ≈ `dLM`
+     * oluyor; `round()` 500'ün altını **sıfıra** indiriyor → yakalama çarpanı sıfırlanıyor
+     * ve kahraman motorda hiç doğmuyor. 3.000 cüce bile bu eşiği geçemedi (ölçüldü);
+     * 2.000 ejderha gündüz 8.326, gece 2.824 tecrübe üretiyor — iki hâlde de güvenli.
+     * 30.000 muhafız savunanı kazandıracak kadar kalabalık.
+     */
+    await giveUnits(attackCity, 'dragon', 2000);
+    await giveDefenses(defendCity, 'guard', 30_000);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: attackCity, playerId: attacker, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dragon: 2000 }, at,
+    });
+    await kos(m.missionId);
+
+    /**
+     * ⚠️ Kurulumun gerçekten savunanı kazandırdığını ÖNCE doğrula: saldıran kazanırsa
+     * kahraman öteki tarafta doğar ve test "kahraman yok" diye anlamsız bir yerde düşer.
+     *
+     * ⚠️⚠️ Savaş **GÖREV KİMLİĞİNDEN** çekiliyor, `world_id`den DEĞİL. Test dünyaları
+     * koşular arasında YENİDEN KULLANILIYOR (`freshWorldId` her koşuda 100'den başlıyor,
+     * `createWorld` `ON CONFLICT DO UPDATE` yapıyor) — yani `WHERE world_id = ...` önceki
+     * koşudan kalma bir savaşı okuyabiliyor. Bu tam olarak yaşandı: sorgu bambaşka bir
+     * kurulumun sonucunu döndürüp testi yanlış yerden düşürdü.
+     */
+    const [savas] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT winner, result FROM battles WHERE mission_id = ${m.missionId}
+    `);
+    expect(savas!['winner']).toBe('defender');
+    /* Tecrübe > 0 olmadan yakalama çarpanı sıfırlanır ve kahraman motorda hiç doğmaz. */
+    expect(Number((savas!['result'] as Record<string, unknown>)['xp'])).toBeGreaterThan(0);
+
+    const kahraman = await yeniKahraman(defender);
+    expect(kahraman).toBeDefined();
+    expect(Number(kahraman!['city_id'])).toBe(defendCity);
+    const mh = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT 1 FROM mission_heroes WHERE hero_id = ${kahraman!['id']}
+    `);
+    expect(mh).toHaveLength(0);
   });
 });

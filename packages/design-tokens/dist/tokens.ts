@@ -20,7 +20,7 @@ export const lightColors = {
   "focusRing": "#8A5A2B",
   "panelHeader": "#C89B5A",
   "onPanelHeader": "#2B2116",
-  "rowAlt": "#F3E9D6",
+  "rowAlt": "#EDE0C6",
   "bolt": "#A97540"
 } as const;
 

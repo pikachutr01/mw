@@ -1110,6 +1110,23 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
       <div className={`mb-2 flex items-center gap-2 rounded-[var(--radius-sm)] border px-3 py-2
         ${r.winner === 'draw' ? 'border-border bg-raised'
           : r.won ? 'border-success bg-success/10' : 'border-danger bg-danger/10'}`}>
+        {/*
+          ⚠️⚠️ **BURADA `toLocaleUpperCase('tr')` YOK ve bu BİLİNÇLİ** (2026-08-21).
+
+          Kullanıcı mobilde *"KAYBETTİNİZ yazısında büyük İ harfi gözükmüyor"* dedi ve orada
+          düzeltme `mwUpper` oldu. Web'de aynı yamaya kalkışıldı, sonra ÖLÇÜLDÜ ve gereksiz
+          olduğu görüldü: iki taraf aynı ada sahip ama **farklı Cinzel dosyaları** kullanıyor.
+            • mobil `assets/fonts/Cinzel-VF.ttf` → küçük `i` glifi NOKTASIZ (yMax 600, dotless
+              `ı` ile birebir aynı), yani «Kaybettiniz» gerçekten «KAYBETTINIZ» çiziliyordu.
+            • web (Google Fonts) → küçük `i` NOKTALI küçük büyük harf olarak çiziliyor
+              (tuvalde ölçüldü: mürekkep iki bloğa ayrılıyor, nokta + gövde).
+          Yani web'de görünen bir kusur YOKTU; büyütmek yalnız harfleri uzatan, istenmemiş bir
+          görsel değişiklik olurdu.
+
+          ⚠️ Google bir gün fontu mobildeki sürüme yaklaştırırsa nokta buradan da kaybolur.
+          O gün çözüm hazır: `.toLocaleUpperCase('tr')` — `toUpperCase()` DEĞİL, o yerelden
+          bağımsız olduğu için `i` → `I` verir ve hatanın aynısını üretir.
+        */}
         <b className={`display flex-1 text-lg
           ${r.winner === 'draw' ? 'text-muted' : r.won ? 'text-success' : 'text-danger'}`}>
           {r.winner === 'draw' ? 'Berabere' : r.won ? 'Kazandınız !' : 'Kaybettiniz !'}
@@ -1122,10 +1139,12 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
           *"ay ikonu üzerine tıklanınca bilgilendirici bir tooltip ile Savaş gece gerçekleşti
           şeklinde bir bilgi gösterelim"* isteniyor. Eski notu silmiyoruz — kararın iki kez
           değiştiğini görmek, bir sonraki turda üçüncü kez tartışmamayı sağlıyor.
+          ⭐ 2026-08-21: metin TEK CÜMLEYE indi (*"gece savaşı tooltip ine sadece savaş gece
+          gerçekleşti yazsın, detaylı açıklama yazmasın"*). Kalkan kısım gece görüşünün vuruş
+          gücüne etkisini anlatıyordu; kullanıcı raporda mekanik açıklaması istemiyor.
         */}
         {r.night ? (
-          <Tooltip label={'Savaş gece gerçekleşti. Gece görüşü tekniği olmayan saldıran ordu '
-            + 'daha az vuruş gücüyle savaşır.'}>
+          <Tooltip label="Savaş gece gerçekleşti.">
             <span className="cursor-help text-lg" aria-label="gece savaşı">🌙</span>
           </Tooltip>
         ) : null}
@@ -1233,6 +1252,15 @@ function BattleReport({ battleId, onNavigate }: { battleId: number; onNavigate?:
               </span>
             </div>
           ) : null}
+          {/*
+            ⭐ SONUÇ CÜMLESİ KUTUNUN İÇİNDE (kullanıcı, 2026-08-21): *"mağara yıkıldığında
+            içindeki ordu şehre kaçıyor bilgi notunu aynı kutu içinde yazalım. Ayrı ayrı
+            notlar olmasın."* Cümle eskiden `notes` listesine düşüyordu ve raporun EN ALTINDA,
+            mağara kutusundan kopuk bir madde işareti olarak çıkıyordu.
+            ⚠️ Metin sunucudan geliyor (`cave.note`), burada yazılmıyor: iki istemcinin aynı
+            olayı ayrı cümlelerle anlatması bu depoda bilinen bir ayrışma kaynağı.
+          */}
+          {r.cave.note ? <div className="mt-1 text-muted">{r.cave.note}</div> : null}
         </div>
       ) : null}
 

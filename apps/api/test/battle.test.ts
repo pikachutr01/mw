@@ -2652,10 +2652,17 @@ describe('⭐⭐ rapor: aynı bilgi iki kez yazılmaz', () => {
     expect(notes(row(), 'attacker')).not.toMatch(/[Ss]ur/);
   });
 
-  it('⭐ savunanda yalnız SONUÇ kalıyor — kutunun söylemediği kısıt', () => {
+  /**
+   * ⛔ **KISIT NOTU KALDIRILDI** (kullanıcı, 2026-08-21): *"sur yıkıldığında «Sur onarılana
+   * kadar yeni savunma birimi emri veremezsin» şeklindeki bilgi notunu kaldır."*
+   *
+   * ⚠️ Test ters yönde kilitliyor: sur yıkılınca savunanda sura dair HİÇ not olmamalı.
+   * Kuralın kendisi duruyor (emir hâlâ reddediliyor), raporda anlatılmıyor.
+   */
+  it('⭐ savunanda sur yıkımı için not HİÇ yazılmıyor (kutuda zaten var)', () => {
     const n = notes(row(), 'defender');
-    expect(n).toMatch(/yeni savunma birimi emri veremezsin/);
-    expect(n).not.toMatch(/TAMAMEN/);
+    expect(n).not.toMatch(/[Ss]ur/);
+    expect(n).not.toMatch(/savunma birimi emri/);
   });
 
   it('kısmi hasarda yüzde savunana bir kez yazılıyor (kutuda), notta değil', () => {
@@ -2703,24 +2710,53 @@ describe('⭐⭐ rapor: aynı bilgi iki kez yazılmaz', () => {
       cave: { present: true, level: 3, ...cave },
     } as Partial<BattleRow['result']>);
 
-    it('⭐ yıkım durumu kutuda; notta yalnız sonuç/sayı', () => {
+    /**
+     * ⭐ **SONUÇ CÜMLESİ ARTIK KUTUNUN İÇİNDE** (kullanıcı, 2026-08-21: *"aynı kutu içinde
+     * yazalım. Ayrı ayrı notlar olmasın."*) → `cave.note`, `notes` DEĞİL.
+     */
+    it('⭐ yıkım durumu kutuda; sonuç cümlesi de AYNI kutuda (notlarda değil)', () => {
       const r = withCave({ broken: true, required: 100, survivingDwarves: 150, reason: null });
       expect(buildBattleReport(r, 'defender').cave).toMatchObject({ broken: true });
-      expect(notes(r, 'defender')).not.toMatch(/YIKILDI/);
-      expect(notes(r, 'defender')).toMatch(/şehre kaçıyor/);
-      expect(notes(r, 'attacker')).not.toMatch(/YIKILDI/);
-      expect(notes(r, 'attacker')).toMatch(/cüce yeterli oldu/);
+      expect(buildBattleReport(r, 'defender').cave?.note).toMatch(/şehre kaçıyor/);
+      expect(buildBattleReport(r, 'attacker').cave?.note).toMatch(/cüce yeterli oldu/);
+      /* ⚠️ Not listesi mağaraya dair TEK KELİME etmiyor — kutudan kopuk madde kalmadı. */
+      expect(notes(r, 'defender')).not.toMatch(/mağara|kaçıyor/i);
+      expect(notes(r, 'attacker')).not.toMatch(/mağara|cüce/i);
     });
 
-    it('⭐ dayandığında sayılar SALDIRANA yalnız kutudan gider, not yazılmaz', () => {
+    /**
+     * ⭐⭐ **SAVUNAN DAYANAN MAĞARAYI HİÇ GÖRMÜYOR** (kullanıcı, 2026-08-21): *"Savunma
+     * raporuna mağaranın dayandığı bilgisi yazılmasın, sadece yıkılırsa yazılsın. Aynı şekilde
+     * «Mağaran dayandı: yıkılması için xxx cüce gerekiyordu» gibi ek bilgi de eklenmesin."*
+     *
+     * ⚠️ Kapı `cave` alanının KENDİSİNDE: null bırakılınca kutu da düz metin de çizilmiyor.
+     * İstemciye «sen gizle» demek aynı kararı üç yerde tekrarlamak olurdu.
+     */
+    it('⭐⭐ savunanda dayanan mağara HİÇ raporlanmıyor (kutu da not da yok)', () => {
+      const r = withCave({
+        broken: false, required: 100, survivingDwarves: 40, reason: 'not_enough_dwarves',
+      });
+      const def = buildBattleReport(r, 'defender');
+      expect(def.cave).toBeNull();
+      expect(def.notes.join(' | ')).not.toMatch(/cüce|[Mm]ağara/);
+      expect(def.text).not.toMatch(/Mağara/);
+    });
+
+    it('⭐ «zaten yıkıktı» da savunana YAZILMIYOR — yıkım değil, değişmeyen durum', () => {
+      const r = withCave({
+        broken: false, required: 100, survivingDwarves: 150, reason: 'already_repairing',
+      });
+      expect(buildBattleReport(r, 'defender').cave).toBeNull();
+      expect(notes(r, 'defender')).not.toMatch(/onarım|mağara/i);
+    });
+
+    it('⭐ SALDIRAN değişmedi: dayanan mağarada sayılar kutudan gider, not yazılmaz', () => {
       const r = withCave({
         broken: false, required: 100, survivingDwarves: 40, reason: 'not_enough_dwarves',
       });
       expect(buildBattleReport(r, 'attacker').cave)
-        .toMatchObject({ required: 100, survivingDwarves: 40 });
+        .toMatchObject({ required: 100, survivingDwarves: 40, note: null });
       expect(notes(r, 'attacker')).not.toMatch(/cüce/);
-      /* Savunana kutu sayı basmıyor → cümle ona kalıyor. */
-      expect(notes(r, 'defender')).toMatch(/100 cüce gerekiyordu/);
     });
 
     it('düz metinde mağara satırı var (orada kutu yok)', () => {
@@ -2728,6 +2764,12 @@ describe('⭐⭐ rapor: aynı bilgi iki kez yazılmaz', () => {
         broken: false, required: 100, survivingDwarves: 40, reason: 'not_enough_dwarves',
       });
       expect(buildBattleReport(r, 'attacker').text).toMatch(/Mağara: dayandı \(gereken 100 cüce/);
+    });
+
+    it('⭐ düz metinde sonuç cümlesi mağara satırının ALTINDA (sonda değil)', () => {
+      const r = withCave({ broken: true, required: 100, survivingDwarves: 150, reason: null });
+      expect(buildBattleReport(r, 'defender').text)
+        .toMatch(/Mağara: YIKILDI\n {2}İçerideki ordu şehre kaçıyor/);
     });
   });
 });

@@ -205,6 +205,95 @@ async function openReturn(): Promise<{ id: number; payload: Record<string, unkno
   return rows[0] ? { id: Number(rows[0]['id']), payload: rows[0]['payload'] as Record<string, unknown> } : null;
 }
 
+/* ═══ YÜK ARABASI — SALDIRI KAPISI ve HIZ MUAFİYETİ (2026-08-21) ═══════════ */
+
+/**
+ * ⭐⭐ Kullanıcının iki şartı:
+ *   1. *"Artık bir saldırı için yalnızca yük arabası seçilirse görev başlatılamasın… Ama
+ *      sadece saldırı için geçerli, nakliye, destek gibi görevlerde sadece yük arabası
+ *      seçilebilir."*
+ *   2. *"Yük arabası orduyla beraber savaşa gönderildiğinde artık ordudaki en yavaş ünitenin
+ *      hızına endeksli olsun, kendisi orduyu yavaşlatan ünite olmasın… tek başına nakliye,
+ *      şehir kurma ve destek için gönderilirse yine kendi hızına göre hareket etsin."*
+ */
+describe('⭐⭐ Yük Arabası', () => {
+  it('⭐⭐ YALNIZ araba ile saldırı REDDEDİLİR', async () => {
+    await giveUnits(home, 'cargo_wagon', 10);
+    const at = await clock.gameNow(worldId);
+    await expect(missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { cargo_wagon: 10 }, at,
+    })).rejects.toMatchObject({ code: 'no_units' });
+  });
+
+  /**
+   * ⚠️⚠️ **GNOM GEÇER ve bu bilinçli.** Kural ilk yazımda `NONCOMBAT` kümesine bağlanmıştı ve
+   * gnom da reddediliyordu; motorda gnomun da vuruş yapmaması teknik olarak doğru bir
+   * gerekçeydi ama kullanıcı oyunun kendi diliyle düzeltti (2026-08-22): *"Savaşmayan birim
+   * olsa bile o bir savaşçı sonuçta."* Gnom bir asker, yük arabası bir taşıt.
+   *
+   * ⚠️ Test o kararı kilitliyor: biri kümeyi tekrar `NONCOMBAT`e bağlarsa burası düşer.
+   */
+  it('⭐⭐ yalnız Gnom ile saldırı GEÇER (gnom bir asker)', async () => {
+    await giveUnits(home, 'gnome', 10);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { gnome: 10 }, at,
+    });
+    expect(m.missionId).toBeGreaterThan(0);
+  });
+
+  it('araba + savaşçı saldırısı GEÇER', async () => {
+    await giveUnits(home, 'cargo_wagon', 5);
+    await giveUnits(home, 'dwarf', 5);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { cargo_wagon: 5, dwarf: 5 }, at,
+    });
+    expect(m.missionId).toBeGreaterThan(0);
+  });
+
+  /**
+   * ⭐⭐ HIZ MUAFİYETİ. Ejderha 160, araba 140 — muafiyet olmasaydı kafile 140'a düşerdi.
+   * ⚠️ Sayı `missions.payload.speed`ten okunuyor, yani sunucunun GERÇEKTEN kullandığı hız;
+   * ayrı bir hesap tekrarı değil.
+   */
+  it('⭐⭐ araba kafileyi YAVAŞLATMIYOR (ejderha 160 kalıyor)', async () => {
+    await giveUnits(home, 'dragon', 3);
+    await giveUnits(home, 'cargo_wagon', 5);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendAttack({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { dragon: 3, cargo_wagon: 5 }, at,
+    });
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM missions WHERE id = ${m.missionId}
+    `);
+    expect(Number((row!['payload'] as Record<string, unknown>)['speed'])).toBe(160);
+  });
+
+  /**
+   * ⭐ TEK BAŞINA araba: muafiyet DÜŞÜYOR. Yoksa "hızı olmayan birim" üretirdik ve
+   * nakliye süresi hesaplanamazdı.
+   */
+  it('⭐ tek başına nakliyede araba KENDİ hızıyla (140)', async () => {
+    await giveUnits(home, 'cargo_wagon', 3);
+    await setResources(home, 10_000, 0);
+    const at = await clock.gameNow(worldId);
+    const m = await missions.sendTransport({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 2 }, units: { cargo_wagon: 3 },
+      cargo: { gold: 5000, food: 0 }, at,
+    });
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT payload FROM missions WHERE id = ${m.missionId}
+    `);
+    expect(Number((row!['payload'] as Record<string, unknown>)['speed'])).toBe(140);
+  });
+});
+
 /* ═══ NAKLİYE ══════════════════════════════════════════════════════════════ */
 
 describe('nakliye', () => {
@@ -253,6 +342,20 @@ describe('nakliye', () => {
       .find((x) => x['kind'] === 'transport_report' && x['side'] === 'sender');
     expect(gonderen).toBeDefined();
     expect((gonderen!['body'] as Record<string, unknown>)['cargo']).toEqual({ gold: 8000, food: 0 });
+
+    /**
+     * ⭐ **KONUDA ŞEHİR ADI DEĞİL OYUNCU ADI** (kullanıcı, 2026-08-21): *"Ulaşan nakliye
+     * raporunda şehrin adı değil oyuncunun adı yazılsın."*
+     *
+     * ⚠️ Hedef şehrin adı `dusman`, sahibinin adı `rival…` — ikisi bilerek FARKLI, yoksa test
+     * eski davranışta da geçerdi. Şehir adının KONUDA OLMADIĞI da ayrıca kilitleniyor.
+     * ⚠️ Ad tam eşitlikle sınanmıyor: `createPlayer` kullanıcı adına benzersizlik soneki
+     * ekliyor (`rival-1867cb64`), yani `toBe` bu kurulumda hiçbir zaman tutmaz.
+     * ⚠️ Şehir adı gövdede DURUYOR: değişen yalnız liste satırındaki konu.
+     */
+    expect(String(gonderen!['subject'])).toMatch(/^Nakliyen ulaştı · rival/);
+    expect(String(gonderen!['subject'])).not.toContain('dusman');
+    expect((gonderen!['body'] as Record<string, unknown>)['targetCityName']).toBe('dusman');
 
     /* ⭐ DÖNÜŞ RAPOR ÜRETMEZ (kullanıcı, 2026-07-30): ordu eve varınca posta DÜŞMEZ —
      * yalnız mission:completed bildirimi. */
@@ -1026,6 +1129,45 @@ describe('şehir kurma', () => {
     const newCityId = Number(rows[0]!['id']);
     expect((await unitsOf(newCityId))['dwarf']).toBe(30);
     expect(await openReturn()).toBeNull();   // garnizon olarak kalır
+  });
+
+  /**
+   * ⭐⭐ **YOLDAKİ ŞEHİR KURMA GÖREVİ DE HAKKA SAYILIR** (kullanıcı, 2026-08-21: *"beşinci
+   * şehir kurma görevi zaten yolda olduğu için buna müsaade edilmesin"*).
+   *
+   * Kural `mission.service.ts`te baştan beri yazılıydı (`owned + pending >= limit`) ama
+   * **hiçbir test onu tutmuyordu** — `city_limit` kodu tüm test klasöründe geçmiyordu.
+   * Denetimde çıktı ve kilitlendi.
+   *
+   * ⚠️ Sayılmasaydı açılan boşluk şu: oyuncu aynı anda beş kuruluş seferi yollar, hepsi
+   * "henüz kurulmadı" olduğu için hepsi geçer ve tavan sessizce delinir. Aynı tuzağın ikizi
+   * saldırı limitinde de var ve orada da aynı biçimde kapatılmış.
+   *
+   * ⚠️ Kurulum sayıları bilinçli: `colonization 6` → hak 3, oyuncunun ZATEN 2 şehri var,
+   * yani tek bir yoldaki görev tavanı doldurmaya yetiyor. Görev **işlenmiyor** (`runDue`
+   * çağrılmıyor) — testin ölçtüğü şey tam olarak "henüz varmamış" hâli.
+   */
+  it('⭐⭐ yoldaki kuruluş seferi hakka sayılır — ikinci sefer reddedilir', async () => {
+    await setTech(me, 'colonization', 6);     // hak 3, elinde 2 şehir var
+    await giveUnits(home, 'dwarf', 60);
+    const at = await clock.gameNow(worldId);
+
+    await missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 7 }, units: { dwarf: 30 }, at,
+    });
+
+    /* ⚠️ İlk görev HÂLÂ YOLDA (işlenmedi): şehir sayısı hâlâ 2, ama hak dolmuş sayılıyor. */
+    await expect(missions.sendFoundCity({
+      originCityId: home, playerId: me, worldId,
+      target: { k: 1, d: 1, s: 8 }, units: { dwarf: 30 }, at,
+    })).rejects.toMatchObject({ code: 'city_limit' });
+
+    /* Hata gövdesi sayıları da taşıyor — ekran "2 + 1 / 3" diyebilsin. */
+    const [row] = await h.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n FROM cities WHERE player_id = ${me}
+    `);
+    expect(Number(row!['n'])).toBe(2);
   });
 
   /**

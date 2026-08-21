@@ -929,7 +929,13 @@ export interface BattleReport {
     captured: { name: string; mine: boolean } | null;
   };
   wall: { level: number | null; integrity: number | null; destroyed: boolean } | null;
-  /** `escaped` yalnız savunanda dolar — mağaranın içi saldırana asla gitmez. */
+  /**
+   * `escaped` yalnız savunanda dolar — mağaranın içi saldırana asla gitmez.
+   *
+   * ⚠️ **SAVUNANDA `null` = mağara YIKILMADI** (2026-08-21, kullanıcı): rapor mağarayı yalnız
+   * yıkıldığında anlatıyor. Boş olması «mağara yok» demek DEĞİL; kapı sunucuda
+   * (`battle-report.ts`), burada ek bir gizleme koşulu YOK.
+   */
   cave: {
     present: boolean;
     broken: boolean;
@@ -938,6 +944,8 @@ export interface BattleReport {
     reason: string | null;
     escaped: Record<string, number> | null;
     repairUntil: string | null;
+    /** ⭐ Kutunun içinde basılan sonuç cümlesi; yıkılmayan mağarada (ve eski kayıtlarda) null. */
+    note: string | null;
   } | null;
   loot: { gold: number; food: number } | null;
   /** Yalnız saldıran: ortaya çıkan havuz vs fiilen taşınan. */

@@ -150,6 +150,31 @@ void main() {
       expect(BattleReport.fromJson(_report()).cave, isNull);
     });
 
+    /// ⭐ SONUÇ CÜMLESİ KUTUNUN İÇİNDE (kullanıcı, 2026-08-21: *"aynı kutu içinde yazalım.
+    /// Ayrı ayrı notlar olmasın."*) — sunucu cümleyi `notes` yerine `cave.note` ile yolluyor.
+    ///
+    /// ⚠️ Eşleme kopsaydı belirti SESSİZ olurdu: kutu çizilir, cümle hiç görünmezdi.
+    test('⭐ `cave.note` okunuyor; alan yoksa null (eski kayıt)', () {
+      final r = BattleReport.fromJson(
+        _report({
+          'cave': {
+            'present': true,
+            'broken': true,
+            'note':
+                'İçerideki ordu şehre kaçıyor; mağara onarılana kadar kullanılamaz.',
+          },
+        }),
+      );
+      expect(r.cave!.note, contains('şehre kaçıyor'));
+
+      final eski = BattleReport.fromJson(
+        _report({
+          'cave': {'present': true, 'broken': true},
+        }),
+      );
+      expect(eski.cave!.note, isNull);
+    });
+
     /// ⚠️ Kapasite yettiğinde `leftBehind` null geliyor ve satır çizilmiyor. `(0,0)`a
     /// düşürseydik her raporda «şehirde kaldı: 0» satırı belirirdi.
     test('⭐ geride kalan yoksa null', () {

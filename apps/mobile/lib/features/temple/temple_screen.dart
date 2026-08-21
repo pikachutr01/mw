@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/api_client.dart';
+import '../../core/clock.dart';
 import '../../gen/facts.g.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
@@ -342,15 +343,74 @@ class _HeroCardState extends ConsumerState<_HeroCard> {
     final ok = await mwConfirmSheet(
       context,
       title: '${h.name} diriltilsin mi?',
-      // ⚠️⚠️ Burada RAKAM VAR ve bu, `mwConfirm`in «rakam yazma» kuralının bilinçli istisnası:
-      // orada sorun, ekrandaki tahminin sunucunun ONAY ANINDAKİ hesabından sapmasıydı (iade
-      // oranı zamanla değişiyor). Diriltme maliyeti ise seviyeye bağlı ve zamanla değişmiyor;
-      // üstelik oyuncunun karar verebilmesi için kaç kaynak gideceğini bilmesi ŞART.
+      /* ⚠️⚠️ Burada RAKAM VAR ve bu, `mwConfirm`in «rakam yazma» kuralının bilinçli istisnası:
+         orada sorun, ekrandaki tahminin sunucunun ONAY ANINDAKİ hesabından sapmasıydı (iade
+         oranı zamanla değişiyor). Diriltme maliyeti ise seviyeye bağlı ve zamanla değişmiyor;
+         üstelik oyuncunun karar verebilmesi için kaç kaynak gideceğini bilmesi ŞART.
+
+         ⚠️ `body` düz metin karşılığı olarak duruyor (gerekçe `mwConfirmSheet`te); ekranda
+         çizilen `bodyWidget`. */
       body:
-          'Maliyet ${mwNumber(c.gold)} altın · ${mwNumber(c.food)} yemek — şehrin kaynağından '
-          'düşer ve iptal edilse bile iade edilmez.\n\n'
-          'Kahramanın seviyesi arttıkça süre de maliyet de yükselir; bu şehrin Tapınağını '
-          'yükseltmek süreyi kısaltır.',
+          'Maliyet: ${mwNumber(c.gold)} altın, ${mwNumber(c.food)} yemek. '
+          'Süre: ${formatDuration(h.reviveSeconds ?? 0)}. '
+          'Kaynak şehrinden düşer ve iptal edilse bile iade edilmez.',
+      /* ⭐⭐ MALİYET ARTIK İKONLU ve SÜRE DE YAZIYOR (kullanıcı, 2026-08-22: *"diriltme
+         maliyeti için altın ve yemek resimleri olsun… Diriltme maliyeti ile beraber diriltme
+         süresi de başlamadan önce gösterilsin."*).
+
+         ⚠️ Süre alanı (`reviveSeconds`) modelde BAŞTAN BERİ vardı ama hiç çizilmiyordu:
+         oyuncu kaç kaynak gideceğini görüyor, ne kadar bekleyeceğini görmüyordu. Web zaten
+         gösteriyordu, eksik olan yalnız mobildi.
+         ⚠️ Metinde **tire yok** (kullanıcı isteği + deponun yazım kuralı): ayırıcı olarak
+         nokta ve virgül kullanıldı. */
+      bodyWidget: Builder(
+        builder: (ctx) {
+          final renk = MwColors.of(ctx).muted;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                runSpacing: 4,
+                children: [
+                  Text('Maliyet', style: TextStyle(fontSize: 13, color: renk)),
+                  MwResource(kind: 'gold', amount: c.gold, size: 16),
+                  MwResource(kind: 'food', amount: c.food, size: 16),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text('Süre', style: TextStyle(fontSize: 13, color: renk)),
+                  const SizedBox(width: 10),
+                  Text(
+                    formatDuration(h.reviveSeconds ?? 0),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(ctx).colorScheme.primary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Kaynak şehrinin kasasından düşer ve iptal edilse bile iade edilmez.',
+                style: TextStyle(fontSize: 12, color: renk),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Kahramanın seviyesi arttıkça süre de maliyet de yükselir. '
+                'Bu şehrin Tapınağını yükseltmek süreyi kısaltır.',
+                style: TextStyle(fontSize: 12, color: renk),
+              ),
+            ],
+          );
+        },
+      ),
       confirmLabel: 'Dirilt',
       danger: false,
     );

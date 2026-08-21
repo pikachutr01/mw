@@ -241,15 +241,28 @@ function MemberView({ a, page, setPage }: {
                 ) : null}
 
                 <span className="my-0.5 block border-t border-border" />
-                <MenuItem danger disabled={leave.isPending}
-                  onClick={() => {
-                    close();
-                    void confirm({
-                      title: 'İttifaktan Ayrıl',
-                      body: 'İttifağı terk ediyorsunuz. Emin misiniz!',
-                      danger: true,
-                    }).then((ok) => { if (ok) leave.mutate(); });
-                  }}>İttifaktan Ayrıl</MenuItem>
+                {/*
+                  ⚠️⚠️ **LİDERDE «AYRIL» HİÇ ÇİZİLMİYOR** (2026-08-21). Lider hiçbir koşulda
+                  ayrılamıyor: üye varsa önce Liderlik Devri (`leader_must_transfer`), tek
+                  kalmışsa İttifağı Dağıt (`must_disband`). Yani liderde bu madde **her zaman**
+                  hataya düşerdi — tıklanabilir ama asla çalışmayan bir menü satırı.
+
+                  ⚠️ Son üye lider için kural 2026-08-21'de değişti: eskiden «Ayrıl» sunucuda
+                  sessizce DAĞITIYORDU (kullanıcı: *"ittifağı dağıtmadan son kişi ayrılamaz"*).
+                  Çıkış yolu kaybolmuyor — hemen altındaki «İttifağı Dağıt» maddesi liderde
+                  her zaman görünüyor ve kendi onayını istiyor.
+                */}
+                {isLeader ? null : (
+                  <MenuItem danger disabled={leave.isPending}
+                    onClick={() => {
+                      close();
+                      void confirm({
+                        title: 'İttifaktan Ayrıl',
+                        body: 'İttifağı terk ediyorsunuz. Emin misiniz!',
+                        danger: true,
+                      }).then((ok) => { if (ok) leave.mutate(); });
+                    }}>İttifaktan Ayrıl</MenuItem>
+                )}
                 {isLeader ? (
                   <MenuItem danger disabled={disband.isPending}
                     onClick={() => {

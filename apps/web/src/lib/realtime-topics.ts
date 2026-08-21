@@ -46,6 +46,23 @@ export const BATTLE_KEYS = [
 export const INVALIDATES: Record<string, readonly string[]> = {
   'missions:changed': ['missions'],
   'city:changed': ['city', 'catalog', 'overview'],
+  /**
+   * ⭐⭐ ORDU EVE DÖNDÜ (kullanıcı, 2026-08-21): *"ordu şehre geri döndüğünde oyun açık
+   * durumda olunca görevlerde anlık olarak kullanılabilir hâle gelmeli."*
+   *
+   * ⚠️⚠️ Bu satır 2026-08-21'e kadar YAZILAMIYORDU: sunucu olayı `missions:changed` konusuna
+   * düzleştiriyordu, yani `city:army_returned` adı istemciye hiç ulaşmıyordu
+   * (`realtime.bus.ts`). Bedeli tek bir ekranda görünüyordu ama tam da oyuncunun beklediği
+   * yerde: dönen KAHRAMAN. `temple` tazelenmediği için Tapınak kahramanı hâlâ «görevde»
+   * gösteriyor, sefer formu da onu seçtirmiyordu.
+   *
+   * ⚠️ `catalog` listede ÇÜNKÜ Baraka/Savunma ekranları birimlerin güncel adedini oradan
+   * okuyor (`useCatalog` yoklama YAPMIYOR — o anahtar yalnız bu tabloyla tazeleniyor).
+   * ⚠️ `missions` gereksiz görünebilir (`mission:completed` de yayınlanıyor) ama duruyor:
+   * iki olayın sırası garanti değil ve bu tablonun kuralı «olayın değiştirdiği her şeyi
+   * yaz», «başka bir olay nasılsa halleder» değil.
+   */
+  'city:army_returned': ['city', 'catalog', 'missions', 'temple', 'overview'],
   // Yeni şehir kurulması şehir ŞERİDİNİ de değiştirir; ⭐ o koordinata YOLDA olan şehir
   // kurma görevleri de yeni sahibe "gelen saldırı" olarak görünür hâle gelir → missions da tazelenir.
   'cities:changed': ['cities', 'city', 'world', 'missions'],

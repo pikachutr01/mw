@@ -63,7 +63,19 @@ export function createTransportHandler(cities: CityService): MissionHandler {
         playerId: senderPlayerId,
         kind: 'transport_report',
         side: 'sender',
-        subject: `Nakliyen ulaştı · ${target.name}`,
+        /**
+         * ⭐ **ŞEHİR ADI DEĞİL OYUNCU ADI** (kullanıcı, 2026-08-21): *"Ulaşan nakliye
+         * raporunda şehrin adı değil oyuncunun adı yazılsın."*
+         *
+         * ⚠️ Gönderen için ayırt edici olan KİME yolladığı: aynı oyuncunun birden çok şehri
+         * olabiliyor ve şehir adları oyuncunun keyfine göre değişiyor, yani «Kuzey Kalesi»
+         * satırı listede kimin olduğunu söylemiyordu.
+         * ⚠️ Ayırıcı ` · ` KORUNUYOR: `battleCounterpart` (iki istemcide de var) karşı tarafın
+         * adını tam bu ayıraçtan okuyor.
+         * ⚠️ Şehir bilgisi KAYBOLMUYOR — `targetCityName` gövdede duruyor ve rapor açılınca
+         * çiziliyor; değişen yalnız liste satırındaki konu.
+         */
+        subject: `Nakliyen ulaştı · ${target.username}`,
         body: {
           targetCityId, targetCityName: target.name, targetPlayer: target.username,
           cargo, at: ctx.at.toISOString(),

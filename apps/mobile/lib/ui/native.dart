@@ -113,23 +113,38 @@ Future<T?> mwSheet<T>(
 }) {
   return _sheet<T>(
     context,
-    (ctx) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ⭐ Başlık bandı `mwTallSheet` ile ORTAK (gerekçe `_SheetBaslik`te).
-          _SheetBaslik(title: title, titleIsUserText: titleIsUserText),
-          // ⚠️ Uzun içerik sığmazsa kaydırılabilir olmalı: telefon yatayken ya da yazı
-          // boyutu büyütülmüşken sheet ekranı aşabiliyor.
-          // ⚠️ Yan dolgu artık BURADA, dışta değil: bant kenardan kenara uzanmalı.
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: child,
+    /* ⭐⭐ KLAVYE DOLGUSU (kullanıcı, 2026-08-21: *"tapınak sayfasında bir kahramanın adını
+       değiştirmek istediğimizde açılan bottom sheet klavyenin altında kalıyor"*).
+
+       ⚠️⚠️ Eksik olan TEK yer burasıydı: `mwTextSheet` ve `mwTallSheet` `viewInsets`i
+       baştan beri uyguluyor (ikisinin başlığında da yazılı), `mwSheet` uygulamıyordu. İçinde
+       yazı alanı olan her `mwSheet` çağrısı — Tapınak'taki «Adını Değiştir» (`_RenameBox`)
+       bunların ilki — klavye açılınca ekranın altında kalıyordu.
+
+       ⚠️ Dolgu `SafeArea`nın DIŞINDA: `SafeArea` sistem çubuklarını hesaplıyor, klavyeyi
+       değil. İçeri alsaydık iki dolgu üst üste binip klavye kapalıyken boşluk bırakırdı.
+       ⚠️ Bu düzeltme `mwSheet` kullanan TÜM sheet'leri etkiliyor ve bu **istenen yön**:
+       yazı alanı olmayan sheet'lerde `viewInsets.bottom` zaten 0, yani onlar değişmiyor. */
+    (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ⭐ Başlık bandı `mwTallSheet` ile ORTAK (gerekçe `_SheetBaslik`te).
+            _SheetBaslik(title: title, titleIsUserText: titleIsUserText),
+            // ⚠️ Uzun içerik sığmazsa kaydırılabilir olmalı: telefon yatayken ya da yazı
+            // boyutu büyütülmüşken sheet ekranı aşabiliyor.
+            // ⚠️ Yan dolgu artık BURADA, dışta değil: bant kenardan kenara uzanmalı.
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: child,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -316,6 +331,18 @@ Future<bool> mwConfirmSheet(
   BuildContext context, {
   required String title,
   required String body,
+
+  /// ⭐⭐ ZENGİN GÖVDE — verilirse `body` metninin YERİNE çiziliyor (2026-08-22).
+  ///
+  /// Kullanıcı diriltme onayında *"altın ve yemek resimleri olsun"* dedi ve düz metin
+  /// bunu yapamıyor. Alan **isteğe bağlı**: onayların büyük çoğunluğu tek cümlelik bir
+  /// uyarı ve onlara widget yazdırmak her çağıranı gereksiz yere ağırlaştırırdı.
+  ///
+  /// ⚠️ `body` yine de ZORUNLU ve bu bilinçli: widget veren çağıran da aynı cümleyi düz
+  /// metin olarak yazmak zorunda kalıyor. Bedeli bir satır; kazancı, gövdeyi görselleştirmek
+  /// isteyen birinin **metni tamamen atlayamaması** — ekran okuyucu ve gelecekteki düz metin
+  /// yüzeyleri o cümleye bakıyor.
+  Widget? bodyWidget,
   String confirmLabel = 'Onayla',
   bool danger = true,
 }) async {
@@ -327,7 +354,8 @@ Future<bool> mwConfirmSheet(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(body, style: TextStyle(color: MwColors.of(ctx).muted)),
+          bodyWidget ??
+              Text(body, style: TextStyle(color: MwColors.of(ctx).muted)),
           const SizedBox(height: 16),
           MwButton(
             label: confirmLabel,

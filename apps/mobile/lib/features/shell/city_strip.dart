@@ -85,6 +85,21 @@ class CityStrip extends ConsumerWidget {
 
     return Column(
       mainAxisSize: MainAxisSize.min,
+      /* ⭐⭐ `stretch` ŞART (kullanıcı, 2026-08-21: *"koordinat ve chevron simgesi en sağa
+         yanaşık olsun, ortalara doğru yaklaşmasın"*).
+
+         ⚠️⚠️ Arıza buradaydı, `_Header`in kendi düzeninde değil: `Column`un varsayılan
+         `crossAxisAlignment` değeri **`center`** ve o, çocuklara GEVŞEK genişlik veriyor.
+         Başlık `Container`ının belirtilmiş bir genişliği olmadığı için içeriği kadar
+         daralıyor, `Row` da ekranın tamamını görmüyordu → içindeki `Spacer` **0 piksel**
+         alıyor ve koordinat şehir adının hemen peşine yapışıyordu. `_Header`de yazılı olan
+         *«koordinat sağa yaslı ve sabit bir sütunda duruyor»* kuralı, doğru yazılmış olmasına
+         rağmen bu yüzden hiç işlemiyordu.
+
+         ⚠️ Düzeltme `Row`a `mainAxisAlignment: spaceBetween` eklemek DEĞİL: o da aynı gevşek
+         kutunun içinde çalışır, yani hiçbir şeyi değiştirmezdi. Sorun hizalama değil
+         **genişlik**. */
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Header(active: active, open: open),
         if (open) _Strip(cities: cities, activeId: active.id),
@@ -237,22 +252,56 @@ class _Strip extends ConsumerWidget {
       ref.watch(movementsProvider).value ?? const [],
     );
 
-    // ⚠️ SOLA YASLI, her hücre kendi genişliğinde (web'de kullanıcı kararı). Eşit bölünen
-    // hücreler kullanılsaydı TEK şehirde o hücre ekranın tamamını kaplar, simge ortasında
-    // asılı kalırdı. Sabit 72 px: beş şehir 360 px'e sığıyor, taşarsa yatayda kayıyor.
+    /* ⭐⭐ BEŞ ŞEHİR YATAY KAYDIRMADAN SIĞIYOR (kullanıcı, 2026-08-21: *"5 şehir olunca şehir
+       seçici kısmı yatay scroll oluşturuyor, scroll oluşturmadan ekranda 5 şehrin de olmasını
+       sağlayalım"*).
+
+       ⚠️⚠️ Eski yorum *"Sabit 72 px: beş şehir 360 px'e sığıyor"* diyordu ve **aritmetiği
+       eksikti**: 5×72 = 360 doğru ama araya 4 ayırıcı (4×4 = 16) ve yanlara dolgu (8+8 = 16)
+       giriyor → gerçek ihtiyaç **392 px**. 360-412 dp'lik telefonların çoğunda taşıyor ve
+       liste kaydırılabilir hâle geliyordu.
+
+       ⭐ Çözüm hücreleri EŞİT BÖLMEK değil, **tavanı korumak**: genişlik `min(72, sığan)`.
+       Böylece eski yorumun haklı uyarısı da ayakta kalıyor — tek şehirde hücre ekranı
+       kaplamıyor, 72 px'de duruyor ve şerit sola yaslı görünmeye devam ediyor. Yalnız
+       sığmadığı durumda daralıyor.
+
+       ⚠️ `MAX_CITIES = 5` sabit bir tavan (`packages/catalog` · `formulas.ts`), yani hesabın
+       en kötü hâli beş hücre: 320 dp'lik bir ekranda bile (320−32−16)/5 ≈ 54 px kalıyor.
+       ⚠️ Alt sınır 52: bunun altında koordinat satırı («1:12:345») okunmaz hâle geliyor.
+       Sınıra dayanılırsa `ListView` yine kaydırılabiliyor — yani kırpma değil, eski davranış.
+       ⚠️ `ListView` KORUNUYOR (`Row`a çevrilmedi): beklenmedik dar bir ekranda kaydırma
+       emniyet ağı olarak kalsın. */
+    const tavan = 72.0;
+    const taban = 52.0;
+    const yanDolgu = 8.0;
+    const ayirac = 4.0;
+
     return SizedBox(
       height: 84,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-        itemCount: cities.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 4),
-        itemBuilder: (context, i) {
-          final city = cities[i];
-          return _Cell(
-            city: city,
-            active: city.id == activeId,
-            threat: tehdit.contains(city.id),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final n = cities.length;
+          final bos =
+              constraints.maxWidth -
+              yanDolgu * 2 -
+              ayirac * (n - 1).clamp(0, n);
+          final genislik = (bos / n).clamp(taban, tavan);
+
+          return ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(yanDolgu, 6, yanDolgu, 4),
+            itemCount: n,
+            separatorBuilder: (_, _) => const SizedBox(width: ayirac),
+            itemBuilder: (context, i) {
+              final city = cities[i];
+              return _Cell(
+                city: city,
+                active: city.id == activeId,
+                threat: tehdit.contains(city.id),
+                width: genislik,
+              );
+            },
           );
         },
       ),
@@ -261,10 +310,20 @@ class _Strip extends ConsumerWidget {
 }
 
 class _Cell extends ConsumerWidget {
-  const _Cell({required this.city, required this.active, required this.threat});
+  const _Cell({
+    required this.city,
+    required this.active,
+    required this.threat,
+    required this.width,
+  });
 
   final CitySummary city;
   final bool active;
+
+  /// ⭐ Hücre genişliği ÇAĞIRANDAN geliyor (2026-08-21) — eskiden burada sabit 72 idi.
+  /// Şerit, beş şehrin kaydırmadan sığması için gerekiyorsa daraltıyor; hesap ve gerekçe
+  /// `_Strip`te.
+  final double width;
 
   /// ⭐ Bu şehre düşmanca bir hareket geliyor mu (saldırı ya da casusluk).
   ///
@@ -284,7 +343,7 @@ class _Cell extends ConsumerWidget {
     return GestureDetector(
       onTap: () => ref.read(activeCityProvider.notifier).select(city.id),
       child: Container(
-        width: 72,
+        width: width,
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
         decoration: BoxDecoration(
           color: active ? scheme.primary.withValues(alpha: 0.15) : null,

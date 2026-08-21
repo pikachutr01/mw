@@ -76,33 +76,58 @@ bool canTransferLeadership({
   required int targetPlayerId,
 }) => myRole == MwRole.leader && targetPlayerId != myPlayerId;
 
-/// ⭐ İTTİFAKTAN AYRIL.
+/// ⭐ İTTİFAKTAN AYRIL — **LİDER HİÇBİR KOŞULDA AYRILAMAZ.**
 ///
-/// ⚠️⚠️ **LİDER, ÜYE VARKEN AYRILAMAZ** (`leader_must_transfer`): önce Liderlik Devri
-/// yapmalı. Tek üye kalmışsa ayrılmak ittifağı **DAĞITIYOR** ve sunucu bunu sessizce yapıyor
-/// — bu yüzden onay metni de farklı olmak zorunda, yoksa lider ittifağını kazara siler.
-({bool canLeave, bool disbands, String? reason}) leaveGate({
+/// ⚠️⚠️ Üye varken: önce Liderlik Devri (`leader_must_transfer`).
+/// ⚠️⚠️ **Tek üye kalmışsa: DAĞITMAK gerekiyor** (`must_disband`, kullanıcı 2026-08-21:
+/// *"ittifağı dağıtmadan son kişi ayrılamaz"*).
+///
+/// Eskiden bu dal `canLeave: true, disbands: true` dönüyordu çünkü sunucu son üye lider
+/// «Ayrıl» dediğinde ittifağı **sessizce dağıtıyordu**. İki taraf da değişti: sunucu artık
+/// hata veriyor, buradaki kapı da düğmeyi kapatıyor. Gerekçe `alliance.service.ts` ·
+/// `leave()` başlığında — özeti: dağıtma geri alınamaz ve kendi onayı var; onu «Ayrıl»
+/// düğmesinin arkasına saklamak, adı ve emeği kazara silmenin yoluydu.
+///
+/// ⚠️ `disbands` alanı KALDIRILDI: artık daima `false` olurdu ve her zaman aynı değeri
+/// dönen bir bayrak, çağıranda yalnız ölü dallar üretir.
+({bool canLeave, String? reason}) leaveGate({
   required int myRole,
   required int memberCount,
 }) {
   if (myRole != MwRole.leader) {
-    return (canLeave: true, disbands: false, reason: null);
+    return (canLeave: true, reason: null);
   }
   if (memberCount > 1) {
     return (
       canLeave: false,
-      disbands: false,
       reason: 'Lider ittifaktan ayrılamaz — önce Liderlik Devri yapmalısın.',
     );
   }
-  // Tek üye kalan lider: ayrılmak = dağıtmak.
-  return (canLeave: true, disbands: true, reason: null);
+  return (
+    canLeave: false,
+    reason:
+        'İttifaktaki son üye sensin — ayrılmak yerine ittifağı dağıtmalısın.',
+  );
 }
 
 /// Dağıtma ve yeniden adlandırma **yalnız Lider**; metin ve toplu mesaj **Konsey ve üstü**.
 ///
 /// ⚠️ Metnin Konsey'e açık olması bilinçli: metin bir tanıtım alanı ve liderin her düzeltme
 /// için çağrılması ittifağı yavaşlatırdı. Ad ise kimliğin kendisi — orada tek imza var.
+/// ⭐⭐ DÜNYA KÜNYESİNDEN DAVET — düğme çizilir mi (kullanıcı, 2026-08-22: *"Webden bakarak
+/// uygulamaya bunu ekleyelim."*). Web'deki `canInviteToAlliance` ile birebir aynı karar.
+///
+/// İki şart birden: **benim** yetkim Konsey ve üstü olacak, **hedefin** ittifakı olmayacak.
+///
+/// ⚠️ İkinci şart yalnız görsel bir incelik değil: sunucu zaten `target_has_alliance` ile
+/// reddediyor (`alliance.service.ts` · `invite`). Kapı burada da olmasaydı düğme her hedefte
+/// çıkar ve oyuncu **kesin reddedilecek** bir isteği göndermiş olurdu.
+///
+/// ⚠️ `myRole` NULL olabilir: ittifakım yoksa sorgu `alliance: null` dönüyor. `?? 0` ile
+/// kapalı tarafa düşüyoruz — bilinmiyorsa gösterme.
+bool canInviteToAlliance({int? myRole, required bool targetHasAlliance}) =>
+    !targetHasAlliance && (myRole ?? 0) >= MwRole.council;
+
 bool canDisband(int myRole) => myRole == MwRole.leader;
 bool canRename(int myRole) => myRole == MwRole.leader;
 bool canEditText(int myRole) => myRole >= MwRole.council;
