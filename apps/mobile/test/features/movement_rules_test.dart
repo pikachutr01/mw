@@ -26,6 +26,10 @@ Movement _m({
   Map<String, int> units = const {},
   List<MwHero> heroes = const [],
   ({int gold, int food})? cargo,
+  // ⚠️ Varsayılanlar eski testlerin beklediği değerler; yalnız uç eşleştirme testleri
+  //    bunları veriyor. Değiştirmek dosyadaki her testi ilgisiz biçimde etkilerdi.
+  MwCoords? origin = (k: 1, d: 2, s: 3),
+  MwCoords? target = (k: 4, d: 5, s: 6),
 }) => Movement(
   key: key,
   id: id,
@@ -35,9 +39,9 @@ Movement _m({
   cityId: cityId,
   startedAt: startedAt,
   executeAt: executeAt,
-  origin: (k: 1, d: 2, s: 3),
+  origin: origin,
   originPlayer: 'Baturalp',
-  target: (k: 4, d: 5, s: 6),
+  target: target,
   targetPlayer: 'Kurt',
   returnOf: returnOf,
   canceled: canceled,
@@ -271,6 +275,139 @@ void main() {
     /// «Tüm askerler öldü, kahraman dönüyor» hâli — boş nesne gerçek bir durum.
     test('boş ordu okunabiliyor', () {
       expect(Movement.fromJson(ham(units: <String, dynamic>{})).units, isEmpty);
+    });
+  });
+
+  /// ⭐⭐ DÜNYA SATIRINDAKİ GÖREV SİMGELERİ (kullanıcı, 2026-08-21).
+  ///
+  /// Arıza sınıfı sessiz: hep `target`a bakan bir kod **gelen** saldırıyı saldırganın
+  /// satırına değil BENİM satırıma asar. Ekranda hata yok, simge yanlış yerde ve oyuncu
+  /// saldırganı göremiyor. Web'de aynı kural `components/movements.tsx` · `otherEnd`.
+  group('otherEnd', () {
+    const benim = (k: 1, d: 10, s: 3);
+    const hedef = (k: 1, d: 10, s: 7);
+
+    test('⭐ giden hareketin karşı ucu target', () {
+      expect(
+        otherEnd(_m(direction: 'out', origin: benim, target: hedef)),
+        hedef,
+      );
+    });
+
+    /// ⚠️⚠️ ASIL VAKA: gelende hedef BENİM şehrim, karşı taraf `origin`.
+    test('⭐⭐ GELEN hareketin karşı ucu origin (kendi satırıma düşmesin)', () {
+      expect(
+        otherEnd(_m(direction: 'in', origin: hedef, target: benim)),
+        hedef,
+      );
+    });
+
+    test('⭐ dönen kendi ordumun karşı ucu origin', () {
+      expect(
+        otherEnd(_m(direction: 'own', origin: hedef, target: benim)),
+        hedef,
+      );
+    });
+
+    /// ⚠️ Uç `null` olabilir: boş koordinata şehir kurma dönüşünde kaynak yok.
+    test('uç yoksa null', () {
+      expect(otherEnd(_m(direction: 'out', target: null)), isNull);
+    });
+  });
+
+  group('movementsForSlot', () {
+    const benim = (k: 1, d: 10, s: 3);
+    const hedef = (k: 1, d: 10, s: 7);
+
+    final giden = _m(
+      id: 1,
+      direction: 'out',
+      cityId: 5,
+      origin: benim,
+      target: hedef,
+    );
+    final gelen = _m(
+      id: 2,
+      direction: 'in',
+      cityId: 5,
+      origin: hedef,
+      target: benim,
+    );
+
+    /// Başka bir şehrimin hareketi — aktif şehir süzgeci bunu dışarıda bırakmalı.
+    final baskaSehrim = _m(
+      id: 3,
+      direction: 'out',
+      cityId: 9,
+      origin: (k: 1, d: 10, s: 4),
+      target: hedef,
+    );
+    final alakasiz = _m(
+      id: 4,
+      direction: 'out',
+      cityId: 5,
+      origin: benim,
+      target: (k: 2, d: 20, s: 1),
+    );
+
+    test('⭐ hedef satırına hem giden hem gelen düşüyor', () {
+      final r = movementsForSlot([giden, gelen, alakasiz], 5, hedef);
+      expect(r.map((m) => m.id).toList()..sort(), [1, 2]);
+    });
+
+    /// ⚠️⚠️ AKTİF ŞEHİR SÜZGECİ: başka şehrimin aynı hedefe giden ordusu bu satıra
+    /// DÜŞMEMELİ. Kullanıcının şartı "aktif şehrin ilgili olduğu görevler" — hepsi değil.
+    test('⭐⭐ başka şehrimin hareketi listeye girmiyor', () {
+      expect(movementsForSlot([baskaSehrim], 5, hedef), isEmpty);
+      expect(movementsForSlot([baskaSehrim], 9, hedef).map((m) => m.id), [3]);
+    });
+
+    /// ⚠️ Aktif şehir yoksa liste boş: süzgeç anlamsızlaşır ve satırlara her şey düşerdi.
+    test('⭐ aktif şehir yoksa boş', () {
+      expect(movementsForSlot([giden, gelen], null, hedef), isEmpty);
+    });
+
+    test('kendi satırıma (gelen hareketin hedefi) hiçbir şey düşmüyor', () {
+      expect(movementsForSlot([gelen], 5, benim), isEmpty);
+    });
+
+    /// ⚠️⚠️ TAVAN VE SIRA: sığmayan sessizce düşüyor (kullanıcının şartı) ve kalanlar **en
+    /// yakın varış** olanlar. En eski başlayanı tutmak, belki de en uzaktakini öne alırdı.
+    test('⭐⭐ en fazla 3 ve en yakın varış üstte', () {
+      Movement mv(int id, String saat) => _m(
+        id: id,
+        direction: 'out',
+        cityId: 5,
+        origin: benim,
+        target: hedef,
+        executeAt: '2026-08-22T$saat:00:00.000Z',
+      );
+      final r = movementsForSlot(
+        [mv(10, '18'), mv(11, '14'), mv(12, '11'), mv(13, '09')],
+        5,
+        hedef,
+      );
+      expect(r.map((m) => m.id), [13, 12, 11]);
+    });
+
+    test('tavan dışarıdan değiştirilebiliyor', () {
+      final a = _m(
+        id: 20,
+        direction: 'out',
+        cityId: 5,
+        origin: benim,
+        target: hedef,
+        executeAt: '2026-08-22T11:00:00.000Z',
+      );
+      final b = _m(
+        id: 21,
+        direction: 'out',
+        cityId: 5,
+        origin: benim,
+        target: hedef,
+        executeAt: '2026-08-22T12:00:00.000Z',
+      );
+      expect(movementsForSlot([a, b], 5, hedef, max: 1).map((m) => m.id), [20]);
     });
   });
 }

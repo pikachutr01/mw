@@ -31,9 +31,7 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 
 | # | İş | İlk bakılacak yer | Durum / not |
 | :-- | :-- | :-- | :-- |
-| **C** | Dünya ekranında aktif şehrin görev ikonları | `apps/web/src/screens/World.tsx` · `apps/mobile/lib/features/world/world_screen.dart` | **API değişikliği GEREKMİYOR**: `Movement` tipi origin/target koordinatını, yönü ve `canCancel`i zaten taşıyor; eşleşme `k:d:s` ile istemcide. Detay penceresi de hazır (`MovementModal` / `movement_sheet.dart`). En fazla 3 ikon, sığmayan düşer. **Sıradaki iş bu.** |
-| **B2** | Görev emri verilince toast/notify | web `apps/web/src/components/Toaster.tsx` (var) · mobilde **altyapı YOK** | Mobilde `MwToast` yazılacak (Overlay tabanlı, paket değil). Sözleşme `{title, body?, url?, category}`. Emir onayı **yerel** üretilecek, sunucu turu beklenmeyecek. |
-| **D** | Rapor sheet'lerine saldırı / casusluk düğmeleri | `apps/web/src/screens/Messages.tsx` · `apps/mobile/lib/features/messages/message_sheet.dart` | Sefer formunu **koordinattan** açabilen bir giriş noktası gerekiyor (bugün slot nesnesi isteniyor). 10 kat kuralı zaten sunucuda, istemci kapı koymayacak. Dört rapor türünde: casusluk, casusluk önleme, saldırı, şehir savunma. |
+| **B2** | Görev emri verilince toast/notify | web `apps/web/src/components/Toaster.tsx` (var) · mobilde **altyapı YOK** | Mobilde `MwToast` yazılacak (Overlay tabanlı, paket değil). Sözleşme `{title, body?, url?, category}`. Emir onayı **yerel** üretilecek, sunucu turu beklenmeyecek. **Sıradaki iş bu.** |
 | **E1** | Mobil simülatör ekranı | `apps/mobile/lib/app/router.dart` (`/simulate` yer tutucu) · web `apps/web/src/screens/Simulate.tsx` | Uç oturumsuz çalışıyor. «Simülatöre Aktar» yolu web'de `writeSimPrefill()` → `/simulate`; mobilde prefill deposu `core/storage.dart`a yazılacak. Rapor sheet'indeki düğme de o zaman açılacak (`message_sheet.dart:17` bu eksiği zaten not etmiş). |
 | **E2** | Mobil destek ekranı | `/destek` yer tutucu · web `apps/web/src/screens/Support.tsx` | Sunucu ucu tam (dosya yükleme dâhil). **Misafire açık olmak ZORUNDA** (kullanıcı şartı). |
 | **F4** | Mobil genel/ittifak sohbeti görünümü | `apps/mobile/lib/features/chat/{global,alliance}_chat_sheet.dart` | Yalnız **görsel**: baloncuk, hizalama, gönderen ayrımı, zaman damgası, boş durum. ⚠️ Oyuncunun yazdığı metinde Cinzel YASAK. |
@@ -42,9 +40,8 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** C → D → B2 → E1 → E2 → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır
-olup yalnız arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır
-basanlar.
+**Sıra önerisi:** B2 → E1 → E2 → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
+arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır basanlar.
 
 ---
 
@@ -65,6 +62,46 @@ basanlar.
 | E4 (dünya çarpanı rozeti) · E5 (uzun bas → saatlik üretim) | 5 |
 | Kahraman diriltme sheet'i (web + mobil) | 5 |
 | E3 (mobil Seçenekler: Cihazlar · Şehir yönetimi · Hesabı sil) | 6 |
+| C (dünya satırında görev ikonları) · D (rapordan sefer düğmeleri) | 7 |
+
+### C ve D nasıl çözüldü (tur 7)
+
+**İkisi tek bir fikirle çözüldü: `?m=`.** Plan D için *"sefer formunu koordinattan açabilen
+bir giriş noktası"* öneriyordu. Uygulanan yol farklı ve daha ucuz: rapor formu **kendi
+açmıyor**, Dünya ekranına `/world/:k/:d?s=<slot>&m=<tür>` ile gidiyor.
+
+Gerekçe iki tane:
+
+1. Adres zaten vardı. Raporlardaki *«Dünyada göster»* bağlantısı 2026-08-19'dan beri
+   `?s=` taşıyor; `&m=` onun yanına eklenen tek bir parametre. Yeni bir giriş noktası,
+   slot çözümünün ikinci bir kopyası olurdu.
+2. **Rapor tarihsel bir kayıt.** Koordinatın sahibi o günden beri değişmiş olabilir.
+   Dünya'ya uğramak hedefi taze listeden çözüyor; oyuncu kime saldırdığını görüyor ve form
+   doğru veriyle açılıyor. Rapordaki dondurulmuş `owner` alanından slot uydurmak yanılırdı.
+
+**Asıl ince karar — düğmenin hedefi her zaman `target` DEĞİL:**
+
+| rapor | side | düşman uç |
+| :-- | :-- | :-- |
+| Saldırı Raporu | `attacker` | `target` |
+| Şehir Savunma Raporu | `defender` | **`origin`** |
+| Casusluk Raporu | `spy` | `target` |
+| Casusluk Önleme | `target` | **`origin`** |
+
+Yani savunma raporlarındaki düğme **karşı saldırı** açıyor. Hep `target`a bakan bir kod
+saldırı raporunda doğru çalışır, savunma raporunda oyuncuya kendi şehrine saldırma düğmesi
+sunardı — ekranda hiçbir şey kırılmadan. Kural iki istemcide de saf ve testli
+(`lib/report-target.ts` · `message_rules.dart` · `reportEnemyCoord`).
+
+**C'nin ince kararı da aynı türden:** hareketin "karşı ucu" yöne bağlı
+(`out` → `target`, `in`/`own` → `origin`). Hep `target`a bakılsaydı **gelen** saldırının
+simgesi saldırganın satırına değil oyuncunun kendi satırına düşerdi. Sunucuya dokunulmadı:
+`Movement` iki ucu, yönü ve `cityId`yi zaten taşıyor. Sığmayan simgeler sessizce düşüyor
+(kullanıcının şartı) ve kalanlar **en yakın varış** olanlar.
+
+⚠️ Mobilde iki widget bu yüzden **durumlu** oldu (`_ListState`, `_OptionsState`): rapordan
+gelen form **bir kez** açılmalı. Durumsuz bir widget'ta her yeniden çizim formu geri açar ve
+oyuncu kapatamaz. Web'de aynı işi `useRef` yapıyor, vurgunun (`flash`) disipliniyle aynı.
 
 ### E3 hakkında iki düzeltme
 
@@ -355,7 +392,7 @@ değil, tıklamanın karşılığı; ağ turu beklemek onu geç ve yanlış hiss
 
 ---
 
-## C. DÜNYA EKRANI GÖREV İKONLARI
+## C. DÜNYA EKRANI GÖREV İKONLARI ✅ (tur 7)
 
 **İstenen:** aktif şehrin ilgili olduğu görevlerin ikonu, Dünya listesinde **karşı tarafın
 kullanıcı adının yanında**; birden çoksa yan yana; sığmayan gizlenir; ikona dokununca
@@ -379,7 +416,7 @@ kullanıcı adını ezmemeli — ad `min-w-0 truncate`, şerit `shrink-0` ve sab
 
 ---
 
-## D. RAPOR EKRANLARINA SALDIRI / CASUSLUK DÜĞMELERİ
+## D. RAPOR EKRANLARINA SALDIRI / CASUSLUK DÜĞMELERİ ✅ (tur 7)
 
 **İstenen:** casusluk raporu · casusluk önleme raporu · saldırı raporu · şehir savunma
 raporu ekranlarına, köşeye, **ikon** şeklinde «saldır» ve «casus gönder» düğmeleri. Casusluk

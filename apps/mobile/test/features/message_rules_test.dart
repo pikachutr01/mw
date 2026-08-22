@@ -529,4 +529,101 @@ void main() {
       expect(foundCityReason(42), isNull);
     });
   });
+
+  /// ⭐⭐ RAPORDAN SEFER (kullanıcı, 2026-08-21) — düğmenin hedefi hangi uç?
+  ///
+  /// Arıza sınıfı sinsi ve sessiz: hep `target`a bakan bir kod **saldırı raporunda doğru**
+  /// çalışır, şehir savunma raporunda oyuncuya kendi şehrine saldırma düğmesi sunar. Ekranda
+  /// hiçbir şey kırılmaz, sunucu reddeder ve oyuncu "düğme bozuk" der.
+  group('reportEnemyCoord', () {
+    const benim = (k: 1, d: 10, s: 3, name: 'Evim', owner: 'ben');
+    const dusman = (k: 2, d: 20, s: 7, name: 'Kale', owner: 'rakip');
+
+    test('⭐ saldırı raporunda düşman uç = target', () {
+      expect(
+        reportEnemyCoord('battle_report', 'attacker', benim, dusman),
+        dusman,
+      );
+    });
+
+    /// ⚠️⚠️ ASIL VAKA: savunma raporunda ordu BANA geldi, `target` benim şehrim. Düğme
+    /// `origin`i açmalı ki oyuncu saldırana **karşı saldırı** başlatabilsin.
+    test('⭐⭐ şehir savunma raporunda düşman uç = origin (karşı saldırı)', () {
+      expect(
+        reportEnemyCoord('battle_report', 'defender', dusman, benim),
+        dusman,
+      );
+    });
+
+    test('⭐ casusluk raporunda düşman uç = target', () {
+      expect(reportEnemyCoord('spy_report', 'spy', benim, dusman), dusman);
+    });
+
+    test(
+      '⭐⭐ casusluk önleme raporunda düşman uç = origin (casusu gönderen)',
+      () {
+        expect(reportEnemyCoord('spy_report', 'target', dusman, benim), dusman);
+      },
+    );
+
+    /// ⚠️ Eski kayıtlarda `spy_report`un `side`ı `'spy'` olmayabiliyor; ekranın kendi kuralı
+    /// da *"`target` değilse casusluk raporu"*. Sessizce düğmeleri yok etmek, eski bir
+    /// raporda sebebi anlaşılmayan bir eksiklik olurdu.
+    test('⭐ bilinmeyen spy_report side\'ı casusluk raporu sayılıyor', () {
+      expect(reportEnemyCoord('spy_report', 'sender', benim, dusman), dusman);
+      expect(reportEnemyCoord('spy_report', '', benim, dusman), dusman);
+    });
+
+    /// ⚠️ Nakliye yaptığın müttefikine «saldır» düğmesi sunmak yanlış bir davet olurdu ve
+    /// şehir kurma raporunda karşı taraf diye bir şey zaten yok.
+    test('⭐ düşman ucu olmayan türlerde null', () {
+      for (final kind in [
+        'transport_report',
+        'support_report',
+        'found_city_report',
+        'return_report',
+        'alliance_invite',
+        'alliance_message',
+        'system',
+      ]) {
+        expect(
+          reportEnemyCoord(kind, 'owner', benim, dusman),
+          isNull,
+          reason: kind,
+        );
+      }
+    });
+
+    test('side null ise null', () {
+      expect(reportEnemyCoord('battle_report', null, benim, dusman), isNull);
+    });
+
+    /// ⚠️ Tür doğru ama uç yok: boş koordinata şehir kurma dönüşü gibi vakalar.
+    test('⭐ tür doğru ama uç yoksa null', () {
+      expect(
+        reportEnemyCoord('battle_report', 'attacker', benim, null),
+        isNull,
+      );
+      expect(
+        reportEnemyCoord('battle_report', 'defender', null, benim),
+        isNull,
+      );
+    });
+  });
+
+  group('kReportMissions', () {
+    /// ⚠️ Tür adları SUNUCUNUN sefer türleriyle birebir olmak zorunda: bu dizeler adrese
+    /// (`?m=`) yazılıyor ve Dünya ekranı onları hedef künyesindeki seçeneklerle eşleştiriyor.
+    /// Yazım hatası sessizce "hiçbir form açılmadı"ya dönüşürdü.
+    test('⭐ tür adları sunucunun sefer türleri', () {
+      expect(kReportMissions.map((r) => r.type), ['attack', 'spy']);
+    });
+
+    test('her düğmenin ikonu ve etiketi var', () {
+      for (final r in kReportMissions) {
+        expect(r.icon, isNotEmpty);
+        expect(r.label, isNotEmpty);
+      }
+    });
+  });
 }

@@ -17,12 +17,17 @@
 /// ⛔ **«Simülatöre Aktar» düğmesi YOK** — bilerek. Web'de casusluk raporundan tek dokunuşla
 /// simülatör dolduruluyor; mobilde Simülatör ekranı henüz yer tutucu ve olmayan bir ekrana
 /// götüren düğme, çalışıyormuş gibi görünen bir kapı olurdu. O ekran gelince buraya eklenecek.
+///
+/// ⭐ **«Saldır» ve «Casus gönder» VAR** (2026-08-21) — gövdenin sonunda, çizgiyle ayrılmış
+/// şeritte (`_SeferDugmeleri`). Yukarıdaki eksikle karıştırılmasın: o düğmenin gideceği ekran
+/// yok, bunların gideceği ekran (Dünya) var ve zaten çalışıyor.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../core/api_client.dart';
@@ -131,7 +136,121 @@ class _Detail extends ConsumerWidget {
           BattleReportView(battleId: m.battleId!, onNavigate: kapat)
         else
           _PlainDetail(m: m, onDone: kapat),
+
+        _SeferDugmeleri(m: m, onDone: kapat),
       ],
+    );
+  }
+}
+
+/// ⭐⭐ RAPORDAN SEFER (kullanıcı, 2026-08-21): casusluk · casusluk önleme · saldırı · şehir
+/// savunma raporlarına ikon şeklinde «saldır» ve «casus gönder».
+///
+/// ⚠️ **Neden gövdenin SONUNDA:** `mwSheet`in altlığı (footer) yok — içerik nerede biterse
+/// sheet orada bitiyor. Web'de bu düğmeler modalın footer'ında; buradaki en yakın karşılık
+/// üstten çizgiyle ayrılmış son şerit. İttifak Kabul/Red düğmelerinin gövde İÇİNDE olması
+/// başka bir karar (onlar raporun konusuyla ilgili, ekran değiştirmiyorlar) ve o ayrım
+/// korunuyor: bu şerit çizgiyle ayrılıyor, onlar ayrılmıyor.
+///
+/// ⚠️ Hedef koordinatı İKİ ayrı kaynaktan geliyor ve `m` sheet ömrü boyunca değişmediği için
+/// koşullu `watch` burada güvenli: savaş raporunda `battles` kaydı, diğerlerinde mesaj
+/// gövdesi. İkisi de bu ağaçta zaten izleniyor, ek istek doğurmuyor.
+class _SeferDugmeleri extends ConsumerWidget {
+  const _SeferDugmeleri({required this.m, required this.onDone});
+
+  final MessageRow m;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = MwColors.of(context);
+
+    MwReportCoord? origin;
+    MwReportCoord? target;
+    if (m.battleId != null) {
+      final r = ref.watch(battleProvider(m.battleId!)).value;
+      origin = r?.origin;
+      target = r?.target;
+    } else {
+      final body = ref.watch(messageBodyProvider(m.id)).value;
+      final rota = body?['route'];
+      if (rota is Map) {
+        origin = BattleReport.reportCoord(rota['origin']);
+        target = BattleReport.reportCoord(rota['target']);
+      }
+    }
+
+    /* ⚠️ Hangi ucun düşman olduğu `message_rules.dart` · `reportEnemyCoord`ta ve saf:
+       savunma raporlarında hedef `origin`, yani düğme KARŞI SALDIRI açıyor. */
+    final dusman = reportEnemyCoord(m.kind, m.side, origin, target);
+    if (dusman == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Divider(height: 1, color: c.border),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (final r in kReportMissions) ...[
+                /* ⚠️ Sefer formunu BURADA açmıyoruz, Dünya ekranına gidiyoruz — web'le aynı
+                   yol ve aynı gerekçe: rapor tarihsel bir kayıt, koordinatın sahibi o günden
+                   beri değişmiş olabilir. Dünya hedef künyesini TAZE listeden çözüyor ve
+                   oyuncu kime saldırdığını görüyor. */
+                _SeferDugmesi(
+                  icon: r.icon,
+                  label: r.label,
+                  onTap: () {
+                    onDone();
+                    context.go(
+                      '/world/${dusman.k}/${dusman.d}'
+                      '?s=${dusman.s}&m=${r.type}',
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeferDugmesi extends StatelessWidget {
+  const _SeferDugmesi({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    // ⚠️ İkonun YANINDA etiket var: web'de düğme `title` ile açıklanıyor ama dokunmatikte
+    //    üzerine gelme diye bir şey yok ve çıplak bir ikon "bu ne yapar" sorusunu bırakırdı.
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MwIcon(folder: 'missions', id: icon, size: 22),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontSize: 13, color: c.muted)),
+          ],
+        ),
+      ),
     );
   }
 }

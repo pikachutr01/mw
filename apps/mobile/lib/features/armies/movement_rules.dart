@@ -32,6 +32,53 @@ const Map<String, String> kMissionLabel = {
 /// verinin yüklenmediğini sanır. «—» "burada koordinat yok" diyor.
 String coordText(MwCoords? c) => c == null ? '—' : '${c.k}:${c.d}:${c.s}';
 
+/// ⭐⭐ HAREKETİN **KARŞI** UCU — hangi koordinat "öteki taraf"?
+///
+/// `cityId` her zaman BENİM şehrim (giden → kaynağım, gelen/dönen → varış şehrim). Karşı uç
+/// o yüzden yöne bakarak seçiliyor:
+///   • `out` → ordumu gönderdiğim yer, yani **target**
+///   • `in`  → bana geleni gönderen yer, yani **origin**
+///   • `own` → kendi ordumun döndüğü yer, yani yine **origin**
+///
+/// ⚠️ Basitçe `target`a bakmak YANLIŞ olurdu: gelen saldırıda hedef benim şehrim olduğu için
+/// simge kendi satırıma düşerdi ve oyuncu saldırganı değil kendini işaretlenmiş görürdü.
+/// Web'de aynı kural `components/movements.tsx` · `otherEnd`.
+MwCoords? otherEnd(Movement m) => m.direction == 'out' ? m.target : m.origin;
+
+bool _ayniKoordinat(MwCoords? a, MwCoords b) =>
+    a != null && a.k == b.k && a.d == b.d && a.s == b.s;
+
+/// ⭐ DÜNYA SATIRINA ASILACAK HAREKETLER (kullanıcı, 2026-08-21): *"aktif şehrin ilgili olduğu
+/// görevlerin ikonu, karşı tarafın kullanıcı adının yanında; birden çoksa yan yana; sığmayan
+/// gizlenir"*.
+///
+/// İki süzgeç: hareket **aktif şehrimin** olacak (`cityId`) ve karşı ucu bu slot olacak.
+///
+/// ⚠️ Sıra `executeAt`e göre, yani **en yakın varış üstte**. Sığmayanlar sessizce düşeceği
+/// için hangi üçünün kaldığı keyfi olamaz: oyuncunun bakması gereken en önce gerçekleşecek
+/// olan. `startedAt`e göre sıralamak (şehir şeridinin yaptığı) en eski ama belki de en uzak
+/// hareketi öne alırdı.
+///
+/// ⚠️ Aktif şehir yoksa liste BOŞ: `cityId` süzgeci anlamsızlaşır ve satırlara başka
+/// şehirlerimin hareketleri de düşerdi.
+List<Movement> movementsForSlot(
+  List<Movement> movements,
+  int? activeCityId,
+  MwCoords slot, {
+  int max = 3,
+}) {
+  if (activeCityId == null) return const [];
+  final list =
+      movements
+          .where(
+            (m) =>
+                m.cityId == activeCityId && _ayniKoordinat(otherEnd(m), slot),
+          )
+          .toList()
+        ..sort((a, b) => a.executeAt.compareTo(b.executeAt));
+  return list.length <= max ? list : list.sublist(0, max);
+}
+
 /// Hareketin tonu — tek soruya cevap: **bu bana bir tehdit mi?**
 ///
 /// ⚠️ Web ton yerine bir Tailwind sınıf adı döndürüyor (`text-danger`); Dart'ta o dize hiçbir

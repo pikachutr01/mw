@@ -15,8 +15,12 @@
 /// ⚠️ **GİZLİLİK (§13.16.5):** liste asker ve kaynak GÖSTERMEZ. Bunu öğrenmenin tek yolu
 /// casusluktur; sunucu zaten göndermiyor, istemci de türetmeye çalışmıyor.
 ///
-/// ⚠️ Sefer gönderme formu (web'deki `world-modal.tsx`, 606 satır) **bu turda taşınmadı**;
-/// sheet bugün yalnız hedefi tanıtıyor. Sahte bir düğme koymak yerine eksik olduğu yazılı.
+/// ⚠️ Bu satır bir süre *"sefer gönderme formu bu turda taşınmadı"* diyordu ve **bayattı**:
+/// form `mission_form.dart`ta, hedef künyesindeki seçeneklerden açılıyor. Not güncellendi
+/// çünkü yanlış bir "eksik" notu, olmayan bir işi kuyrukta tutar.
+///
+/// ⭐ Satırda görev simgeleri var (2026-08-21): aktif şehrimle o slot arasındaki hareketler,
+/// oyuncu adının yanında, en fazla üç. Eşleştirme `movement_rules.dart` · `movementsForSlot`.
 library;
 
 import 'dart:async';
@@ -29,10 +33,19 @@ import '../../core/world_coords.dart';
 import '../../gen/contracts.g.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
+import '../armies/movement.dart';
+import '../armies/movement_icon.dart';
+import '../armies/movement_rules.dart';
+import '../armies/movement_sheet.dart';
 import 'target_sheet.dart';
 
 class WorldScreen extends ConsumerStatefulWidget {
-  const WorldScreen({super.key, this.fromUrl, this.highlight});
+  const WorldScreen({
+    super.key,
+    this.fromUrl,
+    this.highlight,
+    this.missionType,
+  });
 
   /// Derin bağlantıdan gelen diyar (`/world/:k/:d`). Yoksa `null`.
   final MwRealm? fromUrl;
@@ -42,6 +55,13 @@ class WorldScreen extends ConsumerStatefulWidget {
   /// koordinata kısa bir anlığına highlight verelim ki oyuncu ekranı açınca hangi şehre
   /// gittiğini anlasın."*
   final int? highlight;
+
+  /// ⭐⭐ Rapordan gelen sefer türü (`?m=`, 2026-08-21) — `attack` ya da `spy`.
+  ///
+  /// ⚠️ `highlight` OLMADAN anlamsız (hangi slot?) ve o yüzden ikisi birlikte okunuyor.
+  /// Rapor formu kendi açmıyor, buraya yolluyor: hedef künyesi burada taze listeden
+  /// çözülüyor ve oyuncu hedefin bugünkü hâlini görüyor.
+  final String? missionType;
 
   @override
   ConsumerState<WorldScreen> createState() => _WorldScreenState();
@@ -130,6 +150,10 @@ class _WorldScreenState extends ConsumerState<WorldScreen> {
                   realm: realm,
                   activeCityId: activeId,
                   highlight: _parlayan,
+                  /* ⚠️ Oyuncu diyarı ELLE değiştirdiyse (`_sel`) sefer türü artık geçersiz:
+                     adresteki slot başka bir diyarda başka bir şeye denk gelir. Vurgunun
+                     sönmesiyle aynı kural. */
+                  missionType: _sel == null ? widget.missionType : null,
                 ),
         ),
       ],
@@ -356,11 +380,12 @@ class _RealmFieldState extends State<_RealmField> {
   }
 }
 
-class _List extends ConsumerWidget {
+class _List extends ConsumerStatefulWidget {
   const _List({
     required this.realm,
     required this.activeCityId,
     required this.highlight,
+    required this.missionType,
   });
 
   final MwRealm realm;
@@ -369,9 +394,55 @@ class _List extends ConsumerWidget {
   /// Kısa bir an parlayan slot; `null` → vurgu yok.
   final int? highlight;
 
+  /// Rapordan gelen sefer türü (`?m=`); liste gelince form kendiliğinden açılıyor.
+  final String? missionType;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_List> createState() => _ListState();
+}
+
+/// ⚠️⚠️ `_List` bu yüzden DURUMLU: rapordan gelen sefer formu **bir kez** açılmalı ve bunu
+/// bilmenin tek yolu bir bayrak. Durumsuz bir widget'ta her yeniden çizim formu geri açar ve
+/// oyuncu onu kapatamaz. Vurgunun (`_parlayan`) disipliniyle aynı, aynı gerekçelerle.
+class _ListState extends ConsumerState<_List> {
+  bool _seferAcildi = false;
+
+  /// Liste geldikten SONRA açılıyor: veri gelmeden slot çözülemez.
+  ///
+  /// ⚠️ Slot BOŞSA da açılıyor — boş koordinata «şehir kur» meşru bir sefer ve hedef künyesi
+  /// zaten o durumu biliyor. Erken dönmek, rapordaki koordinat bu arada boşalmışsa oyuncuyu
+  /// sessizce hiçbir yere götürmek olurdu.
+  void _seferiAc(List<WorldSlot> slots) {
+    final tur = widget.missionType;
+    final s = widget.highlight;
+    if (_seferAcildi || tur == null || tur.isEmpty || s == null) return;
+    if (slots.isEmpty) return;
+    _seferAcildi = true;
+    final slot = slots.where((x) => x.s == s).firstOrNull;
+    if (slot == null) return;
+    // ⚠️ Çizim SIRASINDA sheet açılamaz; kare bitince açılıyor.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showTargetSheet(
+        context,
+        slot: slot,
+        realm: widget.realm,
+        initialType: tur,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final realm = widget.realm;
     final world = ref.watch(worldProvider(realm));
+    /* ⭐ SATIRA ASILAN GÖREV SİMGELERİ (kullanıcı, 2026-08-21).
+       ⚠️ Sunucuya dokunulmadı: `Movement` hem iki ucu hem yönü hem `cityId`yi zaten
+       taşıyor, eşleşme istemcide `k:d:s` ile yapılıyor.
+       ⚠️ `.value ?? const []` — hareketler gelmeden liste çizilmeyi BEKLEMİYOR: diyar
+       zaten geldiyse satırlar görünmeli, simgeler sonradan düşer. Beklemek, ilgisiz bir
+       isteğin gecikmesini Dünya ekranının açılış süresine eklerdi. */
+    final movements = ref.watch(movementsProvider).value ?? const <Movement>[];
 
     return world.when(
       // ⭐ İSKELET DEĞİL ama AYNI GEREKÇE: diyar değişirken liste boşalıp yeniden dolarsa
@@ -384,38 +455,49 @@ class _List extends ConsumerWidget {
       /* ⚠️ Tazeleme YALNIZ diyarı geçersiz kılıyor, şehri değil: bu ekranda oyuncunun
          merak ettiği şey slotların doluluğu. Şehir listesi de çekmek, ilgisiz bir isteği
          her jeste eklemek olurdu. */
-      data: (slots) => MwRefresh(
-        onRefresh: () {
-          ref.invalidate(worldProvider(realm));
-          return mwRefreshAll([ref.read(worldProvider(realm).future)]);
-        },
-        /* ⭐ KENARLARA YAPIŞIK DEĞİL (kullanıcı, 2026-08-19). Liste eskiden tam genişlikteydi
+      data: (slots) {
+        // ⭐ Rapordan gelen `?m=` sefer formunu burada açıyor — veri elde olduğu tek yer.
+        _seferiAc(slots);
+        return MwRefresh(
+          onRefresh: () {
+            ref.invalidate(worldProvider(realm));
+            return mwRefreshAll([ref.read(worldProvider(realm).future)]);
+          },
+          /* ⭐ KENARLARA YAPIŞIK DEĞİL (kullanıcı, 2026-08-19). Liste eskiden tam genişlikteydi
            ve uygulamanın geri kalanı 12 px kenar boşluğuyla çalıştığı için Dünya tek başına
            farklı görünüyordu.
 
            ⚠️ `ListView.builder` yerine tek çocuklu `ListView`: satırlar **ortak bir kartın**
            içine giriyor ve kart yuvarlatılmış köşeleri kırpıyor. Sanallaştırma kaybı yok —
            bir diyarda daima 10 slot var (`kSlotsPerRealm`), yani liste sabit ve kısa. */
-        builder: (physics) => ListView(
-          physics: physics,
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
-          children: [_Kart(child: Column(children: _satirlar(slots)))],
-        ),
-      ),
+          builder: (physics) => ListView(
+            physics: physics,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+            children: [
+              _Kart(child: Column(children: _satirlar(slots, movements))),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  List<Widget> _satirlar(List<WorldSlot> slots) => [
+  List<Widget> _satirlar(List<WorldSlot> slots, List<Movement> movements) => [
     for (var i = 0; i < slots.length; i++)
       _Row(
         slot: slots[i],
         alt: i.isOdd,
-        flash: slots[i].s == highlight,
+        flash: slots[i].s == widget.highlight,
         // ⚠️ Son satırın alt çizgisi YOK: kartın kendi kenarı zaten orada duruyor ve iki
         //    çizgi üst üste binince alt kenar kalın görünüyordu.
         son: i == slots.length - 1,
-        activeCityId: activeCityId,
-        realm: realm,
+        activeCityId: widget.activeCityId,
+        realm: widget.realm,
+        hareketler: movementsForSlot(movements, widget.activeCityId, (
+          k: widget.realm.k,
+          d: widget.realm.d,
+          s: slots[i].s,
+        )),
       ),
   ];
 }
@@ -505,10 +587,15 @@ class _Row extends ConsumerWidget {
     required this.flash,
     required this.activeCityId,
     required this.realm,
+    required this.hareketler,
   });
 
   final WorldSlot slot;
   final bool alt;
+
+  /// Bu slotla aktif şehrim arasındaki hareketler — en fazla üç, en yakın varış üstte
+  /// (`movementsForSlot`).
+  final List<Movement> hareketler;
 
   /// ⭐ Rapordan gelen hedef — kısa bir an parlıyor (gerekçe `WorldScreen.highlight`te).
   final bool flash;
@@ -631,6 +718,21 @@ class _Row extends ConsumerWidget {
                       if (city.protection != null) ...[
                         const SizedBox(width: 4),
                         Icon(Icons.shield_outlined, size: 13, color: c.info),
+                      ],
+                      /* ⭐ GÖREV SİMGELERİ ADIN YANINDA (kullanıcının şartı, 2026-08-21).
+                         ⚠️ Ad `Flexible` + `ellipsis` olduğu için simgeler TAŞMA ÜRETMEZ,
+                         yalnız uzun adı biraz erken kırpar. Doğru öncelik bu: yarım
+                         çizilen bir simge hangi görev olduğunu söylemez, yarım bir ad
+                         hâlâ okunur.
+                         ⚠️ `MovementIcon`un kendi `onTap`i satırın `InkWell`inden ÖNCE
+                         yakalıyor (iç jest kazanır); yoksa simgeye basan oyuncu hedef
+                         künyesini açardı. */
+                      for (final m in hareketler) ...[
+                        const SizedBox(width: 4),
+                        MovementIcon(
+                          m: m,
+                          onTap: () => showMovementSheet(context, m),
+                        ),
                       ],
                     ],
                   ),

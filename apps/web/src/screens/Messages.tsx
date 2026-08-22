@@ -24,6 +24,7 @@ import {
 import { useOpenChat } from '../lib/chat-context.tsx';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { HERO_SKILLS } from '../lib/hero-skills.ts';
+import { REPORT_MISSIONS, reportEnemyCoord } from '../lib/report-target.ts';
 import {
   intelIsTransferable, sideFromCity, sideFromIntel, writeSimPrefill, WARRIORS, type SpyHero,
 } from '../lib/sim-prefill.ts';
@@ -603,10 +604,51 @@ function MessageModal({ m, onClose }: { m: MessageRow; onClose: () => void }) {
   const setFavorite = useSetFavorite();
   const favorite = detail.data?.favorite ?? m.favorite;
 
+  /**
+   * ⭐⭐ RAPORDAN SEFER (kullanıcı, 2026-08-21): casusluk · casusluk önleme · saldırı · şehir
+   * savunma raporlarına ikon şeklinde «saldır» ve «casus gönder».
+   *
+   * ⚠️ Savaş raporunun koordinatı GÖVDEDE değil, `battles` kaydında; o yüzden burada da
+   * `useBattle` çağrılıyor. Ek istek doğurmuyor: `BattleReport` aynı anahtarı zaten
+   * çekiyor ve React Query ikisini tek isteğe indiriyor.
+   *
+   * ⚠️ Hangi ucun düşman olduğu `lib/report-target.ts`te ve saf — savunma raporlarında
+   * hedef `origin`, yani düğme **karşı saldırı** açıyor. Gerekçesi orada yazılı.
+   */
+  const battle = useBattle(m.battleId ?? null);
+  const enemy = reportEnemyCoord(
+    m.kind, m.side,
+    m.battleId ? battle.data?.coords?.origin : route?.origin,
+    m.battleId ? battle.data?.coords?.target : route?.target,
+  );
+
+  /* ⚠️ Sefer formunu BURADA açmıyoruz, Dünya ekranına gidiyoruz. `TargetModal` bir slot
+     istiyor ve raporun elindeki koordinattan slot uydurmak yanlış olurdu: rapor tarihsel
+     bir kayıt, koordinatın sahibi değişmiş olabilir. Dünya slotu taze listeden çözüyor. */
+  const toMission = (type: string): void => {
+    if (!enemy) return;
+    onClose();
+    nav(`/world/${enemy.k}/${enemy.d}?s=${enemy.s}&m=${type}`);
+  };
+
   return (
     <Modal title={<UserText>{m.subject}</UserText>} onClose={onClose} width="lg"
       footer={(
         <>
+          {/* ⚠️ İkonlar «Kapat»ın SOLUNDA ve `mr-auto` ile sola yaslı: footer `justify-end`
+              ve eylem düğmeleriyle aynı hizada durmaları, kapatmak isteyenin yanlışlıkla
+              sefer başlatmasını kolaylaştırırdı. */}
+          {enemy ? (
+            <span className="mr-auto flex items-center gap-1">
+              {REPORT_MISSIONS.map((r) => (
+                <button key={r.type} type="button" title={r.label}
+                  onClick={() => toMission(r.type)}
+                  className="rounded-[var(--radius-sm)] p-0.5 transition-[filter] hover:brightness-125">
+                  <MissionIcon id={r.icon} size={24} title={r.label} />
+                </button>
+              ))}
+            </span>
+          ) : null}
           {canTransfer ? (
             <Button size="sm" onClick={toSimulator}>Simülatöre Aktar</Button>
           ) : null}

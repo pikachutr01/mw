@@ -19,9 +19,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { fmt } from '../lib/hooks.ts';
-import { useCity, useWorld, type WorldSlot } from '../lib/queries.ts';
+import { useCity, useMovements, useWorld, type Movement, type WorldSlot } from '../lib/queries.ts';
 import { homeAction, visibleCoords } from '../lib/world-coords.ts';
 import { AllyBadge } from '../components/AllyBadge.tsx';
+import {
+  MovementIcon, MovementModal, MovementTooltip, movementsForSlot, type TipState,
+} from '../components/movements.tsx';
 import { BoundedAmountInput, Button, MissionIcon, Panel, Skeleton, Td, Th } from '../components/ui.tsx';
 import { TargetModal } from './world-modal.tsx';
 
@@ -100,6 +103,22 @@ export function World() {
   const [flash, setFlash] = useState<number | null>(null);
 
   /**
+   * ⭐⭐ `?m=` — RAPORDAN GELEN SEFER TÜRÜ (kullanıcı, 2026-08-21: raporlara «saldır» ve
+   * «casus gönder» düğmeleri).
+   *
+   * ⚠️⚠️ Rapor sefer formunu KENDİ açmıyor, buraya yönlendiriyor ve bu bilinçli. `TargetModal`
+   * bir `WorldSlot` istiyor; raporun elinde yalnız koordinat var ve slotu rapordan **uydurmak**
+   * yanlış olurdu: rapor tarihsel bir kayıt, koordinatın sahibi o günden beri değişmiş
+   * olabilir. Buraya gelince slot **taze** listeden çözülüyor, oyuncu hedefin bugünkü hâlini
+   * (sahibi, koruması, ittifakı) görüyor ve form doğru veriyle açılıyor.
+   *
+   * ⚠️ `?s=` ile aynı biçim: yola segment eklenmedi, tür bir **ipucu**. `?s=` olmadan `?m=`
+   * anlamsız (hangi slot?) ve o yüzden ikisi birlikte okunuyor.
+   */
+  const missionType = search.get('m');
+  const missionRef = useRef<string | null>(null);
+
+  /**
    * ⚠️⚠️ **BİR KEZ parlıyor** (kullanıcı bildirimi, 2026-08-19): *"dünyada diyar değişince
    * aynı satıra yapmaya devam ediyor. İlk açılışta bir kere yapması lazım."*
    *
@@ -125,6 +144,18 @@ export function World() {
 
   const slots = world.data?.slots ?? [];
 
+  /**
+   * ⭐ SATIRA ASILAN GÖREV SİMGELERİ (kullanıcı, 2026-08-21).
+   *
+   * ⚠️ Bu **yeni bir ağ isteği değil**: `['missions']` anahtarını şehir şeridi zaten her
+   * ekranda çekiyor, React Query aynı anahtarı paylaşıyor. Sunucuya dokunmaya da gerek
+   * kalmadı — `Movement` hem uçları hem yönü hem `cityId`yi zaten taşıyor.
+   */
+  const movements = useMovements();
+  const allMovements = movements.data?.movements ?? [];
+  const [tip, setTip] = useState<TipState | null>(null);
+  const [openMovement, setOpenMovement] = useState<Movement | null>(null);
+
   /* ⚠️ Vurgu LİSTE GELDİKTEN sonra başlıyor (`slots.length` bağımlılığı): veri gelmeden
      tetiklenirse animasyon boş iskeletin üstünde akıp biter ve oyuncu hiçbir şey görmez.
      ⚠️ Süre 1,6 sn: kullanıcı *"kısa bir an parlayıp sönen"* dedi. Daha kısası göz kırpmayla
@@ -142,6 +173,26 @@ export function World() {
     const t = setTimeout(() => setFlash(null), 1600);
     return () => clearTimeout(t);
   }, [highlightSlot, slots.length, k, d, sel]);
+
+  /**
+   * ⭐ Rapordan gelen `?m=` sefer formunu açıyor — **liste geldikten sonra** ve **bir kez**.
+   * Vurgunun (`flash`) disipliniyle aynı ve aynı gerekçelerle: veri gelmeden slot çözülemez,
+   * `ref` olmadan her yeniden çizim modalı geri açar ve oyuncu kapatamaz.
+   *
+   * ⚠️ Slot BOŞSA da modal açılıyor: boş koordinata «şehir kur» meşru bir sefer ve
+   * `TargetModal` zaten o durumu biliyor. Erken dönmek, rapordaki koordinat bu arada
+   * boşalmışsa oyuncuyu sessizce hiçbir şeye götürmek olurdu.
+   */
+  useEffect(() => {
+    if (missionType == null || missionType === '') return;
+    if (!Number.isInteger(highlightSlot) || highlightSlot <= 0) return;
+    if (slots.length === 0 || sel != null) return;
+    const key = `${k}:${d}:${highlightSlot}:${missionType}`;
+    if (missionRef.current === key) return;
+    missionRef.current = key;
+    const slot = slots.find((s) => s.s === highlightSlot);
+    if (slot) setTarget({ slot, type: missionType });
+  }, [missionType, highlightSlot, slots, k, d, sel]);
 
   return (
     <div className="space-y-2">
@@ -251,6 +302,7 @@ export function World() {
                  * 2,30 ile hafifçe DÜŞTÜ; gözü ayıran şey sıcak-soğuk zıtlığı).
                  */
                 const isActive = c != null && c.id === cityId;
+                const rowMovements = movementsForSlot(allMovements, cityId, { k, d, s: slot.s });
                 // ⭐ Rapordan gelen slot — kısa bir an parlıyor (gerekçe `flash` başlığında).
                 const isFlash = flash === slot.s;
                 return (
@@ -298,6 +350,19 @@ export function World() {
                           */}
                           <span className="min-w-0 truncate font-semibold">{c.username}</span>
                           {c.isAlly ? <AllyBadge /> : null}
+                          {/*
+                            ⭐ GÖREV SİMGELERİ ADIN YANINDA (kullanıcının şartı, 2026-08-21).
+                            ⚠️ `shrink-0`: sıkışınca ad kırpılır, simge kırpılmaz. Yarım çizilen
+                            bir simge hangi görev olduğunu söylemez; yarım bir ad hâlâ okunur.
+                            ⚠️ `stopPropagation` ŞART — satırın kendisi hedef penceresini
+                            açıyor ve simgeye basan oyuncu onu değil hareketi görmek istiyor.
+                          */}
+                          {rowMovements.map((m) => (
+                            <span key={m.key} className="shrink-0"
+                              onClick={(e) => e.stopPropagation()}>
+                              <MovementIcon m={m} onTip={setTip} onOpen={setOpenMovement} />
+                            </span>
+                          ))}
                         </span>
                       ) : <span className="text-muted">—</span>}
                     </Td>
@@ -351,6 +416,14 @@ export function World() {
           initialType={target.type}
           onClose={() => setTarget(null)}
         />
+      ) : null}
+
+      {/* ⚠️ Tooltip modal AÇIKKEN gizleniyor (şehir şeridindeki kararın aynısı): ikisi üst
+          üste binince tooltip modalın önünde asılı kalıyor ve fare modalın içindeyken
+          kapanmıyor. */}
+      {tip && !openMovement ? <MovementTooltip {...tip} /> : null}
+      {openMovement ? (
+        <MovementModal m={openMovement} onClose={() => setOpenMovement(null)} />
       ) : null}
     </div>
   );

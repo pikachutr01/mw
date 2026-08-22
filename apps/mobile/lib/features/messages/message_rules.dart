@@ -8,6 +8,7 @@
 library;
 
 import '../../gen/contracts.g.dart';
+import 'battle_report.dart' show MwReportCoord;
 import 'message.dart';
 
 /// ⭐ RAPOR TÜR KATALOĞU (kullanıcı, 2026-07-30): her türün kendi ikonu ve satır başlığı var —
@@ -349,6 +350,62 @@ String? foundCityReason(Object? reason) => switch (reason) {
   'city_limit' => 'Şehir hakkın dolduğu için kurulamadı; ordu geri dönüyor.',
   _ => null,
 };
+
+/* ══ RAPORDAN SEFER (2026-08-21) ══════════════════════════════════════════════════════════
+   Kullanıcı isteği: casusluk · casusluk önleme · saldırı · şehir savunma raporlarına
+   ikon şeklinde «saldır» ve «casus gönder» düğmeleri. Web'de aynı kural
+   `apps/web/src/lib/report-target.ts`. */
+
+/// Düğmelerin açacağı sefer türleri — sırası ekrandaki sırası.
+const List<({String type, String icon, String label})> kReportMissions = [
+  (type: 'attack', icon: 'attack', label: 'Saldır'),
+  (type: 'spy', icon: 'spy_out', label: 'Casus gönder'),
+];
+
+/// Hangi ucun düşman olduğu — `kind:side` anahtarıyla.
+const Map<String, String> _kDusmanUc = {
+  'battle_report:attacker': 'target',
+  'battle_report:defender': 'origin',
+  'spy_report:spy': 'target',
+  'spy_report:target': 'origin',
+};
+
+/// ⭐⭐ RAPORUN DÜŞMAN UCU — düğmenin hedefi hangi koordinat?
+///
+/// ⚠️⚠️ ASIL KARAR BURADA ve göründüğünden ince: hedef **her zaman `target` DEĞİL**.
+///
+///   | rapor                | side       | benim olan uç | düşman uç  |
+///   | :--                  | :--        | :--           | :--        |
+///   | Saldırı Raporu       | `attacker` | origin        | **target** |
+///   | Şehir Savunma Raporu | `defender` | target        | **origin** |
+///   | Casusluk Raporu      | `spy`      | origin        | **target** |
+///   | Casusluk Önleme      | `target`   | target        | **origin** |
+///
+/// Yani savunma raporlarında düğme **karşı saldırı** açıyor. Hep `target`a bakılsaydı oyuncu
+/// kendi şehrine saldırmaya çalışırdı: sunucu reddederdi ama düğmenin kendisi anlamsız olurdu.
+///
+/// ⚠️ Nakliye, destek, şehir kurma ve ittifak mesajlarında `null` — oralarda "düşman uç" diye
+/// bir şey yok ve nakliye yaptığın müttefikine «saldır» sunmak yanlış bir davet olurdu.
+///
+/// ⚠️ Bilinmeyen bir `spy_report` `side`ı casusluk raporu sayılıyor; ekranın kendi kuralı da
+/// *"`target` değilse casusluk raporu"*. Sessizce düğmeleri yok etmek, eski bir raporda
+/// sebebi anlaşılmayan bir eksiklik olurdu.
+///
+/// ⚠️ **İstemci başka kapı koymuyor.** 10 kat kuralı, koruma, tatil modu, doğrulanmamış
+/// e-posta — hepsi sunucuda ve orada yeniden bakılıyor (kullanıcı, 2026-08-21: *"hata dönerse
+/// form gösterir"*). Rapor tarihsel bir kayıt; koordinatın bugünkü sahibini istemcide tahmin
+/// etmeye çalışmak yanılırdı.
+MwReportCoord? reportEnemyCoord(
+  String kind,
+  String? side,
+  MwReportCoord? origin,
+  MwReportCoord? target,
+) {
+  final duzeltilmis = kind == 'spy_report' && side != 'target' ? 'spy' : side;
+  final uc = _kDusmanUc['$kind:$duzeltilmis'];
+  if (uc == null) return null;
+  return uc == 'target' ? target : origin;
+}
 
 /// ⛔ **BU DOSYADA SIRALAMA FONKSİYONU YOK — bilinçli.** Sıra sunucudan geliyor
 /// (`ORDER BY id DESC`, en yeni üstte) ve istemcide ikinci bir sıralama, aynı kuralın

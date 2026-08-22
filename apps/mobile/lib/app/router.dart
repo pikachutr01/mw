@@ -87,6 +87,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                  diyarı açan şey `k:d`, `s` yalnız "hangisine bak" diyor. Web'de de aynı
                  biçim (`World.tsx` · `useSearchParams`). */
               highlight: int.tryParse(s.uri.queryParameters['s'] ?? ''),
+
+              /* ⭐⭐ `?m=` — rapordan gelen SEFER TÜRÜ (2026-08-21). Rapor sefer formunu
+                 kendi açmıyor, buraya yönlendiriyor ve bu bilinçli: rapor tarihsel bir
+                 kayıt, koordinatın sahibi o günden beri değişmiş olabilir. Buraya gelince
+                 hedef künyesi TAZE listeden çözülüyor. `?s=` ile aynı biçim ve web'le aynı
+                 adres (`Messages.tsx` · `toMission`). */
+              missionType: s.uri.queryParameters['m'],
             ),
           ),
           GoRoute(path: '/barracks', builder: (_, _) => const BarracksScreen()),

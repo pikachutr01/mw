@@ -31,6 +31,52 @@ export const TYPE_LABEL: Record<string, string> = {
 export const coordText = (c: Coords | null): string => (c ? `${c.k}:${c.d}:${c.s}` : '—');
 
 /**
+ * ⭐⭐ HAREKETİN **KARŞI** UCU — hangi koordinat "öteki taraf"?
+ *
+ * `cityId` her zaman BENİM şehrim (giden → kaynağım, gelen/dönen → varış şehrim). Karşı uç
+ * o yüzden yöne bakarak seçiliyor:
+ *   • `out`  → ordumu gönderdiğim yer, yani **target**
+ *   • `in`   → bana geleni gönderen yer, yani **origin**
+ *   • `own`  → kendi ordumun döndüğü yer, yani yine **origin**
+ *
+ * ⚠️ Basitçe "target"a bakmak YANLIŞ olurdu: gelen saldırıda target benim şehrim olduğu için
+ * simge kendi satırıma düşerdi ve oyuncu saldırganı değil kendini işaretlenmiş görürdü.
+ */
+export const otherEnd = (m: Movement): Coords | null =>
+  (m.direction === 'out' ? m.target : m.origin);
+
+const sameCoord = (a: Coords | null, b: Coords): boolean =>
+  a != null && a.k === b.k && a.d === b.d && a.s === b.s;
+
+/**
+ * ⭐ DÜNYA SATIRINA ASILACAK HAREKETLER (kullanıcı, 2026-08-21): *"aktif şehrin ilgili olduğu
+ * görevlerin ikonu, karşı tarafın kullanıcı adının yanında; birden çoksa yan yana; sığmayan
+ * gizlenir"*.
+ *
+ * İki süzgeç: hareket **aktif şehrimin** olacak (`cityId`) ve karşı ucu bu slot olacak.
+ *
+ * ⚠️ Sıra `executeAt`e göre, yani **en yakın varış üstte**. Sığmayanlar sessizce düşeceği
+ * için hangi üçünün kaldığı bir tercih meselesi değil: oyuncunun bakması gereken şey en önce
+ * gerçekleşecek olan. `startedAt`e göre sıralamak (şehir şeridinin yaptığı) burada en eski
+ * ama belki de en uzak hareketi öne alırdı.
+ *
+ * ⚠️ Aktif şehir yoksa liste BOŞ: `cityId` süzgeci anlamsızlaşır ve satırlara başka
+ * şehirlerimin hareketleri düşerdi.
+ */
+export function movementsForSlot(
+  movements: readonly Movement[],
+  activeCityId: number | null,
+  slot: Coords,
+  max = 3,
+): Movement[] {
+  if (activeCityId == null) return [];
+  return movements
+    .filter((m) => m.cityId === activeCityId && sameCoord(otherEnd(m), slot))
+    .sort((a, b) => Date.parse(a.executeAt) - Date.parse(b.executeAt))
+    .slice(0, max);
+}
+
+/**
  * ⭐ HAREKETİN RENGİ — tek soruya cevap: **bu bana bir tehdit mi?**
  * (kullanıcı, 2026-08-04: *"giden destekte turuncu, gelen destekte kırmızı renk görünüyor"*)
  *

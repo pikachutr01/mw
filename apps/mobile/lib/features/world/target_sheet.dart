@@ -49,10 +49,13 @@ const Map<String, String> kProtectionLabel = {
 String cityLabel(String name) =>
     name.replaceFirst(RegExp(r'\s+şehri$', caseSensitive: false), '');
 
+/// Hedef künyesi. `initialType` verilirse seçenekler gelir gelmez o görevin formu
+/// kendiliğinden açılıyor (rapordan gelen `?m=` yolu).
 Future<void> showTargetSheet(
   BuildContext context, {
   required WorldSlot slot,
   required MwRealm realm,
+  String? initialType,
 }) {
   final city = slot.city;
   final koord = '${realm.k}:${realm.d}:${slot.s}';
@@ -83,7 +86,7 @@ Future<void> showTargetSheet(
                 style: TextStyle(color: c.muted),
               ),
               const SizedBox(height: 8),
-              _Options(slot: slot, realm: realm),
+              _Options(slot: slot, realm: realm, initialType: initialType),
             ],
           );
         }
@@ -200,7 +203,7 @@ Future<void> showTargetSheet(
             ],
 
             const SizedBox(height: 6),
-            _Options(slot: slot, realm: realm),
+            _Options(slot: slot, realm: realm, initialType: initialType),
           ],
         );
       },
@@ -388,14 +391,57 @@ class _InviteButtonState extends ConsumerState<_InviteButton> {
 }
 
 /// ⭐ SEÇENEK LİSTESİ — sunucunun bu hedefe izin verdiği görevler.
-class _Options extends ConsumerWidget {
-  const _Options({required this.slot, required this.realm});
+class _Options extends ConsumerStatefulWidget {
+  const _Options({
+    required this.slot,
+    required this.realm,
+    required this.initialType,
+  });
 
   final WorldSlot slot;
   final MwRealm realm;
 
+  /// Rapordan gelen sefer türü; seçenekler gelince o görevin formu kendiliğinden açılıyor.
+  final String? initialType;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Options> createState() => _OptionsState();
+}
+
+/// ⚠️⚠️ DURUMLU olmasının tek sebebi `initialType`: form **bir kez** açılmalı. Durumsuz bir
+/// widget'ta her yeniden çizim (saat vuruşu, seçenek tazelenmesi) formu geri açar ve oyuncu
+/// kapatamaz. `world_screen.dart` · `_ListState` ile aynı disiplin.
+class _OptionsState extends ConsumerState<_Options> {
+  bool _formAcildi = false;
+
+  /// ⚠️ Sunucunun İZİN VERDİĞİ listede yoksa form açılmıyor — kapalı bir seçeneğin formunu
+  /// zorla açmak, oyuncuyu doldurup göndermeye davet edip sunucuya reddettirmek olurdu.
+  /// Seçenek listede ama `enabled: false` ise form yine açılıyor: sebep formun içinde yazılı
+  /// ve oyuncu neden yapamadığını orada görüyor (bu ekranın kurulu kuralı).
+  void _formuAc(MissionOptions o, int aktif) {
+    final tur = widget.initialType;
+    if (_formAcildi || tur == null || tur.isEmpty || o.activeCity) return;
+    final opt = o.options.where((x) => x.type == tur).firstOrNull;
+    if (opt == null) return;
+    _formAcildi = true;
+    // ⚠️ Çizim SIRASINDA sheet açılamaz; kare bitince açılıyor.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showMissionForm(
+        context,
+        type: opt.type,
+        originCityId: aktif,
+        target: (k: widget.realm.k, d: widget.realm.d, s: widget.slot.s),
+        option: opt,
+        attacksLeft: o.attacksLeft,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slot = widget.slot;
+    final realm = widget.realm;
     final c = MwColors.of(context);
     final aktif = ref.watch(activeCityProvider).value;
     if (aktif == null) return const SizedBox.shrink();
@@ -423,6 +469,9 @@ class _Options extends ConsumerWidget {
         ),
         error: (e, _) => MwErrorBox('Seçenekler alınamadı: $e'),
         data: (o) {
+          // ⭐ Rapordan gelen sefer türü burada forma dönüşüyor — izin listesi elde.
+          _formuAc(o, aktif);
+
           /// ⚠️ «Aktif şehrin kendisi» ile «seçenek yok» AYRI cümleler: biri *"buradan
           /// bakıyorsun zaten"*, diğeri *"bu hedefe hiçbir şey gönderemezsin"* diyor.
           if (o.activeCity) {
