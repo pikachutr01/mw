@@ -906,9 +906,135 @@ class OptionsActions {
     //    sayacı bunu bilmezse artmaya devam ediyormuş gibi görünür.
     _ref.invalidate(citiesProvider);
   }
+
+  /// Bir cihazı (oturum zincirini) düşür.
+  ///
+  /// ⚠️ Dönüş `self`: çıkarılan zincir **bu cihazınsa** true. Sunucu kendi cihazını
+  /// çıkarmayı engellemiyor (uzaktakini düşürebilen zaten oturumun sahibi) ve ekran bunu
+  /// bilerek çıkışa çevirecek — web'de bu bayrak okunmuyor ve oturum ancak bir sonraki
+  /// istek 401 alınca düşüyor, yani oyuncu arada belirsiz bir süre "hâlâ içeride" görünüyor.
+  Future<bool> revokeDevice(String chainId) async {
+    final body = await _ref
+        .read(apiProvider)
+        .request('DELETE', '/api/v1/auth/sessions/$chainId');
+    _ref.invalidate(devicesProvider);
+    return body is Map && body['self'] == true;
+  }
+
+  Future<void> revokeOtherDevices() async {
+    await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/auth/sessions/revoke-others', body: const {});
+    _ref.invalidate(devicesProvider);
+  }
+
+  /// ⚠️ Bu uç **hesabı SİLMEZ**, yalnız e-postaya 12 saatlik tek kullanımlık bir bağlantı
+  /// yollar. Yıkıcı adım jetonla web'deki `/hesap-sil` sayfasında; gerekçe
+  /// `MOBIL_UYGULAMA.md` §5. Doğrulanmamış e-posta sunucuda reddediliyor.
+  Future<void> requestAccountDeletion() => _ref
+      .read(apiProvider)
+      .request('POST', '/api/v1/auth/delete-account/request', body: const {});
 }
 
 final optionsActionsProvider = Provider<OptionsActions>(OptionsActions.new);
+
+/// Açık oturumlar (`GET /auth/sessions`) — **zincir başına tek satır**.
+///
+/// ⚠️ `current` bayrağını SUNUCU hesaplıyor (`bool_or(f.id = currentSessionId)`), istemci
+/// `x-device-id` ile tahmin etmiyor. Bu ayrım panelin var olabilmesinin şartı: yanlış
+/// işaretlenen bir satır oyuncuya kendi oturumunu kapattırırdı.
+typedef MwDevice = ({
+  String chainId,
+  String? platform,
+  String? deviceModel,
+  String? osVersion,
+  String? appVersion,
+  String? ip,
+  String? userAgent,
+  String lastSeenAt,
+  bool current,
+});
+
+final devicesProvider = FutureProvider<List<MwDevice>>((ref) async {
+  if (ref.watch(sessionProvider) == null) return const [];
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/auth/sessions');
+  // ⚠️ Sunucu `serverNow` da yolluyor ve saat kayması buradan besleniyor: liste göreli
+  //    süre gösteriyor, cihaz saati şaşmışsa "3 saat önce" yanlış çıkardı.
+  if (body is Map) {
+    ref.read(clockProvider).noteServerTime(body['serverNow'] as String?);
+  }
+  final list = body is Map ? body['items'] as List<dynamic>? : null;
+  return (list ?? const [])
+      .whereType<Map<String, dynamic>>()
+      .map(
+        (e) => (
+          chainId: e['chainId'] as String? ?? '',
+          platform: e['platform'] as String?,
+          deviceModel: e['deviceModel'] as String?,
+          osVersion: e['osVersion'] as String?,
+          appVersion: e['appVersion'] as String?,
+          ip: e['ip'] as String?,
+          userAgent: e['userAgent'] as String?,
+          lastSeenAt: e['lastSeenAt'] as String? ?? '',
+          current: e['current'] as bool? ?? false,
+        ),
+      )
+      .toList();
+});
+
+/* ══ ŞEHİR YÖNETİMİ ═══════════════════════════════════════════════════════════════════════
+   ⚠️ Neden Seçenekler bloğunda: tek çağıranı Seçenekler ekranı ve web'de de öyle
+   (`CityAdminPanel`). Şehir sekmesine koymak üçüncü bir kopya açardı. */
+
+/// Terk **ön kontrolü** (`GET /cities/:id/abandon`).
+///
+/// ⚠️ Bu bir yetki kapısı DEĞİL: asıl kontrol sunucuda, kilit altında yeniden koşuyor.
+/// Buradaki liste yalnız oyuncuya "şu an neden olmuyor" demek için.
+final abandonCheckProvider =
+    FutureProvider.family<({bool canAbandon, List<String> blockers}), int>((
+      ref,
+      cityId,
+    ) async {
+      final body = await ref
+          .read(apiProvider)
+          .request('GET', '/api/v1/cities/$cityId/abandon');
+      final m = body is Map<String, dynamic> ? body : const <String, dynamic>{};
+      return (
+        canAbandon: m['canAbandon'] as bool? ?? false,
+        blockers: (m['blockers'] as List<dynamic>? ?? const [])
+            .map((e) => '$e')
+            .toList(),
+      );
+    });
+
+class CityAdmin {
+  const CityAdmin(this._ref);
+
+  final Ref _ref;
+
+  Future<void> rename(int cityId, String name) async {
+    await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/cities/$cityId/rename', body: {'name': name});
+    _tazele(_ref, 'cities:changed');
+    _tazele(_ref, 'city:changed');
+  }
+
+  /// ⚠️ Terk sonrası **aktif şehir değiştirilmiyor** burada: `ActiveCity.build` kayıtlı
+  /// şehir listede yoksa zaten ilkine (sunucu `is_capital DESC` sıraladığı için başkente)
+  /// düşüyor. Elle bir başkent araması yazmak, o kuralın ikinci bir kopyası olurdu.
+  Future<void> abandon(int cityId) async {
+    await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/cities/$cityId/abandon', body: const {});
+    _ref.invalidate(abandonCheckProvider);
+    _tazele(_ref, kTopicAll);
+  }
+}
+
+final cityAdminProvider = Provider<CityAdmin>(CityAdmin.new);
 
 /// ⭐ DÜNYA DURUMU — `GET /api/v1/world/state`.
 ///

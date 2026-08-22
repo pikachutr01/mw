@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
  */
 import { NAME_MAX, NAME_MIN } from '@mobilwar/catalog';
 import { coords } from '../lib/format.ts';
-import { api } from '../lib/api.ts';
+import { ApiError, api } from '../lib/api.ts';
 import { useActiveCity } from '../lib/city-context.tsx';
 import { useCities, type CitySummary } from '../lib/queries.ts';
 import { useConfirm } from './Modal.tsx';
@@ -144,13 +144,20 @@ function AbandonCity({ city }: { city: CitySummary }): React.ReactElement {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [blockers, setBlockers] = useState<string[] | null>(null);
+  /**
+   * ⚠️ Ön kontrolün PATLAMASI ile "henüz dönmedi" ayrı tutuluyor. Tek `null` ile
+   * yürütülüyordu ve arıza sinsiydi: istek hata verince düğme **kalıcı olarak** kapalı
+   * kalıyor, ekranda hiçbir açıklama çıkmıyor ve oyuncunun yeniden deneme yolu olmuyordu.
+   */
+  const [checkFailed, setCheckFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setBlockers(null);
+    setCheckFailed(false);
     void api<{ blockers: string[] }>(`/api/v1/cities/${city.id}/abandon`)
       .then((r) => { if (alive) setBlockers(r.blockers); })
-      .catch(() => { if (alive) setBlockers(null); });
+      .catch(() => { if (alive) setCheckFailed(true); });
     return () => { alive = false; };
   }, [city.id]);
 
@@ -182,7 +189,18 @@ function AbandonCity({ city }: { city: CitySummary }): React.ReactElement {
       if (capital) setCityId(capital.id);
       await qc.invalidateQueries();
     } catch (err) {
-      setError(err);
+      /**
+       * ⚠️⚠️ 409 `abandon_blocked` gövdesi DÜZ: `{ code, blockers }` — içinde `message` yok.
+       * Olduğu gibi `ErrorBox`a vermek oyuncuya yalnız *"İstek başarısız (409)"* gösterirdi.
+       * Oysa bu hatanın anlamı belli: ön kontrolden sonra araya bir değişiklik girmiş (ordu
+       * yola çıkmış, kuyruğa iş düşmüş). Listeyi ekrana da yazıyoruz çünkü `useEffect` yalnız
+       * `city.id` değişince koşuyor; yoksa ekranda eski (boş) engel listesi kalırdı.
+       */
+      const taze = err instanceof ApiError && err.code === 'abandon_blocked'
+        ? (err.body as { blockers?: string[] } | undefined)?.blockers
+        : undefined;
+      if (taze && taze.length > 0) setBlockers(taze);
+      else setError(err);
     } finally {
       setBusy(false);
     }
@@ -197,6 +215,10 @@ function AbandonCity({ city }: { city: CitySummary }): React.ReactElement {
             {blockers.map((b) => <li key={b}>{b}</li>)}
           </ul>
         </>
+      ) : checkFailed ? (
+        <div className="text-xs text-warning">
+          Terk denetimi yapılamadı. Sayfayı yenileyip yeniden dene.
+        </div>
       ) : (
         <Button variant="danger" disabled={busy || blockers == null} onClick={() => void run()}>
           {busy ? 'Terk ediliyor…' : 'Şehri Terk Et'}

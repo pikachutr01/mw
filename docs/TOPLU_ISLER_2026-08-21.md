@@ -31,9 +31,8 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 
 | # | İş | İlk bakılacak yer | Durum / not |
 | :-- | :-- | :-- | :-- |
-| **E3** | Mobil Seçenekler eksikleri: **Cihazlar** · **Şehir yönetimi** · **hesap silme akışı** | `apps/mobile/lib/features/options/options_screen.dart` · web karşılıkları `apps/web/src/components/{DevicesPanel,CityAdminPanel,AccountPanel}.tsx` | Sunucu uçları HAZIR. Hesap silme için tek düğme yeter: `POST /auth/delete-account/request` yalnız posta yolluyor, yıkıcı adım e-postadaki jetonla. **Sıradaki iş bu.** |
+| **C** | Dünya ekranında aktif şehrin görev ikonları | `apps/web/src/screens/World.tsx` · `apps/mobile/lib/features/world/world_screen.dart` | **API değişikliği GEREKMİYOR**: `Movement` tipi origin/target koordinatını, yönü ve `canCancel`i zaten taşıyor; eşleşme `k:d:s` ile istemcide. Detay penceresi de hazır (`MovementModal` / `movement_sheet.dart`). En fazla 3 ikon, sığmayan düşer. **Sıradaki iş bu.** |
 | **B2** | Görev emri verilince toast/notify | web `apps/web/src/components/Toaster.tsx` (var) · mobilde **altyapı YOK** | Mobilde `MwToast` yazılacak (Overlay tabanlı, paket değil). Sözleşme `{title, body?, url?, category}`. Emir onayı **yerel** üretilecek, sunucu turu beklenmeyecek. |
-| **C** | Dünya ekranında aktif şehrin görev ikonları | `apps/web/src/screens/World.tsx` · `apps/mobile/lib/features/world/world_screen.dart` | **API değişikliği GEREKMİYOR**: `Movement` tipi origin/target koordinatını, yönü ve `canCancel`i zaten taşıyor; eşleşme `k:d:s` ile istemcide. Detay penceresi de hazır (`MovementModal` / `movement_sheet.dart`). En fazla 3 ikon, sığmayan düşer. |
 | **D** | Rapor sheet'lerine saldırı / casusluk düğmeleri | `apps/web/src/screens/Messages.tsx` · `apps/mobile/lib/features/messages/message_sheet.dart` | Sefer formunu **koordinattan** açabilen bir giriş noktası gerekiyor (bugün slot nesnesi isteniyor). 10 kat kuralı zaten sunucuda, istemci kapı koymayacak. Dört rapor türünde: casusluk, casusluk önleme, saldırı, şehir savunma. |
 | **E1** | Mobil simülatör ekranı | `apps/mobile/lib/app/router.dart` (`/simulate` yer tutucu) · web `apps/web/src/screens/Simulate.tsx` | Uç oturumsuz çalışıyor. «Simülatöre Aktar» yolu web'de `writeSimPrefill()` → `/simulate`; mobilde prefill deposu `core/storage.dart`a yazılacak. Rapor sheet'indeki düğme de o zaman açılacak (`message_sheet.dart:17` bu eksiği zaten not etmiş). |
 | **E2** | Mobil destek ekranı | `/destek` yer tutucu · web `apps/web/src/screens/Support.tsx` | Sunucu ucu tam (dosya yükleme dâhil). **Misafire açık olmak ZORUNDA** (kullanıcı şartı). |
@@ -43,7 +42,7 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** E3 → C → D → B2 → E1 → E2 → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır
+**Sıra önerisi:** C → D → B2 → E1 → E2 → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır
 olup yalnız arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır
 basanlar.
 
@@ -65,6 +64,34 @@ basanlar.
 | Değişiklik günlüğü maddeleri üretim veritabanına yazıldı (**taslak**) | 4 |
 | E4 (dünya çarpanı rozeti) · E5 (uzun bas → saatlik üretim) | 5 |
 | Kahraman diriltme sheet'i (web + mobil) | 5 |
+| E3 (mobil Seçenekler: Cihazlar · Şehir yönetimi · Hesabı sil) | 6 |
+
+### E3 hakkında iki düzeltme
+
+**1. İlk turdaki üç erteleme gerekçesinin üçü de geçersiz çıktı.** Gerekçeler
+`options_screen.dart` başlığına yazılmıştı ve amacı buydu: yazılı gerekçe sınanabiliyor.
+
+* *"Cihaz listesi `x-device-id` ile eşleşiyor, «bu cihaz hangisi» ayrımını yanlış göstermek
+  oyuncuya kendi oturumunu kapattırabilirdi"* → **yanlıştı.** `auth.service.ts` ·
+  `listSessions` `current` bayrağını `bool_or(f.id = currentSessionId)` ile **sunucuda**
+  hesaplıyor ve listeyi kendi cihaz üstte olacak biçimde sıralıyor. İstemci hiçbir şey
+  tahmin etmiyor.
+* *"Şehir yönetimi Şehir sekmesine daha yakın"* → web'de de **Seçenekler**'de.
+* *"Hesap silme Google Play şartı gereği webde kalmak zorunda"* → şart **yıkıcı adım** için.
+  `MOBIL_UYGULAMA.md` §5 silme SAYFASININ webde ve oturumsuz kalmasını istiyor ve aynı
+  paragraf *"silmeyi kayıttan zorlaştırmamak mağaza kuralı, kolaylaştırmak serbest"* diyor.
+  Uygulamadaki düğme hesabı silmiyor, yalnız `delete-account/request` ile 12 saatlik
+  bağlantı yollatıyor.
+
+**2. Keşif sırasında web'de iki arıza çıktı ve düzeltildi** (`CityAdminPanel.tsx`):
+
+| arıza | eskiden | şimdi |
+| :-- | :-- | :-- |
+| Terk **ön kontrolü** patlarsa | `catch` sessizdi, `blockers` `null` kalıyordu → düğme **kalıcı olarak kapalı**, ekranda hiçbir açıklama yok, yeniden deneme yolu yok | ayrı `checkFailed` durumu → *"Terk denetimi yapılamadı. Sayfayı yenileyip yeniden dene."* |
+| Terk **409 `abandon_blocked`** | gövde düz (`{code, blockers}`, `message` yok) → `ErrorBox` yalnız *"İstek başarısız (409)"* yazıyordu | gövdedeki `blockers` okunup ekrandaki listeye yazılıyor |
+
+Mobil taraf ikisini de baştan doğru yapıyor; `options_screen.dart` · `_SehirState._mesaj`
+ve `_Terk`in `error:` dalı.
 
 ### E4 hakkında bir düzeltme
 
@@ -388,7 +415,7 @@ son koşu hatırlama). «Simülatöre Aktar» yolu: `writeSimPrefill()` → `/si
 `/destek` → PlaceholderScreen. Web `screens/Support.tsx` + `SupportPublicThread.tsx`.
 Sunucu ucu tam (`/api/v1/support*`, ek dosya yükleme dâhil). Misafire açık olmak **zorunda**.
 
-### E3. Seçenekler ekranı eksikleri
+### E3. Seçenekler ekranı eksikleri ✅ (tur 6)
 
 | Web paneli | Mobilde | Durum |
 | :-- | :-- | :-- |
@@ -397,13 +424,27 @@ Sunucu ucu tam (`/api/v1/support*`, ek dosya yükleme dâhil). Misafire açık o
 | `PrefsPanel` | «Görünüm» | kısmen |
 | `VacationPanel` | «Tatil modu» | var |
 | `BlockedPanel` | «Engellenenler» | var |
-| `DevicesPanel` | — | **YOK** |
-| `CityAdminPanel` | — | **YOK** |
-| `DeleteAccountPanel` | yalnız «siteye git» notu | **YOK** |
+| `DevicesPanel` | «Aktif cihazlar» | ✅ tur 6 |
+| `CityAdminPanel` | «Şehir» | ✅ tur 6 |
+| `DeleteAccountPanel` | «Hesabı sil» | ✅ tur 6 |
 
 **Hesap silme:** uç hazır — `POST /auth/delete-account/request` (oturumlu) yalnız **posta
 yolluyor**, yıkıcı adım jetonla e-postadan onaylanıyor. Yani mobilde tek düğme yeter, akışın
-geri kalanı zaten e-postada. `_HesapSilmeNotu` bunun yerine gerçek panele dönüşür.
+geri kalanı zaten e-postada. `_HesapSilmeNotu` gerçek panele dönüştü.
+
+⚠️ Geriye **tek** bilerek eksik panel kaldı: `PrefsPanel`in arka plan görseli ayarı. Web'e
+özel bir görsel tercih, mobilde karşılığı yok.
+
+**Mobilin web'den ayrıldığı üç yer** (üçü de bilinçli, koda gerekçesiyle yazıldı):
+
+1. «Diğer cihazlar» **yerinde açılıyor**, modalda değil. Web'de modal olmasının sebebi
+   panelin iki sütunlu ızgarada durması; mobilde sayfa zaten kayıyor ve listeyi sheet'e
+   koymak kaydırılabilir bir şeyin üstüne ikinci bir kaydırılabilir katman bindirirdi.
+2. Kendi cihazını çıkarınca **hemen çıkış** yapılıyor. Sunucu yanıtta `self` bayrağını
+   yolluyor; web onu okumuyor ve oturum ancak bir sonraki istek 401 alınca düşüyor. Onay
+   metninde verilen söz *(«giriş ekranına döneceksin»)* ancak bayrak okununca tutuluyor.
+3. Son görülme **göreli süre** («5 dakika önce»), web'deki mutlak tarih değil. `clock.dart`
+   bilerek `intl` taşımıyor ve uygulamanın geri kalanı da her yerde göreli süre gösteriyor.
 
 ### E4. Dünya çarpanı rozeti + kısaltılmış süre çizgisi
 

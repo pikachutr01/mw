@@ -166,7 +166,7 @@ function DeleteAccountBody({ verified }: { verified: boolean }): React.ReactElem
         <p>
           Onayladığında e-postan, şifren, oturumların ve bildirim aboneliklerin silinir;
           hesabına <strong>bir daha giriş yapamazsın</strong>. Şehirlerin adlarıyla,{' '}
-          <strong>oyuncu adın</strong> ve <strong>puanın</strong> dünyada olduğu gibi kalır —
+          <strong>oyuncu adın</strong> ve <strong>puanın</strong> dünyada olduğu gibi kalır,
           sıralamalarda görünmeye devam eder. Aynı e-postayla yeniden kayıt olabilirsin ama
           eski oyuncu adını alamazsın.
         </p>
