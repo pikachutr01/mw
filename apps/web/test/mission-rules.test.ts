@@ -15,7 +15,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  ARMY_OPTIONAL, attackHasEscort, HERO_MISSIONS, hasCrew,
+  ARMY_OPTIONAL, attackHasEscort, HERO_MISSIONS, hasCrew, missionSentToast,
 } from '../src/lib/mission-rules.ts';
 
 describe('kahraman gönderilebilen görevler', () => {
@@ -108,6 +108,38 @@ describe('attackHasEscort — yalnız araba ile saldırı yasağı', () => {
   it('⭐⭐ saldırı DIŞINDAKİ görevlerde araba tek başına serbest', () => {
     for (const type of ['transport', 'support', 'found_city', 'teleport']) {
       expect(attackHasEscort(type, ['cargo_wagon']), type).toBe(true);
+    }
+  });
+});
+
+/**
+ * ⭐⭐ EMİR ONAYI METNİ — mobil karşılığıyla BİREBİR aynı cümleler olmalı
+ * (`apps/mobile/lib/features/world/mission_rules.dart` · `missionSentToast`).
+ *
+ * ⚠️ Arıza sınıfı sessiz: iki istemcide iki farklı cümle yazmak hiçbir yerde hata üretmez,
+ * yalnız aynı oyun iki dille konuşur. Bu yüzden cümleler burada birebir yazılı — mobil
+ * tarafta değişen bir kelime, bu testi kırmasa da eşleşmeyi gözle görülür kılıyor.
+ */
+describe('missionSentToast', () => {
+  it('⭐ her sefer türünün kendi cümlesi var', () => {
+    expect(missionSentToast('attack')).toBe('Saldırın yola çıktı');
+    expect(missionSentToast('spy')).toBe('Casusun yola çıktı');
+    expect(missionSentToast('transport')).toBe('Nakliyen yola çıktı');
+    expect(missionSentToast('support')).toBe('Desteğin yola çıktı');
+    expect(missionSentToast('found_city')).toBe('Şehir kurma seferin yola çıktı');
+    expect(missionSentToast('teleport')).toBe('Teleport başladı');
+  });
+
+  /** ⚠️ Sunucuya yeni bir görev tipi eklendiğinde toast BOŞ kalmamalı. */
+  it('⭐ bilinmeyen tür genel cümleye düşüyor, boş kalmıyor', () => {
+    expect(missionSentToast('ritual')).toBe('Sefer başlatıldı');
+    expect(missionSentToast('')).toBe('Sefer başlatıldı');
+  });
+
+  /** ⚠️ Oyuncuya görünen metinde tire/çizgi YASAK (depo yazım kuralı). */
+  it('⭐ hiçbir cümlede tire yok', () => {
+    for (const t of ['attack', 'spy', 'transport', 'support', 'found_city', 'teleport', 'x']) {
+      expect(missionSentToast(t)).not.toMatch(/[-–—]/);
     }
   });
 });

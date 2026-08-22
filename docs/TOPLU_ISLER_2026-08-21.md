@@ -19,7 +19,10 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 | Zebra deseni kapsamı | **Web ve mobil birlikte** — token kaynaktan koyulaşır, tek kaynak korunur |
 | Tatil modu ölçütü | **Onaylandı**: bina + 2×teknik + 10×(şehir−1); ordu ve kaynak formüle GİRMEZ |
 
-**Hâlâ cevap bekleyen sorular:** A6 (`T0`/`g` sayıları) · H1 (kural metnini kim yazıyor).
+**Hâlâ cevap bekleyen tek soru:** A6 — `T0` ve `g` sayıları (önerim 60 ve 1,6).
+
+⚠️ H1 artık soru DEĞİL: kullanıcı 2026-08-21'de sohbet kural metnini yazmayı devretti
+(*"Sohbet uyarı metinlerini sen oluştur şimdilik, ben gerekli görürsem değiştirtirim"*).
 
 ---
 
@@ -31,8 +34,7 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 
 | # | İş | İlk bakılacak yer | Durum / not |
 | :-- | :-- | :-- | :-- |
-| **B2** | Görev emri verilince toast/notify | web `apps/web/src/components/Toaster.tsx` (var) · mobilde **altyapı YOK** | Mobilde `MwToast` yazılacak (Overlay tabanlı, paket değil). Sözleşme `{title, body?, url?, category}`. Emir onayı **yerel** üretilecek, sunucu turu beklenmeyecek. **Sıradaki iş bu.** |
-| **E1** | Mobil simülatör ekranı | `apps/mobile/lib/app/router.dart` (`/simulate` yer tutucu) · web `apps/web/src/screens/Simulate.tsx` | Uç oturumsuz çalışıyor. «Simülatöre Aktar» yolu web'de `writeSimPrefill()` → `/simulate`; mobilde prefill deposu `core/storage.dart`a yazılacak. Rapor sheet'indeki düğme de o zaman açılacak (`message_sheet.dart:17` bu eksiği zaten not etmiş). |
+| **E1** | Mobil simülatör ekranı | `apps/mobile/lib/app/router.dart` (`/simulate` yer tutucu) · web `apps/web/src/screens/Simulate.tsx` | Uç oturumsuz çalışıyor. «Simülatöre Aktar» yolu web'de `writeSimPrefill()` → `/simulate`; mobilde prefill deposu `core/storage.dart`a yazılacak. Rapor sheet'indeki düğme de o zaman açılacak (`message_sheet.dart` başlığı bu eksiği zaten not etmiş). **Sıradaki iş bu.** |
 | **E2** | Mobil destek ekranı | `/destek` yer tutucu · web `apps/web/src/screens/Support.tsx` | Sunucu ucu tam (dosya yükleme dâhil). **Misafire açık olmak ZORUNDA** (kullanıcı şartı). |
 | **F4** | Mobil genel/ittifak sohbeti görünümü | `apps/mobile/lib/features/chat/{global,alliance}_chat_sheet.dart` | Yalnız **görsel**: baloncuk, hizalama, gönderen ayrımı, zaman damgası, boş durum. ⚠️ Oyuncunun yazdığı metinde Cinzel YASAK. |
 | **G1** | Web mobil görünümde Şehir sayfası | `apps/web/src/screens/City.tsx` (1138 satır) | Kullanıcı kararı: **uygulamadaki şehir görünümü gibi** olacak, *"daha büyük gösterim ve ekrana tam sığan ögeler"*. |
@@ -40,7 +42,7 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** B2 → E1 → E2 → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
+**Sıra önerisi:** E1 → E2 → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
 arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır basanlar.
 
 ---
@@ -63,6 +65,7 @@ arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı a�
 | Kahraman diriltme sheet'i (web + mobil) | 5 |
 | E3 (mobil Seçenekler: Cihazlar · Şehir yönetimi · Hesabı sil) | 6 |
 | C (dünya satırında görev ikonları) · D (rapordan sefer düğmeleri) | 7 |
+| **B2** (toast/notify) · C'nin satır taşması düzeltmesi | 8 |
 
 ### C ve D nasıl çözüldü (tur 7)
 
@@ -102,6 +105,52 @@ simgesi saldırganın satırına değil oyuncunun kendi satırına düşerdi. Su
 ⚠️ Mobilde iki widget bu yüzden **durumlu** oldu (`_ListState`, `_OptionsState`): rapordan
 gelen form **bir kez** açılmalı. Durumsuz bir widget'ta her yeniden çizim formu geri açar ve
 oyuncu kapatamaz. Web'de aynı işi `useRef` yapıyor, vurgunun (`flash`) disipliniyle aynı.
+
+### B2 ve C'nin taşma düzeltmesi (tur 8)
+
+**C bir kusurla çıkmıştı ve kullanıcı cihazda yakaladı:** görev simgesi Ordular şeridindeki
+hâliyle (34 px + altında geri sayım) satıra asılmıştı. Satır `height: 46` sabit olduğu için
+Flutter ekranda **gerçek bir uyarı** bastı: *«BOTTOM OVERFLOWED BY 9.0 PIXELS»*, saatler alt
+satıra sarktı. Webde aynı şey sessizce oluyordu — orada simge `sm:h-14` (56 px) ve satır `h-9`
+(36 px).
+
+Kullanıcının kararı: *"ordular sayfasında göründüğü şekilde değil, buraya özel sadece ikon
+olarak görünsün; altında geri sayım olmasın, simge satıra sığsın."* Çözüm iki istemcide de
+`MovementIcon`a bir `compact` bayrağı:
+
+* simge 20 px, geri sayım yok, dönüş rozeti yok
+* **parıltı KALDI** — geri sayım ve rozet gittiğine göre "bana gelen saldırı" ile "benim
+  ordum" ayrımını yapan tek sinyal o
+* ⚠️ Mobilde `compact` kipte `tickProvider` **izlenmiyor**: geri sayım yoksa saniyede bir
+  yeniden çizilecek bir şey de yok. İzleseydik on satırlık Dünya listesi hiçbir şey
+  değişmediği hâlde her saniye baştan çizilirdi.
+
+⚠️ Ayrı bir widget değil bayrak: ton kuralı (`movementTone`) iki kipte de aynı kalmalı.
+
+---
+
+**B2 — emir onayı toast'ı.** İki istemcide de yerel, sunucu turu beklenmiyor.
+
+⚠️ Plandaki *"`mission:sent` muhtemelen hedefe «sana saldırı geliyor» diyor"* tahmini
+**yanlıştı**: o kayıt yalnız `type === 'transport'` ise ve yalnız ALICIYA bildirim üretiyor;
+gönderene hiçbir şey gitmiyor. Yani emir onayı zaten sunucudan gelemezdi.
+
+* **Web:** altyapı hazırdı ve **hiç kullanılmıyordu** — `useToast()` dışa aktarılmış ama
+  depoda tek çağıran yoktu. Yeni bir şey yazılmadı, hazır kanca bağlandı.
+* **Mobil:** `lib/ui/toast.dart` sıfırdan yazıldı. `SnackBar` değil: Material tonu oyunun
+  temasına ait değil ve tek toast gösteriyor, oysa web'de üç yığılabiliyor. `OverlayEntry`
+  de değil — `session_conflict.dart`ın `Stack` deseni izlendi, çünkü elle yönetilen bir
+  overlay ekran değişimlerinde sızıntı üretiyor.
+* Davranış web'le eşli: **6 sn**, **en fazla 3**, tıklanınca rotaya git. Sabitler testle
+  kilitli (`toast_test.dart` · «sabitler web ile eşli»).
+* Yerleşim `SessionConflictGate`in **içinde**: oturum devralındığında perde toast'ın da
+  üstünü örtmeli.
+* Metin kuralı iki istemcide de saf ve testli (`missionSentToast`), cümleler birebir aynı.
+
+⛔ **Sunucudan gelen `notify:show` mobilde HÂLÂ dinlenmiyor** ve bu bilinçli bir sınır:
+mobil istemci o olaya hiç abone değil (push altyapısı Faz 3) ve bastırma kuralının
+(`suppressToast`) mobil karşılığı için "hangi sohbet açık" bilgisi gerekiyor. Toast katmanı
+artık hazır, yani o iş geldiğinde yalnız besleme bağlanacak.
 
 ### E3 hakkında iki düzeltme
 

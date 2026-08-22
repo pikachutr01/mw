@@ -13,6 +13,21 @@
 ///    ve liste ile şerit **aynı** fonksiyondan besleniyor.
 ///  • ⚠️ Dokunma hedefi simgeden BÜYÜK: simge 34 px ama sütunun tamamı (simge + yazı + boşluk)
 ///    ~52 px ve tıklanabilir. 34 px'lik bir hedef parmakla ıskalanır.
+///
+/// ─ ⭐⭐ `compact` KİPİ (kullanıcı, 2026-08-22) ─────────────────────────────────────────────
+/// Dünya listesinin satırına asılınca bu simge **taştı**: cihazda gerçek bir
+/// *«BOTTOM OVERFLOWED BY 9.0 PIXELS»* uyarısı çıktı ve geri sayımlar alt satıra sarktı.
+/// Sebep basit — satır `height: 46` sabit, simge tek başına 34 px ve altında bir de saat var.
+///
+/// Kullanıcının kararı: *"ordular sayfasında göründüğü şekilde değil, buraya özel sadece
+/// ikon olarak görünsün; altında geri sayım olmasın, simge satıra sığsın."*
+///
+/// ⚠️ Ayrı bir widget DEĞİL, bayrak: ton kuralı (`movementTone`) ve dokunma davranışı ikisinde
+/// de aynı kalmalı. Ayrı yazsaydık tehdidin rengi iki yerde yaşar ve kaçınılmaz olarak ayrışırdı.
+///
+/// ⚠️⚠️ `compact` kipte `tickProvider` **İZLENMİYOR** ve bu yalnız gereksizlik meselesi değil:
+/// geri sayım yoksa saniyede bir yeniden çizilecek bir şey de yok. İzleseydik on satırlık
+/// Dünya listesi, hiçbir şey değişmediği hâlde her saniye baştan çizilirdi.
 library;
 
 import 'package:flutter/material.dart';
@@ -24,23 +39,59 @@ import 'movement.dart';
 import 'movement_rules.dart';
 
 class MovementIcon extends ConsumerWidget {
-  const MovementIcon({super.key, required this.m, required this.onTap});
+  const MovementIcon({
+    super.key,
+    required this.m,
+    required this.onTap,
+    this.compact = false,
+  });
 
   final Movement m;
   final VoidCallback onTap;
 
+  /// Dar bir satıra asılan hâli: yalnız simge, geri sayım yok, dönüş rozeti yok.
+  final bool compact;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = MwColors.of(context);
-    final clock = ref.watch(clockProvider);
-    // ⚠️ Bu satır olmadan geri sayım yalnız sunucu yanıtı geldiğinde güncellenirdi.
-    ref.watch(tickProvider);
 
     final tone = switch (movementTone(m)) {
       MwTone.danger => c.danger,
       MwTone.warning => c.warning,
       MwTone.success => c.success,
     };
+
+    if (compact) {
+      /* ⚠️ PARILTI KALDI ama küçüldü (9 → 4 bulanıklık). Tehdidin rengi bu simgenin tek
+         bilgisi: geri sayım da rozet de gittiğine göre "bana gelen saldırı" ile "benim
+         ordum" ayrımını yapan başka hiçbir şey kalmıyor. Süs değil, sinyal. */
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: tone.withValues(alpha: 0.55), blurRadius: 4),
+                ],
+              ),
+            ),
+            MwIcon(folder: 'missions', id: m.icon, size: 20),
+          ],
+        ),
+      );
+    }
+
+    final clock = ref.watch(clockProvider);
+    // ⚠️ Bu satır olmadan geri sayım yalnız sunucu yanıtı geldiğinde güncellenirdi.
+    ref.watch(tickProvider);
 
     /// ⚠️ Kendi dönüşüm `direction == 'own'` — `type == 'return'` DEĞİL. Sunucu gelen bir
     /// dönüşü de `return` tipiyle gönderebiliyor; rozeti belirleyen şey ordunun BENİM olması.

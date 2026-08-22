@@ -139,18 +139,54 @@ export function titleOf(m: Movement): string {
 export interface TipState { m: Movement; x: number; y: number }
 
 /** Şehir simgesinin altına asılan tek hareket. */
+/**
+ * ⭐⭐ `compact` KİPİ (kullanıcı, 2026-08-22) — dar bir satıra asılan hâli.
+ *
+ * Dünya listesinin satırı `h-9` (36 px); bu simge masaüstünde `sm:h-14` (56 px) çiziliyor ve
+ * altında bir de geri sayım var. Satıra asılınca ikisi de taştı — mobilde Flutter bunu
+ * *«BOTTOM OVERFLOWED BY 9.0 PIXELS»* diye yüzümüze söyledi, tarayıcıda ise sessizce satır
+ * yüksekliğini bozdu.
+ *
+ * Kullanıcının kararı: *"ordular sayfasında göründüğü şekilde değil, buraya özel sadece ikon
+ * olarak görünsün; altında geri sayım olmasın, simge satıra sığsın."*
+ *
+ * ⚠️ Ayrı bir bileşen DEĞİL, bayrak: ton/parıltı kuralı ikisinde de aynı kalmalı.
+ * ⚠️ Tooltip `compact` kipte de duruyor — yer kaplamıyor ve geri sayımı kaybeden masaüstü
+ * oyuncusunun kalan süreyi öğrenebileceği tek yer o.
+ */
 export function MovementIcon({
-  m, onTip, onOpen,
+  m, onTip, onOpen, compact = false,
 }: {
   m: Movement;
   onTip: (t: TipState | null) => void;
   onOpen: (m: Movement) => void;
+  compact?: boolean;
 }) {
   const left = remainingClock(m.executeAt);
   const isReturn = m.direction === 'own';
 
   // Fare TAKİPLİ tooltip (masaüstü); dokunmatikte tıklama modalı açar.
   const show = (e: React.MouseEvent): void => onTip({ m, x: e.clientX, y: e.clientY });
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onMouseEnter={show}
+        onMouseMove={show}
+        onMouseLeave={() => onTip(null)}
+        onClick={(e) => { e.stopPropagation(); onTip(null); onOpen(m); }}
+        className="inline-flex cursor-pointer items-center rounded-[var(--radius-sm)]
+          transition-[filter] hover:brightness-110"
+      >
+        {/* ⚠️ Parıltı KALDI: geri sayım ve dönüş rozeti gittiğine göre "bana gelen saldırı"
+            ile "benim ordum" ayrımını yapan tek şey o. Süs değil, sinyal. */}
+        <img src={`/assets/missions/${m.icon}.png`} alt={titleOf(m)}
+          width={80} height={80}
+          className={`icon-shadow h-5 w-5 object-contain ${movementGlow(m)}`} />
+      </button>
+    );
+  }
 
   return (
     <button

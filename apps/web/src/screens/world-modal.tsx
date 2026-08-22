@@ -26,9 +26,10 @@ import {
 } from '../components/ui.tsx';
 import { Modal, useConfirm } from '../components/Modal.tsx';
 import {
-  ARMY_OPTIONAL, attackHasEscort, HERO_MISSIONS, hasCrew,
+  ARMY_OPTIONAL, attackHasEscort, HERO_MISSIONS, hasCrew, missionSentToast,
 } from '../lib/mission-rules.ts';
 import { canInviteToAlliance } from '../lib/chat-moderation.ts';
+import { useToast } from '../components/Toaster.tsx';
 
 /**
  * Görev tipi → ekranda görünen ad ve simge (§13.14: İngilizce id görünmez).
@@ -353,6 +354,7 @@ function MissionForm({
   const city = useCity(cityId);
   const catalog = useCatalog(cityId);
   const send = useSendMission();
+  const toast = useToast();
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [heroIds, setHeroIds] = useState<number[]>([]);
   const [gold, setGold] = useState('');
@@ -636,7 +638,22 @@ function MissionForm({
                 ...(HERO_MISSIONS.has(type) && heroIds.length > 0 ? { heroIds } : {}),
                 ...(rule.cargo ? { cargo } : {}),
               },
-              { onSuccess: onDone },
+              {
+                /* ⭐ EMİR ONAYI (kullanıcı, 2026-08-21). ⚠️ Toast ÖNCE, kapatma sonra:
+                   `onDone` bu modalı söküyor ve söküldükten sonra `toast()` çağırmak
+                   sökülmüş bir ağaçtan durum güncellemesi olurdu. Sağlayıcı `App`ta,
+                   yani toast modal kapansa da ayakta kalıyor.
+                   ⚠️ `url: '/armies'` — onayın tek doğal devamı orduyu yolda görmek. */
+                onSuccess: () => {
+                  toast({
+                    title: missionSentToast(type),
+                    body: `Hedef ${target.k}:${target.d}:${target.s}`,
+                    url: '/armies',
+                    category: 'report',
+                  });
+                  onDone();
+                },
+              },
             );
           }}
         >

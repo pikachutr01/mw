@@ -198,3 +198,26 @@ const Map<String, MwMissionInfo> kMissionInfo = {
     hint: 'Anlık transfer, kaynak taşınmaz.',
   ),
 };
+
+/// ⭐⭐ EMİR ONAYI METNİ (kullanıcı, 2026-08-21: *"görev emri verilince toast/notify"*).
+///
+/// ⚠️⚠️ Onay **YEREL** üretiliyor, sunucudan gelmiyor. Sebep sözleşme değil his: emir onayı
+/// bir bildirim değil, **tıklamanın karşılığı**. Sunucu turunu beklemek onu geç ve yanlış
+/// hissettirirdi. (Sunucunun `mission:sent` kaydı zaten yalnız NAKLİYEDE ve yalnız ALICIYA
+/// bildirim üretiyor — gönderene hiçbir şey gitmiyor, `notify.catalog.ts`.)
+///
+/// ⚠️ Tür başına ayrı cümle: hepsine «Sefer başlatıldı» demek, üç ekran ötede aynı toast'ı
+/// gören oyuncuya ne gönderdiğini söylemezdi. Bilinmeyen tür genel cümleye düşüyor —
+/// sunucuya yeni bir görev tipi eklendiğinde toast boş kalmamalı.
+///
+/// ⚠️ Web'deki `lib/mission-rules.ts` · `missionSentToast` ile **birebir aynı cümleler**:
+/// ayrışsalardı aynı oyun iki istemcide iki farklı dille konuşurdu.
+String missionSentToast(String type) => switch (type) {
+  'attack' => 'Saldırın yola çıktı',
+  'spy' => 'Casusun yola çıktı',
+  'transport' => 'Nakliyen yola çıktı',
+  'support' => 'Desteğin yola çıktı',
+  'found_city' => 'Şehir kurma seferin yola çıktı',
+  'teleport' => 'Teleport başladı',
+  _ => 'Sefer başlatıldı',
+};

@@ -31,6 +31,7 @@ import '../city/catalog_model.dart';
 import '../city/city_model.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
+import '../../ui/toast.dart';
 import 'mission_options.dart';
 import 'mission_rules.dart';
 
@@ -359,6 +360,20 @@ class _MissionFormState extends ConsumerState<MissionForm> {
             cargo: _rule.cargo ? (gold: _gold, food: _food) : null,
           );
       await mwTapOk();
+      /* ⭐ EMİR ONAYI (kullanıcı, 2026-08-21: *"görev emri verilince toast/notify"*).
+         ⚠️ Toast `pop`tan ÖNCE: kapanma bu ağacı söküyor ve söküldükten sonra bir
+         sağlayıcıya yazmak sökülmüş bir durumdan güncelleme olurdu. Toast katmanı
+         `bootstrap.dart`ta yaşıyor, yani sheet kapansa da ayakta kalıyor.
+         ⚠️ `url: '/armies'` — onayın tek doğal devamı orduyu yolda görmek. */
+      ref
+          .read(toastProvider.notifier)
+          .show(
+            title: missionSentToast(widget.type),
+            body:
+                'Hedef ${widget.target.k}:${widget.target.d}:${widget.target.s}',
+            url: '/armies',
+            category: 'report',
+          );
       // ⚠️ Sheet'i kapatan taraf BURASI: gönderimden sonra açık kalan bir form, oyuncuyu
       // aynı orduyu ikinci kez göndermeye davet ederdi.
       if (mounted) Navigator.of(context).pop();

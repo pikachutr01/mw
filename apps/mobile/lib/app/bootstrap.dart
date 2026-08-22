@@ -18,6 +18,7 @@ import '../features/options/options_rules.dart';
 import '../features/shell/update_gate.dart';
 import '../gen/tokens.dart';
 import '../ui/keyboard_guard.dart';
+import '../ui/toast.dart';
 import 'providers.dart';
 import 'router.dart';
 
@@ -126,9 +127,13 @@ class MobilWarApp extends ConsumerWidget {
       //    tek tek ekranlara dağıtılırsa bir sonraki ekran onu almayı unutur.
       // ⭐ Tema tercihi izleniyor: Seçenekler'den değişince uygulama anında dönüyor.
       themeMode: ref.watch(themeProvider),
+      // ⭐ Toast katmanı EN İÇTE (2026-08-21): çakışma perdesi açıkken toast'ın da üstü
+      //    örtülmeli. O anda oyuncunun okuması gereken tek şey perdenin kendisi.
       builder: (context, child) => MwKeyboardGuard(
         child: UpdateGate(
-          child: SessionConflictGate(child: child ?? const SizedBox.shrink()),
+          child: SessionConflictGate(
+            child: MwToastHost(child: child ?? const SizedBox.shrink()),
+          ),
         ),
       ),
     );

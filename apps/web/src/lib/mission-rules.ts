@@ -70,3 +70,27 @@ export function attackHasEscort(type: string, unitIds: readonly string[]): boole
   if (type !== 'attack') return true;
   return unitIds.some((id) => !CANNOT_ATTACK_ALONE.has(id));
 }
+
+/**
+ * ⭐⭐ EMİR ONAYI METNİ (kullanıcı, 2026-08-21: *"görev emri verilince toast/notify"*).
+ *
+ * ⚠️⚠️ Onay **YEREL** üretiliyor, sunucudan gelmiyor. Sebep sözleşme değil his: emir onayı
+ * bir bildirim değil, **tıklamanın karşılığı**. Sunucu turunu beklemek onu geç ve yanlış
+ * hissettirirdi. (Sunucunun `mission:sent` kaydı zaten yalnız NAKLİYEDE ve yalnız ALICIYA
+ * bildirim üretiyor — gönderene hiçbir şey gitmiyor, `notify.catalog.ts`.)
+ *
+ * ⚠️ Tür başına ayrı cümle: hepsine «Sefer başlatıldı» demek, üç ekran ötede aynı toast'ı
+ * gören oyuncuya ne gönderdiğini söylemezdi. Bilinmeyen tür genel cümleye düşüyor —
+ * sunucuya yeni bir görev tipi eklendiğinde toast boş kalmamalı.
+ */
+export function missionSentToast(type: string): string {
+  switch (type) {
+    case 'attack': return 'Saldırın yola çıktı';
+    case 'spy': return 'Casusun yola çıktı';
+    case 'transport': return 'Nakliyen yola çıktı';
+    case 'support': return 'Desteğin yola çıktı';
+    case 'found_city': return 'Şehir kurma seferin yola çıktı';
+    case 'teleport': return 'Teleport başladı';
+    default: return 'Sefer başlatıldı';
+  }
+}

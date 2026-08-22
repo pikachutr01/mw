@@ -360,7 +360,9 @@ export function World() {
                           {rowMovements.map((m) => (
                             <span key={m.key} className="shrink-0"
                               onClick={(e) => e.stopPropagation()}>
-                              <MovementIcon m={m} onTip={setTip} onOpen={setOpenMovement} />
+                              {/* ⚠️ `compact`: Ordular şeridindeki hâli (56 px + geri sayım)
+                                  `h-9` satırı bozuyordu — gerekçe `MovementIcon` başlığında. */}
+                              <MovementIcon m={m} compact onTip={setTip} onOpen={setOpenMovement} />
                             </span>
                           ))}
                         </span>

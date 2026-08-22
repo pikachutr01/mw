@@ -217,4 +217,41 @@ void main() {
       expect(gonder(type: 'support', unitCount: 0, heroCount: 1), isTrue);
     });
   });
+
+  /// ⭐⭐ EMİR ONAYI METNİ — web karşılığıyla (`lib/mission-rules.ts` · `missionSentToast`)
+  /// BİREBİR aynı cümleler olmalı.
+  ///
+  /// ⚠️ Arıza sınıfı sessiz: iki istemcide iki farklı cümle hiçbir yerde hata üretmez, yalnız
+  /// aynı oyun iki dille konuşur.
+  group('missionSentToast', () {
+    test('⭐ her sefer türünün kendi cümlesi var', () {
+      expect(missionSentToast('attack'), 'Saldırın yola çıktı');
+      expect(missionSentToast('spy'), 'Casusun yola çıktı');
+      expect(missionSentToast('transport'), 'Nakliyen yola çıktı');
+      expect(missionSentToast('support'), 'Desteğin yola çıktı');
+      expect(missionSentToast('found_city'), 'Şehir kurma seferin yola çıktı');
+      expect(missionSentToast('teleport'), 'Teleport başladı');
+    });
+
+    /// ⚠️ Sunucuya yeni bir görev tipi eklendiğinde toast BOŞ kalmamalı.
+    test('⭐ bilinmeyen tür genel cümleye düşüyor, boş kalmıyor', () {
+      expect(missionSentToast('ritual'), 'Sefer başlatıldı');
+      expect(missionSentToast(''), 'Sefer başlatıldı');
+    });
+
+    /// ⚠️ Oyuncuya görünen metinde tire/çizgi YASAK (depo yazım kuralı).
+    test('⭐ hiçbir cümlede tire yok', () {
+      for (final t in [
+        'attack',
+        'spy',
+        'transport',
+        'support',
+        'found_city',
+        'teleport',
+        'x',
+      ]) {
+        expect(missionSentToast(t), isNot(matches(RegExp(r'[-–—]'))));
+      }
+    });
+  });
 }

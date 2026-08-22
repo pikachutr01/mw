@@ -731,6 +731,7 @@ class _Row extends ConsumerWidget {
                         const SizedBox(width: 4),
                         MovementIcon(
                           m: m,
+                          compact: true,
                           onTap: () => showMovementSheet(context, m),
                         ),
                       ],
