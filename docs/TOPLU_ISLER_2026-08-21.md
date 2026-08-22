@@ -34,14 +34,13 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 
 | # | İş | İlk bakılacak yer | Durum / not |
 | :-- | :-- | :-- | :-- |
-| **+ Yardım** | Mobil `/help` ekranı — **kuyrukta yoktu, tur 9'da bulundu** | web `apps/web/src/screens/Help.tsx` (417 satır) | «Daha» menüsünün dört maddesinden biri ve **hâlâ yer tutucu**. İçerik %100 statik: 9 konu, 40 madde, ~550 kelime, hepsi `Help.tsx`in İÇİNDE. ⭐ Doğru yol metni kopyalamak değil, `TOPICS`i `apps/web/src/lib/`e taşıyıp `facts.g.dart` üretecine bağlamak (üreteç zaten `info-texts.ts`i okuyor). ⚠️ `/help/sefer` ayrı bir iş: tamamen dinamik bir sefer hesaplayıcı. **Sıradaki iş bu.** |
-| **F4** | Mobil genel/ittifak sohbeti görünümü | `apps/mobile/lib/features/chat/{global,alliance}_chat_sheet.dart` | Yalnız **görsel**: baloncuk, hizalama, gönderen ayrımı, zaman damgası, boş durum. ⚠️ Oyuncunun yazdığı metinde Cinzel YASAK. |
+| **+ Yardım** | Mobil `/help` ekranı — **kuyrukta yoktu, tur 9'da bulundu** | web `apps/web/src/screens/Help.tsx` (417 satır) | «Daha» menüsünün dört maddesinden biri ve **hâlâ yer tutucu**. İçerik %100 statik: 9 konu, 40 madde, ~550 kelime, hepsi `Help.tsx`in İÇİNDE. ⭐ Doğru yol metni kopyalamak değil, `TOPICS`i `apps/web/src/lib/`e taşıyıp `facts.g.dart` üretecine bağlamak (üreteç zaten `info-texts.ts`i okuyor). ⚠️ `/help/sefer` ayrı bir iş: tamamen dinamik bir sefer hesaplayıcı. ⏸️ **KULLANICI ERTELEDİ (2026-08-22):** *"Yardım sayfasını şimdilik geçelim, onu daha sonra dolduracağız."* Yer tutucu bilerek duruyor. |
 | **G1** | Web mobil görünümde Şehir sayfası | `apps/web/src/screens/City.tsx` (1138 satır) | Kullanıcı kararı: **uygulamadaki şehir görünümü gibi** olacak, *"daha büyük gösterim ve ekrana tam sığan ögeler"*. |
 | **H1** | DM + ittifak sohbetinde kural onayı | `apps/api/src/chat/` · şema `chat_participants` | Tasarım aşağıda (H1). Kural **metnini ben yazacağım** (kullanıcı 2026-08-21 devretti). DM onayı kanal başına (`chat_participants`e yeni kolon), ittifak onayı oyun başına (`players`), ikisi de **sürümlü**. |
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** Yardım → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
+**Sıra önerisi:** G1 → H1 → A6 (Yardım kullanıcı kararıyla ertelendi). Gerekçe: önce sunucusu hazır olup yalnız
 arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır basanlar.
 
 ---
@@ -67,6 +66,7 @@ arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı a�
 | **B2** (toast/notify) · C'nin satır taşması düzeltmesi | 8 |
 | **E1** (mobil simülatör + «Simülatöre aktar») | 9 |
 | **E2** (mobil destek: misafir + oturumlu) | 10 |
+| **F4** (mobil oda sohbeti: baloncuk + gruplama) | 11 |
 
 ### C ve D nasıl çözüldü (tur 7)
 
@@ -148,6 +148,43 @@ düzeltildi.
 kayıt kalsaydı oyuncu bir hafta sonra simülatörü açtığında formu eski bir raporun verisiyle
 dolmuş bulurdu. Sur ve Büyü Kalkanı `structures`tan `counts`a katılıyor — sunucu onları
 `defenses`ten ayıklıyor ve atlanırsa casusluktan gelen savunmada sur hep sıfır görünürdü.
+
+### F4 — oda sohbeti görünümü (tur 11)
+
+Kullanıcının istediği dört şey: *"baloncuk, hizalama, gönderen ayrımı, zaman damgası, boş
+durum"*.
+
+**Eski düzenin gerekçesi yarı doğruydu.** Kodda şöyle yazıyordu: *"on kişilik bir odada
+sağ/sol hizalama okumayı kolaylaştırmıyor, kim yazdı sorusunun cevabı hizalama değil ad."*
+Doğru olan yarısı: **başkalarını** birbirinden ayıran şey gerçekten ad. Eksik olan yarısı:
+*"benimki hangisi"* sorusunun cevabı hizalama ve web'in üç sohbeti de yıllardır öyle
+çiziyor. Yeni düzen ikisini birden yapıyor — hizalama beni ayırıyor, ad başkalarını.
+
+**Web'den alınan üç karar:** dolu accent baloncuk (benim) / çerçeveli baloncuk (başkası) ·
+bana bahsedilen mesajda **kalın accent çerçeve** · ard arda gelen aynı gönderende adın
+tekrarlanmaması (`sameAsPrev`).
+
+⚠️ **Sistem duyurusu artık ortada ve baloncuksuz.** Bir tarafa yaslamak onu bir oyuncunun
+sözü gibi gösterirdi.
+
+── ⚠️⚠️ Yolda bulunan GERÇEK hata ──────────────────────────────────────────────────────
+
+İki sheet de `roomIsMine` yerine ham `m.senderId == myId` yazıyordu. İki taraf da `null`
+olabiliyor: kimlik henüz yüklenmediyse `myId` null, **sistem duyurusunun `senderId`i de**
+null. `null == null` doğru döndüğü için sistem duyurusu bir an *"benim mesajım"* rengiyle
+çiziliyordu. Kural `chat_rules.dart` · `isMine`da DM tarafı için zaten yazılıydı ve tuzağı
+birebir anlatıyordu — oda tarafı onu çağırmıyordu. Artık `room_rules.dart` · `roomIsMine`
+var ve testle kilitli.
+
+── Kopya kaldırıldı ────────────────────────────────────────────────────────────────────
+
+`_RoomLine` iki dosyada **birebir kopyaydı** ve kopya olduğu için birlikte eskimişti:
+ikisinde de baloncuk yoktu, ikisinde de gruplama yoktu, ikisi de aynı `null` hatasını
+taşıyordu. Tek dosyaya çıkarıldı (`chat/room_line.dart` · `MwRoomLine`).
+
+⚠️ Ters listede *"önceki mesaj"* `i + 1`, `i - 1` DEĞİL (liste `reverse: true`). Yanlış
+komşu vermek grubun ilk mesajını adsız bırakıp sonuncusuna ad yazdırırdı; kural ve testi
+`showSenderName`de.
 
 ### E2 — mobil destek (tur 10)
 
@@ -696,7 +733,7 @@ olmayanlarda `viewInsets.bottom` zaten 0.
 **Düzeltme:** `mwSheet`e de `viewInsets` dolgusu. ⚠️ `mwSheet` çok yerde kullanılıyor,
 düzeltme hepsini birden etkiler (istenen yönde: yazı alanı olan her sheet düzelir).
 
-### F4. Genel/ittifak sohbeti görünümü
+### F4. Genel/ittifak sohbeti görünümü ✅ (tur 11)
 
 `features/chat/global_chat_sheet.dart` (557 satır) · `alliance_chat_sheet.dart` (749 satır).
 İşlevsel olarak tam (gerçek zamanlı olaylar, susturma, yavaş mod, bahsetme). İstenen yalnız

@@ -29,6 +29,7 @@ import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 import 'alliance_chat_rules.dart';
 import 'chat_rules.dart';
+import 'room_line.dart';
 import 'room_message.dart';
 import 'room_rules.dart';
 
@@ -209,9 +210,11 @@ class _BodyState extends ConsumerState<_Body> {
                           senderId: m.senderId,
                           senderRole: open.roleOf(m.senderId),
                         );
-                    return _RoomLine(
+                    /* ⚠️ «Önceki» = daha ESKİ mesaj ve ters listede o `i + 1`. */
+                    return MwRoomLine(
                       m: m,
-                      mine: m.senderId == myId,
+                      myId: myId,
+                      onceki: i + 1 < mesajlar.length ? mesajlar[i + 1] : null,
                       onDelete: silebilir ? () => _delete(m) : null,
                     );
                   },
@@ -532,78 +535,6 @@ class _MemberRowState extends ConsumerState<_MemberRow> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-}
-
-/// Oda satırı — Genel Sohbet'inkiyle aynı görsel dil, ek olarak **uzun basınca kaldır**.
-class _RoomLine extends ConsumerWidget {
-  const _RoomLine({required this.m, required this.mine, this.onDelete});
-
-  final RoomMessage m;
-  final bool mine;
-
-  /// `null` → kaldırma yetkim yok; uzun basma hiçbir şey yapmıyor.
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = MwColors.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final clock = ref.watch(clockProvider);
-    final parts = splitMentions(m.body, m.mentions);
-
-    return InkWell(
-      // ⚠️ Uzun basma — posta kutusundaki seçim kipiyle aynı jest ve aynı gerekçe: satırın
-      // yanında kalıcı bir çöp kutusu, dar ekranda en kıt kaynağı yer.
-      onLongPress: onDelete,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    senderLabel(m),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: mine ? scheme.primary : c.info,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  clock.timeAgo(m.createdAt),
-                  style: TextStyle(fontSize: 10, color: c.muted),
-                ),
-              ],
-            ),
-            const SizedBox(height: 1),
-            Text.rich(
-              TextSpan(
-                children: [
-                  for (final p in parts)
-                    TextSpan(
-                      text: p.text,
-                      style: p.mentionId == null
-                          ? null
-                          : TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.primary,
-                            ),
-                    ),
-                ],
-              ),
-              style: const TextStyle(fontSize: 14),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

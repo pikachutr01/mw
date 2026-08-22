@@ -35,6 +35,7 @@ import '../../core/realtime.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 import 'chat_rules.dart';
+import 'room_line.dart';
 import 'room_message.dart';
 import 'room_rules.dart';
 
@@ -212,7 +213,13 @@ class _BodyState extends ConsumerState<_Body> {
                       );
                     }
                     final m = mesajlar[i];
-                    return _RoomLine(m: m, mine: m.senderId == myId);
+                    /* ⚠️ «Önceki» = daha ESKİ mesaj ve ters listede o `i + 1`.
+                       `i - 1` yazmak grubun ilk mesajını adsız bırakırdı. */
+                    return MwRoomLine(
+                      m: m,
+                      myId: myId,
+                      onceki: i + 1 < mesajlar.length ? mesajlar[i + 1] : null,
+                    );
                   },
                 ),
         ),
@@ -342,78 +349,6 @@ class _BodyState extends ConsumerState<_Body> {
   }
 }
 
-/// Oda satırı — DM'in baloncuğundan FARKLI: burada **yazarın adı** görünmek zorunda.
-///
-/// ⚠️ Baloncuk yerine satır: on kişilik bir odada sağ/sol hizalama okumayı kolaylaştırmıyor,
-/// zorlaştırıyor (kim yazdı sorusunun cevabı hizalama değil, ad). Kendi mesajım yalnız adın
-/// renginden ayrılıyor.
-class _RoomLine extends ConsumerWidget {
-  const _RoomLine({required this.m, required this.mine});
-
-  final RoomMessage m;
-  final bool mine;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = MwColors.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final clock = ref.watch(clockProvider);
-    final parts = splitMentions(m.body, m.mentions);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  // ⚠️ Ad çözümü `senderLabel`da: kaldırılmış oyuncuda ham `id` ASLA yazılmaz.
-                  senderLabel(m),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: mine ? scheme.primary : c.info,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                clock.timeAgo(m.createdAt),
-                style: TextStyle(fontSize: 10, color: c.muted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 1),
-          /* ⚠️ Bahsetme parçaları `TextSpan` olarak basılıyor — Flutter işaretleme
-             yorumlamıyor, yani gövdeye gömülü bir şey metin olarak görünür. */
-          Text.rich(
-            TextSpan(
-              children: [
-                for (final p in parts)
-                  TextSpan(
-                    text: p.text,
-                    style: p.mentionId == null
-                        ? null
-                        : TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: scheme.primary,
-                          ),
-                  ),
-              ],
-            ),
-            style: const TextStyle(fontSize: 14),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Yazma kutusu — DM'inkiyle aynı kalıp, ek olarak «yazıyor» yayını.
 class _Composer extends StatefulWidget {
   const _Composer({
     required this.controller,

@@ -124,3 +124,47 @@ String typingText(List<String> names) {
 /// ⚠️ Sayı bilinmiyorsa boş dize — «0 kişi bağlı» yazmak, kendisi bağlıyken yalan olurdu.
 String presenceText(int? count) =>
     count == null || count <= 0 ? '' : '$count kişi bağlı';
+
+/* ══ BALONCUK KARARLARI (F4, 2026-08-22) ══════════════════════════════════════════════════
+   Oda sohbetleri bugüne kadar DÜZ SATIR çiziyordu; kullanıcı baloncuk, hizalama ve gönderen
+   ayrımı istedi. Web'in üç sohbeti de baloncuk kullanıyor ve kararlar oradan alındı. */
+
+/// Bu mesaj benim mi?
+///
+/// ⚠️⚠️ **`m.senderId == myId` YAZILAMAZ.** İki taraf da `null` olabiliyor: kimliğim henüz
+/// yüklenmediyse `myId` null, **sistem duyurusunun `senderId`i de null**. `null == null`
+/// doğru döndüğü için sistem duyurusu bir an "benim mesajım" gibi çizilirdi — sağa yaslı,
+/// dolu accent baloncukla. `chat_rules.dart` · `isMine` aynı tuzağı DM tarafında anlatıyor;
+/// oda tarafında kural yazılıydı ama iki sheet de onu çağırmayıp ham karşılaştırma
+/// yapıyordu (2026-08-22'de bulundu).
+bool roomIsMine(RoomMessage m, int? myId) =>
+    m.senderId != null && myId != null && m.senderId == myId;
+
+/// Sistem duyurusu mu? ⚠️ Ayrı çiziliyor: ne benim ne başkasının, bir tarafa yaslanmamalı.
+bool isSystemMessage(RoomMessage m) => m.senderId == null;
+
+/// Gönderen adı bu satırda yazılsın mı?
+///
+/// ⚠️⚠️ ARD ARDA GELEN AYNI GÖNDEREN GRUPLANIYOR (web'deki `sameAsPrev`): beş mesaj yazan
+/// birinin adını beş kez yazmak, ekranın yarısını aynı adla doldurmak demek.
+///
+/// ⚠️ Kendi mesajımda ad HİÇ yazılmıyor: baloncuk zaten sağda ve dolu renkte, adı da
+/// eklemek aynı bilgiyi üçüncü kez söylemek olurdu.
+///
+/// ⚠️⚠️ `onceki` **daha ESKİ** mesaj demek. Liste `reverse: true` çiziliyor (index 0 dipte,
+/// en yeni), yani çağıranın vereceği şey `mesajlar[i + 1]` — `i - 1` DEĞİL. Ters listede
+/// yanlış komşuyu vermek, grubun ilk mesajını adsız bırakıp sonuncusuna ad yazdırırdı.
+bool showSenderName(RoomMessage m, RoomMessage? onceki, int? myId) {
+  if (isSystemMessage(m)) return false;
+  if (roomIsMine(m, myId)) return false;
+  if (onceki == null) return true;
+  if (isSystemMessage(onceki)) return true;
+  return onceki.senderId != m.senderId;
+}
+
+/// Bu mesajda benden bahsedilmiş mi?
+///
+/// ⚠️ Baloncuğu kalın çerçeveyle işaretlemek için: gövdedeki vurgu tek başına yetmiyor,
+/// kayan bir listede göz önce baloncuğun biçimine takılıyor.
+bool mentionsMe(RoomMessage m, int? myId) =>
+    myId != null && m.mentions.any((x) => x.id == myId);

@@ -206,4 +206,100 @@ void main() {
       expect(presenceText(0), '');
     });
   });
+
+  /* ══ BALONCUK KARARLARI (F4, 2026-08-22) ═══════════════════════════════════════════════ */
+
+  /// ⚠️⚠️ Bu grubun varlık sebebi ÖLÇÜLMÜŞ bir hata: iki sohbet sheet'i de `roomIsMine`
+  /// yerine ham `m.senderId == myId` yazıyordu ve `null == null` doğru döndüğü için sistem
+  /// duyurusu, kimliğim yüklenmeden önce "benim mesajım" gibi çiziliyordu.
+  group('roomIsMine', () {
+    test('kendi mesajım', () {
+      expect(roomIsMine(_m(senderId: 5), 5), isTrue);
+    });
+
+    test('başkasının mesajı', () {
+      expect(roomIsMine(_m(senderId: 9), 5), isFalse);
+    });
+
+    /// ⭐⭐ ASIL VAKA: ikisi de null.
+    test('⭐⭐ sistem duyurusu + yüklenmemiş kimlik BENİM DEĞİL', () {
+      expect(roomIsMine(_m(senderId: null), null), isFalse);
+    });
+
+    test('⭐ sistem duyurusu hiçbir kimlikle benim değil', () {
+      expect(roomIsMine(_m(senderId: null), 5), isFalse);
+    });
+
+    test('⭐ kimliğim yüklenmediyse hiçbir mesaj benim değil', () {
+      expect(roomIsMine(_m(senderId: 5), null), isFalse);
+    });
+  });
+
+  group('isSystemMessage', () {
+    test('gönderensiz mesaj sistem duyurusu', () {
+      expect(isSystemMessage(_m(senderId: null)), isTrue);
+      expect(isSystemMessage(_m(senderId: 5)), isFalse);
+    });
+  });
+
+  group('showSenderName', () {
+    /// ⚠️ Kendi baloncuğumda ad HİÇ yazılmıyor: sağda ve dolu renkte olması zaten söylüyor.
+    test('⭐ kendi mesajımda ad yazılmıyor', () {
+      expect(showSenderName(_m(senderId: 5), null, 5), isFalse);
+    });
+
+    test('sistem duyurusunda ad yazılmıyor', () {
+      expect(showSenderName(_m(senderId: null), null, 5), isFalse);
+    });
+
+    test('listenin en eski mesajında ad yazılıyor', () {
+      expect(showSenderName(_m(senderId: 9), null, 5), isTrue);
+    });
+
+    /// ⚠️⚠️ GRUPLAMA: beş mesaj yazan birinin adını beş kez yazmak, ekranın yarısını aynı
+    /// adla doldurmak demek.
+    test('⭐⭐ ard arda aynı gönderende ad TEKRARLANMIYOR', () {
+      expect(showSenderName(_m(senderId: 9), _m(senderId: 9), 5), isFalse);
+    });
+
+    test('⭐ gönderen değişince ad yeniden yazılıyor', () {
+      expect(showSenderName(_m(senderId: 9), _m(senderId: 7), 5), isTrue);
+    });
+
+    /// ⚠️ Araya sistem duyurusu girerse grup KIRILIYOR: duyuru ortada, baloncuksuz ve
+    /// tarafsız çiziliyor; ardından gelen mesajın adsız kalması onu duyuruya bağlarmış gibi
+    /// gösterirdi.
+    test('⭐ araya sistem duyurusu girince grup kırılıyor', () {
+      expect(showSenderName(_m(senderId: 9), _m(senderId: null), 5), isTrue);
+    });
+  });
+
+  group('mentionsMe', () {
+    RoomMessage bahseden(List<int> ids) => RoomMessage.fromJson({
+      'id': 1,
+      'senderId': 9,
+      'senderName': 'Kurt',
+      'body': 'selam @Baturalp',
+      'createdAt': '2026-08-19T10:00:00.000Z',
+      'mentions': [
+        for (final id in ids) {'id': id, 'at': 6, 'len': 9},
+      ],
+    });
+
+    test('⭐ bahsedilen kişi bensem doğru', () {
+      expect(mentionsMe(bahseden([5]), 5), isTrue);
+      expect(mentionsMe(bahseden([7, 5]), 5), isTrue);
+    });
+
+    test('başkasından bahsedilmişse yanlış', () {
+      expect(mentionsMe(bahseden([7]), 5), isFalse);
+      expect(mentionsMe(_m(), 5), isFalse);
+    });
+
+    /// ⚠️ Kimliğim yüklenmediyse hiçbir şey "bana" değil: aksi hâlde her baloncuk kalın
+    /// çerçeveyle yanardı.
+    test('⭐ kimliğim yüklenmediyse yanlış', () {
+      expect(mentionsMe(bahseden([5]), null), isFalse);
+    });
+  });
 }
