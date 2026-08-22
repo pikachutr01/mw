@@ -35,12 +35,11 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 | # | İş | İlk bakılacak yer | Durum / not |
 | :-- | :-- | :-- | :-- |
 | **+ Yardım** | Mobil `/help` ekranı — **kuyrukta yoktu, tur 9'da bulundu** | web `apps/web/src/screens/Help.tsx` (417 satır) | «Daha» menüsünün dört maddesinden biri ve **hâlâ yer tutucu**. İçerik %100 statik: 9 konu, 40 madde, ~550 kelime, hepsi `Help.tsx`in İÇİNDE. ⭐ Doğru yol metni kopyalamak değil, `TOPICS`i `apps/web/src/lib/`e taşıyıp `facts.g.dart` üretecine bağlamak (üreteç zaten `info-texts.ts`i okuyor). ⚠️ `/help/sefer` ayrı bir iş: tamamen dinamik bir sefer hesaplayıcı. ⏸️ **KULLANICI ERTELEDİ (2026-08-22):** *"Yardım sayfasını şimdilik geçelim, onu daha sonra dolduracağız."* Yer tutucu bilerek duruyor. |
-| **G1** | Web mobil görünümde Şehir sayfası | `apps/web/src/screens/City.tsx` (1138 satır) | Kullanıcı kararı: **uygulamadaki şehir görünümü gibi** olacak, *"daha büyük gösterim ve ekrana tam sığan ögeler"*. |
 | **H1** | DM + ittifak sohbetinde kural onayı | `apps/api/src/chat/` · şema `chat_participants` | Tasarım aşağıda (H1). Kural **metnini ben yazacağım** (kullanıcı 2026-08-21 devretti). DM onayı kanal başına (`chat_participants`e yeni kolon), ittifak onayı oyun başına (`players`), ikisi de **sürümlü**. |
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** G1 → H1 → A6 (Yardım kullanıcı kararıyla ertelendi). Gerekçe: önce sunucusu hazır olup yalnız
+**Sıra önerisi:** H1 → A6 (Yardım kullanıcı kararıyla ertelendi). Gerekçe: önce sunucusu hazır olup yalnız
 arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır basanlar.
 
 ---
@@ -67,6 +66,7 @@ arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı a�
 | **E1** (mobil simülatör + «Simülatöre aktar») | 9 |
 | **E2** (mobil destek: misafir + oturumlu) | 10 |
 | **F4** (mobil oda sohbeti: baloncuk + gruplama) | 11 |
+| **G1** (web mobil Şehir sayfası) | 12 |
 
 ### C ve D nasıl çözüldü (tur 7)
 
@@ -148,6 +148,30 @@ düzeltildi.
 kayıt kalsaydı oyuncu bir hafta sonra simülatörü açtığında formu eski bir raporun verisiyle
 dolmuş bulurdu. Sur ve Büyü Kalkanı `structures`tan `counts`a katılıyor — sunucu onları
 `defenses`ten ayıklıyor ve atlanırsa casusluktan gelen savunmada sur hep sıfır görünürdü.
+
+### G1 — web mobil Şehir sayfası (tur 12)
+
+Kullanıcı kararı: *"uygulamadaki şehir görünümü gibi, daha büyük gösterim ve ekrana tam
+sığan ögeler."*
+
+⚠️ Ölçüm önce yapıldı: 375 px'lik ekranda bir satırın içeriğine **~323 px** kalıyor
+(`375 − 24 kabuk dolgusu − 4 panel çerçevesi − 24 satır dolgusu`). Altı somut sıkışma
+noktası bulundu ve hepsi düzeltildi.
+
+| # | Sorun | Düzeltme |
+| :-- | :-- | :-- |
+| 1 | **Yapılar** satırı dar ekranda sarmıyordu; orta sütuna `323 − 56 − 24 − 56` = **~187 px** kalıyor ve ad + maliyet + süre + ön koşul oraya sığmak zorundaydı | Baraka satırına 2026-07-30'da verilen **iki katlı mobil düzen** buraya da taşındı → orta sütun ~243 px |
+| 2 | **Akademi** satırı birebir aynı hatayla | aynı düzen |
+| 3 | **«Toplam:»** satırında `flex-wrap` unutulmuştu — dosyadaki **tek gerçek yatay taşma**. `Res` içeride `whitespace-nowrap` ve küçülemiyor; 100 adetlik bir emirde yedi haneli maliyet 323 px'i aşıyordu | `flex-wrap` eklendi |
+| 4 | **Sur onarım cümlesi** kırpılıyordu: *"…bütünlük %85 — saldırı gel…"*. Kırpılan yer tam da **savaş kararını** veren bilgiydi | mobilde sarıyor, `sm:`de eski düzen |
+| 5 | **İlerleme etiketi** kırpılıyordu; en uzunları mağaranınkiler (`mağaraya girecek · 1.234 alan`) ve kırpılan yer kuyruğun hangi kalemi olduğuydu | mobilde sarıyor |
+| 6 | **Dokunma hedefleri** ~28 px; üstelik ↑ ↓ okları `gap-0.5` (2 px) ile **yıkıcı** «İptal et»in yanındaydı | mobilde `min-h-11` (44 px) ve aralık açıldı |
+
+⚠️ Hiçbir değişiklik masaüstünü etkilemiyor: hepsi `sm:` (640 px) altında geçerli, üstünde
+eski düzen aynen sürüyor.
+
+⛔ **Tarayıcıdan doğrulanmadı:** Şehir ekranı oturum istiyor ve depo kuralı gereği parolayı
+forma ben yazmıyorum. Kapılar (typecheck + 339 test) yeşil, görsel doğrulama kullanıcıda.
 
 ### F4 — oda sohbeti görünümü (tur 11)
 
@@ -744,7 +768,7 @@ düzeltme hepsini birden etkiler (istenen yönde: yazı alanı olan her sheet d�
 
 ## G. WEB
 
-### G1. Web mobil görünümdeki Şehir sayfası mobil mantığına hizalansın
+### G1. Web mobil görünümdeki Şehir sayfası ✅ (tur 12)
 
 Web `screens/City.tsx` **1138 satır**, `CityHub.tsx` 56 satır; mobil
 `city_hub_screen.dart` 169 satır. Kullanıcı mobildeki düzeni daha iyi buluyor.
