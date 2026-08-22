@@ -19,7 +19,7 @@
  *    ama kendisine yazılmış bir sohbete **cevap verebilir**. Ölçüt `players.created_at`
  *    (o dünyaya katılım), hesap yaşı değil: sohbet dünya-kapsamlı.
  */
-import { liveNumber } from '../settings/live.ts';
+import { liveBool, liveNumber } from '../settings/live.ts';
 
 /**
  * ⚠️ Gövde uzunluğu AYARLANABİLİR DEĞİL ve şemaya da konmadı: `packages/contracts`teki
@@ -31,6 +31,13 @@ export const CHAT_BODY_MAX = 500;
 export interface ChatLimits {
   /** Gövde uzunluğu — sözleşmedeki `max(500)` ile aynı. */
   bodyMax: number;
+  /**
+   * ⭐ Sohbet kuralı onayı zorunlu mu (`chat.termsRequired`).
+   *
+   * ⚠️ İTTİFAK sohbeti de bunu okuyor, kendi grubundan değil: kural metni tek ve onay
+   * anahtarı da tek olmalı. İki ayrı anahtar, ikisinden birini açmayı unutmak demekti.
+   */
+  termsRequired: boolean;
   /** Kova: `perSeconds` içinde en fazla `burst` mesaj (kanal değil OYUNCU başına). */
   burst: number;
   perSeconds: number;
@@ -46,6 +53,11 @@ export interface ChatLimits {
 export function chatLimits(): ChatLimits {
   return {
     bodyMax: CHAT_BODY_MAX,
+    /**
+     * ⚠️ VARSAYILAN KAPALI: onayı bilmeyen eski bir istemci, açık olsaydı anlamadığı bir
+     * hatayla karşılaşır ve oyuncu mesaj gönderemezdi. Panelden açılıyor.
+     */
+    termsRequired: liveBool('chat', 'termsRequired', false),
     burst: liveNumber('chat', 'burst', 5),
     perSeconds: liveNumber('chat', 'perSeconds', 10),
     duplicateSeconds: liveNumber('chat', 'duplicateSeconds', 15),

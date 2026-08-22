@@ -28,8 +28,8 @@ import { assertCanModerate, AllianceError, ROLE } from '../alliance/alliance.ser
 import { toDate, type Db } from '../db/client.ts';
 import { allianceChatLimits } from './alliance-chat.limits.ts';
 import {
-  assertFlowOk, assertNotBanned, assertVerifiedToChat, findRetry, insertMessage,
-  ChatError, type Tx,
+  assertChatTermsAccepted, assertFlowOk, assertNotBanned, assertVerifiedToChat, findRetry,
+  insertMessage, ChatError, type Tx,
 } from './chat.guards.ts';
 import { mentionRecipients, resolveMentions, type Mention } from './mentions.ts';
 
@@ -404,6 +404,16 @@ export class AllianceChatService {
       await this.assertCanWrite(tx, {
         worldId: o.worldId, playerId: o.playerId, allianceId: ch.allianceId, joinedAt: ch.joinedAt,
       });
+
+      /**
+       * ⭐⭐ KURAL ONAYI (H1, 2026-08-22) — kovadan ÖNCE: onay eksikken oyuncuya "çok hızlı
+       * yazıyorsun" demek yanlış sebebi söylemek olurdu.
+       *
+       * ⚠️ İTTİFAKTA `channelId` VERİLMİYOR ve bu kasıtlı: onay oyun başına, kanal başına
+       * değil (`players.chat_terms_version`). İttifak değiştirmek kuralları değiştirmiyor.
+       * Ayrıca ittifak kanalında `chat_participants` satırı zaten hiç yaratılmıyor.
+       */
+      await assertChatTermsAccepted(tx, { playerId: o.playerId });
 
       /* 6) Kova + mükerrer + yavaş mod — ⚠️ kapsam `'channel'` (değişmez 3). */
       await assertFlowOk(tx, {

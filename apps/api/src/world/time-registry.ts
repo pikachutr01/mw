@@ -228,6 +228,13 @@ export const TIME_SHIFT_REGISTRY: readonly TimeShiftEntry[] = [
  * *"bunu şimdiki zamanla karşılaştıran bir kural var mı?"* Varsa buraya değil, yukarıya.
  */
 export const NON_TIMELINE_COLUMNS: readonly string[] = [
+  /* ⭐⭐ SOHBET KURALI ONAYI (H1, 2026-08-22) — kaydırılmaz.
+     Bunlar oyun zaman çizgisine ait değil, **hukuki bir kabulün** damgası. Hiçbir canlı kural
+     onları şimdiki zamanla karşılaştırmıyor: kapı `terms_version >= güncel sürüm` diye
+     bakıyor, damgaya değil. Kaydırmak, bakım duraklaması kadar yanlış bir onay tarihi
+     kaydetmek olurdu ve şikâyet incelemesinde tam da o tarih okunuyor. */
+  'chat_participants.terms_accepted_at', 'players.chat_terms_accepted_at',
+
   // 1 — Geçmiş oyun olayları
   'battles.at', 'battles.created_at',
   /* ⚠️ `favorited_at` `read_at` ile AYNI aile: ikisi de yalnız "işaretli mi" sorusuna cevap

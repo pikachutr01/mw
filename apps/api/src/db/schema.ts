@@ -226,6 +226,15 @@ export const players = pgTable('players', {
    */
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+  /**
+   * ⭐ İTTİFAK SOHBETİ KURAL ONAYI — **oyun başına bir kez** (göç 0052).
+   *
+   * ⚠️ İttifak başına DEĞİL: kurallar oyuncunun davranışına dair, ittifaka özel değil.
+   * İttifak değiştirmek kuralları değiştirmiyor; her katılımda yeniden sormak onayı bir
+   * «tamam» tuşuna çevirirdi.
+   */
+  chatTermsVersion: smallint('chat_terms_version').notNull().default(0),
+  chatTermsAcceptedAt: timestamp('chat_terms_accepted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('players_world_username').on(t.worldId, t.username),
@@ -1230,6 +1239,16 @@ export const chatParticipants = pgTable('chat_participants', {
    */
   mutedUntil: timestamp('muted_until', { withTimezone: true }),
   notify: boolean('notify').notNull().default(true),
+  /**
+   * ⭐⭐ SOHBET KURALI ONAYI — **her yazışma için ayrı** (kullanıcı şartı, göç 0052).
+   *
+   * ⚠️ `0` = onaylanmadı; gerçek sürümler 1'den başlıyor (`chat/chat.terms.ts`).
+   * ⚠️ Geçmişi silmek onayı SİLMEZ: silme yalnız `cleared_before_message_id`i kaydırıyor,
+   * bu satır yerinde duruyor. Her silmede yeniden sormak oyuncuyu "okumadan onayla"maya
+   * alıştırır ve kaydın değerini düşürürdü.
+   */
+  termsVersion: smallint('terms_version').notNull().default(0),
+  termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
   joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('chat_participants_pk').on(t.channelId, t.playerId),

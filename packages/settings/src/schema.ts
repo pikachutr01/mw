@@ -265,6 +265,18 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
 const STATIC_SETTINGS: readonly SettingDef[] = [
   /* ── Sohbet ──────────────────────────────────────────────────────────────── */
   {
+    key: 'chat.termsRequired',
+    label: 'Sohbet kuralı onayı zorunlu',
+    type: 'boolean', default: false, tag: 'design',
+    description: 'Açıkken oyuncu ilk mesajını göndermeden önce sohbet kurallarını onaylamak '
+      + 'zorunda. Özel mesajda onay her yazışma için ayrı, ittifak sohbetinde oyun başına bir '
+      + 'kez alınır. Kapalıyken kural penceresi hiç açılmaz ve kimse engellenmez.',
+    note: 'VARSAYILAN KAPALI ve bu bilinçli: onayı bilmeyen ESKİ bir mobil sürüm, açık '
+      + 'olsaydı anlamadığı bir hatayla karşılaşır ve oyuncu mesaj gönderemezdi. Uygulama '
+      + 'güncellemesi mağazalarda yayıldıktan sonra açılmalı. Kapatmak da acil vana: bir '
+      + 'aksaklıkta sohbeti tamamen kapatmak yerine yalnız kapıyı kaldırır.',
+  },
+  {
     key: 'chat.burst',
     label: 'Kova: pencere başına mesaj',
     type: 'int', default: 5, min: 1, max: 100, tag: 'design', unit: 'adet',

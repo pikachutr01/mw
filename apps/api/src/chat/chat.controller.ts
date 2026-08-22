@@ -14,6 +14,7 @@ import {
   BadRequestException, Body, Controller, Delete, ForbiddenException, Get, HttpCode, HttpException,
   HttpStatus, Inject, NotFoundException, Param, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { chatReportRequest, openDmRequest, sendChatRequest } from '@mobilwar/contracts';
 import { AuthGuard, type AuthedRequest } from '../auth/auth.guard.ts';
@@ -21,8 +22,22 @@ import { UNVERIFIED_CODE } from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';
 import { DB } from '../db/tokens.ts';
 import { ChatError, ChatService } from './chat.service.ts';
+import { chatLimits } from './chat.limits.ts';
+import { CHAT_TERMS, CHAT_TERMS_VERSION, termsAccepted } from './chat.terms.ts';
 
 const idParam = z.coerce.number().int().positive();
+
+/**
+ * Kural onayı gövdesi.
+ *
+ * ⚠️ SÜRÜM ALANI YOK ve bilerek: istemcinin bildirdiği bir sürüme güvenmek, okunmamış bir
+ * metni onaylanmış göstermenin en kolay yolu olurdu. Sunucu kendi sürümünü yazıyor.
+ * ⚠️ `dm` kapsamında `channelId` ZORUNLU: onay o yazışmaya ait.
+ */
+const acceptTermsBody = z.discriminatedUnion('scope', [
+  z.object({ scope: z.literal('alliance') }),
+  z.object({ scope: z.literal('dm'), channelId: z.number().int().positive() }),
+]);
 
 export function toHttp(err: unknown): Error {
   if (!(err instanceof ChatError)) return err as Error;
@@ -73,8 +88,75 @@ export function toHttp(err: unknown): Error {
 export class ChatController {
   private readonly service: ChatService;
 
+  /** ⚠️ Kural onayı iki tabloya tek `UPDATE` yazıyor; servis katmanı gerektirmiyor. */
+  private readonly db: Db;
+
   constructor(@Inject(DB) db: Db) {
     this.service = new ChatService(db);
+    this.db = db;
+  }
+
+  /* ── Sohbet kuralları (H1, 2026-08-22) ──────────────────────────────────── */
+
+  /**
+   * ⭐⭐ KURAL METNİ + O OYUNCUNUN DURUMU.
+   *
+   * ⚠️ Metin SUNUCUDAN geliyor ve bu şart: onay hukuki bir kabul, web'de bir şeyi
+   * uygulamada başka bir şeyi onaylatmak kaydı değersiz kılardı.
+   *
+   * ⚠️ `required` **ayardan** geliyor (`chat.termsRequired`, varsayılan KAPALI). Kapalıyken
+   * istemci kural penceresini hiç açmıyor; onayı bilmeyen eski bir sürüm de engellenmiyor.
+   *
+   * ⚠️ `alliance` durumu burada, DM durumu **yazışmanın kendi paketinde** dönüyor: DM onayı
+   * kanal başına ve hangi kanal olduğunu bu uç bilmiyor.
+   */
+  @Get('terms')
+  async terms(@Req() req: AuthedRequest): Promise<Record<string, unknown>> {
+    const p = req.player!;
+    const [row] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT chat_terms_version AS v FROM players WHERE id = ${p.playerId}
+    `);
+    return {
+      ...CHAT_TERMS,
+      required: chatLimits().termsRequired,
+      alliance: termsAccepted(row?.['v'] == null ? 0 : Number(row['v'])),
+    };
+  }
+
+  /**
+   * ⭐ ONAYI KAYDET.
+   *
+   * ⚠️ İki kapsam, iki tablo: `dm` → o yazışmanın katılımcı satırı, `alliance` → oyuncu
+   * satırı. Kapsam istemciden geliyor ama **kanal sahipliği doğrulanıyor**: `channelId`
+   * oyuncunun katılımcısı olmadığı bir kanalsa hiçbir satır güncellenmiyor.
+   *
+   * ⚠️ Sürüm gövdeden OKUNMUYOR, sunucudan yazılıyor: istemcinin bildirdiği bir sürüme
+   * güvenmek, okunmamış bir metni onaylanmış göstermenin en kolay yolu olurdu.
+   */
+  @Post('terms/accept')
+  @HttpCode(200)
+  async acceptTerms(
+    @Body() body: unknown, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const parsed = acceptTermsBody.safeParse(body);
+    if (!parsed.success) throw new BadRequestException({ code: 'invalid_request' });
+    const p = req.player!;
+
+    if (parsed.data.scope === 'alliance') {
+      await this.db.execute(sql`
+        UPDATE players
+           SET chat_terms_version = ${CHAT_TERMS_VERSION}, chat_terms_accepted_at = now()
+         WHERE id = ${p.playerId}
+      `);
+      return { ok: true, version: CHAT_TERMS_VERSION };
+    }
+
+    await this.db.execute(sql`
+      UPDATE chat_participants
+         SET terms_version = ${CHAT_TERMS_VERSION}, terms_accepted_at = now()
+       WHERE channel_id = ${parsed.data.channelId} AND player_id = ${p.playerId}
+    `);
+    return { ok: true, version: CHAT_TERMS_VERSION };
   }
 
   /** Sohbet listesi — Mesajlar ekranı bunu oyun mesajlarıyla tarihe göre birleştirir. */

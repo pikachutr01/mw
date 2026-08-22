@@ -20,8 +20,8 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { chatLimits } from './chat.limits.ts';
 import {
-  assertFlowOk, assertNotBanned, assertVerifiedToChat, findRetry, insertMessage,
-  ChatError, type Tx,
+  assertChatTermsAccepted, assertFlowOk, assertNotBanned, assertVerifiedToChat, findRetry,
+  insertMessage, ChatError, type Tx,
 } from './chat.guards.ts';
 
 /**
@@ -153,6 +153,15 @@ export class ChatService {
        * yüzünden zaten yazılmış bir mesaj "gönderilemedi" görünmemeli.
        */
       await assertVerifiedToChat(tx, o.playerId);
+
+      /**
+       * ⭐⭐ KURAL ONAYI (H1, 2026-08-22) — §verify'ın hemen ardında, çünkü ikisi de aynı
+       * cinsten: *"yazmaya hakkın var mı"*. Engel ve kova kapılarından ÖNCE olmalı; onay
+       * eksikken oyuncuya "çok hızlı yazıyorsun" demek yanlış sebebi söylemek olurdu.
+       *
+       * ⚠️ Onay ÖZEL MESAJDA kanal başına: `channelId` veriliyor.
+       */
+      await assertChatTermsAccepted(tx, { playerId: o.playerId, channelId: o.channelId });
 
       /**
        * ⭐ SOHBET YASAĞI (§admin Faz 6) — yeniden deneme kontrolünden SONRA, engelden ÖNCE.

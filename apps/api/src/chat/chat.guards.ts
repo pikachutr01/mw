@@ -20,6 +20,8 @@ import {
   isVerified, UNVERIFIED_CODE, UNVERIFIED_MESSAGE, unverifiedLimits,
 } from '../auth/unverified.ts';
 import type { Db } from '../db/client.ts';
+import { chatLimits } from './chat.limits.ts';
+import { termsAccepted } from './chat.terms.ts';
 
 export type Tx = Pick<Db, 'execute'>;
 
@@ -258,3 +260,49 @@ export async function insertMessage(tx: Tx, o: {
     createdAt: new Date(String(row!['created_at'])),
   };
 }
+
+/* ── Sohbet kuralı onayı (H1, 2026-08-22) ─────────────────────────────────── */
+
+/**
+ * ⭐⭐ KURAL ONAYI KAPISI — onaylamayan **yazamaz**, okumaya dokunulmaz.
+ *
+ * ⚠️⚠️ **YALNIZ YAZMA kapatılıyor, OKUMA değil.** Tasarım notunda bir ara *"alıcı onaylamadan
+ * mesajı göremez"* de yazıyordu; uygularken vazgeçildi ve gerekçesi şu: okumayı kapatmak,
+ * birine ulaşmaya çalışan oyuncunun mesajını rehin alır ve kötü niyetli birinin karşısındakine
+ * zorla bir onay penceresi açtırmasına yol açardı. Kullanıcının istediği de *"ilk mesajdan
+ * ÖNCE onay"*, yani gönderme tarafı. §verify kapısı da (doğrulanmamış hesap yazamaz, okur)
+ * tam olarak bu ayrımı kuruyor.
+ *
+ * ⚠️ Kapı `chat.termsRequired` KAPALIYKEN hiç çalışmıyor: onayı bilmeyen eski bir istemci
+ * anlamadığı bir hatayla karşılaşmasın (gerekçe `chat.limits.ts`te).
+ */
+export async function assertChatTermsAccepted(
+  tx: Tx,
+  o: { playerId: number; channelId?: number },
+): Promise<void> {
+  if (!chatLimits().termsRequired) return;
+
+  /* ⚠️ İki AYRI kapsam, iki ayrı satır:
+       • `channelId` VARSA özel mesaj → onay o yazışmaya ait (`chat_participants`).
+       • yoksa ittifak sohbeti → onay oyun başına (`players`). */
+  const [row] = o.channelId == null
+    ? await tx.execute<Record<string, unknown>>(sql`
+        SELECT chat_terms_version AS v FROM players WHERE id = ${o.playerId}
+      `)
+    : await tx.execute<Record<string, unknown>>(sql`
+        SELECT terms_version AS v FROM chat_participants
+         WHERE channel_id = ${o.channelId} AND player_id = ${o.playerId}
+      `);
+
+  /* ⚠️ Satır YOKSA da onaysız sayılıyor: katılımcı satırı kanal açılırken yaratılıyor ve
+     olmaması normal bir durum değil, ama burada iyimser davranmak kapıyı delerdi. */
+  if (termsAccepted(row?.['v'] == null ? 0 : Number(row['v']))) return;
+
+  throw new ChatError(
+    CHAT_TERMS_CODE,
+    'Yazmadan önce sohbet kurallarını onaylaman gerekiyor.',
+  );
+}
+
+/** İstemcinin tanıdığı kod — kural penceresini bu kodda açıyor. */
+export const CHAT_TERMS_CODE = 'terms_required';
