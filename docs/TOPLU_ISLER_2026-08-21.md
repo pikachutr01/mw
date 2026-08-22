@@ -151,27 +151,41 @@ dolmuş bulurdu. Sur ve Büyü Kalkanı `structures`tan `counts`a katılıyor �
 
 ### G1 — web mobil Şehir sayfası (tur 12)
 
-Kullanıcı kararı: *"uygulamadaki şehir görünümü gibi, daha büyük gösterim ve ekrana tam
-sığan ögeler."*
+⚠️⚠️ **İLK DENEMEDE YANLIŞ EKRAN HEDEFLENDİ.** Kullanıcının kastettiği **Şehir ANA
+SAYFASI** (`/city` · `CityHub.tsx`) idi; ben alt ekranları (`City.tsx` — Yapılar, Baraka,
+Akademi) düzeltmeye çalıştım. Üstelik oraya koyduğum «düğme alt kata insin» düzeni
+görünümü **kötüleştirdi**: kullanıcı bildirdi (*"seviye atlatma butonu çok büyük oldu,
+şekilsiz duruyor"*). O değişikliklerin tamamı geri alındı.
 
-⚠️ Ölçüm önce yapıldı: 375 px'lik ekranda bir satırın içeriğine **~323 px** kalıyor
-(`375 − 24 kabuk dolgusu − 4 panel çerçevesi − 24 satır dolgusu`). Altı somut sıkışma
-noktası bulundu ve hepsi düzeltildi.
+**Ders:** *"Şehir sayfası"* bu depoda iki ayrı şeye işaret ediyor — hub (`/city`) ve beş alt
+ekran. Hangisi olduğu sorulmalıydı; ekran görüntüsü alıp bakmak da yeterdi.
 
-| # | Sorun | Düzeltme |
-| :-- | :-- | :-- |
-| 1 | **Yapılar** satırı dar ekranda sarmıyordu; orta sütuna `323 − 56 − 24 − 56` = **~187 px** kalıyor ve ad + maliyet + süre + ön koşul oraya sığmak zorundaydı | Baraka satırına 2026-07-30'da verilen **iki katlı mobil düzen** buraya da taşındı → orta sütun ~243 px |
-| 2 | **Akademi** satırı birebir aynı hatayla | aynı düzen |
-| 3 | **«Toplam:»** satırında `flex-wrap` unutulmuştu — dosyadaki **tek gerçek yatay taşma**. `Res` içeride `whitespace-nowrap` ve küçülemiyor; 100 adetlik bir emirde yedi haneli maliyet 323 px'i aşıyordu | `flex-wrap` eklendi |
-| 4 | **Sur onarım cümlesi** kırpılıyordu: *"…bütünlük %85 — saldırı gel…"*. Kırpılan yer tam da **savaş kararını** veren bilgiydi | mobilde sarıyor, `sm:`de eski düzen |
-| 5 | **İlerleme etiketi** kırpılıyordu; en uzunları mağaranınkiler (`mağaraya girecek · 1.234 alan`) ve kırpılan yer kuyruğun hangi kalemi olduğuydu | mobilde sarıyor |
-| 6 | **Dokunma hedefleri** ~28 px; üstelik ↑ ↓ okları `gap-0.5` (2 px) ile **yıkıcı** «İptal et»in yanındaydı | mobilde `min-h-11` (44 px) ve aralık açıldı |
+── Yapılan iş (doğru hedef) ────────────────────────────────────────────────────────────
 
-⚠️ Hiçbir değişiklik masaüstünü etkilemiyor: hepsi `sm:` (640 px) altında geçerli, üstünde
-eski düzen aynen sürüyor.
+`CityHub.tsx` uygulamadaki Şehir sekmesine hizalandı:
 
-⛔ **Tarayıcıdan doğrulanmadı:** Şehir ekranı oturum istiyor ve depo kuralı gereği parolayı
-forma ben yazmıyorum. Kapılar (typecheck + 339 test) yeşil, görsel doğrulama kullanıcıda.
+* **Panel kaldırıldı.** Beş satırlık listeyi ahşap çerçeveye almak ekranın üçte birini
+  kaplayıp gerisini boş bırakıyordu; uygulamada da panel yok, doğrudan kartlar var.
+* **Kartlar 96 px**, ikon 32 → 56 px, etiket Cinzel ve bir punto büyük.
+* Zebra deseni gitti: satırları ayıran şey artık kartın kendi kenarı.
+
+⭐ **96 px tahmin değil, ölçüm:** tarayıcıda kaydırma kabının içerik alanı 533 px
+(629 − 96 alt dolgu) ve beş kart + dört boşluk 512 px tutuyor — yani boşta yalnız **21 px**
+kalıyor, kaydırma çubuğu doğmuyor (`scrollHeight == clientHeight`). Uygulamanın
+`LayoutBuilder`ı da kart yüksekliğini 74..108 arasına kelepçeliyor; 96 tam ortasında.
+
+── Alt ekranlarda KORUNAN iki düzeltme ─────────────────────────────────────────────────
+
+Geri alma sırasında ikisi bilerek bırakıldı, çünkü ikisi de görünümü değiştirmiyor, yalnız
+**kaybolan bilgiyi** geri getiriyor:
+
+1. «Toplam:» satırındaki `flex-wrap` — dosyadaki tek gerçek yatay taşma (100 adetlik emirde
+   yedi haneli maliyet 323 px'lik satırı aşıyordu).
+2. Sur onarım cümlesi ve ilerleme etiketi mobilde artık sarıyor, kırpılmıyor. İkisinde de
+   kırpılan yer tam da karar veren bilgiydi (*"…bütünlük %85 — saldırı gel…"*).
+
+✅ Tarayıcıdan doğrulandı (375×812): hub, Yapılar ve Akademi ekran görüntüsüyle kontrol
+edildi; alt ekranlar eski görünümünde.
 
 ### F4 — oda sohbeti görünümü (tur 11)
 

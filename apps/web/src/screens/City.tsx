@@ -234,8 +234,7 @@ function ProgressRow({
           : <span className="flex-1" />}
         {right}
         {canCancel && onCancel ? (
-          <Button size="sm" variant="danger" className="min-h-11 sm:min-h-0"
-            disabled={cancelling} onClick={onCancel}>İptal et</Button>
+          <Button size="sm" variant="danger" disabled={cancelling} onClick={onCancel}>İptal et</Button>
         ) : null}
       </div>
       <div className="h-1.5 overflow-hidden rounded-full border border-border bg-raised">
@@ -498,15 +497,7 @@ function Buildings({ city }: { city: CityDetail }) {
           const mutex = mutexOf(b.id);
           return (
             <li key={b.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              {/* ⭐ MOBİL İKİ KATLI DÜZEN (kullanıcı, 2026-08-22: *"uygulamadaki şehir görünümü
-                  gibi, daha büyük gösterim ve ekrana tam sığan ögeler"*).
-
-                  ⚠️ Bu düzen Baraka/Savunma satırına 2026-07-30'da verilmişti ama iki
-                  kardeşine TAŞINMAMIŞTI. Bedeli ölçülebilir: 375 px'lik ekranda orta sütuna
-                  `323 − 56(ikon) − 24(boşluk) − 56(düğme)` = **~187 px** kalıyordu ve ad,
-                  maliyet, süre, ön koşul hepsi oraya sığmak zorundaydı. Düğme alt kata
-                  inince orta sütun ~243 px'e çıkıyor. */}
-              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-between sm:gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <CatalogIcon kind="buildings" id={b.id} alt={b.name} />
                 <div className="min-w-0 flex-1">
                   {/* ⭐ Mağara adı TIKLANABİLİR: doldurma/boşaltma modalının girişi burasıdır
@@ -532,14 +523,12 @@ function Buildings({ city }: { city: CityDetail }) {
                   {mutex ? <LockNote text={mutex} /> : null}
                 </div>
                 {/* ⚠️ Ön-şart eksikse düğme PASİF — hata mesajıyla karşılaşmadan görülmeli. */}
-                <div className="flex w-full shrink-0 justify-end sm:w-auto">
-                  <Button size="sm" className="min-h-11 sm:min-h-0"
-                    disabled={maxed || capped || busy || !afford || unmet || enqueue.isPending
-                      || (b.id === 'cave' && caveLocked) || mutex != null}
-                    onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
-                    {maxed ? '—' : `sv ${b.level + 1}`}
-                  </Button>
-                </div>
+                <Button size="sm"
+                  disabled={maxed || capped || busy || !afford || unmet || enqueue.isPending
+                    || (b.id === 'cave' && caveLocked) || mutex != null}
+                  onClick={() => enqueue.mutate({ category: 'building', type: b.id })}>
+                  {maxed ? '—' : `sv ${b.level + 1}`}
+                </Button>
               </div>
               {/* ⭐ Mağaranın taşıma ve onarım geri sayımları da tam burada — seviye ilerletme
                   çubuğuyla AYNI yerde, çünkü oyuncu "mağara ne yapıyor" sorusunu tek noktaya
@@ -709,27 +698,19 @@ function ProductionPanel({
                     * ok göstermek "bir işe yarar" izlenimi verip tıklayınca hiçbir şey
                     * yapmıyordu.
                     */}
-                  {/* ⚠️⚠️ MOBİLDE ARALIK AÇILDI (kullanıcı, 2026-08-22). Eskiden ↑ ve ↓
-                      `gap-0.5` (2 px) ile YIKICI «İptal et» düğmesinin hemen yanındaydı ve
-                      üçü de `size="sm"` yani ~30x28 px'lik hedeflerdi. Parmakla sırayı
-                      değiştirmeye çalışan oyuncunun emri iptal etmesi işten değildi.
-                      ⚠️ `min-h-11` = 44 px, dokunma hedefi tabanı; `sm:`de eski ölçüler. */}
-                  <span className="ml-auto flex shrink-0 items-center gap-2 sm:gap-1">
+                  <span className="ml-auto flex shrink-0 items-center gap-1">
                     {!active && waiting > 1 ? (
-                      <span className="flex shrink-0 items-center gap-1.5 sm:gap-0.5">
+                      <span className="flex shrink-0 items-center gap-0.5">
                         <span className="tnum mr-1 text-[11px] text-muted">sıra {q.position}</span>
                         <Button size="sm" variant="ghost" title="Yukarı"
-                          className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0"
                           onClick={() => onMove(q.id, 'up')}>↑</Button>
                         <Button size="sm" variant="ghost" title="Aşağı"
-                          className="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0"
                           onClick={() => onMove(q.id, 'down')}>↓</Button>
                       </span>
                     ) : !active ? (
                       <span className="tnum shrink-0 text-[11px] text-muted">sıra {q.position}</span>
                     ) : null}
-                    <Button size="sm" variant="danger" className="min-h-11 sm:min-h-0"
-                      onClick={() => onCancel(q)}>İptal et</Button>
+                    <Button size="sm" variant="danger" onClick={() => onCancel(q)}>İptal et</Button>
                   </span>
                 </div>
 
@@ -1135,15 +1116,7 @@ function Techs({ city }: { city: CityDetail }) {
           const capped = caps != null && t.level >= caps.maxTechLevel;   // §verify, «≥»
           return (
             <li key={t.id} className={`px-3 py-2 ${i % 2 === 1 ? 'bg-row-alt' : ''}`}>
-              {/* ⭐ MOBİL İKİ KATLI DÜZEN (kullanıcı, 2026-08-22: *"uygulamadaki şehir görünümü
-                  gibi, daha büyük gösterim ve ekrana tam sığan ögeler"*).
-
-                  ⚠️ Bu düzen Baraka/Savunma satırına 2026-07-30'da verilmişti ama iki
-                  kardeşine TAŞINMAMIŞTI. Bedeli ölçülebilir: 375 px'lik ekranda orta sütuna
-                  `323 − 56(ikon) − 24(boşluk) − 56(düğme)` = **~187 px** kalıyordu ve ad,
-                  maliyet, süre, ön koşul hepsi oraya sığmak zorundaydı. Düğme alt kata
-                  inince orta sütun ~243 px'e çıkıyor. */}
-              <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-between sm:gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <CatalogIcon kind="techs" id={t.id} alt={t.name} />
                 <div className="min-w-0 flex-1">
                   <ItemName name={t.name} value={t.level}
@@ -1154,14 +1127,12 @@ function Techs({ city }: { city: CityDetail }) {
                     buildings={city.buildings} techs={city.techs} />
                   {capped ? <VerifyCap max={caps.maxTechLevel} what="Araştırma" /> : null}
                 </div>
-                <div className="flex w-full shrink-0 justify-end sm:w-auto">
-                  <Button size="sm" className="min-h-11 sm:min-h-0"
-                    disabled={busyHere || academyUpgrading || !!q || !afford || unmet
-                      || enqueue.isPending || capped}
-                    onClick={() => enqueue.mutate({ category: 'tech', type: t.id })}>
-                    sv {t.level + 1}
-                  </Button>
-                </div>
+                <Button size="sm"
+                  disabled={busyHere || academyUpgrading || !!q || !afford || unmet
+                    || enqueue.isPending || capped}
+                  onClick={() => enqueue.mutate({ category: 'tech', type: t.id })}>
+                  sv {t.level + 1}
+                </Button>
               </div>
               {q ? (
                 <ProgressRow
