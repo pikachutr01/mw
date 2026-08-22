@@ -1036,6 +1036,30 @@ class CityAdmin {
 
 final cityAdminProvider = Provider<CityAdmin>(CityAdmin.new);
 
+/// ⭐ SAVAŞ SİMÜLATÖRÜ — `POST /api/v1/simulate`.
+///
+/// ⚠️ Uç sunucuda oturumsuz çalışıyor (`OptionalAuthGuard`) ama **uygulamada ekran oturum
+/// istiyor** (kullanıcı, 2026-08-22). Jetonun tek etkisi motor ayarlarının hangi dünyadan
+/// okunacağı; oturumlu istekte oyuncunun kendi dünyasının dengesi kullanılıyor.
+///
+/// ⚠️ Sağlayıcı DEĞİL eylem: sonuç bir sorgu değil, oyuncunun bastığı düğmenin çıktısı.
+/// `FutureProvider` yazsaydık ekran her tazelemede kendiliğinden yeniden savaşırdı.
+class Simulator {
+  const Simulator(this._ref);
+
+  final Ref _ref;
+
+  Future<List<Object?>> run(Map<String, dynamic> body) async {
+    final yanit = await _ref
+        .read(apiProvider)
+        .request('POST', '/api/v1/simulate', body: body);
+    final list = yanit is Map ? yanit['results'] as List<dynamic>? : null;
+    return list ?? const [];
+  }
+}
+
+final simulatorProvider = Provider<Simulator>(Simulator.new);
+
 /// ⭐ DÜNYA DURUMU — `GET /api/v1/world/state`.
 ///
 /// ⚠️ Bugün yalnız **Genel Sohbet açık mı** okunuyor. Aynı uç bakım perdesini de besliyor

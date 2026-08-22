@@ -14,13 +14,10 @@
 /// ⚠️ Gövde `jsonb` ve türü sunucuda da `Record<string, unknown>`. Dart'ta tiplemek sahte bir
 /// kapı olurdu (`MOBIL_MIMARI.md` §4) — alanlar okundukları yerde savunmayla çözülüyor.
 ///
-/// ⛔ **«Simülatöre Aktar» düğmesi YOK** — bilerek. Web'de casusluk raporundan tek dokunuşla
-/// simülatör dolduruluyor; mobilde Simülatör ekranı henüz yer tutucu ve olmayan bir ekrana
-/// götüren düğme, çalışıyormuş gibi görünen bir kapı olurdu. O ekran gelince buraya eklenecek.
-///
-/// ⭐ **«Saldır» ve «Casus gönder» VAR** (2026-08-21) — gövdenin sonunda, çizgiyle ayrılmış
-/// şeritte (`_SeferDugmeleri`). Yukarıdaki eksikle karıştırılmasın: o düğmenin gideceği ekran
-/// yok, bunların gideceği ekran (Dünya) var ve zaten çalışıyor.
+/// ⭐ Gövdenin sonunda, çizgiyle ayrılmış eylem şeridi var (`_SeferDugmeleri`): **«Saldır»**
+/// ve **«Casus gönder»** (2026-08-21) ile casusluk raporunda **«Simülatöre aktar»**
+/// (2026-08-22). Sonuncusu Simülatör ekranı gelene kadar bilerek yoktu — olmayan bir ekrana
+/// götüren düğme, çalışıyormuş gibi görünen bir kapı olurdu.
 library;
 
 import 'dart:async';
@@ -34,6 +31,7 @@ import '../../core/api_client.dart';
 import '../../gen/facts.g.dart';
 import '../../ui/native.dart';
 import '../../ui/primitives.dart';
+import '../simulate/simulate_prefill.dart';
 import 'battle_report.dart';
 import 'battle_report_view.dart';
 import 'message.dart';
@@ -183,7 +181,21 @@ class _SeferDugmeleri extends ConsumerWidget {
     /* ⚠️ Hangi ucun düşman olduğu `message_rules.dart` · `reportEnemyCoord`ta ve saf:
        savunma raporlarında hedef `origin`, yani düğme KARŞI SALDIRI açıyor. */
     final dusman = reportEnemyCoord(m.kind, m.side, origin, target);
-    if (dusman == null) return const SizedBox.shrink();
+
+    /* ⭐ «Simülatöre aktar» YALNIZ casusluk raporunda ve yalnız künye taşıyorsa: casusluk
+       kademeli ve düşük kademede yalnız kaynak sızıyor. Boş bir formu "aktardım" diye
+       açmak, düğmenin çalışmadığını düşündürürdü (web'de aynı ölçüt). */
+    /* ⚠️ İki adımda okunuyor, tek ternary'de değil: `?['intel']` bir ternary'nin içinde
+       yazıldığında Dart ayrıştırıcısı `?[`yi ternary'nin `?`si sanıyor ve dosya derlenmiyor.
+       Ayrı satır hem derleniyor hem okunuyor. */
+    final govde = m.kind == 'spy_report' && m.side != 'target'
+        ? ref.watch(messageBodyProvider(m.id)).value
+        : null;
+    final intel = govde == null ? null : govde['intel'];
+    final aktarilabilir =
+        intel is Map<String, dynamic> && simIntelTransferable(intel);
+
+    if (dusman == null && !aktarilabilir) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 14),
@@ -195,24 +207,45 @@ class _SeferDugmeleri extends ConsumerWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              for (final r in kReportMissions) ...[
-                /* ⚠️ Sefer formunu BURADA açmıyoruz, Dünya ekranına gidiyoruz — web'le aynı
-                   yol ve aynı gerekçe: rapor tarihsel bir kayıt, koordinatın sahibi o günden
-                   beri değişmiş olabilir. Dünya hedef künyesini TAZE listeden çözüyor ve
-                   oyuncu kime saldırdığını görüyor. */
+              if (aktarilabilir)
                 _SeferDugmesi(
-                  icon: r.icon,
-                  label: r.label,
-                  onTap: () {
+                  icon: 'spy_back',
+                  label: 'Simülatöre aktar',
+                  onTap: () async {
+                    /* ⚠️ ÖNCE YAZ, SONRA GİT: simülatör devri `initState`te okuyor ve
+                       navigasyondan sonra yazmak yarışa girerdi. */
+                    await ref
+                        .read(storeProvider)
+                        .write(
+                          kSimPrefillKey,
+                          MwSimTransfer(
+                            // ⚠️ `aktarilabilir` zaten tipi daraltmış olduğu için burada
+                            //    ayrıca dönüştürmeye gerek yok.
+                            defender: simSideFromIntel(intel),
+                          ).encode(),
+                        );
+                    if (!context.mounted) return;
                     onDone();
-                    context.go(
-                      '/world/${dusman.k}/${dusman.d}'
-                      '?s=${dusman.s}&m=${r.type}',
-                    );
+                    context.go('/simulate');
                   },
                 ),
-                const SizedBox(width: 8),
-              ],
+              /* ⚠️ Sefer formunu BURADA açmıyoruz, Dünya ekranına gidiyoruz — web'le aynı
+                 yol ve aynı gerekçe: rapor tarihsel bir kayıt, koordinatın sahibi o günden
+                 beri değişmiş olabilir. Dünya hedef künyesini TAZE listeden çözüyor ve
+                 oyuncu kime saldırdığını görüyor. */
+              if (dusman != null)
+                for (final r in kReportMissions)
+                  _SeferDugmesi(
+                    icon: r.icon,
+                    label: r.label,
+                    onTap: () {
+                      onDone();
+                      context.go(
+                        '/world/${dusman.k}/${dusman.d}'
+                        '?s=${dusman.s}&m=${r.type}',
+                      );
+                    },
+                  ),
             ],
           ),
         ],

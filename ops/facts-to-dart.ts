@@ -41,8 +41,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  LEVEL_BASED, MERIT_TIERS, NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE, UNITS_BY_ID,
+  LEVEL_BASED, MERIT_TIERS, NAME_MAX, NAME_MIN, NAME_RULE_MESSAGE, TECHS, UNITS_BY_ID,
 } from '@mobilwar/catalog';
+import { HERO_POINTS_PER_LEVEL } from '@mobilwar/contracts';
 import { BUILDING_INFO, TECH_INFO, UNIT_INFO } from '../apps/web/src/lib/info-texts.ts';
 import { HERO_SKILLS } from '../apps/web/src/lib/hero-skills.ts';
 import { unitStrikeLabel, unitTechNames } from '../apps/web/src/lib/unit-facts.ts';
@@ -98,6 +99,21 @@ const strikeLines = unitIds
 const kindLines = unitIds
   .map((id) => `  ${dartStr(id)}: ${dartStr(UNITS_BY_ID[id]!.kind)},`)
   .join('\n');
+
+/* ══ SİMÜLATÖR İÇİN: HANGİ TEKNİK SAVAŞA GİRİYOR (2026-08-22) ═════════════════════════════
+   ⚠️⚠️ AD ve SIRA burada ÜRETİLMİYOR ve buna gerek de yok: `GET /cities/:id/catalog`
+   savaşçıları `WARRIOR_ORDER`, savunmayı `DEFENSE_ORDER` (tapınak hariç) ve teknikleri
+   `TECH_ORDER` ile **zaten sıralı ve adlandırılmış** döndürüyor (`city.controller.ts`).
+   İkinci bir kopya yazmak, kataloğu Dart'a üretmeme kararını delmek olurdu.
+
+   ⭐ Sunucunun SÖYLEMEDİĞİ tek şey: bir tekniğin savaş statına dokunup dokunmadığı.
+   Katalog ucu teknikleri tek tip olarak veriyor (`CatalogUpgradable`), `stat` alanı yok.
+   Casusluk · Haritacılık · Sömürgecilik savaşa hiç girmiyor ve simülatörde kutuları
+   olmamalı — o süzgeç için bu küme gerekiyor. */
+
+/** ⚠️ `stat === null` olanlar savaşa girmiyor; küme yalnız GİRENLERİ taşıyor. */
+const combatTechIds = TECHS.filter((t) => t.stat !== null).map((t) => t.id);
+const combatTechLines = combatTechIds.map((id) => `  ${dartStr(id)},`).join('\n');
 
 /**
  * ⭐ Kahraman yetenekleri — anahtar · simge · etiket, **sıra dâhil** (`hero-skills.ts`).
@@ -229,6 +245,27 @@ ${levelBasedLines}
 const int kNameMin = ${NAME_MIN};
 const int kNameMax = ${NAME_MAX};
 const String kNameRuleMessage = ${dartStr(NAME_RULE_MESSAGE)};
+
+/// ⭐⭐ SAVAŞA GİREN TEKNİKLER — simülatör teknik listesini bununla süzüyor.
+///
+/// ⚠️ **Ad ve sıra burada YOK ve olmamalı:** \`GET /cities/:id/catalog\` teknikleri zaten
+/// \`TECH_ORDER\` sırasıyla ve adlarıyla döndürüyor. Sunucunun söylemediği tek şey bir
+/// tekniğin savaş statına dokunup dokunmadığı — katalog ucu \`stat\` alanını taşımıyor.
+///
+/// ⚠️ Listede OLMAYANLAR: Casusluk · Haritacılık · Sömürgecilik. Üçü de savaşa hiç girmiyor
+/// ve simülatörde kutuları olsaydı hiçbir etkisi olmayan alanlar olurdu.
+const Set<String> kCombatTechs = {
+${combatTechLines}
+};
+
+/// ⚠️ Taş Ustalığı yalnız SAVUNMA yapılarını ölçekliyor. Saldıranda bir kutu sunmak, hiçbir
+/// etkisi olmayan bir alan olurdu; orijinal araç da o hücreyi çizgiyle geçiyor.
+const Set<String> kDefenderOnlyTech = {'masonry'};
+
+/// Kahramanın seviye başına dağıtabildiği yetenek puanı — simülatördeki bütçe sayacı bunu
+/// kullanıyor. ⚠️ Simülatörde aşım ENGELLENMİYOR (bilerek): *"seviye 10 kahramana 40 puan
+/// verseydim"* sorusu sorulabilmeli. Gerçek kural sunucuda (\`hero.controller.ts\`).
+const int kHeroPointsPerLevel = ${HERO_POINTS_PER_LEVEL};
 `;
 
 const check = process.argv.includes('--check');

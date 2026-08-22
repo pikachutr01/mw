@@ -23,21 +23,21 @@ const String kLandingPath = '/';
 /// ilk sorusu daima *"şu an ne oluyor?"*.
 const String kHomePath = '/armies';
 
-/// ⭐ Oturum İSTEMEYEN yollar — web'deki `GuestApp` rota tablosuyla aynı küme.
+/// ⭐ Oturum İSTEMEYEN yollar.
 ///
-/// ⚠️ `/simulate` sunucuda gerçekten oturumsuz çalışıyor: uç `OptionalAuthGuard` ile korunuyor
-/// ve kimlik yoksa dünya-0 denge katmanına düşüyor (`simulate.controller.ts:38`). Yani bu liste
-/// bir istemci nezaketi değil, sunucunun davranışının aynası.
+/// ⚠️⚠️ **`/simulate` BURADA DEĞİL ve web'den bilerek ayrılıyor** (kullanıcı, 2026-08-22:
+/// *"Uygulamada simülatöre oturumsuz ulaşılamasın… sadece oturum açan simülatör
+/// kullanabilsin"*). Sunucu ucu hâlâ oturumsuz (`OptionalAuthGuard`) ve web'de misafir onu
+/// kullanmaya devam ediyor; kapanan şey yalnız **uygulamadaki** kapı.
+///
+/// ⚠️ Kararın ekrana yansıması var: simülatör birim adlarını ve sırasını
+/// `GET /cities/:id/catalog`tan alıyor, o uç ise oturum VE şehir sahipliği istiyor. Misafire
+/// açık kalsaydı ya adları derlenmiş bir kopyadan okumak (kataloğu Dart'a üretmeme kararını
+/// delerdi) ya da ekranı isimsiz göstermek gerekirdi.
 ///
 /// ⚠️ `/destek` misafire açık olmak ZORUNDA (kullanıcı şartı): desteğe en çok ihtiyaç duyan
 /// kişi zaten giriş YAPAMAYAN kişidir.
-const Set<String> kGuestPaths = {
-  kLandingPath,
-  kAuthPath,
-  '/simulate',
-  '/help',
-  '/destek',
-};
+const Set<String> kGuestPaths = {kLandingPath, kAuthPath, '/help', '/destek'};
 
 /// Bu yol misafire açık mı?
 ///
@@ -61,9 +61,9 @@ bool isGuestPath(String location) {
 ///   • Misafir, oturum isteyen bir yola gidemez → ana sayfa.
 ///   • Oturumlu oyuncunun karşılama/giriş ekranında durmasının anlamı yok → oyuna al.
 ///
-/// ⚠️ Oturumlu oyuncu `/simulate`, `/help`, `/destek`e **girebilir** — o ekranlar ikisine de
-/// açık. Misafir kümesini "yalnız misafir" diye okumak, oturumlu oyuncuyu kendi
-/// simülatöründen atardı.
+/// ⚠️ Oturumlu oyuncu `/help` ve `/destek`e **girebilir** — o ekranlar ikisine de açık.
+/// Misafir kümesini "yalnız misafir" diye okumak, oturumlu oyuncuyu destek talebinden
+/// atardı. (`/simulate` artık zaten bu kümede değil, yalnız oturumlu.)
 String? authRedirect({required String location, required bool signedIn}) {
   if (!signedIn) return isGuestPath(location) ? null : kLandingPath;
   if (location == kLandingPath || location == kAuthPath) return kHomePath;

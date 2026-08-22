@@ -34,15 +34,15 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 
 | # | İş | İlk bakılacak yer | Durum / not |
 | :-- | :-- | :-- | :-- |
-| **E1** | Mobil simülatör ekranı | `apps/mobile/lib/app/router.dart` (`/simulate` yer tutucu) · web `apps/web/src/screens/Simulate.tsx` | Uç oturumsuz çalışıyor. «Simülatöre Aktar» yolu web'de `writeSimPrefill()` → `/simulate`; mobilde prefill deposu `core/storage.dart`a yazılacak. Rapor sheet'indeki düğme de o zaman açılacak (`message_sheet.dart` başlığı bu eksiği zaten not etmiş). **Sıradaki iş bu.** |
-| **E2** | Mobil destek ekranı | `/destek` yer tutucu · web `apps/web/src/screens/Support.tsx` | Sunucu ucu tam (dosya yükleme dâhil). **Misafire açık olmak ZORUNDA** (kullanıcı şartı). |
+| **E2** | Mobil destek ekranı | `/destek` **rotası HİÇ YOK** · web `apps/web/src/screens/Support.tsx` (515 satır) | Sunucu ucu tam (dosya yükleme dâhil). **Misafire açık olmak ZORUNDA** (kullanıcı şartı). ⚠️ Bugün «Daha» menüsündeki düğme «Bilinmeyen sayfa» hatasına düşüyor. **Sıradaki iş bu.** |
+| **+ Yardım** | Mobil `/help` ekranı — **kuyrukta yoktu, tur 9'da bulundu** | `/help` rotası HİÇ YOK · web `apps/web/src/screens/Help.tsx` (417 satır) | «Daha» menüsünün dört maddesinden biri ve o da **kırık bağlantı**. `routing_rules.dart` onu misafire açık sayıyor ama gidecek ekran yok. |
 | **F4** | Mobil genel/ittifak sohbeti görünümü | `apps/mobile/lib/features/chat/{global,alliance}_chat_sheet.dart` | Yalnız **görsel**: baloncuk, hizalama, gönderen ayrımı, zaman damgası, boş durum. ⚠️ Oyuncunun yazdığı metinde Cinzel YASAK. |
 | **G1** | Web mobil görünümde Şehir sayfası | `apps/web/src/screens/City.tsx` (1138 satır) | Kullanıcı kararı: **uygulamadaki şehir görünümü gibi** olacak, *"daha büyük gösterim ve ekrana tam sığan ögeler"*. |
 | **H1** | DM + ittifak sohbetinde kural onayı | `apps/api/src/chat/` · şema `chat_participants` | Tasarım aşağıda (H1). Kural **metnini ben yazacağım** (kullanıcı 2026-08-21 devretti). DM onayı kanal başına (`chat_participants`e yeni kolon), ittifak onayı oyun başına (`players`), ikisi de **sürümlü**. |
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** E1 → E2 → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
+**Sıra önerisi:** E2 → Yardım → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
 arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır basanlar.
 
 ---
@@ -66,6 +66,7 @@ arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı a�
 | E3 (mobil Seçenekler: Cihazlar · Şehir yönetimi · Hesabı sil) | 6 |
 | C (dünya satırında görev ikonları) · D (rapordan sefer düğmeleri) | 7 |
 | **B2** (toast/notify) · C'nin satır taşması düzeltmesi | 8 |
+| **E1** (mobil simülatör + «Simülatöre aktar») | 9 |
 
 ### C ve D nasıl çözüldü (tur 7)
 
@@ -105,6 +106,43 @@ simgesi saldırganın satırına değil oyuncunun kendi satırına düşerdi. Su
 ⚠️ Mobilde iki widget bu yüzden **durumlu** oldu (`_ListState`, `_OptionsState`): rapordan
 gelen form **bir kez** açılmalı. Durumsuz bir widget'ta her yeniden çizim formu geri açar ve
 oyuncu kapatamaz. Web'de aynı işi `useRef` yapıyor, vurgunun (`flash`) disipliniyle aynı.
+
+### E1 — mobil simülatör (tur 9)
+
+**⭐ Kullanıcı kararı tur ortasında geldi ve işi baştan aşağı sadeleştirdi**
+(*"Uygulamada simülatöre oturumsuz ulaşılamasın… sadece oturum açan simülatör
+kullanabilsin"*).
+
+Keşif şunu bulmuştu: mobilde oturumsuz bir ekran birim **adlarını ve sırasını** hiçbir
+yerden alamıyor. Katalog Dart'a bilerek üretilmiyor (dünya başına ezilebilen sayılar
+yüzünden) ve `catalogProvider` yalnız oturum değil **şehir sahipliği** istiyor. Oturumsuz
+kalsaydı ya adları derlemek (o kararı delerdi) ya da ekranı isimsiz göstermek gerekiyordu.
+Oturum şartı gelince ikisi de gereksizleşti.
+
+**Sonuçta üretece eklenen tek şey `kCombatTechs`.** `GET /cities/:id/catalog` savaşçıları
+`WARRIOR_ORDER`, savunmayı `DEFENSE_ORDER` (tapınak hariç), teknikleri `TECH_ORDER` ile
+**zaten sıralı ve adlandırılmış** döndürüyor. Sunucunun söylemediği tek şey bir tekniğin
+savaş statına dokunup dokunmadığı (`stat` alanı katalog ucunda yok) — Casusluk, Haritacılık
+ve Sömürgecilik'in kutusu olmamalı.
+
+⚠️ Bunun için kök `package.json`a `@mobilwar/contracts` workspace bağımlılığı eklendi:
+`HERO_POINTS_PER_LEVEL` orada yaşıyor ve üreteç ona ulaşamıyordu.
+
+**Web'den bilinçli üç ayrım (üçü de dar ekran):**
+
+1. Web iki tarafı geniş tablolarda çiziyor; burada satır başına iki dar kutu var ve «Kalan»
+   ayrı bir sütun değil, kutunun altındaki küçük yazı.
+2. Kahramanlar **ayrı bir sheet'te**: satır başına beş kutu telefonda hiçbir düzende sığmıyor.
+3. Simülatör misafire kapalı (yukarıdaki karar); webde açık kalmaya devam ediyor.
+
+**Yolda kapanan kırık bağlantı:** misafir açılış ekranındaki «Savaş simülatörünü dene»
+düğmesi `/simulate` rotası hiç tanımlı olmadığı için «Bilinmeyen sayfa» hatasına düşüyordu.
+Düğme kaldırıldı (karar gereği), rota da eklendi (oturumlu).
+
+**«Simülatöre aktar»** casusluk raporuna geldi. ⚠️ Devir tek atımlık ve **okuyan siliyor**:
+kayıt kalsaydı oyuncu bir hafta sonra simülatörü açtığında formu eski bir raporun verisiyle
+dolmuş bulurdu. Sur ve Büyü Kalkanı `structures`tan `counts`a katılıyor — sunucu onları
+`defenses`ten ayıklıyor ve atlanırsa casusluktan gelen savunmada sur hep sıfır görünürdü.
 
 ### B2 ve C'nin taşma düzeltmesi (tur 8)
 
@@ -487,7 +525,7 @@ footer'da, ekran değiştiren eylem. Yeni ikon düğmeleri de aynı yere.
 
 ## E. MOBİL EŞİTLEME
 
-### E1. Simülatör ekranı (bugün yer tutucu)
+### E1. Simülatör ekranı ✅ (tur 9)
 
 `app/router.dart` — `/simulate` **PlaceholderScreen**. Rota misafire açık
 (`routing_rules.dart:37`), sunucu ucu `simulate.controller.ts` `OptionalAuthGuard` ile

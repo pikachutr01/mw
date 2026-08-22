@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@mobilwar/catalog": "workspace:*",
+    "@mobilwar/contracts": "workspace:*",
     "@types/node": "^22.10.2",
     "turbo": "^2.10.8",
     "typescript": "^5.7.2",

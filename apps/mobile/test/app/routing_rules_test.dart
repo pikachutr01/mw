@@ -39,8 +39,11 @@ const _allPaths = <String>[
 
 void main() {
   group('misafir — oturum istemeyen yollar', () {
-    test('⭐ web `GuestApp` ile aynı küme geçebilir', () {
-      for (final p in ['/', kAuthPath, '/simulate', '/help', '/destek']) {
+    /// ⚠️⚠️ `/simulate` bu listede YOK ve olmamalı (kullanıcı, 2026-08-22):
+    /// *"Uygulamada simülatöre oturumsuz ulaşılamasın"*. Web'de misafire açık kalmaya
+    /// devam ediyor; ayrışan şey yalnız uygulamanın kapısı.
+    test('⭐ misafir kümesi geçebilir', () {
+      for (final p in ['/', kAuthPath, '/help', '/destek']) {
         expect(
           authRedirect(location: p, signedIn: false),
           isNull,
@@ -93,9 +96,9 @@ void main() {
     test(
       '⚠️ misafir ekranları oturumluya da AÇIK — kümeyi «yalnız misafir» okumak hataydı',
       () {
-        // Simülatör, yardım ve destek iki tarafa da açık. Ters okunsaydı oyuncu kendi
-        // simülatöründen atılırdı.
-        for (final p in ['/simulate', '/help', '/destek']) {
+        // Yardım ve destek iki tarafa da açık. Ters okunsaydı oyuncu destek talebinden
+        // atılırdı. (Simülatör artık yalnız oturumlu; ayrı testi aşağıda.)
+        for (final p in ['/help', '/destek']) {
           expect(
             authRedirect(location: p, signedIn: true),
             isNull,
@@ -130,6 +133,30 @@ void main() {
       expect(authRedirect(location: kHomePath, signedIn: false), kLandingPath);
       expect(authRedirect(location: kLandingPath, signedIn: false), isNull);
       expect(authRedirect(location: kHomePath, signedIn: true), isNull);
+    });
+  });
+
+  /// ⭐⭐ SİMÜLATÖR YALNIZ OTURUMLU (kullanıcı, 2026-08-22).
+  ///
+  /// ⚠️ Kararın ekrana yansıması var: simülatör birim adlarını ve sırasını
+  /// `GET /cities/:id/catalog`tan alıyor ve o uç oturum + şehir sahipliği istiyor. Misafire
+  /// açık kalsaydı adları derlenmiş bir kopyadan okumak gerekirdi ve bu, kataloğu Dart'a
+  /// üretmeme kararını delerdi.
+  group('simülatör kapısı', () {
+    test('⭐⭐ misafir simülatöre giremiyor, karşılamaya düşüyor', () {
+      expect(
+        authRedirect(location: '/simulate', signedIn: false),
+        kLandingPath,
+      );
+    });
+
+    test('⭐ oturumlu oyuncu simülatöre girebiliyor', () {
+      expect(authRedirect(location: '/simulate', signedIn: true), isNull);
+    });
+
+    test('misafir kümesinde değil', () {
+      expect(isGuestPath('/simulate'), isFalse);
+      expect(kGuestPaths, isNot(contains('/simulate')));
     });
   });
 }

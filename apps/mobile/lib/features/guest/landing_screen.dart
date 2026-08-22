@@ -79,15 +79,15 @@ class LandingScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               MwButton(label: 'Oyuna gir', onTap: () => context.go(kAuthPath)),
-              const SizedBox(height: 8),
-              // ⭐ Simülatör oturumsuz çalışıyor (`simulate.controller.ts` · OptionalAuthGuard).
-              // Ziyaretçinin kayıt olmadan oyunun çekirdek mekaniğini denemesi, kayıt kararını
-              // vermeden önce erişebildiği tek gerçek şey.
-              MwButton(
-                label: 'Savaş simülatörünü dene',
-                kind: MwButtonKind.ghost,
-                onTap: () => context.go('/simulate'),
-              ),
+              /* ⛔⛔ «Savaş simülatörünü dene» düğmesi KALDIRILDI (kullanıcı, 2026-08-22:
+                 *"Uygulamada simülatöre oturumsuz ulaşılamasın"*).
+
+                 ⚠️ Düğme zaten ÇALIŞMIYORDU: `/simulate` rotası hiç tanımlı değildi ve
+                 dokunan ziyaretçi «Bilinmeyen sayfa» hatasına düşüyordu. Yani burada iki
+                 şey birden kapandı — kırık bağlantı ve artık istenmeyen bir kapı.
+
+                 ⚠️ Web'de simülatör misafire AÇIK kalmaya devam ediyor (uç oturumsuz);
+                 ayrışan şey yalnız uygulamanın kapısı. */
             ],
           ),
         ),

@@ -26,6 +26,7 @@ import '../features/guest/landing_screen.dart';
 import '../features/messages/messages_screen.dart';
 import '../features/temple/temple_screen.dart';
 import '../features/options/options_screen.dart';
+import '../features/simulate/simulate_screen.dart';
 import '../features/world/world_screen.dart';
 import '../core/city_screens.dart';
 import '../core/world_coords.dart';
@@ -135,6 +136,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           // ⭐ Seçenekler artık gerçek ekran (2026-08-20) — listeden ayrı yazılıyor ki
           //    hangisinin yer tutucu OLMADIĞI tek bakışta görünsün.
           GoRoute(path: '/options', builder: (_, _) => const OptionsScreen()),
+
+          /* ⭐⭐ SİMÜLATÖR (2026-08-22) — «Daha» listesindeki düğme bugüne kadar
+             «Bilinmeyen sayfa» hatasına düşüyordu: rota hiç tanımlı değildi.
+             ⚠️ Kabuğun İÇİNDE ve oturumlu: kullanıcı kararı gereği misafire kapalı
+             (`routing_rules.dart` · `kGuestPaths`), ekran birim adlarını `catalogProvider`
+             üzerinden alıyor ve o uç şehir sahipliği istiyor. */
+          GoRoute(path: '/simulate', builder: (_, _) => const SimulateScreen()),
           for (final d in drawerItems.where((d) => d.path != '/options'))
             GoRoute(
               path: d.path,

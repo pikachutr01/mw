@@ -189,3 +189,31 @@ const Set<String> kLevelBased = {
 const int kNameMin = 3;
 const int kNameMax = 15;
 const String kNameRuleMessage = 'Ad 3-15 karakter olmalı; harf, rakam ve boşluk kullanılabilir.';
+
+/// ⭐⭐ SAVAŞA GİREN TEKNİKLER — simülatör teknik listesini bununla süzüyor.
+///
+/// ⚠️ **Ad ve sıra burada YOK ve olmamalı:** `GET /cities/:id/catalog` teknikleri zaten
+/// `TECH_ORDER` sırasıyla ve adlarıyla döndürüyor. Sunucunun söylemediği tek şey bir
+/// tekniğin savaş statına dokunup dokunmadığı — katalog ucu `stat` alanını taşımıyor.
+///
+/// ⚠️ Listede OLMAYANLAR: Casusluk · Haritacılık · Sömürgecilik. Üçü de savaşa hiç girmiyor
+/// ve simülatörde kutuları olsaydı hiçbir etkisi olmayan alanlar olurdu.
+const Set<String> kCombatTechs = {
+  'archery',
+  'blacksmithing',
+  'chemistry',
+  'instinct',
+  'sorcery',
+  'armor',
+  'masonry',
+  'talisman',
+};
+
+/// ⚠️ Taş Ustalığı yalnız SAVUNMA yapılarını ölçekliyor. Saldıranda bir kutu sunmak, hiçbir
+/// etkisi olmayan bir alan olurdu; orijinal araç da o hücreyi çizgiyle geçiyor.
+const Set<String> kDefenderOnlyTech = {'masonry'};
+
+/// Kahramanın seviye başına dağıtabildiği yetenek puanı — simülatördeki bütçe sayacı bunu
+/// kullanıyor. ⚠️ Simülatörde aşım ENGELLENMİYOR (bilerek): *"seviye 10 kahramana 40 puan
+/// verseydim"* sorusu sorulabilmeli. Gerçek kural sunucuda (`hero.controller.ts`).
+const int kHeroPointsPerLevel = 3;

@@ -11,6 +11,9 @@ importers:
       '@mobilwar/catalog':
         specifier: workspace:*
         version: link:packages/catalog
+      '@mobilwar/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.1
