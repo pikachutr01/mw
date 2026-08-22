@@ -35,6 +35,7 @@ import '../features/messages/battle_report.dart';
 import '../features/messages/message.dart';
 import '../features/messages/message_rules.dart';
 import '../features/options/options_rules.dart';
+import '../features/support/support_model.dart';
 import '../features/temple/hero_model.dart';
 import '../features/world/mission_options.dart';
 import '../gen/contracts.g.dart';
@@ -1059,6 +1060,133 @@ class Simulator {
 }
 
 final simulatorProvider = Provider<Simulator>(Simulator.new);
+
+/* ══ DESTEK (2026-08-22) ══════════════════════════════════════════════════════════════════
+   ⚠️⚠️ İKİ AYRI UÇ AİLESİ var ve karıştırılmamalı:
+     • oturumlu  → `/api/v1/support/...`         (AuthGuard)
+     • misafir   → `/api/v1/support/public/...`  (jeton taşıyıcı yetki, AuthGuard YOK)
+   Sunucu `OptionalAuthGuard` kullanmıyor: oturumu olan biri public ucu çağırsa bile talep
+   ANONİM açılıyor. Yani seçimi istemci yapmak zorunda ve yanlış seçim, oyuncunun talebini
+   kendi hesabından koparırdı. */
+
+/// Oturumlu oyuncunun talepleri.
+final supportTicketsProvider = FutureProvider<List<MwTicket>>((ref) async {
+  if (ref.watch(sessionProvider) == null) return const [];
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/support');
+  final list = body is Map ? body['tickets'] as List<dynamic>? : null;
+  return (list ?? const [])
+      .whereType<Map<String, dynamic>>()
+      .map(MwTicket.fromJson)
+      .toList();
+});
+
+/// Form açılış paketi — e-posta alanının görünüp görünmeyeceğini **sunucu** söylüyor.
+///
+/// ⚠️ İstemcide `me` yanıtından türetseydik kural iki yere yazılmış olurdu.
+typedef MwSupportForm = ({String email, bool verified, bool showEmail});
+
+final supportFormProvider = FutureProvider<MwSupportForm>((ref) async {
+  if (ref.watch(sessionProvider) == null) {
+    return (email: '', verified: false, showEmail: true);
+  }
+  final body = await ref
+      .read(apiProvider)
+      .request('GET', '/api/v1/support/form');
+  final m = body is Map<String, dynamic> ? body : const <String, dynamic>{};
+  return (
+    email: m['email'] as String? ?? '',
+    verified: m['emailVerified'] as bool? ?? false,
+    showEmail: m['showEmailField'] as bool? ?? false,
+  );
+});
+
+/// Yazışma — oturumlu talep kimliğiyle, misafir jetonla.
+///
+/// ⚠️ Aile anahtarı bir KAYIT: `(id: 3, token: null)` ile `(id: null, token: 'abc')` iki
+/// ayrı yazışma ve tek bir `int?` anahtar ikisini ayırt edemezdi.
+final supportThreadProvider =
+    FutureProvider.family<MwTicketThread, ({int? id, String? token})>((
+      ref,
+      anahtar,
+    ) async {
+      final yol = anahtar.token != null
+          ? '/api/v1/support/public/tickets/${anahtar.token}'
+          : '/api/v1/support/${anahtar.id}';
+      final body = await ref.read(apiProvider).request('GET', yol);
+      if (body is! Map<String, dynamic>) {
+        throw const MwApiError(0, 'Talep okunamadı.');
+      }
+      return MwTicketThread.fromJson(body);
+    });
+
+class Support {
+  const Support(this._ref);
+
+  final Ref _ref;
+
+  /// Oturumlu talep açar; talep kimliğini döndürür.
+  Future<int> create({
+    required String subject,
+    required String category,
+    required String body,
+    String? email,
+  }) async {
+    final yanit = await _ref
+        .read(apiProvider)
+        .request(
+          'POST',
+          '/api/v1/support',
+          body: {
+            'subject': subject,
+            'category': category,
+            'body': body,
+            if (email != null && email.isNotEmpty) 'email': email,
+          },
+        );
+    _ref.invalidate(supportTicketsProvider);
+    return yanit is Map ? (yanit['ticketId'] as num?)?.toInt() ?? 0 : 0;
+  }
+
+  /// Misafir talebi açar; takip **jetonunu** döndürür.
+  ///
+  /// ⚠️ Jeton 256 bit ve sunucuda yalnız `sha256`'sı duruyor — yanıttaki ham değer bir daha
+  /// alınamıyor. Kaybedilirse oyuncunun tek yolu e-postasındaki bağlantı.
+  Future<({int id, String? token})> createAnon({
+    required String subject,
+    required String category,
+    required String body,
+    required String email,
+  }) async {
+    final yanit = await _ref
+        .read(apiProvider)
+        .request(
+          'POST',
+          '/api/v1/support/public/tickets',
+          body: {
+            'subject': subject,
+            'category': category,
+            'body': body,
+            'email': email,
+          },
+        );
+    final m = yanit is Map ? yanit : const {};
+    return (
+      id: (m['ticketId'] as num?)?.toInt() ?? 0,
+      token: m['token'] as String?,
+    );
+  }
+
+  Future<void> reply({int? id, String? token, required String body}) async {
+    final yol = token != null
+        ? '/api/v1/support/public/tickets/$token/messages'
+        : '/api/v1/support/$id/messages';
+    await _ref.read(apiProvider).request('POST', yol, body: {'body': body});
+    _ref.invalidate(supportThreadProvider((id: id, token: token)));
+    _ref.invalidate(supportTicketsProvider);
+  }
+}
+
+final supportProvider = Provider<Support>(Support.new);
 
 /// ⭐ DÜNYA DURUMU — `GET /api/v1/world/state`.
 ///

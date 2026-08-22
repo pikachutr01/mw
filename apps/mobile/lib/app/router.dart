@@ -27,6 +27,7 @@ import '../features/messages/messages_screen.dart';
 import '../features/temple/temple_screen.dart';
 import '../features/options/options_screen.dart';
 import '../features/simulate/simulate_screen.dart';
+import '../features/support/support_screen.dart';
 import '../features/world/world_screen.dart';
 import '../core/city_screens.dart';
 import '../core/world_coords.dart';
@@ -42,6 +43,13 @@ class _SessionListener extends ChangeNotifier {
     ref.listen(sessionProvider, (_, _) => notifyListeners());
   }
 }
+
+/// «Daha» listesinde GERÇEK ekranı olan yollar — yer tutucu döngüsü bunları atlamak zorunda.
+///
+/// ⚠️ Liste burada, `shell.dart`ta değil: `drawerItems` menünün ne göstereceğini söylüyor,
+/// bu ise hangisinin gerçekten yazıldığını. İkisini karıştırmak, menüden bir madde silmenin
+/// rotayı da silmesi demek olurdu.
+const Set<String> _gercekEkranlar = {'/options', '/simulate', '/destek'};
 
 final routerProvider = Provider<GoRouter>((ref) {
   final listener = _SessionListener(ref);
@@ -138,12 +146,24 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/options', builder: (_, _) => const OptionsScreen()),
 
           /* ⭐⭐ SİMÜLATÖR (2026-08-22) — «Daha» listesindeki düğme bugüne kadar
-             «Bilinmeyen sayfa» hatasına düşüyordu: rota hiç tanımlı değildi.
+             *"Simülatör — yakında."* yer tutucusunu açıyordu.
              ⚠️ Kabuğun İÇİNDE ve oturumlu: kullanıcı kararı gereği misafire kapalı
              (`routing_rules.dart` · `kGuestPaths`), ekran birim adlarını `catalogProvider`
              üzerinden alıyor ve o uç şehir sahipliği istiyor. */
           GoRoute(path: '/simulate', builder: (_, _) => const SimulateScreen()),
-          for (final d in drawerItems.where((d) => d.path != '/options'))
+
+          /// ⭐ DESTEK (2026-08-22) — misafire de açık (kullanıcı şartı).
+          GoRoute(path: '/destek', builder: (_, _) => const SupportScreen()),
+
+          /* ⚠️⚠️ SÜZGEÇ, GERÇEK EKRANI OLAN HER YOLU ELEMEK ZORUNDA. Bu döngü «Daha»
+             listesindeki her maddeyi yer tutucuya bağlıyor; gerçek ekranı olan bir yol
+             elenmezse İKİ KEZ kaydediliyor. go_router ilk eşleşmeyi seçtiği için üsttekiler
+             bugün doğru açılıyor ama bu bir tesadüf: sıra değişirse yer tutucu kazanır ve
+             ekran sessizce kaybolur. (2026-08-22'de tam bu oldu — `/simulate` eklendi ama
+             süzgeç yalnız `/options` diyordu.) */
+          for (final d in drawerItems.where(
+            (d) => !_gercekEkranlar.contains(d.path),
+          ))
             GoRoute(
               path: d.path,
               builder: (_, _) => PlaceholderScreen(d.label),

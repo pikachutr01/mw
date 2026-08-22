@@ -34,15 +34,14 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 
 | # | İş | İlk bakılacak yer | Durum / not |
 | :-- | :-- | :-- | :-- |
-| **E2** | Mobil destek ekranı | `/destek` **rotası HİÇ YOK** · web `apps/web/src/screens/Support.tsx` (515 satır) | Sunucu ucu tam (dosya yükleme dâhil). **Misafire açık olmak ZORUNDA** (kullanıcı şartı). ⚠️ Bugün «Daha» menüsündeki düğme «Bilinmeyen sayfa» hatasına düşüyor. **Sıradaki iş bu.** |
-| **+ Yardım** | Mobil `/help` ekranı — **kuyrukta yoktu, tur 9'da bulundu** | `/help` rotası HİÇ YOK · web `apps/web/src/screens/Help.tsx` (417 satır) | «Daha» menüsünün dört maddesinden biri ve o da **kırık bağlantı**. `routing_rules.dart` onu misafire açık sayıyor ama gidecek ekran yok. |
+| **+ Yardım** | Mobil `/help` ekranı — **kuyrukta yoktu, tur 9'da bulundu** | web `apps/web/src/screens/Help.tsx` (417 satır) | «Daha» menüsünün dört maddesinden biri ve **hâlâ yer tutucu**. İçerik %100 statik: 9 konu, 40 madde, ~550 kelime, hepsi `Help.tsx`in İÇİNDE. ⭐ Doğru yol metni kopyalamak değil, `TOPICS`i `apps/web/src/lib/`e taşıyıp `facts.g.dart` üretecine bağlamak (üreteç zaten `info-texts.ts`i okuyor). ⚠️ `/help/sefer` ayrı bir iş: tamamen dinamik bir sefer hesaplayıcı. **Sıradaki iş bu.** |
 | **F4** | Mobil genel/ittifak sohbeti görünümü | `apps/mobile/lib/features/chat/{global,alliance}_chat_sheet.dart` | Yalnız **görsel**: baloncuk, hizalama, gönderen ayrımı, zaman damgası, boş durum. ⚠️ Oyuncunun yazdığı metinde Cinzel YASAK. |
 | **G1** | Web mobil görünümde Şehir sayfası | `apps/web/src/screens/City.tsx` (1138 satır) | Kullanıcı kararı: **uygulamadaki şehir görünümü gibi** olacak, *"daha büyük gösterim ve ekrana tam sığan ögeler"*. |
 | **H1** | DM + ittifak sohbetinde kural onayı | `apps/api/src/chat/` · şema `chat_participants` | Tasarım aşağıda (H1). Kural **metnini ben yazacağım** (kullanıcı 2026-08-21 devretti). DM onayı kanal başına (`chat_participants`e yeni kolon), ittifak onayı oyun başına (`players`), ikisi de **sürümlü**. |
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** E2 → Yardım → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
+**Sıra önerisi:** Yardım → F4 → G1 → H1 → A6. Gerekçe: önce sunucusu hazır olup yalnız
 arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır basanlar.
 
 ---
@@ -67,6 +66,7 @@ arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı a�
 | C (dünya satırında görev ikonları) · D (rapordan sefer düğmeleri) | 7 |
 | **B2** (toast/notify) · C'nin satır taşması düzeltmesi | 8 |
 | **E1** (mobil simülatör + «Simülatöre aktar») | 9 |
+| **E2** (mobil destek: misafir + oturumlu) | 10 |
 
 ### C ve D nasıl çözüldü (tur 7)
 
@@ -135,14 +135,45 @@ ve Sömürgecilik'in kutusu olmamalı.
 2. Kahramanlar **ayrı bir sheet'te**: satır başına beş kutu telefonda hiçbir düzende sığmıyor.
 3. Simülatör misafire kapalı (yukarıdaki karar); webde açık kalmaya devam ediyor.
 
-**Yolda kapanan kırık bağlantı:** misafir açılış ekranındaki «Savaş simülatörünü dene»
-düğmesi `/simulate` rotası hiç tanımlı olmadığı için «Bilinmeyen sayfa» hatasına düşüyordu.
-Düğme kaldırıldı (karar gereği), rota da eklendi (oturumlu).
+**Yolda kapanan kapı:** misafir açılış ekranındaki «Savaş simülatörünü dene» düğmesi
+gerçek bir ekrana değil *"Simülatör — yakında."* yer tutucusuna gidiyordu. Düğme kaldırıldı
+(karar gereği), rota da eklendi (oturumlu).
+
+⚠️ **Tur 9'da bu bölümde «Bilinmeyen sayfa hatasına düşüyordu» yazıyordu ve YANLIŞTI.**
+Rota tanımlı değildi ama `router.dart`taki `drawerItems` döngüsü «Daha» listesinin her
+maddesini yer tutucuya bağlıyor, yani ekranda hata değil *"yakında"* çıkıyordu. Tur 10'da
+düzeltildi.
 
 **«Simülatöre aktar»** casusluk raporuna geldi. ⚠️ Devir tek atımlık ve **okuyan siliyor**:
 kayıt kalsaydı oyuncu bir hafta sonra simülatörü açtığında formu eski bir raporun verisiyle
 dolmuş bulurdu. Sur ve Büyü Kalkanı `structures`tan `counts`a katılıyor — sunucu onları
 `defenses`ten ayıklıyor ve atlanırsa casusluktan gelen savunmada sur hep sıfır görünürdü.
+
+### E2 — mobil destek (tur 10)
+
+Misafir ve oturumlu iki kipte çalışıyor; kullanıcı şartı gereği **misafire açık**
+(*"desteğe en çok ihtiyaç duyan kişi zaten giriş YAPAMAYAN kişidir"*).
+
+⚠️⚠️ **İki ayrı uç ailesi var ve seçimi İSTEMCİ yapmak zorunda:** sunucu `OptionalAuthGuard`
+kullanmıyor, yani oturumu olan biri public ucu çağırsa bile talep **anonim** açılıyor ve
+oyuncunun kendi hesabından kopardı.
+
+**Misafirin takip jetonu cihaza yazılıyor.** Sunucu jetonu bir daha vermiyor (yalnız
+`sha256`'sı duruyor); webde karşılığı adresteki `/destek/t/:token` bağlantısı ama telefonda
+oyuncunun bir adresi elle saklaması gerçekçi değil. Aynı bağlantı e-postayla da gidiyor,
+yani depo kaybolsa da yol açık.
+
+⛔ **Ek (resim) yükleme YOK ve bu bilinçli bir sınır:** `pubspec.yaml`da dosya seçici paketi
+yok, iki platformda da fotoğraf izni akışı gerekiyor ve `dio` üzerinden `multipart` gövdesi
+`api_client`ın JSON varsayımını deler. Üçü de yapılabilir ama üçü de bu ekranın işi değil.
+⚠️ Eki olan bir YÖNETİCİ mesajı sessizce yutulmuyor: «bu mesajda bir ek var» diye
+işaretleniyor.
+
+**Yolda düzeltilen gerçek bir tuzak:** `router.dart`taki yer tutucu döngüsü yalnız
+`/options`ı eliyordu, oysa tur 9'da `/simulate` gerçek bir ekran olmuştu — yol **iki kez**
+kayıtlıydı. go_router ilk eşleşmeyi seçtiği için ekran doğru açılıyordu ama bu bir tesadüf:
+sıra değişse yer tutucu kazanır ve simülatör sessizce kaybolurdu. Süzgeç artık
+`_gercekEkranlar` kümesinden besleniyor.
 
 ### B2 ve C'nin taşma düzeltmesi (tur 8)
 
@@ -534,7 +565,7 @@ son koşu hatırlama). «Simülatöre Aktar» yolu: `writeSimPrefill()` → `/si
 `message_sheet.dart:17` bu eksiği zaten not etmiş (*«olmayan bir ekrana düğme koymamak»*).
 **İş:** ekranın kendisi + prefill deposu (mobilde `storage.dart`) + rapor sheet'ine düğme.
 
-### E2. Destek ekranı (bugün yer tutucu)
+### E2. Destek ekranı ✅ (tur 10)
 
 `/destek` → PlaceholderScreen. Web `screens/Support.tsx` + `SupportPublicThread.tsx`.
 Sunucu ucu tam (`/api/v1/support*`, ek dosya yükleme dâhil). Misafire açık olmak **zorunda**.
