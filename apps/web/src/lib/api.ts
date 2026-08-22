@@ -246,7 +246,20 @@ function zodMessage(b: Record<string, unknown>): string | null {
 function errorOf(status: number, body: unknown): ApiError {
   const b = (body ?? {}) as Record<string, unknown>;
   const inner = (b['message'] ?? b) as Record<string, unknown>;
-  const code = typeof inner === 'object' && inner ? (inner['code'] as string | undefined) : undefined;
+  /**
+   * ⚠️⚠️ İKİ YERE DE BAKILIYOR ve ikincisi 2026-08-23'te eklendi. Nest bir istisnaya DÜZ bir
+   * nesne verildiğinde (`new BadRequestException({ code, message })`) gövde
+   * `{ code: '...', message: 'Türkçe cümle' }` biçiminde geliyor. O durumda yukarıdaki
+   * `inner` bir DİZE oluyor (`b['message']`) ve `code` sessizce kayboluyordu.
+   *
+   * Bedeli ölçüldü: sohbet kuralı onayı reddi (`terms_required`) istemciye kodsuz ulaşıyor,
+   * ekran ham hata metnini basıyor ve kural penceresi HİÇ açılmıyordu (kullanıcı bildirdi).
+   * Aynı sessiz kayıp `blocked`, `slow_mode`, `alliance_muted` gibi bütün sohbet kodlarını
+   * da etkiliyordu.
+   */
+  const code = (typeof inner === 'object' && inner
+    ? (inner['code'] as string | undefined)
+    : undefined) ?? (typeof b['code'] === 'string' ? b['code'] : undefined);
   const message =
     (typeof inner === 'object' && inner && typeof inner['message'] === 'string' ? inner['message'] : null)
     ?? (typeof b['message'] === 'string' ? b['message'] : null)

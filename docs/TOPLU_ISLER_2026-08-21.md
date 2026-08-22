@@ -36,7 +36,7 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 | :-- | :-- | :-- | :-- |
 | **+ Yardım** | Mobil `/help` ekranı — **kuyrukta yoktu, tur 9'da bulundu** | web `apps/web/src/screens/Help.tsx` (417 satır) | «Daha» menüsünün dört maddesinden biri ve **hâlâ yer tutucu**. İçerik %100 statik: 9 konu, 40 madde, ~550 kelime, hepsi `Help.tsx`in İÇİNDE. ⭐ Doğru yol metni kopyalamak değil, `TOPICS`i `apps/web/src/lib/`e taşıyıp `facts.g.dart` üretecine bağlamak (üreteç zaten `info-texts.ts`i okuyor). ⚠️ `/help/sefer` ayrı bir iş: tamamen dinamik bir sefer hesaplayıcı. ⏸️ **KULLANICI ERTELEDİ (2026-08-22):** *"Yardım sayfasını şimdilik geçelim, onu daha sonra dolduracağız."* Yer tutucu bilerek duruyor. |
 | **H1** | DM + ittifak kural onayı — **SUNUCU BİTTİ (tur 13), İSTEMCİLER KALDI** | web `ChatWindow.tsx` + `AllianceChatSheet.tsx` · mobil `chat_sheet.dart` + `alliance_chat_sheet.dart` | Sunucu hazır: göç 0052, `GET /chat/terms`, `POST /chat/terms/accept`, gönderme kapıları, 13 test. ⚠️ Kapı `chat.termsRequired` ayarıyla **VARSAYILAN KAPALI** — istemciler bitip mobil güncelleme yayılana kadar açılmayacak. İstemcilerin işi: `terms_required` kodunu yakalayıp kural penceresini açmak ve onayı yollamak. **Sıradaki iş bu.**
-| **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
+| **A6** | Tatil modu hak kazanma eşiği — **kuyruktaki SON madde** | `apps/api/src/vacation/vacation.service.ts` · tam tasarım aşağıda §A6 | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. 🔴 **Tek açık karar: `T0` ve `g`** (önerim 60 ve 1,6) — kullanıcı cevaplamadı. Altı adımlık yapılacaklar listesi §A6'da. |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
 **Sıra önerisi:** A6 (Yardım kullanıcı kararıyla ertelendi). Gerekçe: önce sunucusu hazır olup yalnız
@@ -494,6 +494,18 @@ gerekçesi de yorumda («henüz kurulmadı boşluğu»).
 ---
 
 ### A6. Tatil modu — oyun içi hak kazanma eşiği (TASARIM)
+
+> 🔴 **KUYRUKTAKİ SON MADDE (2026-08-23).** Mekanik ONAYLI, kod yazılmadı. Yeni bir oturum
+> buradan devam edebilir: aşağıdaki tasarım tek başına yeterli. **Tek açık karar `T0` ve `g`
+> sayıları** — kullanıcı henüz cevaplamadı, önerim `T0 = 60`, `g = 1,6`.
+>
+> Yapılacaklar sırasıyla: (1) `players.vacation_count` kolonu + göç · (2) `vacation.unlockBase`
+> ve `vacation.unlockGrowth` ayarları (`packages/settings/src/schema.ts`) · (3) P hesabı ve
+> eşik kapısı `vacation.service.ts` · `blockers()` içine · (4) e-posta doğrulama şartı ·
+> (5) `/vacation/status` içine `progress: {value, need}` · (6) iki istemcide ilerleme çubuğu.
+>
+> ⚠️ Yeni bir `timestamptz` eklenirse `time-registry.test.ts` karar isteyecek (bu turda iki
+> kez yakaladı); `vacation_count` sayı olduğu için o kapıya takılmıyor.
 
 **Bugün var olanlar** (`apps/api/src/vacation/vacation.service.ts`):
 * `blockers()`: yoldaki ordu (giden/dönen/gelen), süren üretim/ilerletme, çıkıştan sonraki
