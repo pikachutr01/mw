@@ -73,6 +73,7 @@
  ⭐ ÖNERİLEN — tüneli de kuran başlatıcı:
 
     cd C:\Projects\misc\ghidra\mw\apps\mobile
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
     .\tool\dev.ps1
 
   Betik sırayla: adb'yi bulur → bağlı cihazı seçer → `adb reverse` tünelini
