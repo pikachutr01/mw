@@ -1,6 +1,18 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    /* ⭐⭐ ARTIMLI DENETİM (kullanıcı, 2026-08-22: *"bir dosya değişince neden tüm api'ye
+       typecheck atıyorsun"*). Ölçüldü: soğuk koşu 2 dk 16 sn sürüyordu ve her küçük
+       değişiklikte baştan koşuyordu.
+
+       ⚠️ Tek dosyayı denetlemek ÇÖZÜM DEĞİL: asıl yakalanması gereken hata, değişen
+       dosyanın ÇAĞIRANLARINDA çıkıyor (bir arayüze alan eklemek gibi). Doğru cevap
+       kapsamı daraltmak değil, tekrarı ucuzlatmak.
+
+       ⚠️ `.tsbuildinfo` `.gitignore`da zaten var. İki yapılandırma AYRI dosya kullanmak
+       zorunda; aynı yolu paylaşsalardı biri diğerinin önbelleğini sürekli geçersiz kılardı. */
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsc-src.tsbuildinfo",
     "rootDir": "src",
     "outDir": "dist",
     "experimentalDecorators": true,

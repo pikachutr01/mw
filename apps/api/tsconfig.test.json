@@ -17,6 +17,10 @@
    */
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    /* ⚠️ Kendi önbellek dosyası — `tsconfig.json`unkiyle aynı yolu paylaşsalardı ikisi
+       birbirinin önbelleğini sürekli geçersiz kılardı. */
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsc-test.tsbuildinfo",
     "noEmit": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
