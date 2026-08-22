@@ -32,6 +32,7 @@ import 'chat_rules.dart';
 import 'room_line.dart';
 import 'room_message.dart';
 import 'room_rules.dart';
+import 'terms_sheet.dart';
 
 Future<void> showAllianceChatSheet(BuildContext context) => mwTallSheet<void>(
   context,
@@ -349,7 +350,21 @@ class _BodyState extends ConsumerState<_Body> {
       await mwTapOk();
     } on MwApiError catch (e) {
       await mwTapError();
-      if (mounted) setState(() => _error = roomErrorText(e.code, e.message));
+      /* ⭐ Kural onayı istenmişse HATA GÖSTERMİYORUZ, kuralları açıyoruz: oyuncunun yapması
+         gereken şey bir hata okumak değil, metni okuyup kabul etmek. Onaylarsa mesaj
+         kendiliğinden yeniden gidiyor — yazdığı metni ikinci kez yazdırmak cezalandırma olurdu.
+         ⚠️ İttifak kapsamında `channelId` VERİLMİYOR: onay oyun başına. */
+      if (e.code == 'terms_required' && mounted) {
+        final ok = await showChatTermsSheet(context);
+        if (ok && mounted) {
+          setState(() => _sending = false);
+          await _send();
+          return;
+        }
+        if (mounted) setState(() => _error = null);
+      } else if (mounted) {
+        setState(() => _error = roomErrorText(e.code, e.message));
+      }
     } catch (_) {
       await mwTapError();
       if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');

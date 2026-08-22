@@ -24,7 +24,7 @@ import type { DbHandle } from '../src/db/client.ts';
 import { MissionError, MissionService } from '../src/missions/mission.service.ts';
 import { QueueError, QueueService } from '../src/queues/queue.service.ts';
 import { GameClockService } from '../src/world/game-clock.service.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb, verifyEmail } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, verifyEmail, acceptChatTerms } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -404,6 +404,7 @@ describe('sosyal kısıtlar', () => {
 
   it('mesaj yazılamaz (okumak serbest)', async () => {
     const channelId = await chat.openConversation({ worldId, playerId: other, withPlayerId: me });
+    await acceptChatTerms(h, channelId);
     // Doğrulanmış taraf yazabiliyor…
     await chat.send({
       worldId, playerId: other, channelId, body: 'selam', clientMsgId: randomUUID(),

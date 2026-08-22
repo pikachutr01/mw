@@ -54,10 +54,10 @@ export function chatLimits(): ChatLimits {
   return {
     bodyMax: CHAT_BODY_MAX,
     /**
-     * ⚠️ VARSAYILAN KAPALI: onayı bilmeyen eski bir istemci, açık olsaydı anlamadığı bir
-     * hatayla karşılaşır ve oyuncu mesaj gönderemezdi. Panelden açılıyor.
+     * ⚠️ VARSAYILAN AÇIK (kullanıcı, 2026-08-22): web de uygulama da test sürecinde, yani
+     * onayı bilmeyen eski bir sürüm yok. Panelden kapatmak acil vana olarak duruyor.
      */
-    termsRequired: liveBool('chat', 'termsRequired', false),
+    termsRequired: liveBool('chat', 'termsRequired', true),
     burst: liveNumber('chat', 'burst', 5),
     perSeconds: liveNumber('chat', 'perSeconds', 10),
     duplicateSeconds: liveNumber('chat', 'duplicateSeconds', 15),

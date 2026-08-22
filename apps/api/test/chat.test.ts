@@ -41,10 +41,35 @@ beforeEach(async () => {
   `);
 });
 
-/** Kanalı açıp tek mesaj gönderen kısayol. */
+/**
+ * Kanalı açıp tek mesaj gönderen kısayol.
+ *
+ * ⚠️⚠️ ALICI DA KABUL EDİLMİŞ SAYILIYOR (2026-08-22). Mesaj isteği akışı geldiğinden beri
+ * (göç 0053) alıcı kabul etmeden `history` boş dönüyor ve yerine istek künyesi geliyor.
+ * Bu dosyadaki testlerin derdi o akış DEĞİL — engelleme, kova, sayfalama, silme gibi
+ * **süregelen bir yazışmanın** davranışları. Kurulum bu yüzden yazışmayı "başlamış" hâle
+ * getiriyor; istek akışının kendi testleri `chat-terms.test.ts` ve `chat-request.test.ts`te.
+ */
+/**
+ * Kanalı açıp İKİ TARAFI da kabul etmiş hâle getirir — «süregelen yazışma» kurulumu.
+ *
+ * ⚠️ İki ayrı kapı var ve ikisi de kabul istiyor: kural onayı (göç 0052, gönderen için)
+ * ve mesaj isteği (göç 0053, alıcı için). Kurulum ikisini birden geçiyor; kapıların
+ * KENDİ testleri `chat-terms.test.ts` ve `chat-request.test.ts`te.
+ */
+async function hazir(a: number, b: number): Promise<number> {
+  const channelId = await chat.openConversation({ worldId, playerId: a, withPlayerId: b });
+  await chat.acceptConversation({ worldId, playerId: a, channelId });
+  await chat.acceptConversation({ worldId, playerId: b, channelId });
+  return channelId;
+}
+
 async function say(from: number, to: number, body: string): Promise<{ channelId: number; id: number }> {
   const channelId = await chat.openConversation({ worldId, playerId: from, withPlayerId: to });
+  // ⚠️ GÖNDEREN de kabul etmek zorunda: kural onayı kapısı (göç 0052) varsayılan AÇIK.
+  await chat.acceptConversation({ worldId, playerId: from, channelId });
   const m = await chat.send({ worldId, playerId: from, channelId, body, clientMsgId: randomUUID() });
+  await chat.acceptConversation({ worldId, playerId: to, channelId });
   return { channelId, id: m.id };
 }
 
@@ -104,7 +129,7 @@ describe('mesaj gönderme', () => {
   });
 
   it('⭐ clientMsgId idempotency — aynı anahtarla ikinci gönderim ÇİFT satır yazmaz', async () => {
-    const channelId = await chat.openConversation({ worldId, playerId: ali, withPlayerId: veli });
+    const channelId = await hazir(ali, veli);
     const key = randomUUID();
     const first = await chat.send({ worldId, playerId: ali, channelId, body: 'tekrar', clientMsgId: key });
     const second = await chat.send({ worldId, playerId: ali, channelId, body: 'tekrar', clientMsgId: key });
@@ -191,7 +216,7 @@ describe('engelleme', () => {
 
 describe('flood koruması', () => {
   it('⭐ kova: kısa sürede çok mesaj reddedilir', async () => {
-    const channelId = await chat.openConversation({ worldId, playerId: ali, withPlayerId: veli });
+    const channelId = await hazir(ali, veli);
     for (let i = 0; i < 5; i++) {
       await chat.send({ worldId, playerId: ali, channelId, body: `mesaj ${i}`, clientMsgId: randomUUID() });
     }
@@ -202,7 +227,7 @@ describe('flood koruması', () => {
 
   /** `mesajlar.txt` kanıtı: rakip yapımda aynı satırın 5 kez üst üste gönderildiği örnekler var. */
   it('⭐ mükerrer mesaj: aynı metin kısa sürede tekrar gönderilemez', async () => {
-    const channelId = await chat.openConversation({ worldId, playerId: ali, withPlayerId: veli });
+    const channelId = await hazir(ali, veli);
     await chat.send({ worldId, playerId: ali, channelId, body: 'spam', clientMsgId: randomUUID() });
     await expect(chat.send({
       worldId, playerId: ali, channelId, body: 'spam', clientMsgId: randomUUID(),
@@ -240,6 +265,16 @@ describe('sohbeti silme', () => {
     const list = await chat.conversations({ worldId, playerId: veli });
     expect(list).toHaveLength(1);
     expect(list[0]!.lastMessage).toBe('yeni');
+
+    /* ⭐⭐ SİLDİKTEN SONRA GELEN MESAJ YENİ BİR İSTEK (kullanıcı, 2026-08-22): geçmişi
+       silmek yazışmayı bitirmek demek, sonrası yeniden sorulur. Önce istek görünüyor... */
+    const istek = await chat.history({ worldId, playerId: veli, channelId });
+    expect(istek.items).toEqual([]);
+    expect(istek.request?.fromPlayerId).toBe(ali);
+    expect(istek.request?.count).toBe(1);
+
+    // ...kabul edilince YALNIZ yeni mesaj geliyor, eskiler gelmiyor.
+    await chat.acceptConversation({ worldId, playerId: veli, channelId });
     const hist = await chat.history({ worldId, playerId: veli, channelId });
     expect(hist.items.map((m) => m.body)).toEqual(['yeni']);
   });
@@ -298,6 +333,9 @@ describe('acemi kısıtı', () => {
 
   it('⭐ yeni oyuncu konuşma BAŞLATAMAZ', async () => {
     const channelId = await chat.openConversation({ worldId, playerId: ayse, withPlayerId: ali });
+    /* ⚠️ Kural onayı önce alınıyor: bu testin ölçtüğü şey ACEMİ kısıtı ve onay kapısı
+       ondan ÖNCE çalıştığı için, alınmazsa yanlış kodu ölçerdik. */
+    await chat.acceptConversation({ worldId, playerId: ayse, channelId });
     await expect(chat.send({
       worldId, playerId: ayse, channelId, body: 'merhaba', clientMsgId: randomUUID(),
     })).rejects.toMatchObject({ code: 'dm_new_player_restricted' });
@@ -343,7 +381,7 @@ describe('şikayet', () => {
 
 describe('geçmiş sayfalama (keyset)', () => {
   it('⭐ before imleciyle eski mesajlar gelir, hasMore doğru', async () => {
-    const channelId = await chat.openConversation({ worldId, playerId: ali, withPlayerId: veli });
+    const channelId = await hazir(ali, veli);
     // Kova ve mükerrer engeline takılmadan 8 mesaj: doğrudan DB'ye.
     for (let i = 1; i <= 8; i++) {
       await h.db.execute(sql`

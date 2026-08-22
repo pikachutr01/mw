@@ -267,14 +267,13 @@ const STATIC_SETTINGS: readonly SettingDef[] = [
   {
     key: 'chat.termsRequired',
     label: 'Sohbet kuralı onayı zorunlu',
-    type: 'boolean', default: false, tag: 'design',
+    type: 'boolean', default: true, tag: 'design',
     description: 'Açıkken oyuncu ilk mesajını göndermeden önce sohbet kurallarını onaylamak '
       + 'zorunda. Özel mesajda onay her yazışma için ayrı, ittifak sohbetinde oyun başına bir '
       + 'kez alınır. Kapalıyken kural penceresi hiç açılmaz ve kimse engellenmez.',
-    note: 'VARSAYILAN KAPALI ve bu bilinçli: onayı bilmeyen ESKİ bir mobil sürüm, açık '
-      + 'olsaydı anlamadığı bir hatayla karşılaşır ve oyuncu mesaj gönderemezdi. Uygulama '
-      + 'güncellemesi mağazalarda yayıldıktan sonra açılmalı. Kapatmak da acil vana: bir '
-      + 'aksaklıkta sohbeti tamamen kapatmak yerine yalnız kapıyı kaldırır.',
+    note: 'VARSAYILAN AÇIK (kullanıcı, 2026-08-22): web de uygulama da henüz test sürecinde '
+      + 've herkese yayınlanmış değil, yani eski sürüm sorunu yok. Kapatmak acil vana olarak '
+      + 'duruyor: bir aksaklıkta sohbeti tamamen kapatmak yerine yalnız kapıyı kaldırır.',
   },
   {
     key: 'chat.burst',

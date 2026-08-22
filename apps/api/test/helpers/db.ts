@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { sql } from 'drizzle-orm';
+import { CHAT_TERMS_VERSION } from '../../src/chat/chat.terms.ts';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { createDb, toDate, type DbHandle } from '../../src/db/client.ts';
@@ -213,9 +214,19 @@ export async function createPlayer(
             ${opts.verified === false ? null : sql`now()`})
     RETURNING id
   `);
+  /**
+   * ⚠️⚠️ SOHBET KURALLARI ONAYLANMIŞ DOĞUYOR (2026-08-22). Kural onayı kapısı (göç 0052)
+   * varsayılan AÇIK ve `players.chat_terms_version` ittifak sohbetini tutuyor. Onaysız
+   * doğsalardı sohbetle ilgisi olmayan onlarca test (moderasyon, §verify, ittifak sohbeti)
+   * "kuralları onayla" hatasıyla düşerdi — ölçtükleri şey o değil.
+   *
+   * ⚠️ Kapının KENDİ testleri bunu bilerek geri alıyor: `chat-terms.test.ts` özel mesaj
+   * onayını `chat_participants` üzerinden ölçüyor ve o kolon buradan etkilenmiyor.
+   */
   const p = await h.db.execute<{ id: number } & Record<string, unknown>>(sql`
-    INSERT INTO players (world_id, account_id, username)
-    VALUES (${worldId}, ${Number(acc[0]!.id)}, ${`${label}-${token}`})
+    INSERT INTO players (world_id, account_id, username, chat_terms_version)
+    VALUES (${worldId}, ${Number(acc[0]!.id)}, ${`${label}-${token}`},
+            ${CHAT_TERMS_VERSION})
     RETURNING id
   `);
   return Number(p[0]!.id);
@@ -286,4 +297,24 @@ export async function missionRow(h: DbHandle, id: number): Promise<{
   `);
   const r = rows[0]!;
   return { status: r.status, attempts: Number(r.attempts), lastError: r.last_error, executeAt: toDate(r.execute_at) };
+}
+
+/**
+ * ⭐ TEST KURULUMU — bir DM kanalını **iki taraf için de** "kurallar onaylanmış" hâline
+ * getirir.
+ *
+ * ⚠️ `createPlayer` yalnız `players.chat_terms_version`i (ittifak kapsamı) ayarlıyor; özel
+ * mesaj onayı KANAL BAŞINA (`chat_participants.terms_version`) ve kanal ancak
+ * `openConversation` çağrılınca doğuyor. Bu yüzden ayrı bir adım.
+ *
+ * ⚠️ `dm_accepted_at` de veriliyor: mesaj isteği akışı (göç 0053) yoksa alıcı geçmişi boş
+ * görür. Sohbetle ilgisi olmayan testlerin derdi o akış değil; kendi testleri
+ * `chat-request.test.ts`te.
+ */
+export async function acceptChatTerms(h: DbHandle, channelId: number): Promise<void> {
+  await h.db.execute(sql`
+    UPDATE chat_participants
+       SET terms_version = ${CHAT_TERMS_VERSION}, dm_accepted_at = now()
+     WHERE channel_id = ${channelId}
+  `);
 }

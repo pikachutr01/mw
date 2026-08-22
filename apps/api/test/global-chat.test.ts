@@ -19,7 +19,7 @@ import type { DbHandle } from '../src/db/client.ts';
 import { notificationForOutbox } from '../src/notify/notify.catalog.ts';
 import { eventForOutbox } from '../src/realtime/realtime.bus.ts';
 import { setLiveSettings } from '../src/settings/live.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, acceptChatTerms } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -204,6 +204,7 @@ describe('yazma hakkı', () => {
 
     /* Genel kanal kovası doldu ama DM kovası el değmemiş olmalı. */
     const channelId = await dm.openConversation({ worldId, playerId: ali, withPlayerId: eru });
+    await acceptChatTerms(h, channelId);
     const m = await dm.send({ worldId, playerId: ali, channelId, body: 'ozel', clientMsgId: uuid() });
     expect(m.id).toBeGreaterThan(0);
   });
@@ -404,6 +405,7 @@ describe('yönetici', () => {
       .rejects.toMatchObject({ code: 'chat_banned' });
     /* …ama özel mesaj AÇIK. Bu ayrımı `assertNotBanned(…, 'other')` sağlıyor. */
     const channelId = await dm.openConversation({ worldId, playerId: ali, withPlayerId: eru });
+    await acceptChatTerms(h, channelId);
     const ozel = await dm.send({ worldId, playerId: ali, channelId, body: 'ozel', clientMsgId: uuid() });
     expect(ozel.id).toBeGreaterThan(0);
 

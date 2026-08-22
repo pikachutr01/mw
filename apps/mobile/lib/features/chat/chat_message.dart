@@ -43,19 +43,49 @@ class ChatMessage {
 
 /// Bir geçmiş sayfası. ⚠️ Sunucu **en YENİ mesajı önce** döndürüyor (keyset, `before` =
 /// ekrandaki en eski mesajın id'si). Ekranda eskiden yeniye çizmek çağıranın işi.
+/// ⭐⭐ BEKLEYEN MESAJ İSTEĞİ (kullanıcı, 2026-08-22) — alıcı kabul edene kadar gövde
+/// YERİNE bu geliyor.
+///
+/// ⚠️ Önizleme ya da gövde YOK ve olmamalı: korumanın tamamı gövdeyi göstermemek üzerine
+/// kurulu. Oyuncunun karar vermek için gördüğü tek şey kim olduğu ve kaç mesaj beklediği.
+typedef MwDmRequest = ({
+  int fromPlayerId,
+  String fromUsername,
+  int count,
+  String firstAt,
+});
+
 class ChatHistoryPage {
-  const ChatHistoryPage({required this.items, required this.hasMore});
+  const ChatHistoryPage({
+    required this.items,
+    required this.hasMore,
+    this.request,
+  });
 
   final List<ChatMessage> items;
   final bool hasMore;
 
+  /// `null` → yazışma kabul edilmiş, mesajlar `items`ta.
+  final MwDmRequest? request;
+
   static const empty = ChatHistoryPage(items: [], hasMore: false);
 
-  static ChatHistoryPage fromJson(Map<String, dynamic> j) => ChatHistoryPage(
-    items: (j['items'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(ChatMessage.fromJson)
-        .toList(),
-    hasMore: j['hasMore'] as bool? ?? false,
-  );
+  static ChatHistoryPage fromJson(Map<String, dynamic> j) {
+    final r = j['request'];
+    return ChatHistoryPage(
+      items: (j['items'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ChatMessage.fromJson)
+          .toList(),
+      hasMore: j['hasMore'] as bool? ?? false,
+      request: r is Map<String, dynamic>
+          ? (
+              fromPlayerId: (r['fromPlayerId'] as num?)?.toInt() ?? 0,
+              fromUsername: r['fromUsername'] as String? ?? '',
+              count: (r['count'] as num?)?.toInt() ?? 0,
+              firstAt: r['firstAt'] as String? ?? '',
+            )
+          : null,
+    );
+  }
 }

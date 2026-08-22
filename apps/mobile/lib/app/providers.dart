@@ -1406,6 +1406,33 @@ final chatHistoryProvider = FutureProvider.family<ChatHistoryPage, int>((
       : ChatHistoryPage.empty;
 });
 
+/// ⭐ SOHBET KURALLARI — metin ve ittifak kapsamındaki onay durumu (`GET /chat/terms`).
+///
+/// ⚠️ Metin SUNUCUDAN: onay hukuki bir kabul ve iki istemci aynı metni göstermek zorunda.
+typedef MwChatTerms = ({
+  int version,
+  String title,
+  String intro,
+  List<String> items,
+  String confirmLabel,
+  bool required,
+  bool alliance,
+});
+
+final chatTermsProvider = FutureProvider<MwChatTerms>((ref) async {
+  final body = await ref.read(apiProvider).request('GET', '/api/v1/chat/terms');
+  final m = body is Map<String, dynamic> ? body : const <String, dynamic>{};
+  return (
+    version: (m['version'] as num?)?.toInt() ?? 0,
+    title: m['title'] as String? ?? 'Sohbet kuralları',
+    intro: m['intro'] as String? ?? '',
+    items: (m['items'] as List<dynamic>? ?? const []).map((e) => '$e').toList(),
+    confirmLabel: m['confirmLabel'] as String? ?? 'Kabul ediyorum',
+    required: m['required'] as bool? ?? false,
+    alliance: m['alliance'] as bool? ?? false,
+  );
+});
+
 /// ⭐ SOHBET EYLEMLERİ — aç · gönder · okundu · sil · engelle · şikayet et.
 ///
 /// ⚠️ Hepsi `chat:message` konusunu elle tazeliyor, çünkü bu uçların hiçbiri WS olayı
@@ -1457,6 +1484,33 @@ class Chat {
 
   /// ⚠️ **YALNIZ bende siler**; karşı tarafta sohbet aynen duruyor. Posta kutusunun toplu
   /// silme ucundan (`messages/delete`) bu yüzden ayrı: orada satır gerçekten yok oluyor.
+  /// ⭐⭐ MESAJ İSTEĞİNİ KABUL ET — mesajlar görünür olur.
+  ///
+  /// ⚠️ Sunucu aynı adımda kural onayını da yazıyor: istek penceresi kuralları gösteriyor
+  /// ve iki ayrı pencerede iki kez onay tıklatmak, ikincisini okutmamak olurdu.
+  Future<void> acceptConversation(int channelId) async {
+    await _api.request(
+      'POST',
+      '/api/v1/chat/conversations/$channelId/accept',
+      body: const {},
+    );
+    _ref.invalidate(chatHistoryProvider(channelId));
+    _tazele(_ref, 'chat:message');
+  }
+
+  /// Kural onayı. ⚠️ `channelId` verilirse ÖZEL MESAJ kapsamı, verilmezse ittifak.
+  Future<void> acceptTerms({int? channelId}) async {
+    await _api.request(
+      'POST',
+      '/api/v1/chat/terms/accept',
+      body: channelId == null
+          ? {'scope': 'alliance'}
+          : {'scope': 'dm', 'channelId': channelId},
+    );
+    _ref.invalidate(chatTermsProvider);
+    if (channelId != null) _ref.invalidate(chatHistoryProvider(channelId));
+  }
+
   Future<void> clear(int channelId) async {
     await _api.request('DELETE', '/api/v1/chat/conversations/$channelId');
     _tazele(_ref, 'chat:message');

@@ -36,6 +36,7 @@ import '../../ui/native.dart';
 import '../../ui/primitives.dart';
 import 'chat_message.dart';
 import 'chat_rules.dart';
+import 'terms_sheet.dart';
 import 'room_rules.dart';
 
 /// Sohbetin karşı tarafı. `blocked` liste sorgusundan geliyor — «engeli kaldır» metnini ve
@@ -238,6 +239,7 @@ class _BodyState extends ConsumerState<_Body> {
     final c = MwColors.of(context);
     final myId = ref.watch(sessionProvider)?.playerId;
     final page = ref.watch(chatHistoryProvider(t.channelId));
+    final istek = page.value?.request;
     // Damgalar («12 dakika önce») saniyelik sayaçla tazeleniyor — web'deki `useTick`.
     ref.watch(tickProvider);
 
@@ -266,6 +268,15 @@ class _BodyState extends ConsumerState<_Body> {
                 ? Padding(
                     padding: const EdgeInsets.all(16),
                     child: MwErrorBox('Sohbet okunamadı: ${page.error}'),
+                  )
+                : istek != null
+                /* ⭐⭐ MESAJ İSTEĞİ (kullanıcı, 2026-08-22): sunucu alıcı kabul edene kadar
+                   gövde YERİNE künye döndürüyor. Kural metni de aynı pencerede — iki ayrı
+                   pencerede iki kez onay tıklatmak, ikincisini okutmamak olurdu. */
+                ? _Istek(
+                    istek: istek,
+                    channelId: t.channelId,
+                    onKapat: () => Navigator.of(context).pop(),
                   )
                 : mesajlar.isEmpty
                 ? const MwEmpty('Henüz mesaj yok. İlk mesajı sen yaz.')
@@ -437,7 +448,24 @@ class _BodyState extends ConsumerState<_Body> {
       await mwTapError();
       // ⚠️ Metin `code`tan üretiliyor, sunucunun mesajından DEĞİL: ham sunucu metni
       // İngilizce olabiliyor ve §13.14 ekranda İngilizce yasaklıyor (karar `chatErrorText`te).
-      if (mounted) setState(() => _error = chatErrorText(e.code));
+      /* ⭐ Kural onayı istenmişse HATA GÖSTERMİYORUZ, kuralları açıyoruz: oyuncunun
+         yapması gereken şey bir hata okumak değil, metni okuyup kabul etmek. Onaylarsa
+         mesaj kendiliğinden yeniden gönderiliyor — yazdığı metni ikinci kez yazdırmak
+         cezalandırma olurdu. */
+      if (e.code == 'terms_required' && mounted) {
+        final ok = await showChatTermsSheet(
+          context,
+          channelId: widget.target.channelId,
+        );
+        if (ok && mounted) {
+          setState(() => _sending = false);
+          await _send();
+          return;
+        }
+        if (mounted) setState(() => _error = null);
+      } else if (mounted) {
+        setState(() => _error = chatErrorText(e.code));
+      }
     } catch (_) {
       await mwTapError();
       if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');
@@ -674,5 +702,155 @@ class _Notice extends StatelessWidget {
       ),
       child: Text(text, style: TextStyle(fontSize: 12, color: c.warning)),
     );
+  }
+}
+
+/// ⭐⭐ MESAJ İSTEĞİ EKRANI — üç seçenek: onayla · sil · engelle.
+///
+/// ⚠️ Gövde BURADA YOK ve olamaz: sunucu göndermiyor. Oyuncunun karar vermek için gördüğü
+/// tek şey KİM olduğu ve kaç mesaj beklediği.
+///
+/// ⚠️ Kurallar da bu pencerede gösteriliyor (kullanıcı, 2026-08-22: *"alıcı kişi mesajı
+/// onay sürecinde de benzer uyarı mesajlarını görsün"*) ve kabul ikisini birden kapsıyor.
+class _Istek extends ConsumerStatefulWidget {
+  const _Istek({
+    required this.istek,
+    required this.channelId,
+    required this.onKapat,
+  });
+
+  final MwDmRequest istek;
+  final int channelId;
+  final VoidCallback onKapat;
+
+  @override
+  ConsumerState<_Istek> createState() => _IstekState();
+}
+
+class _IstekState extends ConsumerState<_Istek> {
+  bool _busy = false;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MwColors.of(context);
+    final kurallar = ref.watch(chatTermsProvider).value;
+    final r = widget.istek;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: [
+        Text(
+          // ⚠️ Oyuncunun adı → gövde fontu, `mwUpper` YOK (Cinzel kuralı).
+          '${r.fromUsername} sana mesaj göndermek istiyor.',
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          r.count > 1
+              ? '${mwNumber(r.count)} mesaj bekliyor. Onaylarsan hepsini görürsün.'
+              : 'Onaylarsan mesajı görürsün.',
+          style: TextStyle(fontSize: 12, color: c.muted),
+        ),
+        if (kurallar != null) ...[
+          const SizedBox(height: 12),
+          MwPanel(
+            title: kurallar.title,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final k in kurallar.items)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '• $k',
+                      style: TextStyle(fontSize: 12, color: c.muted),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        MwButton(
+          label: kurallar?.confirmLabel ?? 'Onayla',
+          busy: _busy,
+          onTap: _busy ? null : _onayla,
+        ),
+        const SizedBox(height: 8),
+        /* ⚠️ «Sil» tek taraflı: karşı tarafta yazışma aynen duruyor. Yeniden yazarsa bana
+           tekrar sorulur (`clearConversation` kabulü de sıfırlıyor). */
+        MwButton(
+          label: 'Sil',
+          kind: MwButtonKind.ghost,
+          onTap: _busy ? null : _sil,
+        ),
+        const SizedBox(height: 8),
+        MwButton(
+          label: 'Engelle',
+          kind: MwButtonKind.danger,
+          onTap: _busy ? null : _engelle,
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 10),
+          MwErrorBox(_error!),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _onayla() => _run(
+    () => ref.read(chatProvider).acceptConversation(widget.channelId),
+    kapat: false,
+  );
+
+  Future<void> _sil() async {
+    final ok = await mwConfirmSheet(
+      context,
+      title: 'Mesajı sil',
+      body:
+          'Bu yazışma senden silinecek. Karşı taraf yazmaya devam ederse yeniden '
+          'sorulur.',
+      confirmLabel: 'Sil',
+    );
+    if (!ok || !mounted) return;
+    await _run(() => ref.read(chatProvider).clear(widget.channelId));
+  }
+
+  Future<void> _engelle() async {
+    final ok = await mwConfirmSheet(
+      context,
+      title: '${widget.istek.fromUsername} engellensin mi?',
+      body:
+          'Bu oyuncu sana bir daha mesaj gönderemez. İstediğin zaman Seçenekler '
+          'sayfasından engeli kaldırabilirsin.',
+      confirmLabel: 'Engelle',
+    );
+    if (!ok || !mounted) return;
+    await _run(
+      () => ref
+          .read(chatProvider)
+          .setBlocked(widget.istek.fromPlayerId, blocked: true),
+    );
+  }
+
+  Future<void> _run(Future<void> Function() action, {bool kapat = true}) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await action();
+      await mwTapOk();
+      if (mounted && kapat) widget.onKapat();
+    } on MwApiError catch (e) {
+      await mwTapError();
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      await mwTapError();
+      if (mounted) setState(() => _error = 'Sunucuya ulaşılamadı.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }

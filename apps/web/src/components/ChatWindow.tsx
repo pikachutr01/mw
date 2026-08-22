@@ -20,10 +20,13 @@ import {
   closeChatChannel, onSocketEvent, openChatChannel, sendTyping,
 } from '../lib/realtime.ts';
 import {
-  useAccount, useBlockPlayer, useChatHistory, useClearConversation, useMarkChatRead,
-  useReportChat, useSendChatMessage, type ChatMessage,
+  useAcceptChatTerms, useAcceptConversation, useAccount, useBlockPlayer, useChatHistory,
+  useChatTerms,
+  useClearConversation, useMarkChatRead, useReportChat, useSendChatMessage,
+  type ChatMessage,
 } from '../lib/queries.ts';
-import { Button, ErrorBox, TextArea, TimeAgo } from './ui.tsx';
+import { ApiError } from '../lib/api.ts';
+import { Button, ErrorBox, TextArea, TimeAgo, UserText } from './ui.tsx';
 import { useConfirm } from './Modal.tsx';
 
 export interface ChatTarget {
@@ -68,6 +71,17 @@ export function ChatWindow({ target, myId, onClose }: {
   const block = useBlockPlayer();
   const report = useReportChat();
   const confirm = useConfirm();
+  /* ⭐⭐ MESAJ İSTEĞİ (kullanıcı, 2026-08-22): sunucu, alıcı kabul edene kadar gövde
+     YERİNE istek künyesi döndürüyor. Kural metni de aynı pencerede gösteriliyor — iki ayrı
+     pencerede iki kez onay tıklatmak, ikincisini okutmamak olurdu. */
+  const request = history.data?.pages?.[0]?.request ?? null;
+  const terms = useChatTerms();
+  const acceptDm = useAcceptConversation();
+  const acceptTerms = useAcceptChatTerms();
+  /* ⭐ GÖNDEREN tarafı: kurallar onaylanmadan yazılamıyor (göç 0052). Sunucu `terms_required`
+     koduyla reddediyor; ham hata yerine metni gösterip onay düğmesi sunuyoruz. */
+  const termsBlocked = send.error instanceof ApiError
+    && send.error.code === 'terms_required';
   /** §verify — doğrulanmamış hesap yazamaz. Bilgi gelmemişse ENGELLEME (sunucu son sözü söyler). */
   const account = useAccount();
   const unverified = account.data != null && !account.data.emailVerified;
@@ -249,6 +263,56 @@ export function ChatWindow({ target, myId, onClose }: {
         ) : null}
         {history.isLoading ? (
           <div className="py-4 text-center text-xs text-muted">yükleniyor…</div>
+        ) : request ? (
+          /* ⚠️ Gövde BURADA YOK ve olamaz: sunucu göndermiyor. Oyuncunun karar vermek için
+             gördüğü tek şey KİM olduğu ve kaç mesaj beklediği. */
+          <div className="space-y-2 py-3">
+            <div className="text-sm font-semibold text-ink">
+              <UserText>{request.fromUsername}</UserText> sana mesaj göndermek istiyor.
+            </div>
+            <div className="text-xs text-muted">
+              {request.count > 1
+                ? `${fmt(request.count)} mesaj bekliyor. Onaylarsan hepsini görürsün.`
+                : 'Onaylarsan mesajı görürsün.'}
+            </div>
+
+            {terms.data ? (
+              <div className="rounded-[var(--radius-sm)] border border-border bg-raised p-2">
+                <div className="mb-1 text-[11px] font-semibold text-ink">{terms.data.title}</div>
+                <ul className="ml-4 list-disc space-y-0.5 text-[11px] text-muted">
+                  {terms.data.items.map((t) => <li key={t}>{t}</li>)}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" disabled={acceptDm.isPending}
+                onClick={() => acceptDm.mutate(channelId)}>
+                {terms.data?.confirmLabel ?? 'Onayla'}
+              </Button>
+              {/* ⚠️ «Sil» tek taraflı silme: karşı tarafta yazışma durur, bende kapanır. */}
+              <Button size="sm" variant="ghost" onClick={() => {
+                void confirm({
+                  title: 'Mesajı sil',
+                  body: 'Bu yazışma senden silinecek. Karşı taraf yazmaya devam ederse '
+                    + 'yeniden sorulur.',
+                  confirmLabel: 'Sil', danger: true,
+                }).then((ok) => { if (ok) clear.mutate(channelId, { onSuccess: onClose }); });
+              }}>Sil</Button>
+              <Button size="sm" variant="danger" onClick={() => {
+                void confirm({
+                  title: 'Oyuncuyu engelle',
+                  body: 'Bu oyuncu sana bir daha mesaj gönderemez. İstediğin zaman '
+                    + 'Seçenekler sayfasından engeli kaldırabilirsin.',
+                  confirmLabel: 'Engelle', danger: true,
+                }).then((ok) => {
+                  if (!ok) return;
+                  block.mutate({ playerId: request.fromPlayerId, blocked: true },
+                    { onSuccess: () => onClose() });
+                });
+              }}>Engelle</Button>
+            </div>
+          </div>
         ) : messages.length === 0 ? (
           <div className="py-6 text-center text-xs text-muted">
             Henüz mesaj yok. İlk mesajı sen yaz.
@@ -294,7 +358,19 @@ export function ChatWindow({ target, myId, onClose }: {
       </div>
 
       <div className="shrink-0 space-y-1 border-t-2 border-strong bg-raised px-2.5 py-2">
-        {send.isError ? (
+        {termsBlocked && terms.data ? (
+          <div className="space-y-1.5 rounded-[var(--radius-sm)] border border-border bg-raised p-2">
+            <div className="text-[11px] font-semibold text-ink">{terms.data.title}</div>
+            <div className="text-[11px] text-muted">{terms.data.intro}</div>
+            <ul className="ml-4 list-disc space-y-0.5 text-[11px] text-muted">
+              {terms.data.items.map((t) => <li key={t}>{t}</li>)}
+            </ul>
+            <Button size="sm" disabled={acceptTerms.isPending}
+              onClick={() => acceptTerms.mutate({ scope: 'dm', channelId })}>
+              {terms.data.confirmLabel}
+            </Button>
+          </div>
+        ) : send.isError ? (
           <ErrorBox error={new Error(messageForError(send.error))} />
         ) : null}
         {target.blocked ? (
@@ -322,7 +398,10 @@ export function ChatWindow({ target, myId, onClose }: {
             className="max-h-24 min-h-[2.25rem] resize-none"
           />
           <Button size="sm"
-            disabled={draft.trim().length === 0 || send.isPending || target.blocked || unverified}
+            disabled={draft.trim().length === 0 || send.isPending || target.blocked || unverified
+              /* ⚠️ İstek beklerken yazmak yok: henüz kabul etmediğin bir yazışmaya cevap
+                 vermek, kabul etmiş olmakla aynı şey olurdu. */
+              || request != null}
             onClick={submit}>Gönder</Button>
         </div>
         {draft.length > 400 ? (

@@ -1492,14 +1492,29 @@ export const useChatConversations = (): UseQueryResult<{ items: ChatConversation
  * Sohbet geçmişi — **keyset sayfalama** (projede ilk `useInfiniteQuery`).
  * Sunucu en YENİ mesajı önce döner; `before` bir sonraki sayfanın imleci (en eski görünen id).
  */
+/**
+ * ⭐ Bekleyen mesaj isteği — alıcı kabul edene kadar gövde YERİNE bu geliyor (göç 0053).
+ * Önizleme YOK: koruma tam olarak gövdeyi göstermemek üzerine kurulu.
+ */
+export interface DmRequest {
+  fromPlayerId: number;
+  fromUsername: string;
+  count: number;
+  firstAt: string;
+}
+
 export const useChatHistory = (
   channelId: number | null,
-): UseInfiniteQueryResult<{ pages: { items: ChatMessage[]; hasMore: boolean }[] }, Error> =>
+): UseInfiniteQueryResult<
+  { pages: { items: ChatMessage[]; hasMore: boolean; request?: DmRequest }[] }, Error
+> =>
   useInfiniteQuery({
     queryKey: ['chat-history', channelId],
     enabled: channelId != null,
     initialPageParam: null as number | null,
-    queryFn: ({ pageParam }) => get<{ items: ChatMessage[]; hasMore: boolean }>(
+    queryFn: ({ pageParam }) => get<{
+      items: ChatMessage[]; hasMore: boolean; request?: DmRequest;
+    }>(
       `/api/v1/chat/conversations/${channelId}/messages${pageParam ? `?before=${pageParam}` : ''}`,
     ),
     getNextPageParam: (last) => (last.hasMore && last.items.length > 0
@@ -1532,6 +1547,56 @@ export function useSendChatMessage(channelId: number | null) {
       }),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['chat-history', channelId] });
+      void qc.invalidateQueries({ queryKey: ['chat'] });
+    },
+  });
+}
+
+/** ⭐ Sohbet kuralları — metin ve o oyuncunun ittifak kapsamındaki durumu. */
+export interface ChatTerms {
+  version: number;
+  title: string;
+  intro: string;
+  items: string[];
+  confirmLabel: string;
+  required: boolean;
+  alliance: boolean;
+}
+
+export const useChatTerms = (): UseQueryResult<ChatTerms> => useQuery({
+  queryKey: ['chat-terms'],
+  queryFn: () => get<ChatTerms>('/api/v1/chat/terms'),
+  enabled: useAuthed(),
+  // ⚠️ Metin sürümlü ve nadiren değişiyor; her sohbet açılışında yeniden çekmenin anlamı yok.
+  staleTime: 10 * 60 * 1000,
+});
+
+/** Kural onayı — `dm` kapsamında kanal kimliği zorunlu. */
+export function useAcceptChatTerms() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { scope: 'alliance' } | { scope: 'dm'; channelId: number }) =>
+      api('/api/v1/chat/terms/accept', { method: 'POST', body: v }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['chat-terms'] });
+      void qc.invalidateQueries({ queryKey: ['chat-history'] });
+    },
+  });
+}
+
+/**
+ * ⭐⭐ MESAJ İSTEĞİNİ KABUL ET — mesajlar görünür olur.
+ *
+ * ⚠️ Sunucu aynı adımda kural onayını da yazıyor: istek penceresi kuralları gösteriyor ve
+ * oyuncuya iki ayrı pencerede iki kez onay tıklatmak, ikincisini okutmamak olurdu.
+ */
+export function useAcceptConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (channelId: number) =>
+      api(`/api/v1/chat/conversations/${channelId}/accept`, { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['chat-history'] });
       void qc.invalidateQueries({ queryKey: ['chat'] });
     },
   });

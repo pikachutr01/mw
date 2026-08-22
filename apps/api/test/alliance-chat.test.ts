@@ -17,7 +17,7 @@ import type { DbHandle } from '../src/db/client.ts';
 import { eventForOutbox } from '../src/realtime/realtime.bus.ts';
 import { notificationForOutbox } from '../src/notify/notify.catalog.ts';
 import { setLiveSettings } from '../src/settings/live.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, acceptChatTerms } from './helpers/db.ts';
 
 let h: DbHandle;
 let worldId: number;
@@ -255,6 +255,7 @@ describe('flood koruması', () => {
     const channelId = await dm.openConversation({
       worldId, playerId: lider, withPlayerId: disaridan,
     });
+    await acceptChatTerms(h, channelId);
     const sent = await dm.send({
       worldId, playerId: lider, channelId, body: 'dm serbest', clientMsgId: uuid(),
     });

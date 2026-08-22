@@ -39,7 +39,7 @@ görünen değişiklikler değişiklik günlüğüne yazılır.
 | **A6** | Tatil modu hak kazanma eşiği | `apps/api/src/vacation/vacation.service.ts` | Mekanik ONAYLI: `P = Σbina + 2×Σteknik + 10×(şehir−1)`, eşik `T(n) = T0 × g^n`, yeni kolon `players.vacation_count`. E-posta doğrulaması pazarlıksız şart. **Açık soru:** `T0` ve `g` (önerim 60 ve 1,6). |
 | **+** | Doğrulanmamış e-postada mobil kısıtları | `apps/api/src/auth/unverified.ts` · mobil ekranlar | Sunucu zaten kapıyı tutuyor (`assertVerified`); iş, mobilde **web'dekiyle aynı görsel kısıtların** olup olmadığını denetlemek. Yoksa eklenecek. |
 
-**Sıra önerisi:** H1 → A6 (Yardım kullanıcı kararıyla ertelendi). Gerekçe: önce sunucusu hazır olup yalnız
+**Sıra önerisi:** A6 (Yardım kullanıcı kararıyla ertelendi). Gerekçe: önce sunucusu hazır olup yalnız
 arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı ağır basanlar.
 
 ---
@@ -67,6 +67,7 @@ arayüz isteyenler, sonra yeni altyapı isteyenler, en sonda tasarım kararı a�
 | **E2** (mobil destek: misafir + oturumlu) | 10 |
 | **F4** (mobil oda sohbeti: baloncuk + gruplama) | 11 |
 | **G1** (web mobil Şehir sayfası) | 12 |
+| **H1** (sohbet kural onayı + mesaj isteği: sunucu + web + mobil) | 13 |
 
 ### C ve D nasıl çözüldü (tur 7)
 

@@ -2,11 +2,13 @@
  * ⭐⭐ SOHBET KURALI ONAYI (H1, kullanıcı 2026-08-21: *"DM ve ittifak sohbetinde ilk mesajdan
  * önce kural onayı"*).
  *
- * ─ ⚠️ BU DOSYANIN EN ÖNEMLİ GARANTİSİ ────────────────────────────────────────────────────
- * Kapı **varsayılan olarak KAPALI** (`chat.termsRequired = false`) ve kapalıyken hiç kimseyi
- * engellemiyor. Bu bir nezaket değil, dağıtım güvenliği: onayı bilmeyen ESKİ bir mobil sürüm
- * açık bir kapıyla karşılaşsaydı, oyuncu anlamadığı bir hatayla mesaj gönderemez hâle
- * gelirdi ve mağaza güncellemesi yayılana kadar öyle kalırdı.
+ * ─ ⚠️ BU DOSYANIN AYIRDIĞI ŞEY ───────────────────────────────────────────────────────────
+ * İki ayrı kapı var ve karıştırılmamalı:
+ *   • KURAL ONAYI (bu dosya, göç 0052) → GÖNDERENİ tutuyor. Yazamazsın, okursun.
+ *   • MESAJ İSTEĞİ (`chat-request.test.ts`, göç 0053) → ALICIYI koruyor. Kabul edene kadar
+ *     gelen mesajları görmezsin.
+ * Aşağıdaki «okuyabiliyor» testi tam da bu ayrımı kilitliyor: isteği kabul etmiş ama
+ * kuralları onaylamamış bir oyuncu OKUR, YAZAMAZ.
  *
  * ─ ⚠️ İKİ KAPSAM, İKİ TABLO ──────────────────────────────────────────────────────────────
  * DM onayı **yazışma başına** (`chat_participants.terms_version`), ittifak onayı **oyun
@@ -57,25 +59,21 @@ async function kanal(): Promise<number> {
   return chat.openConversation({ worldId, playerId: ali, withPlayerId: veli });
 }
 
-describe('kapı kapalıyken (varsayılan)', () => {
+describe('kapı kapatılabiliyor — acil vana', () => {
   /**
-   * ⚠️⚠️ EN KRİTİK TEST. Bu bozulursa canlıdaki eski mobil sürümler mesaj gönderemez hâle
-   * gelir ve bunu ancak oyuncular bildirdiğinde öğreniriz.
+   * ⚠️⚠️ Varsayılan 2026-08-22'de AÇIĞA alındı (kullanıcı: *"web sürüm de uygulama da henüz
+   * herkese tam anlamıyla yayınlanmış değil, hepsi test sürecinde"*). Kapatma yolu yine de
+   * duruyor ve bu test onu kilitliyor: bir aksaklıkta sohbeti tamamen kapatmak yerine
+   * yalnız kapıyı kaldırmak gerekebilir.
    */
-  it('⭐⭐ onay olmadan da mesaj gönderilebiliyor', async () => {
-    const ch = await kanal();
-    await expect(gonder(ali, ch)).resolves.toBeTruthy();
-  });
-
-  it('⭐ ayar açıkça kapalıyken de aynı', async () => {
+  it('⭐⭐ ayar kapatılınca onaysız da gönderilebiliyor', async () => {
     setLiveSettings({ chat: { termsRequired: false } });
     const ch = await kanal();
     await expect(gonder(ali, ch)).resolves.toBeTruthy();
   });
 });
 
-describe('kapı açıkken — özel mesaj', () => {
-  beforeEach(() => { setLiveSettings({ chat: { termsRequired: true } }); });
+describe('kapı açıkken — özel mesaj (varsayılan)', () => {
 
   it('⭐⭐ onaylamayan yazamıyor ve kod `terms_required`', async () => {
     const ch = await kanal();
@@ -139,12 +137,13 @@ describe('kapı açıkken — özel mesaj', () => {
   });
 
   /**
-   * ⚠️ OKUMA KAPATILMIYOR. Tasarım notunda bir ara *"alıcı onaylamadan mesajı göremez"* de
-   * yazıyordu; uygulanmadı. Okumayı kapatmak, birine ulaşmaya çalışan oyuncunun mesajını
-   * rehin alır ve kötü niyetli birinin karşısındakine zorla onay penceresi açtırmasına yol
-   * açardı. §verify kapısı da aynı ayrımı kuruyor: doğrulanmamış hesap yazamaz, okur.
+   * ⭐⭐ İKİ KAPININ AYRIMI. Kural onayı YAZMAYI tutuyor, okumayı değil; okumayı tutan şey
+   * mesaj isteği (göç 0053) ve o ayrı bir kabul. Veli isteği kabul etmiş ama kuralları
+   * onaylamamış: okuyabilmeli, yazamamalı.
+   *
+   * ⚠️ §verify kapısı da aynı ayrımı kuruyor: doğrulanmamış hesap yazamaz, okur.
    */
-  it('⭐⭐ onaylamayan OKUYABİLİYOR — yalnız yazma kapalı', async () => {
+  it('⭐⭐ kural onayı YAZMAYI tutuyor, OKUMAYI değil', async () => {
     const ch = await kanal();
     await h.db.execute(sql`
       UPDATE chat_participants SET terms_version = ${CHAT_TERMS_VERSION}
@@ -152,9 +151,14 @@ describe('kapı açıkken — özel mesaj', () => {
     `);
     await gonder(ali, ch);
 
-    // Veli onaylamadı ama geçmişi okuyabilmeli.
+    // Veli isteği kabul ediyor ama kural sürümü 0 kalıyor.
+    await h.db.execute(sql`
+      UPDATE chat_participants SET dm_accepted_at = now()
+       WHERE channel_id = ${ch} AND player_id = ${veli}
+    `);
     const sayfa = await chat.history({ worldId, playerId: veli, channelId: ch, limit: 20 });
     expect(sayfa.items.length).toBeGreaterThan(0);
+    await expect(gonder(veli, ch)).rejects.toMatchObject({ code: CHAT_TERMS_CODE });
   });
 });
 

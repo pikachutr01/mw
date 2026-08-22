@@ -234,6 +234,9 @@ export const NON_TIMELINE_COLUMNS: readonly string[] = [
      bakıyor, damgaya değil. Kaydırmak, bakım duraklaması kadar yanlış bir onay tarihi
      kaydetmek olurdu ve şikâyet incelemesinde tam da o tarih okunuyor. */
   'chat_participants.terms_accepted_at', 'players.chat_terms_accepted_at',
+  /* ⭐ Mesaj isteği kabulü (göç 0053) — aynı aile, aynı gerekçe: kapı `dm_accepted_at IS
+     NULL` diye bakıyor, damganın kendisiyle şimdiki zamanı karşılaştıran kural yok. */
+  'chat_participants.dm_accepted_at',
 
   // 1 — Geçmiş oyun olayları
   'battles.at', 'battles.created_at',

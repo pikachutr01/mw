@@ -19,6 +19,7 @@
 import { sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { chatLimits } from './chat.limits.ts';
+import { CHAT_TERMS_VERSION } from './chat.terms.ts';
 import {
   assertChatTermsAccepted, assertFlowOk, assertNotBanned, assertVerifiedToChat, findRetry,
   insertMessage, ChatError, type Tx,
@@ -40,6 +41,19 @@ export interface ConversationRow {
   lastMessageAt: string | null;
   unreadCount: number;
   blocked: boolean;
+}
+
+/**
+ * ⭐ Bekleyen mesaj isteği — alıcı kabul edene kadar gövde YERİNE bu dönüyor.
+ *
+ * ⚠️ Gövde ya da önizleme YOK: koruma tam olarak gövdeyi göstermemek üzerine kurulu.
+ * Oyuncunun karar vermek için ihtiyacı olan tek şey KİM olduğu ve kaç mesaj beklediği.
+ */
+export interface DmRequest {
+  fromPlayerId: number;
+  fromUsername: string;
+  count: number;
+  firstAt: string;
 }
 
 export interface MessageRow {
@@ -209,8 +223,13 @@ export class ChatService {
       const id = written.id;
 
       /* Gönderen kendi mesajını okumuş sayılır — kendi yazdığı rozet üretmesin. */
+      /* ⭐ Gönderen kendi yazışmasını KENDİLİĞİNDEN kabul etmiş sayılıyor: kendi yazdığı
+         mesaj için ona "biri sana yazmak istiyor" diye sormak anlamsız olurdu.
+         ⚠️ `COALESCE`: daha önce kabul ettiyse tarih KORUNUYOR, her mesajda tazelenmiyor. */
       await tx.execute(sql`
-        UPDATE chat_participants SET last_read_message_id = GREATEST(last_read_message_id, ${id})
+        UPDATE chat_participants
+           SET last_read_message_id = GREATEST(last_read_message_id, ${id}),
+               dm_accepted_at = COALESCE(dm_accepted_at, now())
          WHERE channel_id = ${o.channelId} AND player_id = ${o.playerId}
       `);
 
@@ -288,8 +307,24 @@ export class ChatService {
   /** Geçmiş — keyset sayfalama (`before` = en eski görünen id). En yeni ÖNCE döner. */
   async history(o: {
     worldId: number; playerId: number; channelId: number; before?: number | null; limit?: number;
-  }): Promise<{ items: MessageRow[]; hasMore: boolean }> {
+  }): Promise<{ items: MessageRow[]; hasMore: boolean; request?: DmRequest }> {
     const me = await this.participant(this.db, o.channelId, o.playerId, o.worldId);
+
+    /**
+     * ⭐⭐ MESAJ İSTEĞİ (kullanıcı, 2026-08-22) — kabul edilmemiş yazışmada gelen mesajlar
+     * **gösterilmiyor**; yerine kimin yazdığı ve kaç mesaj beklediği dönüyor.
+     *
+     * ⚠️⚠️ Süzgeç SUNUCUDA, istemcide değil. İstemci "çizme" deseydi gövde yine ağdan
+     * geçerdi ve tarayıcı ağ sekmesinde okunabilirdi — yani koruma değil perde olurdu.
+     *
+     * ⚠️ Bekleyen mesaj YOKSA istek de yok: kanalı kendi açan ama henüz yazmayan oyuncuya
+     * "biri sana yazmak istiyor" demek yanlış olurdu.
+     */
+    if (!me.dmAccepted) {
+      const req = await this.pendingRequest(o.channelId, o.playerId, me.clearedBefore);
+      if (req) return { items: [], hasMore: false, request: req };
+    }
+
     const limit = Math.min(100, Math.max(1, o.limit ?? chatLimits().pageSize));
     const rows = await this.db.execute<Record<string, unknown>>(sql`
       SELECT id, channel_id, sender_id, body, created_at
@@ -314,6 +349,62 @@ export class ChatService {
     };
   }
 
+  /**
+   * ⭐ Bekleyen mesaj isteği — yoksa `null`.
+   *
+   * ⚠️ `sender_id <> me` şart: kendi yazdığım mesaj beni "istek" ekranına düşürmemeli.
+   * Kendi kanalını açıp yazan oyuncu zaten `send` sırasında kabul edilmiş sayılıyor, ama
+   * bu süzgeç onu ikinci kez garantiliyor.
+   */
+  private async pendingRequest(
+    channelId: number, playerId: number, clearedBefore: number,
+  ): Promise<DmRequest | null> {
+    const [r] = await this.db.execute<Record<string, unknown>>(sql`
+      SELECT COUNT(*)::int AS n,
+             MIN(m.created_at) AS first_at,
+             MAX(other.player_id) AS other_id,
+             MAX(pl.username) AS other_name
+        FROM chat_messages m
+        JOIN chat_participants other
+          ON other.channel_id = m.channel_id AND other.player_id <> ${playerId}
+        JOIN players pl ON pl.id = other.player_id
+       WHERE m.channel_id = ${channelId}
+         AND m.id > ${clearedBefore}
+         AND m.deleted_at IS NULL
+         AND m.sender_id IS NOT NULL
+         AND m.sender_id <> ${playerId}
+    `);
+    const n = Number(r?.['n'] ?? 0);
+    if (n === 0) return null;
+    return {
+      fromPlayerId: Number(r!['other_id']),
+      fromUsername: String(r!['other_name'] ?? ''),
+      count: n,
+      firstAt: new Date(String(r!['first_at'])).toISOString(),
+    };
+  }
+
+  /**
+   * ⭐⭐ İSTEĞİ KABUL ET — mesajlar görünür olur.
+   *
+   * ⚠️⚠️ Kural onayı da AYNI adımda alınıyor (kullanıcı, 2026-08-22: *"alıcı kişi mesajı
+   * onay sürecinde de benzer uyarı mesajlarını görsün"*). İstek penceresi kuralları
+   * gösteriyor; oyuncuya iki ayrı pencerede iki kez onay tıklatmak, ikincisini okutmamanın
+   * en kestirme yolu olurdu.
+   */
+  async acceptConversation(o: {
+    worldId: number; playerId: number; channelId: number;
+  }): Promise<void> {
+    await this.participant(this.db, o.channelId, o.playerId, o.worldId);
+    await this.db.execute(sql`
+      UPDATE chat_participants
+         SET dm_accepted_at = now(),
+             terms_version = GREATEST(terms_version, ${CHAT_TERMS_VERSION}),
+             terms_accepted_at = COALESCE(terms_accepted_at, now())
+       WHERE channel_id = ${o.channelId} AND player_id = ${o.playerId}
+    `);
+  }
+
   /** Okundu imleci — daima ileri (`GREATEST`), geç gelen istek sayacı geri almasın. */
   async markRead(o: { worldId: number; playerId: number; channelId: number }): Promise<void> {
     await this.participant(this.db, o.channelId, o.playerId, o.worldId);
@@ -335,12 +426,25 @@ export class ChatService {
    * ⚠️ `last_read_message_id` de zıplatılır; yoksa okunmamış bir sohbeti silince rozet
    * "hayalet" olarak asılı kalırdı.
    */
+  /*
+   * ⭐⭐ SİLMEK KABULÜ DE GERİ ALIYOR (kullanıcı, 2026-08-22): *"mesaj geçmişini sildikten
+   * sonra ilk mesaj gönderdiğinde"* yeniden sorulmalı. Silmek yazışmayı bitirmek demek;
+   * sonrasında gelen mesaj yeni bir istektir.
+   *
+   * ⚠️ Kural onayı (`terms_version`) SIFIRLANMIYOR — o hukuki bir kabul, gerekçesi göç
+   * 0052'de yazılı. Sıfırlanan yalnız `dm_accepted_at`.
+   *
+   * ⚠️⚠️ Aşağıdaki SQL şablon dizesinin içine ters tırnaklı yorum YAZILAMAZ: ters tırnak
+   * dizeyi kapatıyor ve dosya derlenmiyor (2026-08-22'de bir kez yaşandı). Açıklamalar bu
+   * yüzden metodun üstünde.
+   */
   async clearConversation(o: { worldId: number; playerId: number; channelId: number }): Promise<void> {
     await this.participant(this.db, o.channelId, o.playerId, o.worldId);
     await this.db.execute(sql`
       UPDATE chat_participants p
          SET cleared_before_message_id = GREATEST(p.cleared_before_message_id, last_id.v),
-             last_read_message_id      = GREATEST(p.last_read_message_id, last_id.v)
+             last_read_message_id      = GREATEST(p.last_read_message_id, last_id.v),
+             dm_accepted_at            = NULL
         FROM (SELECT COALESCE(MAX(id), 0) AS v FROM chat_messages WHERE channel_id = ${o.channelId}) last_id
        WHERE p.channel_id = ${o.channelId} AND p.player_id = ${o.playerId}
     `);
@@ -427,14 +531,17 @@ export class ChatService {
   /** Katılımcı mıyım + kanal BU dünyada mı? İkisi tek sorguda (dünya yalıtımı kapısı). */
   private async participant(
     tx: Tx, channelId: number, playerId: number, worldId: number,
-  ): Promise<{ clearedBefore: number }> {
+  ): Promise<{ clearedBefore: number; dmAccepted: boolean }> {
     const [r] = await tx.execute<Record<string, unknown>>(sql`
-      SELECT p.cleared_before_message_id
+      SELECT p.cleared_before_message_id, p.dm_accepted_at
         FROM chat_participants p JOIN chat_channels c ON c.id = p.channel_id
        WHERE p.channel_id = ${channelId} AND p.player_id = ${playerId} AND c.world_id = ${worldId}
     `);
     if (!r) throw new ChatError('not_a_member', 'Bu sohbete erişimin yok.');
-    return { clearedBefore: Number(r['cleared_before_message_id'] ?? 0) };
+    return {
+      clearedBefore: Number(r['cleared_before_message_id'] ?? 0),
+      dmAccepted: r['dm_accepted_at'] != null,
+    };
   }
 
   /** Karşı taraf + kendi katılımım (tek sorgu). */

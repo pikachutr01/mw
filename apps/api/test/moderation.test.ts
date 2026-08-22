@@ -10,7 +10,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ChatError, ChatService } from '../src/chat/chat.service.ts';
 import type { DbHandle } from '../src/db/client.ts';
-import { createPlayer, createWorld, freshWorldId, setupTestDb } from './helpers/db.ts';
+import { createPlayer, createWorld, freshWorldId, setupTestDb, acceptChatTerms } from './helpers/db.ts';
 
 let h: DbHandle;
 let chat: ChatService;
@@ -60,12 +60,14 @@ const send = (from: number, channelId: number): Promise<unknown> =>
 describe('sohbet yasağı', () => {
   it('yasaksız oyuncu mesaj gönderebilir (temel doğru)', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await expect(send(alice, ch)).resolves.toBeTruthy();
   });
 
   /** ⭐ Fazın asıl iddiası. Bu test kırılırsa ban yine kâğıt üstünde kalmış demektir. */
   it('⭐ yasaklı oyuncu mesaj GÖNDEREMEZ', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await banPlayer(alice, { reason: 'spam' });
 
     const err = await send(alice, ch).then(() => null, (e: unknown) => e);
@@ -83,7 +85,9 @@ describe('sohbet yasağı', () => {
     const carol = await createPlayer(h, worldId, 'carol');
     await h.db.execute(sql`UPDATE players SET created_at = now() - interval '30 days' WHERE id = ${carol}`);
     const toBob = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, toBob);
     const toCarol = await chat.openConversation({ worldId, playerId: alice, withPlayerId: carol });
+    await acceptChatTerms(h, toCarol);
     await banPlayer(alice);
 
     await expect(send(alice, toBob)).rejects.toThrow(ChatError);
@@ -96,6 +100,7 @@ describe('sohbet yasağı', () => {
    */
   it('yasaklı oyuncuya yazılabilir ve o okumaya devam eder', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await banPlayer(alice);
 
     await expect(send(bob, ch)).resolves.toBeTruthy();
@@ -124,6 +129,7 @@ describe('sohbet yasağı', () => {
    */
   it('⭐⭐ `global` kapsamlı yasak ÖZEL MESAJI kapatmaz', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await h.db.execute(sql`
       INSERT INTO chat_bans (world_id, player_id, scope, until, reason)
       VALUES (${worldId}, ${alice}, 'global', NULL, 'genel sohbette küfür')
@@ -133,6 +139,7 @@ describe('sohbet yasağı', () => {
 
   it('süresi GEÇMİŞ yasak etkisiz', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await h.db.execute(sql`
       INSERT INTO chat_bans (world_id, player_id, scope, until, reason)
       VALUES (${worldId}, ${alice}, 'all', now() - interval '1 hour', 'eski')
@@ -142,6 +149,7 @@ describe('sohbet yasağı', () => {
 
   it('süresiz yasak (until NULL) sonsuza kadar geçerli', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await banPlayer(alice);   // days yok → süresiz
     const err = await send(alice, ch).then(() => null, (e: unknown) => e);
     expect((err as ChatError).message).toContain('süresiz');
@@ -150,6 +158,7 @@ describe('sohbet yasağı', () => {
   /** Yasak KARŞI tarafı bağlamaz. */
   it('yasak yalnız yasaklıyı bağlar', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await banPlayer(alice);
     await expect(send(bob, ch)).resolves.toBeTruthy();
   });
@@ -161,6 +170,7 @@ describe('sohbet yasağı', () => {
    */
   it('yasak DÜNYA bazlı', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await h.db.execute(sql`
       INSERT INTO chat_bans (world_id, player_id, scope, until, reason)
       VALUES (${worldId + 1}, ${alice}, 'all', NULL, 'başka dünya')
@@ -175,6 +185,7 @@ describe('sohbet yasağı', () => {
    */
   it('yasaktan ÖNCE yazılmış mesajın ağ tekrarı hâlâ çalışır', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     const clientMsgId = msg();
     const first = await chat.send({
       worldId, playerId: alice, channelId: ch, body: 'ilk', clientMsgId,
@@ -215,6 +226,7 @@ describe('yasağın kaldırılması', () => {
    */
   it('kaldırma satırı SİLMEZ, süreyi geçmişe çeker', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await banPlayer(alice, { reason: 'küfür' });
     await expect(send(alice, ch)).rejects.toThrow(ChatError);
 
@@ -235,6 +247,7 @@ describe('yasağın kaldırılması', () => {
   /** Birden çok yasak varsa en güçlüsü (süresiz) kazanır. */
   it('süresiz yasak, süreli bir yasağın yanında etkisini korur', async () => {
     const ch = await chat.openConversation({ worldId, playerId: alice, withPlayerId: bob });
+    await acceptChatTerms(h, ch);
     await banPlayer(alice, { days: 1, reason: 'kısa' });
     await banPlayer(alice, { reason: 'süresiz' });
 

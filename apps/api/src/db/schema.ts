@@ -1249,6 +1249,16 @@ export const chatParticipants = pgTable('chat_participants', {
    */
   termsVersion: smallint('terms_version').notNull().default(0),
   termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
+  /**
+   * ⭐⭐ MESAJ İSTEĞİ KABULÜ (kullanıcı, 2026-08-22, göç 0053) — `NULL` = gelen mesajlar
+   * **istek** olarak bekliyor, alıcı henüz görmüyor.
+   *
+   * ⚠️ 0052'deki `termsVersion`dan FARKLI bir soruya cevap veriyor: o GÖNDERENİ kapıya
+   * alıyor (kuralları onaylamadan yazamazsın), bu ALICIYI koruyor (tanımadığın birinin
+   * mesajı sana zorla okutulmuyor). Biri diğerinin yerine geçemez.
+   * ⚠️ Geçmişi silmek `NULL`a çekiyor: silen oyuncuya yeniden soruluyor.
+   */
+  dmAcceptedAt: timestamp('dm_accepted_at', { withTimezone: true }),
   joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('chat_participants_pk').on(t.channelId, t.playerId),

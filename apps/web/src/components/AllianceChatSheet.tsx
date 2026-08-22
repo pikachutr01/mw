@@ -35,6 +35,8 @@ import { AllianceChatMuteModal } from './AllianceChatMuteModal.tsx';
 import { MentionAutocomplete, type MentionItem } from './MentionAutocomplete.tsx';
 import { useConfirm } from './Modal.tsx';
 import { Button, ErrorBox, TextArea, TimeAgo } from './ui.tsx';
+import { ApiError } from '../lib/api.ts';
+import { useAcceptChatTerms, useChatTerms } from '../lib/queries.ts';
 
 /** Sunucu hata kodu → oyuncuya gösterilecek metin (`ChatWindow.messageForError` kalıbı). */
 function messageForError(err: unknown): string {
@@ -72,6 +74,10 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
   const history = useAllianceChatHistory(channelId);
   const send = useSendAllianceChatMessage();
   const mute = useAllianceChatMute();
+  const terms = useChatTerms();
+  const acceptTerms = useAcceptChatTerms();
+  const termsBlocked = send.error instanceof ApiError
+    && send.error.code === 'terms_required';
   const unmute = useAllianceChatUnmute();
   const remove = useDeleteAllianceChatMessage();
   const confirm = useConfirm();
@@ -374,7 +380,24 @@ export function AllianceChatSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="shrink-0 space-y-1 border-t-2 border-strong bg-raised px-2.5 py-2">
-          {send.isError ? <ErrorBox error={new Error(messageForError(send.error))} /> : null}
+          {/* ⭐ Kural onayı (göç 0052) — ittifak kapsamında onay OYUN BAŞINA bir kez.
+              ⚠️ Ham `terms_required` hatası yerine metin + onay düğmesi: oyuncunun
+              yapması gereken şey bir hata mesajı okumak değil, kuralları okuyup kabul etmek. */}
+          {termsBlocked && terms.data ? (
+            <div className="space-y-1.5 rounded-[var(--radius-sm)] border border-border bg-raised p-2">
+              <div className="text-[11px] font-semibold text-ink">{terms.data.title}</div>
+              <div className="text-[11px] text-muted">{terms.data.intro}</div>
+              <ul className="ml-4 list-disc space-y-0.5 text-[11px] text-muted">
+                {terms.data.items.map((t) => <li key={t}>{t}</li>)}
+              </ul>
+              <Button size="sm" disabled={acceptTerms.isPending}
+                onClick={() => acceptTerms.mutate({ scope: 'alliance' })}>
+                {terms.data.confirmLabel}
+              </Button>
+            </div>
+          ) : send.isError ? (
+            <ErrorBox error={new Error(messageForError(send.error))} />
+          ) : null}
           {mute.isError ? <ErrorBox error={new Error(messageForError(mute.error))} /> : null}
           {unmute.isError ? <ErrorBox error={new Error(messageForError(unmute.error))} /> : null}
           {remove.isError ? <ErrorBox error={new Error(messageForError(remove.error))} /> : null}

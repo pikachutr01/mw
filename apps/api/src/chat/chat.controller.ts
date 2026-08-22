@@ -202,6 +202,27 @@ export class ChatController {
     } catch (err) { throw toHttp(err); }
   }
 
+  /**
+   * ⭐⭐ MESAJ İSTEĞİNİ KABUL ET (kullanıcı, 2026-08-22).
+   *
+   * ⚠️ Diğer iki seçenek YENİ UÇ İSTEMİYOR ve bu bilinçli: «Sil» zaten tek taraflı silme
+   * (`DELETE conversations/:id`), «Engelle» zaten engelleme ucu. İstek ekranı üç düğmeyi
+   * bir araya getiriyor, üç yeni uç değil.
+   */
+  @Post('conversations/:id/accept')
+  @HttpCode(200)
+  async acceptConversation(
+    @Param('id') id: string, @Req() req: AuthedRequest,
+  ): Promise<Record<string, unknown>> {
+    const p = req.player!;
+    try {
+      await this.service.acceptConversation({
+        worldId: p.worldId, playerId: p.playerId, channelId: idParam.parse(id),
+      });
+      return { ok: true };
+    } catch (err) { throw toHttp(err); }
+  }
+
   @Post('conversations/:id/messages')
   @HttpCode(201)
   async send(
